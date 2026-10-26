@@ -9,6 +9,8 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductionPhysicalReleaseTest {
@@ -65,6 +67,56 @@ class ProductionPhysicalReleaseTest {
         assertInstanceOf(CommandResult.Rejected.class, submit(engine, "close", ReferenceContainerCustody.confirmedMutationTransition(
                 new FrontierWorldStateCodec().decode(before.canonicalState()), depot, 2L)));
         assertArrayEquals(before.canonicalState(), engine.checkpoint().canonicalState());
+    }
+
+    @Test void allStationCompartmentsLeaveHotInOneTransactionAndRecoverWithoutChangingStock() {
+        for (boolean mutation : List.of(false, true)) {
+            var fixture = multiSectionStation(); var state = fixture.state(); var container = fixture.container();
+            var config = configuration(state); var engine = FrontierEngines.create(config);
+            var ids = ReferenceContainerCustody.boundFungibleAccountIds(state, container);
+            assertEquals(2, ids.size());
+            var transition = ReferenceContainerCustody.confirmedMutationTransition(state, container, 2);
+            var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(transition, codecs.decode(transition.type(), codecs.encode(transition)));
+            var omitted = new PhysicalReplicaCustodyPayloads.ReferenceMutationClosed(container, transition.scopeId(),
+                    transition.expectedEpoch(), transition.expectedCanonicalRevision(), transition.expectedReplicaRevision(),
+                    transition.emittedCanonicalRevision(), transition.fingerprint(), transition.provenance(),
+                    Set.of(ids.stream().sorted().findFirst().orElseThrow()));
+            assertInstanceOf(CommandResult.Rejected.class, submit(engine, "omit-compartment", omitted));
+            assertArrayEquals(new FrontierWorldStateCodec().encode(state), engine.checkpoint().canonicalState());
+            assertAccepted(submit(engine, "complete-compartments", mutation ? transition
+                    : new FungibleStackBindingsReleased(ids.stream().sorted().findFirst().orElseThrow(), 1)));
+            var recovered = FrontierEngines.recover(config, new RecoveryImage(state.bootstrap().worldId(),
+                    Optional.of(new SnapshotRecord(engine.checkpoint(), 1)), List.of()));
+            var after = new FrontierWorldStateCodec().decode(recovered.checkpoint().canonicalState());
+            assertFalse(ReferenceContainerCustody.hasLiveCustody(after, container));
+            assertTrue(ReferenceContainerCustody.boundFungibleAccountIds(after, container).isEmpty());
+            assertEquals(state.inventory().fungibleResources().lots(), after.inventory().fungibleResources().lots());
+            assertEquals(state.inventory().fungibleResources().accounts(), after.inventory().fungibleResources().accounts());
+            assertEquals(ReferenceContainerCustody.canonicalFingerprint(state, container),
+                    ReferenceContainerCustody.canonicalFingerprint(after, container));
+        }
+    }
+
+    private record MultiSectionFixture(FrontierWorldState state, SubjectId container) { }
+    private static MultiSectionFixture multiSectionStation() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:multi-section-release"), 126,
+                FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")));
+        var container = new SubjectId("container:structure-7-forge-station"); var home = new SubjectId("settlement:7");
+        var ledger = state.inventory().fungibleResources();
+        for (var section : List.of(ContainerSectionId.INPUT, ContainerSectionId.FUEL)) {
+            var holder = new ResourceCustody.Container(container, section); var account = ContainerResourceAccounts.id(holder);
+            var lot = new SubjectId("lot:multi-section-" + section.value());
+            String kind = section.equals(ContainerSectionId.INPUT) ? "minecraft:iron_ingot" : "minecraft:coal";
+            int slot = section.equals(ContainerSectionId.INPUT) ? 7 : 10;
+            ledger = ledger.issue(new ResourceLot(lot, home, kind, 3, "test:physical-section-precondition", List.of()),
+                    new CustodyAccount(account, holder, Map.of(lot, 3), Map.of()));
+            ledger = ledger.rebind(account, 1, List.of(new PhysicalStackBinding(new SubjectId("binding:multi-section-" + section.value()),
+                    account, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, slot)),
+                    1, kind, Map.of(lot, 3), Map.of())));
+        }
+        return new MultiSectionFixture(ReferenceContainerCustodyFixtures.observedAndHeld(
+                state.withInventory(state.inventory().withFungibleResources(ledger)), container), container);
     }
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(FrontierWorldState state) {

@@ -63,7 +63,7 @@ final class FrontierV3ContainerSurfaceExecutor {
      * projection, a foreign socket and a stale owned chest without guessing from CONFLICT.
      */
     record Readiness(String chunk, String freshSocket, String support, String targetBlock, String chest, String slots, String mismatch,
-                     boolean ordinaryPlayerNearby, boolean presentationDemand, int eligibleObserverCount, int presentationObserverCount) { }
+                     boolean ordinaryPlayerNearby, boolean presentationDemand, int eligibleObserverCount, int presentationObserverCount, String supportEvidence) { }
 
     private FrontierV3ContainerSurfaceExecutor() { }
 
@@ -426,15 +426,15 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     static Readiness readiness(ServerLevel level, FrontierWorldState state, SubjectId containerId) {
         ContainerSurface surface = state.inventory().surfaces().get(containerId);
-        if (surface == null) return new Readiness("UNKNOWN_CONTAINER", "", "", "", "", "", "", false, false, 0, 0);
+        if (surface == null) return new Readiness("UNKNOWN_CONTAINER", "", "", "", "", "", "", false, false, 0, 0, "");
         if (!surface.fixed()) {
             var physical = FrontierV3PhysicalContainer.inspect(level, state, containerId).orElse(null);
             if (physical == null) return new Readiness("BODY_UNAVAILABLE", "NOT_APPLICABLE_MOBILE", "",
-                    "", "", "", "", false, false, 0, 0);
+                    "", "", "", "", false, false, 0, 0, "");
             var demand = FrontierV3PhysicalDemand.readiness(level, physical.position());
             return new Readiness("LOADED", "NOT_APPLICABLE_MOBILE", "", "", physical.declared() ? "OWNED" : "UNTAGGED",
                     matchesCanonicalSlots(physical.inventory(), state, containerId) ? "CURRENT" : "MISMATCH", "",
-                    demand.ordinaryPlayerNearby(), demand.presentationDemand(), demand.eligibleObserverCount(), demand.presentationObserverCount());
+                    demand.ordinaryPlayerNearby(), demand.presentationDemand(), demand.eligibleObserverCount(), demand.presentationObserverCount(), "");
         }
         BlockPos target = position(surface);
         // For the F0.2B reference scopes an evicted-ticking chunk retained in the server's
@@ -442,7 +442,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         // Keep the generic materializer's loaded-socket diagnostic unchanged for every other
         // family while reporting the same eligibility boundary used by the custody adapter.
         if (!FrontierV3LoadedWorld.ready(level, target) || (ReferenceContainerCustody.isReferenceContainer(state, containerId) && !level.shouldTickBlocksAt(target))) {
-            return new Readiness("UNLOADED", "", "", "", "", "", "", false, false, 0, 0);
+            return new Readiness("UNLOADED", "", "", "", "", "", "", false, false, 0, 0, "");
         }
         io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null);
         SocketReadiness supportStatus = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
@@ -458,7 +458,16 @@ final class FrontierV3ContainerSurfaceExecutor {
         FrontierV3PhysicalDemand.Readiness demand = FrontierV3PhysicalDemand.readiness(level, target);
         return new Readiness("LOADED", freshSocketDiagnostic(fresh, owned != null), supportStatus.name(),
                 BuiltInRegistries.BLOCK.getKey(level.getBlockState(target).getBlock()).toString(), chestStatus, slots, mismatch,
-                demand.ordinaryPlayerNearby(), demand.presentationDemand(), demand.eligibleObserverCount(), demand.presentationObserverCount());
+                demand.ordinaryPlayerNearby(), demand.presentationDemand(), demand.eligibleObserverCount(), demand.presentationObserverCount(), supportEvidence(level, state, target, support));
+    }
+
+    /** One bounded, read-only point explanation. A generic DEFERRED must not hide
+     * an absent declaration, withdrawn support or an unprojected foundation. */
+    private static String supportEvidence(ServerLevel level, FrontierWorldState state, BlockPos target, ContainerSocketSupport support) {
+        var p = target.below();
+        var delta = state.physicalDeltas().get(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(p.getX(), p.getY(), p.getZ()));
+        return "declaration=" + support + ";actual=" + BuiltInRegistries.BLOCK.getKey(level.getBlockState(p).getBlock())
+                + ";claim=" + FrontierV3GrayboxLedger.get(level).claim(p) + ";delta=" + delta;
     }
 
     /** A fresh-socket probe is intentionally inapplicable after the exact owned chest exists. */

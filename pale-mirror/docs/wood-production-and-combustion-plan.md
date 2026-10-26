@@ -134,3 +134,18 @@ boundary; burn ticks are not silently called joules or FE.
 Progress evidence belongs in the canonical continuity ledger and linked build
 receipts. Boxes are marked only after the corresponding wired behavior exists;
 this document is an implementation plan, not a completion claim.
+
+
+## Integration findings (2026-10-27)
+
+The complete reference-container boundary also participates in this migration:
+its mutation receipt retains every bound compartment account. A normal layout
+release closes all those accounts and the same physical custody lease in one
+transaction. Omitting a compartment or supplying a stale epoch is rejected;
+resource titles, quantities and physical slot layout remain unchanged.
+
+Native verification must name the current companion pack when the source checkout
+is separate. `FRONTIER_V3_PILOT_GRAYBOX_DATAPACK_DIRECTORY` selects it explicitly;
+the runner retains the installed dimension digest/generator/ruleset and checks
+recovery against that same input. A neighbouring historical vanilla-flat fixture
+pack is not evidence for the current agricultural generator or genesis fabric.

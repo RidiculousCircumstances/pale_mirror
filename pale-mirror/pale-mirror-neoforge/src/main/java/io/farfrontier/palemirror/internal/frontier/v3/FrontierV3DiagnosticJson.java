@@ -706,6 +706,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"freshSocket\":\"" + quote(value.freshSocket()) + "\",\"support\":\"" + quote(value.support())
                 + "\",\"targetBlock\":\"" + quote(value.targetBlock()) + "\",\"chest\":\"" + quote(value.chest())
                 + "\",\"slots\":\"" + quote(value.slots()) + "\",\"mismatch\":\"" + quote(value.mismatch())
+                + "\",\"supportEvidence\":\"" + quote(value.supportEvidence())
                 + "\",\"ordinaryPlayerNearby\":" + value.ordinaryPlayerNearby()
                 + ",\"presentationDemand\":" + value.presentationDemand()
                 + ",\"eligibleObserverCount\":" + value.eligibleObserverCount()

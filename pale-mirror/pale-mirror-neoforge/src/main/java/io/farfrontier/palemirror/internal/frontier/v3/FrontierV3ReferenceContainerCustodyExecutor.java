@@ -611,19 +611,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
         if (requiresLoadedMutationConfirmation(lease, replica,
                 ReferenceContainerCustody.canonicalFingerprint(state, lease.objectId()))) return false;
-        List<PhysicalStackBinding> bound = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> state.inventory().fungibleResources().accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container container
-                        && container.containerId().equals(lease.objectId())).toList();
-        if (!bound.isEmpty()) {
-            if (bound.stream().anyMatch(binding -> binding.authorityEpoch() != lease.authorityEpoch())) {
-                throw new IllegalStateException("fungible resource binding cannot outlive its reference custody epoch");
-            }
-            SubjectId accountId = bound.getFirst().accountId();
-            if (bound.stream().anyMatch(binding -> !binding.accountId().equals(accountId))) {
-                throw new IllegalStateException("one reference container has multiple live fungible accounts");
-            }
+        var accounts = ReferenceContainerCustody.boundFungibleAccountIds(state, lease.objectId());
+        if (!accounts.isEmpty()) {
+            // The common planner closes every compartment and the reference lease atomically.
             return submit(runtime, "fungible-release", lease.objectId(), lease.authorityEpoch(),
-                    new FungibleStackBindingsReleased(accountId, lease.authorityEpoch()));
+                    new FungibleStackBindingsReleased(accounts.stream().sorted().findFirst().orElseThrow(), lease.authorityEpoch()));
         }
         return submit(runtime, "release-renew", lease.objectId(), lease.authorityEpoch(), new CustodyReleased(lease.scopeId(),
                 lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));

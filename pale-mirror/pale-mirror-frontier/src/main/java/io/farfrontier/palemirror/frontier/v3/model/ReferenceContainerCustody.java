@@ -175,8 +175,8 @@ public final class ReferenceContainerCustody {
             throw new IllegalArgumentException("reference mutation transition has no exact live custody");
         }
         List<PhysicalStackBinding> bindings = boundFungibleSlots(state, containerId);
-        Optional<SubjectId> accountId = oneBoundAccount(bindings);
-        if (!accountId.equals(transition.releasedFungibleAccountId())
+        var accountIds = boundFungibleAccountIds(state, containerId);
+        if (!accountIds.equals(transition.releasedFungibleAccountIds())
                 || bindings.stream().anyMatch(binding -> binding.authorityEpoch() != lease.authorityEpoch())) {
             throw new IllegalArgumentException("reference mutation fungible disposition does not match custody epoch");
         }
@@ -190,7 +190,8 @@ public final class ReferenceContainerCustody {
                 .release(transition.scopeId(), transition.expectedEpoch(), transition.expectedCanonicalRevision(), transition.expectedReplicaRevision())
                 .emit(containerId, transition.expectedCanonicalRevision(), transition.expectedReplicaRevision(), transition.emittedCanonicalRevision(),
                         transition.fingerprint(), transition.provenance());
-        FrontierWorldState released = accountId.map(id -> ProductionResourceCustody.release(state, id, transition.expectedEpoch())).orElse(state);
+        FrontierWorldState released = state;
+        for (var id : accountIds.stream().sorted().toList()) released = ProductionResourceCustody.release(released, id, transition.expectedEpoch());
         released = ProductionTransformationStateSupport.releasePreparedForContainer(released, containerId);
         return released.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(closed));
     }
@@ -220,7 +221,7 @@ public final class ReferenceContainerCustody {
             throw new IllegalArgumentException("reference mutation has an epoch-mismatched fungible layout");
         }
         return new ReferenceMutationClosed(containerId, lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
-                lease.expectedReplicaRevision(), emittedCanonicalRevision, canonicalFingerprint(state, containerId), provenance(containerId), oneBoundAccount(bindings));
+                lease.expectedReplicaRevision(), emittedCanonicalRevision, canonicalFingerprint(state, containerId), provenance(containerId), boundFungibleAccountIds(state, containerId));
     }
 
     static List<PhysicalStackBinding> boundFungibleSlots(FrontierWorldState state, SubjectId containerId) {
@@ -229,10 +230,10 @@ public final class ReferenceContainerCustody {
                         && custody.containerId().equals(containerId)).toList();
     }
 
-    private static Optional<SubjectId> oneBoundAccount(List<PhysicalStackBinding> bindings) {
-        return bindings.stream().map(PhysicalStackBinding::accountId).distinct().reduce((left, right) -> {
-            throw new IllegalArgumentException("reference mutation has multiple live fungible accounts");
-        });
+    /** Complete resource layout of one declared physical container, across every compartment. */
+    public static java.util.Set<SubjectId> boundFungibleAccountIds(FrontierWorldState state, SubjectId containerId) {
+        return boundFungibleSlots(state, containerId).stream().map(PhysicalStackBinding::accountId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /** Canonical stock image; depot/store fungibles are independent of Vanilla slot placement. */

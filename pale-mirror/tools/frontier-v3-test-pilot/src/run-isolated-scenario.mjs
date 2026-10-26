@@ -38,6 +38,9 @@ class ZeroPlayerPreludeTimeout extends Error {
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
+const grayboxDatapackOverride = process.env.FRONTIER_V3_PILOT_GRAYBOX_DATAPACK_DIRECTORY;
+if (grayboxDatapackOverride === '') throw new Error('explicit graybox datapack directory must not be empty');
+let grayboxDatapack = null;
 const sourcePath = resolve(scenarioPath);
 // The disposable runner writes a private loopback-port variant for its actual
 // client connection.  Keep the checked-in declaration digest alongside the
@@ -423,6 +426,7 @@ if (completed) {
   // for a one-server scenario that has no recovery record.
   manifest.isolation = { world, port, freshWorld: true };
   manifest.scenarioDeclarationSha256 = scenarioDeclarationSha256;
+  manifest.grayboxDatapack = grayboxDatapack;
   manifest.recovery = recoveryMetadata;
   // Retain the immutable supervisor journal so the post-child F0.2B consumer
   // can reject a missing/stale/wrong-server durable-save or recovered-read
@@ -468,6 +472,9 @@ async function startServer(reset) {
       '-PfrontierV3PilotReset=true', `-PfrontierV3PilotRunId=${serverRunId}`,
       `-PfrontierV3PilotProfile=${scenario.server.profile ?? defaultPilotProfile()}`,
       `-PfrontierV3PilotViewDistance=${scenario.server.viewDistance ?? 10}`];
+    if (grayboxDatapackOverride !== undefined) {
+      serverArgs.push(`-PfrontierV3PilotGrayboxDatapackDirectory=${resolve(grayboxDatapackOverride)}`);
+    }
     if (process.env.FRONTIER_V3_PILOT_PREPARED_RUNTIME === 'true') {
       serverArgs.push('-PfrontierV3PilotPreparedRuntime=true');
     } else if (process.env.FRONTIER_V3_PILOT_PREPARED_RUNTIME !== undefined) {
@@ -492,6 +499,20 @@ async function startServer(reset) {
       throw new Error(`disposable v3 recovery world is unavailable: ${disposableWorld}`, { cause: failure });
     }
   }
+  const dimensionFile = 'data/pale_mirror/dimension/frontier_graybox.json';
+  const installedDimension = await readFile(resolve(disposableWorld, 'datapacks/pale-mirror-graybox', dimensionFile));
+  const dimensionSha256 = createHash('sha256').update(installedDimension).digest('hex');
+  if (grayboxDatapack !== null && grayboxDatapack.dimensionSha256 !== dimensionSha256) {
+    throw new Error('graybox datapack changed across the retained recovery boundary');
+  }
+  if (grayboxDatapackOverride !== undefined && createHash('sha256')
+      .update(await readFile(resolve(grayboxDatapackOverride, dimensionFile))).digest('hex') !== dimensionSha256) {
+    throw new Error('prepared native world did not receive the explicitly selected graybox datapack');
+  }
+  const generator = JSON.parse(installedDimension.toString('utf8')).generator;
+  grayboxDatapack = Object.freeze({ dimensionSha256, generator: generator.type,
+    biomeRuleset: generator.biomes?.ruleset ?? null,
+    sourceDirectory: grayboxDatapackOverride === undefined ? 'workspace-default' : resolve(grayboxDatapackOverride) });
   // Initial preparation can reset only the disposable game directory.  Every launch then proves
   // the same artifact/classpath identity before a server JVM starts; recovery never resolves or
   // rebuilds a replacement world or launch work.

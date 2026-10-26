@@ -127,3 +127,12 @@ The repository guardrails still require the full critical Gradle gate before a
 commit touching canonical/materialization/test-harness code. The matrix avoids
 running unrelated visual or third-party-pack suites on every local edit; it
 does not weaken that final gate.
+
+
+For a source checkout separated from its current companion pack, select that
+pack explicitly with `FRONTIER_V3_PILOT_GRAYBOX_DATAPACK_DIRECTORY`. The isolated
+runner passes the directory to world preparation, checks the installed dimension
+against it and records its SHA-256, generator and biome ruleset in the manifest.
+Recovery must retain the same dimension configuration. An older neighbouring
+checkout may contain a vanilla-flat fixture pack: that does not prove the current
+agricultural generator, genesis structures or source provenance.

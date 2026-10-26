@@ -348,8 +348,15 @@ public final class FrontierWorldPhysicalObservationProcess {
                     events.add(new ProposedEvent(checkpoint.scopeId(), checkpoint));
                 }
             }
-            after = reduceFungibleBindingRelease(after, owner, released);
-            events.add(new ProposedEvent(owner, released));
+            var accounts = account.custody() instanceof ResourceCustody.Container container
+                    ? ReferenceContainerCustody.boundFungibleAccountIds(state, container.containerId())
+                    : java.util.Set.of(released.accountId());
+            if (!accounts.contains(released.accountId())) throw new IllegalArgumentException("release has no current bound layout");
+            for (var id : accounts.stream().sorted().toList()) {
+                var member = new FungibleStackBindingsReleased(id, released.authorityEpoch());
+                after = reduceFungibleBindingRelease(after, owner, member);
+                events.add(new ProposedEvent(owner, member));
+            }
             if (containerLease != null) {
                 // One canonical transaction closes both layout and reference scope. Publishing
                 // between these facts strands COLD input behind a live scope if its chunk loads.

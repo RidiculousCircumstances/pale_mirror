@@ -157,14 +157,17 @@ final class PhysicalReplicaCustodyPayloadCodecs {
             ReferenceMutationClosed value = (ReferenceMutationClosed) payload;
             subject(output, value.objectId()); writeFence(output, value.scopeId(), value.expectedEpoch(), value.expectedCanonicalRevision(), value.expectedReplicaRevision());
             output.writeLong(value.emittedCanonicalRevision()); FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance());
-            output.writeBoolean(value.releasedFungibleAccountId().isPresent());
-            if (value.releasedFungibleAccountId().isPresent()) subject(output, value.releasedFungibleAccountId().orElseThrow());
+            output.writeInt(value.releasedFungibleAccountIds().size());
+            for (var id : value.releasedFungibleAccountIds().stream().sorted().toList()) subject(output, id);
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> {
             var object = subject(input); Fence fence = readFence(input); long emitted = input.readLong(); String fingerprint = FrontierWorldPayloadCodecs.readString(input);
-            String provenance = FrontierWorldPayloadCodecs.readString(input); java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> account = input.readBoolean()
-                    ? java.util.Optional.of(subject(input)) : java.util.Optional.empty();
-            return new ReferenceMutationClosed(object, fence.scope(), fence.epoch(), fence.canonical(), fence.replica(), emitted, fingerprint, provenance, account);
+            String provenance = FrontierWorldPayloadCodecs.readString(input); int count = input.readInt();
+            if (count < 0 || count > ContainerRecord.MAX_SLOTS) throw new IllegalArgumentException("invalid reference layout account count");
+            var accounts = new java.util.HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
+            for (int index = 0; index < count; index++) if (!accounts.add(subject(input)))
+                throw new IllegalArgumentException("duplicate reference layout account");
+            return new ReferenceMutationClosed(object, fence.scope(), fence.epoch(), fence.canonical(), fence.replica(), emitted, fingerprint, provenance, accounts);
         }); }
     }
     private static void writeReplica(DataOutputStream output, PhysicalReplicaRecord value) throws IOException {
