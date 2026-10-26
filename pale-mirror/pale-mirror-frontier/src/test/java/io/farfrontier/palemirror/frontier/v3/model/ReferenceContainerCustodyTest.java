@@ -66,6 +66,15 @@ class ReferenceContainerCustodyTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-cold-fungible"), 91L));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         int wheatSlot = state.inventory().availableSlots(depot).getFirst();
+        var beforeImage = ReferenceContainerCustody.expectedFungibleSlots(state, depot);
+        var account = ReferenceContainerCustody.scopeId(depot);
+        var changedResources = state.inventory().fungibleResources().transformCold(account,
+                java.util.Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), java.util.Map.of(),
+                new ResourceLot(new SubjectId("lot:reference-new-bread"), new SubjectId("settlement:1"),
+                        "minecraft:bread", 64, "test", java.util.List.of()));
+        var changed = state.withInventory(state.inventory().withFungibleResources(changedResources));
+        assertEquals("minecraft:bread", ReferenceContainerCustody.expectedFungibleSlots(changed, depot).get(wheatSlot).itemKind());
+        assertEquals("minecraft:wheat", beforeImage.get(wheatSlot).itemKind(), "an old immutable image cannot change or authorize its successor");
         assertEquals(new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 64),
                 ReferenceContainerCustody.expectedFungibleSlot(state, depot, wheatSlot).orElseThrow());
         ArrayList<ReferenceContainerCustody.ObservedSlot> matching = new ArrayList<>();

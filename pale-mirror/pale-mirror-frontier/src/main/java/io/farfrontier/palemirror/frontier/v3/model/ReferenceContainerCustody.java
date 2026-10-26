@@ -18,6 +18,12 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayload
  * the current replica grants physical custody.
  */
 public final class ReferenceContainerCustody {
+    private record SlotImageQuery(SubjectId container, java.util.Set<Integer> reserved) {
+        private SlotImageQuery { reserved = java.util.Set.copyOf(reserved); }
+    }
+    private static final ImmutableInputView<BoundedValueMemo<SlotImageQuery, Map<Integer, ProjectedFungibleSlot>>> SLOT_IMAGES
+            = new ImmutableInputView<>();
+
     public static final SubjectId PROVIDER_ID = new SubjectId("provider:reference-container-adapter");
 
     private ReferenceContainerCustody() { }
@@ -290,6 +296,13 @@ public final class ReferenceContainerCustody {
 
     private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, ProductionCatalog catalog, SubjectId containerId,
                                                                               java.util.Set<Integer> reservedSlots) {
+        var images = SLOT_IMAGES.get(List.of(inventory, catalog), () -> new BoundedValueMemo<>(128));
+        return images.get(new SlotImageQuery(containerId, reservedSlots),
+                () -> compileFungibleSlots(inventory, catalog, containerId, reservedSlots));
+    }
+
+    private static Map<Integer, ProjectedFungibleSlot> compileFungibleSlots(ExactInventory inventory, ProductionCatalog catalog,
+            SubjectId containerId, java.util.Set<Integer> reservedSlots) {
         ContainerRecord container = inventory.containers().get(containerId);
         if (container == null) throw new IllegalArgumentException("reference container is not declared");
         Map<Integer, ProjectedFungibleSlot> slots = new LinkedHashMap<>();

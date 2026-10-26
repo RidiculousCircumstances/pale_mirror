@@ -96,3 +96,19 @@ R274 world. Failed startup cleanup also avoids invoking domain worksite
 reconciliation before any canonical state was decoded; the original rejection
 remains visible and native stores still finish. Live old-world continuation
 claims apply only to343, not the new food candidate.
+
+Follow-up HOT JFR also finds repeated expected-container-layout compilation on
+the server thread. The common container owner now keeps a bounded per-thread
+image memo for exactly one immutable inventory/catalog input, keyed additionally
+by the exact reserved-slot set. Slot checks reuse that derived image; changed
+stock, physical bindings, station/catalog or reservations recompute. No native
+observation, permission to mutate or recovery receipt is cached as authority.
+
+A second HOT/reentry JFR proves owner-thread journal waits (13–36ms each) in
+required operation confirmation, saved-adoption cleanup and post-confirmed mining
+witness cleanup. Required confirmations now honor the existing ordinary-turn
+async durability port, retaining canonical receipt pins until the closure flush.
+Saved native adoption proof and post-canonical SETTLED cleanup submit async
+metadata; fresh mutation still requires its exact actor/operation durable prefix.
+Mid-effect mining witness persistence remains a separate protected effect window
+and is not blindly converted to an unsafe fire-and-forget write.

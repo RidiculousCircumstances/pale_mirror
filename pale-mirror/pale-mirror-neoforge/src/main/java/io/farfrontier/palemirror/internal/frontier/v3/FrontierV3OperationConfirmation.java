@@ -48,7 +48,8 @@ final class FrontierV3OperationConfirmation {
     static boolean submitRequired(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence) {
         var ledger = FrontierV3OperationLedger.get(level);
         if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return false;
-        return submit(ledger, () -> ledger.persist(level), canonical(level, runtime, java.util.Optional.empty(), true), ticket, consequence);
+        return submitOutcome(ledger, durability(level, runtime, ledger),
+                canonical(level, runtime, java.util.Optional.empty(), true), ticket, consequence) == Outcome.CONFIRMED;
     }
     static boolean submit(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket,
             FrontierPayload consequence, Runnable afterCommit) {

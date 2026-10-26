@@ -90,7 +90,9 @@ final class FrontierV3ExtractionExecutor {
                 var ledger = FrontierV3GrayboxLedger.get(level);
                 ledger.worksite(new FrontierV3WorksiteBlockWitness(declared, block.extraction().definition().before(),
                         FrontierV3WorksiteBlockWitness.Phase.SETTLED));
-                ledger.persist(level);
+                // Canonical confirmation already owns the outcome; SETTLED is
+                // cleanup of its retained worksite witness, not pre-effect permission.
+                ledger.persistAsync(level);
               }
               FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor, worker);
             });

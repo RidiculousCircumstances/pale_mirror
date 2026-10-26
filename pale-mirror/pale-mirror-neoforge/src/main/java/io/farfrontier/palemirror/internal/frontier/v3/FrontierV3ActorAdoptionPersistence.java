@@ -59,7 +59,10 @@ final class FrontierV3ActorAdoptionPersistence {
                 return body == null ? ledger.permitsRecordedOwner(binding)
                         : FrontierV3ActorOwnerBinding.from(body).filter(binding::equals).isPresent();
             });
-            if (acknowledged > 0) ledger.persist(level, state.bootstrap().worldId());
+            // Entity writes and synchronization are already positively complete. This
+            // retires conservative recovery metadata, not permission to create a body.
+            // New actor operations still await their exact prepareActorDurable prefix.
+            if (acknowledged > 0) ledger.persistAsync(level, state.bootstrap().worldId());
         }));
     }
 
