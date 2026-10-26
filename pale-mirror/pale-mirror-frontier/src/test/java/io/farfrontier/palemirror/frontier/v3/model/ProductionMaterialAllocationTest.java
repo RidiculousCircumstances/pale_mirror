@@ -38,4 +38,15 @@ class ProductionMaterialAllocationTest {
         var recipe = recipe(List.of(input("head", 3, "minecraft:iron_ingot"), input("handle", 2, "minecraft:stick")));
         assertThrows(IllegalArgumentException.class, () -> recipe.allocate(Map.of("minecraft:iron_ingot", 64, "minecraft:stick", 64), 14));
     }
+    @Test void nativeReplacementSourcesAreExplicitBoundedAndPartOfTheCatalogIdentity() {
+        var recipe = recipe(List.of(input("head", 3, "minecraft:iron_ingot"), input("handle", 2, "minecraft:stick")));
+        var original = new ProductionRecipe.Id("minecraft:iron_pickaxe");
+        var replacement = new ProductionRecipe.Id("example:alternate_pickaxe");
+        var nativeRecipe = recipe.withNativeCraftingRecipes(List.of(original, replacement));
+        assertEquals(List.of(original, replacement), nativeRecipe.nativeCraftingRecipe().orElseThrow().candidates());
+        assertNotEquals(recipe.withNativeCraftingRecipe(original).canonicalText(), nativeRecipe.canonicalText());
+        assertNotEquals(nativeRecipe.canonicalText(), recipe.withNativeCraftingRecipes(List.of(replacement, original)).canonicalText());
+        assertThrows(IllegalArgumentException.class, () -> recipe.withNativeCraftingRecipes(List.of()));
+        assertThrows(IllegalArgumentException.class, () -> recipe.withNativeCraftingRecipes(List.of(original, original)));
+    }
 }

@@ -15,8 +15,11 @@ final class FrontierV3NativeProductionDefinitions {
     static void validate(MinecraftServer server, ProductionCatalog catalog) {
         for (var declared : catalog.recipes()) {
             if (declared.nativeCraftingRecipe().isEmpty()) continue;
-            var source = server.getRecipeManager().byKey(ResourceLocation.parse(declared.nativeCraftingRecipe().orElseThrow().value()))
-                    .orElseThrow(() -> new IllegalArgumentException("declared native crafting recipe is absent: " + declared.id().value())).value();
+            var candidates = declared.nativeCraftingRecipe().orElseThrow().candidates();
+            var holder = candidates.stream().map(candidate -> server.getRecipeManager().byKey(ResourceLocation.parse(candidate.value())))
+                    .flatMap(Optional::stream).findFirst().orElseThrow(() -> new IllegalArgumentException(
+                            "declared native crafting recipe is absent: " + declared.id().value() + "; admitted sources=" + candidates));
+            var source = holder.value();
             if (!(source instanceof CraftingRecipe)) throw new IllegalArgumentException("unsupported native production recipe type: " + declared.id().value());
             var product = source.getResultItem(server.registryAccess());
             if (product.isEmpty() || !BuiltInRegistries.ITEM.getKey(product.getItem()).toString().equals(declared.product().itemKind())

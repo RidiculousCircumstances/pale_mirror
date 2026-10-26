@@ -13,7 +13,7 @@ final class GrayboxWoodProduction {
                 var inputs = new ArrayList<>(recipe.ingredients());
                 inputs.add(new ProductionRecipe.Ingredient(new ProductionRecipe.InputId("handle"), Set.of("minecraft:stick"), 2));
                 recipes.add(new ProductionRecipe(recipe.id(), recipe.capability(), inputs, recipe.product(), recipe.requiresCombustion(),
-                        recipe.processingMode(), recipe.outcome()).withNativeCraftingRecipe(new ProductionRecipe.Id(recipe.product().itemKind())));
+                        recipe.processingMode(), recipe.outcome()).withNativeCraftingRecipes(nativeToolSources(recipe.product().itemKind())));
             } else recipes.add(recipe);
         }
         var planks = new ProductionRecipe.Id("pale_mirror:oak_planks"); var sticks = new ProductionRecipe.Id("pale_mirror:sticks");
@@ -50,6 +50,16 @@ final class GrayboxWoodProduction {
                 base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(), work, trade,
                 base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(), base.execution(), production, base.fields(), base.tools(), base.worldLayout(),
                 base.forestry().withStarterEquipment("minecraft:iron_axe", base.forestry().workersPerSettlement()));
+    }
+    private static List<ProductionRecipe.Id> nativeToolSources(String product) {
+        // Quark's admitted pack content replaces these vanilla IDs with tagged shaped recipes.
+        // The adapter still validates the complete pinned material allocation and product.
+        var replacement = Map.of(
+                "minecraft:stone_pickaxe", "quark:tweaks/crafting/utility/better_stone_tools/pickaxe",
+                "minecraft:stone_shovel", "quark:tweaks/crafting/utility/better_stone_tools/shovel",
+                "minecraft:stone_hoe", "quark:tweaks/crafting/utility/better_stone_tools/hoe").get(product);
+        return replacement == null ? List.of(new ProductionRecipe.Id(product))
+                : List.of(new ProductionRecipe.Id(product), new ProductionRecipe.Id(replacement));
     }
     private GrayboxWoodProduction() { }
 }

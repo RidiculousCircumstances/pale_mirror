@@ -180,3 +180,16 @@ readiness and an inactive hive/assault timeout. The affected native storage/body
 and production/economy slices passed (56 and55 tests). These narrower results do
 not turn that broad gate green. Final fresh-world deployment/full-pack receipt
 remains the delivery exit below.
+
+
+Full-pack delivery found an additional native binding contradiction: Quark's
+`better_stone_tools` removes the three vanilla stone-tool recipe IDs and
+supplies its tagged shaped recipes under explicit Quark IDs. An item registry
+ID is therefore insufficient as a unique native recipe source. Recipe content
+now declares a bounded ordered list of admitted native sources; the first
+installed source must still satisfy the complete pinned allocation and output.
+Missing or incompatible sources still fail startup. The list and its priority
+participate in canonical catalog identity; no output-item scan, inferred alias,
+recipe override or disabled consistency check is used. The failed r275 startup
+saved normally; its world is retained as diagnostic evidence. Delivery uses a
+separate fresh world after verification of the correction.

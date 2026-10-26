@@ -5,13 +5,28 @@ import java.util.*;
 /** Immutable single-product recipe. Inventory custody and labour are separate owners. */
 public record ProductionRecipe(Id id, ProductionStationSpec.Capability capability,
                                List<Ingredient> ingredients, Product product, boolean requiresCombustion,
-                               ProcessingMode processingMode, ProductionRecipeOutcome outcome, Optional<Id> nativeCraftingRecipe) {
+                               ProcessingMode processingMode, ProductionRecipeOutcome outcome, Optional<NativeCraftingSource> nativeCraftingRecipe) {
     public ProductionRecipe(Id id, ProductionStationSpec.Capability capability, List<Ingredient> ingredients, Product product,
             boolean requiresCombustion, ProcessingMode processingMode, ProductionRecipeOutcome outcome) {
         this(id, capability, ingredients, product, requiresCombustion, processingMode, outcome, Optional.empty());
     }
     public ProductionRecipe withNativeCraftingRecipe(Id nativeId) {
-        return new ProductionRecipe(id, capability, ingredients, product, requiresCombustion, processingMode, outcome, Optional.of(nativeId));
+        return withNativeCraftingRecipes(List.of(nativeId));
+    }
+    public ProductionRecipe withNativeCraftingRecipes(List<Id> candidates) {
+        return new ProductionRecipe(id, capability, ingredients, product, requiresCombustion, processingMode, outcome,
+                Optional.of(new NativeCraftingSource(candidates)));
+    }
+    /** Ordered, explicitly admitted native implementations; never infer a recipe from its output item. */
+    public record NativeCraftingSource(List<Id> candidates) {
+        public NativeCraftingSource {
+            candidates = List.copyOf(candidates);
+            if (candidates.isEmpty() || candidates.size() > 8 || new HashSet<>(candidates).size() != candidates.size())
+                throw new IllegalArgumentException("native crafting sources must be bounded and distinct");
+        }
+        String canonicalText() {
+            return candidates.stream().map(Id::value).collect(java.util.stream.Collectors.joining(","));
+        }
     }
     /** Existing resource recipes explicitly use fungible output; equipment recipes declare their identity semantics. */
     public ProductionRecipe(Id id, ProductionStationSpec.Capability capability, Ingredient ingredient,
@@ -109,7 +124,7 @@ public record ProductionRecipe(Id id, ProductionStationSpec.Capability capabilit
         return requiresCombustion ? work.require(product.itemKind(), WorkOperation.PRODUCE).workUnits() : 0L;
     }
     public String canonicalText() {
-        return id.value() + "|native:" + nativeCraftingRecipe.map(Id::value).orElse("none") + ":" + capability.wireTag() + ":"
+        return id.value() + "|native:" + nativeCraftingRecipe.map(NativeCraftingSource::canonicalText).orElse("none") + ":" + capability.wireTag() + ":"
                 + ingredients.stream().sorted(Comparator.comparing(Ingredient::id))
                     .map(input -> input.id().value() + "=" + input.acceptedItems().stream().sorted()
                         .collect(java.util.stream.Collectors.joining(",")) + "*" + input.quantity())
