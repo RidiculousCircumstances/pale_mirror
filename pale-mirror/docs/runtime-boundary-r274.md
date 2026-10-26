@@ -22,6 +22,9 @@ clock debt grew from 45 to 6,803 ticks while Minecraft's sampled TPS stayed near
   common canonical-confirmation protocol rather than leaking journal records.
 - The field owner accepts that typed abort only for its retained preparation,
   exact execution/body/scope (including the exact retired departure incarnation).
+  A body owner's durable RESUME_COLD retirement is sufficient positive departure
+  evidence for an unissued action after its transient native receipt was pruned;
+  it does not require another entity census or a player visit.
   No inventory changes occur. The next preparation has a new storage revision.
 - Cross-owner constructor audits are deferred only within unpublished planning /
   reduction scopes. The mandatory pre-WAL publication, direct construction and

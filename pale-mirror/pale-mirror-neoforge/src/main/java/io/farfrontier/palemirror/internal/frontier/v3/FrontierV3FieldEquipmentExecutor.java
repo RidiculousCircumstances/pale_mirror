@@ -20,28 +20,43 @@ final class FrontierV3FieldEquipmentExecutor {
         for (var site : state.resourceSites().sites().values()) for (var job : site.harvestJobs().values()) {
             var step = job.equipment().pending().orElse(null);
             if (step == null) continue;
+            var body = step.observation().actuation().body();
+            var entity = io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(
+                    state.bootstrap().worldId(), job.workerId());
+            // RESUME_COLD is the body owner's durable positive departure receipt.
+            // Draining an UNISSUED action changes no inventory and needs no second
+            // disk census after the original transient saved-body image was retired.
+            if (ActorBodyAuthority.retainsRetiredDeparture(state, body)
+                    && level.getEntity(entity) == null && FrontierV3AmbientPendingAdmissions.get(runtime, entity) == null) {
+                if (abortUnused(level, runtime, job, step)) return true;
+                continue;
+            }
             var departure = ledger.bodyDeparture(job.workerId()).orElse(null);
-            if (departure == null || !departure.retainedForDependentCheckpoint(state)
+            if (departure == null || !ledger.savedBodyDeparture(departure)) continue;
+            if (!departure.retainedForDependentCheckpoint(state)
                     || departure.identity().epoch() != step.observation().actuation().body().physicalEpoch()
-                    || !ledger.savedBodyDeparture(departure)
                     || !ledger.currentBodyResidence(job.workerId(), departure.residenceGeneration())
                     || FrontierV3ActorBodyController.departureReadPending(level, departure)
                     || level.getEntity(departure.identity().entityId()) != null
                     || FrontierV3AmbientPendingAdmissions.get(runtime, departure.identity().entityId()) != null) continue;
-            var preparation = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
-                    FieldEquipmentChanged.Action.PREPARE, Optional.of(step));
-            var unused = FrontierV3MinecraftOperation.cancelUnusedPreparation(level,
-                    FrontierV3OperationReceipt.Protocol.FIELD_EQUIPMENT, job.id(), preparation);
-            if (unused.isEmpty()) continue;
-            var aborted = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
-                    FieldEquipmentChanged.Action.ABORT_UNATTEMPTED, Optional.of(step));
-            if (unused.orElseThrow().cancelledTicket().isPresent())
-                FrontierV3OperationConfirmation.submitRecovery(level, runtime,
-                        unused.orElseThrow().cancelledTicket().orElseThrow(), aborted, Optional.empty());
-            else FrontierV3CommandSubmission.submit(runtime, "field-equipment-departure-abort", job.id().value(), aborted);
-            return true;
+            if (abortUnused(level, runtime, job, step)) return true;
         }
         return false;
+    }
+    static boolean abortUnused(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            ResourceSiteHarvestJob job, WorkEquipmentStep step) {
+        var preparation = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                FieldEquipmentChanged.Action.PREPARE, Optional.of(step));
+        var unused = FrontierV3MinecraftOperation.cancelUnusedPreparation(level,
+                FrontierV3OperationReceipt.Protocol.FIELD_EQUIPMENT, job.id(), preparation);
+        if (unused.isEmpty()) return false;
+        var aborted = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                FieldEquipmentChanged.Action.ABORT_UNATTEMPTED, Optional.of(step));
+        if (unused.orElseThrow().cancelledTicket().isPresent())
+            FrontierV3OperationConfirmation.submitRecovery(level, runtime,
+                    unused.orElseThrow().cancelledTicket().orElseThrow(), aborted, Optional.empty());
+        else FrontierV3CommandSubmission.submit(runtime, "field-equipment-departure-abort", job.id().value(), aborted);
+        return true;
     }
     static Optional<FrontierV3OperationAftermath> deathEffect(ServerLevel level, FrontierWorldState state,
             ResourceSiteHarvestJob job, net.minecraft.world.entity.Mob body) {
