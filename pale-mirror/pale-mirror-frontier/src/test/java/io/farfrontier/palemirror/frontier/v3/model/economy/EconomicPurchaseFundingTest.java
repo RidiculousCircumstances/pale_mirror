@@ -7,6 +7,19 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPurchaseFundingTest {
+    @Test void unfundedOperatingWishesCannotVetoAnAlreadyAllocatedRestartPurchase() {
+        var budgets = Map.of("fuel", 30L, "repair", 70L);
+        var plan = new EconomicPlan(1000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),
+                Map.of("fuel", 10L, "repair", 3L), Set.of(), Map.of("fuel", 0L, "repair", 0L),
+                Map.of("fuel", 20L, "repair", 150L));
+        var needs = List.of(new ProcurementBudget.Need("fuel", 10, new FixedScalar(10), 0, 2),
+                new ProcurementBudget.Need("repair", 50, new FixedScalar(3), 100));
+        assertEquals(30, EconomicPurchaseFunding.available(plan, new FixedScalar(100), needs, "fuel").raw(),
+                "the actual 70 allocation stays protected; the unfunded additional 80 is not money");
+        assertEquals(0, EconomicPurchaseFunding.available(plan, new FixedScalar(50), needs, "fuel").raw(),
+                "a forecast allocation cannot recreate money spent since review");
+    }
+
     @Test void ordinaryFuelPurchasePreservesTheOtherOperatingInputsWithoutCreatingMoney() {
         var budgets = Map.of("fuel", 90L, "repair", 10L, "food", 0L);
         var plan = new EconomicPlan(1000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),

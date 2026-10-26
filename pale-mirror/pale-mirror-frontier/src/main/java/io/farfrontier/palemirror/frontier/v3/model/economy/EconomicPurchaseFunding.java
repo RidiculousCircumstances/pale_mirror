@@ -36,7 +36,11 @@ public final class EconomicPurchaseFunding {
         // purchases can use their envelope and genuinely unallocated liquidity.
         long envelope = restart ? cash.raw() : Math.min(cash.raw(), Math.addExact(estimate, optional));
         long otherOperating = plan.operatingBudgets().entrySet().stream().filter(e -> !e.getKey().equals(item))
-                .mapToLong(Map.Entry::getValue).reduce(0L, Math::addExact);
+                // Operating requirements can exceed the available treasury.
+                // Protect the allocated part, not an unfunded wish that would
+                // veto the planner's own affordable purchase allocation.
+                .mapToLong(e -> Math.min(e.getValue(), plan.purchaseBudgets().getOrDefault(e.getKey(), 0L)))
+                .reduce(0L, Math::addExact);
         long ordinary = Math.min(Math.min(envelope, protectedCash.raw()), Math.max(0, cash.raw() - otherOperating));
         if (immediateAlternativeQuantity == 0) return new FixedScalar(ordinary);
         var backed = needs.stream().filter(other -> !other.item().equals(item)

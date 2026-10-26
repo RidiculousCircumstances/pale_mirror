@@ -12,6 +12,32 @@ class ExpeditionProvisioningTest {
     private static final FoodCatalog.Food FOOD = LIFE.foods().require(FoodCatalog.BREAD);
     private static final ExpeditionRules RULES = ExpeditionRules.initial();
 
+    @Test void firstMealUsesActualEmptyStomachAndRemainingJourneyStillHasEnoughFood() {
+        var life = FrontierRulesets.marketQuarryGraybox().residentLife();
+        var food = life.foods().require(FoodCatalog.BREAD);
+        int first = Math.ceilDiv(life.mealTargetUnits(), food.nutritionPerItem());
+        assertEquals(first, ExpeditionProvisioning.requiredFoodItems(0, 0, 1000, food, life));
+        for (int speed : new int[] {life.metabolismMinPermille(), 1000, life.metabolismMaxPermille()}) {
+            long end = 200_000;
+            int stock = ExpeditionProvisioning.requiredFoodItems(end, 0, speed, food, life);
+            var nutrition = new ResidentNutrition(ResidentNutritionStatus.STARVING, 0, 0, 0);
+            long tick = 0;
+            while (true) {
+                if (nutrition.wantsFood(life)) {
+                    int count = Math.ceilDiv(nutrition.nutritionWanted(life), food.nutritionPerItem());
+                    stock -= count;
+                    assertTrue(stock >= 0, "forecast must fund every actual meal including return/margin");
+                    nutrition = nutrition.consumeNutritionAt(tick, count * food.nutritionPerItem(), life, speed);
+                }
+                long next = nutrition.nextThresholdTick(life, speed);
+                if (next > end) break;
+                tick = next;
+                nutrition = nutrition.accrueThrough(tick, life, speed);
+            }
+            assertFalse(nutrition.accrueThrough(end, life, speed).wantsFood(life));
+        }
+    }
+
     @Test void survivingActualAnimalDoesNotAcquireFoodNeedsForDeadHumanMembers() {
         var plan = ExpeditionProvisioning.planWithAsset(List.of(), 500, 500, 1, 0, 15, FOOD, LIFE, RULES);
         assertTrue(plan.feasible());

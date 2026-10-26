@@ -127,6 +127,17 @@ public final class ExpeditionProvisioning {
                 Math.multiplyExact(life.satietyUnitTicks(), 1_000L));
         // Excess nutrition clipped at stomach capacity is not additional travel endurance.
         var meal = FoodConsumptionForecast.atThreshold(food, life);
+        if (satiety < life.eatBelowUnits()) {
+            // The crew's first meal starts at its actual stomach contents, not
+            // the future hunger threshold. A starving resident can use a whole
+            // bread; treating that refill as threshold-sized meals charges it
+            // several times and can veto a materially feasible departure.
+            int first = Math.ceilDiv(life.mealTargetUnits() - satiety, food.nutritionPerItem());
+            long afterFirst = Math.min(life.satietyCapacityUnits(),
+                    Math.addExact(satiety, Math.multiplyExact((long) first, food.nutritionPerItem())));
+            return Math.toIntExact(Math.addExact(first, meal.itemsFor(Math.max(0L,
+                    Math.addExact(loss, life.mealTargetUnits() - afterFirst)))));
+        }
         return Math.toIntExact(meal.itemsFor(Math.max(0L,
                 Math.addExact(loss, (long) life.mealTargetUnits() - satiety))));
     }

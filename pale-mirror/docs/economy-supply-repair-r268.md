@@ -36,6 +36,34 @@ recipe/recovery, partial-stack, economic-recovery and transport tests cover the
 connected unchanged paths. Runtime delivery evidence is recorded in governance
 CONTINUITY.md and ignored build/economy-repair-r268 receipts.
 
+## Provisioning and funding defects
+
+The journey forecast also treated an already hungry resident's first meal as a
+series of small refills at the future hunger threshold. With live nutrition
+rules, a resident at zero satiety needed three bread in the forecast even for
+zero travel, although one actual bread restores full satiety. The forecast now
+accounts for that first meal at actual satiety and retains the conservative
+threshold yield for subsequent travel, return and margin. Crew admission,
+replenishment and return advice share that same calculation. A regression
+compares sufficient retained food with real nutrition transitions through a
+200000-tick journey at slow, normal and fast metabolism.
+
+Quote-time funding protected full hypothetical operating requirements even
+when the planner could allocate only part of them. In the saved Dawnbridge plan,
+other input wishes reduced coal purchasing to 1.038273 coins, despite an actual
+2.293122-coins allocation. The unfunded remainder could veto the planner's own
+allocation. Quote-time protection now retains the allocated operating portion;
+existing complementary-restart and earlier-deadline protection still applies.
+No balance, order consent or actual reservation is bypassed. The negative
+counterexample also reduces available cash after review and proves the old
+allocation cannot recreate that money.
+
+Rollout uses the existing normal shutdown, which writes a complete canonical
+checkpoint. Existing mission food targets remain their retained allocations;
+new forecasts do not rewrite or remove those goods. Snapshot hydration and
+new admission/replay use the same final candidate. No old WAL decision is
+manually rewritten under the corrected forecast.
+
 ## Separate observations
 
 Failed coal trips often really lack journey provisions on both sides. Existing
