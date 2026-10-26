@@ -27,6 +27,7 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
     }
     private record Cell(NavigationCell value, boolean aftermath) { }
     private record Image(Map<BlockPosition, Cell> cells, Map<TerrainColumn, List<BlockPosition>> columns) { }
+    private static final Image EMPTY = new Image(Map.of(), Map.of());
     private static final class Snapshot implements KnownNaturalGeometry.Snapshot {
         private final FrontierBootstrap bootstrap;
         private final ForestState forest;
@@ -35,6 +36,7 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
         Snapshot(FrontierBootstrap bootstrap, ForestState forest) { this.bootstrap = bootstrap; this.forest = forest;
             this.plan = GrayboxForestPlan.compile(bootstrap); }
         private Image image(ForestRegion region) {
+            if (!plan.mayTouch(region) && !forest.touches(region)) return EMPTY;
             return images.get(region, () -> {
                 var cells = new HashMap<BlockPosition, Cell>();
                 plan.blocksIn(region).forEach((position, block) -> cells.put(position, new Cell(new NavigationCell(NavigationShape.FULL, true,

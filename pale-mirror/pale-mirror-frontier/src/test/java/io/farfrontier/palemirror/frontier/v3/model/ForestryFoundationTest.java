@@ -36,6 +36,19 @@ class ForestryFoundationTest {
             assertEquals(tree.logs().block(i), images.computeIfAbsent(region, plan::blocksIn).get(position));
         }
     }
+    @Test void aCapturedTreeOutsideAuthoredPatchesStillOverridesAnUnknownRegion() {
+        var origin = new BlockPosition(BOOTSTRAP.bounds().minX() + 32, 64, BOOTSTRAP.bounds().minZ() + 32);
+        var region = ForestRegion.containing(origin);
+        assertFalse(GrayboxForestPlan.compile(BOOTSTRAP).mayTouch(region));
+        var prototype = firstTree();
+        var tree = new TreeDescriptor(new TreeId(UUID.fromString("bcc6524a-67a7-454d-a7ef-1cb9537e46f4")), 1,
+                "minecraft:tree_feature", prototype.species(), origin, prototype.logs());
+        var state = FrontierWorldState.initial(BOOTSTRAP);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().forest(state.forest().admit(tree)));
+        var geometry = new ForestryKnownGeometry().snapshot(state).overlay((x, z) -> null);
+        assertTrue(geometry.collisionAt(origin).isPresent(), "captured trees must not depend on initial forest coverage");
+        assertTrue(geometry.collisionAt(origin.offset(0, -1, 0)).isEmpty(), "a sparse overlay cannot invent ground knowledge");
+    }
     @Test void playerWithdrawalPersistsThroughUnrelatedUpdateAndRecoveryWithoutIssuingWood() {
         var initial = FrontierWorldState.initial(BOOTSTRAP); var tree = firstTree();
         var referenceBefore = TreeReference.declaredBy(tree);

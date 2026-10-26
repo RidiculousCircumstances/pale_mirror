@@ -20,6 +20,7 @@ public final class GrayboxForestPlan {
     private final FrontierBootstrap bootstrap;
     private final List<Patch> patches;
     private final Set<TerrainColumn> protectedColumns;
+    private final Set<ForestRegion> coverage;
     private final BoundedValueMemo<ForestRegion, List<TreeDescriptor>> regions = new BoundedValueMemo<>(128);
     private final BoundedValueMemo<io.farfrontier.palemirror.frontier.v3.api.SubjectId, List<Header>> headers = new BoundedValueMemo<>(12);
 
@@ -32,6 +33,14 @@ public final class GrayboxForestPlan {
             configured.add(new Patch(rule, home.anchor()));
         }
         patches = List.copyOf(configured);
+        var covered = new HashSet<ForestRegion>();
+        for (var patch : patches) {
+            int radius = patch.rule().outerRadius() + 2;
+            for (int x = Math.floorDiv(patch.centre().x() - radius, 16); x <= Math.floorDiv(patch.centre().x() + radius, 16); x++)
+                for (int z = Math.floorDiv(patch.centre().z() - radius, 16); z <= Math.floorDiv(patch.centre().z() + radius, 16); z++)
+                    covered.add(new ForestRegion(x, z));
+        }
+        coverage = Set.copyOf(covered);
         if (patches.isEmpty()) { protectedColumns = Set.of(); return; }
         var excluded = new HashSet<TerrainColumn>();
         FrontierGrayboxPlan.compileInitialSettlementFabric(bootstrap).cells().keySet().forEach(position -> exclude(excluded, position));
@@ -53,7 +62,10 @@ public final class GrayboxForestPlan {
         return PLANS.get(new BootstrapKey(Objects.requireNonNull(bootstrap)), () -> new GrayboxForestPlan(bootstrap));
     }
     /** At most this chunk and the two-block canopy margin, not all trees in the world. */
-    public List<TreeDescriptor> touching(ForestRegion region) { return regions.get(region, () -> inRegion(region)); }
+    public boolean mayTouch(ForestRegion region) { return coverage.contains(region); }
+    public List<TreeDescriptor> touching(ForestRegion region) {
+        return mayTouch(region) ? regions.get(region, () -> inRegion(region)) : List.of();
+    }
     private List<TreeDescriptor> inRegion(ForestRegion region) {
         var result = new ArrayList<TreeDescriptor>();
         int minX = region.x() * 16 - 2, maxX = region.x() * 16 + 17;

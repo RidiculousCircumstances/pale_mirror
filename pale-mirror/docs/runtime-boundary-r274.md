@@ -199,3 +199,22 @@ calculation or commit. Nonphysical dimensions retain the original native path.
 No custom durable queue, disabled foliage, dropped scheduled event or removed
 pre-effect disk barrier is introduced. Actual native LevelTicks coverage checks
 suffix persistence ownership, duplicate ordering and eventual execution.
+
+On b14da2f60 the subsequent20FPS live sequence reached host sample9462 with
+maximum complete native tick78.92ms (recent maxima7.6–31.5ms). No >80ms tick was
+logged; a natural save span was66.9ms. This is a bounded observation window, not
+a hard-real-time guarantee. The scenario's zero-conflict assertion FAILED: the
+retained incident is exactly the earlier kernel failure at75502 (first=last),
+not a new incident. The retained world and diagnostic history were not erased.
+The actual600-pose forestry window covered65.55blocks with a170-tick longest
+hold, improved relative to the prior558-tick window but not matched work phases.
+Canonical debt still grew1488->3241 across98214->101324; throughput/next-action
+latency is therefore not closed by the native peak result.
+
+The worker JFR also attributes substantial navigation sampling to forest overlay
+lookups in empty regions. Authored patches now publish a conservative canopy-
+expanded region index; snapshots bypass image memo locks/allocation outside both
+that coverage and retained captured-tree footprints. Existing or newly grown
+external trees and cross-boundary aftermath still use the full overlay. Unknown
+base terrain remains unknown. This is a derived membership fast path, not a
+change to route connectivity, resource quantities or canonical schema.
