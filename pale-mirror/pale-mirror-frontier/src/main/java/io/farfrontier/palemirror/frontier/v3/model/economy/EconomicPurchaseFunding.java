@@ -26,9 +26,9 @@ public final class EconomicPurchaseFunding {
         var earlier = afterEarlierBudgets(plan, cash, needs, need.deadline());
         var peers = needs.stream().filter(other -> other.deadline() == need.deadline()).toList();
         var protectedCash = restart ? ProcurementBudget.forOptionalSpending(earlier, peers.stream()
-                .filter(other -> !other.item().equals(item) && other.restartQuantity() > 0)
-                .map(other -> new ProcurementBudget.Need(other.item(), other.restartQuantity(),
-                        other.unitLimit(), other.deadline())).toList())
+                .filter(other -> !other.item().equals(item) && other.restartQuantity() > 0
+                        && (!plan.fundedRestarts().contains(item) || plan.fundedRestarts().contains(other.item())))
+                .map(other -> protectedRestart(plan, other)).toList())
                 : ProcurementBudget.forPurchase(earlier, peers, item);
         long estimate = plan.purchaseBudgets().getOrDefault(item, 0L);
         long optional = Math.max(0, cash.raw() - plan.purchaseBudgets().values().stream().reduce(0L, Math::addExact));
@@ -45,12 +45,25 @@ public final class EconomicPurchaseFunding {
         if (immediateAlternativeQuantity == 0) return new FixedScalar(ordinary);
         var backed = needs.stream().filter(other -> !other.item().equals(item)
                 && other.deadline() <= need.deadline() && plan.fundedRestarts().contains(other.item()))
-                .map(other -> new ProcurementBudget.Need(other.item(), other.restartQuantity(), other.unitLimit(), other.deadline())).toList();
+                .map(other -> protectedRestart(plan, other)).toList();
         long substitutable = ProcurementBudget.forOptionalSpending(cash, backed).raw();
         long unit = plan.purchasePrices().get(item);
         long emergency = immediateAlternativeQuantity > substitutable / unit ? substitutable
                 : Math.multiplyExact(immediateAlternativeQuantity, unit);
         return new FixedScalar(Math.max(ordinary, emergency));
+    }
+    private static ProcurementBudget.Need protectedRestart(EconomicPlan plan, ProcurementBudget.Need need) {
+        if (need.restartQuantity() == 0)
+            return new ProcurementBudget.Need(need.item(), 0, FixedScalar.ZERO, need.deadline());
+        long unit = need.unitLimit().raw();
+        long full = unit > 0 && need.restartQuantity() > Long.MAX_VALUE / unit
+                ? Long.MAX_VALUE : need.restartQuantity() * unit;
+        // A commodity may serve several independent bundles. Protect its allocated
+        // contribution, not the unfunded requirements of every other production.
+        // Current repricing may still require at least one whole unit.
+        long cash = plan.fundedRestarts().contains(need.item())
+                ? Math.max(unit, Math.min(full, plan.purchaseBudgets().getOrDefault(need.item(), 0L))) : full;
+        return new ProcurementBudget.Need(need.item(), 1, new FixedScalar(cash), need.deadline());
     }
     private static FixedScalar afterEarlierBudgets(EconomicPlan plan, FixedScalar cash,
             List<ProcurementBudget.Need> needs, long deadline) {

@@ -2,7 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model.economy;
 
 import java.util.*;
 
-/** Derived intent. Funded restarts have quoted cash coverage, not promised on-time inputs.
+/** Derived intent. Funded restart items contribute to a complete quoted production bundle,
+ * independently of unfunded sibling productions; they do not promise on-time inputs.
  * Additional production is net new output, not a target against another stock scope.
  * Only canonical admission owners may turn it into obligations. */
 public record EconomicPlan(long horizonTicks, Map<String, Long> domesticTargets,

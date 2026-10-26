@@ -12,7 +12,7 @@ class EconomicCashCycleCodecTest {
     @Test void operatingEnvelopeAndExplicitRecoveryPurposeRoundTripAndRejectUnknownOrUnfundedScope() throws IOException {
         var amounts = Map.of("fuel", 10L);
         var plan = new EconomicPlan(1000, amounts, amounts, amounts, 0, 5, 2, List.of(), List.of(), Set.of(),
-                amounts, Set.of(), amounts, Map.of("fuel", 15L));
+                amounts, Set.of("fuel"), amounts, Map.of("fuel", 15L));
         var bytes = new ByteArrayOutputStream();
         EconomicPlanCodec.write(new DataOutputStream(bytes), plan);
         assertEquals(plan, EconomicPlanCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));

@@ -7,7 +7,8 @@ import java.util.*;
 final class EconomicFunding {
     record Allocation(Map<String, Long> budgets, long liquidity, long unfunded,
                       Map<String, Long> prices, Set<String> fundedRestarts, boolean restartCashShortfall, Map<String, Long> operatingBudgets) { }
-    Allocation allocate(EconomicSnapshot facts, SupplyPlanner.Plan supply, EconomicRequirements.Projection horizon, long horizonTicks) {
+    Allocation allocate(EconomicSnapshot facts, SupplyPlanner.Assessment assessment, EconomicRequirements.Projection horizon, long horizonTicks) {
+        var supply = assessment.plan();
         var prices = new TreeMap<>(facts.replacementPrices());
         var quoted = new TreeMap<String, Long>();
         for (var offer : facts.market().offers()) quoted.merge(offer.item(),
@@ -18,7 +19,6 @@ final class EconomicFunding {
         var restartQuantities = new TreeMap<String, Long>();
         var currentCosts = new TreeMap<String, Long>();
         var desiredCosts = new TreeMap<String, Long>();
-        var quotedRestarts = new HashSet<String>();
         var processes = new HashMap<String, SupplyPlanner.Process>(); facts.processes().forEach(p -> processes.put(p.id(), p));
         for (var entry : supply.demands().entrySet()) {
             String item = entry.getKey(); var demand = entry.getValue(); var stock = facts.stocks().get(item);
@@ -31,7 +31,6 @@ final class EconomicFunding {
                 actual = SourcingPurchaseCost.quote(facts.market(), item, minimum, Long.MAX_VALUE);
             if (minimum > 0 && actual.quantity() == minimum) {
                 prices.put(item, Math.ceilDiv(actual.cash(), minimum));
-                quotedRestarts.add(item);
             }
             restart.put(item, actual.quantity() == minimum ? actual.cash()
                     : SourcingPurchaseCost.forecast(facts.market(), item, minimum, prices.get(item)));
@@ -59,7 +58,6 @@ final class EconomicFunding {
                     restart.put(entry.getKey(), late.cash());
                     requested.put(entry.getKey(), Math.max(late.cash(), desiredCosts.get(entry.getKey())));
                     prices.put(entry.getKey(), Math.ceilDiv(late.cash(), late.quantity()));
-                    quotedRestarts.add(entry.getKey());
                 }
             }
             restartTotal = restart.values().stream().reduce(0L, Math::addExact);
@@ -75,18 +73,16 @@ final class EconomicFunding {
             operating.merge(item, cost, Math::addExact);
             requested.merge(item, operating.get(item), Math::max);
         });
-        if (restartTotal <= available) {
-            budgets.putAll(restart); available -= restartTotal;
-            for (var item : operating.keySet()) {
-                long take = Math.min(available, Math.max(0, operating.get(item) - budgets.getOrDefault(item, 0L)));
-                budgets.merge(item, take, Math::addExact); available -= take;
-            }
-        } else {
-            // An unaffordable input bundle cannot consume the last money while
-            // preventing direct survival purchases. No imaginary complete restart.
+        var funded = EconomicRestartFunding.allocate(facts, assessment);
+        budgets.putAll(funded.budgets());
+        prices.putAll(funded.prices());
+        funded.budgets().forEach((item, cost) -> requested.merge(item, cost, Math::max));
+        available -= budgets.values().stream().reduce(0L, Math::addExact);
+        // An unavailable sibling cannot erase a complete quoted bundle. Conversely,
+        // partial optional funding below never promotes an incomplete bundle.
+        if (restartTotal > facts.market().availableMoney())
             for (var entry : facts.stocks().entrySet()) if (entry.getValue().policy().essential())
                 requested.merge(entry.getKey(), currentCosts.get(entry.getKey()), Math::max);
-        }
         var order = new ArrayList<>(requested.keySet());
         boolean restartImpossible = restartTotal > facts.market().availableMoney();
         order.sort(Comparator.<String>comparingInt(item -> priority(facts, supply, item, restartImpossible))
@@ -102,12 +98,8 @@ final class EconomicFunding {
             liquidity = Math.addExact(liquidity, Math.max(0, entry.getValue() - current));
         }
         long cost = requested.values().stream().reduce(0L, Math::addExact);
-        var restartItems = restart.entrySet().stream().filter(e -> e.getValue() > 0)
-                .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toUnmodifiableSet());
-        boolean fullyQuoted = quotedRestarts.containsAll(restartItems);
         return new Allocation(Map.copyOf(budgets), liquidity, Math.max(0, cost - facts.market().availableMoney()),
-                Map.copyOf(prices), fullyQuoted && restartTotal <= facts.market().availableMoney() ? restartItems : Set.of(),
-                !restartItems.isEmpty() && restartTotal > facts.market().availableMoney(), Map.copyOf(operating));
+                Map.copyOf(prices), funded.items(), restartTotal > facts.market().availableMoney(), Map.copyOf(operating));
     }
     private static int priority(EconomicSnapshot facts, SupplyPlanner.Plan plan, String item, boolean restartImpossible) {
         var stock = facts.stocks().get(item); var demand = plan.require(item);

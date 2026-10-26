@@ -55,7 +55,8 @@ public final class EconomicPlanner {
             stocks.put(item, new SupplyPlanner.Stock(stock.available(), stock.incoming(), stock.promisedProduction(), target,
                     minimum, stock.consumptionUnits(), stock.consumptionPeriodTicks(), stock.policy(), stock.arrivals(), OptionalLong.of(target), stock.requiredInput()));
         }
-        var supply = new SupplyPlanner().plan(stocks, facts.processes(), facts.commitments(), selection);
+        var assessment = new SupplyPlanner().assess(stocks, facts.processes(), facts.commitments(), selection);
+        var supply = assessment.plan();
         supply.inputRequirements().forEach((item, amount) -> domestic.merge(item, amount, Math::addExact));
         var missing = new TreeMap<String, Long>();
         domestic.forEach((item, target) -> {
@@ -70,7 +71,7 @@ public final class EconomicPlanner {
             missing.put(item, Math.max(0, target - Math.addExact(stock.available(), arriving)));
         });
         var projected = new EconomicRequirements.Projection(domestic, missing);
-        var funding = new EconomicFunding().allocate(facts, supply, projected, horizon);
+        var funding = new EconomicFunding().allocate(facts, assessment, projected, horizon);
         var saleable = EconomicStockRelease.assess(facts, supply, reserves);
         var production = new TreeMap<String, Long>();
         facts.stocks().forEach((item, stock) -> {

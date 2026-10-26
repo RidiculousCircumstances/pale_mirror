@@ -213,7 +213,22 @@ public final class SupplyPlanner {
     public Plan plan(Map<String, Stock> facts, List<Process> capacities, List<Dependency> commitments) {
         return plan(facts, capacities, commitments, SourcingMarket.none());
     }
+    /** One complete owner-declared restart; inputs remain a bundle, never independent promises. */
+    public record Restart(String product, Map<String, Long> inputs) {
+        public Restart {
+            Objects.requireNonNull(product); inputs = Map.copyOf(inputs);
+            if (product.isBlank() || inputs.isEmpty() || inputs.values().stream().anyMatch(q -> q < 1))
+                throw new IllegalArgumentException("invalid production restart bundle");
+        }
+    }
+    /** Ephemeral dependency advice from the same source-selection pass, never another durable plan. */
+    public record Assessment(Plan plan, List<Restart> restarts) {
+        public Assessment { Objects.requireNonNull(plan); restarts = List.copyOf(restarts); }
+    }
     public Plan plan(Map<String, Stock> facts, List<Process> capacities, List<Dependency> commitments, SourcingMarket market) {
+        return assess(facts, capacities, commitments, market).plan();
+    }
+    public Assessment assess(Map<String, Stock> facts, List<Process> capacities, List<Dependency> commitments, SourcingMarket market) {
         var observed = Map.copyOf(facts); var processes = List.copyOf(capacities);
         var sourcing = market.allocate();
         commitments = List.copyOf(commitments);
@@ -245,10 +260,14 @@ public final class SupplyPlanner {
         for (var entry : stocks.entrySet()) entry.getValue().requiredInput().ifPresent(required -> {
             // An admitted recovery delivery already covers this finite restart.
             // Lateness remains visible; it must not buy another unit every review.
-            if (entry.getValue().covered() < required.quantity()) demands.put(entry.getKey(), new Demand(0, 0,
-                    required.quantity(), required.withinTicks(), Set.of(Reason.PRODUCTION_INPUT), Optional.empty()));
+            if (entry.getValue().covered() < required.quantity()) {
+                resources.requireRecovery(entry.getKey(), required.quantity());
+                demands.put(entry.getKey(), new Demand(0, 0, required.quantity(), required.withinTicks(),
+                        Set.of(Reason.PRODUCTION_INPUT), Optional.empty()));
+            }
         });
         for (var committed : commitments) {
+            resources.protect(committed.product(), committed.resource(), committed.quantity());
             var product = requireStock(stocks, committed.product());
             long deadline = product.policy().essential() ? product.deadline() : Long.MAX_VALUE;
             dependency(stocks, processes, demands, allocatedBatches, resources, committed.resource(), committed.quantity(), committed.quantity(),
@@ -292,8 +311,8 @@ public final class SupplyPlanner {
             if (missing > pending) expand(stocks, processes, demands, allocatedBatches, resources,
                     entry.getKey(), missing - pending, deadline, reasons, new HashSet<>(), sourcing);
         }
-        return new Plan(demands, Map.of(), sourcing.spending(), sourcing.purchased(), resources.inputRequirements(),
-                Optional.empty(), resources.backedRecipes());
+        return new Assessment(new Plan(demands, Map.of(), sourcing.spending(), sourcing.purchased(), resources.inputRequirements(),
+                Optional.empty(), resources.backedRecipes()), resources.restarts());
     }
     private void expand(Map<String, Stock> stocks, List<Process> capacities, Map<String, Demand> demands, Map<String, Long> allocatedBatches, SupplyResources resources,
                         String item, long amount, long deadline, Set<Reason> reasons, Set<String> ancestors, SourcingMarket.Allocation sourcing) {
@@ -325,6 +344,11 @@ public final class SupplyPlanner {
             // Coverage and intent are separate even for a partially funded batch plan.
             var fuel = resources.fuel(process, batches, allocated);
             var protectedFuel = resources.fuel(process, protectedBatches, allocated);
+            if (batches > 0) {
+                process.inputs().forEach((input, quantity) -> resources.protect(item, input,
+                        Math.multiplyExact(protectedBatches, quantity)));
+                protectedFuel.ifPresent(fuelInput -> resources.protect(item, fuelInput.item(), fuelInput.quantity()));
+            }
             resources.allocate(process, backed, allocated);
             resources.allocateLabour(process, batches);
             allocatedBatches.put(process.id(), Math.addExact(allocated, batches));

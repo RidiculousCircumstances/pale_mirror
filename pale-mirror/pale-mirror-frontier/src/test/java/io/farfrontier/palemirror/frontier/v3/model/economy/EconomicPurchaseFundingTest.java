@@ -7,6 +7,37 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPurchaseFundingTest {
+    @Test void arrivedRestartInputNoLongerBlocksImmediateConsumption() {
+        var budgets = Map.of("fuel", 2L, "food", 0L);
+        var plan = new EconomicPlan(1000, budgets, budgets, budgets, 0, 200, 0, List.of(), List.of(), Set.of(),
+                Map.of("fuel", 2L, "food", 1L), Set.of("fuel"), budgets);
+        var needs = List.of(new ProcurementBudget.Need("fuel", 101, new FixedScalar(2), 0, 0),
+                new ProcurementBudget.Need("food", 20, FixedScalar.ONE, 0));
+        assertEquals(6, EconomicPurchaseFunding.available(plan, new FixedScalar(6), needs, "food", 20).raw());
+    }
+
+    @Test void emergencyAlternativeProtectsFundedContributionNotUnfundedSiblingDemandForSameInput() {
+        var budgets = Map.of("fuel", 2L, "food", 0L);
+        var plan = new EconomicPlan(1000, budgets, budgets, budgets, 0, 200, 0, List.of(), List.of(), Set.of(),
+                Map.of("fuel", 2L, "food", 1L), Set.of("fuel"), budgets);
+        var needs = List.of(new ProcurementBudget.Need("fuel", 101, new FixedScalar(2), 0, 101),
+                new ProcurementBudget.Need("food", 20, FixedScalar.ONE, 0));
+        assertEquals(4, EconomicPurchaseFunding.available(plan, new FixedScalar(6), needs, "food", 20).raw());
+    }
+
+    @Test void unfundedIndependentRestartCannotVetoQuotedProductionInputsAtPurchaseBoundary() {
+        var budgets = Map.of("fuel", 6L, "repair", 0L, "food", 0L);
+        var prices = Map.of("fuel", 2L, "repair", 100L, "food", 1L);
+        var plan = new EconomicPlan(1000, budgets, budgets, budgets, 0, 100, 0, List.of(), List.of(), Set.of(),
+                prices, Set.of("fuel"), budgets, Map.of("fuel", 2L, "repair", 100L));
+        var needs = List.of(new ProcurementBudget.Need("fuel", 20, new FixedScalar(2), 0, 1),
+                new ProcurementBudget.Need("repair", 1, new FixedScalar(100), 0, 1),
+                new ProcurementBudget.Need("food", 20, FixedScalar.ONE, 0));
+        assertEquals(6, EconomicPurchaseFunding.available(plan, new FixedScalar(6), needs, "fuel").raw());
+        assertEquals(4, EconomicPurchaseFunding.available(plan, new FixedScalar(6), needs, "food", 20).raw(),
+                "the complete restart remains protected against emergency alternatives");
+    }
+
     @Test void unfundedOperatingWishesCannotVetoAnAlreadyAllocatedRestartPurchase() {
         var budgets = Map.of("fuel", 30L, "repair", 70L);
         var plan = new EconomicPlan(1000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),

@@ -10,6 +10,20 @@ final class SupplyResources {
     private final Map<String, Long> inputRequirements = new HashMap<>();
     private final Map<String, Long> urgentInputRequirements = new HashMap<>();
     private final Map<String, Long> labour = new TreeMap<>();
+    private final Map<String, Map<String, Long>> restartInputs = new TreeMap<>();
+    void protect(String product, String resource, long quantity) {
+        restartInputs.computeIfAbsent(product, ignored -> new TreeMap<>()).merge(resource, quantity, Math::addExact);
+    }
+    private final Map<String, Long> recoveryInputs = new TreeMap<>();
+    void requireRecovery(String resource, long quantity) { recoveryInputs.put(resource, quantity); }
+    List<SupplyPlanner.Restart> restarts() {
+        var result = new ArrayList<SupplyPlanner.Restart>();
+        // Buying a finished recovery input and producing that input are separate
+        // alternatives, never a self-dependent recipe requiring its own output.
+        recoveryInputs.forEach((item, quantity) -> result.add(new SupplyPlanner.Restart(item, Map.of(item, quantity))));
+        restartInputs.forEach((product, inputs) -> result.add(new SupplyPlanner.Restart(product, inputs)));
+        return List.copyOf(result);
+    }
     private final Map<String, Long> backedRecipes = new TreeMap<>();
     Map<String, Long> backedRecipes() { return Map.copyOf(backedRecipes); }
 
