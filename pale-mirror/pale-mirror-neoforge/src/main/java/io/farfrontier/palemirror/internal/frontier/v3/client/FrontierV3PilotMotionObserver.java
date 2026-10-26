@@ -120,6 +120,9 @@ final class FrontierV3PilotMotionObserver {
     /** Never fall back to nearest-of-type: a motion receipt belongs to the current exact lease worker. */
     private static String expectedName(Minecraft minecraft, JsonObject action) {
         if (action.has("nameContains")) return FrontierV3PilotPresentationName.resolve(minecraft, action);
+        // An explicit worker must pass exact UUID admission before body selection.
+        // Nameless pack animals need no unrelated resident/process name receipt.
+        if (action.has("workerId")) return "";
         JsonObject process = receivedDiagnostic("process", action.get("id").getAsString());
         if (process == null || !process.has("identity") || !process.get("identity").isJsonObject()) return null;
         JsonObject identity = process.getAsJsonObject("identity");
