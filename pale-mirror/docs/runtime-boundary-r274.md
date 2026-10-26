@@ -362,3 +362,24 @@ interrupting execution or retiring the body revokes it immediately. No larger
 timeout or field-state branch is added to the generic navigator. Other owners
 without a retained goal keep their bounded local directive. Existing explicit
 ActorMovement permissions keep their original owner and validation path.
+
+The following clean HOT window still failed: before profiling, native67.45ms
+but a ready callback112.06ms (aggregate scene stage108.78ms), with a farmer
+remaining PREPARED. The later271.44ms native maximum includes JFR startup and
+must not be presented as a comparable clean measurement. The25s profile shows
+land is no longer the dominant preparation stack; goods transport/equipment
+valuation and economic change/relationship validation remain significant.
+
+Source review found a shared continuation defect: the outer physical pass
+consumed its aggregate scenes stage even when the nested scene-family pass
+yielded with an unfinished suffix. Readiness resumed the outer suffix, so later
+families had to wait for another complete physical round rather than their
+actual dependency. The nested pass and aggregate tick path are removed. Each
+closed registered scene behavior now contributes its own resumable stage to
+the single physical registry, preserving provider order and each family's
+declared scene-write partition. All stages share the original allowance and
+one invocation per native turn; ready callbacks cannot replay prior actors or
+renew the budget. Composition coverage requires one stage per registered family
+and forbids the lost aggregate continuation. Existing physical-pass tests cover
+delayed acknowledgement/suffix order/non-replay; native shared storage/lifetime/
+field56 and scoped registry/actuation tests pass flat-physical-pass-check.log.

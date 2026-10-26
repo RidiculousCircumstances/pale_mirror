@@ -102,9 +102,6 @@ final class FrontierV3SceneExecutor {
     /** Admission outcome; release observations live in the durable departure ledger. */
     enum BodyMaterialization { COMPLETE, DEFERRED, CONFLICT }
     private FrontierV3SceneExecutor() { }
-    static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        FrontierV3SceneBehaviorRegistry.tick(level, runtime);
-    }
     /** One registered family is checked before every physical executor turn. */
     static void requireRegisteredSceneTurn(FrontierWorldState state, SceneLease lease) {
         FrontierDurationProcessDriverRegistry.requireSceneTick(lease, state.actorLocations(), 1);
@@ -444,7 +441,6 @@ final class FrontierV3SceneExecutor {
         FrontierV3RestartDemandGrace.forget(runtime);
         FrontierV3SceneStoredRecovery.forget(runtime);
         FrontierV3SceneTurnScheduler.forget(runtime);
-        FrontierV3SceneBehaviorRegistry.forgetTurns(runtime);
         FrontierV3ProductionTransformationExecutor.forget(runtime);
         FrontierV3ExactItemConsumptionExecutor.forget(runtime);
     }

@@ -5,7 +5,9 @@ import java.util.Set;
 
 /** The one explicit v3 physical execution composition. */
 final class FrontierV3PhysicalExecutors {
-    private static final FrontierV3PhysicalExecutorRegistry REGISTRY = new FrontierV3PhysicalExecutorRegistry(List.of(
+    private static final FrontierV3PhysicalExecutorRegistry REGISTRY = compose();
+    private static FrontierV3PhysicalExecutorRegistry compose() {
+        var stages = new java.util.ArrayList<>(List.of(
             executor("meal-departure-recovery", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "meal-departure-recovery", FrontierV3ResidentMealDepartureRecovery::tick),
             executor("field-equipment-recovery", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "field-equipment-recovery", FrontierV3FieldEquipmentExecutor::recoverDeparture),
             executor("forest-generation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "forest-generation-observation", FrontierV3ForestryObservation::tick),
@@ -84,10 +86,11 @@ final class FrontierV3PhysicalExecutors {
             executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
             executor("route-construction", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("structural-repair"), "route-construction-effect", FrontierV3RouteConstructionExecutor::tick),
             executor("route-maintenance", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-construction"), "route-maintenance-effect", FrontierV3RouteMaintenanceExecutor::tick),
-            executor("deferred-aftermath", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-maintenance"), "deferred-aftermath-effect", FrontierV3AftermathOwnerComposition::aftermath),
-
-            executor("scenes", FrontierV3PhysicalExecutorRegistry.Stage.SCENE, Set.of("deferred-aftermath", "object-boards"), "scene-leases", FrontierV3SceneExecutor::tick)
-    ));
+            executor("deferred-aftermath", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-maintenance"), "deferred-aftermath-effect", FrontierV3AftermathOwnerComposition::aftermath)
+        ));
+        stages.addAll(FrontierV3SceneBehaviorRegistry.registry().physicalStages());
+        return new FrontierV3PhysicalExecutorRegistry(stages);
+    }
 
     private FrontierV3PhysicalExecutors() { }
 

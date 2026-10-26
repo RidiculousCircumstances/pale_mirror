@@ -26,7 +26,11 @@ class FrontierV3PhysicalExecutorsTest {
         var ids = diagnostics.stream().map(FrontierV3PhysicalExecutorRegistry.Diagnostic::id).toList();
         assertTrue(ids.indexOf("pedestrian-courtesy") < ids.indexOf("ambient-actors"));
         assertTrue(ids.indexOf("pedestrian-courtesy") < ids.indexOf("shipment-resource-effects"));
-        assertTrue(ids.indexOf("pedestrian-courtesy") < ids.indexOf("scenes"));
+        var sceneStages = diagnostics.stream().filter(value -> value.stage() == FrontierV3PhysicalExecutorRegistry.Stage.SCENE).toList();
+        assertTrue(sceneStages.stream().allMatch(value -> ids.indexOf("pedestrian-courtesy") < ids.indexOf(value.id())));
+        org.junit.jupiter.api.Assertions.assertEquals(io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.values().length,
+                sceneStages.size(), "every registered family needs its own resumable stage, not a hidden child pass");
+        assertFalse(ids.contains("scenes"), "an aggregate turn must not consume an unfinished scene-family suffix");
         assertTrue(diagnostics.stream().filter(value -> value.id().equals("ambient-actors")).findFirst().orElseThrow()
                 .dependencies().contains("pedestrian-courtesy"));
     }

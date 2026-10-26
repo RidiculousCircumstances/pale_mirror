@@ -13,7 +13,6 @@ import net.minecraft.server.level.ServerLevel;
 
 import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -61,7 +60,6 @@ final class FrontierV3SceneBehaviorRegistry {
                     Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.ROUTE_PATROL))));
 
     private final List<Behavior> ordered;
-    private final Map<FrontierV3ServerRuntime<?, ?>, FrontierV3PhysicalPass> turns = new java.util.WeakHashMap<>();
 
     FrontierV3SceneBehaviorRegistry(List<Behavior> registrations) {
         Objects.requireNonNull(registrations, "scene behavior registrations");
@@ -82,26 +80,21 @@ final class FrontierV3SceneBehaviorRegistry {
     /** Resolve and validate providers at service composition, before the first gameplay turn. */
     static FrontierV3SceneBehaviorRegistry registry() { return CURRENT; }
 
-    static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        CURRENT.tickAll(level, runtime);
+    /** Every registered family is a first-class continuation in the single physical
+     * pass. A parent stage must not consume its turn before a child suffix finishes. */
+    List<FrontierV3PhysicalExecutorRegistry.Definition> physicalStages() {
+        var result = new java.util.ArrayList<FrontierV3PhysicalExecutorRegistry.Definition>();
+        var dependencies = java.util.Set.of("deferred-aftermath", "object-boards");
+        for (var behavior : ordered) {
+            String id = "scene-" + behavior.kind().name().toLowerCase(java.util.Locale.ROOT);
+            result.add(new FrontierV3PhysicalExecutorRegistry.Definition(id, FrontierV3PhysicalExecutorRegistry.Stage.SCENE,
+                    dependencies, java.util.Set.of("scene-leases/" + behavior.kind().name()), 1,
+                    FrontierV3PhysicalExecutorRegistry.Admission.REQUIRED,
+                    (level, runtime) -> behavior.tick().tick(level, runtime)));
+            dependencies = java.util.Set.of(id); // Preserve the declared provider order.
+        }
+        return List.copyOf(result);
     }
-
-    /** One cooperative round, with the unvisited suffix retained across native ticks.
-     * Readiness callbacks share the same allowance and cannot replay an acted family. */
-    void tickAll(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        var pass = turns.computeIfAbsent(runtime, ignored -> new FrontierV3PhysicalPass(System::nanoTime));
-        pass.begin(level.getGameTime());
-        long allowance = (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D);
-        pass.run(ordered.size(), allowance, () -> !runtime.awaitingCanonicalPredecessor(), index -> {
-            var behavior = ordered.get(index);
-            try (var ignored = io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.safelyBegin(
-                    runtime.executionMetrics(), io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.Stage.PHYSICAL,
-                    "scene-family", behavior.kind().name())) {
-                behavior.tick().tick(level, runtime);
-            }
-        });
-    }
-    static void forgetTurns(FrontierV3ServerRuntime<?, ?> runtime) { CURRENT.turns.remove(runtime); }
 
     static SubjectId strikeCause(FrontierWorldState state, SceneLease lease, SubjectId attacker, long epoch) {
         for (Behavior behavior : CURRENT.ordered) {
