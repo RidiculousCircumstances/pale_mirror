@@ -63,6 +63,28 @@ that area's geometry. Maximum fields, total cells, per-turn development and
 search radius remain unchanged. No speculative route, coordinate-based owner
 inference, soil teleportation or arbitrary rise of limits was introduced.
 
+## First physical display of expanded land
+
+The first live HOT/COLD/HOT check exposed an initialization contradiction:
+Hearthvale's original field had already expanded from64 to97cells in COLD,
+including33coarse-dirt cells. Initialization treated unchanged admitted coarse
+ground as ambiguous evidence of an unrecorded write. Both the writer and journal
+also maintained different hardcoded lists of harmless matching blocks.
+
+The read-only initial-plan review now supplies one predecessor permission to
+both consumers. Exact admitted ground can be retained without claiming that
+tillage happened; a target-looking crop or farmland without a valid predecessor
+still cannot be adopted. Prepared durability and cross-owner fences remain.
+A refused batch carries the actual rejected review, including its index,
+position and observed/target states. Conflict coordinates no longer silently
+point to the batch's first block.
+
+The native regression reproduced the actual `AMBIGUOUS` rejection before the
+repair. It also verifies that a substituted stone block prevents the entire
+unprepared batch from writing, and that successful initial display retains
+coarse dirt rather than granting preparation or yield. The old failed live
+world is retained for diagnosis; it is not manually repaired or reported green.
+
 ## Verification and limits
 
 Affected Java checks include config-only extra soil/action data, missing and

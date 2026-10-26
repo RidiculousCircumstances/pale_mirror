@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -292,11 +294,12 @@ final class FrontierV3ResourceSiteExecutor {
             return;
         }
         var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, runtime, site);
-        if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
-                || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS) {
-            var step = FrontierV3ResourceFieldInitialPlan.stepAt(site, initial.cursor().nextWrite(), initial.cursor().target());
-            recordCellInitializationConflict(level, runtime, site, step.position());
-        }
+        result.rejected().ifPresent(review -> {
+            PaleMirrorMod.LOGGER.warn("PMV3_FIELD_INITIALIZATION_REJECTED site={} index={} position={} expected={} observed={} disposition={} layout={}",
+                    site.id().value(), review.step().index(), review.step().position(), review.step().target(),
+                    review.observed().orElseThrow(), review.disposition(), review.step().layoutRevision());
+            recordCellInitializationConflict(level, runtime, site, review.step().position());
+        });
     }
     private static void recordCellInitializationConflict(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ResourceSite site, BlockPosition position) {
@@ -376,9 +379,10 @@ final class FrontierV3ResourceSiteExecutor {
         }
         if (!initial.cursor().complete()) {
             var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, runtime, site);
-            if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
-                    || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
-                unknown(runtime, intent.id(), "cell-field-" + result.name().toLowerCase(java.util.Locale.ROOT));
+            result.rejected().ifPresent(review -> unknown(runtime, intent.id(), "cell-field-"
+                    + result.status().name().toLowerCase(java.util.Locale.ROOT) + "-index-" + review.step().index()
+                    + "-position-" + review.step().position() + "-expected-" + review.step().target()
+                    + "-observed-" + review.observed().orElseThrow()));
             return;
         }
         var targetCycle = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle.seeded(site.id(), site.layout(), 1);

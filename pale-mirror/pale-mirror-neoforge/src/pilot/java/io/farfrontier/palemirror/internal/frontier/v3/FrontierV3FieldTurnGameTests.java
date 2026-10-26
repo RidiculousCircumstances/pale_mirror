@@ -68,8 +68,8 @@ public final class FrontierV3FieldTurnGameTests {
         var before = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
         if (before.complete()) { complete.run(); return; }
         var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> true);
-        if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
-                || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
+        if (result.status() == FrontierV3ResourceFieldInitialWriter.Status.FOREIGN
+                || result.status() == FrontierV3ResourceFieldInitialWriter.Status.AMBIGUOUS)
             helper.fail("declared field projection lost its exact predecessor: " + result);
         var after = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
         helper.assertTrue(after.nextWrite() >= before.nextWrite()

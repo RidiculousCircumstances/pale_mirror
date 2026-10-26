@@ -404,8 +404,8 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         var owner = (FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id());
         if (owner.cursor().complete()) { completed.run(); return; }
         var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> true);
-        if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
-                || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
+        if (result.status() == FrontierV3ResourceFieldInitialWriter.Status.FOREIGN
+                || result.status() == FrontierV3ResourceFieldInitialWriter.Status.AMBIGUOUS)
             helper.fail("initial projection rejected its actual physical predecessor: " + result);
         helper.runAfterDelay(1, () -> finishInitialProjection(helper, site, completed));
     }

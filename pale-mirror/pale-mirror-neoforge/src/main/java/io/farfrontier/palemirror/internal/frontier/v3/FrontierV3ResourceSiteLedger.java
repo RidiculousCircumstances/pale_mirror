@@ -305,7 +305,8 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         FieldInitialization prior = fieldClaim(site.id()) instanceof FieldInitialization value ? value : null;
         if (prior == null || prior.status() != Status.PENDING || !prior.cursor().matches(site)
                 || prior.cursor().complete() || prior.cursor().prepared()
-                || !review.matches(site, prior.cursor(), FrontierV3ResourceFieldInitialPlan.Disposition.BEFORE))
+                || !review.preparationPermitted() || !review.step().equals(
+                        FrontierV3ResourceFieldInitialPlan.stepAt(site, prior.cursor().nextWrite(), prior.cursor().target())))
             throw new IllegalStateException("initial field write lacks its exact observed neutral predecessor");
         fieldClaims.put(prior.siteId(), new FieldInitialization(prior.siteId(), prior.intentId(), Status.PENDING,
                 prior.cursor().preparedStep(review.observed().orElseThrow()))); setDirty();
@@ -321,10 +322,7 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         for (int offset = 0; offset < reviews.size(); offset++) {
             var review = reviews.get(offset);
             var step = FrontierV3ResourceFieldInitialPlan.stepAt(site, prior.cursor().nextWrite() + offset, prior.cursor().target());
-            boolean emptyTarget = (step.target().isAir() || step.target().is(net.minecraft.world.level.block.Blocks.DIRT))
-                    && review.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.APPLIED;
-            if (!review.step().equals(step) || review.observed().isEmpty()
-                    || !emptyTarget && review.disposition() != FrontierV3ResourceFieldInitialPlan.Disposition.BEFORE)
+            if (!review.step().equals(step) || !review.preparationPermitted())
                 throw new IllegalStateException("initial field batch has an unloaded, foreign or unclaimed predecessor");
         }
         fieldClaims.put(site.id(), new FieldInitialization(site.id(), prior.intentId(), Status.PENDING,

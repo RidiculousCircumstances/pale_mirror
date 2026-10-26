@@ -12,7 +12,19 @@ final class FrontierV3ResourceFieldInitialWriter {
     /** Allocation ceiling for replay-safe presentation, not growth/work cadence. */
     static final int MAX_BATCH_WRITES = FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES;
     /** CURSOR_COMPLETE is not activation or canonical preparation confirmation. */
-    enum Result { UNLOADED, FOREIGN, AMBIGUOUS, RETRY, ADVANCED, CURSOR_COMPLETE }
+    enum Status { UNLOADED, FOREIGN, AMBIGUOUS, RETRY, ADVANCED, CURSOR_COMPLETE }
+    record Result(Status status, java.util.Optional<FrontierV3ResourceFieldInitialPlan.Review> rejected) {
+        Result {
+            Objects.requireNonNull(status); Objects.requireNonNull(rejected);
+            if ((status == Status.FOREIGN || status == Status.AMBIGUOUS) != rejected.isPresent())
+                throw new IllegalArgumentException("initial field refusal requires its exact block observation");
+        }
+        static Result of(Status status) { return new Result(status, java.util.Optional.empty()); }
+        static Result refuse(FrontierV3ResourceFieldInitialPlan.Review review) {
+            return new Result(review.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.FOREIGN
+                    ? Status.FOREIGN : Status.AMBIGUOUS, java.util.Optional.of(review));
+        }
+    }
 
     private FrontierV3ResourceFieldInitialWriter() { }
 
@@ -54,10 +66,10 @@ final class FrontierV3ResourceFieldInitialWriter {
         if (!(ledger.fieldClaim(Objects.requireNonNull(site).id()) instanceof FrontierV3ResourceSiteLedger.FieldInitialization claim)
                 || claim.status() != FrontierV3ResourceSiteLedger.Status.PENDING || !claim.cursor().matches(site))
             throw new IllegalStateException("initial field has no exact current physical owner");
-        if (claim.cursor().complete()) return Result.CURSOR_COMPLETE;
+        if (claim.cursor().complete()) return Result.of(Status.CURSOR_COMPLETE);
         int limit = initialWriteBudget(io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get());
         var budget = FrontierV3ProjectionWriteBudget.current(level);
-        if (!budget.available()) return Result.RETRY;
+        if (!budget.available()) return Result.of(Status.RETRY);
         int count = Math.min(limit, budget.remaining());
         if (!claim.cursor().prepared()) {
             var before = new java.util.ArrayList<FrontierV3ResourceFieldInitialPlan.Review>();
@@ -65,12 +77,8 @@ final class FrontierV3ResourceFieldInitialWriter {
                     claim.cursor().nextWrite() + count); index++) {
                 var reading = FrontierV3ResourceFieldInitialPlan.observe(level, site,
                         FrontierV3ResourceFieldInitialPlan.stepAt(site, index, claim.cursor().target()));
-                if (reading.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.UNLOADED) return Result.UNLOADED;
-                if (reading.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.FOREIGN) return Result.FOREIGN;
-                if (reading.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.APPLIED
-                        && !reading.step().target().isAir()
-                        && !reading.step().target().is(net.minecraft.world.level.block.Blocks.DIRT)
-                        && !reading.step().target().is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)) return Result.AMBIGUOUS;
+                if (reading.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.UNLOADED) return Result.of(Status.UNLOADED);
+                if (!reading.preparationPermitted()) return Result.refuse(reading);
                 before.add(reading);
             }
             ledger.prepareFieldInitializationBatch(site, before);
@@ -86,22 +94,21 @@ final class FrontierV3ResourceFieldInitialWriter {
             writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(
                     new net.minecraft.core.BlockPos(step.position().x(), step.position().y(), step.position().z()), step.target()));
         }
-        if (!prepare.test(java.util.List.copyOf(writes))) return Result.RETRY;
-        Result result = Result.RETRY;
+        if (!prepare.test(java.util.List.copyOf(writes))) return Result.of(Status.RETRY);
+        Result result = Result.of(Status.RETRY);
         try {
             for (int written = 0; written < count && budget.take(); written++) {
                 var applied = FrontierV3ResourceFieldInitialPlan.applyPrepared(level, site, ledger);
                 if (!applied.writtenThisCall() && !applied.reconciledProjection()) {
                     return switch (applied.disposition()) {
-                        case UNLOADED -> Result.UNLOADED;
-                        case FOREIGN -> Result.FOREIGN;
-                        case APPLIED -> Result.AMBIGUOUS;
-                        case BEFORE -> Result.RETRY;
+                        case UNLOADED -> Result.of(Status.UNLOADED);
+                        case FOREIGN, APPLIED -> Result.refuse(applied);
+                        case BEFORE -> Result.of(Status.RETRY);
                     };
                 }
                 ledger.advanceFieldInitialization(site, applied);
                 var after = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
-                result = after.complete() ? Result.CURSOR_COMPLETE : Result.ADVANCED;
+                result = Result.of(after.complete() ? Status.CURSOR_COMPLETE : Status.ADVANCED);
                 if (after.complete() || !after.prepared()) break;
             }
             return result;

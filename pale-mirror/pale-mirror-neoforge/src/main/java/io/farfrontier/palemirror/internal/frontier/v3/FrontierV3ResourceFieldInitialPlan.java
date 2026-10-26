@@ -35,21 +35,32 @@ final class FrontierV3ResourceFieldInitialPlan {
         private final Optional<BlockState> observed;
         private final boolean writtenThisCall;
         private final boolean reconciledProjection;
+        private final boolean neutralPredecessor;
 
         private Review(Step step, Disposition disposition, Optional<BlockState> observed, boolean writtenThisCall) {
             this(step, disposition, observed, writtenThisCall, false);
         }
         private Review(Step step, Disposition disposition, Optional<BlockState> observed, boolean writtenThisCall,
                        boolean reconciledProjection) {
+            this(step, disposition, observed, writtenThisCall, reconciledProjection, false);
+        }
+        private Review(Step step, Disposition disposition, Optional<BlockState> observed, boolean writtenThisCall,
+                       boolean reconciledProjection, boolean neutralPredecessor) {
             this.step = step; this.disposition = disposition; this.observed = observed;
             this.writtenThisCall = writtenThisCall;
             this.reconciledProjection = reconciledProjection;
+            this.neutralPredecessor = neutralPredecessor;
         }
         Step step() { return step; }
         Disposition disposition() { return disposition; }
         Optional<BlockState> observed() { return observed; }
         boolean writtenThisCall() { return writtenThisCall; }
         boolean reconciledProjection() { return reconciledProjection; }
+        /** An unchanged admitted ground block is not evidence of unrecorded crop work. */
+        boolean preparationPermitted() {
+            return observed.isPresent() && (disposition == Disposition.BEFORE
+                    || disposition == Disposition.APPLIED && neutralPredecessor);
+        }
         boolean matches(ResourceSite site, int nextWrite, Disposition expected) {
             return disposition == expected && step.equals(stepAt(site, nextWrite));
         }
@@ -130,7 +141,7 @@ final class FrontierV3ResourceFieldInitialPlan {
         }
         Disposition disposition = current.equals(step.target()) ? Disposition.APPLIED
                 : baseline ? Disposition.BEFORE : Disposition.FOREIGN;
-        return new Review(step, disposition, Optional.of(current), false);
+        return new Review(step, disposition, Optional.of(current), false, false, baseline);
     }
 
     /** Prepared replay-safe projection accepts an observed target or writes its retained predecessor.
