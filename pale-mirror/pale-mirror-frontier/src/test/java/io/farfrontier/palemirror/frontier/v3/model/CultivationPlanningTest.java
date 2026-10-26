@@ -8,6 +8,18 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CultivationPlanningTest {
+    @Test void distantGroundChangesReuseLocalLandButNeverItsOldAdmissionProof() {
+        var state = prepared(); var home = new SubjectId("settlement:1");
+        var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
+        var first = FieldDevelopmentLand.survey(state, home, fields, 3);
+        var distant = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                state.extractionSites().invalidateGeology(new BlockPosition(300, 63, 300))));
+        var current = FieldDevelopmentLand.survey(distant, home, fields, 3);
+        assertSame(first.cells().getFirst(), current.cells().getFirst(), "unread remote terrain cannot require another local flood");
+        assertThrows(IllegalArgumentException.class, () -> first.require(distant, home, fields));
+        assertDoesNotThrow(() -> current.require(distant, home, fields));
+    }
+
     @Test void disposingRouteViewsDoesNotInvalidateUnchangedLandFacts() {
         var state = prepared(); var home = new SubjectId("settlement:1");
         var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();

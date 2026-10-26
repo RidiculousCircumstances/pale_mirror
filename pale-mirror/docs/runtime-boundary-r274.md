@@ -321,3 +321,24 @@ board/budget/probe/confirmation tests PASS,25 native body-lifetime tests PASS,
 guardrails and packaged JAR PASS. Receipts:land-eviction-before-fix.log,
 admission-wake-land-check.log,wake-cache-package-final-check.log. These do not
 establish a hard80ms maximum or universal next-action latency.
+
+The e09 HOT reentry remained exploratory PASS, but debt630->1395 over2441
+native ticks still demonstrated insufficient throughput. Complete native ticks
+stayed below62.98ms; a separate ready scene callback reached84.80ms. Neither
+of these remaining issues is hidden by the native maximum.
+
+The land query's remaining invalidation was global: any geology/observation
+change anywhere replaced its complete world input. Local land selection now
+retains the exact regional geometry proof for the bounded discovery footprint
+and a shared KnownBlockReadWitness of every suitability block read, including
+unknown/protected results. A remote change can reuse only unchanged local
+facts; a changed read or local traversal token requires rediscovery. Sample
+revision metadata is refreshed from the exact current state before creating
+the new Survey, whose old-state admission fence remains mandatory. The read
+witness is generic, bounded and has no command/admission authority. Overflow
+disables reuse without truncating discovery. The consumer retains at most64
+queries and131072 block reads; it holds no old mutable world or host service.
+The unused global land-input accessor was removed. Tests cover actual remote
+geology changes, local revocation, stale/foreign surveys, scope eviction,
+unknown/permission changes and incomplete read witnesses. No time benchmark
+or reduced navigation reach is involved.
