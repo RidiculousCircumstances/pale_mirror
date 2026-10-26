@@ -78,19 +78,13 @@ final class FrontierV3ActorMovementNavigation {
         if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
                 || !route.order().equals(movement.order())
                 || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()) {
-            try {
-                route = new Route(actuation.id(), lease.revision(), movement.order(), state.routeTopology(), state.physicalDeltas(),
-                        provider.route(state, movement,
-                                FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
-            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                blocked(body, movement, "known_route:" + unavailable.status()
-                        + (unavailable.status() == PedestrianRouteResult.Status.PLANNING ? "" : ":" + unavailable.getMessage()));
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return;
-            }
+            var basis = state;
+            route = new Route(actuation.id(), lease.revision(), movement.order(), state.routeTopology(), state.physicalDeltas(),
+                    FrontierV3NativeRouteHint.optional(() -> provider.route(basis, movement,
+                            FrontierV3SurfaceObservation.observedBody(body).supportingSurface())));
             ROUTES.put(body, route);
         }
-        if (FrontierV3SemanticMovement.arrived(level, body, route.waypoints().getLast())) {
+        if (movement.order().legalStations().stream().anyMatch(station -> FrontierV3SemanticMovement.arrived(level, body, station))) {
             BLOCKED.remove(body);
             FrontierV3GoalNavigation.stop(body, actuation);
             return;

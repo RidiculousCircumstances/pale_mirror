@@ -550,7 +550,8 @@ final class FrontierV3AmbientActorExecutor {
                 ? bodyTicket.admission() : FrontierV3ActorBodyController.admission(state, binding,
                     ledger, false);
         if (decision == FrontierV3ActorBodyController.Admission.RECONSTRUCTION)
-            contact = FrontierV3ActorBodyController.reconstructionContact(state, location.body()).orElse(contact);
+            contact = FrontierV3ActorBodyController.reconstructionContact(state, location.body(),
+                    surface -> FrontierV3StandingPosition.hasExactStandingColumn(level, surface.support())).orElse(contact);
         if (!FrontierV3StandingPosition.hasExactStandingColumn(level, contact.support())) return FrontierV3AmbientAdmissionDiagnostic.blocked(expectedId, contact.support());
         if (FrontierV3BodyPlacement.occupied(level, FrontierV3ActorCarrierFactory.physicalType(location.kind()), contact))
             return FrontierV3AmbientAdmissionDiagnostic.occupied(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));

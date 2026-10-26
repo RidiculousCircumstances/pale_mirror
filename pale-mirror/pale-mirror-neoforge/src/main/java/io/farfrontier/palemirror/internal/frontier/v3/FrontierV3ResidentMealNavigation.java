@@ -65,18 +65,18 @@ final class FrontierV3ResidentMealNavigation {
                 || completedWaitingLegRequiresReplan(route.waypoints(),
                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface(),
                     ResidentMealProcess.serviceSurface(state, meal), admitted, meal.phase())) {
-            try {
+            var hint = FrontierV3NativeRouteHint.optional(() -> meal.phase() == ResidentMeal.Phase.MOVE
+                    ? approach(level, state, body, meal)
+                    : ResidentMealKnownNavigation.clearancePathFrom(state, meal,
+                        FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
+            if (!hint.isEmpty()) {
                 route = new Route(actuation.id(), lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
-                        meal.phase() == ResidentMeal.Phase.MOVE
-                                ? approach(level, state, body, meal)
-                                : ResidentMealKnownNavigation.clearancePathFrom(state, meal,
-                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface()), level.getGameTime(), false);
-            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                        hint, level.getGameTime(), false);
+            } else {
                 // Missing COLD departure knowledge is not a native path verdict.
                 // Keep the same source/access turn and ask the common provider to
                 // prove an ordinary loaded-world path under the exact actuator.
-                var destination = unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY
-                        && meal.phase() == ResidentMeal.Phase.MOVE
+                var destination = meal.phase() == ResidentMeal.Phase.MOVE
                         ? ResidentMealKnownNavigation.approachStations(state, meal,
                             FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), station -> available(level, body, station))
                             .stream().limit(MovementOrder.MAX_LEGAL_STATIONS)
@@ -88,8 +88,7 @@ final class FrontierV3ResidentMealNavigation {
                     route = new Route(actuation.id(), lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
                             List.of(destination.orElseThrow()), level.getGameTime(), true);
                 } else {
-                    if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
-                        blocked(body, meal, "known_route:" + unavailable.status() + ":" + unavailable.getMessage());
+                    blocked(body, meal, "native_approach:awaiting-permitted-destination");
                     FrontierV3GoalNavigation.stop(body, actuation);
                     return;
                 }

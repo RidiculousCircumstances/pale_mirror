@@ -676,7 +676,10 @@ final class FrontierV3ActorBodyController {
         if (admission == Admission.RECONSTRUCTION && request.retainedSpatialPose().isPresent()) {
             var pose = request.retainedSpatialPose().orElseThrow();
             if (!state.actorLocations().get(declaration.actorId()).body().equals(pose)) return Result.CONFLICT;
-            var contact = reconstructionContact(state, pose);
+            var contact = reconstructionContact(state, pose, surface -> {
+                var support = new BlockPos(surface.x(), surface.y(), surface.z());
+                return support.above().equals(request.standing().apply(level, support));
+            });
             if (contact.isPresent() && surfaces.getFirst().equals(pose.supportingSurface())) {
                 var grounded = contact.orElseThrow();
                 surfaces = java.util.stream.Stream.concat(java.util.stream.Stream.of(grounded),
@@ -735,13 +738,24 @@ final class FrontierV3ActorBodyController {
 
     /** Known same-column contact only; never relocate a live actor or manufacture missing-body authority. */
     static java.util.Optional<SurfaceAnchor> reconstructionContact(FrontierWorldState state,
-            io.farfrontier.palemirror.frontier.v3.model.BodyPosition pose) {
+            io.farfrontier.palemirror.frontier.v3.model.BodyPosition pose,
+            java.util.function.Predicate<SurfaceAnchor> currentStandingColumn) {
         return reconstructionContact(pose,
-                io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianRouteKnowledge.forFrontier(state).geometry());
+                io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianRouteKnowledge.forFrontier(state).geometry(), currentStandingColumn);
     }
     static java.util.Optional<SurfaceAnchor> reconstructionContact(
             io.farfrontier.palemirror.frontier.v3.model.BodyPosition pose,
             io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry) {
+        return reconstructionContact(pose, geometry, surface -> false);
+    }
+    static java.util.Optional<SurfaceAnchor> reconstructionContact(
+            io.farfrontier.palemirror.frontier.v3.model.BodyPosition pose,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
+            java.util.function.Predicate<SurfaceAnchor> currentStandingColumn) {
+        // A positive native contact outranks an older surveyed floor below it.
+        // Otherwise reconstruction can try to settle through a still-present
+        // block, then reject every admission on the blocked lower column.
+        if (currentStandingColumn.test(pose.supportingSurface())) return java.util.Optional.empty();
         // The same candidate policy as COLD; actual native placement still proves
         // collision/clearance before creating the reconstructed body.
         return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianVerticalSettlement.candidate(

@@ -462,3 +462,27 @@ meal order now names its actual activity owner (claimId), rather than the reside
 as a surrogate. No domain meal branch was added to the shared navigator.
 Existing waiting/exit-reservation coverage additionally rejects forged owners,
 meal generations and reservation withdrawal for a previously issued approach.
+
+
+A targeted meal exploration could not bind resident:6-12 Mila Moss: this was an
+actual BLOCKED admission, not an observation-method timeout. Her retained meal
+claim:resident-meal-6-12-48087 was still waiting from an earlier simulation day.
+Naturally loaded read-only block queries proved stone atY63, blue_concrete atY64,
+and air atY65/Y66 in her original(-611,-19) column. Reconstruction selected the
+older surveyedY63 floor instead of her valid retainedY64 support, then rejected
+its own lower placement because the blue block occupied that body cell.
+The common body controller and admission diagnostic now prioritize a positive
+native exact standing-column proof before considering same-column vertical
+settling. Actual placement/collision/custody and journal gates remain unchanged;
+there is no horizontal relocation, second body or invented task arrival.
+
+Her COLD departure also returned NO_PATH at the known hard scope. HOT meal and
+explicit actor-movement providers were still using that advisory query as a
+mandatory prerequisite for the shared Minecraft navigator. A common optional
+native-route-hint adapter now withholds unavailable hints (planning, knowledge,
+search limits or a miss in the COLD model) while the same exact task goal,
+activity, service access and movement permission still reach the native provider.
+Contract exceptions propagate. Actual loaded collision, bounds and native path
+remain mandatory; a missing hint is neither arrival nor resource/work permission.
+Explicit actor-movement arrival uses its declared legal goals even without a hint.
+COLD movement, saved route schemas and their exact validation are unchanged.

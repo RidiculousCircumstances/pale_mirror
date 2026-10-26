@@ -48,7 +48,14 @@ public final class FrontierV3BodyContactRecoveryGameTests {
         helper.assertValueEqual(FrontierV3ActorBodyController.admission(state, binding, ledger, false),
                 FrontierV3ActorBodyController.Admission.RECONSTRUCTION, "exact history is reconstruction, never first birth");
         helper.assertTrue(FrontierV3ActorBodyController.resumableAdmission(level, state, binding), "whole-set scene recovery can resume it");
-        helper.assertTrue(FrontierV3ActorBodyController.reconstructionContact(state, pose).filter(ground::equals).isPresent(),
+        var raised = new BlockPos(pose.x(), pose.y() - 1, pose.z());
+        level.setBlock(raised, net.minecraft.world.level.block.Blocks.BLUE_CONCRETE.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3ActorBodyController.reconstructionContact(state, pose,
+                surface -> FrontierV3StandingPosition.hasExactStandingColumn(level, surface.support())).isEmpty(),
+                "a native supported pose must not settle into the solid block above an older surveyed floor");
+        level.setBlock(raised, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3ActorBodyController.reconstructionContact(state, pose,
+                surface -> FrontierV3StandingPosition.hasExactStandingColumn(level, surface.support())).filter(ground::equals).isPresent(),
                 "known contact differs from the retained airborne pose");
         helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.body(level, state, request),
                 FrontierV3ActorBodyController.Result.APPLIED, "durable common admission uses the real supported column");

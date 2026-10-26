@@ -35,6 +35,9 @@ class FrontierV3ActorCarrierCompositionTest {
             public boolean blocked(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) { return false; }
         };
         assertEquals(java.util.Optional.of(ground), FrontierV3ActorBodyController.reconstructionContact(pose, geometry));
+        assertTrue(FrontierV3ActorBodyController.reconstructionContact(pose, geometry,
+                surface -> surface.equals(pose.supportingSurface())).isEmpty(),
+                "a physically standing original pose cannot settle through its support toward older surveyed ground");
         assertEquals(java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 58, 0)),
                 FrontierV3ActorBodyController.reconstructionContact(
                         new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 60, 0), geometry),
