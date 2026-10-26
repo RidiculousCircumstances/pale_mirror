@@ -231,3 +231,24 @@ uses the ordinary hash-backed immutable view, avoiding dense SetN probe runs in
 the sampled grid. Scoped cultivation/geometry/forest40tests and architecture9,
 guardrails/JAR/package passed planning-images-final-check.log. Live throughput
 must still be measured; no decrease in clock debt is inferred across a restart.
+
+The next real HOT sequence completed with the declared retained incident count1,
+no new kernel failure. It additionally exposed two ready-callback peaks outside
+the complete native tick:123.7ms for scene work and85.6ms for COLD pack movement
+planning. These are not covered by a native-tick-only maximum. Source tracing
+found movement continuation still registered on the owner thread, although its
+inputs are immutable model state. It now uses the existing detached preparation
+port, preserving exact-state publication, route readiness and WAL execution.
+The existing airborne/recovery movement check exercises the real registered
+worker preparation and unchanged typed outcome.
+
+The harvest HOT adapter also acquired a COLD route calculation every time it
+built optional native-goal advice. The physical navigator can navigate without
+that hint, and no canonical owner retained those native-poll dependencies.
+It now consumes retained advice only; absent advice keeps the exact same native
+order/stations and starts no unused background search. A negative-boundary check
+rejects any query acquisition while building that HOT goal. Remaining scene peaks
+need comparable profiling if they recur; this is not proof that a120ms scene span
+was entirely caused by that query. Resident6-13 had switched from forestry to
+FIELD_HARVEST and later IDLE during this run; the empty forestry job view is not a
+stalled forestry job. Future observations must bind the current owner.

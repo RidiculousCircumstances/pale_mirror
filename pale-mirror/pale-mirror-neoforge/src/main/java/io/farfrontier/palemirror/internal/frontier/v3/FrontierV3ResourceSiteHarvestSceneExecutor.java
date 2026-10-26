@@ -647,13 +647,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         return true;
     }
 
-    private static FrontierV3GoalNavigation.Goal hotGoal(
+    static FrontierV3GoalNavigation.Goal hotGoal(
             FrontierWorldState state, ResourceSiteHarvestJob job, ResourceSiteHarvestGoal goal) {
-        // Known geometry is a route hint. Only the shared physical provider may
-        // authorize a different loaded-world path to this unchanged semantic goal.
+        // Retained geometry is optional advice. HOT must not create background
+        // route demand while its physical navigator owns this unchanged goal.
         try {
             return FrontierV3GoalNavigation.Goal.routed(goal.movementOrder(),
-                    io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.plannedPath(state, job),
+                    io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.retainedPath(state, job),
                     state.bootstrap().bounds());
         } catch (io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable gap) {
             return FrontierV3GoalNavigation.Goal.routed(goal.movementOrder(), java.util.List.of(), state.bootstrap().bounds());

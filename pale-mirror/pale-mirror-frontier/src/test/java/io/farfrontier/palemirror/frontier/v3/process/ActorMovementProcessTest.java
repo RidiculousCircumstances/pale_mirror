@@ -28,7 +28,11 @@ class ActorMovementProcessTest {
         var floor = KnownPedestrianGround.forFrontier(state).at(home.anchor().x()+22, home.anchor().z()+22);
         state = state.withActorBody(actor, floor.standingBody().offset(0,1,0));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
-        var plan = ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement,2),2);
+        var action = ActorMovementProcess.progress(movement, 2);
+        var preparation = FrontierWorldRuntimeDefinition.configuration(state.bootstrap()).scheduledPlanner()
+                .preparation(state, action, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(2)).orElseThrow();
+        var completion = java.util.concurrent.CompletableFuture.supplyAsync(preparation::prepare).join();
+        var plan = completion.get();
         var event = assertInstanceOf(ActorMovementGrounded.class, plan.getFirst().payload());
         var wire = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(event, wire.decode(event.type(),wire.encode(event)));

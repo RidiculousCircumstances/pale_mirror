@@ -320,7 +320,7 @@ public final class FrontierWorldProcessCatalog {
                     return TransportMissionProcess.wakeDependencies(state, action);
                 }
             })),
-            Map.entry(ActorMovementProcess.PROGRESS, withPlanningRecovery(new FrontierScheduledPlanner() {
+            Map.entry(ActorMovementProcess.PROGRESS, detached(withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ActorMovementProcess.plan(state, action, action.dueAt().ticks());
                 }
@@ -331,7 +331,7 @@ public final class FrontierWorldProcessCatalog {
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ActorMovementProcess.held(state, action);
                 }
-            })),
+            }))),
             Map.entry("frontier.market.clear", withPlanningRecovery(atExecutionTime(
                     (state, action, instant) -> MarketClearingProcess.plan(state, action, instant.ticks())))),
             Map.entry("frontier.resource_site.growth", new FrontierScheduledPlanner() {
