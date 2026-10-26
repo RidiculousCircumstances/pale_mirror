@@ -26,6 +26,13 @@ final class FrontierV3EnvironmentalAdmission {
         try { return mutation.getAsBoolean(); }
         finally { mutationDepth--; }
     }
+    boolean scheduledAvailable() { return spent < allowance; }
+    /** A scheduled callback is required work once admitted. Its nested writes cannot be skipped. */
+    void scheduled(Runnable action) {
+        long start = clock.getAsLong();
+        try { action.run(); }
+        finally { spent = Math.addExact(spent, Math.max(0L, clock.getAsLong() - start)); }
+    }
     boolean run(Runnable sample) {
         if (spent >= allowance || active) return false;
         long start = clock.getAsLong(); activeStarted = start; active = true;

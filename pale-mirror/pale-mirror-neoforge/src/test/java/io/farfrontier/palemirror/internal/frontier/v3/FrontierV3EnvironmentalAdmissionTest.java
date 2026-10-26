@@ -24,6 +24,17 @@ class FrontierV3EnvironmentalAdmissionTest {
             assertFalse(admission.mutate(() -> true), "failed mutations must not leave an active nesting bypass");
         }));
     }
+    @Test void scheduledCallbacksShareTheAllowanceButKeepAllTheirNestedRequiredWrites() {
+        var clock = new AtomicLong(); var admission = new FrontierV3EnvironmentalAdmission(clock::get);
+        admission.begin(10); assertTrue(admission.scheduledAvailable());
+        admission.scheduled(() -> {
+            clock.addAndGet(11);
+            assertTrue(admission.mutate(() -> true), "a begun required callback must finish all its writes");
+        });
+        assertFalse(admission.scheduledAvailable());
+        assertFalse(admission.run(() -> fail("random samples share the exhausted native allowance")));
+        admission.begin(10); assertTrue(admission.scheduledAvailable());
+    }
     @Test void manyCallbacksShareOneAllowanceAndTheNextTickResamplesWithoutReplaying() {
         var clock = new AtomicLong(); var admission = new FrontierV3EnvironmentalAdmission(clock::get);
         admission.begin(10);

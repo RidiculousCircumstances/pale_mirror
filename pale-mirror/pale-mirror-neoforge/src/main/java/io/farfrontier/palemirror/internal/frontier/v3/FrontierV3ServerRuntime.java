@@ -410,6 +410,11 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     boolean runEnvironmentalMutation(java.util.function.BooleanSupplier mutation) {
         return environmentalAdmission.mutate(mutation);
     }
+    boolean scheduledNativeTickAvailable() {
+        return status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && !engine.hasPendingCalculation()
+                && !engine.hasPendingCommit() && environmentalAdmission.scheduledAvailable();
+    }
+    void runScheduledNativeTick(Runnable action) { environmentalAdmission.scheduled(action); }
     void runEnvironmentalSample(Runnable sample) {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || engine.hasPendingCalculation()) {
             yieldedEnvironmentalSamples++; return;

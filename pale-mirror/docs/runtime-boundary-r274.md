@@ -170,3 +170,32 @@ It never truncates a proof and calls the destination reached. Movement segment
 and full-route calculation contracts remain separate. No state/schema change or
 world reset is required. This removes the demonstrated failure path, but does
 not by itself prove all HOT next-action waits or caravan pauses resolved.
+
+## Native scheduled updates were outside the random-sample budget
+
+The f41c87b0e real HOT sequence records600 poses for the exact caravan carrier
+resident:8-12: a38-client-tick initial hold, then37.25blocks over the30-second
+window, with only two isolated one-tick holds. Forestry resident:6-13 instead
+held558ticks, mostly PREPARED, then moved6blocks. These are observed limits,
+not a successful all-activities smoothness claim. Simulation debt grew during
+HOT and complete native ticks still reached100–275ms. One natural autosave's
+complete save span was46ms; that is not the whole worst-tick explanation.
+
+A focused reentry JFR isolates the remaining native path:
+LeavesBlock.tick -> LevelTicks.runCollectedTicks -> geological invalidation ->
+FrontierFileStore.append -> flushPendingBlocking. These required scheduled
+updates are not random samples. A single tick drained many independent callbacks
+and synchronously forced each exact pre-effect fact. The earlier random-sample
+repair cannot cover that path.
+
+The shared integration now admits whole scheduled callbacks using the same
+native-tick allowance. It never skips a descendant write of an admitted callback.
+The bounded unexecuted suffix is returned to vanilla's own persistent per-chunk
+tick queues with its exact type, position, deadline, priority and sub-tick order.
+If an executed callback scheduled a later duplicate after collection, the prior
+due record keeps the turn it would have retained had collection stopped earlier.
+A batch starts no collection while the canonical owner is already awaiting its
+calculation or commit. Nonphysical dimensions retain the original native path.
+No custom durable queue, disabled foliage, dropped scheduled event or removed
+pre-effect disk barrier is introduced. Actual native LevelTicks coverage checks
+suffix persistence ownership, duplicate ordering and eventual execution.

@@ -11,9 +11,17 @@ import net.minecraft.world.level.material.FluidState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-/** Random samples yield before invocation; scheduled ticks and player effects are not samples. */
+/** Random samples resample; scheduled callbacks retain their exact native queue records. */
 @Mixin(ServerLevel.class)
 abstract class FrontierV3EnvironmentalSampleMixin {
+    @WrapOperation(method = "tick", at = @At(value = "INVOKE", target =
+            "Lnet/minecraft/world/ticks/LevelTicks;tick(JILjava/util/function/BiConsumer;)V"), require = 2)
+    private <T> void frontierV3$scheduledBatch(net.minecraft.world.ticks.LevelTicks<T> ticks, long now, int maximum,
+            java.util.function.BiConsumer<BlockPos, T> action, Operation<Void> original) {
+        var level = (ServerLevel) (Object) this;
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ScheduledNativeTicks.batch(level,
+                () -> original.call(ticks, now, io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ScheduledNativeTicks.maximum(maximum), action));
+    }
     @WrapOperation(method = "tickChunk", at = @At(value = "INVOKE", target =
             "Lnet/minecraft/world/level/block/state/BlockState;randomTick(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/util/RandomSource;)V"), require = 1)
     private void frontierV3$blockSample(BlockState state, ServerLevel level, BlockPos position,

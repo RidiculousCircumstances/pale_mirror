@@ -32,6 +32,41 @@ public final class FrontierV3SharedStorageGameTests {
         helper.assertTrue(!FrontierV3NativeAutosave.active(), "failed native saves cannot leak implicit permission");
         helper.succeed();
     }
+    @GameTest(batch="pm-frontier-v3-shared-storage",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=40)
+    public static void scheduledNativeSuffixRetainsItsOriginalOrderAndPersistentChunkOwner(GameTestHelper helper) {
+        var clock = new java.util.concurrent.atomic.AtomicLong();
+        var allowance = new FrontierV3EnvironmentalAdmission(clock::get); allowance.begin(1);
+        var ticks = new net.minecraft.world.ticks.LevelTicks<String>(chunk -> true,
+                () -> net.minecraft.util.profiling.InactiveProfiler.INSTANCE);
+        var chunk = new net.minecraft.world.ticks.LevelChunkTicks<String>();
+        ticks.addContainer(new net.minecraft.world.level.ChunkPos(0, 0), chunk);
+        var first = new net.minecraft.world.ticks.ScheduledTick<>("first", new net.minecraft.core.BlockPos(1, 63, 1),
+                0L, net.minecraft.world.ticks.TickPriority.HIGH, 3L);
+        var second = new net.minecraft.world.ticks.ScheduledTick<>("second", new net.minecraft.core.BlockPos(2, 63, 1),
+                0L, net.minecraft.world.ticks.TickPriority.NORMAL, 4L);
+        var future = new net.minecraft.world.ticks.ScheduledTick<>("future", new net.minecraft.core.BlockPos(3, 63, 1),
+                100L, net.minecraft.world.ticks.TickPriority.NORMAL, 5L);
+        ticks.schedule(first); ticks.schedule(second); ticks.schedule(future);
+        var executed = new ArrayList<String>();
+        java.util.function.BiConsumer<net.minecraft.core.BlockPos, String> callback = (position, type) -> {
+            executed.add(type); clock.addAndGet(2);
+            if (type.equals("first")) ticks.schedule(new net.minecraft.world.ticks.ScheduledTick<>("second", second.pos(),
+                    50L, net.minecraft.world.ticks.TickPriority.NORMAL, 6L));
+        };
+        FrontierV3ScheduledNativeTicks.within(allowance::scheduledAvailable, allowance::scheduled,
+                () -> ticks.tick(1L, 256, callback));
+        helper.assertTrue(executed.equals(List.of("first")), "one admitted callback finishes, suffix must not execute");
+        helper.assertTrue(chunk.getAll().toList().containsAll(List.of(second, future)) && chunk.count() == 2,
+                "deferred exact record including its deadline/priority/order belongs to vanilla's saved chunk queue");
+        helper.assertTrue(!FrontierV3ScheduledNativeTicks.active(), "scheduler allowance cannot escape its native batch");
+        allowance.begin(1);
+        FrontierV3ScheduledNativeTicks.within(allowance::scheduledAvailable, allowance::scheduled,
+                () -> ticks.tick(1L, 256, callback));
+        helper.assertTrue(executed.equals(List.of("first", "second")), "original due tick must not be postponed by its later duplicate");
+        ticks.tick(100L, 256, callback);
+        helper.assertTrue(executed.equals(List.of("first", "second", "future")), "ordinary native scheduling remains intact");
+        helper.succeed();
+    }
     private record Entry(FrontierV3JournaledSavedData ledger, Function<CompoundTag,FrontierV3JournaledSavedData> decode) { }
     @GameTest(batch="pm-frontier-v3-shared-storage",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=40)
     public static void everyPhysicalStoreUsesCompleteRecoveryAndSharedFlush(GameTestHelper helper) {
