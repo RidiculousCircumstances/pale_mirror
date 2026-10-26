@@ -19,6 +19,7 @@
     "CalendarLevelDataMixin",
     "CalendarServerLevelDataMixin",
     "FrontierV3GoalNavigationMobMixin",
+    "FrontierV3GoalNavigationHorseMixin",
     "FrontierV3GameTestSliceMixin",
     "FrontierV3ServerEntityTrackerMixin",
     "FrontierV3EntityDepartureMixin",

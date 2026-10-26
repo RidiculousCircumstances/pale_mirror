@@ -43,15 +43,24 @@ final class FrontierV3AmbientHotAdmission {
                         lease.handoffBody(), supported.orElseThrow(), bodyId, java.util.Optional.empty()));
         FrontierV3DiagnosticTrace.record(level.getServer(), "ambient-admission:" + actorId.value(),
                 "ambient_body_admitted", actorId, result);
-        current = runtime.decodedState().orElse(null);
+        long revision = lease.revision();
+        runtime.afterCommand(result, () -> armConfirmed(level, runtime, actorId, revision, bodyId, arm));
+    }
+
+    /** The exact receipt wakes its actuator; a completed WAL must not wait for a new roster scan. */
+    private static void armConfirmed(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            SubjectId actorId, long revision, io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId bodyId, boolean arm) {
+        var current = runtime.decodedState().orElse(null);
         if (current == null) return;
-        lease = current.ambientLeases().get(actorId);
+        var lease = current.ambientLeases().get(actorId);
         Entity entity = level.getEntity(FrontierV3AmbientActorExecutor.entityId(current, actorId));
-        if (lease == null || lease.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body)
+        if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.revision() != revision
+                || !bodyId.equals(io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(current, actorId))
+                || !(entity instanceof Mob body)
                 || !FrontierV3AmbientActorExecutor.owned(body, actorId, current.actorLocations().get(actorId).kind())) return;
         if (!arm) { FrontierV3AmbientActorExecutor.holdForPreLeaseHandoff(body); return; }
         FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, body, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, current, actorId, FrontierV3AmbientActorExecutor.bioform(current, actorId));
-            FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, current, actorId, body, lease);
+        FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, current, actorId, body, lease);
     }
 }

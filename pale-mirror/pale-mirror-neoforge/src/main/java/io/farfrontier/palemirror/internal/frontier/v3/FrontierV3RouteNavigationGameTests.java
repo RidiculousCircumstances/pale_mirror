@@ -272,6 +272,13 @@ public final class FrontierV3RouteNavigationGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 110)
     public static void wideTransitPassesHintBeforeCenteringButStillProvesFinalArrival(GameTestHelper helper) {
         floor(helper); var level = helper.getLevel();
+        // Wide native nodes use a width-dependent offset. Leave their full
+        // footprint clear: the former east/south walls blocked every transit
+        // candidate, correctly selecting the ordinary final-goal fallback.
+        for (int x = 1; x <= 7; x++) for (int z = 1; z <= 7; z++) {
+            level.setBlock(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(helper.absolutePos(new BlockPos(x, 2, z)), Blocks.AIR.defaultBlockState(), 3);
+        }
         var animal = helper.spawnWithNoFreeWill(EntityType.DONKEY, new Vec3(2.5, 1, 2.5));
         var hint = new java.util.ArrayList<SurfaceAnchor>();
         for (int x = 2; x <= 6; x++) hint.add(anchor(helper, x, 2));

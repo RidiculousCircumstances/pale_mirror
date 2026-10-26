@@ -252,3 +252,37 @@ need comparable profiling if they recur; this is not proof that a120ms scene spa
 was entirely caused by that query. Resident6-13 had switched from forestry to
 FIELD_HARVEST and later IDLE during this run; the empty forestry job view is not a
 stalled forestry job. Future observations must bind the current owner.
+
+The exact nameless donkey observation on d496aadf9 completed (597 poses,
+14.79 blocks). It retained a 45-tick stationary interval despite an active
+native path and no coincident host spike. The dependency source supplies a
+concrete competing actuator: Minecraft 1.21.1 AbstractHorse.aiStep starts grass
+eating outside serverAiStep/NoAI, and isImmobile blocks travel until its
+fifty-tick counter ends. The shared native movement integration now suppresses
+autonomous grazing only while a current goal-navigation permission controls
+that horse, and clears already-started grazing before ordinary travel. Releasing
+that permission restores native grazing. The native negative check exercises
+both boundaries with a real donkey. No caravan-specific movement driver or
+global animal-AI change is added. Width-derived native path points already
+matched Path.getEntityPosAtNode; lateral node offsets alone were not a defect.
+
+A separate two-minute exploratory HOT sample of resident6-13 distinguishes
+selection, body admission and work. The resident already had FIELD_HARVEST work,
+then spent about10.2s with a durable insertion ticket and16.0s indexed before
+motion. This is not an unselected activity. Source review found ambient HOT
+confirmation checked publication immediately after submit, but did not arm its
+actuator when the asynchronous receipt later published. It now uses the
+existing exact command continuation, revalidating the captured lease revision
+and body incarnation. Handoff-only confirmation still never arms an ambient
+actuator. This removes one missed wake, not every admission/scene delay.
+The same sample includes stationary HARVESTING with a real200000 milli-work
+obligation; actual labour must not be reclassified as idle waiting.
+
+The existing wide-transit native test originally enclosed all three advisory
+targets against its east/south walls. Width-correct collision validation thus
+selected the legal final-goal fallback instead of transit. Its own bounded
+fixture now leaves those target footprints clear; no production collision rule
+or terminal-arrival assertion is weakened. Scoped native local-navigation45
+tests pass, including real grazing/release. Runtime durability/recovery checks,
+guardrails and package verification are retained in
+build/r274-runtime-repair/horse-admission-final-check.log.
