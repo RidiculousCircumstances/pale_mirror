@@ -103,7 +103,7 @@ boundary; burn ticks are not silently called joules or FE.
   running/paused/blocked reason and remaining burn time. Exit: wood competes as
   fuel and material without double promises, impossible input bundles or an
   unexplained production label. Existing food and smelting remain viable.
-- [ ] F. Verify and deliver. First review the complete wired source path; focused
+- [x] F. Verify and deliver. First review the complete wired source path; focused
   checks cover allocation/ports, interrupted or altered ingredients, partial
   transfers, repair identity and combustion boundaries. Extend the existing
   declarative native station/forestry scenarios for an actual produced tool,
@@ -178,8 +178,7 @@ The broad native smoke still has three separately classified pre-existing
 failures: an obsolete execution-order diagnostic expectation, fixed-tick patrol
 readiness and an inactive hive/assault timeout. The affected native storage/body
 and production/economy slices passed (56 and55 tests). These narrower results do
-not turn that broad gate green. Final fresh-world deployment/full-pack receipt
-remains the delivery exit below.
+not turn that broad gate green. Final fresh-world deployment/full-pack evidence is recorded below.
 
 
 Full-pack delivery found an additional native binding contradiction: Quark's
@@ -193,3 +192,31 @@ participate in canonical catalog identity; no output-item scan, inferred alias,
 recipe override or disabled consistency check is used. The failed r275 startup
 saved normally; its world is retained as diagnostic evidence. Delivery uses a
 separate fresh world after verification of the correction.
+
+
+## Delivered build and observed scope
+
+Runtime code7406a8b8f is installed in fresh world
+`frontier-v3-r275b-wood-production-20261027`, seed126, r29/schema308. Exact
+preflight, publication/install and fresh runtime verification passed; receipts
+`build/wood-native/deploy-r275b/`. Final clean release guardrails/check/build/JAR
+verification passed5m01, with1948 Frontier and877 NeoForge tests and no
+failures/errors/skips (`build/wood-release-pack-binding-verification.log`).
+
+The full-pack ordinary player run completed54actions and5personally inspected
+frames on that live server:1log->4planks->8sticks->1ironaxe, arbitrary INPUT7/8,
+paused unattended fuel expiry, reopening without automatic resume, explicit
+resume, exact axe pickup and6surviving sticks. Required loaded-mod inventory
+passed, including Quark/Create;20FPS client and private display exited after
+the check. Receipt:`build/wood-native/live-wood-inputs-fuel-result.json`,
+run4e439ff9-8430-4e09-986e-49ffaef78e79. Semantic progress is SATISFIED/TERMINAL.
+Final live summary is green with0required/inventory/scene conflicts.
+
+The live exploratory runner leaves build metadata null; the separate
+`build/wood-native/delivery-receipt.json` retains the frozen clean source ref,
+matching client-generated/server-packaged runtime sourceTree and installed JAR
+checksum. The checked-in isolated scenario supplies the graceful-restart story;
+this live run does not claim a second server restart or formal human M3.
+Actual forestry jobs were observed with their distinct starter axes; a complete
+autonomous NPC wood-stock loop was not observed in this short acceptance run.
+The three broad-native-smoke failures above remain openly recorded.
