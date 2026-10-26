@@ -124,7 +124,9 @@ final class FrontierV3BodyInsertionJournal {
         var operations = FrontierV3OperationLedger.get(level);
         if (!operations.sealUnattemptedCancellation(retained.operation().ticket()))
             throw new IllegalStateException("body cancellation has no unattempted native permission");
-        operations.persist(level);
+        // The body integration durably seals this refusal before restoring the
+        // unused permission. A second caller-owned force adds no evidence and
+        // waits for unrelated writes on the same journal.
         FrontierV3BodyOperationIntegration.reject(level, ticket.world(), ledger, retained);
         var tickets = PENDING.get(level);
         if (tickets == null || !tickets.remove(new Key(ticket.world(), ticket.binding().declaration().actorId()), ticket))

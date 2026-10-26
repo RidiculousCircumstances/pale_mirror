@@ -19,7 +19,7 @@ final class FrontierV3ActorBodyCustody {
         if (ticket == null || !unstartedAbsenceProven(level, runtime, state, actor)) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         FrontierV3BodyInsertionJournal.reject(level, ledger, ticket);
-        ledger.persist(level, state.bootstrap().worldId());
+        // reject owns the complete durable rollback, including its final actor row.
         return true;
     }
 

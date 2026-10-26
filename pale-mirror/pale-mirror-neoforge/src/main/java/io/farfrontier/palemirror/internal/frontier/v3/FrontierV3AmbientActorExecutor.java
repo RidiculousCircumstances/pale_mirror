@@ -687,18 +687,41 @@ final class FrontierV3AmbientActorExecutor {
         // only a real saved departure may release physical cargo custody.
         if (!releaseEligible(state, release)) return Optional.empty();
         FrontierV3ActorCarryProjection.requireMatches(state, actorId, body);
-        if (lease.status() != AmbientLeaseStatus.DRAINING && !(submit(runtime, "ambient-draining", actorId.value(),
-                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
+        var exactBody = ActorBodyAuthority.current(state, actorId);
+        var drainingLease = lease.withStatus(AmbientLeaseStatus.DRAINING);
+        if (lease.status() != AmbientLeaseStatus.DRAINING) {
+            var transition = submit(runtime, "ambient-draining", actorId.value(),
+                    new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
+            if (transition instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending) {
+                // Publication, rather than the next round-robin probe, resumes
+                // the exact old scope. Re-enter the owner to re-observe all
+                // physical/cargo fences; the captured pose is not reused.
+                runtime.afterCommand(transition, () -> {
+                    var resumed = runtime.decodedState().orElse(null);
+                    if (resumed != null && drainingLease.equals(resumed.ambientLeases().get(actorId))
+                            && exactBody.equals(ActorBodyAuthority.current(resumed, actorId))
+                            && !body.isRemoved()) release(runtime, body);
+                });
+                return Optional.empty();
+            }
+            if (!(transition instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
+        }
         FrontierWorldState drained = runtime.decodedState().orElse(null);
         if (drained == null || drained.ambientLeases().get(actorId) == null
                 || drained.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return Optional.empty();
-        if (!(submit(runtime, "ambient-release", actorId.value(), release)
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
+        var result = submit(runtime, "ambient-release", actorId.value(), release);
+        runtime.afterCommand(result, () -> {
+            var resumed = runtime.decodedState().orElse(null);
+            if (resumed != null && drainingLease.withStatus(AmbientLeaseStatus.CLOSED).equals(resumed.ambientLeases().get(actorId))
+                    && exactBody.equals(ActorBodyAuthority.current(resumed, actorId)) && !body.isRemoved()) {
+                FrontierV3ActorCarryProjection.rememberConfirmed(resumed, actorId, body);
+                FrontierV3ActorProbeSchedule.wake(runtime, resumed, actorId, level.getGameTime());
+            }
+        });
+        if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
         FrontierWorldState released = runtime.decodedState().orElse(null);
         if (released == null || released.ambientLeases().get(actorId) == null
                 || released.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return Optional.empty();
-        FrontierV3ActorCarryProjection.rememberConfirmed(released, actorId, body);
         return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, released));
     }
     /** Cancel admission, not a physical owner: historical bodies require their retained carrier. */

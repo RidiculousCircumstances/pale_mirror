@@ -418,3 +418,27 @@ admission) and was stopped; it is not a passing receipt. Those inactive patrol
 fixtures were not changed or used to excuse active product behavior. The actual
 changed boundary uses the existing shared-storage/body-lifetime/field slice and
 scoped cancellation, record-durability, suffix and worksite-witness coverage.
+
+
+The follow-up HOT/COLD exploration still found508ms and1.93s complete native
+transition ticks, outside measured PM stages; they are not attributed to the
+bounded source review. A warmed repeat and a same-world fresh-process first-entry
+profile did not reproduce those two peaks. Their original cause remains unproved.
+The profile does retain120–146ms production/validation ready work and mandatory
+body-insertion rollback waits; these limits are not hidden by a low recent tick.
+
+Source review also found a direct next-activity delay: physical ambient release
+returned on pending DRAINING publication without registering its continuation.
+It required another actor-probe round to finish closing that same scope. The
+existing command completion now resumes the same owner after publication,
+rechecking the exact lease and body incarnation plus all physical/cargo gates.
+The final release receipt updates the existing carry projection and wakes the
+existing actor probe queue for successor selection. A changed lease/incarnation
+or departed body invalidates the callback; no captured old pose is reused and
+no new activity is admitted by the callback itself.
+
+Two redundant journal barriers in unstarted-body cancellation were removed.
+BodyOperationIntegration already forces the sealed refusal before restoring the
+unused permission and forces its final actor row. Its callers no longer force
+those same journals again. The sole rollback owner and all causal save ordering
+remain unchanged; this is not an asynchronous grant of unused birth permission.
