@@ -520,3 +520,34 @@ capacity or proof of no viable equilibrium. No long-run balance is established.
 Next unresolved economy work: compare feasible provisioned recovery packages,
 recurring production/export/import quantities and working capital. Do not call
 inequality a bug or force prices/free money to conceal missing real inputs.
+
+
+## R270 follow-up — can old damage recover through field expansion?
+
+User asks whether prior bugs explain the crisis and whether mining settlements
+can expand cultivation when grain imports fail. Read-only investigation; no
+implementation, deployment, fresh-world experiment or recovery claim this turn.
+Current copied snapshot revision2792792/tick722035, raw evidence/probe under
+IMPL/build/economy-expansion-r270/. All six mining settlements retain64cells,
+three productive field workers each, SUITABLE_LAND_LIMIT and0new land candidates.
+Ironmeadow review721884 target552/expected64; Northwatch351/64, Stonefield392/64,
+Redwillow628/64, Hearthvale454/64, Westhaven480/64. They ARE asking for more crops;
+not a blanket economic prohibition on mining settlements' farming.
+
+Exact ground survey radius64: zero absent geometry columns and thousands of
+PUBLIC coarse_dirt surfaces, but0suitable candidates. GrayboxAgriculture.ROCKY
+uses coarse_dirt/stone; FieldDevelopmentCell accepts only dirt/grass/farmland.
+FrontierV3FieldBlocks likewise cannot represent coarse dirt as preparable soil.
+ModLens pinned dependency snapshot ac5901effb63c8add2e7c49e51ec16803ded5b4fa4ce09c982f62b9aa90c1075:
+HoeItem.useOn delegates HOE_TILL; IBlockExtension.getToolModifiedState lines792+
+converts coarse_dirt to dirt, then dirt to farmland on another use. Our support
+gap therefore excludes real native-preparable ground. Repair needs explicit
+preparation stages/costs/observations, not mapping coarse dirt straight to dirt.
+Actual connectivity/field-count/worker/equipment limits still require checking
+before promising that supporting this soil alone ensures food self-sufficiency.
+
+Earlier bugs can leave depleted cash/stock in this retained world; corrected
+code does not refund spending. Whole-world eventual recovery is NOT proved or
+proved impossible. The active soil limitation also exists in a fresh world, so
+reset alone cannot establish a robust adaptive economy. No free money/food or
+forced purchases recommended as a substitute for fixing recovery capabilities.
