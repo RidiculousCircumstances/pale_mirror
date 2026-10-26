@@ -46,13 +46,19 @@ public final class TripDispatchPolicy {
     public static boolean uncovered(SupplyPlanner.Demand demand, SupplyReservePlanner.Need need,
             long available, List<SupplyPlanner.Arrival> incoming, long arrivalTicks, long reviewTicks) {
         if (demand.purchase() == 0) return false;
-        if (need.consumption().numerator().signum() == 0)
-            return demand.urgentPurchase() > 0 || demand.deadlineTicks() != Long.MAX_VALUE
-                    && (demand.reasons().contains(SupplyPlanner.Reason.PRODUCTION_INPUT)
-                        || demand.reasons().contains(SupplyPlanner.Reason.PRODUCTION_FUEL));
         var arrivals = new ArrayList<>(incoming);
         if (demand.production() > 0 && demand.deadlineTicks() != Long.MAX_VALUE)
             arrivals.add(new SupplyPlanner.Arrival(demand.production(), demand.deadlineTicks()));
+        if (need.consumption().numerator().signum() == 0) {
+            if (demand.deadlineTicks() == Long.MAX_VALUE) return false;
+            long required = Math.max(need.immediate(), Math.max(demand.protectedInput(),
+                    Math.addExact(available, demand.urgentPurchase())));
+            long horizon = Math.addExact(arrivalTicks, reviewTicks);
+            long covered = Math.addExact(available, arrivals.stream()
+                    .filter(arrival -> arrival.afterTicks() <= horizon)
+                    .mapToLong(SupplyPlanner.Arrival::quantity).reduce(0L, Math::addExact));
+            return required > covered;
+        }
         return !DatedStockCoverage.assess(available, need, 0, arrivals,
                 Math.addExact(arrivalTicks, reviewTicks)).covered();
     }

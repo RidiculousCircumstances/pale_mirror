@@ -8,6 +8,7 @@ final class SupplyResources {
     private final Map<String, String> fuels = new HashMap<>();
     private final Map<String, Long> processReady = new HashMap<>();
     private final Map<String, Long> inputRequirements = new HashMap<>();
+    private final Map<String, Long> directUses;
     private final Map<String, Long> urgentInputRequirements = new HashMap<>();
     private final Map<String, Long> labour = new TreeMap<>();
     private final Map<String, Map<String, Long>> restartInputs = new TreeMap<>();
@@ -28,15 +29,20 @@ final class SupplyResources {
     Map<String, Long> backedRecipes() { return Map.copyOf(backedRecipes); }
 
     long requireInput(String item, long quantity) {
-        return inputRequirements.merge(item, quantity, Math::addExact);
+        inputRequirements.merge(item, quantity, Math::addExact);
+        return inputRequired(item);
     }
     Map<String, Long> inputRequirements() { return Map.copyOf(inputRequirements); }
-    long inputRequired(String item) { return inputRequirements.getOrDefault(item, 0L); }
+    long inputRequired(String item) {
+        return Math.addExact(directUses.getOrDefault(item, 0L), inputRequirements.getOrDefault(item, 0L));
+    }
     long requireUrgentInput(String item, long quantity) {
         return urgentInputRequirements.merge(item, quantity, Math::addExact);
     }
 
-    SupplyResources(Map<String, SupplyPlanner.Stock> stocks, List<SupplyPlanner.Process> processes) {
+    SupplyResources(Map<String, SupplyPlanner.Stock> stocks, List<SupplyPlanner.Process> processes,
+                    Map<String, Long> directUses) {
+        this.directUses = Map.copyOf(directUses);
         for (var process : processes) process.labourCapacity().forEach((worker, ticks) -> {
             var previous = labour.putIfAbsent(worker, ticks);
             if (previous != null && !previous.equals(ticks)) throw new IllegalArgumentException("inconsistent shared labour horizon");
@@ -45,6 +51,9 @@ final class SupplyResources {
             var quantities = new TreeMap<Long, Long>(); quantities.put(0L, stock.available());
             stock.arrivals().forEach(arrival -> quantities.merge(arrival.afterTicks(), arrival.quantity(), Math::addExact));
             available.put(item, quantities);
+            // This is dated forecast allocation only, not a resource claim or
+            // an export ban. Unknown future purchases cannot back another recipe.
+            consume(item, directUses.getOrDefault(item, 0L));
         });
     }
 

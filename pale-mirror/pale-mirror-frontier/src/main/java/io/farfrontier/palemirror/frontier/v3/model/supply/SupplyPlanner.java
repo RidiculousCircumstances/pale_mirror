@@ -229,11 +229,21 @@ public final class SupplyPlanner {
         return assess(facts, capacities, commitments, market).plan();
     }
     public Assessment assess(Map<String, Stock> facts, List<Process> capacities, List<Dependency> commitments, SourcingMarket market) {
+        return assess(facts, capacities, commitments, market, Map.of());
+    }
+    /** Direct uses are distinct from an inventory buffer: a recipe cannot spend
+     * the same unit that the owner already needs for another selected service. */
+    public Assessment assess(Map<String, Stock> facts, List<Process> capacities, List<Dependency> commitments,
+                             SourcingMarket market, Map<String, Long> directUses) {
         var observed = Map.copyOf(facts); var processes = List.copyOf(capacities);
+        directUses = Map.copyOf(directUses);
         var sourcing = market.allocate();
         commitments = List.copyOf(commitments);
         if (observed.isEmpty() || observed.size() > 256 || processes.size() > 256
                 || commitments.size() > 4096
+                || !observed.keySet().containsAll(directUses.keySet())
+                || directUses.values().stream().anyMatch(quantity -> quantity < 0)
+                || directUses.entrySet().stream().anyMatch(entry -> entry.getValue() > observed.get(entry.getKey()).target())
                 || processes.stream().map(Process::id).distinct().count() != processes.size())
             throw new IllegalArgumentException("unbounded or duplicate supply inputs");
         for (var process : processes) {
@@ -242,7 +252,7 @@ public final class SupplyPlanner {
             process.fuels().keySet().forEach(item -> requireStock(observed, item));
         }
         validateDependencies(observed, processes, commitments);
-        var resources = new SupplyResources(observed, processes);
+        var resources = new SupplyResources(observed, processes, directUses);
         var unsecured = resources.retain(commitments);
         var pendingUnsecured = new HashMap<String, Long>();
         var backed = new HashMap<>(observed);

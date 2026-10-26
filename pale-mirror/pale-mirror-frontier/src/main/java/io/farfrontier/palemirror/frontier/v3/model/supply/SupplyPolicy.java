@@ -12,4 +12,7 @@ public record SupplyPolicy(int reorderPermille, int preferredLot, int preferredT
         return reorderPermille + ":" + preferredLot + ":" + preferredTripLoad + ":"
                 + leadTicks + ":" + maximumWaitTicks + ":" + essential;
     }
+    public SupplyPolicy withLeadTicks(long estimate) {
+        return new SupplyPolicy(reorderPermille, preferredLot, preferredTripLoad, estimate, maximumWaitTicks, essential);
+    }
 }

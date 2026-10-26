@@ -53,9 +53,11 @@ public final class EconomicPlanner {
             long minimum = Math.addExact(need.immediate(), need.consumption().over(facts.dayTicks()));
             long target = Math.addExact(need.immediate(), need.consumption().over(horizon)); domestic.put(item, target);
             stocks.put(item, new SupplyPlanner.Stock(stock.available(), stock.incoming(), stock.promisedProduction(), target,
-                    minimum, stock.consumptionUnits(), stock.consumptionPeriodTicks(), stock.policy(), stock.arrivals(), OptionalLong.of(target), stock.requiredInput()));
+                    minimum, stock.consumptionUnits(), stock.consumptionPeriodTicks(),
+                    stock.policy().withLeadTicks(facts.reserves().get(item).timing().leadTicks()),
+                    stock.arrivals(), OptionalLong.of(target), stock.requiredInput()));
         }
-        var assessment = new SupplyPlanner().assess(stocks, facts.processes(), facts.commitments(), selection);
+        var assessment = new SupplyPlanner().assess(stocks, facts.processes(), facts.commitments(), selection, domestic);
         var supply = assessment.plan();
         supply.inputRequirements().forEach((item, amount) -> domestic.merge(item, amount, Math::addExact));
         var missing = new TreeMap<String, Long>();

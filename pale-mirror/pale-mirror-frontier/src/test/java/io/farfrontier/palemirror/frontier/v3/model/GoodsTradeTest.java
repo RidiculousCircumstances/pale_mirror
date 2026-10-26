@@ -216,8 +216,11 @@ class GoodsTradeTest {
         assertEquals(43, state.inventory().fungibleResources().claims().get(CLAIM).quantity());
         assertTrue(state.shipments().shipments().get(shipment.id()).reception().isEmpty());
         assertFalse(ShipmentStateSupport.coldTransferAvailable(state, state.shipments().shipments().get(shipment.id())));
-        assertTrue(new ShipmentServiceAccess().demands(state, RECEIVER).isEmpty(),
-                "a full receiver retains cargo and contract, not an exclusive unloading turn");
+        var waitingAccess = new ShipmentServiceAccess().demands(state, RECEIVER).stream()
+                .filter(access -> access.identity().ownerId().equals(shipment.id())).findFirst().orElseThrow();
+        assertFalse(waitingAccess.readyToEnter(),
+                "capacity loss retains the journey declaration but cannot admit an unloading turn");
+        assertFalse(ShipmentServiceAccess.available(state, state.shipments().shipments().get(shipment.id())));
         assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.held(state,
                 io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), 11)),
                 "capacity waits retain a dependency wake, not an unconditional polling timer");
