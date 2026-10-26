@@ -34,7 +34,13 @@ class FrontierV3ActorActuationTest {
         source.set(Optional.of(changed));
         var following = changed.resourceSites().site(site).harvestJob(job.id()).orElseThrow();
         assertFalse(permission.currentActivityGoal(original), "same execution cannot retain yesterday's cell");
-        assertTrue(permission.currentActivityGoal(ResourceSiteHarvestGoal.current(changed, following).movementOrder()));
+        var followingOrder = ResourceSiteHarvestGoal.current(changed, following).movementOrder();
+        assertTrue(permission.currentActivityGoal(followingOrder));
+        var position = changed.resourceSite(site).cropSlots().getFirst();
+        var conflict = new ResourceSiteConflictObserved(site, position, ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH);
+        var blocked = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess.reduceConflict(changed, site, conflict);
+        source.set(Optional.of(blocked));
+        assertFalse(permission.currentActivityGoal(followingOrder), "a retained causal job is not continuing motion permission");
         source.set(Optional.empty());
         assertFalse(permission.currentActivityGoal(original));
     }

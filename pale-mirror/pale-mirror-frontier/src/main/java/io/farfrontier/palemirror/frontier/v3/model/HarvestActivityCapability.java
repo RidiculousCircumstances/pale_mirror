@@ -7,7 +7,11 @@ import java.util.Optional;
 final class HarvestActivityCapability implements ActorActivityCapability {
     @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder> navigationOrder(
             FrontierWorldState state, ActorExecutionId execution) {
-        return Optional.of(ResourceSiteHarvestGoal.current(state, job(state, execution)).movementOrder());
+        var job = job(state, execution);
+        if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING
+                || job.hasPendingPhysicalWork() || state.resourceSites().harvestMutationPending(job))
+            return Optional.empty();
+        return Optional.of(ResourceSiteHarvestGoal.current(state, job).movementOrder());
     }
     @Override public ActorActivityKind kind() { return ActorActivityKind.FIELD_HARVEST; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
