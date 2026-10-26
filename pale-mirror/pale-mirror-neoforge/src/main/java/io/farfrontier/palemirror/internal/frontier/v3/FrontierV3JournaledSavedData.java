@@ -12,7 +12,7 @@ import java.util.function.*;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3JournalNbt.*;
 
 /** Storage protocol only. Families declare their tables, record codec and physical fences. */
-abstract class FrontierV3JournaledSavedData extends SavedData {
+abstract class FrontierV3JournaledSavedData extends SavedData implements FrontierV3NativeAutosave.Target {
     /** Current immutable record's exact submitted prefix, independent of unrelated rows. */
     interface RecordedTable<K, V> extends Map<K, V> { boolean durable(K key); }
     private final FrontierV3PhysicalStoreKind kind;
@@ -229,6 +229,11 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         meta.put("payload", metadata()); updates.put("$meta", encode(meta));
         for (StoredTable table : tables) table.collect(updates);
         return updates;
+    }
+    @Override public final void submitAutosave(File file, HolderLookup.Provider registries) {
+        Path target = file.toPath().toAbsolutePath().normalize();
+        if (path == null || !path.equals(target)) throw new IllegalArgumentException("foreign implicit physical store save");
+        persistAsync(); // This is a submission, never proof that an effect may proceed.
     }
     @Override public final void save(File file, HolderLookup.Provider registries) {
         try {

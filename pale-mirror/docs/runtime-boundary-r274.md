@@ -137,3 +137,12 @@ before vanilla emits drops, rather than admitting geometry alone and discovering
 an owner refusal only after drops. The nested setBlock retains those same
 idempotent witnesses. Native block-extraction/terrain-admission4 tests passed;
 the shared storage/body/field54 tests passed for the environmental wrapper.
+
+Source audit of NeoForge DimensionDataStorage.save confirms it calls each
+SavedData.save(File), whose ordinary implementation enqueues compressed NBT. Our
+common journals override that entry with a synchronous prefix barrier, including
+clean pending images. Added an explicit native autosave Target port to both
+shared journals and actor rows. Only the automatic tickServer save entry uses
+that port; direct persist/effect/explicit save and shutdown paths still force
+their exact prefixes. All normal rows use the existing async writer and receipt
+gates. No vanilla save-cycle replacement or reduced native durability is added.

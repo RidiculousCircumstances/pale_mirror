@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Bounded inactive-body evidence; canonical actors and rosters remain domain-owned. */
-final class FrontierV3AmbientCarrierLedger extends SavedData {
+final class FrontierV3AmbientCarrierLedger extends SavedData implements FrontierV3NativeAutosave.Target {
     private static final String NAME = "pale_mirror_frontier_v3_ambient_carriers";
     static final int FORMAT = 12;
     private static final int MAX_CARRIERS = 4_096;
@@ -318,8 +318,13 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     }
     java.util.concurrent.CompletableFuture<Long> persistAsync(ServerLevel level, WorldId worldId) {
         if (get(level, worldId) != this) throw new IllegalArgumentException("foreign actor carrier ledger");
+        return submitRows(storageFile(level, worldId).toAbsolutePath().normalize());
+    }
+    @Override public void submitAutosave(java.io.File file, HolderLookup.Provider registries) {
+        submitRows(file.toPath().toAbsolutePath().normalize());
+    }
+    private java.util.concurrent.CompletableFuture<Long> submitRows(java.nio.file.Path path) {
         try {
-            var path = storageFile(level, worldId).toAbsolutePath().normalize();
             if (journal == null) { journal = FrontierV3JournalStore.open(path); journalPath = path; }
             else if (!journalPath.equals(path)) throw new IllegalArgumentException("carrier ledger changed storage target");
             var updates = new java.util.TreeMap<String, byte[]>();

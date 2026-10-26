@@ -42,6 +42,7 @@
     "FrontierV3PlayerOperationSaveMixin",
     "FrontierV3DepotMenuClickMixin",
     "FrontierV3HorseMenuAccessor",
-    "FrontierV3CompoundContainerAccessor"
+    "FrontierV3CompoundContainerAccessor",
+    "FrontierV3NativeAutosaveMixin"
   ]
 }

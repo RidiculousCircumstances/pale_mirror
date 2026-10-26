@@ -31,8 +31,15 @@ public final class FrontierV3HostTiming {
     }
     public static FrontierExecutionMetrics.Span beginNativeSave(MinecraftServer server, String part, String owner) {
         var runtime = FrontierV3ServerLifecycle.runtimeFor(server);
-        return FrontierExecutionMetrics.safelyBegin(runtime == null ? FrontierExecutionMetrics.noOp() : runtime.executionMetrics(),
+        var span = FrontierExecutionMetrics.safelyBegin(runtime == null ? FrontierExecutionMetrics.noOp() : runtime.executionMetrics(),
                 FrontierExecutionMetrics.Stage.PHYSICAL, "native-save-" + part, owner);
+        long started = System.nanoTime();
+        return () -> {
+            span.close();
+            long elapsed = Math.max(0L, System.nanoTime() - started);
+            if (elapsed > 10_000_000L) io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                    "PMV3_NATIVE_SAVE part={} owner={} durationNanos={}", part, owner, elapsed);
+        };
     }
     static FrontierExecutionMetrics.Span beginPmTurn(FrontierExecutionMetrics metrics) {
         return FrontierExecutionMetrics.safelyBegin(metrics, FrontierExecutionMetrics.Stage.HOST_TURN,
