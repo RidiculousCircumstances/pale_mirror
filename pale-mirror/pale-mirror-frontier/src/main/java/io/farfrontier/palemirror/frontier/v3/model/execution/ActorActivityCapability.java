@@ -24,6 +24,14 @@ public interface ActorActivityCapability {
      * execution until their coordinated terminal settlement; scenes never own death outcomes. */
     default java.util.Optional<ActorActivityDeath> deathAcknowledgement() { return java.util.Optional.empty(); }
     void validateReference(FrontierWorldState state, ActorExecutionId execution);
+    /** Optional owner-retained semantic navigation order. Absence requires a
+     * periodically refreshed local directive; it grants no continuing path.
+     * Implementations must read their current exact goal without route search. */
+    default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder> navigationOrder(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution);
+        return java.util.Optional.empty();
+    }
     /** Optional explicit idle/service presentation between legs; generic projection knows no family phase. */
     default java.util.Optional<ActorActivityAmbientTarget> stationaryAmbientTarget(FrontierWorldState state, ActorExecutionId execution) {
         return java.util.Optional.empty();

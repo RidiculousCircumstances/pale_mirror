@@ -10,7 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeo
 /** Agriculture's suitability predicate over shared geometry and reachable-area discovery. No mutation or forced chunks. */
 final class FieldDevelopmentLand {
     private record Query(SubjectId home, int limit) { }
-    private record Facts(FrontierBootstrap bootstrap, ImmutableDependencies fields,
+    private record Facts(FrontierBootstrap bootstrap, List<ResourceSite> fields,
             Object geometryVersion,
             Optional<PedestrianGeometryRevision> regional,
             Set<Region> regions,
@@ -53,7 +53,7 @@ final class FieldDevelopmentLand {
                 ? currentRegional.orElseThrow().matches(retained.regional().orElseThrow(), retained.regions())
                 : Objects.equals(geometry.version(), retained.geometryVersion()));
         if (retained != null && retained.bootstrap() == state.bootstrap()
-                && retained.fields().matches(fields.toArray()) && sameGeometry && retained.blocks().matches(knowledge)) {
+                && retained.fields().equals(fields) && sameGeometry && retained.blocks().matches(knowledge)) {
             // Only selection facts are reused. Refresh each admitted sample's
             // revision from this exact state; old observation metadata cannot
             // become permission for new development.
@@ -66,7 +66,7 @@ final class FieldDevelopmentLand {
             cells = discover(state, fields, limit, reads, geometry);
             var complete = reads.completed();
             if (complete.isPresent()) {
-                var facts = new Facts(state.bootstrap(), ImmutableDependencies.of(fields.toArray()), geometry.version(),
+                var facts = new Facts(state.bootstrap(), List.copyOf(fields), geometry.version(),
                         currentRegional, regions(state, fields), complete.orElseThrow(), cells);
                 synchronized (LAND) {
                     var old = LAND.put(query, facts);

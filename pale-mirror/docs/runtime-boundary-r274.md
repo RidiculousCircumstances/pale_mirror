@@ -342,3 +342,23 @@ The unused global land-input accessor was removed. Tests cover actual remote
 geology changes, local revocation, stale/foreign surveys, scope eviction,
 unknown/permission changes and incomplete read witnesses. No time benchmark
 or reduced navigation reach is involved.
+
+The next production-path review found why land reuse was still ineffective:
+ResourceSiteState.descriptors constructs fresh ResourceSite value records on
+every read, while retained land inputs compared those records by identity.
+Ordinary economic callers reconstruct that list every review; earlier checks
+reused the same local list and missed this path. Retained field declarations
+now match by their complete values (identity, ownership, kind and layout).
+An additional test uses two real descriptor reads, not reused references.
+
+The native field path had a separate timing dependency: captured activity
+permission expired after20 host ticks unless the whole scene executor refreshed
+it. It possessed an exact semantic MovementOrder but no continuing goal proof.
+The existing closed activity-capability registry now optionally supplies its
+own current navigationOrder. The field owner implements that read-only port.
+Shared navigation captures that exact order, body incarnation and execution,
+and revalidates them at every entity boundary; replacing the cell/storage goal,
+interrupting execution or retiring the body revokes it immediately. No larger
+timeout or field-state branch is added to the generic navigator. Other owners
+without a retained goal keep their bounded local directive. Existing explicit
+ActorMovement permissions keep their original owner and validation path.

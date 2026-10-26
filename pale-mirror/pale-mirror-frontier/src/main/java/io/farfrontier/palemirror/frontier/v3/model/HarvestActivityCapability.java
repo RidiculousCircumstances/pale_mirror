@@ -5,6 +5,10 @@ import java.util.Optional;
 
 /** Field owner supplies its exact checkpoint and preserves work/cargo through interruption. */
 final class HarvestActivityCapability implements ActorActivityCapability {
+    @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder> navigationOrder(
+            FrontierWorldState state, ActorExecutionId execution) {
+        return Optional.of(ResourceSiteHarvestGoal.current(state, job(state, execution)).movementOrder());
+    }
     @Override public ActorActivityKind kind() { return ActorActivityKind.FIELD_HARVEST; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
     @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }

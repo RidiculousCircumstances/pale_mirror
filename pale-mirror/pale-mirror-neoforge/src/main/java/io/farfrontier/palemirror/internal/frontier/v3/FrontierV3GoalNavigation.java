@@ -31,23 +31,29 @@ final class FrontierV3GoalNavigation {
         private final Optional<TravelPace> pace;
         private final double followingSpacing;
         private final Optional<MovementOrder> retainedOrder;
+        private final Optional<MovementOrder> activityOrder;
         private final io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile;
-        private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace, double followingSpacing, Optional<MovementOrder> retainedOrder) {
+        private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace, double followingSpacing,
+                Optional<MovementOrder> retainedOrder, Optional<MovementOrder> activityOrder) {
             this.actor = Objects.requireNonNull(actor); this.actuation = Objects.requireNonNull(actuation);
             this.pace = Objects.requireNonNull(pace);
             if (!Double.isFinite(followingSpacing) || followingSpacing < 0) throw new IllegalArgumentException("invalid following spacing");
             this.followingSpacing = followingSpacing;
             this.retainedOrder = Objects.requireNonNull(retainedOrder);
+            this.activityOrder = Objects.requireNonNull(activityOrder);
+            if (retainedOrder.isPresent() && activityOrder.isPresent())
+                throw new IllegalArgumentException("native continuation has competing order authorities");
             this.profile = actuation.navigationProfile().orElseThrow(() -> new IllegalArgumentException("navigation lost its declared profile"));
         }
         @Override boolean current(Mob candidate) {
             return candidate == actor && actuation.current(candidate) && actuation.navigationProfile().equals(Optional.of(profile))
-                    && retainedOrder.map(actuation::currentMovement).orElse(true);
+                    && retainedOrder.map(actuation::currentMovement).orElse(true)
+                    && activityOrder.map(actuation::currentActivityGoal).orElse(true);
         }
         @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return Optional.of(profile); }
         @Override Optional<TravelPace> pace() { return pace; }
         @Override double followingSpacing() { return followingSpacing; }
-        @Override boolean requiresPeriodicRefresh() { return retainedOrder.isEmpty(); }
+        @Override boolean requiresPeriodicRefresh() { return retainedOrder.isEmpty() && activityOrder.isEmpty(); }
     }
     /** Unmodeled physical fixtures have no canonical identity and cannot acquire one through this permission. */
     private static final class UnmodeledPermission extends ProviderPermission {
@@ -185,7 +191,10 @@ final class FrontierV3GoalNavigation {
             FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         }
         ACTUATIONS.put(actor, actuation);
-        return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation, pace, followingSpacing, retainedOrder));
+        var activityOrder = retainedOrder.isEmpty() ? goal.order().filter(actuation::currentActivityGoal)
+                : Optional.<MovementOrder>empty();
+        return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation, pace, followingSpacing,
+                retainedOrder, activityOrder));
     }
 
     private static Result pursueProvider(ServerLevel level, Mob actor, Goal goal, ProviderPermission permission) {

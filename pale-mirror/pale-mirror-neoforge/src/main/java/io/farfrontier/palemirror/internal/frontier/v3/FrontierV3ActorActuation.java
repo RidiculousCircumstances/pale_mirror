@@ -63,6 +63,22 @@ record FrontierV3ActorActuation(ActorActuationId id, Supplier<Optional<FrontierW
                 && movement.order().equals(order) && movement.coldTravel().isEmpty();
     }
 
+    /** Registered activity owner validates its own retained goal. The native
+     * navigator never interprets a field cursor, production stage or recipe. */
+    boolean currentActivityGoal(io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        var state = currentState.get();
+        if (state.isEmpty()) return false;
+        try { ActorBodyAuthority.requireActuation(state.orElseThrow(), id); }
+        catch (IllegalArgumentException stale) { return false; }
+        var retained = io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.CAPABILITIES
+                .require(id.execution().activityKind()).navigationOrder(state.orElseThrow(), id.execution());
+        retained.ifPresent(value -> {
+            if (!value.actorId().equals(id.execution().actorId()) || !value.ownerId().equals(id.execution().activityOwnerId()))
+                throw new IllegalArgumentException("activity navigation returned a foreign actor or owner");
+        });
+        return retained.filter(order::equals).isPresent();
+    }
+
     private static void requireEnvelope(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId, Mob body) {
         var profile = state.actorLocations().get(actorId).navigationProfile();
         if (!profile.matchesDimensions(body.getBbWidth(), body.getBbHeight()))

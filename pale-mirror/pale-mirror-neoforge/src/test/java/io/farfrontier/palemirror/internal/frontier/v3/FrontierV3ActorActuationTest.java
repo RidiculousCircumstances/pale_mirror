@@ -13,6 +13,32 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3ActorActuationTest {
+    @Test void activityOwnerRetainsOnlyItsExactCurrentGoalWithoutRenewingBodyAuthority() {
+        var configuration = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(
+                new WorldId("frontier:owner-retained-goal"), 421L);
+        var state = configuration.initialState();
+        var site = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("site:1-wheat-field");
+        var job = state.resourceSites().site(site).harvestJobs().values().stream()
+                .reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
+        state = ModeledActorBodyFacts.present(state, job.workerId());
+        var execution = state.actorExecutions().actors().get(job.workerId()).current().orElseThrow();
+        var source = new AtomicReference<>(Optional.of(state));
+        var permission = new FrontierV3ActorActuation(new ActorActuationId(
+                ActorBodyAuthority.current(state, job.workerId()), execution), source::get);
+        var original = ResourceSiteHarvestGoal.current(state, job).movementOrder();
+        assertTrue(permission.currentActivityGoal(original));
+        var cycle = state.resourceSites().cycle(site);
+        int next = (job.progress().nextCropSlotIndex() + 1) % cycle.layout().cells().size();
+        var changed = state.withResourceSites(state.resourceSites().replace(
+                state.resourceSites().site(site).retargetHarvestCell(job, next, cycle)));
+        source.set(Optional.of(changed));
+        var following = changed.resourceSites().site(site).harvestJob(job.id()).orElseThrow();
+        assertFalse(permission.currentActivityGoal(original), "same execution cannot retain yesterday's cell");
+        assertTrue(permission.currentActivityGoal(ResourceSiteHarvestGoal.current(changed, following).movementOrder()));
+        source.set(Optional.empty());
+        assertFalse(permission.currentActivityGoal(original));
+    }
+
     @Test void scoutPermissionRetainsItsSemanticGoalVersionAcrossPhysicalMovementAndRejectsAbaTargetReuse() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-motion-goal"), 71L));
         var scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
