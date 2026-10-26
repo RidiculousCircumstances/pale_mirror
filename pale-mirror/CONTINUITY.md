@@ -435,3 +435,40 @@ but that example does not prove sustainable mineral-export/food-import exchange
 or automatic recovery. Do not promise the crisis fixes itself just because
 Sunreach sometimes buys coal. Remaining model investigation is productive income
 versus necessary inputs/food and actual freight, not forced equal cash balances.
+
+
+## R269 user check: economy/server logical problems
+
+Read-only runtime audit, same2ff550333 game/no player/no FF or restart.
+Raw receipts IMPL/build/economy-logical-audit-r269; source report
+ docs/economy-logical-audit-r269.md (doc-only source commit; game unchanged).
+At660744 hungry263/352; at665962 hungry268. Totalcash1200, Sunreach1008.893804.
+178retained performance windows: measuredTPS average20.00/min19.92, sampled
+recent-window max13.04ms; retained lifetime270.48ms, not a guarantee below80ms.
+Summary661163 no required/scene/inventory/custody conflicts. No new crash log;
+old08:03:50projection-capacity waits and08:05:10client reset remain historical.
+Three common caravans advanced348/348/325blocks over5218ticks. Westhaven's
+bread delivery job1634 retired, so not a proven stall. COLD evidence only.
+
+Exact snapshot contracts: Ashcross bread1=13.496248goods+23.303322freight,
+hold36.799570; Mossbrook bread1 samegoods+13.316184freight, hold26.812432.
+Unreservedcash19.790302/6.746761. Wheat443/844, coal0. These are reservations,
+not completed purchases. TripDispatchPolicy admits any positive late uncovered
+quantity before its economic-lot check; there is no recovery-volume/continuity
+criterion at that boundary. A hard minimum alone would create another deadlock.
+
+Structural gap: EconomicFunding marks fundedRestarts only if ALL protected-input
+items across its plan are quoted and affordable; otherwise the whole set is empty
+(all12 participants empty here). Independent dependency chains are not preserved.
+ProcurementSelection then ranks equal-deadline/equal-restart needs by item name,
+not the useful output that an input enables. No claim that an executable cheaper
+coal alternative existed when these two actual contracts were accepted; that
+counterfactual remains unproved. Current24ktick actualbread output104, not max
+capacity. Whole-world sustained recovery remains unproved; no balancing edits.
+
+Fifth retained incident is retryable PRODUCTION_BLOCKED Northwatch635220, not a
+new invariant conflict. Its sourceTree5c6e5b418870398ccf1d0ec277141fbd4bbec5d5 is
+CORRECT deployed git tree hash, not a wrong commit. Incident JAR is unavailable;
+native CodeSource failure branch not observed. Record as provenance gap, not
+claim of stale deployment. Source report/diff-check/guardrails PASS10sec; no
+new tests, client campaign, reset, simulation/artifact change or push.
