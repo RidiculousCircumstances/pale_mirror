@@ -43,6 +43,7 @@ public final class KnownPedestrianRouteKnowledge {
     private record FieldView(ResourceSite site, ResourceStorageAccess port, ResourceFieldCycle cycle,
                              Set<BlockPosition> obstructions, KnownPedestrianRouteKnowledge knowledge,
                              java.util.Map<SurfaceAnchor, KnownPedestrianRouteKnowledge> witnessedDepartures) { }
+    private static final ImmutableResultView<String, Set<BlockPosition>> FIELD_OBSTRUCTIONS = new ImmutableResultView<>(64);
     private static final java.util.Map<SubjectId, FieldView> FIELDS = new java.util.LinkedHashMap<>();
     private static KnownNaturalGeometry.Composite viewNatural;
     private final FrontierBootstrap bootstrap;
@@ -587,6 +588,9 @@ public final class KnownPedestrianRouteKnowledge {
 
     /** Only obstacle facts affect geometry; growth, yield and worker progress do not. */
     private static Set<BlockPosition> fieldObstructions(ResourceFieldCycle cycle) {
+        return FIELD_OBSTRUCTIONS.get(List.of(cycle), "field-obstructions", () -> compileFieldObstructions(cycle));
+    }
+    private static Set<BlockPosition> compileFieldObstructions(ResourceFieldCycle cycle) {
         Set<BlockPosition> hard = new HashSet<>();
         for (ResourceFieldLayout.Cell cell : cycle.layout().cells()) {
             ResourceFieldCycle.CellState condition = cycle.cell(cell.id());

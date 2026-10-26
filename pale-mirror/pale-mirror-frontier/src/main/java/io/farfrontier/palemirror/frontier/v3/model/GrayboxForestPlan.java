@@ -40,7 +40,7 @@ public final class GrayboxForestPlan {
                 for (int z = Math.floorDiv(patch.centre().z() - radius, 16); z <= Math.floorDiv(patch.centre().z() + radius, 16); z++)
                     covered.add(new ForestRegion(x, z));
         }
-        coverage = Set.copyOf(covered);
+        coverage = Collections.unmodifiableSet(covered);
         if (patches.isEmpty()) { protectedColumns = Set.of(); return; }
         var excluded = new HashSet<TerrainColumn>();
         FrontierGrayboxPlan.compileInitialSettlementFabric(bootstrap).cells().keySet().forEach(position -> exclude(excluded, position));

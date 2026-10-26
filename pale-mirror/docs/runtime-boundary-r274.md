@@ -218,3 +218,16 @@ that coverage and retained captured-tree footprints. Existing or newly grown
 external trees and cross-boundary aftermath still use the full overlay. Unknown
 base terrain remains unknown. This is a derived membership fast path, not a
 change to route connectivity, resource quantities or canonical schema.
+
+A follow-up COLD30s JFR still spends most scheduled-worker samples in land
+reachability and comparison of reconstructed passage obstacle sets. The complete
+land key now uses the geometry owner's immutable version instead of the disposable
+wrapper identity. Its other full suitability inputs and exact-state Survey fence
+remain. The obstacle owner memoizes passage overlays over the exact complete and
+observed obstacle inputs plus the permission set; unchanged overlays retain their
+regional objects. A separate bounded exact-cycle memo avoids repeated field-cell
+obstruction scans after unrelated geometry-view eviction. Spatial forest coverage
+uses the ordinary hash-backed immutable view, avoiding dense SetN probe runs in
+the sampled grid. Scoped cultivation/geometry/forest40tests and architecture9,
+guardrails/JAR/package passed planning-images-final-check.log. Live throughput
+must still be measured; no decrease in clock debt is inferred across a restart.

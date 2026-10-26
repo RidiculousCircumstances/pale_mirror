@@ -10,6 +10,7 @@ final class KnownPedestrianObstacleIndex {
     private enum Source { STATIC, SITES, WITHDRAWN, UNKNOWN, ORGANS, PHYSICAL, STORAGE }
     private final RegionalBlockContributions<Source> physical = new RegionalBlockContributions<>();
     private final RegionalBlockContributions<Source> ground = new RegionalBlockContributions<>();
+    private final ImmutableResultView<Set<BlockPosition>, RegionalBlockSet> passages = new ImmutableResultView<>(64);
     private final Map<Source, Object> versions = new EnumMap<>(Source.class);
     private final RegionalBlockContributions<Source> complete = new RegionalBlockContributions<>();
 
@@ -38,8 +39,11 @@ final class KnownPedestrianObstacleIndex {
         if (cleared.isEmpty()) return complete();
         // All other regions share the complete snapshot. Within the small
         // permission footprint physical changes take precedence over authored clearance.
-        var removals = new HashSet<BlockPosition>();
-        for (var position : cleared) if (!physical.snapshot().contains(position)) removals.add(position);
-        return complete().overlay(removals, Set.of());
+        var whole = complete(); var observed = physical.snapshot(); var permission = Set.copyOf(cleared);
+        return passages.get(List.of(whole, observed), permission, () -> {
+            var removals = new HashSet<BlockPosition>();
+            for (var position : permission) if (!observed.contains(position)) removals.add(position);
+            return whole.overlay(removals, Set.of());
+        });
     }
 }

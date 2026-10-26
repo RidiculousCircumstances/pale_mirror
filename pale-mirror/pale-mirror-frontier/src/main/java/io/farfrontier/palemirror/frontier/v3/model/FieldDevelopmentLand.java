@@ -35,7 +35,9 @@ final class FieldDevelopmentLand {
         var knowledge = new DevelopmentGroundKnowledge(state);
         var geometry = KnownPedestrianRouteKnowledge.forSettlement(state, home, List.of()).geometry();
         var inputs = new ArrayList<Object>(knowledge.immutableInputs());
-        inputs.add(geometry); inputs.addAll(fields);
+        // Geometry wrappers may be rebuilt after bounded view-cache eviction.
+        // Their owner-supplied immutable version still denotes the complete same facts.
+        inputs.add(geometry.version()); inputs.addAll(fields);
         var cells = LAND.get(inputs, new Query(home, limit), () -> discover(state, fields, limit, knowledge, geometry));
         // Reuse only immutable facts. The admission proof is freshly tied to this
         // exact world state; cached land never grants stale development authority.
