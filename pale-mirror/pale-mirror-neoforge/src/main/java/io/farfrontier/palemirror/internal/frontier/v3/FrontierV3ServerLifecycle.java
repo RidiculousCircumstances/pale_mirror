@@ -482,7 +482,10 @@ public final class FrontierV3ServerLifecycle {
                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3CanonicalResumption.forget(server);
         var physicalWorld = server.getLevel(FrontierV3PhysicalWorld.DIMENSION);
-        if (physicalWorld != null) {
+        // Startup may fail before a canonical state exists. There is then no domain
+        // worksite to reconcile; physical stores still finish below, and the original
+        // startup rejection remains the failure instead of a secondary shutdown exception.
+        if (physicalWorld != null && runtime.decodedState().isPresent()) {
             for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.shutdown(physicalWorld, runtime);
             FrontierV3WorksiteProjection.forget(physicalWorld);
             var ledger = FrontierV3AmbientCarrierLedger.get(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);

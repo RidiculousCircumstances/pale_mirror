@@ -88,3 +88,11 @@ Native shared operation/body/field checks and focused recovery checks cover the
 changed boundaries. Exploratory live client visits assess actual continued
 feeding and simulation lag; no all-activities smooth-motion or universal80ms
 hard-real-time claim follows from an empty conflict list.
+
+The extra food payload changes the closed process descriptor inventory. Retained
+R272 therefore correctly fails the current fresh-world-only header guard; it is
+preserved offline, not migrated or silently accepted. Deployment uses a new
+R274 world. Failed startup cleanup also avoids invoking domain worksite
+reconciliation before any canonical state was decoded; the original rejection
+remains visible and native stores still finish. Live old-world continuation
+claims apply only to343, not the new food candidate.
