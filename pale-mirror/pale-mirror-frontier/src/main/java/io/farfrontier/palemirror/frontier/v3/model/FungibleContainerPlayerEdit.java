@@ -24,16 +24,22 @@ public final class FungibleContainerPlayerEdit {
                                            long epoch, UUID playerId, UUID interactionId,
                                            List<FungiblePhysicalObservation.Stack> observed,
                                            Set<SubjectId> withdrawableClaims) {
+        return classify(ledger, accountId, new ResourceCustody.Container(containerId), settlementId, epoch, playerId, interactionId, observed, withdrawableClaims);
+    }
+    public static FrontierPayload classify(FungibleResourceLedger ledger, SubjectId accountId,
+            ResourceCustody.Container holder, SubjectId settlementId, long epoch, UUID playerId, UUID interactionId,
+            List<FungiblePhysicalObservation.Stack> observed, Set<SubjectId> withdrawableClaims) {
+        var containerId = holder.containerId();
         Objects.requireNonNull(ledger, "depot resource ledger");
         Objects.requireNonNull(playerId, "depot player");
         Objects.requireNonNull(interactionId, "depot interaction");
         Objects.requireNonNull(observed, "depot observed layout");
         Objects.requireNonNull(withdrawableClaims, "owner-authorized claim losses");
         CustodyAccount account = ledger.accounts().get(accountId);
-        if (account != null && !account.custody().equals(new ResourceCustody.Container(containerId))
-                || account == null && (!accountId.equals(ReferenceContainerCustody.scopeId(containerId))
+        if (account != null && !account.custody().equals(holder)
+                || account == null && (!accountId.equals(ContainerResourceAccounts.id(holder))
                     || ledger.accounts().values().stream().anyMatch(other ->
-                            other.custody().equals(new ResourceCustody.Container(containerId))))) {
+                            other.custody().equals(holder)))) {
             throw new IllegalArgumentException("player edit lacks the exact depot account");
         }
         List<PhysicalStackBinding> current = ledger.bindings().values().stream()
@@ -69,8 +75,8 @@ public final class FungibleContainerPlayerEdit {
             var gift = gifts.entrySet().iterator().next();
             ResourceLot lot = new ResourceLot(new SubjectId("lot:player-gift-" + interactionId.toString().replace("-", "")),
                     settlementId, gift.getKey(), gift.getValue(), "player-gift:" + interactionId, List.of());
-            ledger.contributeObserved(accountId, containerId, epoch, lot, observed);
-            return new FungibleStockContributionObserved(accountId, containerId, epoch, playerId, interactionId, lot, observed);
+            ledger.contributeObserved(accountId, holder, epoch, lot, observed);
+            return new FungibleStockContributionObserved(accountId, containerId, epoch, playerId, interactionId, lot, observed, holder.section());
         }
         if (account == null) throw new IllegalArgumentException("empty depot cannot lose stock");
         Set<SubjectId> forfeited = SourceStockDepartureSelection.claimsNeededForExit(ledger, account, losses, withdrawableClaims);

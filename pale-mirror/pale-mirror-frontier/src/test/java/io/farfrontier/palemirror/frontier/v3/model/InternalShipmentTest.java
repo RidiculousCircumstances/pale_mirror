@@ -56,7 +56,7 @@ class InternalShipmentTest {
         var lot = new SubjectId("lot:full-station-fixture"); var account = new SubjectId("custody:full-station-fixture");
         var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, shipment.receiver().settlementId(),
                 shipment.itemKind(), 64, "test:station-full", List.of()),
-                new CustodyAccount(account, new ResourceCustody.Container(shipment.receiver().containerId()), Map.of(lot, 64), Map.of()));
+                new CustodyAccount(account, shipment.receiver().custody(), Map.of(lot, 64), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
         var access = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement)
@@ -72,6 +72,21 @@ class InternalShipmentTest {
                 state.inventory().fungibleResources().destroy(account, Map.of(lot, 64), Map.of())));
         ServiceAccessCoordinator.requireDeclared(state, access);
         assertTrue(ServiceAccessCoordinator.available(state, access), "the same journey can enter after external capacity release");
+    }
+
+    @Test void fuelForecastUsesTheDeclaredDeliveryCompartmentNotTheCargoKind() {
+        var fixture = machineSupplyFixture(); var state = fixture.state(); var fuel = fixture.shipment();
+        var receiver = (ShipmentEndpoint.ProductionPort) fuel.receiver();
+        assertEquals(4800, ProductionStationEnergy.unlitFuelTicks(state, receiver.spec().id()));
+        var input = new ShipmentEndpoint.ProductionPort(receiver.settlementId(), receiver.spec(),
+                ActorContainerItemOrder.StationPort.INPUT, receiver.exteriorApproach());
+        var material = new Shipment(fuel.id(), fuel.authorization(), fuel.execution(), fuel.sender(), input,
+                fuel.sourceAccountId(), fuel.carriedAccountId(), ContainerResourceAccounts.id(input.custody()),
+                fuel.itemKind(), fuel.lotQuantities(), fuel.status(), fuel.revision());
+        state = state.withChanges(FrontierWorldStateUpdate.begin().shipments(
+                new ShipmentState(Map.of(material.id(), material), state.shipments().missions())));
+        assertEquals(0, ProductionStationEnergy.unlitFuelTicks(state, receiver.spec().id()),
+                "combustible cargo addressed to INPUT must never back FUEL");
     }
 
     private RetargetFixture machineSupplyFixture() {
@@ -118,7 +133,7 @@ class InternalShipmentTest {
         state = InternalShipmentStateSupport.receive(state, id,
                 new InternalShipmentReceived(id, delivered.revision(), delivered.reception().orElseThrow().id()));
         assertEquals(3, state.inventory().fungibleResources().unclaimedQuantity(
-                ReferenceContainerCustody.scopeId(station.containerId()), receiver.settlementId(), shipment.itemKind()));
+                delivered.receivingAccountId(), receiver.settlementId(), shipment.itemKind()));
         assertEquals(state, codec.decode(codec.encode(state)));
     }
 

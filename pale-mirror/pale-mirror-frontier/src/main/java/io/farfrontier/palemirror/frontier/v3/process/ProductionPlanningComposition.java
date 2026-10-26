@@ -13,7 +13,8 @@ final class ProductionPlanningComposition {
     private static final Map<StrategicObjectiveKind, Planner> PLANNERS = Map.of(
             StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, BakeryProductionPlanning::planStart,
             StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION, CompanyBakeryPlanning::planStart,
-            StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT, EquipmentJobAdmission::planStart);
+            StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT, EquipmentJobAdmission::planStart,
+            StrategicObjectiveKind.SETTLEMENT_PRODUCE_STOCK, StockJobAdmission::planStart);
     static List<ProposedEvent> start(FrontierWorldState state, StrategicTask task, ScheduledAction action, long now) {
         var objective = state.strategicPlans().objectives().get(task.objectiveId());
         var planner = PLANNERS.get(objective.kind());

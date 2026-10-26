@@ -8,7 +8,7 @@ import java.util.List;
 public final class ProductionServiceAccess implements ServiceAccessCapability {
     public sealed interface ResumeWait { String label(); }
     public enum ServiceWait implements ResumeWait {
-        STATION_CUSTODY, AUTOMATIC_PROCESSING, OUTPUT_STORAGE_CAPACITY;
+        STATION_CUSTODY, FUEL_DELIVERY, AUTOMATIC_PROCESSING, OUTPUT_STORAGE_CAPACITY;
         @Override public String label() { return name(); }
     }
     public record StationWait(ProductionStationProcessing.StartReadiness readiness) implements ResumeWait {
@@ -113,6 +113,8 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
             return readiness == ProductionStationProcessing.StartReadiness.READY ? java.util.Optional.empty()
                     : java.util.Optional.of(new StationWait(readiness));
         }
+        if (work.phase() == StationWorkState.Phase.PROCESSING && ProductionStationEnergy.awaitingFuel(state, work.stationId()))
+            return java.util.Optional.of(ServiceWait.FUEL_DELIVERY);
         if (work.phase() == StationWorkState.Phase.PROCESSING
                 && state.bootstrap().ruleset().production().require(work.recipeId()).processingMode()
                     == ProductionRecipe.ProcessingMode.AUTOMATIC) return java.util.Optional.of(ServiceWait.AUTOMATIC_PROCESSING);

@@ -11,10 +11,14 @@ import java.util.UUID;
 public record FungibleStockContributionObserved(SubjectId accountId, SubjectId containerId,
                                                  long authorityEpoch, UUID playerId, UUID interactionId,
                                                  ResourceLot contribution,
-                                                 List<FungiblePhysicalObservation.Stack> observed)
+                                                 List<FungiblePhysicalObservation.Stack> observed, ContainerSectionId section)
         implements FrontierPayload {
+    public FungibleStockContributionObserved(SubjectId account, SubjectId container, long epoch, UUID player, UUID interaction,
+            ResourceLot contribution, List<FungiblePhysicalObservation.Stack> observed) {
+        this(account, container, epoch, player, interaction, contribution, observed, ContainerSectionId.STOCK);
+    }
     public FungibleStockContributionObserved {
-        Objects.requireNonNull(accountId, "contribution account");
+        Objects.requireNonNull(accountId, "contribution account"); Objects.requireNonNull(section, "contribution compartment");
         Objects.requireNonNull(containerId, "contribution container");
         Objects.requireNonNull(playerId, "contribution player");
         Objects.requireNonNull(interactionId, "contribution interaction");

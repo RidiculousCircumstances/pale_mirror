@@ -19,11 +19,15 @@ final class AutomaticStationReadability {
             var clock = operation.progress().orElse(null);
             if (clock == null) return "PROCESSING START PENDING";
             long percent = clock.completedAt(Math.max(tick, clock.evaluatedAtTick())) * 100 / clock.requiredMilliWork();
+            if (ProductionStationEnergy.awaitingFuel(state, spec.id())) return "FUEL NEEDED · " + percent + "%";
+            if (!clock.running() && !clock.complete()) return "PROCESSING PAUSED · " + percent + "%";
             return "PROCESSING " + percent + "% · " + operation.outputQuantity() + " ITEMS";
         }
         if (!ProductionStationRecipe.portVacant(state, spec, ActorContainerItemOrder.StationPort.OUTPUT)) return "OUTPUT READY · AWAITING COLLECTION";
         if (ProductionStationRecipe.portVacant(state, spec, ActorContainerItemOrder.StationPort.INPUT)) return "IDLE · NO INPUT";
-        if (machine.storedHeat() == 0) return "FUEL NEEDED";
+        if (state.bootstrap().ruleset().production().recipes().stream().filter(recipe -> recipe.capability() == spec.capability())
+                .allMatch(ProductionRecipe::requiresCombustion) && machine.burnRemaining(tick) == 0
+                && !ProductionStationEnergy.hasUnlitFuel(state, spec.id())) return "FUEL NEEDED";
         return "IDLE · AWAITING PRODUCTION DEMAND";
     }
     private AutomaticStationReadability() { }

@@ -6,6 +6,28 @@ import java.util.*;
 /** Observed fixed inventory admission. Does not choose a territorial owner, machine capability or storage policy. */
 public final class FixedContainerAdoption {
     public static ExactInventory adopt(ExactInventory inventory, ContainerRecord container, BlockPosition position, List<ResourceLot> contents) {
+        var holders = new HashMap<SubjectId, ContainerSectionId>();
+        contents.forEach(lot -> holders.put(lot.id(), ContainerSectionId.STOCK));
+        return adoptDeclared(inventory, container, position, contents, holders);
+    }
+    public record PlacedResource(int slot, ResourceLot lot) {
+        public PlacedResource { Objects.requireNonNull(lot); if (slot < 0 || slot >= 54) throw new IllegalArgumentException("invalid admitted resource slot"); }
+    }
+    public static ExactInventory adoptPlaced(ExactInventory inventory, ContainerRecord container, BlockPosition position, List<PlacedResource> contents) {
+        var holders = new HashMap<SubjectId, ContainerSectionId>();
+        var slots = new HashSet<Integer>();
+        for (var value : contents) {
+            if (!slots.add(value.slot()) || holders.put(value.lot().id(), container.compartmentLayout().sectionAt(value.slot())) != null)
+                throw new IllegalArgumentException("adoption repeats a physical slot or lot identity");
+            var observed = container.fungibleLayout().slots().get(value.slot());
+            if (observed == null || !observed.itemKind().equals(value.lot().itemKind()) || observed.quantity() != value.lot().quantity())
+                throw new IllegalArgumentException("placed resource differs from its declared observed slot");
+        }
+        if (!slots.equals(container.fungibleLayout().slots().keySet())) throw new IllegalArgumentException("adoption omits a witnessed material slot");
+        return adoptDeclared(inventory, container, position, contents.stream().map(PlacedResource::lot).toList(), holders);
+    }
+    private static ExactInventory adoptDeclared(ExactInventory inventory, ContainerRecord container, BlockPosition position,
+            List<ResourceLot> contents, Map<SubjectId, ContainerSectionId> holders) {
         if (inventory.containers().size() >= 4096 || inventory.containers().containsKey(container.id())
                 || inventory.surfaces().values().stream().filter(ContainerSurface::fixed)
                     .filter(surface -> surface.status() != ContainerSurfaceStatus.RETIRED).anyMatch(surface -> surface.position().equals(position))
@@ -17,14 +39,16 @@ public final class FixedContainerAdoption {
         var surfaces = new LinkedHashMap<>(inventory.surfaces());
         surfaces.put(container.id(), new ContainerSurface(container.id(), position, ContainerSurfaceStatus.ADOPTING));
         var lots = new LinkedHashMap<>(ledger.lots()); var accounts = new LinkedHashMap<>(ledger.accounts());
-        var quantities = new LinkedHashMap<SubjectId, Integer>();
+        var sections = new TreeMap<ContainerSectionId, Map<SubjectId, Integer>>();
         for (var lot : contents) {
             if (lots.putIfAbsent(lot.id(), lot) != null) throw new IllegalArgumentException("adoption cannot reissue an existing lot");
-            quantities.put(lot.id(), lot.quantity());
+            var section = Objects.requireNonNull(holders.get(lot.id()), "admitted resource compartment");
+            container.compartmentLayout().slots(section);
+            sections.computeIfAbsent(section, ignored -> new LinkedHashMap<>()).put(lot.id(), lot.quantity());
         }
-        if (!quantities.isEmpty()) {
-            var id = ReferenceContainerCustody.scopeId(container.id());
-            if (accounts.putIfAbsent(id, new CustodyAccount(id, new ResourceCustody.Container(container.id()), quantities, Map.of())) != null)
+        for (var entry : sections.entrySet()) {
+            var holder = new ResourceCustody.Container(container.id(), entry.getKey()); var id = ContainerResourceAccounts.id(holder);
+            if (accounts.putIfAbsent(id, new CustodyAccount(id, holder, entry.getValue(), Map.of())) != null)
                 throw new IllegalArgumentException("adoption account is already owned");
         }
         return new ExactInventory(records, inventory.items(), inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(),

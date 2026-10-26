@@ -17,12 +17,12 @@ final class BakeryReserveSupply implements ReserveSupplyPort {
         if (!installed) return new Facts(Map.of(), List.of(), Map.of());
         var inputs = new TreeMap<String, Rate>();
         // One explicitly selected alternative. The processing owner can replace this selection policy.
-        String ingredient = recipe.ingredient().acceptedItems().stream().sorted().findFirst().orElseThrow();
-        inputs.put(ingredient, Rate.of(recipe.ingredient().quantity(), recipe.product().quantity()));
-        if (recipe.heatPerBatch() > 0) {
-            var fuel = catalog.fuels().stream().sorted(Comparator.comparingLong(ProductionCatalog.Fuel::heatUnits).reversed()
+        String ingredient = recipe.singleIngredient().acceptedItems().stream().sorted().findFirst().orElseThrow();
+        inputs.put(ingredient, Rate.of(recipe.singleIngredient().quantity(), recipe.product().quantity()));
+        if (recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()) > 0) {
+            var fuel = catalog.fuels().stream().sorted(Comparator.comparingLong(ProductionCatalog.Fuel::burnTicks).reversed()
                     .thenComparing(ProductionCatalog.Fuel::itemKind)).findFirst().orElseThrow();
-            inputs.merge(fuel.itemKind(), Rate.of(recipe.heatPerBatch(), Math.multiplyExact(fuel.heatUnits(), recipe.product().quantity())), Rate::plus);
+            inputs.merge(fuel.itemKind(), Rate.of(recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), Math.multiplyExact(fuel.burnTicks(), recipe.product().quantity())), Rate::plus);
         }
         long lead = BakeryProcessingForecast.reserveLeadTicks(state, home);
         return new Facts(Map.of(), List.of(new Flow(recipe.product().itemKind(), inputs)),

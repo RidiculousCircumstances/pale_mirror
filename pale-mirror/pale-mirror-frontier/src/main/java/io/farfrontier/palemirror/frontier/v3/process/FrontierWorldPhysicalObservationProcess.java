@@ -261,7 +261,7 @@ public final class FrontierWorldPhysicalObservationProcess {
             }
         }
         if (!observed.equals(FungibleContainerPlayerEdit.classify(ledger, observed.sourceAccountId(),
-                observed.containerId(), observed.economicOwnerId(), observed.authorityEpoch(),
+                (ResourceCustody.Container) source.custody(), observed.economicOwnerId(), observed.authorityEpoch(),
                 observed.playerId(), observed.interactionId(), observed.remaining(),
                 SourceStockClaimLoss.admissibleClaims(state, observed.sourceAccountId()))))
             throw new IllegalArgumentException("stock departure differs from its exact witnessed edit classification");
@@ -311,7 +311,7 @@ public final class FrontierWorldPhysicalObservationProcess {
                 || lease.authorityEpoch() != observed.authorityEpoch()) {
             throw new IllegalArgumentException("stock contribution lacks current physical custody authority");
         }
-        FungibleResourceLedger contributed = ledger.contributeObserved(observed.accountId(), observed.containerId(),
+        FungibleResourceLedger contributed = ledger.contributeObserved(observed.accountId(), new ResourceCustody.Container(observed.containerId(), observed.section()),
                 observed.authorityEpoch(), observed.contribution(), observed.observed());
         return state.withInventory(state.inventory().withFungibleResources(contributed));
     }

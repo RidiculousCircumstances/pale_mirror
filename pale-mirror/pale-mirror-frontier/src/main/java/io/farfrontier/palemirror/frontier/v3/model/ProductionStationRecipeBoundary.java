@@ -17,7 +17,7 @@ public record ProductionStationRecipeBoundary(SubjectId stationId, SubjectId con
         Objects.requireNonNull(stationId); Objects.requireNonNull(containerId); Objects.requireNonNull(operationId);
         before = List.copyOf(before); after = List.copyOf(after);
         Objects.requireNonNull(exactBefore); Objects.requireNonNull(exactAfter);
-        if (machineRevision < 1 || authorityEpoch < 0 || before.size() > 3 || after.size() > 3
+        if (machineRevision < 1 || authorityEpoch < 0 || before.size() > 12 || after.size() > 12
                 || authorityEpoch == 0 && (!before.isEmpty() || !after.isEmpty())
                 || authorityEpoch > 0 && (before.isEmpty() || after.isEmpty() && exactAfter.isEmpty())
                 || exactBefore.isPresent() && (exactAfter.isEmpty() || !exactBefore.orElseThrow().id().equals(exactAfter.orElseThrow().id()))
@@ -35,28 +35,10 @@ public record ProductionStationRecipeBoundary(SubjectId stationId, SubjectId con
         var input = operation.inputCustody().materials().orElseThrow();
         var recipe = catalog.require(operation.recipeId());
         ProductionOperationInputs.validate(inventory, station, operation, recipe);
-        var bindings = inventory.fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(input.accountId())).toList();
-        var actual = new HashSet<FungiblePhysicalObservation.Stack>();
-        var expected = new HashSet<FungiblePhysicalObservation.Stack>();
-        var inputAddress = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(containerId, station.inputSlot()));
-        boolean found = false;
-        for (var binding : bindings) {
-            if (binding.authorityEpoch() != authorityEpoch || !(binding.address() instanceof PhysicalStackAddress.ContainerSlot slot)
-                    || !slot.slot().containerId().equals(containerId) || slot.slot().slot() == station.outputSlot())
-                throw new IllegalArgumentException("prepared recipe has a foreign physical port or epoch");
-            actual.add(new FungiblePhysicalObservation.Stack(binding.address(), binding.itemKind(), binding.quantity()));
-            int remaining = binding.quantity();
-            if (binding.address().equals(inputAddress)) {
-                found = true; remaining -= operation.inputQuantity();
-                if (remaining < 0 || !binding.claimQuantities().equals(input.claims())
-                        || input.lots().entrySet().stream().anyMatch(entry -> binding.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue()))
-                    throw new IllegalArgumentException("prepared recipe lost its reserved input port");
-            } else if (slot.slot().slot() != station.fuelSlot()) {
-                throw new IllegalArgumentException("prepared recipe contains an undeclared port");
-            }
-            if (remaining > 0) expected.add(new FungiblePhysicalObservation.Stack(binding.address(), binding.itemKind(), remaining));
-        }
+        var image = ProductionStationMaterialImage.of(inventory.fungibleResources(), station, input);
+        if (image.epoch() != authorityEpoch) throw new IllegalArgumentException("prepared recipe epoch changed");
+        var actual = new HashSet<>(image.before());
+        var expected = new HashSet<>(image.remaining());
         if (recipe.outcome() instanceof ProductionRecipeOutcome.Fungible) {
             expected.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                     new InventoryCustody.ContainerSlot(containerId, station.outputSlot())), recipe.product().itemKind(), operation.outputQuantity()));
@@ -68,7 +50,7 @@ public record ProductionStationRecipeBoundary(SubjectId stationId, SubjectId con
             if (!exactBefore.equals(operation.inputCustody().maintenanceTarget()) || !exactAfter.equals(Optional.of(result)))
                 throw new IllegalArgumentException("prepared recipe has a foreign individual result");
         }
-        if (!found || !actual.equals(new HashSet<>(before)) || !expected.equals(new HashSet<>(after)))
+        if (!actual.equals(new HashSet<>(before)) || !expected.equals(new HashSet<>(after)))
             throw new IllegalArgumentException("prepared recipe pre/postimage differs from its frozen operation");
     }
 }

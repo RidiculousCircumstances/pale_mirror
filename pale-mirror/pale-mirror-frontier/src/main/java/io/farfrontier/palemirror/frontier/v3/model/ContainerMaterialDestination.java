@@ -17,15 +17,19 @@ public record ContainerMaterialDestination(int slot, int before, Map<SubjectId, 
     }
     private static Optional<ContainerMaterialDestination> select(FrontierWorldState state, SubjectId container,
             String kind, Map<SubjectId, Integer> lots, int allowed, Optional<SubjectId> completingOwner, boolean whole) {
+        return select(state, new ResourceCustody.Container(container), kind, lots, allowed, completingOwner, whole);
+    }
+    public static Optional<ContainerMaterialDestination> select(FrontierWorldState state, ResourceCustody.Container holder,
+            String kind, Map<SubjectId, Integer> lots, int allowed, Optional<SubjectId> completingOwner, boolean whole) {
+        var container = holder.containerId();
         int quantity = lots.values().stream().mapToInt(Integer::intValue).sum();
         if (allowed < 0 || allowed > quantity) throw new IllegalArgumentException("placement allowance exceeds declared resources");
-        while (allowed > 0 && !ContainerStorageAdmission.receive(state, container, kind, allowed, completingOwner)) allowed--;
+        while (allowed > 0 && !ContainerStorageAdmission.receive(state, holder, kind, allowed, completingOwner)) allowed--;
         if (whole && allowed != quantity) return Optional.empty();
         var record = state.inventory().containers().get(container);
         if (record == null) throw new IllegalArgumentException("placement has no declared container");
         for (int slot = 0; allowed > 0 && slot < record.slotCount(); slot++) {
-            if (record.productionStation().isPresent() && slot != ProductionStationRecipe.portForItemKind(
-                    state.bootstrap().ruleset().production(), record.productionStation().orElseThrow(), kind)) continue;
+            if (!record.compartmentLayout().slots(holder.section()).contains(slot)) continue;
             if (state.reservedContainerSlots(container).contains(slot)
                     || state.inventory().occupiedSlots().containsKey(new InventoryCustody.ContainerSlot(container, slot))) continue;
             var stack = ReferenceContainerCustody.expectedFungibleSlot(state, container, slot);

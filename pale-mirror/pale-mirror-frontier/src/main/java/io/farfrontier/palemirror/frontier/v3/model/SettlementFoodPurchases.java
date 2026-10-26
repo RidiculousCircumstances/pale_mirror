@@ -11,7 +11,7 @@ public final class SettlementFoodPurchases {
     public static Advice assess(FrontierWorldState state, SubjectId home, int residents, Map<String, GoodsParticipantView.Stock> stocks) {
         var recipe = BakeryRecipes.bread(state);
         // The historic free recipe profiles retain their accepted market policy.
-        if (recipe.heatPerBatch() == 0) return new Advice(Map.of(), Map.of());
+        if (recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()) == 0) return new Advice(Map.of(), Map.of());
         var food = stocks.get(recipe.product().itemKind());
         var commodity = state.bootstrap().ruleset().goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
                 .filter(value -> value.itemKind().equals(recipe.product().itemKind())).findFirst().orElseThrow();
@@ -22,10 +22,7 @@ public final class SettlementFoodPurchases {
                 - food.unclaimedInStorage() - food.expectedIncoming() - promisedFood);
         boolean urgent = SettlementFoodPolicy.reserveCoverageBread(state, home) < SettlementFoodPolicy.baselineReserveRequirement(state, home);
         var catalog = state.bootstrap().ruleset().production();
-        long heat = state.inventory().containers().values().stream().filter(record -> record.ownerId().equals(home)
-                && record.productionStation().isPresent() && !ReferenceContainerCustody.blocksCanonicalUse(state, record.id())
-                && state.productionStations().machines().containsKey(record.productionStation().orElseThrow().id()))
-                .mapToLong(record -> state.productionStations().require(record.productionStation().orElseThrow().id()).storedHeat()).sum();
+        long heat = 0; // No retained combustion credit without an explicit forecast time.
         for (var fuel : catalog.fuels()) {
             long stock = state.inventory().fungibleResources().accounts().values().stream()
                     .filter(account -> account.custody() instanceof ResourceCustody.Container container
@@ -34,7 +31,7 @@ public final class SettlementFoodPurchases {
                     .filter(entry -> state.inventory().fungibleResources().lots().get(entry.getKey()).economicOwnerId().equals(home)
                             && state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind().equals(fuel.itemKind()))
                     .mapToLong(Map.Entry::getValue).sum();
-            heat = Math.addExact(heat, Math.multiplyExact(stock, fuel.heatUnits()));
+            heat = Math.addExact(heat, Math.multiplyExact(stock, fuel.burnTicks()));
         }
         var delay = BakeryProcessingForecast.firstOutputDelay(state, home);
         var life = state.bootstrap().ruleset().residentLife();
@@ -47,13 +44,13 @@ public final class SettlementFoodPurchases {
         long foodTime = metabolism == 0 ? Long.MAX_VALUE : Math.multiplyExact(Math.multiplyExact(
                 (long) SettlementFoodPolicy.reserveCoverageBread(state, home), meal.usefulNutrition()),
                 Math.multiplyExact(life.satietyUnitTicks(), 1_000L)) / Math.multiplyExact(metabolism, meal.items());
-        boolean processing = heat >= recipe.heatPerBatch() && delay.isPresent() && delay.orElseThrow() <= foodTime;
+        boolean processing = heat >= recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()) && delay.isPresent() && delay.orElseThrow() <= foodTime;
         var result = new HashMap<String, Integer>();
         var protectedInputs = new HashMap<String, Integer>();
         // A critical shortage always admits bread. Otherwise usable local processing favours grain.
         if (!urgent && processing) result.put(recipe.product().itemKind(), 0);
-        long needed = processing ? Math.multiplyExact(Math.ceilDiv(deficit, recipe.product().quantity()), recipe.ingredient().quantity()) : 0;
-        for (var kind : recipe.ingredient().acceptedItems()) {
+        long needed = processing ? Math.multiplyExact(Math.ceilDiv(deficit, recipe.product().quantity()), recipe.singleIngredient().quantity()) : 0;
+        for (var kind : recipe.singleIngredient().acceptedItems()) {
             var input = stocks.get(kind);
             if (input == null) throw new IllegalArgumentException("food recipe input has no registered public commodity");
             long fieldSupply = StockSupplyComposition.pending(state, StockSupplyPort.Key.FIELD).stream()

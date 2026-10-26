@@ -42,20 +42,22 @@ import java.util.function.BiFunction;
 public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
-    private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production(),
-            "tool-graybox", FrontierRulesets.toolGraybox(),
-            "expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2"),
-            "quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4"),
-            "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"),
-            "fuelled-quarry", FrontierRulesets.fuelledQuarryGraybox(),
-            "supply-quarry", FrontierRulesets.supplyQuarryGraybox(),
-            "market-quarry", FrontierRulesets.marketQuarryGraybox(),
-            "forestry-r28", FrontierRulesets.installed("frontier-v3-forestry-graybox-r28"),
-            "quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22"));
+    private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(Map.entry("wood-production-r29", FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
+            Map.entry("production", FrontierRulesets.production()),
+            Map.entry("tool-graybox", FrontierRulesets.toolGraybox()),
+            Map.entry("expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2")),
+            Map.entry("quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4")),
+            Map.entry("quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7")),
+            Map.entry("fuelled-quarry", FrontierRulesets.fuelledQuarryGraybox()),
+            Map.entry("supply-quarry", FrontierRulesets.supplyQuarryGraybox()),
+            Map.entry("market-quarry", FrontierRulesets.marketQuarryGraybox()),
+            Map.entry("forestry-r28", FrontierRulesets.installed("frontier-v3-forestry-graybox-r28")),
+            Map.entry("quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("equipmentRepair", (world, seed) -> equipmentWorkConfiguration(world, seed, true)),
             Map.entry("equipmentManufacture", (world, seed) -> equipmentWorkConfiguration(world, seed, false)),
+            Map.entry("woodProductionWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("wood-production-r29"))),
             Map.entry("forestryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("forestry-r28"))),
             Map.entry("forestryEquipped", ForestryFixture::configuration),
             Map.entry("forestryReserve", ForestryFixture::reserveConfiguration),

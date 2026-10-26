@@ -1,0 +1,664 @@
+{
+  "schema": 1,
+  "id": "disposable_multi_input_forge_player_restart",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 126
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25575,
+    "profile": "wood-production-world",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMFuelAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/give PMFuelAudit minecraft:iron_ingot 3"
+    },
+    {
+      "type": "command",
+      "command": "/give PMFuelAudit minecraft:coal 3"
+    },
+    {
+      "type": "command",
+      "command": "/give PMFuelAudit minecraft:oak_log 1"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-woodshop-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -9,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-woodshop-station",
+          "field": "position"
+        }
+      },
+      "block": "pale_mirror:woodworking_bench",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-woodshop-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-woodshop-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-woodshop-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:oak_log",
+      "count": 1,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-woodshop-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "move_within_container",
+      "item": "minecraft:oak_log",
+      "count": 1,
+      "destinationSlot": 7,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-woodshop-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "click_menu_button",
+      "button": 0,
+      "causalMilestone": "ordinary_player_processes_log_from_arbitrary_input_cell"
+    },
+    {
+      "type": "wait_until_container_item",
+      "containerId": "container:structure-7-woodshop-station",
+      "item": "minecraft:oak_planks",
+      "count": 4,
+      "slot": 9,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:oak_planks",
+      "count": 4,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-woodshop-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:oak_planks",
+      "count": 4,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-woodshop-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "click_menu_button",
+      "button": 0,
+      "causalMilestone": "real_planks_become_handle_material"
+    },
+    {
+      "type": "wait_until_container_item",
+      "containerId": "container:structure-7-woodshop-station",
+      "item": "minecraft:stick",
+      "count": 8,
+      "slot": 9,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:stick",
+      "count": 8,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -9,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "block": "pale_mirror:forge",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-forge-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:coal",
+      "count": 3,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_container_item",
+      "containerId": "container:structure-7-forge-station",
+      "item": "minecraft:coal",
+      "count": 3,
+      "slot": 10,
+      "timeoutMs": 30000,
+      "causalMilestone": "fuel_remains_an_item_before_ignition"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-forge-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_ingot",
+      "count": 3,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-forge-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:stick",
+      "count": 8,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-forge-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "move_within_container",
+      "item": "minecraft:stick",
+      "count": 8,
+      "sourceSlot": 1,
+      "destinationSlot": 8,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-forge-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "click_menu_button",
+      "button": 0,
+      "causalMilestone": "ordinary_player_starts_real_recipe"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "station:structure-7-forge",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "operation": {
+            "recipe": "pale_mirror:make_iron_axe",
+            "mode": "ATTENDED",
+            "inputQuantity": 5,
+            "outputQuantity": 1,
+            "ratePermille": 1000
+          },
+          "fuelReady": true
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container",
+      "causalMilestone": "operator_releases_attendance_not_machine_custody"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 0,
+        "y": 64,
+        "z": 480
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 2000,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "station:structure-7-forge"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "block": "pale_mirror:forge",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-forge-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "station:structure-7-forge",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "operation": {
+            "inputQuantity": 5,
+            "transformed": false,
+            "ratePermille": 0,
+            "playerAttendanceIntent": "PAUSED"
+          }
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "reopening_does_not_resume_explicitly_paused_work"
+    },
+    {
+      "type": "click_menu_button",
+      "button": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "station:structure-7-forge",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "operation": {
+            "ratePermille": 1000,
+            "playerAttendanceIntent": "RUN_REQUESTED"
+          }
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "explicit_resume_restores_consent_and_current_attendance"
+    },
+    {
+      "type": "wait_until_container_item",
+      "containerId": "container:structure-7-forge-station",
+      "item": "minecraft:iron_axe",
+      "count": 1,
+      "slot": 9,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "station:structure-7-forge"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-7-forge-station",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:iron_axe",
+      "count": 1,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 37
+  },
+  "assertions": [
+    {
+      "after": 40,
+      "view": "process",
+      "id": "station:structure-7-forge",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "operation": {
+            "inputQuantity": 5,
+            "outputQuantity": 1,
+            "transformed": false,
+            "ratePermille": 0,
+            "playerAttendanceIntent": "PAUSED"
+          }
+        }
+      }
+    },
+    {
+      "after": 46,
+      "view": "process",
+      "id": "station:structure-7-forge",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "operation": {
+            "transformed": false,
+            "ratePermille": 0,
+            "playerAttendanceIntent": "PAUSED"
+          }
+        }
+      }
+    },
+    {
+      "after": 54,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 11,
+      "name": "wood-log-to-planks-ui",
+      "presentation": "player"
+    },
+    {
+      "after": 17,
+      "name": "wood-planks-to-sticks-ui",
+      "presentation": "player"
+    },
+    {
+      "after": 36,
+      "name": "station-player-processing-ui",
+      "presentation": "player"
+    },
+    {
+      "after": 46,
+      "name": "station-explicit-pause-survives-reopening-ui",
+      "presentation": "player"
+    },
+    {
+      "after": 49,
+      "name": "multi-input-confirmed-iron-axe-ui",
+      "presentation": "player"
+    }
+  ]
+}

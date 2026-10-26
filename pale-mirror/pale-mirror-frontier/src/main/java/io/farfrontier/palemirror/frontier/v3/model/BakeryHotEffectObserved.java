@@ -12,8 +12,12 @@ public record BakeryHotEffectObserved(SubjectId jobId, SceneLeaseId leaseId,
                                       StationWorkState.Phase phase, BodyPosition observedWorker,
                                       long sourceEpoch, long destinationEpoch,
                                       List<FungiblePhysicalObservation.Stack> remainingSource,
-                                      List<FungiblePhysicalObservation.Stack> destination)
+                                      List<FungiblePhysicalObservation.Stack> destination, long workflowOrdinal)
         implements FrontierPayload {
+    public BakeryHotEffectObserved(SubjectId job, SceneLeaseId lease, StationWorkState.Phase phase, BodyPosition worker,
+            long sourceEpoch, long destinationEpoch, List<FungiblePhysicalObservation.Stack> source, List<FungiblePhysicalObservation.Stack> destination) {
+        this(job, lease, phase, worker, sourceEpoch, destinationEpoch, source, destination, 0L);
+    }
     public BakeryHotEffectObserved {
         Objects.requireNonNull(jobId, "bakery observed job");
         Objects.requireNonNull(leaseId, "bakery observed lease");
@@ -21,7 +25,7 @@ public record BakeryHotEffectObserved(SubjectId jobId, SceneLeaseId leaseId,
         Objects.requireNonNull(observedWorker, "bakery observed worker");
         remainingSource = List.copyOf(Objects.requireNonNull(remainingSource, "bakery source observation"));
         destination = List.copyOf(Objects.requireNonNull(destination, "bakery destination observation"));
-        if (sourceEpoch < 0 || destinationEpoch < 0 || remainingSource.size() > 27 || destination.size() > 27)
+        if (workflowOrdinal < 0 || sourceEpoch < 0 || destinationEpoch < 0 || remainingSource.size() > 54 || destination.size() > 54)
             throw new IllegalArgumentException("bakery observed physical layout exceeds bounded authority");
     }
     @Override public String type() { return "frontier.bakery_hot_effect_observed"; }

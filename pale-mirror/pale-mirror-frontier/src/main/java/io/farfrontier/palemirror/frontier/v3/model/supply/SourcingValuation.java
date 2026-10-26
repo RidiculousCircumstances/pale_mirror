@@ -31,11 +31,11 @@ public final class SourcingValuation {
         for (var input : process.inputs().entrySet())
             total = Math.addExact(total, Math.multiplyExact(input.getValue(),
                     replacement(input.getKey(), capacities, prices, quoted, costs, visiting, labour)));
-        if (process.heatPerBatch() > 0) {
+        if (process.burnTicksPerBatch() > 0) {
             long fuel = Long.MAX_VALUE;
             for (var entry : process.fuels().entrySet()) {
                 long unit = replacement(entry.getKey(), capacities, prices, quoted, costs, visiting, labour);
-                fuel = Math.min(fuel, Math.ceilDiv(Math.multiplyExact(unit, process.heatPerBatch()), entry.getValue()));
+                fuel = Math.min(fuel, Math.ceilDiv(Math.multiplyExact(unit, process.burnTicksPerBatch()), entry.getValue()));
             }
             total = Math.addExact(total, fuel);
         }

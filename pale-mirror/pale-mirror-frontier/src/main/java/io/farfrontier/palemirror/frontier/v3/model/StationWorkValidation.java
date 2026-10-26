@@ -20,7 +20,7 @@ final class StationWorkValidation {
                     && (job.inputHold() instanceof ProductionInputHold.Materialized) != (work.outputRepresentation() == StationWorkProduct.Representation.EXACT_ITEM))
             throw new IllegalArgumentException("station product representation differs from its declared recipe protocol");
         if (!recipe.product().itemKind().equals(job.outputItemKind())
-                || !recipe.ingredient().accepts(work.inputItemKind()) || recipe.outputForInput(work.inputQuantity()) != job.outputCount())
+                || !recipe.acceptsInput(work.inputItemKind()) || recipe.outputForInput(StationWorkMaterialAccounting.plannedUnits(job)) != job.outputCount())
             throw new IllegalArgumentException("bakery work has a foreign declared recipe or output");
         var sourceStorage = inventory.containers().get(work.sourceContainerId());
         if (sourceStorage == null || !sourceStorage.ownerId().equals(job.settlementId())
@@ -40,12 +40,16 @@ final class StationWorkValidation {
         if (station == null) throw new IllegalArgumentException("bakery work has no current declared station");
         if (!station.facilityId().equals(job.facilityId()) || station.capability() != recipe.capability())
             throw new IllegalArgumentException("bakery work station differs from the job facility or capability");
+        recipe.requireTransformation(station.capability(), StationWorkMaterialAccounting.plannedKinds(job), job.outputItemKind(), job.outputCount());
+        StationWorkMaterialAccounting.validate(inventory, job);
         validateMaintenance(inventory, job, station, work);
         if (StationWorkProduct.individual(catalog, job) && (work.phase() == StationWorkState.Phase.STATION_UNLOAD
                 || work.phase() == StationWorkState.Phase.DEPOT_DELIVERY || work.phase() == StationWorkState.Phase.DELIVERED))
             validateIndividualOutput(inventory, job, station, work);
         else if (job.inputHold() instanceof ProductionInputHold.Materialized) validateExact(inventory, job, station, work);
-        else validateFungible(inventory, job, settlement, station, work);
+        else validateFungible(inventory, job, settlement, station, work, sourceStorage.storage()
+                .map(policy -> policy.endpoint().custody()).orElseGet(() -> sourceStorage.productionStation().orElseThrow()
+                    .custody(ActorContainerItemOrder.StationPort.INPUT)));
     }
 
     private static void validateMaintenance(ExactInventory inventory, ProductionJob job, ProductionStationSpec station, StationWorkState work) {
@@ -120,7 +124,12 @@ final class StationWorkValidation {
                 yield source.custody();
             }
             case STATION_LOAD, DEPOT_DELIVERY -> new InventoryCustody.Actor(job.workerId());
-            case PROCESSING -> new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot());
+            case PROCESSING -> {
+                if (stack == null || !(stack.custody() instanceof InventoryCustody.ContainerSlot slot)
+                        || !slot.containerId().equals(station.containerId()) || !station.inputSlots().contains(slot.slot()))
+                    throw new IllegalArgumentException("exact station input lost its current input address");
+                yield slot;
+            }
             case STATION_UNLOAD -> new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot());
             case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
@@ -132,7 +141,7 @@ final class StationWorkValidation {
     }
 
     private static void validateFungible(ExactInventory inventory, ProductionJob job, Settlement settlement,
-                                         ProductionStationSpec station, StationWorkState work) {
+                                         ProductionStationSpec station, StationWorkState work, ResourceCustody sourceCustody) {
         if (awaitingInputReallocation(inventory.fungibleResources(), job, work)) return;
         ProductionInputHold hold = job.inputHold();
         SubjectId claimId; Map<SubjectId, Integer> input;
@@ -160,14 +169,16 @@ final class StationWorkValidation {
         SubjectId currentId = switch (work.phase()) {
             case TARGET_PICKUP, TARGET_LOAD, DEPOT_PICKUP -> work.sourceAccountId();
             case STATION_LOAD, DEPOT_DELIVERY -> work.actorAccountId();
-            case PROCESSING, STATION_UNLOAD -> work.stationAccountId();
+            case PROCESSING -> work.stationAccountId();
+            case STATION_UNLOAD -> ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.OUTPUT));
             case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
         CustodyAccount account = ledger.accounts().get(currentId);
         ResourceCustody custody = switch (work.phase()) {
-            case TARGET_PICKUP, TARGET_LOAD, DEPOT_PICKUP -> new ResourceCustody.Container(StationWorkStorage.source(job));
+            case TARGET_PICKUP, TARGET_LOAD, DEPOT_PICKUP -> sourceCustody;
             case STATION_LOAD, DEPOT_DELIVERY -> new ResourceCustody.Actor(job.workerId());
-            case PROCESSING, STATION_UNLOAD -> new ResourceCustody.Container(station.containerId());
+            case PROCESSING -> station.custody(ActorContainerItemOrder.StationPort.INPUT);
+            case STATION_UNLOAD -> station.custody(ActorContainerItemOrder.StationPort.OUTPUT);
             case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
         Map<SubjectId, Integer> expectedLots = outputPhase ? Map.of(job.outputItemId(), job.outputCount()) : input;

@@ -8,15 +8,14 @@ import java.util.LinkedHashMap;
 
 /** Installed-machine runtime, independent of orders, residents and physical inventory copies. */
 public record ProductionStations(Map<SubjectId, Machine> machines) {
-    public record Machine(SubjectId stationId, long storedHeat, Optional<ProductionOperation> operation,
+    public record Machine(SubjectId stationId, Optional<FuelCombustion> combustion, Optional<ProductionOperation> operation,
                           long revision, Optional<ProductionStationFuelBurn> pendingFuel,
                           Optional<ProductionStationRecipeBoundary> pendingRecipe) {
         public Machine {
-            Objects.requireNonNull(stationId); operation = Objects.requireNonNull(operation); pendingFuel = Objects.requireNonNull(pendingFuel);
+            Objects.requireNonNull(stationId); combustion = Objects.requireNonNull(combustion); operation = Objects.requireNonNull(operation); pendingFuel = Objects.requireNonNull(pendingFuel);
             pendingRecipe = Objects.requireNonNull(pendingRecipe);
             var retainedOperation = operation;
-            if (storedHeat < 0 || storedHeat > 1_000_000_000L
-                    || revision < 1 || operation.filter(value -> !value.stationId().equals(stationId)).isPresent()
+            if (revision < 1 || operation.filter(value -> !value.stationId().equals(stationId)).isPresent()
                     || pendingFuel.filter(value -> !value.stationId().equals(stationId) || value.machineRevision() != revision).isPresent()
                     || pendingRecipe.filter(value -> !value.stationId().equals(stationId) || value.machineRevision() != revision
                         || retainedOperation.isEmpty() || !retainedOperation.orElseThrow().id().equals(value.operationId())
@@ -24,54 +23,57 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
                     || pendingFuel.isPresent() && pendingRecipe.isPresent())
                 throw new IllegalArgumentException("invalid machine identity or energy");
         }
-        public Machine(SubjectId stationId, long storedHeat, Optional<ProductionOperation> operation,
+        public Machine(SubjectId stationId, Optional<FuelCombustion> combustion, Optional<ProductionOperation> operation,
                        long revision, Optional<ProductionStationFuelBurn> pendingFuel) {
-            this(stationId, storedHeat, operation, revision, pendingFuel, Optional.empty());
+            this(stationId, combustion, operation, revision, pendingFuel, Optional.empty());
         }
-        public static Machine installed(SubjectId stationId) { return new Machine(stationId, 0, Optional.empty(), 1, Optional.empty()); }
+        public static Machine installed(SubjectId stationId) { return new Machine(stationId, Optional.empty(), Optional.empty(), 1, Optional.empty()); }
         public Machine start(ProductionOperation next) {
-            if (operation.isPresent() || pendingFuel.isPresent() || pendingRecipe.isPresent() || !next.stationId().equals(stationId) || storedHeat < next.committedHeat())
+            if (operation.isPresent() || pendingFuel.isPresent() || pendingRecipe.isPresent() || !next.stationId().equals(stationId))
                 throw new IllegalArgumentException("machine cannot start a competing or unfuelled operation");
-            return new Machine(stationId, storedHeat - next.committedHeat(), Optional.of(next), Math.addExact(revision, 1), Optional.empty());
+            return new Machine(stationId, combustion, Optional.of(next), Math.addExact(revision, 1), Optional.empty());
         }
         public Machine replace(ProductionOperation previous, ProductionOperation next) {
             if (pendingFuel.isPresent() || pendingRecipe.isPresent() || !operation.equals(Optional.of(previous)) || !previous.id().equals(next.id()))
                 throw new IllegalArgumentException("machine update has stale operation evidence");
-            return new Machine(stationId, storedHeat, Optional.of(next), Math.addExact(revision, 1), Optional.empty());
+            return new Machine(stationId, combustion, Optional.of(next), Math.addExact(revision, 1), Optional.empty());
         }
         public Machine release(ProductionOperation.Id id) {
             if (pendingFuel.isPresent() || pendingRecipe.isPresent() || !operation.orElseThrow().id().equals(id) || !operation.orElseThrow().transformed())
                 throw new IllegalArgumentException("machine release lacks confirmed output removal");
-            return new Machine(stationId, storedHeat, Optional.empty(), Math.addExact(revision, 1), Optional.empty());
+            return new Machine(stationId, combustion, Optional.empty(), Math.addExact(revision, 1), Optional.empty());
         }
         /** A claim-owner cancellation abandons processing, never restores spent fuel or creates output. */
         Machine cancel(ProductionOperation.Id id) {
             if (pendingFuel.isPresent() || pendingRecipe.isPresent() || !operation.orElseThrow().id().equals(id))
                 throw new IllegalArgumentException("machine cancellation has no exact uncommitted operation");
-            return new Machine(stationId, storedHeat, Optional.empty(), Math.addExact(revision, 1), Optional.empty());
+            return new Machine(stationId, combustion, Optional.empty(), Math.addExact(revision, 1), Optional.empty());
         }
         Machine prepareRecipe(ProductionStationRecipeBoundary boundary) {
             if (pendingFuel.isPresent() || pendingRecipe.isPresent() || operation.isEmpty() || !operation.orElseThrow().complete()
                     || operation.orElseThrow().transformed() || !operation.orElseThrow().id().equals(boundary.operationId())
                     || boundary.machineRevision() != revision || !boundary.stationId().equals(stationId))
                 throw new IllegalArgumentException("station recipe preparation lost its exact completed operation");
-            return new Machine(stationId, storedHeat, operation, revision, Optional.empty(), Optional.of(boundary));
+            return new Machine(stationId, combustion, operation, revision, Optional.empty(), Optional.of(boundary));
         }
         Machine completeRecipe(ProductionOperation previous) {
             if (!operation.equals(Optional.of(previous)) || pendingFuel.isPresent())
                 throw new IllegalArgumentException("station recipe completion has no exact current operation");
             var next = previous.confirmTransformation();
-            return new Machine(stationId, storedHeat, Optional.of(next), Math.addExact(revision, 1), Optional.empty());
+            return new Machine(stationId, combustion, Optional.of(next), Math.addExact(revision, 1), Optional.empty());
         }
         /** Called only by a confirmed fuel-consumption receipt, not by inventory inspection. */
-        Machine fuelled(long heat) {
-            if (heat <= 0) throw new IllegalArgumentException("fuel must contribute positive energy");
-            return new Machine(stationId, Math.addExact(storedHeat, heat), operation, Math.addExact(revision, 1), Optional.empty());
+        Machine ignited(ProductionCatalog.Fuel fuel, long tick) {
+            if (pendingRecipe.isPresent() || combustion.filter(value -> value.remainingAt(tick) > 0).isPresent())
+                throw new IllegalArgumentException("ignition cannot replace burning fuel or a pending recipe");
+            return new Machine(stationId, Optional.of(FuelCombustion.ignite(fuel, tick)), operation,
+                    Math.addExact(revision, 1), Optional.empty());
         }
+        public long burnRemaining(long tick) { return combustion.map(value -> value.remainingAt(tick)).orElse(0L); }
         Machine prepareFuel(ProductionStationFuelBurn burn) {
-            if (pendingFuel.isPresent() || operation.isPresent() || burn.machineRevision() != revision || !burn.stationId().equals(stationId))
+            if (pendingFuel.isPresent() || pendingRecipe.isPresent() || operation.isEmpty() || burn.machineRevision() != revision || !burn.stationId().equals(stationId))
                 throw new IllegalArgumentException("station fuel preparation has competing work or stale evidence");
-            return new Machine(stationId, storedHeat, operation, revision, Optional.of(burn));
+            return new Machine(stationId, combustion, operation, revision, Optional.of(burn));
         }
     }
     public ProductionStations {
@@ -99,6 +101,10 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
             var equipment = catalog.requireEquipment(station.equipmentType());
             if (!equipment.capabilities().contains(station.capability()))
                 throw new IllegalArgumentException("installed station capability differs from its declared equipment type");
+            machine.combustion().ifPresent(burn -> {
+                if (station.fuelSlot().isEmpty() || burn.endsAtTick() - burn.startedAtTick() != catalog.requireFuel(burn.itemKind()).burnTicks())
+                    throw new IllegalArgumentException("combustion lost its declared fuel duration or machine port");
+            });
             machine.operation().ifPresent(operation -> {
                 var recipe = catalog.require(operation.recipeId());
                 equipment.require(recipe);
@@ -108,8 +114,7 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
                             || catalog.automaticPolicies().stream().noneMatch(policy -> policy.recipeId().equals(recipe.id())))
                         throw new IllegalArgumentException("automatic station operation lost its explicit institution mandate");
                 }
-                if (recipe.capability() != station.capability() || recipe.outputForInput(operation.inputQuantity()) != operation.outputQuantity()
-                        || Math.multiplyExact(recipe.heatPerBatch(), operation.inputQuantity() / recipe.ingredient().quantity()) != operation.committedHeat())
+                if (recipe.capability() != station.capability() || recipe.outputForInput(operation.inputQuantity()) != operation.outputQuantity())
                     throw new IllegalArgumentException("machine operation differs from its declared recipe");
                 if (!operation.transformed()) {
                     ProductionOperationInputs.validate(inventory, station, operation, recipe);
@@ -117,7 +122,7 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
                         && recipe.outcome() instanceof ProductionRecipeOutcome.Fungible
                         && operation.inputCustody() instanceof ProductionOperation.FungibleInput input) {
                     var ledger = inventory.fungibleResources(); var claim = ledger.claims().get(operation.outputClaimId());
-                    var account = ledger.accounts().get(input.accountId());
+                    var account = FungibleResourceReadIndex.container(ledger, station.containerId(), ContainerSectionId.OUTPUT).orElse(null);
                     if (claim == null || claim.purpose() != ClaimPurpose.STATION_OUTPUT || !claim.claimantId().equals(order.orderId())
                             || !claim.lotQuantities().equals(Map.of(operation.outputId(), operation.outputQuantity()))
                             || account == null || account.claimQuantities().getOrDefault(claim.id(), 0) != operation.outputQuantity())
@@ -127,15 +132,15 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
             machine.pendingRecipe().ifPresent(boundary -> boundary.validate(inventory, station, machine.operation().orElseThrow(), catalog, tools));
             machine.pendingFuel().ifPresent(burn -> {
                 if (!burn.containerId().equals(station.containerId()) || burn.authorityEpoch() < 1
-                        || burn.heat() != catalog.requireFuel(burn.itemKind()).heatUnits()
+                        || burn.durationTicks() != catalog.requireFuel(burn.itemKind()).burnTicks()
                         || !burn.source().getFirst().address().equals(new PhysicalStackAddress.ContainerSlot(
-                            new InventoryCustody.ContainerSlot(station.containerId(), station.fuelSlot()))))
+                            new InventoryCustody.ContainerSlot(station.containerId(), station.fuelSlot().orElseThrow()))))
                     throw new IllegalArgumentException("machine lost its exact pending fuel port/definition");
                 var ledger = inventory.fungibleResources(); var account = ledger.accounts().get(burn.accountId());
                 var source = burn.source().getFirst();
                 var binding = ledger.bindings().values().stream().filter(value -> value.address().equals(source.address())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("machine pending fuel lost its physical preimage"));
-                if (account == null || !account.custody().equals(new ResourceCustody.Container(station.containerId()))
+                if (account == null || !account.custody().equals(station.custody(ActorContainerItemOrder.StationPort.FUEL))
                         || burn.lots().entrySet().stream().anyMatch(entry -> account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
                         || !binding.accountId().equals(account.id()) || binding.authorityEpoch() != burn.authorityEpoch()
                         || binding.quantity() != source.before() || !binding.itemKind().equals(burn.itemKind()))

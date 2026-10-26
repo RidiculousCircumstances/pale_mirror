@@ -16,17 +16,15 @@ class ProductionStationOperatorTest {
                 FrontierRulesets.fuelledQuarryGraybox()));
         var record = state.inventory().containers().values().stream().filter(value -> value.productionStation().isPresent())
                 .sorted(Comparator.comparing(ContainerRecord::id)).findFirst().orElseThrow();
-        var station = record.productionStation().orElseThrow(); var account = ReferenceContainerCustody.scopeId(record.id());
+        var station = record.productionStation().orElseThrow();
+        var input = ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.INPUT));
+        var fuel = ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.FUEL));
         var ledger = state.inventory().fungibleResources().issue(new ResourceLot(COAL, record.ownerId(), "minecraft:coal", 4, "fixture:coal", List.of()),
-                new CustodyAccount(account, new ResourceCustody.Container(record.id()), Map.of(COAL, 4), Map.of()));
-        state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        for (int burn = 0; burn < 2; burn++) state = ProductionStationEnergy.apply(state, station.id(), new ProductionStationFuelChanged(
-                ProductionStationFuelChanged.Stage.COLD_CONSUMED, ProductionStationEnergy.next(state, station.id()).orElseThrow(), List.of()));
-        ledger = state.inventory().fungibleResources().issue(new ResourceLot(WHEAT, record.ownerId(), "minecraft:wheat", 64, "fixture:input", List.of()),
-                new CustodyAccount(new SubjectId("custody:operator-staging"), new ResourceCustody.Container(record.id()), Map.of(WHEAT, 64), Map.of()));
-        ledger = ledger.transfer(new SubjectId("custody:operator-staging"), account, Map.of(WHEAT, 64), Map.of());
-        ledger = ledger.rebind(account, 1, FungiblePhysicalObservation.bind(ledger, account, 1, List.of(
-                stack(station, station.inputSlot(), "minecraft:wheat", 64), stack(station, station.fuelSlot(), "minecraft:coal", 2))));
+                new CustodyAccount(fuel, station.custody(ActorContainerItemOrder.StationPort.FUEL), Map.of(COAL, 4), Map.of()));
+        ledger = ledger.issue(new ResourceLot(WHEAT, record.ownerId(), "minecraft:wheat", 64, "fixture:input", List.of()),
+                new CustodyAccount(input, station.custody(ActorContainerItemOrder.StationPort.INPUT), Map.of(WHEAT, 64), Map.of()));
+        ledger = ledger.rebind(input, 1, FungiblePhysicalObservation.bind(ledger, input, 1, List.of(stack(station, station.inputSlots().getFirst(), "minecraft:wheat", 64))));
+        ledger = ledger.rebind(fuel, 1, FungiblePhysicalObservation.bind(ledger, fuel, 1, List.of(stack(station, station.fuelSlot().orElseThrow(), "minecraft:coal", 4))));
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withInventory(state.inventory().withFungibleResources(ledger)), record.id());
         return new Fixture(state, station);
     }
@@ -34,30 +32,30 @@ class ProductionStationOperatorTest {
         return new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(spec.containerId(), slot)), kind, count);
     }
     private static FrontierWorldState observe(FrontierWorldState state, ProductionStationSpec station, ProductionStationOperatorChanged.Stage stage, long tick) {
-        return ProductionStationOperator.apply(state, station.id(), new ProductionStationOperatorChanged(station.id(),
+        var next = ProductionStationOperator.apply(state, station.id(), new ProductionStationOperatorChanged(station.id(),
                 state.productionStations().require(station.id()).revision(), PLAYER, BakeryRecipes.BREAD, stage, tick));
+        return stage == ProductionStationOperatorChanged.Stage.PAUSE ? next : ProductionCombustionFixtures.igniteHotIfNeeded(next, station.id(), tick);
     }
     @Test void automaticClockDoesNotDependOnPlayerOrResidentAttendance() {
         var fixture = fixture(); var state = observe(fixture.state(), fixture.station(), ProductionStationOperatorChanged.Stage.START, 200);
         var manual = state.bootstrap().ruleset().production().require(BakeryRecipes.BREAD);
-        var automatic = new ProductionRecipe(manual.id(), manual.capability(), manual.ingredient(), manual.product(),
-                manual.heatPerBatch(), ProductionRecipe.ProcessingMode.AUTOMATIC);
+        var automatic = new ProductionRecipe(manual.id(), manual.capability(), manual.singleIngredient(), manual.product(), manual.requiresCombustion(), ProductionRecipe.ProcessingMode.AUTOMATIC);
         var catalog = new ProductionCatalog(List.of(automatic), state.bootstrap().ruleset().production().fuels(),
                 state.bootstrap().ruleset().production().equipment());
         var operation = state.productionStations().require(fixture.station().id()).operation().orElseThrow();
         var work = state.bootstrap().ruleset().workCatalog();
         // A new automatic recipe starts a new clock; never reinterpret retained attended work.
         var machineOperation = new ProductionOperation(operation.id(), operation.stationId(), operation.orderId(), operation.recipeId(),
-                operation.inputCustody(), operation.outputId(), operation.inputQuantity(), operation.outputQuantity(), operation.committedHeat(),
-                Optional.empty(), false, operation.initiator());
-        var running = ProductionStationClock.next(catalog, work, machineOperation, 200, Optional.empty());
+                operation.inputCustody(), operation.outputId(), operation.inputQuantity(), operation.outputQuantity(),
+                Optional.empty(), false, operation.initiator(), Optional.empty());
+        var running = ProductionStationClock.next(catalog, work, machineOperation, 200, Optional.empty(), Long.MAX_VALUE);
         assertTrue(running.running());
         long finish = 200 + work.require(automatic.product().itemKind(), WorkOperation.PRODUCE).workUnits()
-                * (machineOperation.inputQuantity() / automatic.ingredient().quantity());
-        var complete = ProductionStationClock.next(catalog, work, machineOperation.withProgress(running), finish, Optional.empty());
+                * (machineOperation.inputQuantity() / automatic.singleIngredient().quantity());
+        var complete = ProductionStationClock.next(catalog, work, machineOperation.withProgress(running), finish, Optional.empty(), Long.MAX_VALUE);
         assertTrue(complete.complete());
         assertThrows(IllegalArgumentException.class, () -> ProductionStationClock.next(catalog, work, operation, 200,
-                Optional.of(new ProductionStationClock.Attendance(1_000, 240))));
+                Optional.of(new ProductionStationClock.Attendance(1_000, 240)), Long.MAX_VALUE));
         var manualPaused = ProductionStationClock.next(state, operation, 1_000, Optional.empty());
         assertFalse(manualPaused.running());
         assertEquals(40_000L, manualPaused.completedMilliWork(), "manual lease credits only its 40 ticks, not absence");
@@ -112,7 +110,7 @@ class ProductionStationOperatorTest {
         assertEquals(1, finished.inventory().fungibleResources().lots().get(WHEAT).quantity());
         assertEquals(2, finished.inventory().fungibleResources().lots().get(COAL).quantity());
         assertEquals(21, finished.inventory().fungibleResources().lots().get(operation.outputId()).quantity());
-        assertEquals(1520, finished.productionStations().require(station.id()).storedHeat());
+        assertTrue(finished.productionStations().require(station.id()).combustion().isPresent());
         assertEquals(finished, codec.decode(codec.encode(finished)));
         assertThrows(IllegalArgumentException.class, () -> ProductionStationTransformation.apply(finished, station.id(), completed, ProductionOperationCompletionComposition::completed));
     }
@@ -124,12 +122,12 @@ class ProductionStationOperatorTest {
         var claim = input.claims().keySet().iterator().next();
         state = SourceStockClaimLoss.settle(state, new FungibleStockDepartureObserved(input.accountId(), station.containerId(),
                 state.inventory().containers().get(station.containerId()).ownerId(), 1, PLAYER, UUID.randomUUID(), Map.of(WHEAT, 2), Set.of(claim),
-                List.of(stack(station, station.inputSlot(), "minecraft:wheat", 62), stack(station, station.fuelSlot(), "minecraft:coal", 2))));
+                List.of(stack(station, station.inputSlots().getFirst(), "minecraft:wheat", 62))));
         assertTrue(state.productionStations().require(station.id()).operation().isEmpty());
         assertFalse(state.inventory().fungibleResources().claims().containsKey(claim));
         assertFalse(state.inventory().fungibleResources().lots().containsKey(operation.outputId()));
         assertEquals(62, state.inventory().fungibleResources().lots().get(WHEAT).quantity());
-        assertEquals(1520, state.productionStations().require(station.id()).storedHeat(), "disruption cannot refund already consumed fuel");
+        assertTrue(state.productionStations().require(station.id()).combustion().isPresent());
         var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
     }
 }

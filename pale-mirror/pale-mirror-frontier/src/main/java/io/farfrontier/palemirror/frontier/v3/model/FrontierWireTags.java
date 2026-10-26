@@ -275,7 +275,7 @@ public final class FrontierWireTags {
             entry(StrategicObjectiveKind.class,
                     tag(0, StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION), tag(1, StrategicObjectiveKind.HIVE_EXPAND_INFECTION),
                     tag(2, StrategicObjectiveKind.HIVE_GROW_ORGANISM), tag(4, StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT), tag(5, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD),
-                    tag(10, StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION), tag(11, StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT),
+                    tag(10, StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION), tag(11, StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT), tag(12, StrategicObjectiveKind.SETTLEMENT_PRODUCE_STOCK),
                     tag(7, StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE),
                     tag(8, StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS), tag(9, StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE)),
             entry(StrategicObjectiveStatus.class,

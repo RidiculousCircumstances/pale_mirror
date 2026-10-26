@@ -106,7 +106,7 @@ class FrontierV3DiagnosticSceneJsonTest {
                 checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
         assertEquals("frontier.production-station", result.get("family").getAsString());
         assertEquals(machine.stationId().value(), result.getAsJsonObject("identity").get("station").getAsString());
-        assertEquals(0, result.getAsJsonObject("result").get("storedHeat").getAsLong());
+        assertEquals(0, result.getAsJsonObject("result").get("remainingBurnTicks").getAsLong());
         assertTrue(result.getAsJsonObject("result").get("operation").isJsonNull());
         assertEquals("CLOSED", result.getAsJsonObject("progressObligation").get("next").getAsString());
         assertEquals(state, runtime.decodedState().orElseThrow(), "rendering cannot start or supply the machine");
@@ -115,15 +115,15 @@ class FrontierV3DiagnosticSceneJsonTest {
         var operation = new ProductionOperation(new ProductionOperation.Id(new SubjectId("operation:diagnostic-clock")),
                 machine.stationId(), new SubjectId("order:diagnostic-clock"), BakeryRecipes.BREAD,
                 new ProductionOperation.ExactInput(new SubjectId("item:diagnostic-input")), new SubjectId("lot:diagnostic-output"),
-                3, 1, 80, Optional.of(clock), false, new ProductionOperation.PlayerInitiator(new UUID(0, 1),
-                        ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED));
+                3, 1, Optional.of(clock), false, new ProductionOperation.PlayerInitiator(new UUID(0, 1),
+                        ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED), Optional.empty());
         FrontierScheduleView observed = new FrontierScheduleView() {
             @Override public WorldId worldId() { return checkpoint.worldId(); }
             @Override public Revision revision() { return checkpoint.revision(); }
             @Override public SimInstant instant() { return new SimInstant(500); }
             @Override public List<ScheduledAction> schedules() { return checkpoint.schedules(); }
         };
-        var retained = new ProductionStations.Machine(machine.stationId(), 0, Optional.of(operation), 1, Optional.empty());
+        var retained = new ProductionStations.Machine(machine.stationId(), Optional.empty(), Optional.of(operation), 1, Optional.empty());
         var running = JsonParser.parseString(FrontierV3ProductionStationDiagnosticJson.render(observed, state, retained)).getAsJsonObject()
                 .getAsJsonObject("result").getAsJsonObject("operation");
         assertEquals(0, running.get("completedMilliWork").getAsLong());
@@ -140,7 +140,7 @@ class FrontierV3DiagnosticSceneJsonTest {
         assertFalse(FrontierV3ProductionBenchAccess.attendanceRequested(operation, new UUID(0, 2)));
         assertEquals(8, FrontierV3ProductionBenchAccess.processingStatus(operation.withProgress(
                 WorkProgress.pending(1600, 0).resume(0, 1000, 2000)), 1600));
-        var paused = new ProductionStations.Machine(machine.stationId(), 0, Optional.of(operation.withProgress(clock.pause(200))), 1, Optional.empty());
+        var paused = new ProductionStations.Machine(machine.stationId(), Optional.empty(), Optional.of(operation.withProgress(clock.pause(200))), 1, Optional.empty());
         var stopped = JsonParser.parseString(FrontierV3ProductionStationDiagnosticJson.render(observed, state, paused)).getAsJsonObject()
                 .getAsJsonObject("result").getAsJsonObject("operation");
         assertEquals(200_000, stopped.get("elapsedCompletedMilliWork").getAsLong());

@@ -5,7 +5,7 @@ import java.util.*;
 import java.util.function.Predicate;
 
 /** Shared storage admission. Future-demand ownership is declared by the composition, not discovered here. */
-final class ContainerStorageAdmission {
+public final class ContainerStorageAdmission {
     private ContainerStorageAdmission() { }
     private record ReceiveQuery(SubjectId container, String kind, int quantity, Optional<SubjectId> completing, boolean individual) { }
     private static final ImmutableInputView<Map<ReceiveQuery, Boolean>> RECEIVING = new ImmutableInputView<>();
@@ -19,17 +19,21 @@ final class ContainerStorageAdmission {
         if (cache.size() >= 512) cache.clear();
         cache.put(query, result); return result;
     }
-    private record IncomingQuery(SubjectId container, Optional<SubjectId> completing) { }
+    private record IncomingQuery(SubjectId container, ContainerSectionId section, Optional<SubjectId> completing) { }
     private static final ImmutableKeyedInputView<IncomingQuery, ContainerIncomingStock> INCOMING = new ImmutableKeyedInputView<>(512);
 
     static ContainerIncomingStock inbound(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
+        return inbound(state, new ResourceCustody.Container(container), completing);
+    }
+    static ContainerIncomingStock inbound(FrontierWorldState state, ResourceCustody.Container holder, Optional<SubjectId> completing) {
+        var container = holder.containerId();
         var demands = ContainerStorageDemandSources.demands(state);
         var uncovered = ContainerPhysicalReservations.uncoveredDemands(state);
-        return INCOMING.get(state.bootstrap(), new IncomingQuery(container, completing), List.of(demands, uncovered), () -> {
+        return INCOMING.get(state.bootstrap(), new IncomingQuery(container, holder.section(), completing), List.of(demands, uncovered), () -> {
             // Prove the completion's declared owner even when its entire demand is slot-backed.
-            ContainerInboundCapacity.incoming(demands, container, completing);
+            ContainerInboundCapacity.incoming(demands, container, holder.section(), completing);
             return ContainerInboundCapacity.incoming(uncovered.stream()
-                    .filter(demand -> completing.filter(demand.owner()::equals).isEmpty()).toList(), container, Optional.empty());
+                    .filter(demand -> completing.filter(demand.owner()::equals).isEmpty()).toList(), container, holder.section(), Optional.empty());
         });
     }
     static boolean receive(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
@@ -40,10 +44,15 @@ final class ContainerStorageAdmission {
         var record = state.inventory().containers().get(container);
         if (record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)
                 || record.storage().filter(policy -> !policy.filter().accepts(kind)).isPresent()) return false;
-        if (record.productionStation().isPresent()) return ProductionStationInventoryCapacity.receive(state,
-                record.productionStation().orElseThrow(), kind, quantity, inbound(state, container, completing));
+        if (!record.compartmentLayout().sections().containsKey(ContainerSectionId.STOCK)) return false;
         return state.inventory().canReceiveFungible(container, kind, quantity, ContainerPhysicalReservations.slots(state, container, completing),
                 inbound(state, container, completing));
+    }
+    public static boolean receive(FrontierWorldState state, ResourceCustody.Container holder, String kind, int quantity, Optional<SubjectId> completing) {
+        if (holder.section().equals(ContainerSectionId.STOCK)) return receive(state, holder.containerId(), kind, quantity, completing);
+        var record = state.inventory().containers().get(holder.containerId());
+        if (record == null || ReferenceContainerCustody.blocksCanonicalUse(state, holder.containerId())) return false;
+        return ContainerCompartmentCapacity.receive(state, record, holder.section(), kind, quantity, inbound(state, holder, completing), completing);
     }
     static boolean receiveIndividuals(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
         return receiving(state, new ReceiveQuery(container, kind, quantity, completing, true),

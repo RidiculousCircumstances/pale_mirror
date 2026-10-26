@@ -328,29 +328,21 @@ final class FrontierV3ContainerSurfaceExecutor {
         FungibleResourceLedger resources = state.inventory().fungibleResources();
         List<io.farfrontier.palemirror.frontier.v3.model.CustodyAccount> accounts = resources.accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
-        if (accounts.size() > 1) return false;
         List<FungiblePhysicalObservation.Stack> observed = observedFungibleSlots(chest, state, containerId);
         if (overlapsHarvestOutputReservation(state, observed)) return false;
-        if (accounts.isEmpty()) return observed.isEmpty();
-        if (state.inventory().containers().get(containerId).productionStation().isPresent()) {
-            var projected = ReferenceContainerCustody.expectedFungibleSlots(state, containerId);
-            for (int slot = 0; slot < chest.getContainerSize(); slot++) {
-                var expectedSlot = projected.get(slot);
-                ItemStack actual = chest.getItem(slot);
-                if (expectedSlot == null) {
-                    if (state.inventory().itemAt(containerId, slot).isEmpty() && !actual.isEmpty()) return false;
-                } else if (!actual.is(BuiltInRegistries.ITEM.get(ResourceLocation.parse(expectedSlot.itemKind())))
-                        || actual.getCount() != expectedSlot.quantity()) return false;
-            }
-        }
-        long epoch = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accounts.getFirst().id()))
-                .mapToLong(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).findFirst().orElse(1L);
+        var record = state.inventory().containers().get(containerId);
         try {
-            FungiblePhysicalObservation.bind(resources, accounts.getFirst().id(), epoch, observed);
+            for (var section : record.compartmentLayout().sections().keySet()) {
+                var holder = new ResourceCustody.Container(containerId, section);
+                var account = io.farfrontier.palemirror.frontier.v3.model.FungibleResourceCustodySupport.accountAtContainer(state, containerId, section);
+                var stacks = io.farfrontier.palemirror.frontier.v3.model.ContainerResourceAccounts.observed(state.inventory(), holder, observed);
+                if (account.isEmpty()) { if (!stacks.isEmpty()) return false; else continue; }
+                long epoch = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.orElseThrow().id()))
+                        .mapToLong(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).findFirst().orElse(1L);
+                FungiblePhysicalObservation.bind(resources, account.orElseThrow().id(), epoch, stacks);
+            }
             return true;
-        } catch (IllegalArgumentException invalid) {
-            return false;
-        }
+        } catch (IllegalArgumentException invalid) { return false; }
     }
 
     /** Build the complete owned image before touching even one physical slot. */
@@ -371,7 +363,6 @@ final class FrontierV3ContainerSurfaceExecutor {
         FungibleResourceLedger resources = state.inventory().fungibleResources();
         List<io.farfrontier.palemirror.frontier.v3.model.CustodyAccount> accounts = resources.accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
-        if (accounts.size() > 1) return Optional.empty();
         if (accounts.isEmpty()) return Optional.of(List.copyOf(planned));
         // The domain image owns placement for every container, not a second adapter packing algorithm.
         Map<Integer, ReferenceContainerCustody.ProjectedFungibleSlot> projected;

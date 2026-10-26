@@ -59,13 +59,28 @@ final class ContainerPlayerEditProcess {
                 }
             }
         }
+        var internallyMoved = new java.util.HashSet<SubjectId>();
+        if (edit.returning().isEmpty() && edit.exactChange().isEmpty()) for (var member : edit.members()) {
+            var move = ContainerCompartmentTransfer.propose(next, member);
+            if (move.isEmpty()) continue;
+            var planned = FrontierWorldPhysicalObservationProcess.planFungibleHandoff(next, move.orElseThrow(), now);
+            if (!(planned instanceof CommandPlan.Accepted accepted)) throw new IllegalArgumentException("internal compartment transfer rejected: " + planned);
+            next = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(next, accepted.events().getFirst().subject(), move.orElseThrow());
+            if (consequences != null) consequences.addAll(accepted.events().subList(1, accepted.events().size()));
+            internallyMoved.add(move.orElseThrow().sourceAccountId());
+            internallyMoved.add(move.orElseThrow().destinationAccount().id());
+        }
         int returned = 0;
-        for (var member : edit.members()) {
-            if (member.before().equals(member.after())) continue;
+        for (var member : edit.members()) for (var entry : new TreeMap<>(member.accounts()).entrySet()) {
+            if (internallyMoved.contains(entry.getValue())) continue;
+            var accountId = entry.getValue(); var holder = new ResourceCustody.Container(member.containerId(), entry.getKey());
+            var before = ContainerResourceAccounts.observed(state.inventory(), holder, member.before());
+            var after = ContainerResourceAccounts.observed(state.inventory(), holder, member.after());
+            if (before.equals(after)) continue;
             FrontierPayload fact;
             if (edit.returning().isPresent()) {
                 var source = edit.returning().orElseThrow();
-                int arrived = quantity(member.after(), source.itemKind()) - quantity(member.before(), source.itemKind());
+                int arrived = quantity(after, source.itemKind()) - quantity(before, source.itemKind());
                 if (arrived <= 0) throw new IllegalArgumentException("composed player return must only add its exact resource");
                 var resources = next.inventory().fungibleResources();
                 var binding = resources.bindings().get(source.bindingId());
@@ -74,14 +89,14 @@ final class ContainerPlayerEditProcess {
                         || !binding.address().equals(new PhysicalStackAddress.PlayerSlot(edit.playerId(), source.slot())))
                     throw new IllegalArgumentException("composed player return lost its exact source binding");
                 fact = FungiblePhysicalHandoff.returnObserved(resources, binding, binding.quantity() - arrived,
-                        member.accountId(), member.containerId(), member.epoch(), member.after());
+                        accountId, holder, member.epoch(), after);
                 returned = Math.addExact(returned, arrived);
             } else {
-                UUID memberInteraction = UUID.nameUUIDFromBytes((edit.interactionId() + "/" + member.containerId().value())
+                UUID memberInteraction = UUID.nameUUIDFromBytes((edit.interactionId() + "/" + member.containerId().value() + "/" + entry.getKey().value())
                         .getBytes(StandardCharsets.UTF_8));
-                fact = FungibleContainerPlayerEdit.classify(next.inventory().fungibleResources(), member.accountId(),
-                        member.containerId(), member.ownerId(), member.epoch(), edit.playerId(), memberInteraction,
-                        member.after(), SourceStockClaimLoss.admissibleClaims(next, member.accountId()));
+                fact = FungibleContainerPlayerEdit.classify(next.inventory().fungibleResources(), accountId,
+                        holder, member.ownerId(), member.epoch(), edit.playerId(), memberInteraction,
+                        after, SourceStockClaimLoss.admissibleClaims(next, accountId));
             }
             var planned = switch (fact) {
                 case FungibleStackLayoutObserved value -> FrontierWorldPhysicalObservationProcess.planFungibleLayout(next, value);
@@ -121,17 +136,23 @@ final class ContainerPlayerEditProcess {
                 ((PhysicalStackAddress.ContainerSlot) s.address()).slot().slot() >= container.slotCount()))
             throw new IllegalArgumentException("composed member slot exceeds declared capacity");
         var resources = state.inventory().fungibleResources();
-        var account = resources.accounts().get(member.accountId());
-        if (account == null) {
-            if (!member.accountId().equals(ReferenceContainerCustody.scopeId(member.containerId())) || !member.before().isEmpty()
-                    || resources.accounts().values().stream().anyMatch(a -> a.custody().equals(new ResourceCustody.Container(member.containerId()))))
-                throw new IllegalArgumentException("composed edit has a forged empty predecessor");
-        } else {
-            if (!account.custody().equals(new ResourceCustody.Container(member.containerId()))
-                    || !resources.bindings().values().stream().filter(b -> b.accountId().equals(account.id()))
+        if (!member.accounts().keySet().equals(container.compartmentLayout().sections().keySet()))
+            throw new IllegalArgumentException("composed edit omits a declared compartment");
+        for (var entry : member.accounts().entrySet()) {
+            var holder = new ResourceCustody.Container(member.containerId(), entry.getKey());
+            var before = ContainerResourceAccounts.observed(state.inventory(), holder, member.before());
+            var account = resources.accounts().get(entry.getValue());
+            if (account == null) {
+                if (!entry.getValue().equals(ContainerResourceAccounts.id(holder)) || !before.isEmpty()
+                        || resources.accounts().values().stream().anyMatch(a -> a.custody().equals(holder)))
+                    throw new IllegalArgumentException("composed edit has a forged empty predecessor");
+            } else {
+                if (!account.custody().equals(holder)
+                        || !resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id()))
                             .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList()
-                            .equals(FungiblePhysicalObservation.bind(resources, account.id(), member.epoch(), member.before())))
-                throw new IllegalArgumentException("composed edit predecessor differs from canonical layout");
+                            .equals(FungiblePhysicalObservation.bind(resources, account.id(), member.epoch(), before)))
+                    throw new IllegalArgumentException("composed edit predecessor differs from canonical compartment layout");
+            }
         }
     }
 }

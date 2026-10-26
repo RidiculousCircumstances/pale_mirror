@@ -16,8 +16,8 @@ record FungibleAllocationSourceStockLoss(ClaimPurpose purpose, FungibleClaimForf
             throw new IllegalArgumentException("source loss lacks its declared allocation and current account");
         owner.validate(state, claim, source);
     }
-    @Override public Settlement settle(FrontierWorldState before, ClaimAllocation claim, Settlement transaction) {
-        var next = owner.settle(before, List.of(claim), transaction.resources().withPopulation(transaction.population()));
+    @Override public Settlement settle(FrontierWorldState before, List<ClaimAllocation> claims, Settlement transaction) {
+        var next = owner.settle(before, claims, transaction.resources().withPopulation(transaction.population()));
         return new Settlement(next, next.population());
     }
     @Override public List<ReleasedActivity> released(FrontierWorldState before, ClaimAllocation claim) {

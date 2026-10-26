@@ -17,7 +17,7 @@ public final class ResidentWorkComposition {
                 public HumanCapability capability() { return HumanCapability.INDUSTRY; }
                 public boolean available(FrontierWorldState state, ResidentProfile resident, long tick) {
                     return BakeryJobAdmission.availableWork(state, resident, tick)
-                            || EquipmentJobAdmission.availableWork(state, resident, tick);
+                            || EquipmentJobAdmission.availableWork(state, resident, tick) || StockJobAdmission.availableWork(state, resident, tick);
                 }
             }, new ResidentWorkAvailabilityPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.LOGISTICS; }

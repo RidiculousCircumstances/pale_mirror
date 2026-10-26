@@ -22,7 +22,7 @@ final class StationWorkAdmission {
                 () -> new IllegalArgumentException("station production start lacks selected source/output access")));
         var work = job.stationWork().orElseThrow();
         var recipe = state.bootstrap().ruleset().production().require(work.recipeId());
-        if (!ProductionOutputCapacity.canAdmitRecipe(state, job.rights(), recipe, job.inputCount(), StationWorkStorage.source(job), work.maintenanceTarget()))
+        if (!ProductionOutputCapacity.canAdmitRecipe(state, job.rights(), recipe, StationWorkMaterialAccounting.plannedUnits(job), StationWorkStorage.source(job), work.maintenanceTarget()))
             throw new IllegalArgumentException("production start has no capacity for its retained output");
         SettlementStructure workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId()))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("production lost declared facility"));

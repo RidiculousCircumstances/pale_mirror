@@ -30,7 +30,7 @@ public record ProductionStationProgressObligation(String fingerprint, long budge
         // its pinned work requirement; no wall clock or independently tuned process timer.
         long budget = Math.addExact(ActorMovementProcess.maximumJourneyTicks(),
                 clock.map(value -> (value.requiredMilliWork() + 999) / 1_000).orElse(0L));
-        String fingerprint = machine.storedHeat() + ":" + pending + ":" + operation.map(value ->
+        String fingerprint = machine.combustion() + ":" + pending + ":" + operation.map(value ->
                 value.id().value().value() + ":" + value.transformed() + ":"
                         + value.progress().map(WorkProgress::completedMilliWork).orElse(0L)).orElse("IDLE");
         return new ProductionStationProgressObligation(fingerprint, budget, disposition, next);

@@ -10,7 +10,7 @@ final class InternalShipmentStorageDemand {
                 .filter(shipment -> !shipment.terminal() && (shipment.authorization().kind() == ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT || shipment.authorization().kind() == ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT))
                 .map(shipment -> new ContainerInboundCapacity.Demand(shipment.id(), shipment.receiver().containerId(), shipment.itemKind(), shipment.quantity(),
                         shipment.cargo() instanceof ShipmentCargo.Individual ? ContainerInboundCapacity.Representation.INDIVIDUAL
-                                : ContainerInboundCapacity.Representation.FUNGIBLE))
+                                : ContainerInboundCapacity.Representation.FUNGIBLE, ((ResourceCustody.Container) shipment.receiver().custody()).section()))
                 .toList();
     }
 }

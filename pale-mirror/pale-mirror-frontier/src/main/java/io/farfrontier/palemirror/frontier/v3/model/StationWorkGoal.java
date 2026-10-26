@@ -8,7 +8,7 @@ import java.util.Objects;
 
 /** Semantic work goal. DELIVERED names the service boundary's anchor, not an exact exit destination. */
 public record StationWorkGoal(SubjectId jobId, SubjectId workerId, StationWorkState.Phase phase,
-                             SurfaceAnchor station) {
+                             SurfaceAnchor station, long ordinal) {
     public StationWorkGoal {
         Objects.requireNonNull(jobId, "bakery goal job");
         Objects.requireNonNull(workerId, "bakery goal worker");
@@ -32,7 +32,7 @@ public record StationWorkGoal(SubjectId jobId, SubjectId workerId, StationWorkSt
                     .orElseThrow(() -> new IllegalArgumentException("bakery goal has no current declared station"));
             target = machine.workerStation();
         }
-        return new StationWorkGoal(job.id(), job.workerId(), work.phase(), target);
+        return new StationWorkGoal(job.id(), job.workerId(), work.phase(), target, work.goalOrdinal());
     }
 
     /** Delivery is complete at the depot; later travel is not a production obligation. */
@@ -44,7 +44,7 @@ public record StationWorkGoal(SubjectId jobId, SubjectId workerId, StationWorkSt
     public MovementOrder movementOrder() {
         if (phase == StationWorkState.Phase.DELIVERED)
             throw new IllegalArgumentException("service clearance requires its shared exit region, not an exact station");
-        return new MovementOrder(jobId, workerId, phase.wireTag(), 1L, List.of(station),
+        return new MovementOrder(jobId, workerId, ordinal, 1L, List.of(station),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
     }
 }

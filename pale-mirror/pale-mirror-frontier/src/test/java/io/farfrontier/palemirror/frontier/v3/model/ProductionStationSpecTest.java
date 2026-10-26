@@ -46,7 +46,7 @@ class ProductionStationSpecTest {
         var accountId = new SubjectId("custody:uncollected-station-product");
         var ledger = state.inventory().fungibleResources().issue(new ResourceLot(productId, container.ownerId(),
                 "minecraft:bread", 1, "fixture:uncollected-product", java.util.List.of()),
-                new CustodyAccount(accountId, new ResourceCustody.Container(container.id()), Map.of(productId, 1), Map.of()));
+                new CustodyAccount(accountId, station.custody(ActorContainerItemOrder.StationPort.OUTPUT), Map.of(productId, 1), Map.of()));
         var occupied = state.withInventory(state.inventory().withFungibleResources(ledger));
         assertTrue(occupied.inventory().slotVacant(new InventoryCustody.ContainerSlot(container.id(), station.outputSlot())),
                 "generic unbound packing has space but cannot assign a semantic machine output port");
@@ -83,7 +83,7 @@ class ProductionStationSpecTest {
         SubjectId actor = new SubjectId("resident:test-baker");
         ActorContainerItemOrder.Portion.Fungible wheat = new ActorContainerItemOrder.Portion.Fungible(
                 new SubjectId("custody:test-baker"), new ResourceCustody.Actor(actor),
-                new SubjectId("custody:test-station"), new ResourceCustody.Container(machine.containerId()),
+                new SubjectId("custody:test-station"), machine.custody(ActorContainerItemOrder.StationPort.INPUT),
                 Optional.empty(), "minecraft:wheat", Map.of(new SubjectId("lot:test-wheat"), 64));
         ActorContainerItemOrder load = new ActorContainerItemOrder(new SubjectId("job:test-bread"), actor,
                 ActorContainerItemOrder.Direction.PLACE, wheat,
@@ -96,7 +96,7 @@ class ProductionStationSpecTest {
                 machine.workerStation(), load.actorSlot(), load.goalOrdinal(), load.goalRevision()));
         ProductionStationSpec foreign = new ProductionStationSpec(machine.id(), new SubjectId("structure:foreign"),
                 machine.containerId(), machine.equipmentType(), machine.capability(), machine.workerStation(), machine.socketSurface(),
-                machine.inputSlot(), machine.outputSlot(), machine.fuelSlot());
+                machine.inputSlots(), machine.outputSlot(), machine.fuelSlot(), machine.maintenanceSlot());
         ActorContainerItemOrder forged = new ActorContainerItemOrder(load.ownerId(), actor, load.direction(), wheat,
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(foreign, ActorContainerItemOrder.StationPort.INPUT),
                 machine.workerStation(), load.actorSlot(), load.goalOrdinal(), load.goalRevision());
@@ -127,7 +127,7 @@ class ProductionStationSpecTest {
         ActorContainerItemOrder order = new ActorContainerItemOrder(new SubjectId("job:bakery-loading"), actorId,
                 ActorContainerItemOrder.Direction.PLACE,
                 new ActorContainerItemOrder.Portion.Fungible(actorAccount, new ResourceCustody.Actor(actorId),
-                        stationAccount, new ResourceCustody.Container(machine.containerId()), Optional.empty(),
+                        stationAccount, machine.custody(ActorContainerItemOrder.StationPort.INPUT), Optional.empty(),
                         "minecraft:wheat", Map.of(wheatId, 64)),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(machine, ActorContainerItemOrder.StationPort.INPUT),
                 machine.workerStation(), ActorContainerItemOrder.Hand.MAIN, 1, 1);

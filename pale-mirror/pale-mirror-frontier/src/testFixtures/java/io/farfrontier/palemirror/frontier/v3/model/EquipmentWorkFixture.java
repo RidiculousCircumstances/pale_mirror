@@ -42,7 +42,7 @@ public final class EquipmentWorkFixture {
         var recipe = state.bootstrap().ruleset().production().require(new ProductionRecipe.Id(
                 repair ? "pale_mirror:repair_stone_pickaxe" : "pale_mirror:make_stone_pickaxe"));
         var job = StationWorkOrders.propose(state, task, facility, worker, ResidentWorkKind.PRODUCTION, recipe,
-                new FungibleResourceCustodySupport.LotSelection(source, Map.of(material, recipe.ingredient().quantity())),
+                new FungibleResourceCustodySupport.LotSelection(source, Map.of(material, recipe.singleIngredient().quantity())),
                 repair ? Optional.of(new StationWorkState.MaintenanceTarget(target, depot, "minecraft:stone_pickaxe")) : Optional.empty(),
                 ProductionRights.publicService(home.id()));
         state = ProductionProcess.reduceStarted(state, home.id(), new ProductionStarted(job, material,

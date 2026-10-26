@@ -33,8 +33,8 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
         if (fungibleLayout.slots().keySet().stream().anyMatch(slot -> slot >= slotCount))
             throw new IllegalArgumentException("retained placement targets a slot outside this container");
         productionStation.ifPresent(station -> {
-            if (!station.containerId().equals(id) || station.inputSlot() >= slotCount || station.outputSlot() >= slotCount
-                    || station.fuelSlot() >= slotCount
+            if (!station.containerId().equals(id) || station.inputSlots().stream().anyMatch(slot -> slot >= slotCount) || station.outputSlot() >= slotCount
+                    || (station.fuelSlot().isPresent() && station.fuelSlot().getAsInt() >= slotCount)
                     || station.maintenanceSlot().isPresent() && station.maintenanceSlot().getAsInt() >= slotCount)
                 throw new IllegalArgumentException("production station does not own its declared bounded container");
         });
@@ -43,6 +43,11 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
     public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount, ContainerPurpose purpose,
                            Optional<ProductionStationSpec> productionStation, Optional<ResourceStoragePolicy> storage) {
         this(id, ownerId, slotCount, purpose, productionStation, storage, FungibleContainerLayout.empty());
+    }
+
+    public ContainerCompartmentLayout compartmentLayout() {
+        return productionStation.map(ProductionStationSpec::compartmentLayout)
+                .orElseGet(() -> ContainerCompartmentLayout.stock(slotCount));
     }
 
     public ContainerRecord withFungibleLayout(FungibleContainerLayout layout) {

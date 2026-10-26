@@ -27,10 +27,10 @@ final class EquipmentRenewalForecast {
                 };
                 if (useful < 1) continue;
                 long operations = Math.ceilDiv(demand.plannedWear(), useful);
-                long material = recipe.ingredient().acceptedItems().stream().mapToLong(item ->
-                        GoodsResourceValuation.replacement(state, party, item, tick).raw()).min().orElseThrow();
-                long neededHeat = Math.multiplyExact(operations, recipe.heatPerBatch());
-                long cash = Math.multiplyExact(Math.multiplyExact(operations, recipe.ingredient().quantity()), material);
+                var inputs = ProductionRecipeInputs.select(recipe, kind -> GoodsResourceValuation.replacement(state, party, kind, tick).raw());
+                long neededHeat = Math.multiplyExact(operations, recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()));
+                long cash = inputs.entrySet().stream().mapToLong(entry -> Math.multiplyExact(Math.multiplyExact(operations, entry.getValue()),
+                        GoodsResourceValuation.replacement(state, party, entry.getKey(), tick).raw())).reduce(0L, Math::addExact);
                 if (neededHeat > 0) cash = Math.addExact(cash, fuelCost(state, party, neededHeat, tick));
                 var candidate = new Option(recipe, operations, cash, neededHeat);
                 if (best == null || candidate.cash() < best.cash()
@@ -38,27 +38,25 @@ final class EquipmentRenewalForecast {
             }
             if (best == null) continue;
             var chosen = best;
-            String input = chosen.recipe().ingredient().acceptedItems().stream().sorted(Comparator
-                    .comparingLong((String item) -> GoodsResourceValuation.replacement(state, party, item, tick).raw())
-                    .thenComparing(item -> item)).findFirst().orElseThrow();
-            result.merge(input, Math.multiplyExact(chosen.operations(), chosen.recipe().ingredient().quantity()), Math::addExact);
+            ProductionRecipeInputs.select(chosen.recipe(), kind -> GoodsResourceValuation.replacement(state, party, kind, tick).raw())
+                    .forEach((kind, count) -> result.merge(kind, Math.multiplyExact(chosen.operations(), count), Math::addExact));
             heat = Math.addExact(heat, chosen.heat());
         }
         long supplied = state.inventory().containers().values().stream().filter(c -> c.ownerId().equals(home))
                 .flatMap(c -> c.productionStation().stream()).filter(s -> s.capability() == ProductionStationSpec.Capability.FABRICATION)
-                .mapToLong(s -> ProductionStationEnergy.suppliedHeat(state, s.id())).sum();
+                .mapToLong(s -> ProductionStationEnergy.unlitFuelTicks(state, s.id())).sum();
         if (heat > supplied) {
             long missing = heat - supplied;
             var fuel = catalog.fuels().stream().min(Comparator.comparingLong((ProductionCatalog.Fuel f) ->
-                    Math.multiplyExact(Math.ceilDiv(missing, f.heatUnits()), GoodsResourceValuation.replacement(state, party, f.itemKind(), tick).raw()))
+                    Math.multiplyExact(Math.ceilDiv(missing, f.burnTicks()), GoodsResourceValuation.replacement(state, party, f.itemKind(), tick).raw()))
                     .thenComparing(ProductionCatalog.Fuel::itemKind)).orElseThrow();
-            result.merge(fuel.itemKind(), Math.ceilDiv(missing, fuel.heatUnits()), Math::addExact);
+            result.merge(fuel.itemKind(), Math.ceilDiv(missing, fuel.burnTicks()), Math::addExact);
         }
         return Map.copyOf(result);
     }
     private static long fuelCost(FrontierWorldState state, GoodsParticipant party, long heat, long tick) {
         return state.bootstrap().ruleset().production().fuels().stream().mapToLong(f -> Math.multiplyExact(
-                Math.ceilDiv(heat, f.heatUnits()), GoodsResourceValuation.replacement(state, party, f.itemKind(), tick).raw())).min().orElseThrow();
+                Math.ceilDiv(heat, f.burnTicks()), GoodsResourceValuation.replacement(state, party, f.itemKind(), tick).raw())).min().orElseThrow();
     }
     private EquipmentRenewalForecast() { }
 }

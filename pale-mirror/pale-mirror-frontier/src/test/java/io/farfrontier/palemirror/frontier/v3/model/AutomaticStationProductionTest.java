@@ -20,10 +20,13 @@ class AutomaticStationProductionTest {
                 .sorted(Comparator.comparing(ContainerRecord::id)).findFirst().orElseThrow();
     }
     static FrontierWorldState supply(FrontierWorldState state, ContainerRecord record, String kind, int count, String suffix) {
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id());
+        return supply(state, record, ContainerSectionId.STOCK, kind, count, suffix);
+    }
+    static FrontierWorldState supply(FrontierWorldState state, ContainerRecord record, ContainerSectionId section, String kind, int count, String suffix) {
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id(), section);
         var staging = new SubjectId("custody:smelting-" + suffix); var lot = new SubjectId("lot:smelting-" + suffix);
         var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, record.ownerId(), kind, count, "fixture", List.of()),
-                new CustodyAccount(staging, new ResourceCustody.Container(record.id()), Map.of(lot, count), Map.of()));
+                new CustodyAccount(staging, new ResourceCustody.Container(record.id(), section), Map.of(lot, count), Map.of()));
         if (account.isPresent()) ledger = ledger.transfer(staging, account.orElseThrow().id(), Map.of(lot, count), Map.of());
         return publish(state.withInventory(state.inventory().withFungibleResources(ledger)), record.ownerId(), 1);
     }
@@ -51,54 +54,38 @@ class AutomaticStationProductionTest {
                 "changed facility condition must invalidate the installed-station index");
         assertTrue(AutomaticStationProduction.stations(state, record.ownerId(), recipe).contains(record));
     }
-    @Test void outputReserveWithoutIngredientsNeitherRequestsNorBurnsFuel() {
+    @Test void unlitFuelAndActiveCombustionHaveDistinctLifetimesAcrossRecovery() {
         var state = initial(); var record = station(state); var spec = record.productionStation().orElseThrow();
-        state = supply(state, record, "minecraft:coal", 1, "unbacked-fuel");
-        assertEquals(0, StationFuelDemandComposition.heat(state, spec, 1));
-        assertTrue(ProductionStationEnergy.next(state, spec.id()).isEmpty());
-        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
-        assertTrue(ProductionStationEnergy.next(state, spec.id()).isEmpty(), "recovery must not turn a reserve target into fuel use");
-        state = supply(state, record, "minecraft:raw_iron", 1, "backed-input");
-        assertEquals(200, StationFuelDemandComposition.heat(state, spec, 1));
-        assertTrue(ProductionStationEnergy.next(state, spec.id()).isPresent());
-    }
-    @Test void partialInputCompletesWithoutWorkerAndSurvivesRecoveryWithExactFuelCost() {
-        var state = initial(); var record = station(state); var spec = record.productionStation().orElseThrow();
-        state = supply(state, record, "minecraft:raw_iron", 3, "input");
-        assertTrue(AutomaticStationProduction.offer(state, spec.id(), 1).isEmpty(), "no fuel means no production");
-        state = supply(state, record, "minecraft:coal", 1, "fuel");
-        var burn = ProductionStationEnergy.next(state, spec.id()).orElseThrow();
-        state = ProductionStationEnergy.apply(state, spec.id(), new ProductionStationFuelChanged(
-                ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn, List.of()));
-        var registry = new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), FrontierWorldPayloadCodecs.create());
-        var schedule = FrontierWorldProcessCatalog.initialSchedule(state.bootstrap()).stream()
-                .filter(action -> action.kind().equals("frontier.production_station.review") && action.subject().equals(spec.id()))
-                .findFirst().orElseThrow();
-        assertTrue(FrontierWorldProcessCatalog.prepareScheduled(registry, state, schedule, new SimInstant(1)).isEmpty(),
-                "station admission consumes an accepted economic plan without scheduling another solver");
-        assertFalse(FrontierWorldProcessCatalog.planScheduled(registry, state, schedule, new SimInstant(1)).isEmpty());
+        state = supply(state, record, ContainerSectionId.FUEL, "minecraft:coal", 2, "fuel");
+        assertTrue(ProductionStationEnergy.next(state, spec.id(), 1).isEmpty(), "idle machine never ignites stored fuel");
+        state = supply(state, record, ContainerSectionId.INPUT, "minecraft:raw_iron", 3, "input");
         var offer = AutomaticStationProduction.offer(state, spec.id(), 1).orElseThrow();
-        assertEquals(3, offer.operation().outputQuantity());
-        var start = new ProductionStationAutomaticStarted(spec.id(), state.productionStations().require(spec.id()).revision(), offer.operation().recipeId(), 1);
-        var payloads = FrontierWorldPayloadCodecs.create(); assertEquals(start, payloads.decode(start.type(), payloads.encode(start)));
-        state = AutomaticStationProduction.start(state, spec.id(), start);
-        assertTrue(FrontierWorldProcessCatalog.prepareScheduled(registry, state, schedule, new SimInstant(2)).isEmpty(),
-                "running machine progress must not wait for an economic worker round trip");
-        var progress = ProductionStationProgressed.automatic(state, spec.id(), 2).orElseThrow();
-        state = ProductionStationProgressed.apply(state, spec.id(), progress);
-        assertEquals(600_000, state.productionStations().require(spec.id()).operation().orElseThrow().progress().orElseThrow().requiredMilliWork());
+        state = AutomaticStationProduction.start(state, spec.id(), new ProductionStationAutomaticStarted(spec.id(),
+                state.productionStations().require(spec.id()).revision(), offer.operation().recipeId(), 1));
+        var waiting = ProductionStationProgressed.automatic(state, spec.id(), 1).orElseThrow();
+        state = ProductionStationProgressed.apply(state, spec.id(), waiting);
+        assertFalse(state.productionStations().require(spec.id()).operation().orElseThrow().progress().orElseThrow().running());
+        var burn = ProductionStationEnergy.next(state, spec.id(), 20).orElseThrow();
+        var event = new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn, List.of(), 20);
+        var before = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationEnergy.apply(before, spec.id(),
+                new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn, List.of(), 21)));
+        state = ProductionStationEnergy.apply(state, spec.id(), event);
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
-        assertTrue(ProductionStationProgressed.automatic(state, spec.id(), 601).isEmpty());
-        state = ProductionStationProgressed.apply(state, spec.id(), ProductionStationProgressed.automatic(state, spec.id(), 602).orElseThrow());
+        var fuelAccount = FungibleResourceCustodySupport.accountAtContainer(state, record.id(), ContainerSectionId.FUEL).orElseThrow();
+        assertEquals(1, state.inventory().fungibleResources().unclaimedQuantity(fuelAccount.id(), record.ownerId(), "minecraft:coal"));
+        state = ProductionStationProgressed.apply(state, spec.id(), ProductionStationProgressed.automatic(state, spec.id(), 620).orElseThrow());
         var boundary = ProductionStationTransformation.next(state, spec.id()).orElseThrow();
         state = ProductionStationTransformation.apply(state, spec.id(), new ProductionStationRecipeChanged(
                 ProductionStationRecipeChanged.Stage.COLD_COMPLETED, boundary, List.of()), ProductionOperationCompletionComposition::completed);
         assertTrue(state.productionStations().require(spec.id()).operation().isEmpty());
-        assertEquals(1000, state.productionStations().require(spec.id()).storedHeat());
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id()).orElseThrow();
-        assertEquals(3, state.inventory().fungibleResources().unclaimedQuantity(account.id(), record.ownerId(), "minecraft:iron_ingot"));
-        assertEquals(state, codec.decode(codec.encode(state)));
-        assertTrue(AutomaticStationProduction.offer(state, spec.id(), 603).isEmpty(), "occupied output cannot be overwritten");
+        var output = FungibleResourceCustodySupport.accountAtContainer(state, record.id(), ContainerSectionId.OUTPUT).orElseThrow();
+        assertEquals(3, state.inventory().fungibleResources().unclaimedQuantity(output.id(), record.ownerId(), "minecraft:iron_ingot"));
+        assertEquals(1000, state.productionStations().require(spec.id()).burnRemaining(620));
+        state = codec.decode(codec.encode(state));
+        assertEquals(0, state.productionStations().require(spec.id()).burnRemaining(1620), "fire expires while idle");
+        assertTrue(ProductionStationEnergy.next(state, spec.id(), 1620).isEmpty(), "idle expiry cannot ignite a second item");
+        assertEquals(1, state.inventory().fungibleResources().unclaimedQuantity(fuelAccount.id(), record.ownerId(), "minecraft:coal"));
     }
     @Test void machineOutputIsPickupOnlyAndInputIsDeliveryOnly() {
         var state = initial(); var spec = station(state).productionStation().orElseThrow();
@@ -113,10 +100,8 @@ class AutomaticStationProductionTest {
     }
     @Test void fullReserveStopsAdmissionAndAnActualWithdrawalReopensDemand() {
         var state = initial(); var record = station(state); var spec = record.productionStation().orElseThrow();
-        state = supply(state, record, "minecraft:raw_iron", 8, "reserve-input");
-        state = supply(state, record, "minecraft:coal", 1, "reserve-fuel");
-        state = ProductionStationEnergy.apply(state, spec.id(), new ProductionStationFuelChanged(
-                ProductionStationFuelChanged.Stage.COLD_CONSUMED, ProductionStationEnergy.next(state, spec.id()).orElseThrow(), List.of()));
+        state = supply(state, record, ContainerSectionId.INPUT, "minecraft:raw_iron", 8, "reserve-input");
+        state = supply(state, record, ContainerSectionId.FUEL, "minecraft:coal", 1, "reserve-fuel");
         var home = FrontierWorldStateSupport.settlement(state.bootstrap(), record.ownerId());
         var facility = home.structures().stream().filter(value -> value.id().equals(spec.facilityId())).findFirst().orElseThrow();
         var storage = state.inventory().containers().get(ProductionFacilityLayout.metalStorageId(facility));

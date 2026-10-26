@@ -47,7 +47,8 @@ final class FrontierV3StationWorkPhysicalEffect {
         int destinationSlot = switch (work.phase()) {
             case TARGET_PICKUP, DEPOT_PICKUP, STATION_UNLOAD -> -1;
             case TARGET_LOAD -> station(state, work).maintenanceSlot().orElseThrow();
-            case STATION_LOAD -> station(state, work).inputSlot();
+            case STATION_LOAD -> work.pendingPhysicalStep().map(StationWorkPhysicalStep::destinationSlot)
+                    .orElseGet(() -> StationWorkOperation.loadSlot(state, job).orElse(-1));
             case PROCESSING -> station(state, work).outputSlot();
             case DEPOT_DELIVERY -> work.pendingPhysicalStep().map(StationWorkPhysicalStep::destinationSlot)
                     .orElseGet(() -> ProductionOutputCapacity.deliverySlot(state, job).orElse(-1));
@@ -79,7 +80,7 @@ final class FrontierV3StationWorkPhysicalEffect {
                 return;
             }
             FrontierV3CommandSubmission.submit(runtime, "bakery-effect-prepare", lease.id().value(),
-                    new BakeryHotEffectPrepared(job.id(), lease.id(), work.phase(), destinationSlot));
+                    new BakeryHotEffectPrepared(job.id(), lease.id(), work.phase(), destinationSlot, work.materials().tripOrdinal()));
             return;
         }
         if (!pending.leaseId().equals(lease.id()) || pending.destinationSlot() != destinationSlot) return;
@@ -121,7 +122,7 @@ final class FrontierV3StationWorkPhysicalEffect {
         boolean applied = shape.after();
         if (!applied && !shape.before()) return Optional.empty();
         var effect = applied ? shape.observation() : new BakeryHotEffectObserved(job.id(), lease.id(), work.phase(),
-                StationWorkGoal.current(state, job).station().standingBody(), shape.sourceEpoch(), shape.destinationEpoch(), List.of(), List.of());
+                StationWorkGoal.current(state, job).station().standingBody(), shape.sourceEpoch(), shape.destinationEpoch(), List.of(), List.of(), work.materials().tripOrdinal());
         var ports = participants(shape);
         return FrontierV3OperationAftermath.capture(level, declaration(shape, ports), ports,
                 new BakeryRetiredEffectObserved(identity, effect, applied), applied, applied ? shape::after : shape::before);
@@ -134,7 +135,7 @@ final class FrontierV3StationWorkPhysicalEffect {
     }
     private static FrontierV3OperationReceipt.Declaration declaration(Shape shape, List<FrontierV3MinecraftOperation.Participant> participants) {
         String preparation = FrontierV3OperationConfirmation.fingerprint(new BakeryHotEffectPrepared(shape.job().id(),
-                shape.lease().id(), shape.phase(), shape.destinationSlot()));
+                shape.lease().id(), shape.phase(), shape.destinationSlot(), shape.job().stationWork().orElseThrow().materials().tripOrdinal()));
         String identity = preparation + ":" + shape.sourceEpoch() + ":" + shape.destinationEpoch() + ":" + shape.kind();
         return new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BAKERY, shape.job().id(), identity, identity,
                 participants.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
@@ -237,7 +238,8 @@ final class FrontierV3StationWorkPhysicalEffect {
             case TARGET_PICKUP, TARGET_LOAD -> throw new IllegalArgumentException("individual target has no fungible slices");
             case DEPOT_PICKUP -> work.sourceAccountId();
             case STATION_LOAD, DEPOT_DELIVERY -> work.actorAccountId();
-            case PROCESSING, STATION_UNLOAD -> work.stationAccountId();
+            case PROCESSING -> work.stationAccountId();
+            case STATION_UNLOAD -> ContainerResourceAccounts.id(station(state, work).custody(ActorContainerItemOrder.StationPort.OUTPUT));
             case DELIVERED -> throw new IllegalStateException("delivered bakery work has no physical source");
         };
         if (state.inventory().fungibleResources().bindings().values().stream()
@@ -301,25 +303,29 @@ final class FrontierV3StationWorkPhysicalEffect {
         }
         FrontierV3ActorItemTransfer.FungibleStep transfer() {
             return new FrontierV3ActorItemTransfer.FungibleStep(order, physical, worker,
-                    lease.members().getFirst().entityId(), slices, destinationSlot, 0);
+                    lease.members().getFirst().entityId(), slices, destinationSlot,
+                    destinationSlot < 0 ? 0 : ReferenceContainerCustody.expectedFungibleSlot(state, containerId, destinationSlot)
+                        .map(ReferenceContainerCustody.ProjectedFungibleSlot::quantity).orElse(0));
         }
         FrontierV3StationRecipeEffect recipeEffect() {
             var station = station(state, job.stationWork().orElseThrow());
             ItemStack input, output;
             if (exactSource != null) {
-                if (!exactSource.custody().equals(new InventoryCustody.ContainerSlot(containerId, station.inputSlot())))
+                if (!(exactSource.custody() instanceof InventoryCustody.ContainerSlot slot
+                        && slot.containerId().equals(containerId) && station.inputSlots().contains(slot.slot())))
                     throw new IllegalArgumentException("station input lacks its declared physical port");
                 input = FrontierV3ExactItemPresentation.materializedStack(exactSource);
                 output = FrontierV3ExactItemPresentation.materializedStack(exactOutput);
             } else {
-                if (slices.size() != 1 || sourceSlot(slices.getFirst()) != station.inputSlot())
+                if (slices.size() != 1 || !station.inputSlots().contains(sourceSlot(slices.getFirst())))
                     throw new IllegalArgumentException("station recipe input must occupy its declared port");
                 input = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(kind)), slices.getFirst().before());
                 output = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(job.outputItemKind())), job.outputCount());
             }
             return new FrontierV3StationRecipeEffect(chest(), station,
                     state.bootstrap().ruleset().production().require(job.stationWork().orElseThrow().recipeId()),
-                    input, job.inputCount(), output);
+                    input, job.inputCount(), output, Optional.empty(), exactSource != null
+                        ? ((InventoryCustody.ContainerSlot) exactSource.custody()).slot() : sourceSlot(slices.getFirst()));
         }
         boolean plain(ItemStack stack, String itemKind, int quantity) {
             Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemKind));
@@ -440,7 +446,7 @@ final class FrontierV3StationWorkPhysicalEffect {
             }
             return new BakeryHotEffectObserved(job.id(), lease.id(), phase(),
                     StationWorkGoal.current(state, job).station().standingBody(), sourceEpoch, destinationEpoch,
-                    remaining, destination);
+                    remaining, destination, job.stationWork().orElseThrow().materials().tripOrdinal());
         }
     }
 }

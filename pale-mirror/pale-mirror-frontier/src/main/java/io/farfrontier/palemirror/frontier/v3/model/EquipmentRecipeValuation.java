@@ -15,15 +15,9 @@ final class EquipmentRecipeValuation {
                 .get(new Query(home, tick), () -> project(state, home, tick));
     }
     private static SourcingMarket project(FrontierWorldState state, SubjectId home, long tick) {
-        var window = new SupplyPlanningWindow(state.humanPopulation().schedule(home).dayTicks());
-        var stocks = new TreeMap<String, SupplyPlanner.Stock>();
-        state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().forEach((kind, policy) ->
-                stocks.put(kind, new SupplyPlanner.Stock(0, 0, 0, 0, 0, 0, 1, policy)));
-        var capacities = new ArrayList<>(new AutomaticStationSupplyCapacity().read(state, home, stocks, window));
-        capacities.addAll(new ExtractionSupplyCapacity().read(state, home, stocks, window));
-        capacities.addAll(StationRecipeValuation.read(state, home, recipe ->
-                state.bootstrap().ruleset().tools().find(recipe.product().itemKind()).isPresent()));
         var participant = state.companies().goodsTrade().participants().participants().get(home);
+        var capacities = new ArrayList<>(SupplyCapacityComposition.forValuation(state, participant));
+        capacities.addAll(StationRecipeValuation.read(state, home, recipe -> recipe.outcome() instanceof ProductionRecipeOutcome.Repair));
         return SettlementSourcingMarket.read(state, participant, capacities, tick);
     }
     private EquipmentRecipeValuation() { }

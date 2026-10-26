@@ -38,7 +38,7 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
         int progress = operation.flatMap(ProductionOperation::progress).map(clock ->
                 (int)(clock.completedAt(Math.max(tick, clock.evaluatedAtTick())) * 1_000L / clock.requiredMilliWork())).orElse(0);
         int status;
-        boolean materialsReady = FungibleResourceCustodySupport.accountAtContainer(value.state(), value.record().id())
+        boolean materialsReady = FungibleResourceCustodySupport.accountAtContainer(value.state(), value.record().id(), ContainerSectionId.INPUT)
                 .map(account -> account.lotQuantities().isEmpty() || FungibleResourceCustodySupport.hasCurrentPhysicalPortion(
                         value.state(), account.id(), account.lotQuantities())).orElse(true);
         var lease = value.state().replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(value.record().id()));
@@ -47,15 +47,17 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
                 || ReferenceContainerCustody.blocksCanonicalUse(value.state(), value.record().id())
                 || ContainerPhysicalAuthorityComposition.pending(value.state(), value.record().id()) || !materialsReady) status = 6;
         else if (operation.filter(ProductionOperation::transformed).isPresent()) status = 3;
-        else if (operation.isPresent()) status = processingStatus(operation.orElseThrow(), tick);
+        else if (operation.isPresent()) status = ProductionStationEnergy.awaitingFuel(value.state(), value.machine().stationId())
+                ? 4 : processingStatus(operation.orElseThrow(), tick);
         else if (!bench.getItem(ProductionBenchBlockEntity.OUTPUT).isEmpty()) status = 3;
-        else if (bench.getItem(ProductionBenchBlockEntity.INPUT).isEmpty()) status = 5;
+        else if (inputs(bench).isEmpty()) status = 5;
         else {
             var recipe = selectedRecipe;
-            status = recipe.isEmpty() || bench.getItem(ProductionBenchBlockEntity.INPUT).getCount() < recipe.orElseThrow().ingredient().quantity()
-                    ? 5 : value.machine().storedHeat() < recipe.orElseThrow().heatPerBatch() ? 4 : 1;
+            status = recipe.isEmpty() || recipe.orElseThrow().allocate(inputs(bench), 1).isEmpty()
+                    ? 5 : recipe.orElseThrow().requiresCombustion() && value.machine().burnRemaining(tick) == 0
+                        && !ProductionStationEnergy.hasUnlitFuel(value.state(), value.machine().stationId()) ? 4 : 1;
         }
-        return new View(value.machine().storedHeat(), progress, status, selectedRecipe.map(recipe -> BuiltInRegistries.ITEM.getId(
+        return new View(value.machine().burnRemaining(tick), progress, status, selectedRecipe.map(recipe -> BuiltInRegistries.ITEM.getId(
                 BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(recipe.product().itemKind())))).orElse(0),
                 selectedRecipe.filter(recipe -> recipe.outcome() instanceof ProductionRecipeOutcome.Repair).isPresent());
     }
@@ -68,12 +70,11 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
         }).orElse(7);
     }
     private static Optional<ProductionRecipe> recipe(Current value, ProductionBenchBlockEntity bench, Player player) {
-        var input = bench.getItem(ProductionBenchBlockEntity.INPUT);
-        var kind = BuiltInRegistries.ITEM.getKey(input.getItem()).toString();
+        var available = inputs(bench);
         var station = value.record().productionStation().orElseThrow();
         var target = station.maintenanceSlot().isPresent() ? bench.getItem(station.maintenanceSlot().getAsInt()) : ItemStack.EMPTY;
         var choices = value.state().bootstrap().ruleset().production().recipes().stream().filter(recipe -> recipe.capability() == station.capability()
-                && recipe.ingredient().accepts(kind)).filter(recipe -> target.isEmpty()
+                && available.keySet().stream().anyMatch(recipe::acceptsInput)).filter(recipe -> target.isEmpty()
                     ? !(recipe.outcome() instanceof ProductionRecipeOutcome.Repair)
                     : recipe.outcome() instanceof ProductionRecipeOutcome.Repair && recipe.product().itemKind()
                         .equals(BuiltInRegistries.ITEM.getKey(target.getItem()).toString()))
@@ -81,13 +82,22 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
         if (choices.isEmpty() || !(player.containerMenu instanceof ProductionBenchMenu menu) || menu.inventory() != bench) return Optional.empty();
         return Optional.of(choices.get(Math.floorMod(menu.recipeChoice(), choices.size())));
     }
+    private static Map<String, Integer> inputs(ProductionBenchBlockEntity bench) {
+        var quantities = new TreeMap<String, Integer>();
+        for (int slot = 0; slot < ProductionBenchBlockEntity.INPUT_COUNT; slot++) {
+            var item = bench.getItem(slot);
+            if (!item.isEmpty()) quantities.merge(BuiltInRegistries.ITEM.getKey(item.getItem()).toString(), item.getCount(), Math::addExact);
+        }
+        return Map.copyOf(quantities);
+    }
     @Override public boolean accepts(ProductionBenchBlockEntity bench, int port, ItemStack stack) {
         if (bench.getLevel() != null && bench.getLevel().isClientSide()) return port != ProductionBenchBlockEntity.OUTPUT;
         var found = current(bench); if (found.isEmpty()) return false;
         var value = found.orElseThrow(); var kind = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        if (port >= 0 && port < ProductionBenchBlockEntity.INPUT_COUNT)
+            return value.state().bootstrap().ruleset().production().recipes().stream().anyMatch(recipe ->
+                    recipe.capability() == value.record().productionStation().orElseThrow().capability() && recipe.acceptsInput(kind));
         return switch (port) {
-            case ProductionBenchBlockEntity.INPUT -> value.state().bootstrap().ruleset().production().recipes().stream().anyMatch(recipe ->
-                    recipe.capability() == value.record().productionStation().orElseThrow().capability() && recipe.ingredient().accepts(kind));
             case ProductionBenchBlockEntity.FUEL -> value.state().bootstrap().ruleset().production().fuels().stream()
                     .anyMatch(fuel -> fuel.itemKind().equals(kind));
             case ProductionBenchBlockEntity.MAINTENANCE_TARGET -> value.record().productionStation().orElseThrow().maintenanceSlot().isPresent()

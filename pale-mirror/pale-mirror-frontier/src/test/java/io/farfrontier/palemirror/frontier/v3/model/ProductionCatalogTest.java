@@ -28,7 +28,7 @@ class ProductionCatalogTest {
         assertThrows(IllegalArgumentException.class, () -> catalog.require(new ProductionRecipe.Id("pale_mirror:missing")));
         assertThrows(IllegalArgumentException.class, () -> catalog.requireFuel("minecraft:stone"));
         assertThrows(NullPointerException.class, () -> catalog.require(null));
-        assertNotEquals(catalog.canonicalText(), new ProductionCatalog(List.of(recipe(1, 1, 81)), List.of(fuel), List.of(ProductionEquipment.bench())).canonicalText());
+        assertNotEquals(catalog.canonicalText(), new ProductionCatalog(List.of(recipe(1, 1, 0)), List.of(fuel), List.of(ProductionEquipment.bench())).canonicalText());
         assertNotEquals(catalog.canonicalText(), new ProductionCatalog(List.of(recipe),
                 List.of(new ProductionCatalog.Fuel("minecraft:coal", 1_601)), List.of(ProductionEquipment.bench())).canonicalText());
     }
@@ -42,7 +42,7 @@ class ProductionCatalogTest {
     private static ProductionRecipe recipe(int input, int output, long heat) {
         return new ProductionRecipe(BakeryRecipes.BREAD, ProductionStationSpec.Capability.BAKING,
                 new ProductionRecipe.Ingredient(Set.of("minecraft:wheat"), input),
-                new ProductionRecipe.Product("minecraft:bread", output), heat, ProductionRecipe.ProcessingMode.ATTENDED);
+                new ProductionRecipe.Product("minecraft:bread", output), (heat > 0), ProductionRecipe.ProcessingMode.ATTENDED);
     }
     private static FrontierRuleset copy(FrontierRuleset base, int schema, ProductionCatalog catalog) {
         return new FrontierRuleset("frontier-v3-catalog-test", schema, base.cadence(), base.spatial(), base.rates(),

@@ -46,6 +46,14 @@ export function requestRconQuery({ port, password, command, timeoutMs = 10_000 }
   return requestRconCommand({ port, password, command, timeoutMs, awaitResponse: true });
 }
 
+/** Waits for the server-thread admission reply; socket write alone can lose an advance. */
+export function requestRconAdvance({ port, password, command, timeoutMs = 10_000 }) {
+  if (typeof command !== 'string' || !/^pale_mirror v3 advance(?:_to)? [1-9][0-9]*$/.test(command)) {
+    return Promise.reject(new Error('invalid disposable advance command'));
+  }
+  return requestRconCommand({ port, password, command, timeoutMs, awaitResponse: true, responseKind: 'advance' });
+}
+
 /** The vanilla command reply is issued only after the server-thread flush completed. */
 export function requestRconSaveFlush({ port, password, timeoutMs = 90_000 }) {
   return requestRconCommand({ port, password, command: 'save-all flush', timeoutMs,
@@ -57,8 +65,9 @@ export function requestRconCommand({ port, password, command, timeoutMs = 10_000
   awaitResponse = false, responseKind = 'diagnostic' }) {
   if (!Number.isInteger(port) || port < 1024 || port > 65535 || typeof password !== 'string' || !password
       || typeof command !== 'string' || !/^[a-z0-9_ -]{1,160}$/.test(command) || typeof awaitResponse !== 'boolean'
-      || !['diagnostic', 'save_flush'].includes(responseKind)
-      || (responseKind === 'save_flush' && (!awaitResponse || command !== 'save-all flush'))) {
+      || !['diagnostic', 'save_flush', 'advance'].includes(responseKind)
+      || (responseKind === 'save_flush' && (!awaitResponse || command !== 'save-all flush'))
+      || (responseKind === 'advance' && (!awaitResponse || !/^pale_mirror v3 advance(?:_to)? [1-9][0-9]*$/.test(command)))) {
     return Promise.reject(new Error('invalid disposable RCON endpoint'));
   }
   return new Promise((resolveStop, rejectStop) => {
@@ -96,6 +105,10 @@ export function requestRconCommand({ port, password, command, timeoutMs = 10_000
           if (accepted && awaitResponse && frame.id === COMMAND_ID) responseFrames.push(frame.payload);
           const reply = responseFrames.join('');
           if (accepted && awaitResponse && responseKind === 'diagnostic' && completeDiagnosticResponse(reply)) finish(null, reply);
+          if (accepted && awaitResponse && responseKind === 'advance' && reply.length > 0) {
+            if (/^(?:Queued )?Frontier v3 fast-forward request=[0-9]+ (?:RELATIVE|ABSOLUTE) status=/.test(reply)) finish(null, reply);
+            else finish(new Error(`disposable advance was not admitted: ${reply.slice(0, 240)}`));
+          }
           if (accepted && awaitResponse && responseKind === 'save_flush') {
             if (reply.includes('Unable to save the game')) finish(new Error('vanilla save-all flush failed'));
             else if (reply.includes('Saved the game')) finish(null, reply);

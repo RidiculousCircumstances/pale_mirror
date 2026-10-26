@@ -38,8 +38,11 @@ final class FrontierV3FixedContainerProviders {
     private static final Provider FORGE = new Provider(PaleMirrorProductionStations.FORGE,
             block -> block == PaleMirrorProductionStations.FORGE.get(),
             entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
+    private static final Provider WOODWORKING = new Provider(PaleMirrorProductionStations.WOODWORKING,
+            block -> block == PaleMirrorProductionStations.WOODWORKING.get(),
+            entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
     private static final Map<ProductionEquipment.Id, Provider> EQUIPMENT = Map.of(
-            ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER, ProductionEquipment.FORGE, FORGE);
+            ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER, ProductionEquipment.FORGE, FORGE, ProductionEquipment.WOODWORKING, WOODWORKING);
     private FrontierV3FixedContainerProviders() { }
     private static Provider require(ContainerRecord record) {
         var provider = record.purpose() == ContainerPurpose.PRODUCTION_STATION
@@ -72,8 +75,8 @@ final class FrontierV3FixedContainerProviders {
             throw new IllegalArgumentException("declared fixed container capacity differs from physical provider");
         if (record.productionStation().isPresent()) {
             var spec = record.productionStation().orElseThrow();
-            if (spec.inputSlot() != ProductionBenchBlockEntity.INPUT || spec.outputSlot() != ProductionBenchBlockEntity.OUTPUT
-                    || spec.fuelSlot() != ProductionBenchBlockEntity.FUEL
+            if (!spec.inputSlots().equals(java.util.stream.IntStream.range(0, ProductionBenchBlockEntity.INPUT_COUNT).boxed().toList()) || spec.outputSlot() != ProductionBenchBlockEntity.OUTPUT
+                    || spec.fuelSlot().isPresent() && spec.fuelSlot().getAsInt() != ProductionBenchBlockEntity.FUEL
                     || spec.maintenanceSlot().isPresent() && spec.maintenanceSlot().getAsInt() != ProductionBenchBlockEntity.MAINTENANCE_TARGET)
                 throw new IllegalArgumentException("station port layout differs from registered equipment adapter");
         }

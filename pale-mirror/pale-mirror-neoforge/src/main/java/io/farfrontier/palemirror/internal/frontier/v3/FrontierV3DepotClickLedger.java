@@ -15,7 +15,7 @@ import java.util.Map;
 
 /** Durable pre/post physical witness for one player edit at each PM-owned depot. */
 final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
-    private static final int FORMAT = 4;
+    private static final int FORMAT = 5;
     private static final int MAX_PENDING = 1_024;
     private final Map<SubjectId, FrontierV3ContainerClickTransaction> pending;
     private final FrontierV3LocalOperationReceipts completed;

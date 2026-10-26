@@ -25,7 +25,7 @@ final class ExportProductionValuation {
         for (var process : facts.processes()) {
             var fuels = process.fuels().entrySet().stream().filter(e -> prices.containsKey(e.getKey()))
                     .map(e -> new ProductionValuation.Fuel(prices.get(e.getKey()), e.getValue())).toList();
-            ProductionValuation.unitCost(process.inputs(), process.outputPerBatch(), process.heatPerBatch(), prices, fuels)
+            ProductionValuation.unitCost(process.inputs(), process.outputPerBatch(), process.burnTicksPerBatch(), prices, fuels)
                     .ifPresent(cost -> costs.put(process.id(), cost.raw()));
             if (facts.market().processUnitCosts().containsKey(process.id()))
                 costs.put(process.id(), facts.market().processUnitCosts().get(process.id()));

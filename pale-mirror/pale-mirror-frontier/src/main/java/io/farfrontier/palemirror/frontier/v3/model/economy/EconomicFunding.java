@@ -37,7 +37,7 @@ final class EconomicFunding {
             var process = demand.process().map(processes::get);
             // A missing manufactured output and its inputs are alternatives, not two
             // independent shopping lists. Explicitly selected finished purchases remain.
-            boolean manufacture = process.filter(p -> !p.inputs().isEmpty() || p.heatPerBatch() > 0).isPresent();
+            boolean manufacture = process.filter(p -> !p.inputs().isEmpty() || p.burnTicksPerBatch() > 0).isPresent();
             long current = manufacture ? Math.max(0, demand.purchase() - demand.recoveryProduction()) : demand.purchase();
             long future = manufacture ? 0 : Math.max(0, horizon.missing().get(item) - EconomicForecast.directOutputBy(facts, supply, item, horizonTicks));
             long spending = Math.max(supply.preferredPurchaseSpending().getOrDefault(item, 0L),

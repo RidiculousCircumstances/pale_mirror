@@ -11,11 +11,13 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
     @Override public String type() { return "frontier.container_player_edit_observed"; }
     @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(out -> {
         var edit = (ContainerPlayerEditObserved) payload;
-        out.writeByte(3);
+        out.writeByte(4);
         writeString(out, edit.playerId().toString()); writeString(out, edit.interactionId().toString());
         out.writeByte(edit.members().size());
         for (var member : edit.members()) {
-            writeSubject(out, member.containerId()); writeSubject(out, member.accountId()); writeSubject(out, member.ownerId());
+            writeSubject(out, member.containerId()); out.writeByte(member.accounts().size());
+            for (var account : new TreeMap<>(member.accounts()).entrySet()) { writeString(out, account.getKey().value()); writeSubject(out, account.getValue()); }
+            writeSubject(out, member.ownerId());
             out.writeLong(member.epoch()); stacks(out, member.before()); stacks(out, member.after());
         }
         out.writeBoolean(edit.returning().isPresent());
@@ -37,13 +39,18 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
         }
     }); }
     @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, in -> {
-        if (in.readUnsignedByte() != 3) throw new IllegalArgumentException("incompatible player interaction payload format");
+        if (in.readUnsignedByte() != 4) throw new IllegalArgumentException("incompatible player interaction payload format");
         var player = UUID.fromString(readString(in)); var interaction = UUID.fromString(readString(in));
         int count = in.readUnsignedByte(); if (count < 1 || count > 54) throw new IllegalArgumentException("invalid composed member count");
         var members = new ArrayList<ContainerPlayerEditObserved.Member>();
         for (int i = 0; i < count; i++) {
-            var container = readSubject(in).value(); var account = readSubject(in).value(); var owner = readSubject(in).value();
-            long epoch = in.readLong(); members.add(new ContainerPlayerEditObserved.Member(container, account, owner, epoch,
+            var container = readSubject(in).value(); int sections = in.readUnsignedByte();
+            if (sections < 1 || sections > 4) throw new IllegalArgumentException("invalid compartment declaration count");
+            var accounts = new TreeMap<ContainerSectionId, SubjectId>();
+            for (int j = 0; j < sections; j++) if (accounts.put(new ContainerSectionId(readString(in)), readSubject(in).value()) != null)
+                throw new IllegalArgumentException("duplicate compartment declaration");
+            var owner = readSubject(in).value();
+            long epoch = in.readLong(); members.add(new ContainerPlayerEditObserved.Member(container, accounts, owner, epoch,
                     stacks(in, container), stacks(in, container)));
         }
         Optional<ContainerPlayerEditObserved.PlayerReturn> source = in.readBoolean()

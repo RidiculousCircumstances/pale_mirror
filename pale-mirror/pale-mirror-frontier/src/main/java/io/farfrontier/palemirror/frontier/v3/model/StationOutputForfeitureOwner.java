@@ -20,7 +20,9 @@ final class StationOutputForfeitureOwner implements FungibleClaimForfeitureOwner
     }
     @Override public void validate(FrontierWorldState state, ClaimAllocation claim, SubjectId sourceAccount) {
         var operation = require(state, claim);
-        if (!((ProductionOperation.FungibleInput) operation.inputCustody()).accountId().equals(sourceAccount)
+        var station = ProductionStationEnergy.record(state, operation.stationId()).productionStation().orElseThrow();
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, station.containerId(), ContainerSectionId.OUTPUT);
+        if (account.isEmpty() || !account.orElseThrow().id().equals(sourceAccount)
                 || ContainerPhysicalAuthorityComposition.pending(state, ProductionStationEnergy.record(state, operation.stationId()).id()))
             throw new IllegalArgumentException("station output loss cannot bypass a prepared pickup");
     }

@@ -53,7 +53,7 @@ public final class InternalShipmentStateSupport {
                 || claim == null || claim.purpose() != ClaimPurpose.INTERNAL_LOGISTICS
                 || !claim.claimantId().equals(grant.claimantId()) || !claim.economicOwnerId().equals(grant.claimantId())
                 || !claim.itemKind().equals(shipment.itemKind()) || !claim.lotQuantities().equals(receipt.lotQuantities())
-                || account == null || !account.custody().equals(new ResourceCustody.Container(shipment.receiver().containerId()))
+                || account == null || !account.custody().equals(shipment.receiver().custody())
                 || account.claimQuantities().getOrDefault(claim.id(), 0) != receipt.quantity())
             throw new IllegalArgumentException("internal stock receipt lost its retained owner, allocation or receiving custody");
         var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();

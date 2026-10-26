@@ -44,8 +44,8 @@ public final class FrontierV3EconomicCapacityDiagnostic {
             for (var process : capacities) {
                 processes.add("{\"id\":" + string(process.id()) + ",\"product\":" + string(process.product())
                         + ",\"output\":" + process.outputPerBatch() + ",\"inputs\":" + quantities(process.inputs())
-                        + ",\"heatPerRecipe\":" + process.heatPerBatch() + ",\"fuels\":" + quantities(process.fuels())
-                        + ",\"retainedHeat\":" + process.availableHeat() + ",\"maximumRecipes\":" + process.recipesAvailableBy(horizon)
+                        + ",\"heatPerRecipe\":" + process.burnTicksPerBatch() + ",\"fuels\":" + quantities(process.fuels())
+                        + ",\"retainedHeat\":" + process.availableFuelTicks() + ",\"maximumRecipes\":" + process.recipesAvailableBy(horizon)
                         + ",\"recipesPerOperation\":" + process.recipesPerOperation() + ",\"labourPerOperation\":" + process.labourTicksPerOperation()
                         + ",\"workers\":" + quantities(process.labourCapacity()) + ",\"firstOutputTicks\":" + process.firstOutputDelayTicks() + "}");
             }

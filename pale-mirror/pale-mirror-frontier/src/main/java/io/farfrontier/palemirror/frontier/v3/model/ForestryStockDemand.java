@@ -19,11 +19,19 @@ public final class ForestryStockDemand {
                     return (long) Math.min(target.expectedLogs(), state.forest().require(target.tree()).remaining());
                 }).orElse(0L)).sum();
     }
+    /** Read the settlement's accepted production ceiling without replanning the economy or inventing a current time. */
+    public static long target(FrontierWorldState state, SubjectId home, String kind) {
+        long target = state.bootstrap().ruleset().forestry().reserveItems();
+        if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().containsKey(kind))
+            target = Math.max(target, state.companies().goodsTrade().participants().economicState(home).accepted()
+                    .map(plan -> plan.productionCeilings().getOrDefault(kind, 0L)).orElse(0L));
+        return target;
+    }
     public static boolean requested(FrontierWorldState state, SubjectId home, String kind, Optional<SubjectId> completing) {
         if (!enabled(state, home)) return false;
         long held = held(state, home, kind), reserved = committed(state, home, kind, completing);
         var rules = state.bootstrap().ruleset().forestry();
         boolean ongoing = state.forest().work().values().stream().anyMatch(job -> job.home().equals(home));
-        return (ongoing || held < rules.resumeBelowItems()) && Math.addExact(held, reserved) < rules.reserveItems();
+        return (ongoing || held < rules.resumeBelowItems() || target(state, home, kind) > rules.reserveItems()) && Math.addExact(held, reserved) < target(state, home, kind);
     }
 }

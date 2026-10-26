@@ -15,7 +15,7 @@ final class InternalShipmentAuthorization extends SameOwnerShipmentAuthorization
                 || !claim.claimantId().equals(grant.claimantId()) || !claim.economicOwnerId().equals(grant.claimantId())
                 || !claim.itemKind().equals(shipment.itemKind()) || !claim.lotQuantities().equals(shipment.lotQuantities()))
             throw new IllegalArgumentException("internal shipment lost its exact same-owner allocation or endpoints");
-        if (admission && !ContainerStorageAdmission.receive(state, shipment.receiver().containerId(), shipment.itemKind(),
+        if (admission && !ContainerStorageAdmission.receive(state, (ResourceCustody.Container) shipment.receiver().custody(), shipment.itemKind(),
                 shipment.quantity(), Optional.empty()))
             throw new IllegalArgumentException("internal shipment has no receiving storage capacity for its exact load");
     }

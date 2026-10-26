@@ -108,6 +108,24 @@ final class FrontierWorldInitialState {
                         new InventoryCustody.ContainerSlot(depot, nextSlot++), definition.pristine()));
             }
         });
+        // Explicit minimal bootstrap for the accepted wood/handle cycle. Other equipment uses its existing genesis declaration.
+        if (bootstrap.ruleset().forestry().starterEquipment().isPresent()) for (var home : bootstrap.settlements()) {
+            if (bootstrap.ruleset().forestry().patches().stream().noneMatch(patch -> patch.knownBy().equals(home.id()))) continue;
+            var grant = bootstrap.ruleset().forestry().starterEquipment().orElseThrow();
+            var definition = bootstrap.ruleset().tools().require(grant.itemKind());
+            var depot = FrontierWorldState.depotId(home.id());
+            for (int worker = 0; worker < grant.quantity(); worker++) {
+                int slot = 0;
+                while (true) {
+                    var address = new InventoryCustody.ContainerSlot(depot, slot);
+                    if (items.values().stream().noneMatch(item -> item.custody().equals(address))) break;
+                    slot++;
+                }
+                var id = new SubjectId("item:bootstrap-forestry-axe-" + home.id().value().replace(':', '-') + "-" + worker);
+                items.put(id, new ExactItemStack(id, home.id(), definition.itemKind(), 1,
+                        new InventoryCustody.ContainerSlot(depot, slot), definition.pristine()));
+            }
+        }
         int stockIndex = 0;
         for (var stock : bootstrap.ruleset().initialSettlementStocks().stream()
                 .sorted(java.util.Comparator.comparing(InitialSettlementStock::canonicalText)).toList()) {

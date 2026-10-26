@@ -18,12 +18,12 @@ final class GrayboxForestryProduction {
         recipes.add(new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:make_iron_axe"),
                 ProductionStationSpec.Capability.FABRICATION,
                 new ProductionRecipe.Ingredient(Set.of("minecraft:iron_ingot"), 3),
-                new ProductionRecipe.Product(axe, 1), 200, ProductionRecipe.ProcessingMode.ATTENDED,
+                new ProductionRecipe.Product(axe, 1), true, ProductionRecipe.ProcessingMode.ATTENDED,
                 new ProductionRecipeOutcome.Individual()));
         recipes.add(new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:repair_iron_axe"),
                 ProductionStationSpec.Capability.FABRICATION,
                 new ProductionRecipe.Ingredient(Set.of("minecraft:iron_ingot"), 1),
-                new ProductionRecipe.Product(axe, 1), 100, ProductionRecipe.ProcessingMode.ATTENDED,
+                new ProductionRecipe.Product(axe, 1), true, ProductionRecipe.ProcessingMode.ATTENDED,
                 new ProductionRecipeOutcome.Repair(125)));
         var catalog = new ProductionCatalog(recipes, base.production().fuels(), base.production().equipment(),
                 base.production().automaticPolicies());

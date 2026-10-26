@@ -72,6 +72,27 @@ public final class MaterialContainerImage {
         }
     }
 
+    /** Material order inside a compartment is presentation; crossing a compartment is a real custody change. */
+    public static String fingerprint(String scopeKind, String containerId, ContainerCompartmentLayout layout, List<Slot> slots) {
+        if (slots.size() != layout.capacity()) throw new IllegalArgumentException("compartment image is incomplete");
+        var canonical = new StringBuilder(scopeKind).append('|').append(containerId).append('|');
+        for (var section : layout.sections().entrySet()) {
+            canonical.append(section.getKey().value()).append(':');
+            var totals = new TreeMap<String, Long>();
+            for (int index : section.getValue().stream().sorted().toList()) {
+                var item = checked(slots, index);
+                canonical.append(index).append(',');
+                if (item.fungible()) totals.merge(item.itemKind(), (long) item.count(), Math::addExact);
+                else if (!item.empty()) { canonical.append("exact@").append(index).append(':'); appendItem(canonical, item); }
+            }
+            totals.forEach((kind, quantity) -> canonical.append("stock:").append(kind).append(':').append(quantity).append('|'));
+        }
+        try {
+            return "sha256:" + java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+    }
+
     private static Slot checked(List<Slot> slots, int index) {
         Slot item = Objects.requireNonNull(slots.get(index), "material slot");
         if (item.index() != index) throw new IllegalArgumentException("material image slots are incomplete or unordered");

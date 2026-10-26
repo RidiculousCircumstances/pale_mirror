@@ -122,7 +122,7 @@ class ContainerPlayerEditProcessTest {
             }
             var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
             var nextEdit = new ContainerPlayerEditObserved(PLAYER, new UUID(0, 759), edit.members().stream()
-                    .map(m -> new ContainerPlayerEditObserved.Member(m.containerId(), m.accountId(), m.ownerId(), m.epoch(),
+                    .map(m -> new ContainerPlayerEditObserved.Member(m.containerId(), m.accounts(), m.ownerId(), m.epoch(),
                             m.after(), List.of(stack(m.containerId(), m.after().getFirst().quantity() + 1)))).toList(), Optional.empty());
             var nextCommand = new FrontierCommand(1, new CommandId("test:next-click"), command.worldId(), new Revision(100),
                     command.submittedAt(), command.actor(), command.causes(), nextEdit);
@@ -156,10 +156,10 @@ class ContainerPlayerEditProcessTest {
     }
     @Test void invalidSecondMemberCannotPublishFirstMemberAndEachNominalDimensionIsRequired() {
         var state = fixture(); var edit = gift(state); var right = edit.members().get(1);
-        var invalid = List.of(new ContainerPlayerEditObserved.Member(right.containerId(), right.accountId(), new SubjectId("settlement:foreign"), 1, right.before(), right.after()),
+        var invalid = List.of(new ContainerPlayerEditObserved.Member(right.containerId(), right.accounts(), new SubjectId("settlement:foreign"), 1, right.before(), right.after()),
                 new ContainerPlayerEditObserved.Member(right.containerId(), new SubjectId("custody:foreign"), right.ownerId(), 1, right.before(), right.after()),
-                new ContainerPlayerEditObserved.Member(right.containerId(), right.accountId(), right.ownerId(), 2, right.before(), right.after()),
-                new ContainerPlayerEditObserved.Member(right.containerId(), right.accountId(), right.ownerId(), 1, List.of(stack(RIGHT, 1)), right.after()));
+                new ContainerPlayerEditObserved.Member(right.containerId(), right.accounts(), right.ownerId(), 2, right.before(), right.after()),
+                new ContainerPlayerEditObserved.Member(right.containerId(), right.accounts(), right.ownerId(), 1, List.of(stack(RIGHT, 1)), right.after()));
         for (var forged : invalid) {
             var bad = new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(edit.members().getFirst(), forged), Optional.empty());
             assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, bad, command(bad)));
@@ -168,8 +168,8 @@ class ContainerPlayerEditProcessTest {
         assertFalse(state.inventory().fungibleResources().accounts().containsKey(ReferenceContainerCustody.scopeId(LEFT)));
         assertThrows(IllegalArgumentException.class, () -> ContainerPlayerEditProcess.reduce(state, new SubjectId("resident:foreign"), edit, 0));
         assertThrows(IllegalArgumentException.class, () -> new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(right, right), Optional.empty()));
-        assertThrows(IllegalArgumentException.class, () -> new ContainerPlayerEditObserved.Member(RIGHT, right.accountId(), right.ownerId(), 1, List.of(), List.of(stack(LEFT, 1))));
-        assertThrows(NullPointerException.class, () -> new ContainerPlayerEditObserved.Member(RIGHT, right.accountId(), null, 1, List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ContainerPlayerEditObserved.Member(RIGHT, right.accounts(), right.ownerId(), 1, List.of(), List.of(stack(LEFT, 1))));
+        assertThrows(NullPointerException.class, () -> new ContainerPlayerEditObserved.Member(RIGHT, right.accounts(), null, 1, List.of(), List.of()));
     }
     @Test void trackedPlayerReturnCanSplitAcrossMembersWithoutIssuingNewLotsOrChangingTitle() {
         var state = fixture(); var owner = state.inventory().containers().get(LEFT).ownerId();

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { zeroPlayerPerformance, zeroPlayerRejectedReceipt, zeroPlayerRequestReceipt } from '../src/zero-player-receipt.mjs';
 
-const queued = 'PMV3_DIAG {"kind":"status","status":"ok","fastForwardRequests":[{"requestId":1,"kind":"RELATIVE","requestedTicks":24000,"targetInstant":24001,"admittedCheckpointInstant":1,"reachedCheckpointInstant":null,"status":"QUEUED","reason":null}]}';
+const queued = 'PMV3_DIAG {"kind":"status","status":"ok","lastFastForwardRequest":{"requestId":1,"kind":"RELATIVE","requestedTicks":24000,"targetInstant":24001,"admittedCheckpointInstant":1,"reachedCheckpointInstant":null,"status":"QUEUED","reason":null}}';
 
 test('zero-player timeout preserves a queued server-owned request instead of inventing a terminal marker', () => {
   const receipt = zeroPlayerRequestReceipt(queued);

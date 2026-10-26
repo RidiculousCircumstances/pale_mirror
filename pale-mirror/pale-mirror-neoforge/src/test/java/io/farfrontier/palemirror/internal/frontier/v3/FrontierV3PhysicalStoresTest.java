@@ -35,7 +35,7 @@ class FrontierV3PhysicalStoresTest {
                 ResourceSiteKind.WHEAT_FIELD,FrontierResourceSitePlan.initialGrayboxLayout(slots));
     }
     private static FrontierV3DepotClickWitness click() {
-        return new FrontierV3DepotClickWitness(new SubjectId("container:1-depot"),new SubjectId("custody:container-1-depot"),
+        return new FrontierV3DepotClickWitness(new SubjectId("container:1-depot"),Map.of(ContainerSectionId.STOCK,new SubjectId("custody:container-1-depot")),
                 new SubjectId("settlement:1"),1,UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 UUID.fromString("00000000-0000-0000-0000-000000000002"),List.of(),Optional.empty());
     }
@@ -53,7 +53,7 @@ class FrontierV3PhysicalStoresTest {
                 ledger.worksite(worksite(FrontierV3WorksiteBlockWitness.Phase.PREPARED, Optional.empty())); return ledger;
             }, tag -> FrontierV3GrayboxLedger.load(tag, null), value -> ((FrontierV3GrayboxLedger) value).worksite(
                     worksite(FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED, Optional.of("effect:mine-1")))),
-            new Case("clicks", () -> { var value=FrontierV3DepotClickLedger.load(empty(4,"pending","completed"),null); value.prepare(click()); return value; },
+            new Case("clicks", () -> { var value=FrontierV3DepotClickLedger.load(empty(5,"pending","completed"),null); value.prepare(click()); return value; },
                 tag -> FrontierV3DepotClickLedger.load(tag,null), value -> ((FrontierV3DepotClickLedger)value).retire(click())),
             new Case("boards", () -> { var value=FrontierV3ObjectBoardLedger.load(empty(1,"claims"),null);
                 value.applied("structure:1-farm",17,UUID.randomUUID().toString()); return value; },
@@ -118,7 +118,7 @@ class FrontierV3PhysicalStoresTest {
         })).toList();
     }
     @Test void failingDiskFenceKeepsDirtyStateAndCannotAcknowledgeTheWitness() throws Exception {
-        var ledger=FrontierV3DepotClickLedger.load(empty(4,"pending","completed"),null);
+        var ledger=FrontierV3DepotClickLedger.load(empty(5,"pending","completed"),null);
         Path path=directory.resolve("failed.dat");
         var store=FrontierV3JournalStore.open(path,FrontierV3JournalStore.PHYSICAL);
         ledger.attachJournal(path,WORLD,DIMENSION,store); ledger.prepare(click()); Files.createDirectory(path);

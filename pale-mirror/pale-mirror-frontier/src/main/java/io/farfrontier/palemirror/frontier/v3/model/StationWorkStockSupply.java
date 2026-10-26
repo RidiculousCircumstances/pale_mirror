@@ -12,9 +12,9 @@ final class StationWorkStockSupply implements StockSupplyPort {
                     .map(plan -> plan.require(itemKind).protectedInput()).orElse(0L);
         }
         var recipe = BakeryRecipes.bread(state);
-        return recipe.ingredient().accepts(itemKind) ? Math.multiplyExact(
+        return recipe.singleIngredient().accepts(itemKind) ? Math.multiplyExact(
                 Math.ceilDiv(ProductionStockDemand.readSupply(state, owner, recipe.product().itemKind(), Optional.empty(), atTick).missing(),
-                        recipe.product().quantity()), recipe.ingredient().quantity()) : 0;
+                        recipe.product().quantity()), recipe.singleIngredient().quantity()) : 0;
     }
     @Override public List<Commitment> pending(FrontierWorldState state) {
         var result = new ArrayList<Commitment>();
@@ -28,6 +28,11 @@ final class StationWorkStockSupply implements StockSupplyPort {
             var owner = job.rights().resourceOwner().id();
             if (job.stationWork().flatMap(StationWorkState::maintenanceTarget).isEmpty())
                 result.add(new Commitment(job.id(), owner, job.outputItemKind(), job.outputCount(), 0));
+            if (job.stationWork().isPresent() && (job.inputHold() instanceof ProductionInputHold.FungibleCold || job.inputHold() instanceof ProductionInputHold.FungibleBound)) {
+                StationWorkMaterialAccounting.plannedKinds(job).forEach((kind, quantity) ->
+                        result.add(new Commitment(job.id(), owner, kind, 0, quantity)));
+                continue;
+            }
             long input = switch (job.inputHold()) {
                 case ProductionInputHold.Cold ignored -> 0; // Removed from inventory at admission already.
                 case ProductionInputHold.Materialized exact -> Optional.ofNullable(state.inventory().items().get(exact.itemId()))

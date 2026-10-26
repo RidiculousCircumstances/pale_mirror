@@ -17,17 +17,18 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 /** Minimal familiar graybox UI: ingredient above fuel, product to the right. */
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class ProductionBenchScreen extends AbstractContainerScreen<ProductionBenchMenu> {
-    private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("textures/gui/container/furnace.png");
-    private Button startButton;
-    public ProductionBenchScreen(ProductionBenchMenu menu, Inventory inventory, Component title) { super(menu, inventory, title); }
+        private Button startButton;
+    public ProductionBenchScreen(ProductionBenchMenu menu, Inventory inventory, Component title) {
+        super(menu, inventory, title); imageHeight = 201; inventoryLabelY = 107;
+    }
     @Override protected void init() {
         super.init();
         startButton = addRenderableWidget(Button.builder(Component.translatable("container.pale_mirror.production_bench.start"),
                 button -> { if (minecraft != null && minecraft.gameMode != null) minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 0); })
-                .bounds(leftPos + 84, topPos + 58, 80, 18).build());
+                .bounds(leftPos + 90, topPos + 78, 76, 18).build());
         addRenderableWidget(Button.builder(Component.literal(">"), button -> {
             if (minecraft != null && minecraft.gameMode != null) minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 1);
-        }).bounds(leftPos + 148, topPos + 33, 16, 18).build());
+        }).bounds(leftPos + 148, topPos + 35, 16, 18).build());
     }
     @Override protected void containerTick() {
         super.containerTick();
@@ -36,20 +37,27 @@ public final class ProductionBenchScreen extends AbstractContainerScreen<Product
     @SubscribeEvent public static void register(RegisterMenuScreensEvent event) {
         event.register(PaleMirrorProductionStations.BENCH_MENU.get(), ProductionBenchScreen::new);
         event.register(PaleMirrorProductionStations.FORGE_MENU.get(), ProductionBenchScreen::new);
+        event.register(PaleMirrorProductionStations.WOODWORKING_MENU.get(), ProductionBenchScreen::new);
     }
     @Override protected void renderBg(GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
-        graphics.blit(BACKGROUND, leftPos, topPos, 0, 0, imageWidth, imageHeight);
-        if (menu.hasMaintenancePort()) graphics.blit(BACKGROUND, leftPos + 29, topPos + 52, 55, 52, 18, 18);
+        graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xffc6c6c6);
+        graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + 2, 0xffffffff);
+        graphics.fill(leftPos, topPos + imageHeight - 2, leftPos + imageWidth, topPos + imageHeight, 0xff555555);
+        for (var slot : menu.slots) {
+            int x = leftPos + slot.x, y = topPos + slot.y;
+            graphics.fill(x - 1, y - 1, x + 17, y + 17, 0xff373737);
+            graphics.fill(x, y, x + 17, y + 17, 0xffffffff);
+            graphics.fill(x, y, x + 16, y + 16, 0xff8b8b8b);
+        }
         int progress = Math.clamp(menu.progressPermille(), 0, 1_000);
-        graphics.fill(leftPos + 79, topPos + 34, leftPos + 79 + progress * 24 / 1_000, topPos + 38, 0xffddb94c);
-        graphics.drawString(font, Component.literal("Heat"), leftPos + 8, topPos + 17, 0xff404040, false);
-        graphics.drawString(font, Component.literal(Long.toString(menu.storedHeat())), leftPos + 8, topPos + 29, 0xff404040, false);
+        graphics.fill(leftPos + 88, topPos + 42, leftPos + 88 + progress * 24 / 1_000, topPos + 46, 0xffb08020);
+        graphics.drawString(font, Component.literal("Burn: " + menu.remainingBurnTicks()), leftPos + 90, topPos + 18, 0xff404040, false);
         graphics.drawString(font, Component.translatable("container.pale_mirror.production_bench.status." + menu.status()),
-                leftPos + 84, topPos + 17, 0xff404040, false);
+                leftPos + 8, topPos + 99, 0xff404040, false);
         var product = new net.minecraft.world.item.ItemStack(net.minecraft.core.registries.BuiltInRegistries.ITEM.byId(menu.productRegistryId()));
         if (!product.isEmpty()) {
-            graphics.renderFakeItem(product, leftPos + 130, topPos + 35);
-            if (mouseX >= leftPos + 130 && mouseX < leftPos + 147 && mouseY >= topPos + 35 && mouseY < topPos + 52)
+            graphics.renderFakeItem(product, leftPos + 120, topPos + 58);
+            if (mouseX >= leftPos + 120 && mouseX < leftPos + 137 && mouseY >= topPos + 58 && mouseY < topPos + 75)
                 graphics.renderTooltip(font, Component.translatable(menu.repairRecipe()
                         ? "container.pale_mirror.production_bench.repair" : "container.pale_mirror.production_bench.make", product.getHoverName()), mouseX, mouseY);
         }

@@ -10,13 +10,19 @@ public record ContainerPlayerEditObserved(UUID playerId, UUID interactionId, Lis
     public ContainerPlayerEditObserved(UUID playerId, UUID interactionId, List<Member> members, Optional<PlayerReturn> returning) {
         this(playerId, interactionId, members, returning, Optional.empty());
     }
-    public record Member(SubjectId containerId, SubjectId accountId, SubjectId ownerId, long epoch,
+    public record Member(SubjectId containerId, Map<ContainerSectionId, SubjectId> accounts, SubjectId ownerId, long epoch,
             List<FungiblePhysicalObservation.Stack> before, List<FungiblePhysicalObservation.Stack> after) {
         public Member {
-            Objects.requireNonNull(containerId); Objects.requireNonNull(accountId); Objects.requireNonNull(ownerId);
+            Objects.requireNonNull(containerId); accounts = Map.copyOf(accounts); Objects.requireNonNull(ownerId);
+            if (accounts.isEmpty() || accounts.size() > 4 || new HashSet<>(accounts.values()).size() != accounts.size())
+                throw new IllegalArgumentException("composed member lacks distinct compartment account declarations");
             before = List.copyOf(before); after = List.copyOf(after);
             if (epoch < 1) throw new IllegalArgumentException("composed edit lacks member custody epoch");
             validate(containerId, before); validate(containerId, after);
+        }
+        public Member(SubjectId container, SubjectId account, SubjectId owner, long epoch,
+                List<FungiblePhysicalObservation.Stack> before, List<FungiblePhysicalObservation.Stack> after) {
+            this(container, Map.of(ContainerSectionId.STOCK, account), owner, epoch, before, after);
         }
         private static void validate(SubjectId container, List<FungiblePhysicalObservation.Stack> stacks) {
             if (stacks.size() > 54 || stacks.stream().map(FungiblePhysicalObservation.Stack::address).distinct().count() != stacks.size()
@@ -38,7 +44,8 @@ public record ContainerPlayerEditObserved(UUID playerId, UUID interactionId, Lis
         members = List.copyOf(members);
         if (members.isEmpty() || members.size() > 54
                 || members.stream().map(Member::containerId).distinct().count() != members.size()
-                || members.stream().map(Member::accountId).distinct().count() != members.size())
+                || members.stream().flatMap(member -> member.accounts().values().stream()).distinct().count()
+                    != members.stream().mapToLong(member -> member.accounts().size()).sum())
             throw new IllegalArgumentException("composed edit requires distinct explicitly declared members");
         if (exactChange.isPresent()) {
             if (returning.isPresent()) throw new IllegalArgumentException("mixed individual and fungible player return");

@@ -15,7 +15,7 @@ final class ForestryEquipmentDemand implements EquipmentDemandPort {
             var rules = state.bootstrap().ruleset().forestry();
             var kinds = rules.harvests().stream().map(profile -> profile.outputItem()).collect(java.util.stream.Collectors.toSet());
             long missing = kinds.stream().mapToLong(kind -> ForestryStockDemand.requested(state, home, kind, Optional.empty())
-                    ? Math.max(0, rules.reserveItems() - ForestryStockDemand.held(state, home, kind)) : 0).sum();
+                    ? Math.max(0, ForestryStockDemand.target(state, home, kind) - ForestryStockDemand.held(state, home, kind)) : 0).sum();
             if (missing == 0) return List.of();
             int concurrent = rules.workersPerSettlement();
             long wear = Math.max(concurrent, Math.multiplyExact(missing, rules.tool().wear()));

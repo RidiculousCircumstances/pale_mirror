@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotCrashBoundary, pilotDiagnosticActionStep, pilotFailureFromLine, pilotServerPid, pilotServerQuarantineFailure, pilotServerReady, restartSegments, scenarioDeadlineMs, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
-import { decodeRconFrames, encodeRconFrame, requestRconQuery } from '../src/rcon.mjs';
+import { decodeRconFrames, encodeRconFrame, requestRconAdvance, requestRconQuery } from '../src/rcon.mjs';
 
 const scenario = {
   schema: 1,
@@ -550,4 +550,44 @@ test('F0.3 abrupt player recovery re-enters ordinary source demand before custod
   assert.deepEqual(segments.after.setup, [{ type: 'visit', dimension: 'pale_mirror:frontier_graybox',
     position: { x: -340, y: 65, z: -329 }, settleMs: 1000 }]);
   assert.equal(segments.after.actions[0].type, 'wait_until_diagnostic');
+});
+
+
+test('zero-player advance retains the connection until server admission, not transport handoff', async () => {
+  const sockets = new Set();
+  const server = createServer(socket => {
+    sockets.add(socket); socket.on('close', () => sockets.delete(socket));
+    let bytes = Buffer.alloc(0);
+    socket.on('data', chunk => {
+      bytes = Buffer.concat([bytes, chunk]);
+      const decoded = decodeRconFrames(bytes); bytes = decoded.tail;
+      for (const frame of decoded.frames) {
+        if (frame.id === 71_001) socket.write(encodeRconFrame(71_001, 2, ''));
+        if (frame.id === 71_002) {
+          assert.equal(frame.payload, 'pale_mirror v3 advance 24000');
+          setImmediate(() => socket.write(encodeRconFrame(71_002, 0,
+            'Queued Frontier v3 fast-forward request=7 RELATIVE status=QUEUED requestedTicks=24000 target=24001')));
+        }
+      }
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const reply = await requestRconAdvance({ port: server.address().port, password: 'test-only',
+      command: 'pale_mirror v3 advance 24000' });
+    assert.match(reply, /request=7 RELATIVE status=QUEUED/);
+    await assert.rejects(requestRconAdvance({ port: server.address().port, password: 'test-only', command: 'stop' }), /invalid disposable advance/);
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+
+test('persistent client deadline includes the declared disconnected COLD and restart interval', () => {
+  const value = { ...scenario, restart: { mode: 'graceful', afterAction: 1,
+    zeroPlayerAdvanceTicks: 6000, zeroPlayerTimeoutMs: 900000, zeroPlayerSettleMs: 35000 } };
+  assert.doesNotThrow(() => validateScenario(value));
+  assert.ok(scenarioDeadlineMs(value) >= scenarioDeadlineMs(scenario) + 935_000,
+    'the complete declared COLD wait and demand-release interval must fit');
 });

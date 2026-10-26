@@ -35,8 +35,8 @@ public record ShipmentStorageRetargeted(SubjectId shipmentId, long expectedRevis
             throw new IllegalArgumentException("replacement storage has stale capacity, filter or owner");
         ResourceSourceComposition.knowledge(state, current.sender(), destination).requireRoute(
                 route.map(PedestrianRouteReceipt::route).orElseGet(() -> List.of(origin)));
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, destination.containerId()).map(CustodyAccount::id)
-                .orElseGet(() -> ReferenceContainerCustody.scopeId(destination.containerId()));
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, destination.containerId(), ((ResourceCustody.Container) destination.custody()).section()).map(CustodyAccount::id)
+                .orElseGet(() -> ContainerResourceAccounts.id((ResourceCustody.Container) destination.custody()));
         return state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().replace(current, current.retargetStorage(destination, account))));
     }
     public static boolean unbegun(Shipment shipment) {

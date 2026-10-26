@@ -18,7 +18,7 @@ final class BakeryHotEffectObservedCodec implements PayloadCodec {
         output.writeByte(value.phase().wireTag());
         output.writeInt(value.observedWorker().x()); output.writeInt(value.observedWorker().y()); output.writeInt(value.observedWorker().z());
         output.writeLong(value.sourceEpoch()); output.writeLong(value.destinationEpoch());
-        PhysicalObservationStackCodec.writeStacks(output, value.remainingSource()); PhysicalObservationStackCodec.writeStacks(output, value.destination());
+        PhysicalObservationStackCodec.writeStacks(output, value.remainingSource()); PhysicalObservationStackCodec.writeStacks(output, value.destination()); output.writeLong(value.workflowOrdinal());
     }
     @Override public FrontierPayload decode(byte[] bytes) {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, BakeryHotEffectObservedCodec::read);
@@ -29,7 +29,7 @@ final class BakeryHotEffectObservedCodec implements PayloadCodec {
                 new SceneLeaseId(FrontierWorldStateCodec.readString(input)),
                 StationWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
-                input.readLong(), input.readLong(), PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input));
+                input.readLong(), input.readLong(), PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input), input.readLong());
     }
 
 }

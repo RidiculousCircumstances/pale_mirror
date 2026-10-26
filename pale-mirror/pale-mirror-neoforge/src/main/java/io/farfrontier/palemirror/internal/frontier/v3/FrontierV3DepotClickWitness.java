@@ -9,12 +9,14 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.List;
+import java.util.Map;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSectionId;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 /** Pre-effect member admission. The composed transaction owns the one captured outcome. */
-record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, SubjectId ownerId,
+record FrontierV3DepotClickWitness(SubjectId containerId, Map<ContainerSectionId, SubjectId> accounts, SubjectId ownerId,
                                   long authorityEpoch, UUID playerId, UUID interactionId,
                                   List<FungiblePhysicalObservation.Stack> before, Optional<ReturnSource> returnSource) {
     record ReturnSource(SubjectId bindingId, SubjectId accountId, long epoch, int playerSlot,
@@ -28,7 +30,8 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
 
     FrontierV3DepotClickWitness {
         Objects.requireNonNull(containerId, "click container");
-        Objects.requireNonNull(accountId, "click account");
+        accounts = Map.copyOf(accounts);
+        if (accounts.isEmpty() || accounts.size() > 4) throw new IllegalArgumentException("missing click compartments");
         Objects.requireNonNull(ownerId, "click owner");
         Objects.requireNonNull(playerId, "click player");
         Objects.requireNonNull(interactionId, "click id");
@@ -42,7 +45,12 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putString("container", containerId.value()); tag.putString("account", accountId.value());
+        tag.putString("container", containerId.value());
+        var sections = new ListTag();
+        for (var entry : new java.util.TreeMap<>(accounts).entrySet()) {
+            var section = new CompoundTag(); section.putString("section", entry.getKey().value()); section.putString("account", entry.getValue().value()); sections.add(section);
+        }
+        tag.put("accounts", sections);
         tag.putString("owner", ownerId.value()); tag.putLong("epoch", authorityEpoch);
         tag.putUUID("player", playerId); tag.putUUID("interaction", interactionId);
         tag.put("before", stacks(before));
@@ -57,7 +65,14 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
 
     static FrontierV3DepotClickWitness read(CompoundTag tag) {
         SubjectId container = new SubjectId(tag.getString("container"));
-        return new FrontierV3DepotClickWitness(container, new SubjectId(tag.getString("account")),
+        var sections = tag.getList("accounts", Tag.TAG_COMPOUND); var accounts = new java.util.TreeMap<ContainerSectionId, SubjectId>();
+        if (sections.isEmpty() || sections.size() > 4) throw new IllegalArgumentException("invalid click compartments");
+        for (int i = 0; i < sections.size(); i++) {
+            var section = sections.getCompound(i);
+            if (accounts.put(new ContainerSectionId(section.getString("section")), new SubjectId(section.getString("account"))) != null)
+                throw new IllegalArgumentException("duplicate click compartment");
+        }
+        return new FrontierV3DepotClickWitness(container, accounts,
                 new SubjectId(tag.getString("owner")), tag.getLong("epoch"), tag.getUUID("player"),
                 tag.getUUID("interaction"), readStacks(container, tag.getList("before", Tag.TAG_COMPOUND)),
                 tag.contains("returnSource", Tag.TAG_COMPOUND)

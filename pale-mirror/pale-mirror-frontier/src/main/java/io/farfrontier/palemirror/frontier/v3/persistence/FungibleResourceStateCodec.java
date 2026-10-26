@@ -117,7 +117,7 @@ final class FungibleResourceStateCodec {
 
     private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
         switch (custody) {
-            case ResourceCustody.Container container -> { output.writeByte(0); writeString(output, container.containerId().value()); }
+            case ResourceCustody.Container container -> { output.writeByte(0); writeString(output, container.containerId().value()); writeString(output, container.section().value()); }
             case ResourceCustody.Player player -> { output.writeByte(1); writeString(output, player.playerId().toString()); }
             case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeString(output, cargo.cargoId().value()); }
             case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
@@ -131,7 +131,7 @@ final class FungibleResourceStateCodec {
 
     private static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
-            case 0 -> new ResourceCustody.Container(new SubjectId(readString(input)));
+            case 0 -> new ResourceCustody.Container(new SubjectId(readString(input)), new ContainerSectionId(readString(input)));
             case 1 -> new ResourceCustody.Player(UUID.fromString(readString(input)));
             case 2 -> new ResourceCustody.Cargo(new SubjectId(readString(input)));
             case 3 -> new ResourceCustody.WorldCarrier(UUID.fromString(readString(input)));

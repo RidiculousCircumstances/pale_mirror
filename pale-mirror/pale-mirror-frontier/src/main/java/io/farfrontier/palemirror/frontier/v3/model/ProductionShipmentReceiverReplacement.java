@@ -35,11 +35,8 @@ final class ProductionShipmentReceiverReplacement implements ShipmentReceiverRep
         var record = state.inventory().containers().get(next.containerId());
         if (record == null || !record.ownerId().equals(next.settlementId()) || !record.productionStation().equals(Optional.of(next.spec()))) return false;
         ShipmentEndpointComposition.validate(state, next);
-        try {
-            if (ProductionStationRecipe.portForItemKind(state.bootstrap().ruleset().production(), next.spec(), shipment.itemKind())
-                    != next.spec().slot(next.port())) return false;
-        } catch (IllegalArgumentException unsupported) { return false; }
-        return ContainerStorageAdmission.receive(state, next.containerId(), shipment.itemKind(), shipment.quantity(), Optional.empty());
+        if (!ProductionStationRecipe.accepts(state.bootstrap().ruleset().production(), next.spec(), next.spec().section(next.port()), shipment.itemKind())) return false;
+        return ContainerStorageAdmission.receive(state, next.custody(), shipment.itemKind(), shipment.quantity(), Optional.empty());
     }
     private ProductionShipmentReceiverReplacement() { }
 }

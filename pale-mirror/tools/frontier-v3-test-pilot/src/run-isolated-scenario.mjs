@@ -8,7 +8,7 @@ import { createConnection } from 'node:net';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments, scenarioDeadlineMs } from './scenario.mjs';
-import { requestRconCommand, requestRconQuery, requestRconSaveFlush, requestRconStop } from './rcon.mjs';
+import { requestRconAdvance, requestRconQuery, requestRconSaveFlush, requestRconStop } from './rcon.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
@@ -26,7 +26,15 @@ import { persistentRecoveryMetadata, resolveIsolatedScenarioOuterAttempt } from 
 import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeArmed, stopPilotNaturalDemandCarrier } from './natural-demand-episode.mjs';
 import { snapshotPlayerSave } from './player-save-snapshot.mjs';
 import { zeroPlayerBoundedness } from './zero-player-boundedness.mjs';
-import { zeroPlayerPerformance, zeroPlayerRejectedReceipt, zeroPlayerRequestReceipt } from './zero-player-receipt.mjs';
+import { zeroPlayerPerformance, zeroPlayerRequestReceipt } from './zero-player-receipt.mjs';
+
+class ZeroPlayerPreludeTimeout extends Error {
+  constructor(evidence) {
+    super(`zero-player prelude timed out with request=${evidence.terminalReceipt.requestId} status=${evidence.terminalReceipt.status}`);
+    this.name = 'ZeroPlayerPreludeTimeout'; this.evidence = evidence;
+  }
+}
+
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -557,7 +565,14 @@ async function runZeroPlayerPrelude(server, declaration) {
   const clientSegmentsAtAdmission = clientSegments.length;
   let before = server.outputRevision();
   const outputOffset = server.output().length;
-  await requestRconCommand({ port: server.rconPort, password: server.rconPassword, command });
+  const admission = await requestRconAdvance({ port: server.rconPort, password: server.rconPassword, command });
+  const requestId = Number(/request=([0-9]+)/.exec(admission)[1]);
+  const readReceipt = async () => {
+    const receipt = zeroPlayerRequestReceipt(await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
+      command: 'pale_mirror v3 inspect status' }));
+    if (receipt.requestId !== requestId) throw new Error('zero-player interval lost its exact admitted request');
+    return receipt;
+  };
   const deadline = Date.now() + declaration.timeoutMs;
   while (Date.now() < deadline) {
     // A restart COLD interlude is the second such request in one server lifetime.  Only the
@@ -569,12 +584,14 @@ async function runZeroPlayerPrelude(server, declaration) {
       if (clientSegmentsDuringInterval !== 0) {
         throw new Error('ordinary client segment started during zero-player canonical interval');
       }
+      const terminalReceipt = await readReceipt();
+      if (!['COMPLETED', 'HELD'].includes(terminalReceipt.status)) throw new Error('completion log lacks its terminal server receipt');
       const performance = zeroPlayerPerformance(await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
         command: 'pale_mirror v3 inspect performance' }));
       return Object.freeze({ status: absolute ? 'held' : 'completed', ...(absolute ? { targetInstant: declaration.targetInstant, holdAtTarget: true }
         : { advanceTicks: declaration.advanceTicks }), command,
         clientSegmentsBeforeCompletion: clientSegmentsDuringInterval,
-        clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid,
+        clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid, terminalReceipt,
         boundedness: zeroPlayerBoundedness(server.output().slice(outputOffset)), performance });
     }
     // A physically pending operation is a truthful COLD boundary, never a reason to leave a
@@ -588,8 +605,7 @@ async function runZeroPlayerPrelude(server, declaration) {
       if (expectedTerminalStatus !== 'REJECTED') {
         throw new Error('zero-player prelude was rejected because physical work was pending at the canonical interval boundary');
       }
-      const terminal = zeroPlayerRejectedReceipt(await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
-        command: 'pale_mirror v3 inspect fast_forward' }));
+      const terminal = await readReceipt();
       if (terminal.status !== 'REJECTED' || (declaration.expectReasonContains !== undefined && !terminal.reason.includes(declaration.expectReasonContains))) {
         throw new Error('zero-player prelude rejection lacks its declared causal terminal receipt');
       }
@@ -607,23 +623,14 @@ async function runZeroPlayerPrelude(server, declaration) {
   // Vanilla's RCON command bridge is one server-thread control plane.  These are distinct
   // bounded diagnostics, so serialise them rather than letting two simultaneous TCP clients
   // manufacture a missing response while the request itself remains observable.
-  const terminalResponse = await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
-    command: 'pale_mirror v3 inspect fast_forward' });
+  const terminalReceipt = await readReceipt();
   const performanceResponse = await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
     command: 'pale_mirror v3 inspect performance' });
-  const terminalReceipt = zeroPlayerRequestReceipt(terminalResponse);
   const performance = zeroPlayerPerformance(performanceResponse);
   throw new ZeroPlayerPreludeTimeout(Object.freeze({ status: 'timeout', ...(absolute ? { targetInstant: declaration.targetInstant, holdAtTarget: true }
     : { advanceTicks: declaration.advanceTicks }), command, clientSegmentsBeforeCompletion: clientSegments.length - clientSegmentsAtAdmission,
     clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid, terminalReceipt,
     boundedness: zeroPlayerBoundedness(server.output().slice(outputOffset)), performance }));
-}
-
-class ZeroPlayerPreludeTimeout extends Error {
-  constructor(evidence) {
-    super(`zero-player prelude timed out with request=${evidence.terminalReceipt.requestId} status=${evidence.terminalReceipt.status}`);
-    this.name = 'ZeroPlayerPreludeTimeout'; this.evidence = evidence;
-  }
 }
 
 /** Declared no-player wall interval lets vanilla retire the departed client's ordinary holders. */

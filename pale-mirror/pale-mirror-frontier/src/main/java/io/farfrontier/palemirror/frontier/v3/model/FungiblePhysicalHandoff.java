@@ -186,16 +186,21 @@ public final class FungiblePhysicalHandoff {
     public static FungibleResourceHandoffObserved returnObserved(FungibleResourceLedger ledger,
             PhysicalStackBinding source, int remainingQuantity, SubjectId destinationId,
             SubjectId containerId, long destinationEpoch, List<FungiblePhysicalObservation.Stack> observed) {
+        return returnObserved(ledger, source, remainingQuantity, destinationId, new ResourceCustody.Container(containerId), destinationEpoch, observed);
+    }
+    public static FungibleResourceHandoffObserved returnObserved(FungibleResourceLedger ledger,
+            PhysicalStackBinding source, int remainingQuantity, SubjectId destinationId,
+            ResourceCustody.Container holder, long destinationEpoch, List<FungiblePhysicalObservation.Stack> observed) {
         if (!(source.address() instanceof PhysicalStackAddress.PlayerSlot)
                 || !source.claimQuantities().isEmpty() || remainingQuantity < 0 || remainingQuantity >= source.quantity()
                 || !current(ledger, source.accountId(), source.authorityEpoch()).contains(source))
             throw new IllegalArgumentException("player return lacks its exact current unclaimed source");
         CustodyAccount destination = ledger.accounts().get(destinationId);
-        if (destination != null && !destination.custody().equals(new ResourceCustody.Container(containerId)))
+        if (destination != null && !destination.custody().equals(holder))
             throw new IllegalArgumentException("player return has a foreign destination");
         Map<SubjectId, Integer> retained = first(source.lotQuantities(), remainingQuantity);
         Map<SubjectId, Integer> moved = subtract(source.lotQuantities(), retained);
-        CustodyAccount after = new CustodyAccount(destinationId, new ResourceCustody.Container(containerId),
+        CustodyAccount after = new CustodyAccount(destinationId, holder,
                 add(destination == null ? Map.of() : destination.lotQuantities(), moved),
                 destination == null ? Map.of() : destination.claimQuantities());
         List<PhysicalStackBinding> remaining = new ArrayList<>();

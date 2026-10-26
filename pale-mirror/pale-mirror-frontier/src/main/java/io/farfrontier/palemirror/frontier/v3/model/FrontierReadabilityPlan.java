@@ -348,12 +348,12 @@ public final class FrontierReadabilityPlan {
 
     private static BlockPosition structureBoardPosition(SettlementStructure structure, StructureCondition condition) {
         int depth = switch (structure.kind()) {
-            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, DEPOT -> 7;
+            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT -> 7;
             case HOUSING, INFIRMARY -> 6;
         };
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
             case HALL -> 5;
-            case DEPOT, WORKSHOP, SMELTERY, FORGE -> 4;
+            case DEPOT, WORKSHOP, SMELTERY, FORGE, WOODSHOP -> 4;
             default -> 3;
         };
         return structure.anchor().offset(0, Math.max(2, height - 1), -depth / 2 - 1);
@@ -403,6 +403,7 @@ public final class FrontierReadabilityPlan {
             case WORKSHOP -> "BAKERY";
             case SMELTERY -> "SMELTERY";
             case FORGE -> "FORGE";
+            case WOODSHOP -> "WOODSHOP";
             case DEPOT -> "DEPOT";
             case INFIRMARY -> "INFIRMARY";
         };
@@ -539,7 +540,7 @@ public final class FrontierReadabilityPlan {
         }
         if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id(), atTick);
         if (structure.kind() == StructureKind.WORKSHOP) return workshopText(state, settlement, condition);
-        if (structure.kind() == StructureKind.SMELTERY) return condition != StructureCondition.INTACT
+        if (ProductionFacilityLayout.supports(structure.kind())) return condition != StructureCondition.INTACT
                 ? conditionText(condition) : AutomaticStationReadability.text(state, structure, atTick);
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
         int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());

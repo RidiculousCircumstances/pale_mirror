@@ -18,27 +18,23 @@ public record ProductionStationProgressed(SubjectId stationId, ProductionOperati
     @Override public String type() { return TYPE; }
     public static Optional<ProductionStationProgressed> automatic(FrontierWorldState state, SubjectId stationId, long tick) {
         var machine = state.productionStations().require(stationId);
-        return machine.operation().filter(operation -> !operation.transformed()
-                && (state.bootstrap().ruleset().production().require(operation.recipeId()).processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC
-                    || operation.initiator() instanceof ProductionOperation.PlayerInitiator))
-                .filter(operation -> operation.progress().filter(WorkProgress::complete).isEmpty())
-                .filter(operation -> !(operation.initiator() instanceof ProductionOperation.PlayerInitiator)
-                        || state.bootstrap().ruleset().production().require(operation.recipeId()).processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC
-                        || operation.progress().filter(WorkProgress::running).isPresent())
-                .filter(operation -> operation.progress().filter(progress -> progress.running() && tick < progress.activeUntilTick()).isEmpty())
-                .filter(operation -> {
-                    var container = state.inventory().containers().values().stream().filter(record ->
-                            record.productionStation().filter(spec -> spec.id().equals(stationId)).isPresent()).findFirst().orElseThrow();
-                    return !ReferenceContainerCustody.blocksCanonicalUse(state, container.id());
-                })
-                .map(operation -> new ProductionStationProgressed(stationId, operation.id(), machine.revision(), operation.progress(),
-                        ProductionStationClock.next(state, operation, tick, Optional.empty())));
+        if (machine.pendingFuel().isPresent() || machine.pendingRecipe().isPresent()) return Optional.empty();
+        var operation = machine.operation().orElse(null);
+        if (operation == null || operation.transformed() || operation.complete()) return Optional.empty();
+        var record = ProductionStationEnergy.record(state, stationId);
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) return Optional.empty();
+        var attendance = operation.attendance().filter(value -> value.permittedUntilTick() > tick);
+        if (!ProductionStationClock.updateNeeded(state, operation, tick, attendance)) return Optional.empty();
+        var next = ProductionStationClock.next(state, operation, tick, attendance);
+        if (operation.progress().equals(Optional.of(next))) return Optional.empty();
+        return Optional.of(new ProductionStationProgressed(stationId, operation.id(), machine.revision(), operation.progress(), next));
     }
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ProductionStationProgressed event) {
         if (!event.stationId().equals(subject)
                 || !automatic(state, subject, event.next().evaluatedAtTick()).equals(Optional.of(event)))
             throw new IllegalArgumentException("station processing boundary has stale operation, revision or clock");
         var operation = state.productionStations().require(subject).operation().orElseThrow();
-        return state.withChanges(FrontierWorldStateUpdate.begin().productionStations(ProductionStationProcessing.progress(state, operation, event.next())));
+        return state.withChanges(FrontierWorldStateUpdate.begin().productionStations(ProductionStationProcessing.progress(
+                state, operation, event.next(), operation.attendance().filter(value -> value.permittedUntilTick() > event.next().evaluatedAtTick()))));
     }
 }

@@ -52,10 +52,8 @@ public final class StationWorkDeathResources {
         if (work.phase() == StationWorkState.Phase.PROCESSING || work.phase() == StationWorkState.Phase.STATION_UNLOAD) {
             var abandoned = ProductionStationProcessing.abandon(state, StationWorkOperation.require(state, job));
             inventory = abandoned.inventory(); machines = abandoned.machines();
-        } else if (job.inputHold() instanceof ProductionInputHold.FungibleCold cold) {
-            inventory = releaseInput(inventory, cold.claimId(), job);
-        } else if (job.inputHold() instanceof ProductionInputHold.FungibleBound bound) {
-            inventory = releaseInput(inventory, bound.claimId(), job);
+        } else {
+            for (var claim : StationWorkMaterialAccounting.claims(job)) inventory = releaseInput(inventory, claim, job);
         }
         if (receipt.ground().isPresent()) {
             if (StationWorkCargo.exact(state, job)) {

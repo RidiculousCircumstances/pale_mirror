@@ -20,6 +20,7 @@ public record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjec
         if (kind != StrategicObjectiveKind.HIVE_GROW_ORGANISM
                 && kind != StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT
                 && kind != StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD && kind != StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION && kind != StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT
+                && kind != StrategicObjectiveKind.SETTLEMENT_PRODUCE_STOCK
                 && kind != StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE && kind != StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS
                 && kind != StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE && infectionTarget.isEmpty()) {
             throw new IllegalArgumentException("infection strategic objective requires an infection target");
@@ -27,6 +28,7 @@ public record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjec
         if ((kind == StrategicObjectiveKind.HIVE_GROW_ORGANISM
                 || kind == StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT
                 || kind == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD || kind == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION || kind == StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT
+                || kind == StrategicObjectiveKind.SETTLEMENT_PRODUCE_STOCK
                 || kind == StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE || kind == StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS
                 || kind == StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE) && infectionTarget.isPresent()) {
             throw new IllegalArgumentException("hive growth objective cannot carry an infection target");

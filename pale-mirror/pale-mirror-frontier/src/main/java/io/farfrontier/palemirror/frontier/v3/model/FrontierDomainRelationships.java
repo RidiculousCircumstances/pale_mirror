@@ -596,6 +596,13 @@ public final class FrontierDomainRelationships {
             else edge(edges, Kind.JOB_WORKER, owner, owner, subject(EntityKind.RESIDENT, job.workerId()), Lifecycle.ACTIVE, job.id().value());
             job.inputQuantities().keySet().stream().sorted().forEach(inputId ->
                     edge(edges, Kind.JOB_INPUT, owner, owner, subject(job.inputHold().resourceEntityKind(), inputId), Lifecycle.ACTIVE, job.id().value()));
+            job.stationWork().ifPresent(work -> {
+                var materials = new java.util.TreeSet<SubjectId>();
+                work.materials().queued().stream().filter(input -> !input.withdrawn()).forEach(input -> materials.addAll(input.lots().keySet()));
+                work.materials().loaded().forEach(input -> materials.addAll(input.lots().keySet()));
+                materials.removeAll(job.inputQuantities().keySet());
+                materials.forEach(input -> edge(edges, Kind.JOB_INPUT, owner, owner, subject(EntityKind.RESOURCE_LOT, input), Lifecycle.ACTIVE, job.id().value()));
+            });
             edge(edges, Kind.JOB_OUTPUT, owner, owner, subject(job.outputEntityKind(), job.outputItemId()), Lifecycle.ACTIVE, job.id().value());
         }
         for (HiveGrowthJob job : state.hiveColony().growthJobs().values()) {

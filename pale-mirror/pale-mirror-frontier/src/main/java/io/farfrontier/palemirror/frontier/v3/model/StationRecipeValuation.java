@@ -10,7 +10,7 @@ import java.util.function.Predicate;
 final class StationRecipeValuation {
     static List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Predicate<ProductionRecipe> selected) {
         var result = new ArrayList<SupplyPlanner.Process>(); var catalog = state.bootstrap().ruleset().production();
-        var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.heatUnits()));
+        var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.burnTicks()));
         for (var recipe : catalog.recipes()) {
             if (!selected.test(recipe) || recipe.processingMode() != ProductionRecipe.ProcessingMode.ATTENDED
                     || AutomaticStationProduction.stations(state, home, recipe).isEmpty()) continue;
@@ -20,9 +20,9 @@ final class StationRecipeValuation {
                     state.bootstrap().ruleset().workCatalog())).min().orElse(0);
             if (speed == 0) continue;
             long duration = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
-            var inputs = Map.of(recipe.ingredient().acceptedItems().stream().sorted().findFirst().orElseThrow(), recipe.ingredient().quantity());
+            var inputs = ProductionRecipeInputs.select(recipe, kind -> 0L);
             result.add(new SupplyPlanner.Process(recipe.id().value(), recipe.product().itemKind(), recipe.product().quantity(),
-                    inputs, recipe.heatPerBatch(), fuels, 0, duration, duration, 1, duration, Map.of(), 1));
+                    inputs, recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), fuels, 0, duration, duration, 1, duration, Map.of(), 1));
         }
         return List.copyOf(result);
     }

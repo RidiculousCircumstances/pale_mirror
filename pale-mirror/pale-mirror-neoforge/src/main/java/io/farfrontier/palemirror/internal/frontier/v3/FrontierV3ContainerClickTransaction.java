@@ -40,7 +40,7 @@ record FrontierV3ContainerClickTransaction(List<FrontierV3DepotClickWitness> mem
             }
             for (int i = 0; i < members.size(); i++) {
                 var a = members.get(i); var b = fact.members().get(i);
-                if (!a.containerId().equals(b.containerId()) || !a.accountId().equals(b.accountId()) || !a.ownerId().equals(b.ownerId())
+                if (!a.containerId().equals(b.containerId()) || !a.accounts().equals(b.accounts()) || !a.ownerId().equals(b.ownerId())
                         || a.authorityEpoch() != b.epoch() || !a.before().equals(b.before()))
                     throw new IllegalArgumentException("click outcome changed its admitted predecessor");
             }

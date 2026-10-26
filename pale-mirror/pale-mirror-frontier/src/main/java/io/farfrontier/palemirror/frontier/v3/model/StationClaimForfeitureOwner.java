@@ -11,8 +11,9 @@ final class StationClaimForfeitureOwner implements FungibleClaimForfeitureOwner 
                         () -> new IllegalArgumentException("station claim lost its exact processing owner"));
         if (claim.purpose() != ClaimPurpose.STATION_PROCESSING || operation.transformed()
                 || operation.inputCustody().materials().isEmpty()
-                || !operation.inputCustody().materials().orElseThrow().claims().equals(java.util.Map.of(claim.id(), claim.quantity()))
-                || !operation.inputCustody().materials().orElseThrow().lots().equals(claim.lotQuantities()))
+                || operation.inputCustody().materials().orElseThrow().claims().getOrDefault(claim.id(), 0) != claim.quantity()
+                || claim.lotQuantities().isEmpty() || claim.lotQuantities().entrySet().stream().anyMatch(entry ->
+                    operation.inputCustody().materials().orElseThrow().lots().getOrDefault(entry.getKey(), 0) < entry.getValue()))
             throw new IllegalArgumentException("station stock loss contradicts its current operation allocation");
         return operation;
     }
@@ -25,9 +26,15 @@ final class StationClaimForfeitureOwner implements FungibleClaimForfeitureOwner 
     @Override public FungibleForfeitureSettlement settle(FrontierWorldState before, List<ClaimAllocation> claims,
                                                         FungibleForfeitureSettlement transaction) {
         var stations = transaction.productionStations();
-        for (var claim : claims) {
-            var operation = require(before, claim);
+        var operations = new java.util.LinkedHashMap<ProductionOperation.Id, ProductionOperation>();
+        for (var claim : claims) { var operation = require(before, claim); operations.putIfAbsent(operation.id(), operation); }
+        for (var operation : operations.values()) {
             stations = stations.with(stations.require(operation.stationId()).cancel(operation.id()));
+            var resources = transaction.inventory().fungibleResources();
+            var remaining = operation.inputCustody().materials().orElseThrow().claims().keySet().stream()
+                    .filter(resources.claims()::containsKey).collect(java.util.stream.Collectors.toSet());
+            if (!remaining.isEmpty()) transaction = transaction.withTrade(transaction.inventory().withFungibleResources(
+                    resources.releaseClaims(remaining)), transaction.companies());
             transaction = ProductionOperationCompletionComposition.inputLost(before, operation, transaction);
         }
         return transaction.withStations(stations);

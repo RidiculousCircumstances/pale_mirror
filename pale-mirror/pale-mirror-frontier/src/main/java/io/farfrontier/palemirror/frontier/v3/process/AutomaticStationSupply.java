@@ -16,7 +16,7 @@ final class AutomaticStationSupply {
         var approach = SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach();
         var source = new ShipmentEndpoint.ProductionPort(record.ownerId(), spec,
                 ActorContainerItemOrder.StationPort.OUTPUT, approach);
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id());
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id(), ContainerSectionId.OUTPUT);
         var ledger = state.inventory().fungibleResources();
         int output = account.map(value -> ledger.unclaimedQuantity(value.id(), record.ownerId(), recipe.product().itemKind())).orElse(0);
         if (output > 0) {
@@ -28,20 +28,23 @@ final class AutomaticStationSupply {
             }
         }
         long missing = ProductionStockDemand.read(state, record.ownerId(), recipe.product().itemKind(), tick).missing();
-        long batches = (missing + recipe.product().quantity() - 1L) / recipe.product().quantity();
-        long required = Math.min(64, Math.multiplyExact(batches, recipe.ingredient().quantity()));
-        long supplied = account.map(value -> value.lotQuantities().entrySet().stream()
-                .filter(entry -> recipe.ingredient().accepts(ledger.lots().get(entry.getKey()).itemKind()))
-                .mapToLong(Map.Entry::getValue).sum()).orElse(0L);
-        supplied += state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal()
-                && shipment.receiver().containerId().equals(record.id()) && recipe.ingredient().accepts(shipment.itemKind()))
-                .mapToLong(Shipment::quantity).sum();
-        int quantity = (int) Math.max(0, required - supplied);
-        if (quantity == 0) return Optional.empty();
+        long batches = Math.min(ProductionBatchSizing.maximumRecipeBatches(recipe), Math.ceilDiv(missing, recipe.product().quantity()));
+        var inputAccount = FungibleResourceCustodySupport.accountAtContainer(state, record.id(), ContainerSectionId.INPUT);
+        var supplied = new TreeMap<String, Long>();
+        inputAccount.ifPresent(value -> value.lotQuantities().forEach((id, count) ->
+                supplied.merge(ledger.lots().get(id).itemKind(), (long) count, Math::addExact)));
+        state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal()
+                && shipment.receiver().custody().equals(spec.custody(ActorContainerItemOrder.StationPort.INPUT)))
+                .forEach(shipment -> supplied.merge(shipment.itemKind(), (long) shipment.quantity(), Math::addExact));
+        var materials = ProductionRecipeInputs.select(recipe, kind -> -(supplied.getOrDefault(kind, 0L)
+                + ResourceStorageSelection.sources(state, ledger, record.ownerId(), kind, spec.workerStation(), Set.of(ResourceStorageRole.WAREHOUSE))
+                        .stream().mapToLong(ResourceStorageSelection.Source::quantity).sum()));
         var input = new ShipmentEndpoint.ProductionPort(record.ownerId(), spec, ActorContainerItemOrder.StationPort.INPUT, approach);
-        for (var kind : recipe.ingredient().acceptedItems().stream().sorted().toList()) {
-            for (var warehouse : ResourceStorageSelection.candidates(state, record.ownerId(), kind, input.station(), Set.of(ResourceStorageRole.WAREHOUSE))) {
-                var dispatched = InternalShipmentPlanning.prepare(state, worker, warehouse, input, kind, quantity, tick);
+        for (var material : new TreeMap<>(materials).entrySet()) {
+            int quantity = Math.toIntExact(Math.max(0, Math.multiplyExact(batches, material.getValue()) - supplied.getOrDefault(material.getKey(), 0L)));
+            if (quantity == 0) continue;
+            for (var warehouse : ResourceStorageSelection.candidates(state, record.ownerId(), material.getKey(), input.station(), Set.of(ResourceStorageRole.WAREHOUSE))) {
+                var dispatched = InternalShipmentPlanning.prepare(state, worker, warehouse, input, material.getKey(), quantity, tick);
                 if (dispatched.isPresent()) return dispatched;
             }
         }

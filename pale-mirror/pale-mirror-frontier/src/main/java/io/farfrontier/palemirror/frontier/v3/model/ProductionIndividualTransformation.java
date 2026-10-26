@@ -18,7 +18,7 @@ final class ProductionIndividualTransformation {
                 || recipe.outcome() instanceof ProductionRecipeOutcome.Individual && inventory.items().containsKey(result.id()))
             throw new IllegalArgumentException("station individual result lost its exact pre/postimage");
         resources = cold ? resources.destroy(input.accountId(), input.lots(), input.claims())
-                : resources.destroyObserved(input.accountId(), boundary.authorityEpoch(), input.lots(), input.claims(), boundary.after());
+                : resources.destroyObserved(input.accountId(), boundary.authorityEpoch(), input.lots(), input.claims(), ContainerResourceAccounts.observed(inventory, station.custody(ActorContainerItemOrder.StationPort.INPUT), boundary.after()));
         inventory = inventory.withFungibleResources(resources);
         if (boundary.exactBefore().isPresent()) inventory = inventory.withoutItem(boundary.exactBefore().orElseThrow().id());
         return inventory.store(result);

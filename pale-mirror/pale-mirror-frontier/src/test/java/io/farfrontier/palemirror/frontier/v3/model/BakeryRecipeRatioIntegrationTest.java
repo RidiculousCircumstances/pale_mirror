@@ -15,7 +15,7 @@ class BakeryRecipeRatioIntegrationTest {
         var base = FrontierRulesets.production();
         var recipe = new ProductionRecipe(BakeryRecipes.BREAD, ProductionStationSpec.Capability.BAKING,
                 new ProductionRecipe.Ingredient(Set.of("minecraft:wheat"), 3),
-                new ProductionRecipe.Product("minecraft:bread", 1), 0, ProductionRecipe.ProcessingMode.ATTENDED);
+                new ProductionRecipe.Product("minecraft:bread", 1), false, ProductionRecipe.ProcessingMode.ATTENDED);
         var rules = new FrontierRuleset("frontier-v3-ratio-chain", 25, base.cadence(), base.spatial(), base.rates(),
                 base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(),
                 base.resourceHarvestColdTravelTicksPerEdge(), base.workCatalog(), base.goodsTrade(),

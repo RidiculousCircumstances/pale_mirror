@@ -119,6 +119,7 @@ final class ProductionJobStateSupport {
             throw new IllegalArgumentException("fungible production job is unavailable or duplicates its facility");
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.put(job.id(), job);
+        if (job.stationWork().isPresent()) reserved = StationWorkMaterialAccounting.reserveQueued(state, job, reserved);
         return admit(state, job, state.inventory().withFungibleResources(reserved), next);
     }
 
@@ -132,7 +133,9 @@ final class ProductionJobStateSupport {
         if (job.stationWork().isPresent()
                 && job.stationWork().orElseThrow().phase() != StationWorkState.Phase.DEPOT_PICKUP)
             throw new IllegalArgumentException("bakery job with in-flight cargo cannot be cancelled");
-        ExactInventory nextInventory = switch (job.inputHold()) {
+        boolean sourceWithdrawn = job.stationWork().filter(work -> StationWorkValidation.awaitingInputReallocation(
+                state.inventory().fungibleResources(), job, work)).isPresent();
+        ExactInventory nextInventory = sourceWithdrawn ? state.inventory() : switch (job.inputHold()) {
             case ProductionInputHold.Cold cold -> restoreExactColdInput(state.inventory(), cold);
             case ProductionInputHold.Materialized ignored -> state.inventory();
             case ProductionInputHold.FungibleCold cold -> state.inventory().withFungibleResources(state.inventory().fungibleResources()
@@ -140,6 +143,12 @@ final class ProductionJobStateSupport {
             case ProductionInputHold.FungibleBound bound -> state.inventory().withFungibleResources(
                     ProductionResourceCustody.cancelBound(state, job, bound));
         };
+        if (job.stationWork().isPresent()) {
+            var resources = nextInventory.fungibleResources();
+            var remainingClaims = StationWorkMaterialAccounting.claims(job).stream().filter(resources.claims()::containsKey)
+                    .collect(java.util.stream.Collectors.toSet());
+            if (!remainingClaims.isEmpty()) nextInventory = nextInventory.withFungibleResources(resources.releaseClaims(remainingClaims));
+        }
         Map<PhysicalIntentId, PhysicalIntent> nextIntents = new LinkedHashMap<>(state.physicalIntents());
         for (PhysicalIntent intent : state.physicalIntents().values()) if (intent.causeSubjectId().equals(job.id())) {
             if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION || intent.status() != PhysicalIntentStatus.PREPARED) {

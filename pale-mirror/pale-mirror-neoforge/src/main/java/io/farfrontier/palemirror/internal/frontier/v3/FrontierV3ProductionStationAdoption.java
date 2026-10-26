@@ -36,8 +36,9 @@ final class FrontierV3ProductionStationAdoption {
             var containerId = new SubjectId("container:installed-" + UUID.randomUUID());
             var spec = new ProductionStationSpec(new SubjectId("station:installed-" + UUID.randomUUID()), facility.id(), containerId,
                     placement.equipmentType(), placement.capability(), placement.workerStation(), placement.socketSurface(),
-                    ProductionBenchBlockEntity.INPUT, ProductionBenchBlockEntity.OUTPUT, ProductionBenchBlockEntity.FUEL, placement.maintenanceSlot());
-            var slots = new HashMap<Integer, FungibleContainerLayout.Stack>(); var lots = new ArrayList<ResourceLot>(); boolean admissible = true;
+                    java.util.stream.IntStream.range(0, ProductionBenchBlockEntity.INPUT_COUNT).boxed().toList(), ProductionBenchBlockEntity.OUTPUT,
+                    placement.fuelSlot(), placement.maintenanceSlot());
+            var slots = new HashMap<Integer, FungibleContainerLayout.Stack>(); var lots = new ArrayList<FixedContainerAdoption.PlacedResource>(); boolean admissible = true;
             for (int slot = 0; slot < bench.getContainerSize(); slot++) {
                 var item = bench.getItem(slot); if (item.isEmpty()) continue;
                 var kind = BuiltInRegistries.ITEM.getKey(item.getItem()).toString();
@@ -46,10 +47,10 @@ final class FrontierV3ProductionStationAdoption {
                             .filter(account -> account.custody() instanceof ResourceCustody.Player)
                             .anyMatch(account -> account.lotQuantities().keySet().stream().anyMatch(id ->
                                 state.inventory().fungibleResources().lots().get(id).itemKind().equals(kind)))) { admissible = false; break; }
-                try { if (ProductionStationRecipe.portForItemKind(state.bootstrap().ruleset().production(), spec, kind) != slot) { admissible = false; break; } }
+                try { if (!ProductionStationRecipe.accepts(state.bootstrap().ruleset().production(), spec, spec.compartmentLayout().sectionAt(slot), kind)) { admissible = false; break; } }
                 catch (IllegalArgumentException unsupported) { admissible = false; break; }
                 slots.put(slot, new FungibleContainerLayout.Stack(kind, item.getCount()));
-                lots.add(new ResourceLot(new SubjectId("lot:installed-" + UUID.randomUUID()), home.id(), kind, item.getCount(), "observed-installed-equipment", List.of()));
+                lots.add(new FixedContainerAdoption.PlacedResource(slot, new ResourceLot(new SubjectId("lot:installed-" + UUID.randomUUID()), home.id(), kind, item.getCount(), "observed-installed-equipment", List.of())));
             }
             if (!admissible) continue;
             var record = new ContainerRecord(containerId, home.id(), spec.inventorySize(), ContainerPurpose.PRODUCTION_STATION, Optional.of(spec), Optional.empty(),

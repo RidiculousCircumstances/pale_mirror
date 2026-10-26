@@ -31,7 +31,10 @@ public final class BakerySceneReconciliation {
                 .filter(candidate -> candidate.id().equals(work.stationId())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("station recovery lost its production station"));
         boolean atSource = work.phase() == StationWorkState.Phase.DEPOT_PICKUP;
-        var batch = ledger.accounts().get(atSource ? work.sourceAccountId() : work.stationAccountId());
+        var holder = atSource ? (ResourceCustody.Container) ProductionInputAccess.at(state, work.sourceContainerId()).endpoint().custody()
+                : station.custody(StationWorkCargo.output(job) ? ActorContainerItemOrder.StationPort.OUTPUT : ActorContainerItemOrder.StationPort.INPUT);
+        var batch = atSource ? ledger.accounts().get(work.sourceAccountId())
+                : FungibleResourceCustodySupport.accountAtContainer(state, station.containerId(), holder.section()).orElse(null);
         String kind = StationWorkCargo.kind(job);
         if (work.phase() != receipt.phase() || work.pendingPhysicalStep().isPresent()
                 || ContainerPhysicalAuthorityComposition.pending(state, atSource ? work.sourceContainerId() : station.containerId())
@@ -40,9 +43,11 @@ public final class BakerySceneReconciliation {
                 || state.actorMovements().containsKey(job.workerId())
                 || ledger.accounts().containsKey(work.actorAccountId())
                 || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
-                || batch == null || !batch.custody().equals(new ResourceCustody.Container(atSource ? work.sourceContainerId() : station.containerId()))
-                || !atSource && batch.lotQuantities().entrySet().stream().filter(entry -> ledger.lots().get(entry.getKey()).itemKind().equals(kind))
-                    .mapToInt(java.util.Map.Entry::getValue).sum() != StationWorkCargo.quantity(job))
+                || batch == null || !batch.custody().equals(holder)
+                || !atSource && (work.phase() == StationWorkState.Phase.PROCESSING
+                    ? job.recipeInputQuantities().entrySet().stream().anyMatch(entry -> batch.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
+                    : batch.lotQuantities().entrySet().stream().filter(entry -> ledger.lots().get(entry.getKey()).itemKind().equals(kind))
+                        .mapToInt(java.util.Map.Entry::getValue).sum() != StationWorkCargo.quantity(job)))
             throw new IllegalArgumentException("station recovery cannot abandon cargo or a pending physical effect");
         if (atSource) {
             var claimId = switch (job.inputHold()) {

@@ -8,7 +8,8 @@ final class ProductionPlaces {
     private static final Map<ProductionStationSpec.Capability, Set<StructureKind>> PLACES = Map.of(
             ProductionStationSpec.Capability.BAKING, Set.of(StructureKind.WORKSHOP),
             ProductionStationSpec.Capability.SMELTING, Set.of(StructureKind.SMELTERY),
-            ProductionStationSpec.Capability.FABRICATION, Set.of(StructureKind.FORGE));
+            ProductionStationSpec.Capability.FABRICATION, Set.of(StructureKind.FORGE),
+            ProductionStationSpec.Capability.WOODWORKING, Set.of(StructureKind.WOODSHOP));
     static void require(ProductionStationSpec.Capability capability, SettlementStructure facility) {
         var allowed = PLACES.get(capability);
         if (allowed == null || !allowed.contains(facility.kind()))

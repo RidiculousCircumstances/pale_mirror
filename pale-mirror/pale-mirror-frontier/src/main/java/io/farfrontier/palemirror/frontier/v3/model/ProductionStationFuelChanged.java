@@ -5,12 +5,13 @@ import java.util.*;
 
 /** Durable machine-owned fuel transition, never a resident work/arrival event. */
 public record ProductionStationFuelChanged(Stage stage, ProductionStationFuelBurn burn,
-        List<FungiblePhysicalObservation.Stack> remaining) implements FrontierPayload {
+        List<FungiblePhysicalObservation.Stack> remaining, long atTick) implements FrontierPayload {
     public static final String TYPE = "frontier.production_station_fuel_changed";
     public enum Stage { COLD_CONSUMED, HOT_PREPARED, HOT_CONSUMED }
     public ProductionStationFuelChanged {
         Objects.requireNonNull(stage); Objects.requireNonNull(burn); remaining = List.copyOf(remaining);
-        if (remaining.size() > 64 || stage != Stage.HOT_CONSUMED && !remaining.isEmpty()
+        if (atTick < burn.requestedAtTick() || stage == Stage.HOT_PREPARED && atTick != burn.requestedAtTick()
+                || remaining.size() > 64 || stage != Stage.HOT_CONSUMED && !remaining.isEmpty()
                 || (stage == Stage.COLD_CONSUMED) != (burn.authorityEpoch() == 0))
             throw new IllegalArgumentException("station fuel transition has foreign physical evidence");
     }

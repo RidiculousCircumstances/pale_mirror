@@ -26,9 +26,10 @@ class FrontierDomainRelationshipsTest {
                 next.withChanges(FrontierWorldStateUpdate.begin().structureConditions(java.util.Map.of())));
         assertThrows(IllegalArgumentException.class, () -> invalid.validateTransitionFrom(before));
         assertThrows(IllegalArgumentException.class, invalid::validateComplete);
-        assertThrows(IllegalArgumentException.class, () -> FrontierWorldState.duringUnpublishedTransition(() ->
-                before.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
-                        before.extractionSites().invalidateGeology(new BlockPosition(Integer.MAX_VALUE, 64, 0))))));
+        var outside = FrontierWorldState.duringUnpublishedTransition(() -> before.withChanges(FrontierWorldStateUpdate.begin()
+                .extractionSites(before.extractionSites().invalidateGeology(new BlockPosition(Integer.MAX_VALUE, 64, 0)))));
+        assertThrows(IllegalArgumentException.class, () -> outside.validateTransitionFrom(before));
+        assertThrows(IllegalArgumentException.class, outside::validateComplete);
     }
     @Test void unpublishedCandidatesCannotBypassThePreWalAuditAndScopeCannotLeak() {
         var before = FrontierV3FixtureCatalog.productionWorkConfiguration(

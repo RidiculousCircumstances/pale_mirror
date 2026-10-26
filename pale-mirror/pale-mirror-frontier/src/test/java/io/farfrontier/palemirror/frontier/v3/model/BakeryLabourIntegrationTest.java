@@ -90,7 +90,7 @@ class BakeryLabourIntegrationTest {
         assertEquals(Math.min(edited.bootstrap().ruleset().workCatalog().maxSpeedPermille(), before.ratePermille() * 2),
                 resumed.ratePermille());
         var execution = edited.actorExecutions().current(ActorActivityKind.PRODUCTION).get(job.workerId());
-        edited = StationWorkLabour.change(edited, job, resumed);
+        edited = StationWorkLabour.change(edited, job, StationWorkLabour.propose(edited, job, f.tick() + 300, true));
         var suspended = ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.PRODUCTION)
                 .pause(edited, execution, f.tick() + 350);
         var settled = StationWorkLabour.progress(suspended, job).orElseThrow();
@@ -130,8 +130,8 @@ class BakeryLabourIntegrationTest {
                 f.state(), f.job().settlementId(), early));
         var next = start.labourChange().orElseThrow().next();
         var forged = new BakeryColdStep(start.jobId(), start.expectedPhase(), start.action(), start.nextSurface(),
-                start.executionId(), Optional.empty(), Optional.of(new BakeryLabourChange(Optional.empty(),
-                new WorkProgress(next.requiredMilliWork(), 1_000, next.evaluatedAtTick(), next.ratePermille(), next.activeUntilTick()))));
+                start.executionId(), Optional.empty(), Optional.of(new BakeryLabourChange(Optional.empty(), Optional.empty(),
+                new WorkProgress(next.requiredMilliWork(), 1_000, next.evaluatedAtTick(), next.ratePermille(), next.activeUntilTick()), start.labourChange().orElseThrow().attendance())));
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(
                 f.state(), f.job().settlementId(), forged));
         var codecs = FrontierWorldPayloadCodecs.create();

@@ -87,11 +87,11 @@ class EquipmentSettlementPlanningTest {
         assertTrue(state.bootstrap().ruleset().production().automaticPolicies().stream().allMatch(p -> p.outputReserve() == 0));
         var planned = EquipmentProductionPlanning.planned(state, home.id(), 300);
         assertFalse(planned.isEmpty());
-        assertTrue(planned.stream().anyMatch(p -> p.request().recipe().ingredient().accepts("minecraft:cobblestone")));
+        assertTrue(planned.stream().anyMatch(p -> p.request().recipe().singleIngredient().accepts("minecraft:cobblestone")));
         var demands = SettlementReservePlanning.basis(state, home.id(), 300);
         assertTrue(demands.needs().get("minecraft:cobblestone").immediate() > 0);
         var ready = EquipmentProductionPlanning.ready(state, home.id(), 300).orElseThrow();
-        assertTrue(ready.request().recipe().ingredient().accepts("minecraft:cobblestone"));
+        assertTrue(ready.request().recipe().singleIngredient().accepts("minecraft:cobblestone"));
         var objective = new StrategicObjective(new SubjectId("objective:equipment-plan"), home.id(),
                 StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         var task = new StrategicTask(new SubjectId("task:equipment-plan"), objective.id(), home.id(), StrategicTaskKind.PRODUCE_AT_STATION,

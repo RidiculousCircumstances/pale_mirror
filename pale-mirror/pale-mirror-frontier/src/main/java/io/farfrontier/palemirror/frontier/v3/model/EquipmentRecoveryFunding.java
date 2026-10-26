@@ -15,16 +15,19 @@ final class EquipmentRecoveryFunding {
         if (operations < 1) throw new IllegalArgumentException("empty equipment restart");
         var stations = AutomaticStationProduction.stations(state, home, recipe);
         if (stations.isEmpty()) return new Cost(Long.MAX_VALUE, false);
-        long supplied = stations.stream().mapToLong(record -> ProductionStationEnergy.suppliedHeat(state,
+        long supplied = stations.stream().mapToLong(record -> ProductionStationEnergy.unlitFuelTicks(state,
                 record.productionStation().orElseThrow().id())).max().orElse(0);
-        long heat = Math.max(0, Math.multiplyExact(operations, recipe.heatPerBatch()) - supplied);
+        long heat = Math.max(0, Math.multiplyExact(operations, recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog())) - supplied);
         Cost best = null;
-        for (var ingredient : recipe.ingredient().acceptedItems().stream().sorted().toList()) {
-            var needs = Map.of(ingredient, Math.multiplyExact((long) operations, recipe.ingredient().quantity()));
+        {
+            var participant = state.companies().goodsTrade().participants().participants().get(home);
+            var needs = new TreeMap<String, Long>();
+            ProductionRecipeInputs.select(recipe, kind -> GoodsResourceValuation.replacement(state, participant, kind, tick).raw())
+                    .forEach((kind, count) -> needs.put(kind, Math.multiplyExact((long) operations, count)));
             if (heat == 0) best = better(best, assess(state, home, needs, market, tick), market.availableMoney());
             else for (var fuel : state.bootstrap().ruleset().production().fuels()) {
                 var combined = new TreeMap<>(needs);
-                combined.merge(fuel.itemKind(), Math.ceilDiv(heat, fuel.heatUnits()), Math::addExact);
+                combined.merge(fuel.itemKind(), Math.ceilDiv(heat, fuel.burnTicks()), Math::addExact);
                 best = better(best, assess(state, home, combined, market, tick), market.availableMoney());
             }
         }

@@ -332,7 +332,7 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("production-stations", new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.COLD_CONSUMED,
                         new ProductionStationFuelBurn(new SubjectId("station:representative"), new SubjectId("container:representative"),
                                 new SubjectId("account:representative"), 1, 0, "minecraft:coal",
-                                Map.of(new SubjectId("lot:representative"), 1), 1600, List.of()), List.of())),
+                                Map.of(new SubjectId("lot:representative"), 1), 1600, List.of(), 1), List.of(), 1)),
                 Map.entry("defender-equipment-return-visit", returnVisitRepresentative()),
                 Map.entry("goods-trade", new GoodsTradeRetired(java.util.Set.of(new SubjectId("order:representative")), java.util.Set.of())),
                 Map.entry("shipments", new ShipmentRetired(new SubjectId("shipment:representative"), 1L)),

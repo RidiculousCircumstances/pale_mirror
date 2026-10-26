@@ -43,7 +43,7 @@ final class ProductionActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution) {
         var job = job(state, execution);
         Optional<ActorActivityCheckpoint.Wait> waiting;
-        var status = checkpointStatus(job);
+        var status = checkpointStatus(state, job);
         if (status == ResidentWorkYield.Status.OWNER_SAFETY_HOLD) waiting = Optional.of(new ActorActivityCheckpoint.Wait(
                 ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, job.id()));
         else if (status == ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT) waiting = Optional.of(
@@ -55,10 +55,16 @@ final class ProductionActivityCapability implements ActorActivityCapability {
     @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
         return false; // Production goals are issued by the exact production-scene consumer.
     }
-    static ResidentWorkYield.Status checkpointStatus(ProductionJob job) {
-        return job.stationWork().isEmpty() ? ResidentWorkYield.Status.OWNER_SAFETY_HOLD
-                : job.stationWork().orElseThrow().pendingPhysicalStep().isPresent()
-                    ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY;
+    static ResidentWorkYield.Status checkpointStatus(FrontierWorldState state, ProductionJob job) {
+        if (job.stationWork().isEmpty()) return ResidentWorkYield.Status.OWNER_SAFETY_HOLD;
+        var work = job.stationWork().orElseThrow();
+        if (work.pendingPhysicalStep().isPresent()) return ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT;
+        if (work.phase() == StationWorkState.Phase.PROCESSING || work.phase() == StationWorkState.Phase.STATION_UNLOAD) {
+            StationWorkOperation.require(state, job);
+            var machine = state.productionStations().require(work.stationId());
+            if (machine.pendingFuel().isPresent() || machine.pendingRecipe().isPresent()) return ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT;
+        }
+        return ResidentWorkYield.Status.READY;
     }
     @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick) {
         return StationWorkLabour.pauseJob(state, job(state, execution), atTick);

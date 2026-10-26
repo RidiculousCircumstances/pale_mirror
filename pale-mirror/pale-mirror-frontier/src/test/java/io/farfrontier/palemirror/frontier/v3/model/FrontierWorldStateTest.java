@@ -52,8 +52,8 @@ class FrontierWorldStateTest {
         assertEquals(27 + state.transportFleet().assets().size(), state.inventory().containers().size(),
                 "depots, bakery stations, hive stores, maintenance storage and exact mobile fleet containers");
         assertEquals(FrontierRouteNetwork.OWNER, state.inventory().containers().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).ownerId());
-        assertEquals(state.bootstrap().settlements().size() * EngineeringRecoveryTeam.MAX_MEMBERS,
-                state.inventory().items().values().stream().filter(item -> item.itemKind().equals("minecraft:iron_pickaxe")).count());
+        assertEquals(0, state.inventory().items().values().stream().filter(item -> item.itemKind().equals("minecraft:iron_pickaxe")).count(),
+                "the basic content has no undeclared engineering pickaxe grant");
         assertTrue(state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:stone_hoe")));
         assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
         assertTrue(state.productionJobs().isEmpty());

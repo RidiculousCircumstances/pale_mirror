@@ -74,6 +74,8 @@ final class FrontierV3FungibleResourceObservationExecutor {
         }
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state,
                 containerId);
+        stacks = io.farfrontier.palemirror.frontier.v3.model.ContainerResourceAccounts.observed(state.inventory(),
+                (ResourceCustody.Container) account.custody(), stacks);
         if (FrontierV3ContainerSurfaceExecutor.overlapsHarvestOutputReservation(state, stacks)) {
             FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, ((ResourceCustody.Container) account.custody()).containerId());
             return false;

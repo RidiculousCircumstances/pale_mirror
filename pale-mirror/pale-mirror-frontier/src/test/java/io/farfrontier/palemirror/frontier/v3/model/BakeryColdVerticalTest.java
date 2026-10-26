@@ -803,10 +803,11 @@ class BakeryColdVerticalTest {
                             "a fungible batch in the baker's hand must not lose its owning job"); }
                 case LOAD -> { loads++; assertEquals(new ResourceCustody.Container(state.inventory().containers().values().stream()
                         .flatMap(record -> record.productionStation().stream()).filter(station -> station.id().equals(job.stationWork().orElseThrow().stationId()))
-                        .findFirst().orElseThrow().containerId()), state.inventory().fungibleResources().accounts()
+                        .findFirst().orElseThrow().containerId(), ContainerSectionId.INPUT), state.inventory().fungibleResources().accounts()
                         .get(job.stationWork().orElseThrow().stationAccountId()).custody()); }
                 case RECIPE -> { recipes++; assertFalse(state.inventory().fungibleResources().lots().containsKey(wheat));
-                        assertTrue(state.inventory().fungibleResources().lots().containsKey(bread)); }
+                        assertTrue(state.inventory().fungibleResources().lots().containsKey(bread));
+                        assertPlayerCanTakeReservedStationOutput(state, job); }
                 case UNLOAD -> { unloads++; assertEquals(new ResourceCustody.Actor(job.workerId()),
                         state.inventory().fungibleResources().accounts().get(job.stationWork().orElseThrow().actorAccountId()).custody()); }
                 case DELIVER -> deliveries++;
@@ -829,4 +830,25 @@ class BakeryColdVerticalTest {
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"));
     }
+    private static void assertPlayerCanTakeReservedStationOutput(FrontierWorldState state, ProductionJob job) {
+        var station = ProductionStationEnergy.record(state, job.stationWork().orElseThrow().stationId()).productionStation().orElseThrow();
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, station.containerId(), ContainerSectionId.OUTPUT).orElseThrow();
+        var image = ReferenceContainerCustody.expectedFungibleSlots(state, station.containerId()).entrySet().stream()
+                .map(entry -> new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(station.containerId(), entry.getKey())), entry.getValue().itemKind(), entry.getValue().quantity())).toList();
+        image = ContainerResourceAccounts.observed(state.inventory(), (ResourceCustody.Container) account.custody(), image);
+        state = ProductionResourceCustody.bind(state, account.id(), 7, FungiblePhysicalObservation.bind(
+                state.inventory().fungibleResources(), account.id(), 7, image));
+        var claims = account.claimQuantities().keySet();
+        assertEquals(claims, SourceStockClaimLoss.admissibleClaims(state, account.id()));
+        var actorBefore = state.actorLocations().get(job.workerId());
+        state = SourceStockClaimLoss.settle(state, account.id(), 7, account.lotQuantities(), claims, List.of());
+        assertFalse(state.productionJobs().containsKey(job.id()));
+        assertTrue(state.productionStations().require(station.id()).operation().isEmpty());
+        assertFalse(state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
+        assertEquals(actorBefore, state.actorLocations().get(job.workerId()), "losing output cannot remove its resident");
+        assertTrue(state.inventory().fungibleResources().claims().isEmpty());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
 }

@@ -7,7 +7,19 @@ import java.util.*;
 /** Hashed content and policy. No timers, stock, people or generator instances. */
 public record ForestryRules(List<Patch> patches, int reserveItems, int resumeBelowItems,
                             int workersPerSettlement, int cargoItems, long reviewTicks,
-                            ToolRequirement tool, List<TreeHarvestProfile> harvests) {
+                            ToolRequirement tool, List<TreeHarvestProfile> harvests, Optional<StarterEquipment> starterEquipment) {
+    public record StarterEquipment(String itemKind, int quantity) {
+        public StarterEquipment { if (itemKind == null || !itemKind.matches("[a-z0-9_]+:[a-z0-9_/]+") || quantity < 1 || quantity > 8)
+            throw new IllegalArgumentException("invalid explicit forestry startup equipment"); }
+    }
+    public ForestryRules(List<Patch> patches, int reserveItems, int resumeBelowItems, int workersPerSettlement,
+            int cargoItems, long reviewTicks, ToolRequirement tool, List<TreeHarvestProfile> harvests) {
+        this(patches, reserveItems, resumeBelowItems, workersPerSettlement, cargoItems, reviewTicks, tool, harvests, Optional.empty());
+    }
+    public ForestryRules withStarterEquipment(String kind, int quantity) {
+        return new ForestryRules(patches, reserveItems, resumeBelowItems, workersPerSettlement, cargoItems, reviewTicks, tool, harvests,
+                Optional.of(new StarterEquipment(kind, quantity)));
+    }
     public record Patch(String id, SubjectId knownBy, int innerRadius, int outerRadius,
                         int spacing, int densityPermille, long salt) {
         public Patch {
@@ -21,7 +33,7 @@ public record ForestryRules(List<Patch> patches, int reserveItems, int resumeBel
                 + ":" + spacing + ":" + densityPermille + ":" + salt; }
     }
     public ForestryRules {
-        patches = List.copyOf(patches); Objects.requireNonNull(tool); harvests = List.copyOf(harvests);
+        patches = List.copyOf(patches); starterEquipment = Objects.requireNonNull(starterEquipment); Objects.requireNonNull(tool); harvests = List.copyOf(harvests);
         if (patches.size() > 32 || patches.stream().map(Patch::id).distinct().count() != patches.size()
                 || reserveItems < 1 || reserveItems > 65536 || resumeBelowItems < 1 || resumeBelowItems > reserveItems
                 || workersPerSettlement < 1 || workersPerSettlement > 8 || cargoItems < 1 || cargoItems > 64
@@ -53,7 +65,7 @@ public record ForestryRules(List<Patch> patches, int reserveItems, int resumeBel
     public String canonicalText() {
         return patches.stream().sorted(Comparator.comparing(Patch::id)).map(Patch::canonicalText)
                 .collect(java.util.stream.Collectors.joining(";")) + "|" + reserveItems + ":" + resumeBelowItems
-                + ":" + workersPerSettlement + ":" + cargoItems + ":" + reviewTicks + ":" + tool.canonicalText() + "|"
+                + ":" + workersPerSettlement + ":" + cargoItems + ":" + reviewTicks + ":" + tool.canonicalText() + "|startup:" + starterEquipment + "|"
                 + harvests.stream().sorted(Comparator.comparing(TreeHarvestProfile::id)).map(TreeHarvestProfile::canonicalText)
                     .collect(java.util.stream.Collectors.joining(";"));
     }

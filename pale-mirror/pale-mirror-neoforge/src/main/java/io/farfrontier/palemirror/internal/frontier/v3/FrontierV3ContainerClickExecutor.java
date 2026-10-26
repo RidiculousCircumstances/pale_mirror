@@ -101,12 +101,6 @@ final class FrontierV3ContainerClickExecutor {
                             && source.containerId().equals(containerId)
                             && menu.getCarried().is(net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
                                 net.minecraft.resources.ResourceLocation.parse(item.itemKind()))))) return null;
-        CustodyAccount account = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(value -> value.custody().equals(new ResourceCustody.Container(containerId)))
-                .findFirst().orElse(null);
-        if (state.inventory().fungibleResources().accounts().values().stream()
-                .filter(value -> value.custody().equals(new ResourceCustody.Container(containerId))).count() > 1)
-            return null;
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope()
                 .get(ReferenceContainerCustody.scopeId(containerId));
         if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)
@@ -116,18 +110,23 @@ final class FrontierV3ContainerClickExecutor {
         if (FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(chest, state, containerId))
             return refused(player, target, slot, kind, "FOREIGN_ITEM_COMPONENTS");
         var before = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, containerId);
-        SubjectId accountId = account == null ? ReferenceContainerCustody.scopeId(containerId) : account.id();
-        List<PhysicalStackBinding> canonical = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(accountId))
-                .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
-        try {
-            if (account == null ? !before.isEmpty() || !canonical.isEmpty()
-                    : canonical.isEmpty() || !canonical.equals(FungiblePhysicalObservation.bind(
-                        state.inventory().fungibleResources(), accountId, lease.authorityEpoch(), before)))
-                return refused(player, target, slot, kind, "FUNGIBLE_LAYOUT_MISMATCH");
-        } catch (IllegalArgumentException invalid) { return refused(player, target, slot, kind, "INVALID_BINDING:" + invalid.getMessage()); }
-        if (account != null && mayRemoveReserved(menu, cargoSlot, button, kind, canonical, account, state))
-            return refused(player, target, slot, kind, "RESERVED_STOCK");
+        var accounts = new java.util.TreeMap<ContainerSectionId, SubjectId>();
+        for (var section : owned.compartmentLayout().sections().keySet()) {
+            var holder = new ResourceCustody.Container(containerId, section);
+            var account = FungibleResourceCustodySupport.accountAtContainer(state, containerId, section).orElse(null);
+            var accountId = account == null ? ContainerResourceAccounts.id(holder) : account.id();
+            accounts.put(section, accountId);
+            var sectionBefore = ContainerResourceAccounts.observed(state.inventory(), holder, before);
+            var canonical = state.inventory().fungibleResources().bindings().values().stream()
+                    .filter(binding -> binding.accountId().equals(accountId)).sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
+            try {
+                if (account == null ? !sectionBefore.isEmpty() || !canonical.isEmpty()
+                        : !canonical.equals(FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), accountId, lease.authorityEpoch(), sectionBefore)))
+                    return refused(player, target, slot, kind, "FUNGIBLE_LAYOUT_MISMATCH:" + section.value());
+            } catch (IllegalArgumentException invalid) { return refused(player, target, slot, kind, "INVALID_BINDING:" + invalid.getMessage()); }
+            if (account != null && mayRemoveReserved(menu, cargoSlot, button, kind, canonical, account, state))
+                return refused(player, target, slot, kind, "RESERVED_STOCK");
+        }
         if (kind == ClickType.PICKUP && cargoSlot >= 0) {
             ItemStack cursor = menu.getCarried(), source = chest.getItem(cargoSlot);
             if (!cursor.isEmpty() && !source.isEmpty() && !ItemStack.isSameItemSameComponents(cursor, source))
@@ -136,7 +135,7 @@ final class FrontierV3ContainerClickExecutor {
         java.util.Optional<FrontierV3DepotClickWitness.ReturnSource> returning;
         try { returning = playerReturnSource(player, menu, slot, kind, state); }
         catch (IllegalArgumentException invalid) { return refused(player, target, slot, kind, "INVALID_PLAYER_RETURN:" + invalid.getMessage()); }
-        return new FrontierV3DepotClickWitness(containerId, accountId, owned.ownerId(),
+        return new FrontierV3DepotClickWitness(containerId, accounts, owned.ownerId(),
                 lease.authorityEpoch(), player.getUUID(), interaction, before, returning);
     }
 

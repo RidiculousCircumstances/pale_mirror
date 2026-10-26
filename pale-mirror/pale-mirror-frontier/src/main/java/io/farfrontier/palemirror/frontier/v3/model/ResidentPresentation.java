@@ -37,6 +37,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
                         case BAKING -> "Baker";
                         case SMELTING -> "Smelter";
                         case FABRICATION -> "Toolsmith";
+                        case WOODWORKING -> "Carpenter";
                     }).orElse("Production worker");
             case COURIER -> "Carrier";
             case GROUP_MEMBER -> "Companion";

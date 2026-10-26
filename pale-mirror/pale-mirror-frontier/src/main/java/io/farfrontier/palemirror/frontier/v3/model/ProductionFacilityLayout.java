@@ -9,7 +9,8 @@ public final class ProductionFacilityLayout {
     private static final Map<StructureKind, Definition> DEFINITIONS = Map.of(
             StructureKind.WORKSHOP, new Definition(ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING, OptionalInt.empty()),
             StructureKind.SMELTERY, new Definition(ProductionEquipment.SMELTER, ProductionStationSpec.Capability.SMELTING, OptionalInt.empty()),
-            StructureKind.FORGE, new Definition(ProductionEquipment.FORGE, ProductionStationSpec.Capability.FABRICATION, OptionalInt.of(3)));
+            StructureKind.FORGE, new Definition(ProductionEquipment.FORGE, ProductionStationSpec.Capability.FABRICATION, OptionalInt.of(11)),
+            StructureKind.WOODSHOP, new Definition(ProductionEquipment.WOODWORKING, ProductionStationSpec.Capability.WOODWORKING, OptionalInt.empty()));
     public static boolean supports(StructureKind kind) { return DEFINITIONS.containsKey(kind); }
     public static ProductionStationSpec station(SettlementStructure facility) {
         var definition = Optional.ofNullable(DEFINITIONS.get(facility.kind())).orElseThrow(
@@ -19,7 +20,8 @@ public final class ProductionFacilityLayout {
         String suffix = facility.id().value().replace(':', '-');
         return new ProductionStationSpec(new SubjectId("station:" + suffix), facility.id(),
                 new SubjectId("container:" + suffix + "-station"), definition.equipment(), definition.capability(),
-                port.workStation(), facility.facing().step(port.workStation(), -1), 0, 1, 2, definition.maintenanceSlot());
+                port.workStation(), facility.facing().step(port.workStation(), -1),
+                java.util.stream.IntStream.range(0, 9).boxed().toList(), 9, definition.capability() == ProductionStationSpec.Capability.WOODWORKING ? OptionalInt.empty() : OptionalInt.of(10), definition.maintenanceSlot());
     }
     public static SubjectId metalStorageId(SettlementStructure facility) {
         requireSmeltery(facility); return new SubjectId("container:" + facility.id().value().replace(':', '-') + "-metals");

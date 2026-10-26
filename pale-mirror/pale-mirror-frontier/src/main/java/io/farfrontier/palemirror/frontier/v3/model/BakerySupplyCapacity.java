@@ -19,13 +19,13 @@ final class BakerySupplyCapacity implements SupplyCapacityPort {
             Optional<BakeryProcessingForecast.Capacity> capacity, SupplyPlanningWindow window) {
         if (capacity.isEmpty()) return List.of();
         var recipe = BakeryRecipes.bread(state);
-        var input = recipe.ingredient().acceptedItems().stream().sorted(Comparator
+        var input = recipe.singleIngredient().acceptedItems().stream().sorted(Comparator
                 .<String>comparingLong(item -> stocks.containsKey(item) ? stocks.get(item).covered() : 0).reversed()
                 .thenComparing(java.util.function.Function.identity())).findFirst().orElseThrow();
         var fuels = new TreeMap<String, Long>();
-        state.bootstrap().ruleset().production().fuels().forEach(f -> fuels.put(f.itemKind(), f.heatUnits()));
+        state.bootstrap().ruleset().production().fuels().forEach(f -> fuels.put(f.itemKind(), f.burnTicks()));
         var station = capacity.orElseThrow().station();
-        long heat = Math.max(0, ProductionStationEnergy.suppliedHeat(state, station)
+        long heat = Math.max(0, ProductionStationEnergy.unlitFuelTicks(state, station)
                 - BakerySupplyObligations.requiredHeat(state, station));
         var timing = capacity.orElseThrow();
         int recipesPerOperation = ProductionBatchSizing.maximumRecipeBatches(recipe);
@@ -33,7 +33,7 @@ final class BakerySupplyCapacity implements SupplyCapacityPort {
                 : Math.addExact(1, (window.ticks() - timing.firstOutputDelay()) / timing.batchTicks());
         int maximumRecipes = Math.toIntExact(Math.multiplyExact(operations, recipesPerOperation));
         return List.of(new SupplyPlanner.Process(recipe.id().value(), recipe.product().itemKind(), recipe.product().quantity(),
-                Map.of(input, recipe.ingredient().quantity()), recipe.heatPerBatch(), fuels, heat,
+                Map.of(input, recipe.singleIngredient().quantity()), recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), fuels, heat,
                 capacity.orElseThrow().firstOutputDelay(), capacity.orElseThrow().batchTicks(),
                 maximumRecipes, capacity.orElseThrow().labourTicks(),
                 state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isPresent()

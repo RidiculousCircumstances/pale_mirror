@@ -419,18 +419,18 @@ class BakeryHotVerticalTest {
         assertTrue(ResidentMealServiceAccess.available(state, depot, nextResident),
                 "the witnessed baker departure must free the depot during station work");
         BakeryWorkBlock occupiedMachine = new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED,
-                machine, station.inputSlot(), "minecraft:stone", 1);
+                machine, station.inputSlots().getFirst(), "minecraft:stone", 1);
         state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
                 new BakeryHotBlockChanged(job.id(), leaseId, StationWorkState.Phase.STATION_LOAD,
                         Optional.of(occupiedMachine)));
         FrontierWorldState blockedStation = state;
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectPrepared(
                 blockedStation, task.ownerId(), new BakeryHotEffectPrepared(job.id(), leaseId,
-                        StationWorkState.Phase.STATION_LOAD, station.inputSlot())));
+                        StationWorkState.Phase.STATION_LOAD, station.inputSlots().getFirst())));
         state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
                 new BakeryHotBlockChanged(job.id(), leaseId, StationWorkState.Phase.STATION_LOAD, Optional.empty()));
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
-                new BakeryHotEffectPrepared(job.id(), leaseId, StationWorkState.Phase.STATION_LOAD, station.inputSlot()));
+                new BakeryHotEffectPrepared(job.id(), leaseId, StationWorkState.Phase.STATION_LOAD, station.inputSlots().getFirst()));
         FrontierWorldState preparedLoad = state;
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectObserved(
                 preparedLoad, task.ownerId(), new BakeryHotEffectObserved(job.id(), leaseId,
@@ -442,15 +442,14 @@ class BakeryHotVerticalTest {
         state = BakeryDeathEffectsFixture.observe(state, task.ownerId(), new BakeryHotEffectObserved(
                 job.id(), leaseId, StationWorkState.Phase.STATION_LOAD, station.workerStation().standingBody(),
                 37L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.inputSlot())),
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.inputSlots().getFirst())),
                 "minecraft:wheat", 64))));
         assertEquals(StationWorkState.Phase.PROCESSING, state.productionJobs().get(job.id()).stationWork().orElseThrow().phase());
         var execution = state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
-        var startedLabour = new BakeryLabourChange(Optional.empty(), StationWorkLabour.next(state, state.productionJobs().get(job.id()), 300L, true));
+        var startedLabour = StationWorkLabour.propose(state, state.productionJobs().get(job.id()), 300L, true);
         state = ProductionProcess.reduceBakeryWorkChanged(state, task.ownerId(),
                 new BakeryWorkChanged(job.id(), leaseId, execution, station.workerStation().standingBody(), startedLabour));
-        var completedLabour = new BakeryLabourChange(Optional.of(startedLabour.next()),
-                StationWorkLabour.next(state, state.productionJobs().get(job.id()), startedLabour.next().activeUntilTick(), false));
+        var completedLabour = StationWorkLabour.propose(state, state.productionJobs().get(job.id()), startedLabour.next().activeUntilTick(), false);
         state = ProductionProcess.reduceBakeryWorkChanged(state, task.ownerId(),
                 new BakeryWorkChanged(job.id(), leaseId, execution, station.workerStation().standingBody(), completedLabour));
         assertStationConflictCanReleaseHungryBaker(state, job.id(), leaseId);
@@ -495,6 +494,9 @@ class BakeryHotVerticalTest {
         stocked = stocked.rebind(work.destinationAccountId(), 1L,
                 FungiblePhysicalObservation.bind(stocked, work.destinationAccountId(), 1L, List.of(firstBread)));
         state = state.withInventory(state.inventory().withFungibleResources(stocked));
+        state = state.withInventory(state.inventory().store(new ExactItemStack(
+                new SubjectId("item:occupied-delivery-slot"), task.ownerId(), "minecraft:stone", 1,
+                new InventoryCustody.ContainerSlot(depot, 20))));
         int deliverySlot = state.firstFreeContainerSlot(depot).orElseThrow();
         state = at(state, leaseId, job.workerId(), actor.body());
         BakeryWorkBlock fullDepot = new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED,

@@ -10,7 +10,7 @@ final class EconomicForecast {
         var process = facts.processes().stream().filter(p -> p.id().equals(demand.process().orElseThrow())).findFirst().orElseThrow();
         // Dependent transformations require input-arrival sequencing; do not turn
         // an aggregate output estimate into an invented dated receipt here.
-        if (!process.inputs().isEmpty() || process.heatPerBatch() > 0 || process.firstOutputDelayTicks() > horizon) return 0;
+        if (!process.inputs().isEmpty() || process.burnTicksPerBatch() > 0 || process.firstOutputDelayTicks() > horizon) return 0;
         long batches = process.recipesAvailableBy(horizon);
         return Math.min(demand.production(), Math.multiplyExact(batches, process.outputPerBatch()));
     }

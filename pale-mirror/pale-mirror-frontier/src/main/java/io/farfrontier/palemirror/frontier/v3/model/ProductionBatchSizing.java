@@ -5,15 +5,14 @@ public final class ProductionBatchSizing {
     /** Physical input/output transfer limits constrain one operation independently of the recipe. */
     public static int maximumRecipeBatches(ProductionRecipe recipe) {
         if (!(recipe.outcome() instanceof ProductionRecipeOutcome.Fungible)) return 1;
-        return Math.min(64 / recipe.ingredient().quantity(), 64 / recipe.product().quantity());
+        return Math.min(64 / recipe.inputUnitsPerBatch(), 64 / recipe.product().quantity());
     }
-    public static int inputQuantity(ProductionRecipe recipe, int availableInput, int outputCapacity, long availableHeat) {
-        if (availableInput < 0 || outputCapacity < 0 || availableHeat < 0)
+    public static int inputQuantity(ProductionRecipe recipe, int availableInput, int outputCapacity) {
+        if (availableInput < 0 || outputCapacity < 0)
             throw new IllegalArgumentException("negative production batch capacity");
-        long batches = Math.min(maximumRecipeBatches(recipe), Math.min(availableInput / recipe.ingredient().quantity(),
+        long batches = Math.min(maximumRecipeBatches(recipe), Math.min(availableInput / recipe.inputUnitsPerBatch(),
                 outputCapacity / recipe.product().quantity()));
-        if (recipe.heatPerBatch() > 0) batches = Math.min(batches, availableHeat / recipe.heatPerBatch());
-        return Math.toIntExact(batches * recipe.ingredient().quantity());
+        return Math.toIntExact(batches * recipe.inputUnitsPerBatch());
     }
     private ProductionBatchSizing() { }
 }

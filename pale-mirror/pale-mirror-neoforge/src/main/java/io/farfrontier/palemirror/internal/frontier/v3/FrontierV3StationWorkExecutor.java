@@ -81,7 +81,7 @@ final class FrontierV3StationWorkExecutor {
         }
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
         var labour = StationWorkLabour.progress(state, job);
-        if (StationWorkLabour.attended(state, job) && labour.filter(WorkProgress::running).isPresent()
+        if (StationWorkLabour.attended(state, job) && (labour.filter(WorkProgress::running).isPresent() || StationWorkLabour.holdsAttendance(state, job))
                 && !FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             if (supportedExit.isEmpty()) return; // No fabricated physical pose or work boundary.
             if (!lease.memberBody(state.actorLocations(), job.workerId()).equals(supportedExit.orElseThrow())) {
@@ -89,9 +89,10 @@ final class FrontierV3StationWorkExecutor {
                 return;
             }
             long tick = runtime.canonicalState().orElseThrow().instant().ticks();
+            if (!StationWorkLabour.updateNeeded(state, job, tick, false)) return;
             FrontierV3CommandSubmission.submit(runtime, "bakery-labour-paused", job.id().value(),
                     new BakeryWorkChanged(job.id(), lease.id(), execution, supportedExit.orElseThrow(),
-                            new BakeryLabourChange(labour, StationWorkLabour.next(state, job, tick, false))));
+                            StationWorkLabour.propose(state, job, tick, false)));
             return;
         }
         if (supportedExit.isPresent() && StationWorkGoal.deliveryAccessCleared(state, job, supportedExit.orElseThrow())) {
@@ -117,7 +118,7 @@ final class FrontierV3StationWorkExecutor {
         }
         if (goal.phase() == StationWorkState.Phase.DELIVERED) {
             var movement = FrontierV3ServiceClearanceNavigation.pursue(level, worker, state, job.settlementId(),
-                    StationWorkStorage.current(job), job.id(), job.workerId(), goal.phase().wireTag(),
+                    StationWorkStorage.current(job), job.id(), job.workerId(), goal.ordinal(),
                     1L, actuation);
             if (movement.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "delivered-clearance:" + movement.reason());
@@ -135,7 +136,7 @@ final class FrontierV3StationWorkExecutor {
                 && !ProductionServiceAccess.available(state, job)) {
             var point = ProductionServiceAccess.point(state, job);
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
-                    job.settlementId(), point, job.id(), job.workerId(), goal.phase().wireTag(), 1L, actuation);
+                    job.settlementId(), point, job.id(), job.workerId(), goal.ordinal(), 1L, actuation);
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job,
                     "service-access:" + waiting.reason());
             return;
@@ -164,9 +165,10 @@ final class FrontierV3StationWorkExecutor {
                     return;
                 }
                 boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();
+                if (!StationWorkLabour.updateNeeded(state, job, tick, run)) return;
                 FrontierV3CommandSubmission.submit(runtime, "bakery-station-labour", job.id().value(),
                         new BakeryWorkChanged(job.id(), lease.id(), execution, goal.station().standingBody(),
-                                new BakeryLabourChange(prior, StationWorkLabour.next(state, job, tick, run))));
+                                StationWorkLabour.propose(state, job, tick, run)));
                 return;
             }
             if (work.phase() == StationWorkState.Phase.PROCESSING
@@ -183,7 +185,7 @@ final class FrontierV3StationWorkExecutor {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "known-route:" + unavailable.getMessage());
             return; // The job remains retained; an unsupported path is not a fabricated arrival.
         }
-        MovementOrder order = new MovementOrder(job.id(), job.workerId(), goal.phase().wireTag(),
+        MovementOrder order = new MovementOrder(job.id(), job.workerId(), goal.ordinal(),
                 1L, List.of(goal.station()), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result movement = FrontierV3GoalNavigation.pursue(level, worker,

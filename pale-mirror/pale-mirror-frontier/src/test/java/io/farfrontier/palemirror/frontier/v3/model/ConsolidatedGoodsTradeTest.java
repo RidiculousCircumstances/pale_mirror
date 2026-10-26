@@ -215,7 +215,7 @@ class ConsolidatedGoodsTradeTest {
         assertTrue(reserves.timing().values().stream().allMatch(timing -> timing.leadTicks() == fullLead),
                 "admitted delivery retains the same complete-trip margin, without expired alternative quotes");
         var kinds = mission.shipmentIds().stream().map(state.shipments().shipments()::get).map(Shipment::itemKind).collect(java.util.stream.Collectors.toSet());
-        assertTrue(kinds.containsAll(Set.of("minecraft:bread", "minecraft:cobblestone", "minecraft:coal")), kinds.toString());
+        assertTrue(kinds.containsAll(Set.of("minecraft:bread", "minecraft:coal")), kinds.toString());
         assertEquals(buyerMoney, state.inventory().economics().require(buyer.party().id()).balance(), "admission is not sale settlement");
         assertTrue(group.members().stream().allMatch(m -> m.activityOwnerId().equals(group.id())));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));

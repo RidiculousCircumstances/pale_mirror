@@ -13,9 +13,9 @@ public final class ProductionFuelPolicy {
                 && state.inventory().surfaces().get(record.id()).status() != ContainerSurfaceStatus.CONFLICT)
                 .flatMap(record -> record.productionStation().stream()).mapToLong(station -> catalog.recipes().stream()
                         .filter(recipe -> recipe.capability() == station.capability())
-                        .mapToLong(recipe -> Math.multiplyExact(recipe.heatPerBatch(), 2L * (64 / recipe.ingredient().quantity())))
+                        .mapToLong(recipe -> Math.multiplyExact(recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), 2L * ProductionBatchSizing.maximumRecipeBatches(recipe)))
                         .max().orElse(0)).sum();
-        return Math.toIntExact(Math.ceilDiv(heat, fuel.orElseThrow().heatUnits()));
+        return Math.toIntExact(Math.ceilDiv(heat, fuel.orElseThrow().burnTicks()));
     }
     private ProductionFuelPolicy() { }
 }

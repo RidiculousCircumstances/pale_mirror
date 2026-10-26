@@ -80,7 +80,7 @@ final class BakeryJobAdmission {
     static ProductionJob exact(FrontierWorldState state, StrategicTask task, Settlement settlement,
                                SettlementStructure workshop, ExactItemStack input, ResidentProfile worker, ProductionRights rights) {
         if (!input.economicOwnerId().equals(rights.resourceOwner().id())
-                || !BakeryRecipes.bread(state).ingredient().accepts(input.itemKind()))
+                || !BakeryRecipes.bread(state).singleIngredient().accepts(input.itemKind()))
             throw new IllegalArgumentException("bakery exact input must belong to its declared production owner");
         SubjectId jobId = ProductionProcess.jobId(task);
         String stem = jobId.value().substring("job:".length());
@@ -123,7 +123,7 @@ final class BakeryJobAdmission {
         return new StationWorkState(StationWorkState.Phase.DEPOT_PICKUP, ResidentWorkKind.PRODUCTION, outputRepresentation, Optional.empty(), station.id(), BakeryRecipes.BREAD,
                 inputKind, inputQuantity,
                 sourceAccount, sourceContainer,
-                new SubjectId("custody:" + suffix + "-baker-hand"), ReferenceContainerCustody.scopeId(station.containerId()),
+                new SubjectId("custody:" + suffix + "-baker-hand"), ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.INPUT)),
                 FungibleResourceCustodySupport.accountAtContainer(state, destinationContainer).map(CustodyAccount::id)
                         .orElseGet(() -> ReferenceContainerCustody.scopeId(destinationContainer)));
     }

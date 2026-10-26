@@ -8,8 +8,10 @@ import java.util.UUID;
 /** Stable resource-account location; a physical slot is deliberately not canonical custody. */
 public sealed interface ResourceCustody permits ResourceCustody.Container, ResourceCustody.Player,
         ResourceCustody.Cargo, ResourceCustody.WorldCarrier, ResourceCustody.Actor, ResourceCustody.Ground {
-    record Container(SubjectId containerId) implements ResourceCustody {
-        public Container { Objects.requireNonNull(containerId, "resource container"); }
+    record Container(SubjectId containerId, ContainerSectionId section) implements ResourceCustody {
+        /** Ordinary storage has one explicitly declared STOCK compartment. */
+        public Container(SubjectId containerId) { this(containerId, ContainerSectionId.STOCK); }
+        public Container { Objects.requireNonNull(containerId, "resource container"); Objects.requireNonNull(section, "resource section"); }
     }
     record Player(UUID playerId) implements ResourceCustody {
         public Player { Objects.requireNonNull(playerId, "resource player"); }

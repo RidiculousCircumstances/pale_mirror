@@ -18,13 +18,13 @@ final class GrayboxToolProduction {
             String input = material.equals("stone") ? "minecraft:cobblestone" : "minecraft:iron_ingot";
             int quantity = switch (shape) { case "pickaxe" -> 3; case "hoe" -> 2; case "shovel" -> 1;
                 default -> throw new IllegalArgumentException("undeclared graybox shape"); };
-            long heat = material.equals("stone") ? 0 : 200;
+            boolean combustion = material.equals("iron");
             recipes.add(new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:make_" + material + "_" + shape),
                     ProductionStationSpec.Capability.FABRICATION, new ProductionRecipe.Ingredient(Set.of(input), quantity),
-                    new ProductionRecipe.Product(item, 1), heat, ProductionRecipe.ProcessingMode.ATTENDED, new ProductionRecipeOutcome.Individual()));
+                    new ProductionRecipe.Product(item, 1), combustion, ProductionRecipe.ProcessingMode.ATTENDED, new ProductionRecipeOutcome.Individual()));
             recipes.add(new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:repair_" + material + "_" + shape),
                     ProductionStationSpec.Capability.FABRICATION, new ProductionRecipe.Ingredient(Set.of(input), 1),
-                    new ProductionRecipe.Product(item, 1), heat / 2, ProductionRecipe.ProcessingMode.ATTENDED,
+                    new ProductionRecipe.Product(item, 1), combustion, ProductionRecipe.ProcessingMode.ATTENDED,
                     new ProductionRecipeOutcome.Repair(base.tools().require(item).durability() / 2)));
             long seed = material.equals("stone") ? 2L + quantity : 4L + 2L * quantity;
             commodities.add(new GoodsTradeRules.Commodity(item, 0, 0,

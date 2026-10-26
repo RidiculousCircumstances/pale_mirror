@@ -829,7 +829,11 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     public FungibleResourceLedger contributeObserved(SubjectId accountId, SubjectId containerId, long authorityEpoch,
                                                      ResourceLot contribution,
                                                      List<FungiblePhysicalObservation.Stack> observed) {
-        return FungibleObservedStockTransitions.contribute(this, accountId, containerId, authorityEpoch,
+        return contributeObserved(accountId, new ResourceCustody.Container(containerId), authorityEpoch, contribution, observed);
+    }
+    public FungibleResourceLedger contributeObserved(SubjectId accountId, ResourceCustody.Container holder, long authorityEpoch,
+            ResourceLot contribution, List<FungiblePhysicalObservation.Stack> observed) {
+        return FungibleObservedStockTransitions.contribute(this, accountId, holder, authorityEpoch,
                 contribution, observed);
     }
 
@@ -879,6 +883,12 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         nextAccounts.put(account.id(), account.withQuantities(nextAccountLots, nextAccountClaims));
         return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
+    }
+
+    /** Different logical compartments may share a physical machine; stock and title still have one ledger. */
+    public FungibleResourceLedger transformCold(SubjectId inputAccount, Map<SubjectId, Integer> inputLots,
+            Map<SubjectId, Integer> inputClaims, ResourceLot output, SubjectId outputAccount, ResourceCustody outputCustody) {
+        return FungibleRecipeTransitions.between(this, inputAccount, inputLots, inputClaims, output, outputAccount, outputCustody);
     }
 
     /**
@@ -958,7 +968,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> nextClaims = new HashMap<>(account.claimQuantities()); claims.forEach((id, quantity) -> nextClaims.merge(id, quantity, Integer::sum));
         return account.withQuantities(nextLots, nextClaims);
     }
-    private void requireClaimsCoveredByLots(Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
+    void requireClaimsCoveredByLots(Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
                                             String operation) {
         claimQuantities.forEach((claimId, claimQuantity) -> {
             ClaimAllocation claim = claims.get(claimId);

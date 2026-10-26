@@ -160,7 +160,7 @@ final class FungibleResourcePayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             FungibleStockContributionObserved observed = (FungibleStockContributionObserved) payload;
             ResourceLot lot = observed.contribution();
-            writeSubject(output, observed.accountId()); writeSubject(output, observed.containerId());
+            writeSubject(output, observed.accountId()); writeSubject(output, observed.containerId()); writeString(output, observed.section().value());
             output.writeLong(observed.authorityEpoch());
             writeString(output, observed.playerId().toString()); writeString(output, observed.interactionId().toString());
             writeSubject(output, lot.id()); writeSubject(output, lot.economicOwnerId());
@@ -174,7 +174,7 @@ final class FungibleResourcePayloadCodecs {
             }
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectId account = readSubject(input).value(); SubjectId container = readSubject(input).value();
+            SubjectId account = readSubject(input).value(); SubjectId container = readSubject(input).value(); var section = new ContainerSectionId(readString(input));
             long epoch = input.readLong(); java.util.UUID player = java.util.UUID.fromString(readString(input));
             java.util.UUID interaction = java.util.UUID.fromString(readString(input));
             SubjectId id = readSubject(input).value(); SubjectId owner = readSubject(input).value();
@@ -188,7 +188,7 @@ final class FungibleResourcePayloadCodecs {
             List<FungiblePhysicalObservation.Stack> stacks = new ArrayList<>();
             for (int index = 0; index < count; index++) stacks.add(new FungiblePhysicalObservation.Stack(
                     readPhysicalStackAddress(input), readString(input), input.readUnsignedByte()));
-            return new FungibleStockContributionObserved(account, container, epoch, player, interaction, lot, stacks);
+            return new FungibleStockContributionObserved(account, container, epoch, player, interaction, lot, stacks, section);
         }); }
     }
 
@@ -239,7 +239,7 @@ final class FungibleResourcePayloadCodecs {
 
     private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
         switch (custody) {
-            case ResourceCustody.Container container -> { output.writeByte(0); writeSubject(output, container.containerId()); }
+            case ResourceCustody.Container container -> { output.writeByte(0); writeSubject(output, container.containerId()); writeString(output, container.section().value()); }
             case ResourceCustody.Player player -> { output.writeByte(1); writeString(output, player.playerId().toString()); }
             case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeSubject(output, cargo.cargoId()); }
             case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
@@ -253,7 +253,7 @@ final class FungibleResourcePayloadCodecs {
 
     private static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
-            case 0 -> new ResourceCustody.Container(readSubject(input).value());
+            case 0 -> new ResourceCustody.Container(readSubject(input).value(), new ContainerSectionId(readString(input)));
             case 1 -> new ResourceCustody.Player(java.util.UUID.fromString(readString(input)));
             case 2 -> new ResourceCustody.Cargo(readSubject(input).value());
             case 3 -> new ResourceCustody.WorldCarrier(java.util.UUID.fromString(readString(input)));

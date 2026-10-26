@@ -28,7 +28,7 @@ final class EconomicExportPlanning {
             // Use the same owner-dated release boundary as domestic forecasts.
             capacity.put(process.id(), Math.max(0, process.recipesAvailableBy(horizonTicks) - domesticBatches));
             usedRecipes.put(process.id(), domesticBatches);
-            heat.put(process.id(), Math.max(0, process.availableHeat() - Math.multiplyExact(domesticBatches, process.heatPerBatch())));
+            heat.put(process.id(), Math.max(0, process.availableFuelTicks() - Math.multiplyExact(domesticBatches, process.burnTicksPerBatch())));
             consumeLabour(labour, process, domesticBatches);
         }
         var buyerCash = new TreeMap<String, Long>();

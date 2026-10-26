@@ -37,14 +37,14 @@ final class EquipmentReserveSupply implements ReserveSupplyPort {
         for (var planned : plans) {
             first.putIfAbsent(planned.request().pool(), planned);
             var recipe = planned.request().recipe();
-            var material = recipe.ingredient().acceptedItems().stream().sorted().findFirst().orElseThrow();
-            needs.merge(material, new Need(Rate.ZERO, Math.multiplyExact(planned.operations(), recipe.ingredient().quantity())),
-                    (a, b) -> new Need(Rate.ZERO, Math.addExact(a.immediate(), b.immediate())));
-            heat = Math.addExact(heat, Math.multiplyExact(planned.operations(), recipe.heatPerBatch()));
+            ProductionRecipeInputs.select(recipe, kind -> GoodsResourceValuation.replacement(state, participant, kind, tick).raw())
+                    .forEach((kind, count) -> needs.merge(kind, new Need(Rate.ZERO, Math.multiplyExact(planned.operations(), count)),
+                            (a, b) -> new Need(Rate.ZERO, Math.addExact(a.immediate(), b.immediate()))));
+            heat = Math.addExact(heat, Math.multiplyExact(planned.operations(), recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog())));
         }
         long supplied = state.inventory().containers().values().stream().filter(c -> c.ownerId().equals(home))
                 .flatMap(c -> c.productionStation().stream()).filter(s -> s.capability() == ProductionStationSpec.Capability.FABRICATION)
-                .mapToLong(s -> ProductionStationEnergy.suppliedHeat(state, s.id())).sum();
+                .mapToLong(s -> ProductionStationEnergy.unlitFuelTicks(state, s.id())).sum();
         var required = new TreeMap<String, ProductionRequirement>();
         var deficits = new HashMap<String, EquipmentStockProjection.Deficit>();
         EquipmentStockProjection.deficits(state, home).forEach(deficit -> deficits.put(deficit.demand().pool(), deficit));
@@ -55,20 +55,19 @@ final class EquipmentReserveSupply implements ReserveSupplyPort {
             long coveredWear = deficit.demand().plannedWear() - deficit.missingWear();
             long deadline = deficit.immediate() ? 0 : Math.ceilDiv(Math.multiplyExact(coveredWear, window), deficit.demand().plannedWear());
             var recipe = planned.request().recipe();
-            var material = recipe.ingredient().acceptedItems().stream().sorted().findFirst().orElseThrow();
-            required.merge(material, new ProductionRequirement(
-                    recipe.ingredient().quantity(), deadline), ProductionRequirement::plus);
-            minimumHeat = Math.addExact(minimumHeat, recipe.heatPerBatch());
-            if (recipe.heatPerBatch() > 0) fuelDeadline = Math.min(fuelDeadline, deadline);
+            ProductionRecipeInputs.select(recipe, kind -> GoodsResourceValuation.replacement(state, participant, kind, tick).raw())
+                    .forEach((kind, count) -> required.merge(kind, new ProductionRequirement(count, deadline), ProductionRequirement::plus));
+            minimumHeat = Math.addExact(minimumHeat, recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()));
+            if (recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()) > 0) fuelDeadline = Math.min(fuelDeadline, deadline);
         }
         if (heat > supplied) {
-            var fuel = catalog.fuels().stream().sorted(Comparator.comparingLong(ProductionCatalog.Fuel::heatUnits).reversed()
+            var fuel = catalog.fuels().stream().sorted(Comparator.comparingLong(ProductionCatalog.Fuel::burnTicks).reversed()
                     .thenComparing(ProductionCatalog.Fuel::itemKind)).findFirst().orElseThrow();
-            needs.merge(fuel.itemKind(), new Need(Rate.ZERO, Math.ceilDiv(heat - supplied, fuel.heatUnits())),
+            needs.merge(fuel.itemKind(), new Need(Rate.ZERO, Math.ceilDiv(heat - supplied, fuel.burnTicks())),
                     (a, b) -> new Need(Rate.ZERO, Math.addExact(a.immediate(), b.immediate())));
             if (minimumHeat > supplied) required.merge(fuel.itemKind(),
                     new ProductionRequirement(
-                            Math.ceilDiv(minimumHeat - supplied, fuel.heatUnits()), fuelDeadline),
+                            Math.ceilDiv(minimumHeat - supplied, fuel.burnTicks()), fuelDeadline),
                     ProductionRequirement::plus);
         }
         return new Facts(needs, List.of(), Map.of(), required, EquipmentRenewalForecast.read(state, home, tick));

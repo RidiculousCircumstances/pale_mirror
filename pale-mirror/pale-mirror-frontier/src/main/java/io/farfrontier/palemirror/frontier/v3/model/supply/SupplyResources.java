@@ -85,8 +85,8 @@ final class SupplyResources {
     }
 
     Optional<FuelRequirement> fuel(SupplyPlanner.Process process, long batches, long allocated) {
-        long heat = Math.max(0, Math.multiplyExact(batches, process.heatPerBatch())
-                - Math.max(0, process.availableHeat() - Math.multiplyExact(allocated, process.heatPerBatch())));
+        long heat = Math.max(0, Math.multiplyExact(batches, process.burnTicksPerBatch())
+                - Math.max(0, process.availableFuelTicks() - Math.multiplyExact(allocated, process.burnTicksPerBatch())));
         if (heat == 0) return Optional.empty();
         // Keep the chosen alternative stable during one process allocation, including binary search.
         String item = fuels.computeIfAbsent(process.id(), ignored -> process.fuels().keySet().stream()

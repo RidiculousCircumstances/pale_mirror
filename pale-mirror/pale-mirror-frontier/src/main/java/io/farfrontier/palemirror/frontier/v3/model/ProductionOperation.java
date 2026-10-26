@@ -8,8 +8,8 @@ import java.util.Map;
 /** One station-owned operation. An order refers to it; the resident does not own its clock. */
 public record ProductionOperation(Id id, SubjectId stationId, SubjectId orderId,
                                   ProductionRecipe.Id recipeId, InputCustody inputCustody, SubjectId outputId,
-                                  int inputQuantity, int outputQuantity, long committedHeat,
-                                  Optional<WorkProgress> progress, boolean transformed, Initiator initiator) {
+                                  int inputQuantity, int outputQuantity,
+                                  Optional<WorkProgress> progress, boolean transformed, Initiator initiator, Optional<ProductionStationClock.Attendance> attendance) {
     public sealed interface Initiator permits OrderInitiator, PlayerInitiator, SettlementInitiator { }
     /** Explicit institution mandate; the station owns the operation, not a retained worker/job. */
     public record SettlementInitiator(SubjectId settlementId) implements Initiator {
@@ -77,36 +77,40 @@ public record ProductionOperation(Id id, SubjectId stationId, SubjectId orderId,
     public ProductionOperation {
         Objects.requireNonNull(id); Objects.requireNonNull(stationId); Objects.requireNonNull(orderId);
         Objects.requireNonNull(recipeId); Objects.requireNonNull(inputCustody); Objects.requireNonNull(outputId);
-        Objects.requireNonNull(initiator);
+        Objects.requireNonNull(initiator); attendance = Objects.requireNonNull(attendance);
         progress = Objects.requireNonNull(progress);
         if (inputQuantity < 1 || inputQuantity > 64 || outputQuantity < 1 || outputQuantity > 64
-                || committedHeat < 0 || committedHeat > 1_000_000_000L
                 || inputCustody.materials().filter(input -> input.lots().values().stream()
                     .mapToInt(Integer::intValue).sum() != inputQuantity).isPresent()
                 || inputCustody instanceof RepairInput repair && !repair.target().id().equals(outputId)
                 || transformed && progress.filter(WorkProgress::complete).isEmpty()
                 || initiator instanceof PlayerInitiator player && player.attendanceIntent() == PlayerAttendanceIntent.PAUSED
-                    && progress.filter(WorkProgress::running).isPresent()
+                    && (progress.filter(WorkProgress::running).isPresent() || attendance.isPresent())
                 || initiator instanceof OrderInitiator order && !order.orderId().equals(orderId))
             throw new IllegalArgumentException("invalid bounded station operation");
     }
     public ProductionOperation withProgress(WorkProgress value) {
         if (transformed) throw new IllegalArgumentException("transformed operation cannot accrue work");
         return new ProductionOperation(id, stationId, orderId, recipeId, inputCustody, outputId, inputQuantity,
-                outputQuantity, committedHeat, Optional.of(value), false, initiator);
+                outputQuantity, Optional.of(value), false, initiator, attendance);
+    }
+    public ProductionOperation withAttendance(WorkProgress value, Optional<ProductionStationClock.Attendance> present) {
+        if (transformed) throw new IllegalArgumentException("transformed operation cannot claim attendance");
+        return new ProductionOperation(id, stationId, orderId, recipeId, inputCustody, outputId, inputQuantity,
+                outputQuantity, Optional.of(value), false, initiator, present);
     }
     public boolean complete() { return progress.filter(WorkProgress::complete).isPresent(); }
     public ProductionOperation withPlayerAttendanceIntent(PlayerAttendanceIntent intent) {
         if (!(initiator instanceof PlayerInitiator player) || transformed)
             throw new IllegalArgumentException("attendance consent belongs only to an unfinished player operation");
         return new ProductionOperation(id, stationId, orderId, recipeId, inputCustody, outputId, inputQuantity,
-                outputQuantity, committedHeat, progress, false, new PlayerInitiator(player.playerId(), intent));
+                outputQuantity, progress, false, new PlayerInitiator(player.playerId(), intent), attendance);
     }
     public SubjectId outputClaimId() { return outputClaimId(id); }
     public static SubjectId outputClaimId(Id id) { return new SubjectId("claim:station-output-" + id.value().value().replace(':', '-')); }
     public ProductionOperation confirmTransformation() {
         if (!complete() || transformed) throw new IllegalArgumentException("station transformation has no unconsumed completion");
         return new ProductionOperation(id, stationId, orderId, recipeId, inputCustody, outputId, inputQuantity,
-                outputQuantity, committedHeat, progress, true, initiator);
+                outputQuantity, progress, true, initiator, Optional.empty());
     }
 }

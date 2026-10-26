@@ -25,19 +25,8 @@ public final class ProductionStationTransformation {
         if (hot) {
             if (!FungibleResourceCustodySupport.hasCurrentPhysicalPortion(state, input.accountId(), input.lots()))
                 return Optional.empty();
-            var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(input.accountId()))
-                    .sorted(Comparator.comparing(binding -> binding.address().toString())).toList();
-            var sourceAddress = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(record.id(), spec.inputSlot()));
-            var source = bindings.stream().filter(binding -> binding.address().equals(sourceAddress)).findFirst().orElseThrow(
-                    () -> new IllegalArgumentException("completed station operation lost its physical input port"));
-            epoch = source.authorityEpoch();
-            for (var binding : bindings) {
-                if (binding.authorityEpoch() != epoch) throw new IllegalArgumentException("station recipe has mixed authority epochs");
-                before.add(new FungiblePhysicalObservation.Stack(binding.address(), binding.itemKind(), binding.quantity()));
-                int remaining = binding.quantity() - (binding.address().equals(sourceAddress) ? operation.inputQuantity() : 0);
-                if (remaining < 0) throw new IllegalArgumentException("completed station operation lost its input quantity");
-                if (remaining > 0) after.add(new FungiblePhysicalObservation.Stack(binding.address(), binding.itemKind(), remaining));
-            }
+            var image = ProductionStationMaterialImage.of(ledger, spec, input);
+            epoch = image.epoch(); before.addAll(image.before()); after.addAll(image.remaining());
             if (recipe.outcome() instanceof ProductionRecipeOutcome.Fungible)
                 after.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                         new InventoryCustody.ContainerSlot(record.id(), spec.outputSlot())), recipe.product().itemKind(), operation.outputQuantity()));

@@ -33,7 +33,7 @@ final class EquipmentJobAdmission {
             public HumanCapability capability() { return HumanCapability.INDUSTRY; }
             public Optional<ResidentWorkOffer<ProductionJob>> discover(FrontierWorldState state, ResidentProfile worker, long tick) {
                 if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, ready.facility().id())
-                        || !ProductionResourceCustody.canStart(state, ready.input(), ready.input().quantity())) return Optional.empty();
+                        || ready.input().sources().stream().anyMatch(input -> !ProductionResourceCustody.canStart(state, input.selection(), input.selection().quantity()))) return Optional.empty();
                 var request = ready.request();
                 var job = StationWorkOrders.propose(state, task, ready.facility(), worker, kind(), request.recipe(), ready.input(),
                         request.maintenance(), ProductionRights.publicService(task.ownerId()));

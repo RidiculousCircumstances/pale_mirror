@@ -9,7 +9,7 @@ final class FungibleResourceReadIndex {
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
                          Map<SubjectId, Map<Balance, Integer>> available,
-                         Map<SubjectId, CustodyAccount> containers) { }
+                         Map<ResourceCustody.Container, CustodyAccount> containers) { }
     private static final ImmutableInputView<Map<SubjectId, List<CustodyAccount>>> CONTAINERS = new ImmutableInputView<>();
     private static final ImmutableInputView<Set<ResourceCustody>> CLAIMED = new ImmutableInputView<>();
     // Retain one immutable image per owner thread, not accumulated world revisions.
@@ -25,7 +25,12 @@ final class FungibleResourceReadIndex {
     }
 
     static Optional<CustodyAccount> container(FungibleResourceLedger ledger, SubjectId container) {
-        return Optional.ofNullable(image(ledger).containers().get(Objects.requireNonNull(container)));
+        return container(ledger, container, ContainerSectionId.STOCK);
+    }
+
+    static Optional<CustodyAccount> container(FungibleResourceLedger ledger, SubjectId container, ContainerSectionId section) {
+        return Optional.ofNullable(image(ledger).containers().get(new ResourceCustody.Container(
+                Objects.requireNonNull(container), Objects.requireNonNull(section))));
     }
 
     /** All retained accounts, not a first-account shortcut for physical capacity. */
@@ -51,10 +56,11 @@ final class FungibleResourceReadIndex {
         var current = CURRENT.get();
         if (current != null && current.lots() == ledger.lots() && current.claims() == ledger.claims()
                 && current.accounts() == ledger.accounts()) return current;
-        var containers = new HashMap<SubjectId, CustodyAccount>();
+        var containers = new HashMap<ResourceCustody.Container, CustodyAccount>();
         for (var account : ledger.accounts().values()) {
             if (account.custody() instanceof ResourceCustody.Container holder)
-                containers.putIfAbsent(holder.containerId(), account);
+                if (containers.putIfAbsent(holder, account) != null)
+                    throw new IllegalArgumentException("container section has competing resource accounts: " + holder);
         }
         current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), new HashMap<>(), Map.copyOf(containers));
         CURRENT.set(current);

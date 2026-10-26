@@ -49,11 +49,11 @@ public final class ShipmentStateSupport {
                 || state.inventory().fungibleResources().accounts().containsKey(shipment.carriedAccountId())
                     && (shipment.mobileContainerId().isEmpty() || !state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).custody().equals(shipment.carriedCustody()))
                 || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
-                        account.custody().equals(new ResourceCustody.Container(shipment.receiver().containerId()))
+                        account.custody().equals(shipment.receiver().custody())
                                 && !account.id().equals(shipment.receivingAccountId()))
                 || state.inventory().fungibleResources().accounts().containsKey(shipment.receivingAccountId())
                     && !state.inventory().fungibleResources().accounts().get(shipment.receivingAccountId()).custody()
-                            .equals(new ResourceCustody.Container(shipment.receiver().containerId()))
+                            .equals(shipment.receiver().custody())
                 || !(shipment.mobileContainerId().isPresent() ? ActorExecutionCoordinator.declaredActorWorkAdmission(state, shipment.execution().actorId())
                     : ActorExecutionCoordinator.ordinaryWorkAdmission(state, shipment.execution().actorId())).permitted())
             throw new IllegalArgumentException("shipment has no authorized source allocation or available exact courier");
@@ -98,7 +98,7 @@ public final class ShipmentStateSupport {
         if (!ShipmentServiceAccess.available(state, shipment))
             throw new IllegalArgumentException("shipment has not acquired its shared endpoint access turn");
         if (shipment.cargo() instanceof ShipmentCargo.Fungible && shipment.carrying() && !ContainerStorageAdmission.receive(state,
-                shipment.unloadingEndpoint().containerId(), shipment.itemKind(), order.portion().quantity(), ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)))
+                (ResourceCustody.Container) shipment.unloadingEndpoint().custody(), shipment.itemKind(), order.portion().quantity(), ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)))
             throw new IllegalArgumentException("shipment receiver cannot fit its retained cargo");
         var transfer = ActorResourceTransferComposition.cold(state, order);
         return transferred(state, shipment, lots, transfer);
@@ -139,7 +139,7 @@ public final class ShipmentStateSupport {
                 !ContainerStorageAdmission.receive(state, container, shipment.itemKind(), shipment.quantity(), java.util.Optional.empty())).isPresent()
                 ? java.util.Map.of() : shipment.portions();
         int quantity = shipment.quantity();
-        while (quantity > 0 && !ContainerStorageAdmission.receive(state, shipment.unloadingEndpoint().containerId(),
+        while (quantity > 0 && !ContainerStorageAdmission.receive(state, (ResourceCustody.Container) shipment.unloadingEndpoint().custody(),
                 shipment.itemKind(), quantity, ShipmentAuthorizationComposition.capacityCompletionOwner(shipment))) quantity--;
         return portion(shipment.portions(), quantity);
     }

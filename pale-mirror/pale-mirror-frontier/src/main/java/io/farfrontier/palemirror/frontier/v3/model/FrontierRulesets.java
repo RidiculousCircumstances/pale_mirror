@@ -59,7 +59,8 @@ public final class FrontierRulesets {
     private static final FrontierRuleset TOOL_GRAYBOX = GrayboxToolProduction.extend(SMELTING_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_DISTANT_TOOL_GRAYBOX = distant(TOOL_GRAYBOX);
     private static final FrontierRuleset DISTANT_TOOL_GRAYBOX = operatingPrices(PREVIOUS_DISTANT_TOOL_GRAYBOX);
-    private static final FrontierRuleset FORESTRY_GRAYBOX = GrayboxForestryProduction.extend(DISTANT_TOOL_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_FORESTRY_GRAYBOX = GrayboxForestryProduction.extend(DISTANT_TOOL_GRAYBOX);
+    private static final FrontierRuleset FORESTRY_GRAYBOX = GrayboxWoodProduction.extend(PREVIOUS_FORESTRY_GRAYBOX);
     /** New-world startup references match current recipes; historical profiles stay immutable. */
     private static FrontierRuleset operatingPrices(FrontierRuleset base) {
         var trade = base.goodsTrade().withPriceSeeds(GoodsPolicyKind.PUBLIC_SETTLEMENT,
@@ -93,6 +94,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(FORESTRY_GRAYBOX.id(), FORESTRY_GRAYBOX),
+            Map.entry(PREVIOUS_FORESTRY_GRAYBOX.id(), PREVIOUS_FORESTRY_GRAYBOX),
             Map.entry(TOOL_GRAYBOX.id(), TOOL_GRAYBOX),
             Map.entry(DISTANT_TOOL_GRAYBOX.id(), DISTANT_TOOL_GRAYBOX),
             Map.entry(PREVIOUS_DISTANT_TOOL_GRAYBOX.id(), PREVIOUS_DISTANT_TOOL_GRAYBOX),
@@ -146,7 +148,7 @@ public final class FrontierRulesets {
         var recipes = new java.util.ArrayList<>(base.production().recipes());
         recipes.add(new ProductionRecipe(id, ProductionStationSpec.Capability.SMELTING,
                 new ProductionRecipe.Ingredient(java.util.Set.of("minecraft:raw_iron"), 1),
-                new ProductionRecipe.Product("minecraft:iron_ingot", 1), 200, ProductionRecipe.ProcessingMode.AUTOMATIC));
+                new ProductionRecipe.Product("minecraft:iron_ingot", 1), true, ProductionRecipe.ProcessingMode.AUTOMATIC));
         var equipment = new java.util.ArrayList<>(base.production().equipment()); equipment.add(ProductionEquipment.smelter());
         var production = new ProductionCatalog(recipes, base.production().fuels(), equipment,
                 java.util.List.of(new ProductionCatalog.AutomaticPolicy(id, 64, 8)));
@@ -205,12 +207,8 @@ public final class FrontierRulesets {
     /** Explicit balance trial: eightfold baking heat and fourfold finite ore volume.
      * Prices, fuel energy, loot, population and initial warehouse stocks stay unchanged. */
     private static FrontierRuleset higherFuelDemand(FrontierRuleset base) {
-        var catalog = base.production();
-        var production = new ProductionCatalog(catalog.recipes().stream().map(recipe ->
-                recipe.id().equals(BakeryRecipes.BREAD)
-                        ? new ProductionRecipe(recipe.id(), recipe.capability(), recipe.ingredient(), recipe.product(),
-                                Math.multiplyExact(recipe.heatPerBatch(), 8L), recipe.processingMode())
-                        : recipe).toList(), catalog.fuels(), catalog.equipment());
+        var production = base.production();
+        var work = base.workCatalog().replaceDefinition(new WorkCatalog.Definition("minecraft:bread", WorkOperation.PRODUCE, HumanCapability.INDUSTRY, 640));
         java.util.function.UnaryOperator<io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile> larger =
                 pocket -> new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(
                         pocket.producerPeriod(), pocket.firstDepth(), Math.multiplyExact(pocket.depthCells(), 2),
@@ -219,7 +217,7 @@ public final class FrontierRulesets {
                 .withAdditionalPockets(base.extraction().additionalPockets().stream().map(larger).toList());
         return new FrontierRuleset("frontier-v3-quarry-graybox-r22", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
                 base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
-                base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), extraction,
+                work, base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), extraction,
                 base.execution(), production, base.fields());
     }
 

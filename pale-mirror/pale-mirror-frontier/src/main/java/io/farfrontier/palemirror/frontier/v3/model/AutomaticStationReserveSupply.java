@@ -15,12 +15,12 @@ final class AutomaticStationReserveSupply implements ReserveSupplyPort {
             if (AutomaticStationProduction.stations(state, home, recipe).isEmpty()) continue;
             needs.put(recipe.product().itemKind(), new Need(Rate.ZERO, policy.outputReserve()));
             var inputs = new TreeMap<String, Rate>();
-            inputs.put(recipe.ingredient().acceptedItems().stream().sorted().findFirst().orElseThrow(),
-                    Rate.of(recipe.ingredient().quantity(), recipe.product().quantity()));
-            if (recipe.heatPerBatch() > 0) {
-                var fuel = catalog.fuels().stream().sorted(Comparator.comparingLong(ProductionCatalog.Fuel::heatUnits).reversed()
+            ProductionRecipeInputs.select(recipe, kind -> 0L).forEach((kind, count) ->
+                    inputs.merge(kind, Rate.of(count, recipe.product().quantity()), Rate::plus));
+            if (recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()) > 0) {
+                var fuel = catalog.fuels().stream().sorted(Comparator.comparingLong(ProductionCatalog.Fuel::burnTicks).reversed()
                         .thenComparing(ProductionCatalog.Fuel::itemKind)).findFirst().orElseThrow();
-                inputs.merge(fuel.itemKind(), Rate.of(recipe.heatPerBatch(), Math.multiplyExact(fuel.heatUnits(), recipe.product().quantity())), Rate::plus);
+                inputs.merge(fuel.itemKind(), Rate.of(recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), Math.multiplyExact(fuel.burnTicks(), recipe.product().quantity())), Rate::plus);
             }
             flows.add(new Flow(recipe.product().itemKind(), inputs));
             long duration = Math.multiplyExact(state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE).workUnits(), policy.maximumBatches());

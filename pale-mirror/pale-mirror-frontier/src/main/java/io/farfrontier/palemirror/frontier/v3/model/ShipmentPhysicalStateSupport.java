@@ -85,8 +85,8 @@ public final class ShipmentPhysicalStateSupport {
         var container = shipment.unloadingEndpoint().containerId();
         int allowed = ShipmentStateSupport.coldTransferLots(state, shipment).values().stream().mapToInt(Integer::intValue).sum();
         if (allowed == 0) return Optional.empty();
-        return ContainerMaterialDestination.select(state, container, shipment.itemKind(), shipment.lotQuantities(), allowed,
-                ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)).map(d -> new Destination(d.slot(), d.before(), d.lots()));
+        return ContainerMaterialDestination.select(state, (ResourceCustody.Container) shipment.unloadingEndpoint().custody(), shipment.itemKind(), shipment.lotQuantities(), allowed,
+                ShipmentAuthorizationComposition.capacityCompletionOwner(shipment), false).map(d -> new Destination(d.slot(), d.before(), d.lots()));
     }
     public static FrontierWorldState prepare(FrontierWorldState state, SubjectId subject, ShipmentHotPrepared prepared) {
         Shipment shipment = require(state, subject, prepared.shipmentId(), prepared.step());

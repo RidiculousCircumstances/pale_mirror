@@ -22,7 +22,7 @@ final class ProductionEconomicInputChanges implements EconomicInputChangePort {
             if (next != null) sink.resource(next.rights().resourceOwner().id(), COMMITMENT, next.outputItemKind());
         });
         EconomicInputChangePort.difference(before.productionStations().machines(), after.productionStations().machines(), (old, next) -> {
-            if (old != null && next != null && old.storedHeat() == next.storedHeat()
+            if (old != null && next != null && old.combustion().equals(next.combustion())
                     && old.operation().map(ProductionOperation::id).equals(next.operation().map(ProductionOperation::id))) return;
             var station = next == null ? old.stationId() : next.stationId();
             var records = next == null ? before.inventory().containers() : after.inventory().containers();

@@ -12,6 +12,6 @@ interface SourceStockClaimLossOwner {
     record Settlement(FungibleForfeitureSettlement resources, HumanPopulation population) { }
     ClaimPurpose purpose();
     void validate(FrontierWorldState state, SubjectId sourceAccount, ClaimAllocation claim);
-    Settlement settle(FrontierWorldState before, ClaimAllocation claim, Settlement transaction);
+    Settlement settle(FrontierWorldState before, List<ClaimAllocation> claims, Settlement transaction);
     List<ReleasedActivity> released(FrontierWorldState before, ClaimAllocation claim);
 }

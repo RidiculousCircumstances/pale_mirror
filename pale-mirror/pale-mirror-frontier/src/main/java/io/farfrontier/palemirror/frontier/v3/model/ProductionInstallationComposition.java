@@ -8,6 +8,8 @@ public final class ProductionInstallationComposition {
     private static final Map<ProductionStationSpec.Capability,
             BiFunction<FrontierWorldState, ProductionStationSpec, FrontierWorldStateUpdate>> CLIENTS = Map.of(
             ProductionStationSpec.Capability.BAKING, BakeryStationInstallation::installed,
+            ProductionStationSpec.Capability.FABRICATION, (state, station) -> FrontierWorldStateUpdate.begin(),
+            ProductionStationSpec.Capability.WOODWORKING, (state, station) -> FrontierWorldStateUpdate.begin(),
             ProductionStationSpec.Capability.SMELTING, (state, station) -> FrontierWorldStateUpdate.begin());
     static {
         if (!CLIENTS.keySet().equals(EnumSet.allOf(ProductionStationSpec.Capability.class)))

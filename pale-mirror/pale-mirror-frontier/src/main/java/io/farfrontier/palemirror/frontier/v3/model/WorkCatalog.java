@@ -30,7 +30,7 @@ public record WorkCatalog(List<Definition> definitions, int baseSpeedPermille,
     }
     public static WorkCatalog initial() {
         return new WorkCatalog(List.of(
-                new Definition("minecraft:bread", WorkOperation.PRODUCE, HumanCapability.INDUSTRY, 1_600),
+                new Definition("minecraft:bread", WorkOperation.PRODUCE, HumanCapability.INDUSTRY, 80),
                 new Definition("minecraft:wheat", WorkOperation.HARVEST, HumanCapability.AGRICULTURE, 200),
                 new Definition("minecraft:wheat", WorkOperation.SOW, HumanCapability.AGRICULTURE, 100),
                 new Definition("minecraft:wheat", WorkOperation.TILL, HumanCapability.AGRICULTURE, 200)),
@@ -41,6 +41,12 @@ public record WorkCatalog(List<Definition> definitions, int baseSpeedPermille,
                 + definitions.stream().sorted(java.util.Comparator.comparing(Definition::key))
                 .map(value -> value.key() + ":" + value.capability().wireTag() + ":" + value.workUnits())
                 .collect(java.util.stream.Collectors.joining(";"));
+    }
+    public WorkCatalog replaceDefinition(Definition definition) {
+        Objects.requireNonNull(definition);
+        require(definition.resourceKind(), definition.operation());
+        return new WorkCatalog(definitions.stream().map(prior -> prior.key().equals(definition.key()) ? definition : prior).toList(),
+                baseSpeedPermille, skillGainPermille, minSpeedPermille, maxSpeedPermille);
     }
     public WorkCatalog withDefinition(Definition definition) {
         var next = new java.util.ArrayList<>(definitions); next.add(Objects.requireNonNull(definition));

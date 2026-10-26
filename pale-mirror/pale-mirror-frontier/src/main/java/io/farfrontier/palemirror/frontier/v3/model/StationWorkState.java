@@ -13,7 +13,7 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
                               SubjectId actorAccountId, SubjectId stationAccountId,
                               SubjectId destinationAccountId,
                               Optional<StationWorkPhysicalStep> pendingPhysicalStep,
-                              Optional<BakeryWorkBlock> block) {
+                              Optional<BakeryWorkBlock> block, StationWorkMaterials materials) {
     public record MaintenanceTarget(SubjectId itemId, SubjectId sourceContainerId, String itemKind) {
         public MaintenanceTarget {
             Objects.requireNonNull(itemId, "maintenance item");
@@ -39,6 +39,7 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
 
     public StationWorkState {
         Objects.requireNonNull(phase, "station phase");
+        Objects.requireNonNull(materials, "retained station material workflow");
         Objects.requireNonNull(permission, "declared work permission");
         Objects.requireNonNull(outputRepresentation, "declared product representation");
         maintenanceTarget = Objects.requireNonNull(maintenanceTarget, "declared maintenance target");
@@ -61,10 +62,18 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
             throw new IllegalArgumentException("bakery work must retain distinct custody accounts and a bounded station clock");
         }
         if (pendingPhysicalStep.isPresent() && (phase == Phase.DELIVERED
-                || pendingPhysicalStep.orElseThrow().phase() != phase))
+                || pendingPhysicalStep.orElseThrow().phase() != phase || pendingPhysicalStep.orElseThrow().workflowOrdinal() != materials.tripOrdinal()))
             throw new IllegalArgumentException("bakery pending effect must belong to its ready current phase");
         if (phase == Phase.DELIVERED && block.isPresent())
             throw new IllegalArgumentException("delivered bakery job cannot be blocked");
+    }
+
+    public StationWorkState(Phase phase, ResidentWorkKind permission, StationWorkProduct.Representation outputRepresentation,
+            Optional<MaintenanceTarget> maintenanceTarget, SubjectId stationId, ProductionRecipe.Id recipeId, String inputItemKind,
+            int inputQuantity, SubjectId sourceAccountId, SubjectId sourceContainerId, SubjectId actorAccountId, SubjectId stationAccountId,
+            SubjectId destinationAccountId, Optional<StationWorkPhysicalStep> pendingPhysicalStep, Optional<BakeryWorkBlock> block) {
+        this(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, inputQuantity, sourceAccountId,
+                sourceContainerId, actorAccountId, stationAccountId, destinationAccountId, pendingPhysicalStep, block, StationWorkMaterials.empty());
     }
 
     public StationWorkState(Phase phase, ResidentWorkKind permission, StationWorkProduct.Representation outputRepresentation, Optional<MaintenanceTarget> maintenanceTarget,
@@ -77,11 +86,28 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
                 destinationAccountId, Optional.empty(), Optional.empty());
     }
 
+    public StationWorkState withMaterials(StationWorkMaterials value) {
+        return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind,
+                inputQuantity, sourceAccountId, sourceContainerId, actorAccountId, stationAccountId, destinationAccountId,
+                pendingPhysicalStep, block, value);
+    }
+    /** A confirmed deposit ends one trip; the exact next reserved pickup starts another. */
+    public StationWorkState nextMaterial(StationWorkMaterials.Loaded deposited) {
+        if (phase != Phase.STATION_LOAD || pendingPhysicalStep.isPresent() || block.isPresent() || materials.queued().isEmpty())
+            throw new IllegalArgumentException("station material continuation lacks a settled load and retained next input");
+        var next = materials.queued().getFirst();
+        return new StationWorkState(Phase.DEPOT_PICKUP, permission, outputRepresentation, maintenanceTarget, stationId, recipeId,
+                next.itemKind(), next.quantity(), next.sourceAccount(), next.sourceContainer(), actorAccountId, stationAccountId,
+                destinationAccountId, Optional.empty(), next.withdrawn() ? Optional.of(new BakeryWorkBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED,
+                    next.sourceContainer(), -1, next.itemKind(), 0)) : Optional.empty(), materials.deposited(deposited).nextPickup());
+    }
+    public long goalOrdinal() { return Math.addExact(Math.multiplyExact((long) materials.tripOrdinal(), 16L), phase.wireTag()); }
+
     public StationWorkState withBlock(Optional<BakeryWorkBlock> next) {
         if (phase == Phase.DELIVERED && next.isPresent())
             throw new IllegalArgumentException("delivered bakery job cannot be blocked");
         return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, inputQuantity, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, pendingPhysicalStep, next);
+                stationAccountId, destinationAccountId, pendingPhysicalStep, next, materials);
     }
 
     /** After the full hand is deposited, an unbegun order may select a smaller
@@ -91,7 +117,7 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
                 || quantity < 1 || quantity > inputQuantity)
             throw new IllegalArgumentException("only a settled unbegun station load may select its recipe portion");
         return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, quantity, sourceAccountId,
-                sourceContainerId, actorAccountId, stationAccountId, destinationAccountId);
+                sourceContainerId, actorAccountId, stationAccountId, destinationAccountId, Optional.empty(), Optional.empty(), materials);
     }
 
     public StationWorkState withDestination(SubjectId account) {
@@ -99,7 +125,7 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
             throw new IllegalArgumentException("bakery destination cannot change across a pending or completed delivery");
         return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, inputQuantity, sourceAccountId, sourceContainerId, actorAccountId,
                 stationAccountId, account, Optional.empty(),
-                block.filter(value -> value.reason() != BakeryWorkBlock.Reason.DESTINATION_OCCUPIED));
+                block.filter(value -> value.reason() != BakeryWorkBlock.Reason.DESTINATION_OCCUPIED), materials);
     }
 
     /** The reservation ends at confirmed output removal, not delivery or the worker's return. */
@@ -115,25 +141,25 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
                 || block.map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true))
             throw new IllegalArgumentException("bakery depot source can change only while awaiting input");
         return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, inputQuantity, Objects.requireNonNull(accountId, "replacement depot account"),
-                Objects.requireNonNull(containerId, "replacement source storage"), actorAccountId, stationAccountId, destinationAccountId, pendingPhysicalStep, Optional.empty());
+                Objects.requireNonNull(containerId, "replacement source storage"), actorAccountId, stationAccountId, destinationAccountId, pendingPhysicalStep, Optional.empty(), materials);
     }
 
     public StationWorkState preparePhysical(StationWorkPhysicalStep step) {
         if (pendingPhysicalStep.isPresent() || block.isPresent() || step.phase() != phase)
             throw new IllegalArgumentException("bakery phase already has a physical effect intent");
         return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, inputQuantity, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, Optional.of(step), block);
+                stationAccountId, destinationAccountId, Optional.of(step), block, materials);
     }
 
     public StationWorkState withoutPhysical() {
         return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, inputQuantity, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, Optional.empty(), block);
+                stationAccountId, destinationAccountId, Optional.empty(), block, materials);
     }
     public StationWorkState withReplacementStation(ProductionStationSpec replacement) {
         if (pendingPhysicalStep.isPresent() || phase != Phase.DEPOT_PICKUP && phase != Phase.STATION_LOAD)
             throw new IllegalArgumentException("station replacement cannot cross a pending or loaded operation");
         return new StationWorkState(phase, permission, outputRepresentation, maintenanceTarget, replacement.id(), recipeId, inputItemKind, inputQuantity, sourceAccountId, sourceContainerId,
-                actorAccountId, ReferenceContainerCustody.scopeId(replacement.containerId()), destinationAccountId, Optional.empty(), Optional.empty());
+                actorAccountId, ContainerResourceAccounts.id(replacement.custody(ActorContainerItemOrder.StationPort.INPUT)), destinationAccountId, Optional.empty(), Optional.empty(), materials);
     }
 
     public StationWorkState advance(Phase next) {
@@ -149,7 +175,7 @@ public record StationWorkState(Phase phase, ResidentWorkKind permission, Station
         };
         if (!legal || pendingPhysicalStep.isPresent() || block.isPresent()) throw new IllegalArgumentException("bakery phase cannot skip a custody receipt or local block");
         return new StationWorkState(next, permission, outputRepresentation, maintenanceTarget, stationId, recipeId, inputItemKind, inputQuantity, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId);
+                stationAccountId, destinationAccountId, Optional.empty(), Optional.empty(), materials);
     }
 
 }

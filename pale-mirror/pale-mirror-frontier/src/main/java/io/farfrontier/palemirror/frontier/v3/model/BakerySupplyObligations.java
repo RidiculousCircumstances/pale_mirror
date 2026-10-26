@@ -14,7 +14,7 @@ final class BakerySupplyObligations {
                                                      Map<String, SupplyPlanner.Stock> stocks) {
         var available = new HashMap<SubjectId, Long>();
         var fuels = new TreeMap<String, Long>();
-        state.bootstrap().ruleset().production().fuels().forEach(fuel -> fuels.put(fuel.itemKind(), fuel.heatUnits()));
+        state.bootstrap().ruleset().production().fuels().forEach(fuel -> fuels.put(fuel.itemKind(), fuel.burnTicks()));
         // Aggregate energy by product/station before rounding to whole fuel items.
         var needed = new TreeMap<SubjectId, Map<String, Long>>();
         unfunded(state).filter(job -> job.rights().resourceOwner().id().equals(home)).forEach(job ->
@@ -22,7 +22,7 @@ final class BakerySupplyObligations {
                         .merge(job.outputItemKind(), heat(state, job), Math::addExact));
         var result = new ArrayList<SupplyPlanner.Dependency>();
         needed.forEach((station, products) -> {
-            available.put(station, ProductionStationEnergy.suppliedHeat(state, station));
+            available.put(station, ProductionStationEnergy.unlitFuelTicks(state, station));
             products.forEach((product, required) -> {
                 long retained = available.get(station);
                 available.put(station, Math.max(0, retained - required));
@@ -35,11 +35,11 @@ final class BakerySupplyObligations {
     }
     private static java.util.stream.Stream<ProductionJob> unfunded(FrontierWorldState state) {
         return state.productionJobs().values().stream().filter(job -> job.stationWork().filter(work ->
-                work.phase() == StationWorkState.Phase.DEPOT_PICKUP || work.phase() == StationWorkState.Phase.STATION_LOAD).isPresent());
+                work.phase() == StationWorkState.Phase.DEPOT_PICKUP || work.phase() == StationWorkState.Phase.STATION_LOAD || work.phase() == StationWorkState.Phase.PROCESSING).isPresent());
     }
     private static long heat(FrontierWorldState state, ProductionJob job) {
         var recipe = state.bootstrap().ruleset().production().require(job.stationWork().orElseThrow().recipeId());
-        return Math.multiplyExact(recipe.heatPerBatch(), job.inputCount() / recipe.ingredient().quantity());
+        return Math.multiplyExact(recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), StationWorkMaterialAccounting.plannedUnits(job) / recipe.inputUnitsPerBatch());
     }
     private BakerySupplyObligations() { }
 }

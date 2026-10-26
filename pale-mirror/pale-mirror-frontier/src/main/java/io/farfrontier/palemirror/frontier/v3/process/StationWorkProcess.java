@@ -229,12 +229,12 @@ public final class StationWorkProcess {
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
         }
         if (coldBlocker(state, job, checkOutputCapacity).isPresent()) {
-            if (StationWorkLabour.attended(state, job) && StationWorkLabour.progress(state, job).filter(WorkProgress::running).isPresent()
+            if (StationWorkLabour.attended(state, job) && (StationWorkLabour.progress(state, job).filter(WorkProgress::running).isPresent() || StationWorkLabour.holdsAttendance(state, job))
                     && work.pendingPhysicalStep().isEmpty()
                     && ActorExecutionCoordinator.ambientAvailable(state, List.of(job.workerId()))
                     && !ActorExecutionCoordinator.sceneOwns(state, job.workerId())
                     && ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
-                return Optional.of(labourStep(state, job, tick, false));
+                return StationWorkLabour.updateNeeded(state, job, tick, false) ? Optional.of(labourStep(state, job, tick, false)) : Optional.empty();
             return Optional.empty();
         }
         List<SurfaceAnchor> route;
@@ -252,7 +252,7 @@ public final class StationWorkProcess {
                 return Optional.empty();
             var prior = StationWorkLabour.progress(state, job);
             boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();
-            return Optional.of(labourStep(state, job, tick, run));
+            return StationWorkLabour.updateNeeded(state, job, tick, run) ? Optional.of(labourStep(state, job, tick, run)) : Optional.empty();
         }
         return Optional.of(coldStep(state, job, action, current, List.of()));
     }
@@ -263,7 +263,7 @@ public final class StationWorkProcess {
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
         return new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.LABOUR,
                 state.actorLocations().get(job.workerId()).supportingSurface(), execution, Optional.empty(),
-                Optional.of(new BakeryLabourChange(StationWorkLabour.progress(state, job), StationWorkLabour.next(state, job, tick, run))));
+                Optional.of(StationWorkLabour.propose(state, job, tick, run)));
     }
 
     private static BakeryColdStep coldStep(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action,
@@ -303,7 +303,7 @@ public final class StationWorkProcess {
         if (step.action() == BakeryColdStep.Action.LABOUR) {
             var change = step.labourChange().orElseThrow();
             StationWorkLabour.require(state, job, change);
-            return StationWorkLabour.change(state, job, change.next());
+            return StationWorkLabour.change(state, job, change);
         }
         ExactInventory inventory;
         if (step.action() == BakeryColdStep.Action.RECIPE) {
@@ -406,7 +406,7 @@ public final class StationWorkProcess {
         if (prepared.phase() == StationWorkState.Phase.PROCESSING
                 && !(job.inputHold() instanceof ProductionInputHold.Materialized))
             throw new IllegalArgumentException("fungible recipe preparation belongs exclusively to the station owner");
-        if (work.phase() != prepared.phase() || work.pendingPhysicalStep().isPresent()
+        if (work.phase() != prepared.phase() || work.materials().tripOrdinal() != prepared.workflowOrdinal() || work.pendingPhysicalStep().isPresent()
                 || !lease.memberBody(state.actorLocations(), job.workerId()).equals(StationWorkGoal.current(state, job).station().standingBody())
                 || prepared.phase() == StationWorkState.Phase.PROCESSING
                 && !StationWorkLabour.complete(state, job)
@@ -417,7 +417,7 @@ public final class StationWorkProcess {
         int requiredSlot = switch (prepared.phase()) {
             case TARGET_PICKUP, DEPOT_PICKUP, STATION_UNLOAD -> -1;
             case TARGET_LOAD -> station.maintenanceSlot().orElseThrow();
-            case STATION_LOAD -> station.inputSlot();
+            case STATION_LOAD -> StationWorkOperation.loadSlot(state, job).orElse(-1);
             case PROCESSING -> station.outputSlot();
             case DEPOT_DELIVERY -> prepared.destinationSlot();
             case DELIVERED -> throw new IllegalArgumentException("delivered bakery output has no physical effect");
@@ -427,7 +427,7 @@ public final class StationWorkProcess {
                 && !state.containerSlotAvailableForOutput(new InventoryCustody.ContainerSlot(
                 StationWorkStorage.current(job), prepared.destinationSlot()), job.id()))
             throw new IllegalArgumentException("bakery HOT effect has no reserved current target port");
-        StationWorkPhysicalStep step = new StationWorkPhysicalStep(prepared.phase(), prepared.leaseId(), prepared.destinationSlot());
+        StationWorkPhysicalStep step = new StationWorkPhysicalStep(prepared.phase(), prepared.leaseId(), prepared.destinationSlot(), prepared.workflowOrdinal());
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.withStationWork(work.preparePhysical(step)));
     }
 
@@ -481,7 +481,7 @@ public final class StationWorkProcess {
                 || !lease.memberBody(state.actorLocations(), job.workerId()).equals(changed.observedWorker()))
             throw new IllegalArgumentException("bakery labour lost its observed exact worker");
         StationWorkLabour.require(state, job, changed.change());
-        return StationWorkLabour.change(state, job, changed.change().next());
+        return StationWorkLabour.change(state, job, changed.change());
     }
 
     static FrontierWorldState releaseHotHand(FrontierWorldState state, SubjectId subject, BakeryHotHandRelease released) {
@@ -580,7 +580,7 @@ public final class StationWorkProcess {
                 || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
                 || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId()))
             throw new IllegalArgumentException("bakery physical receipt has no current retained worker scene");
-        if (pending.phase() != observed.phase() || !pending.leaseId().equals(observed.leaseId())
+        if (pending.phase() != observed.phase() || pending.workflowOrdinal() != observed.workflowOrdinal() || !pending.leaseId().equals(observed.leaseId())
                 || !observed.observedWorker().equals(StationWorkGoal.current(state, job).station().standingBody())
                 || retired.isEmpty() && !lease.memberBody(state.actorLocations(), job.workerId()).equals(observed.observedWorker())
                 || retired.isPresent() && !lease.members().getFirst().entityId().equals(
@@ -692,7 +692,8 @@ public final class StationWorkProcess {
                         ? new ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot(station, ActorContainerItemOrder.StationPort.MAINTENANCE_TARGET,
                             new InventoryCustody.ContainerSlot(station.containerId(), station.maintenanceSlot().orElseThrow()))
                         : new ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot(station, ActorContainerItemOrder.StationPort.INPUT,
-                            new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot()));
+                            new InventoryCustody.ContainerSlot(station.containerId(), work.pendingPhysicalStep().map(StationWorkPhysicalStep::destinationSlot)
+                                    .orElseGet(() -> StationWorkOperation.loadSlot(state, job).orElseThrow())));
                 case UNLOAD -> new ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot(station, ActorContainerItemOrder.StationPort.OUTPUT,
                         new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
                 case DELIVER -> new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(new InventoryCustody.ContainerSlot(depotId,
@@ -705,7 +706,7 @@ public final class StationWorkProcess {
             SubjectId source = switch (action) {
                 case PICKUP -> work.sourceAccountId();
                 case LOAD, DELIVER -> work.actorAccountId();
-                case UNLOAD -> work.stationAccountId();
+                case UNLOAD -> ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.OUTPUT));
                 default -> throw new IllegalArgumentException("not a resource transfer step");
             };
             SubjectId destination = switch (action) {
@@ -717,7 +718,7 @@ public final class StationWorkProcess {
             ResourceCustody from = state.inventory().fungibleResources().accounts().get(source).custody();
             ResourceCustody to = direction == ActorContainerItemOrder.Direction.TAKE
                     ? new ResourceCustody.Actor(job.workerId())
-                    : new ResourceCustody.Container(action == BakeryColdStep.Action.LOAD ? station.containerId() : depotId);
+                    : (action == BakeryColdStep.Action.LOAD ? station.custody(ActorContainerItemOrder.StationPort.INPUT) : new ResourceCustody.Container(depotId));
             portion = new ActorContainerItemOrder.Portion.Fungible(source, from, destination, to,
                     action == BakeryColdStep.Action.UNLOAD ? Optional.of(StationWorkOperation.require(state, job).outputClaimId())
                         : output ? Optional.empty() : Optional.of(claimId(job)), output ? job.outputItemKind() : work.inputItemKind(),
@@ -731,7 +732,7 @@ public final class StationWorkProcess {
             };
         }
         return new ActorContainerItemOrder(job.id(), job.workerId(), direction, portion, endpoint, surface,
-                ActorContainerItemOrder.Hand.MAIN, work.phase().wireTag(), 1);
+                ActorContainerItemOrder.Hand.MAIN, work.goalOrdinal(), 1);
     }
 
     private static SubjectId claimId(ProductionJob job) {

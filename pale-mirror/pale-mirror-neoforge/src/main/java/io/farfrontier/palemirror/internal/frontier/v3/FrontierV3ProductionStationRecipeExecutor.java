@@ -24,12 +24,9 @@ final class FrontierV3ProductionStationRecipeExecutor {
             }
             var boundary = machine.pendingRecipe().orElseThrow(); var operation = machine.operation().orElseThrow();
             var recipe = state.bootstrap().ruleset().production().require(operation.recipeId());
-            var inputAddress = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(record.id(), station.inputSlot()));
-            var source = boundary.before().stream().filter(value -> value.address().equals(inputAddress)).findFirst().orElseThrow();
-            var input = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(source.itemKind())), source.quantity());
             var output = boundary.exactAfter().map(FrontierV3ExactItemPresentation::materializedStack).orElseGet(() ->
                     new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(recipe.product().itemKind())), operation.outputQuantity()));
-            var effect = new FrontierV3StationRecipeEffect(physical.inventory(), station, recipe, input, operation.inputQuantity(), output,
+            var effect = new FrontierV3StationRecipeEffect(physical.inventory(), station, recipe, boundary.before(), boundary.after(), output,
                     boundary.exactBefore());
             var participants = List.of(physical.persistence().get());
             var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.STATION_RECIPE, machine.stationId(),
@@ -38,6 +35,10 @@ final class FrontierV3ProductionStationRecipeExecutor {
             if (!applied.complete()) continue;
             var observed = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id(),
                     boundary.exactAfter().isPresent() ? Set.of(station.outputSlot()) : Set.of());
+            observed = observed.stream().filter(value -> {
+                int slot = ((PhysicalStackAddress.ContainerSlot) value.address()).slot().slot();
+                return station.inputSlots().contains(slot) || slot == station.outputSlot();
+            }).toList();
             var observedExact = boundary.exactAfter().filter(item -> FrontierV3ExactItemPresentation.exactMatch(
                     physical.inventory().getItem(station.outputSlot()), item));
             FrontierV3OperationConfirmation.submitRequired(level, runtime, applied.ticket(),

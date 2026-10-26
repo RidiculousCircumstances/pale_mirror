@@ -25,9 +25,10 @@ public final class ActorItemCustody {
                 || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation)
             order.requireCurrentStation(inventory);
         if (order.direction() == ActorContainerItemOrder.Direction.PLACE
-                && order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
-                && inventory.itemAt(station.containerId(), station.spec().inputSlot()).isPresent())
-            throw new IllegalArgumentException("station input port is occupied by an exact stack");
+                && order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation endpoint
+                && !ContainerStorageAdmission.receive(state, endpoint.spec().custody(endpoint.port()), order.portion().itemKind(),
+                    order.portion().quantity(), Optional.empty()))
+            throw new IllegalArgumentException("station compartment lacks capacity for its declared material transfer");
         ActorLocation actor = state.actorLocations().get(order.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !actor.supportingSurface().equals(order.station())
@@ -104,6 +105,11 @@ public final class ActorItemCustody {
             throw new IllegalArgumentException("observed actor handoff would overwrite an exact item");
         var preparation = ActorClaimDelegationComposition.prepare(state, order);
         inventory = preparation.inventory();
+        var portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();
+        if (portion.sourceCustody() instanceof ResourceCustody.Container holder)
+            remainingSource = ContainerResourceAccounts.observed(inventory, holder, remainingSource);
+        if (portion.destinationCustody() instanceof ResourceCustody.Container holder)
+            destination = ContainerResourceAccounts.observed(inventory, holder, destination);
         return preparation.ownerChanges().inventory(inventory.withFungibleResources(inventory.fungibleResources()
                 .transferActorOrderObservedStacks(preparation.order(), sourceEpoch, destinationEpoch, remainingSource, destination)));
     }

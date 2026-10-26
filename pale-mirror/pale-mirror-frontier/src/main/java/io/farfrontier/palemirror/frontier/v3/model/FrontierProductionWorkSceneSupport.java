@@ -16,7 +16,7 @@ public final class FrontierProductionWorkSceneSupport {
         ProductionJob job = state.productionJobs().get(assignment.ownerId().orElseThrow());
         if (job == null || !job.workerId().equals(assignment.residentId()))
             throw new IllegalArgumentException("production checkpoint lost its exact worker/job");
-        ResidentWorkYield.Status status = ProductionActivityCapability.checkpointStatus(job);
+        ResidentWorkYield.Status status = ProductionActivityCapability.checkpointStatus(state, job);
         return new ActivityExecutionCheckpoint(state, assignment, status);
     }
     private FrontierProductionWorkSceneSupport() { }

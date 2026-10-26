@@ -8,7 +8,7 @@ import java.util.*;
 public final class EquipmentProductionPlanning {
     public record Request(String pool, ProductionRecipe recipe, Optional<StationWorkState.MaintenanceTarget> maintenance,
                           boolean urgent, long usefulWear, long replacementCost, long workCostPerWear) { }
-    public record Ready(Request request, SettlementStructure facility, FungibleResourceCustodySupport.LotSelection input) { }
+    public record Ready(Request request, SettlementStructure facility, ProductionMaterialSupply.Bundle input) { }
     private record Key(SubjectId home, long tick) { }
     private static final ImmutableInputView<Map<Key, List<Request>>> REQUESTS = new ImmutableInputView<>();
     private static final ImmutableInputView<Map<Key, Acquisition>> PLANS = new ImmutableInputView<>();
@@ -83,10 +83,8 @@ public final class EquipmentProductionPlanning {
     /** An immediate equipment shortage may use an executable alternative instead of waiting on theoretical imports. */
     private static boolean materialAvailable(FrontierWorldState state, SubjectId home, ProductionRecipe recipe) {
         return AutomaticStationProduction.stations(state, home, recipe).stream().anyMatch(record ->
-                ProductionStationProcessing.canStart(state, record.productionStation().orElseThrow().id(), recipe.id(), recipe.ingredient().quantity()))
-                && recipe.ingredient().acceptedItems().stream().anyMatch(kind -> ResourceStorageSelection.containers(state, home, kind,
-                    Set.of(ResourceStorageRole.WAREHOUSE)).stream().anyMatch(container ->
-                        FungibleResourceCustodySupport.selectAtContainer(state, container, home, kind, recipe.ingredient().quantity()).isPresent()));
+                ProductionStationProcessing.canStart(state, record.productionStation().orElseThrow().id(), recipe.id(), recipe.inputUnitsPerBatch())
+                && ProductionMaterialSupply.select(state, home, record.productionStation().orElseThrow(), recipe, 1).isPresent());
     }
     public record Planned(Request request, int operations) { }
     public record Purchase(String pool, String itemKind, int quantity) { }
@@ -174,18 +172,14 @@ public final class EquipmentProductionPlanning {
             for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
                 var station = record.productionStation().orElseThrow();
                 if (!ProductionFacilityReservations.available(state.productionJobs(), station.facilityId())
-                        || !ProductionStationProcessing.canStart(state, station.id(), recipe.id(), recipe.ingredient().quantity())) continue;
+                        || !ProductionStationProcessing.canStart(state, station.id(), recipe.id(), recipe.inputUnitsPerBatch())) continue;
                 var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
                         .filter(value -> value.id().equals(station.facilityId())).findFirst().orElseThrow();
-                for (var kind : recipe.ingredient().acceptedItems().stream().sorted().toList())
-                    for (var container : ResourceStorageSelection.containers(state, home, kind, Set.of(ResourceStorageRole.WAREHOUSE)).stream().sorted().toList()) {
-                        var selected = FungibleResourceCustodySupport.selectAtContainer(state, container, home, kind, recipe.ingredient().quantity());
-                        if (selected.isEmpty() || !FungibleResourceCustodySupport.canReserve(state, selected.orElseThrow())
-                                || ProductionOutputCapacity.selectRecipeDestination(state, ProductionRights.publicService(home), recipe,
-                                    recipe.ingredient().quantity(), container, SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach(),
-                                    request.maintenance()).isEmpty()) continue;
-                        return Optional.of(new Ready(request, facility, selected.orElseThrow()));
-                    }
+                var selected = ProductionMaterialSupply.select(state, home, station, recipe, 1);
+                if (selected.isPresent() && ProductionOutputCapacity.selectRecipeDestination(state, ProductionRights.publicService(home), recipe,
+                        recipe.inputUnitsPerBatch(), selected.orElseThrow().sources().getFirst().containerId(),
+                        SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach(), request.maintenance()).isPresent())
+                    return Optional.of(new Ready(request, facility, selected.orElseThrow()));
             }
         }
         return Optional.empty();

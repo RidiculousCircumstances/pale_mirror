@@ -66,7 +66,7 @@ public final class ProductionChainAllocation {
         long inputDeadline = deadline - ownDuration;
         for (var entry : process.inputs().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList())
             if (!supply(entry.getKey(), Math.multiplyExact(batches, entry.getValue()), inputDeadline, ancestors, Optional.empty())) return false;
-        long neededHeat = Math.multiplyExact(batches, process.heatPerBatch()), storedHeat = heat.getOrDefault(process.id(), 0L);
+        long neededHeat = Math.multiplyExact(batches, process.burnTicksPerBatch()), storedHeat = heat.getOrDefault(process.id(), 0L);
         if (storedHeat < neededHeat) {
             boolean fuelled = false;
             for (var fuel : process.fuels().entrySet().stream().sorted(Comparator

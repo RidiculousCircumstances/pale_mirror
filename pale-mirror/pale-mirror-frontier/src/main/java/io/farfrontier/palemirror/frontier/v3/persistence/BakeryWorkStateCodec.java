@@ -44,10 +44,11 @@ final class BakeryWorkStateCodec {
             StationWorkPhysicalStep step = value.pendingPhysicalStep().orElseThrow();
             output.writeByte(step.phase().wireTag());
             writeString(output, step.leaseId().value());
-            output.writeByte(step.destinationSlot());
+            output.writeByte(step.destinationSlot()); output.writeLong(step.workflowOrdinal());
         }
         output.writeBoolean(value.block().isPresent());
         if (value.block().isPresent()) writeBlock(output, value.block().orElseThrow());
+        StationWorkMaterialsCodec.write(output, value.materials());
     }
 
     static Optional<StationWorkState> read(DataInputStream input) throws IOException {
@@ -67,10 +68,10 @@ final class BakeryWorkStateCodec {
         SubjectId destination = new SubjectId(readString(input));
         Optional<StationWorkPhysicalStep> pending = input.readBoolean()
                 ? Optional.of(new StationWorkPhysicalStep(StationWorkState.Phase.fromWireTag(input.readUnsignedByte()),
-                new SceneLeaseId(readString(input)), input.readByte())) : Optional.empty();
+                new SceneLeaseId(readString(input)), input.readByte(), input.readLong())) : Optional.empty();
         Optional<BakeryWorkBlock> block = input.readBoolean() ? Optional.of(readBlock(input)) : Optional.empty();
         return Optional.of(new StationWorkState(phase, permission, outputRepresentation, maintenance, station, recipe, inputKind, inputQuantity, source, sourceContainer, actor, stationAccount,
-                destination, pending, block));
+                destination, pending, block, StationWorkMaterialsCodec.read(input)));
     }
 
     static void writeBlock(DataOutputStream output, BakeryWorkBlock block) throws IOException {

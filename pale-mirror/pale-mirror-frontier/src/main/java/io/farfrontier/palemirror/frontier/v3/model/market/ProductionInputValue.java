@@ -16,14 +16,14 @@ public final class ProductionInputValue {
             long other = Math.ceilDiv(Math.multiplyExact(process.labourTicksPerOperation(), labourPerTick), process.recipesPerOperation());
             for (var input : process.inputs().entrySet()) if (!input.getKey().equals(item))
                 other = Math.addExact(other, Math.multiplyExact(input.getValue(), Objects.requireNonNull(prices.get(input.getKey()))));
-            if (process.heatPerBatch() > 0 && !process.fuels().containsKey(item)) {
+            if (process.burnTicksPerBatch() > 0 && !process.fuels().containsKey(item)) {
                 long fuel = process.fuels().entrySet().stream().mapToLong(f -> Math.ceilDiv(
-                        Math.multiplyExact(Objects.requireNonNull(prices.get(f.getKey())), process.heatPerBatch()), f.getValue())).min().orElseThrow();
+                        Math.multiplyExact(Objects.requireNonNull(prices.get(f.getKey())), process.burnTicksPerBatch()), f.getValue())).min().orElseThrow();
                 other = Math.addExact(other, fuel);
             }
             long remaining = Math.max(0, output - other);
             long denominator = Math.addExact(Math.multiplyExact(process.inputs().getOrDefault(item, 0).longValue(),
-                    process.fuels().getOrDefault(item, 1L)), process.fuels().containsKey(item) ? process.heatPerBatch() : 0);
+                    process.fuels().getOrDefault(item, 1L)), process.fuels().containsKey(item) ? process.burnTicksPerBatch() : 0);
             if (denominator == 0) continue;
             long value = BigInteger.valueOf(remaining).multiply(BigInteger.valueOf(process.fuels().getOrDefault(item, 1L)))
                     .divide(BigInteger.valueOf(denominator)).longValueExact();

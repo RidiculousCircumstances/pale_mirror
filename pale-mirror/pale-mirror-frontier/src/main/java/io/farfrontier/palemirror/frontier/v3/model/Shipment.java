@@ -184,7 +184,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
                 take ? sourceAccountId() : carriedAccountId(),
                 take ? sender.custody() : carriedCustody(),
                 take ? carriedAccountId() : unloadingAccountId(),
-                take ? carriedCustody() : new ResourceCustody.Container(unloadingEndpoint().containerId()),
+                take ? carriedCustody() : unloadingEndpoint().custody(),
                 Optional.of(authorization.claimId()), itemKind(), portionLots, Optional.of(authorization));
         var slot = mobileContainerId.<ActorItemSlot>map(ActorItemSlot.AttachedStorage::new)
                 .orElseGet(() -> new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));

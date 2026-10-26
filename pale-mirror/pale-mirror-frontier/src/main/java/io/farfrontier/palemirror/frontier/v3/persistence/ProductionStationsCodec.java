@@ -12,7 +12,10 @@ final class ProductionStationsCodec {
     static void write(DataOutputStream out, ProductionStations state) throws IOException {
         writeCount(out, state.machines().size());
         for (var machine : state.machines().values().stream().sorted(Comparator.comparing(ProductionStations.Machine::stationId)).toList()) {
-            writeString(out, machine.stationId().value()); out.writeLong(machine.storedHeat());
+            writeString(out, machine.stationId().value()); out.writeBoolean(machine.combustion().isPresent());
+            if (machine.combustion().isPresent()) {
+                var burn = machine.combustion().orElseThrow(); writeString(out, burn.itemKind()); out.writeLong(burn.startedAtTick()); out.writeLong(burn.endsAtTick());
+            }
             out.writeLong(machine.revision()); out.writeBoolean(machine.pendingFuel().isPresent());
             if (machine.pendingFuel().isPresent()) ProductionStationFuelCodec.writeBurn(out, machine.pendingFuel().orElseThrow());
             out.writeBoolean(machine.pendingRecipe().isPresent());
@@ -36,7 +39,8 @@ final class ProductionStationsCodec {
                 }
             }
             writeString(out, operation.outputId().value()); out.writeInt(operation.inputQuantity()); out.writeInt(operation.outputQuantity());
-            out.writeLong(operation.committedHeat()); WorkStateCodec.writeProgress(out, operation.progress()); out.writeBoolean(operation.transformed());
+            WorkStateCodec.writeProgress(out, operation.progress()); out.writeBoolean(operation.transformed());
+            StationAttendanceCodec.write(out, operation.attendance());
             switch (operation.initiator()) {
                 case ProductionOperation.OrderInitiator order -> { out.writeByte(1); out.writeByte(order.kind().wireTag()); writeString(out, order.orderId().value()); }
                 case ProductionOperation.PlayerInitiator player -> {
@@ -51,16 +55,23 @@ final class ProductionStationsCodec {
         if (count > 4_096) throw new IllegalArgumentException("machine runtime bound exceeded");
         var machines = new LinkedHashMap<SubjectId, ProductionStations.Machine>();
         for (int index = 0; index < count; index++) {
-            var id = new SubjectId(readString(in)); long heat = in.readLong();
+            var id = new SubjectId(readString(in));
+            var combustion = in.readBoolean() ? Optional.of(new FuelCombustion(readString(in), in.readLong(), in.readLong())) : Optional.<FuelCombustion>empty();
             long revision = in.readLong(); var fuel = in.readBoolean() ? Optional.of(ProductionStationFuelCodec.readBurn(in))
                     : Optional.<ProductionStationFuelBurn>empty();
             var recipe = in.readBoolean() ? Optional.of(ProductionStationRecipeCodec.readBoundary(in))
                     : Optional.<ProductionStationRecipeBoundary>empty();
-            Optional<ProductionOperation> operation = in.readBoolean() ? Optional.of(new ProductionOperation(
-                    new ProductionOperation.Id(new SubjectId(readString(in))), new SubjectId(readString(in)),
-                    new SubjectId(readString(in)), new ProductionRecipe.Id(readString(in)), readInput(in), new SubjectId(readString(in)),
-                    in.readInt(), in.readInt(), in.readLong(), WorkStateCodec.readProgress(in), in.readBoolean(), readInitiator(in))) : Optional.empty();
-            if (machines.putIfAbsent(id, new ProductionStations.Machine(id, heat, operation, revision, fuel, recipe)) != null)
+            Optional<ProductionOperation> operation = Optional.empty();
+            if (in.readBoolean()) {
+                var operationId = new ProductionOperation.Id(new SubjectId(readString(in))); var station = new SubjectId(readString(in));
+                var order = new SubjectId(readString(in)); var recipeId = new ProductionRecipe.Id(readString(in));
+                var inputs = readInput(in); var output = new SubjectId(readString(in));
+                int inputQuantity = in.readInt(), outputQuantity = in.readInt(); var progress = WorkStateCodec.readProgress(in);
+                boolean transformed = in.readBoolean(); var attendance = StationAttendanceCodec.read(in); var initiator = readInitiator(in);
+                operation = Optional.of(new ProductionOperation(operationId, station, order, recipeId, inputs, output, inputQuantity, outputQuantity,
+                        progress, transformed, initiator, attendance));
+            }
+            if (machines.putIfAbsent(id, new ProductionStations.Machine(id, combustion, operation, revision, fuel, recipe)) != null)
                 throw new IllegalArgumentException("duplicate installed machine runtime");
         }
         return new ProductionStations(machines);

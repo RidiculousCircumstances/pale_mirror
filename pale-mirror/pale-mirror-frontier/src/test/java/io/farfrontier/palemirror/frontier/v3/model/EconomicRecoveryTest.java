@@ -41,7 +41,7 @@ class EconomicRecoveryTest {
         var first = plans.getFirst();
         assertTrue(first.request().maintenance().isPresent(), first.toString());
         assertEquals(1, first.operations());
-        assertTrue(first.request().recipe().ingredient().accepts("minecraft:cobblestone"));
+        assertTrue(first.request().recipe().singleIngredient().accepts("minecraft:cobblestone"));
         assertTrue(EquipmentProductionPlanning.ready(state, home, 5000).isEmpty(), "an estimated import is not present material");
         assertTrue(new EquipmentReserveSupply().readAt(state, home, 5000).needs().get("minecraft:cobblestone").immediate() > 1,
                 "the desired restoration portfolio stays visible separately from its first-unit minimum");
@@ -80,7 +80,7 @@ class EconomicRecoveryTest {
         assertFalse(deficits.isEmpty());
         assertTrue(deficits.stream().noneMatch(EquipmentStockProjection.Deficit::immediate), "working tools still cover current concurrent workers");
         var first = EquipmentProductionPlanning.planned(state, home, 5000).getFirst();
-        assertTrue(first.request().recipe().ingredient().accepts("minecraft:cobblestone"),
+        assertTrue(first.request().recipe().singleIngredient().accepts("minecraft:cobblestone"),
                 "an unquoted iron upgrade cannot displace an estimated affordable repair before the pool fails: " + first);
         assertEquals(1, first.operations());
         var required = new EquipmentReserveSupply().readAt(state, home, 5000).requiredInputs().get("minecraft:cobblestone");

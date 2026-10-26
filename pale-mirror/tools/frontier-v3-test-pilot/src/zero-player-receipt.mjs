@@ -3,7 +3,7 @@ const MARKER = 'PMV3_DIAG ';
 /** Parses the one durable operator receipt without assuming its terminal outcome. */
 export function zeroPlayerRequestReceipt(response) {
   const value = diagnostic(response, 'fast-forward terminal query');
-  const receipt = Array.isArray(value?.fastForwardRequests) ? value.fastForwardRequests.at(-1) : null;
+  const receipt = value?.lastFastForwardRequest;
   if (value?.kind !== 'status' || value.status !== 'ok' || !Number.isInteger(receipt?.requestId)
       || typeof receipt.kind !== 'string' || !Number.isInteger(receipt.requestedTicks)
       || !Number.isInteger(receipt.targetInstant) || !Number.isInteger(receipt.admittedCheckpointInstant)

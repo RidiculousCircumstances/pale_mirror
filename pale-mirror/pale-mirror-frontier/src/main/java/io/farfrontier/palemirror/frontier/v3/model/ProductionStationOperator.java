@@ -21,28 +21,34 @@ public final class ProductionStationOperator {
         var machines = state.productionStations();
         if (event.stage() == ProductionStationOperatorChanged.Stage.START) {
             if (machine.operation().isPresent()) throw new IllegalArgumentException("station already has an operation");
-            var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id()).orElseThrow(
+            var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id(), ContainerSectionId.INPUT).orElseThrow(
                     () -> new IllegalArgumentException("station has no accounted ingredients"));
-            var address = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(record.id(), station.inputSlot()));
-            var binding = ledger.bindings().values().stream().filter(value -> value.accountId().equals(account.id())
-                    && value.address().equals(address)).findFirst().orElseThrow(() -> new IllegalArgumentException("station input port is empty"));
-            if (!recipe.ingredient().accepts(binding.itemKind())) throw new IllegalArgumentException("station input is not accepted by its selected recipe");
-            int inputQuantity = ProductionBatchSizing.inputQuantity(recipe,
-                    ledger.unclaimedQuantity(account.id(), record.ownerId(), binding.itemKind()), 64, machine.storedHeat());
-            if (inputQuantity == 0) throw new IllegalArgumentException("station lacks a complete ingredient/fuel batch");
-            int batches = inputQuantity / recipe.ingredient().quantity();
-            if (!ProductionStationProcessing.canStart(state, subject, recipe.id(), inputQuantity))
-                throw new IllegalArgumentException("station output or processing capacity is occupied");
-            var selected = FungibleResourceCustodySupport.selectAtAccount(ledger, account.id(), record.ownerId(), binding.itemKind(), inputQuantity).orElseThrow();
-            if (!FungibleResourceCustodySupport.canReserve(state, selected))
-                throw new IllegalArgumentException("station ingredients await their current physical binding");
+            ProductionMaterialSupply.Bundle bundle = null;
+            for (int batches = ProductionBatchSizing.maximumRecipeBatches(recipe); batches > 0; batches--) {
+                var selected = ProductionMaterialSupply.atAccount(ledger, account, record.ownerId(), recipe, batches);
+                if (selected.isPresent() && ProductionStationProcessing.canStart(state, subject, recipe.id(), selected.orElseThrow().quantity())) {
+                    bundle = selected.orElseThrow(); break;
+                }
+            }
+            if (bundle == null) throw new IllegalArgumentException("station lacks a complete ingredient bundle or free output");
+            int inputQuantity = bundle.quantity(); int batches = inputQuantity / recipe.inputUnitsPerBatch();
+            if (bundle.sources().stream().anyMatch(source -> !FungibleResourceCustodySupport.canReserve(state, source.selection())))
+                throw new IllegalArgumentException("station ingredients await their current physical bindings");
             var id = new SubjectId("operation:player-station-" + UUID.nameUUIDFromBytes(
                     (subject.value() + "/" + machine.revision()).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            var claimId = new SubjectId("claim:station-" + UUID.nameUUIDFromBytes(id.value().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             var outputId = new SubjectId("lot:station-output-" + UUID.nameUUIDFromBytes(id.value().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            var claim = new ClaimAllocation(claimId, id, record.ownerId(), binding.itemKind(), inputQuantity, selected.lotQuantities(), ClaimPurpose.STATION_PROCESSING);
-            ledger = ledger.reserveBound(claim, account.id(), binding.authorityEpoch());
-            ProductionOperation.InputCustody inputs = new ProductionOperation.FungibleInput(account.id(), selected.lotQuantities(), Map.of(claimId, inputQuantity));
+            var lots = new TreeMap<SubjectId, Integer>(); var claims = new TreeMap<SubjectId, Integer>();
+            long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(record.id())).authorityEpoch();
+            for (var source : bundle.sources()) {
+                var materialClaim = new SubjectId("claim:station-" + UUID.nameUUIDFromBytes(
+                        (id.value() + "/" + source.itemKind()).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                var claim = new ClaimAllocation(materialClaim, id, record.ownerId(), source.itemKind(), source.selection().quantity(),
+                        source.selection().lotQuantities(), ClaimPurpose.STATION_PROCESSING);
+                ledger = ledger.reserveBound(claim, account.id(), epoch);
+                source.selection().lotQuantities().forEach((lot, quantity) -> lots.merge(lot, quantity, Math::addExact));
+                claims.put(materialClaim, source.selection().quantity());
+            }
+            ProductionOperation.InputCustody inputs = new ProductionOperation.FungibleInput(account.id(), lots, claims);
             if (recipe.outcome() instanceof ProductionRecipeOutcome.Repair) {
                 var target = state.inventory().itemAt(record.id(), station.slot(ActorContainerItemOrder.StationPort.MAINTENANCE_TARGET))
                         .orElseThrow(() -> new IllegalArgumentException("repair requires its target in the maintenance port"));
@@ -52,8 +58,8 @@ public final class ProductionStationOperator {
                 inputs = new ProductionOperation.RepairInput((ProductionOperation.FungibleInput) inputs, target);
             }
             operation = new ProductionOperation(new ProductionOperation.Id(id), subject, id, recipe.id(), inputs, outputId,
-                    inputQuantity, recipe.outputForInput(inputQuantity), recipe.heatPerBatch() * batches, Optional.empty(), false,
-                    new ProductionOperation.PlayerInitiator(event.playerId(), ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED));
+                    inputQuantity, recipe.outputForInput(inputQuantity), Optional.empty(), false,
+                    new ProductionOperation.PlayerInitiator(event.playerId(), ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED), Optional.empty());
             machines = ProductionStationProcessing.start(state, station, operation);
         } else {
             operation = machine.operation().orElseThrow(() -> new IllegalArgumentException("station has no player operation"));
@@ -76,7 +82,7 @@ public final class ProductionStationOperator {
             var next = ProductionStationClock.next(state, operation, event.atTick(), attendance);
             if (event.stage() == ProductionStationOperatorChanged.Stage.RESUME)
                 operation = operation.withPlayerAttendanceIntent(ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED);
-            operation = operation.withProgress(next);
+            operation = operation.withAttendance(next, attendance);
             if (event.stage() == ProductionStationOperatorChanged.Stage.PAUSE)
                 operation = operation.withPlayerAttendanceIntent(ProductionOperation.PlayerAttendanceIntent.PAUSED);
             machines = machines.with(machines.require(subject).replace(previous, operation));

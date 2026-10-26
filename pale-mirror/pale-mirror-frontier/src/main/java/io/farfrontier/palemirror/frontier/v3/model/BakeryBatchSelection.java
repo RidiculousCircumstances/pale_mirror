@@ -97,7 +97,7 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
                 .filter(item -> item.itemKind().equals("minecraft:wheat") && item.economicOwnerId().equals(resourceOwner)
                         && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                         && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())
-                        && item.count() % BakeryRecipes.bread(state).ingredient().quantity() == 0
+                        && item.count() % BakeryRecipes.bread(state).singleIngredient().quantity() == 0
                         && capacity.test(depot, item.count()))
                 .sorted(Comparator.comparingInt(ExactItemStack::count).reversed().thenComparing(ExactItemStack::id))
                 .findFirst().map(item -> new BakeryBatchSelection(Optional.of(item), Optional.empty()));
@@ -107,16 +107,12 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
                 .unclaimedQuantity(value.id(), resourceOwner, "minecraft:wheat"))).orElse(0);
         var recipe = BakeryRecipes.bread(state);
         if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION) {
-            int feasible = ProductionBatchSizing.inputQuantity(recipe, maximum, 64,
-                    Math.max(0, ProductionStationEnergy.obtainableHeat(state, stationId)
-                            - BakerySupplyObligations.requiredHeat(state, stationId)));
-            // One restart batch keeps its explicit fuel obligation when no heat
-            // exists; it must not reserve an entire unavailable production run.
-            maximum = Math.min(maximum, Math.max(recipe.ingredient().quantity(), feasible));
+            int feasible = ProductionBatchSizing.inputQuantity(recipe, maximum, 64);
+            maximum = Math.min(maximum, Math.max(recipe.singleIngredient().quantity(), feasible));
         }
         // A bounded stack-sized search also handles a nearly full output container.
         for (int quantity = maximum; quantity >= 1; quantity--) {
-            if (quantity % BakeryRecipes.bread(state).ingredient().quantity() != 0) continue;
+            if (quantity % BakeryRecipes.bread(state).singleIngredient().quantity() != 0) continue;
             if (!capacity.test(depot, quantity)) continue;
             var input = FungibleResourceCustodySupport.selectAtContainer(state, depot, resourceOwner, "minecraft:wheat", quantity);
             if (input.isPresent()) return Optional.of(new BakeryBatchSelection(Optional.empty(), input));

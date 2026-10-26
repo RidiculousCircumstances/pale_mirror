@@ -5,11 +5,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import java.util.Objects;
 
 /** Durable job-owned, single-use physical effect boundary; -1 means no destination chest slot. */
-public record StationWorkPhysicalStep(StationWorkState.Phase phase, SceneLeaseId leaseId, int destinationSlot) {
+public record StationWorkPhysicalStep(StationWorkState.Phase phase, SceneLeaseId leaseId, int destinationSlot, long workflowOrdinal) {
+    public StationWorkPhysicalStep(StationWorkState.Phase phase, SceneLeaseId lease, int slot) { this(phase, lease, slot, 0L); }
     public StationWorkPhysicalStep {
         Objects.requireNonNull(phase, "bakery physical phase");
         Objects.requireNonNull(leaseId, "bakery physical lease");
-        if (destinationSlot < -1 || destinationSlot > 53)
+        if (workflowOrdinal < 0 || destinationSlot < -1 || destinationSlot > 53)
             throw new IllegalArgumentException("bakery physical destination slot is outside its bounded chest");
         boolean needsSlot = phase == StationWorkState.Phase.TARGET_LOAD || phase == StationWorkState.Phase.STATION_LOAD
                 || phase == StationWorkState.Phase.PROCESSING || phase == StationWorkState.Phase.DEPOT_DELIVERY;

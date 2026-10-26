@@ -14,13 +14,13 @@ class ProductionStationLifecycleTest {
                 .sorted(Comparator.comparing(ContainerRecord::id)).findFirst().orElseThrow();
         var original = old.productionStation().orElseThrow();
         state = state.withChanges(FrontierWorldStateUpdate.begin().productionStations(state.productionStations().with(
-                new ProductionStations.Machine(original.id(), 3200, Optional.empty(), 5, Optional.empty()))));
+                new ProductionStations.Machine(original.id(), Optional.of(new FuelCombustion("minecraft:coal", 1, 1601)), Optional.empty(), 5, Optional.empty()))));
         var spec = new ProductionStationSpec(new SubjectId("station:replacement-test"), original.facilityId(), new SubjectId("container:replacement-test"),
                 original.equipmentType(), original.capability(), original.workerStation(), original.socketSurface(), 0, 1, 2);
         var wheat = new ResourceLot(new SubjectId("lot:replacement-input"), old.ownerId(), "minecraft:wheat", 9, "fixture:player-input", List.of());
         var record = new ContainerRecord(spec.containerId(), old.ownerId(), 3, ContainerPurpose.PRODUCTION_STATION, Optional.of(spec), Optional.empty(),
                 new FungibleContainerLayout(Map.of(0, new FungibleContainerLayout.Stack("minecraft:wheat", 9))));
-        var install = new ProductionStationInstalled(record, state.inventory().surfaces().get(old.id()).position(), List.of(wheat));
+        var install = new ProductionStationInstalled(record, state.inventory().surfaces().get(old.id()).position(), List.of(new FixedContainerAdoption.PlacedResource(0, wheat)));
         var active = state;
         assertThrows(IllegalArgumentException.class, () -> install.apply(active, spec.id(), BakeryStationInstallation::installed));
         state = state.withInventory(state.inventory().withSurfaceStatus(old.id(), ContainerSurfaceStatus.PREPARED)
@@ -36,7 +36,7 @@ class ProductionStationLifecycleTest {
         state = new ProductionStationRetired(original.id(), 5).apply(state, original.id());
         var replaced = install.apply(state, spec.id(), BakeryStationInstallation::installed);
         assertFalse(replaced.productionStations().machines().containsKey(original.id()));
-        assertEquals(0, replaced.productionStations().require(spec.id()).storedHeat());
+        assertEquals(0, replaced.productionStations().require(spec.id()).burnRemaining(100));
         assertTrue(replaced.productionStations().require(spec.id()).operation().isEmpty());
         assertEquals(9, replaced.inventory().fungibleResources().lots().get(wheat.id()).quantity());
         assertEquals(ContainerSurfaceStatus.ADOPTING, replaced.inventory().surfaces().get(record.id()).status());

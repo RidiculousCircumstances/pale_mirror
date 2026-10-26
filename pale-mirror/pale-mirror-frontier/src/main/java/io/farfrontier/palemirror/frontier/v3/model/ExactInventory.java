@@ -730,10 +730,14 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 .filter(binding -> binding.accountId().equals(accountId)).toList();
         if (bindings.isEmpty() || bindings.stream().anyMatch(binding -> binding.authorityEpoch() != epoch))
             throw new IllegalArgumentException("retained layout requires its exact current physical epoch");
-        var slots = new HashMap<Integer, FungibleContainerLayout.Stack>();
+        var record = containers.get(holder.containerId());
+        var allowed = record.compartmentLayout().slots(holder.section());
+        var slots = new HashMap<>(record.fungibleLayout().slots());
+        slots.keySet().removeIf(allowed::contains);
         for (var binding : bindings) {
             if (!(binding.address() instanceof PhysicalStackAddress.ContainerSlot address)
                     || !address.slot().containerId().equals(holder.containerId())
+                    || !allowed.contains(address.slot().slot())
                     || slots.put(address.slot().slot(), new FungibleContainerLayout.Stack(binding.itemKind(), binding.quantity())) != null)
                 throw new IllegalArgumentException("retained layout contains a foreign or duplicate slot");
         }
@@ -807,6 +811,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 case ResourceCustody.Container container -> {
                     ContainerRecord record = containers.get(container.containerId());
                     if (record == null) throw new IllegalArgumentException("fungible account references an unknown container");
+                    record.compartmentLayout().slots(container.section());
                     // A holder may store another registered party's goods. Custody is not
                     // title; admission and commercial acceptance enforce their own authority.
                 }
@@ -831,7 +836,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 ContainerRecord record = containers.get(slot.slot().containerId());
                 if (record == null || slot.slot().slot() >= record.slotCount()
                         || !(account.custody() instanceof ResourceCustody.Container container)
-                        || !container.containerId().equals(slot.slot().containerId())) {
+                        || !container.containerId().equals(slot.slot().containerId())
+                        || !record.compartmentLayout().slots(container.section()).contains(slot.slot().slot())) {
                     throw new IllegalArgumentException("fungible physical binding has no matching owned container account");
                 }
                 if (occupiedSlots.containsKey(slot.slot())) {

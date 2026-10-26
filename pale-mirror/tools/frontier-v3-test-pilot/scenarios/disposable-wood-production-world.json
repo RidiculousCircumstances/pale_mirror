@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "id": "disposable_wood_production_world",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 126
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 26329,
+    "profile": "wood-production-world",
+    "viewDistance": 8
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 24000,
+    "timeoutMs": 900000
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "forest",
+      "id": "settlement:7"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-woodshop-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -9,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-woodshop-station",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "station:structure-7-woodshop"
+    },
+    {
+      "type": "wait",
+      "ms": 10000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 4,
+      "view": "process",
+      "id": "station:structure-7-woodshop",
+      "expect": {
+        "status": "ok",
+        "family": "frontier.production-station"
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "woodworking-bench-exterior"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 1,
+    "zeroPlayerAdvanceTicks": 6000,
+    "zeroPlayerTimeoutMs": 900000,
+    "zeroPlayerSettleMs": 35000
+  }
+}

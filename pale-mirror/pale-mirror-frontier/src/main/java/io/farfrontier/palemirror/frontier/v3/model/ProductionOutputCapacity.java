@@ -68,11 +68,11 @@ public final class ProductionOutputCapacity {
             return state.firstFreeContainerSlot(record.id()).isPresent();
         int output = recipe.outputForInput(inputQuantity);
         return state.canReceiveFungible(record.id(), recipe.product().itemKind(), output)
-                || source.equals(record.id()) && recipe.ingredient().acceptedItems().stream().anyMatch(kind ->
+                || source.equals(record.id()) && recipe.ingredients().size() == 1 && recipe.singleIngredient().acceptedItems().stream().anyMatch(kind ->
                     state.inventory().canTransformFungible(record.id(), kind, inputQuantity, recipe.product().itemKind(), output,
                             state.reservedContainerSlots(record.id()), state.pendingContainerInbound(record.id())))
-                || source.equals(record.id()) && state.inventory().items().values().stream().anyMatch(item ->
-                    item.economicOwnerId().equals(rights.resourceOwner().id()) && recipe.ingredient().accepts(item.itemKind())
+                || source.equals(record.id()) && recipe.ingredients().size() == 1 && state.inventory().items().values().stream().anyMatch(item ->
+                    item.economicOwnerId().equals(rights.resourceOwner().id()) && recipe.singleIngredient().accepts(item.itemKind())
                     && item.count() == inputQuantity && item.custody() instanceof InventoryCustody.ContainerSlot slot
                     && slot.containerId().equals(record.id()))
                     && state.inventory().canReserveSlots(record.id(), state.reservedContainerSlots(record.id()), state.pendingContainerInbound(record.id()));

@@ -22,18 +22,34 @@ public final class StationWorkLabour {
         if (job.stationWork().orElseThrow().phase() != StationWorkState.Phase.PROCESSING) return Optional.empty();
         return StationWorkOperation.require(state, job).progress();
     }
+    public static boolean holdsAttendance(FrontierWorldState state, ProductionJob job) {
+        return job.stationWork().orElseThrow().phase() == StationWorkState.Phase.PROCESSING
+                && StationWorkOperation.require(state, job).attendance().isPresent();
+    }
     public static boolean complete(FrontierWorldState state, ProductionJob job) {
         return progress(state, job).filter(WorkProgress::complete).isPresent();
     }
     public static int permille(FrontierWorldState state, ProductionJob job) {
         return progress(state, job).map(value -> (int)(value.completedMilliWork() * 1_000L / value.requiredMilliWork())).orElse(0);
     }
-    public static FrontierWorldState change(FrontierWorldState state, ProductionJob job, WorkProgress next) {
+    public static FrontierWorldState change(FrontierWorldState state, ProductionJob job, BakeryLabourChange change) {
         return state.withChanges(FrontierWorldStateUpdate.begin().productionStations(
-                ProductionStationProcessing.progress(state, StationWorkOperation.require(state, job), next)));
+                ProductionStationProcessing.progress(state, StationWorkOperation.require(state, job), change.next(), change.attendance())));
     }
 
+    public static boolean updateNeeded(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
+        return ProductionStationClock.updateNeeded(state, StationWorkOperation.require(state, job), tick, attendance(state, job, tick, run));
+    }
+    public static BakeryLabourChange propose(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
+        var operation = StationWorkOperation.require(state, job);
+        var attendance = attendance(state, job, tick, run);
+        return new BakeryLabourChange(operation.progress(), operation.attendance(),
+                ProductionStationClock.next(state, operation, tick, attendance), attendance);
+    }
     public static WorkProgress next(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
+        return ProductionStationClock.next(state, StationWorkOperation.require(state, job), tick, attendance(state, job, tick, run));
+    }
+    private static Optional<ProductionStationClock.Attendance> attendance(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
         var work = job.stationWork().orElseThrow();
         if (work.phase() != StationWorkState.Phase.PROCESSING || work.pendingPhysicalStep().isPresent()
                 || run && work.block().filter(BakeryWorkBlock::requiresPhysicalReconciliation).isPresent())
@@ -43,7 +59,7 @@ public final class StationWorkLabour {
         var operation = StationWorkOperation.require(state, job);
         if (state.bootstrap().ruleset().production().require(work.recipeId()).processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
             throw new IllegalArgumentException("automatic recipe clock belongs to its machine process, not the baker");
-        if (!run) return ProductionStationClock.next(state, operation, tick, Optional.empty());
+        if (!run) return Optional.empty();
         if (operation.progress().filter(progress -> progress.completedAt(tick) == progress.requiredMilliWork()).isPresent())
             throw new IllegalArgumentException("completed bakery labour cannot restart");
         var station = StationWorkGoal.current(state, job).station();
@@ -51,21 +67,22 @@ public final class StationWorkLabour {
                 || !state.actorExecutions().owns(job.workerId(), ActorActivityKind.PRODUCTION, job.id())
                 || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), tick))
             throw new IllegalArgumentException("bakery labour needs its working baker at the retained station");
-        return ProductionStationClock.next(state, operation, tick, Optional.of(new ProductionStationClock.Attendance(
+        return Optional.of(new ProductionStationClock.Attendance(
                 ResidentWorkStatistics.speedPermille(state.humanPopulation().resident(job.workerId()), definition, catalog),
-                ResidentWorkIntervals.permittedUntil(state, job.workerId(), tick))));
+                ResidentWorkIntervals.permittedUntil(state, job.workerId(), tick)));
     }
 
     public static void require(FrontierWorldState state, ProductionJob job, BakeryLabourChange change) {
-        if (!progress(state, job).equals(change.previous())
-                || !next(state, job, change.atTick(), change.next().running()).equals(change.next()))
+        if (!propose(state, job, change.atTick(), change.attendance().isPresent()).equals(change))
             throw new IllegalArgumentException("bakery labour has stale progress, rate or elapsed work");
     }
 
     public static FrontierWorldState pauseJob(FrontierWorldState state, ProductionJob job, long tick) {
         var work = job.stationWork();
-        if (work.isEmpty() || !attended(state, job) || progress(state, job).filter(WorkProgress::running).isEmpty()) return state;
-        return change(state, job, progress(state, job).orElseThrow().pause(tick));
+        if (work.isEmpty() || !attended(state, job) || work.orElseThrow().phase() != StationWorkState.Phase.PROCESSING) return state;
+        var operation = StationWorkOperation.require(state, job);
+        if (operation.attendance().isEmpty() && operation.progress().filter(WorkProgress::running).isEmpty()) return state;
+        return change(state, job, propose(state, job, tick, false));
     }
     private static ProductionJob assigned(FrontierWorldState state, HumanAssignment assignment) {
         if (assignment.kind() != HumanAssignmentKind.PRODUCTION)

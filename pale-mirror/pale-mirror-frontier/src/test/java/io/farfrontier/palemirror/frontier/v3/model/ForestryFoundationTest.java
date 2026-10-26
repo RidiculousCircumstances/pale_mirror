@@ -99,7 +99,7 @@ class ForestryFoundationTest {
         assertFalse(rules.tools().require("minecraft:iron_pickaxe").supports(new ToolRequirement(ToolAbilities.CHOP, 1, 1)));
         var recipes = rules.production().recipes().stream().filter(recipe -> recipe.product().itemKind().equals(axe.itemKind())).toList();
         assertEquals(2, recipes.size());
-        assertTrue(recipes.stream().allMatch(recipe -> recipe.ingredient().acceptedItems().equals(Set.of("minecraft:iron_ingot"))));
+        assertTrue(recipes.stream().allMatch(recipe -> recipe.singleIngredient().acceptedItems().equals(Set.of("minecraft:iron_ingot"))));
         assertEquals(ForestryRules.disabled(), FrontierRulesets.installed("frontier-v3-quarry-graybox-r27").forestry());
     }
     @Test void regrowthNeedsANewSourceAndCannotOverwriteAnUnsettledPriorGeneration() {

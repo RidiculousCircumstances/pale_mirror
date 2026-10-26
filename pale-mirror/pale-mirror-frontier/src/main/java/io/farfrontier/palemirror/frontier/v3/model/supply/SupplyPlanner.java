@@ -64,32 +64,32 @@ public final class SupplyPlanner {
     }
     /** Capacity owner supplies feasible recipes and conservative timing, not an executor. */
     public record Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
-                          long heatPerBatch, Map<String, Long> fuels, long availableHeat,
+                          long burnTicksPerBatch, Map<String, Long> fuels, long availableFuelTicks,
                           long firstOutputDelayTicks, long operationTicks, int maximumBatches, long labourTicksPerOperation,
                           Map<String, Long> labourCapacity, int recipesPerOperation, List<OutputRelease> releases) {
         public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
-                long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
+                long burnTicksPerBatch, Map<String, Long> fuels, long availableFuelTicks, long firstOutputDelayTicks,
                 long operationTicks, int maximumBatches, long labourTicksPerOperation,
                 Map<String, Long> labourCapacity, int recipesPerOperation) {
-            this(id, product, outputPerBatch, inputs, heatPerBatch, fuels, availableHeat, firstOutputDelayTicks,
+            this(id, product, outputPerBatch, inputs, burnTicksPerBatch, fuels, availableFuelTicks, firstOutputDelayTicks,
                     operationTicks, maximumBatches, labourTicksPerOperation, labourCapacity, recipesPerOperation, List.of());
         }
         public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
-                long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
+                long burnTicksPerBatch, Map<String, Long> fuels, long availableFuelTicks, long firstOutputDelayTicks,
                 long batchTicks, int maximumBatches, long labourTicksPerBatch, Map<String, Long> labourCapacity) {
-            this(id, product, outputPerBatch, inputs, heatPerBatch, fuels, availableHeat, firstOutputDelayTicks,
+            this(id, product, outputPerBatch, inputs, burnTicksPerBatch, fuels, availableFuelTicks, firstOutputDelayTicks,
                     batchTicks, maximumBatches, labourTicksPerBatch, labourCapacity, 1);
         }
         public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
-                long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
+                long burnTicksPerBatch, Map<String, Long> fuels, long availableFuelTicks, long firstOutputDelayTicks,
                 long batchTicks, int maximumBatches, long labourTicksPerBatch) {
-            this(id, product, outputPerBatch, inputs, heatPerBatch, fuels, availableHeat, firstOutputDelayTicks,
+            this(id, product, outputPerBatch, inputs, burnTicksPerBatch, fuels, availableFuelTicks, firstOutputDelayTicks,
                     batchTicks, maximumBatches, labourTicksPerBatch, Map.of());
         }
         public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
-                long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
+                long burnTicksPerBatch, Map<String, Long> fuels, long availableFuelTicks, long firstOutputDelayTicks,
                 long batchTicks, int maximumBatches) {
-            this(id, product, outputPerBatch, inputs, heatPerBatch, fuels, availableHeat,
+            this(id, product, outputPerBatch, inputs, burnTicksPerBatch, fuels, availableFuelTicks,
                     firstOutputDelayTicks, batchTicks, maximumBatches, 0);
         }
         public Process {
@@ -99,12 +99,12 @@ public final class SupplyPlanner {
             releases = List.copyOf(releases);
             if (id.isBlank() || product.isBlank() || outputPerBatch < 1 || recipesPerOperation < 1
                     || inputs.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
-                    || heatPerBatch < 0 || availableHeat < 0 || firstOutputDelayTicks < 0
+                    || burnTicksPerBatch < 0 || availableFuelTicks < 0 || firstOutputDelayTicks < 0
                     || operationTicks < 1 || maximumBatches < 1 || labourTicksPerOperation < 0
                     || labourCapacity.size() > 256 || labourCapacity.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
                     || !labourCapacity.isEmpty() && labourTicksPerOperation == 0
                     || fuels.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
-                    || heatPerBatch > 0 && fuels.isEmpty())
+                    || burnTicksPerBatch > 0 && fuels.isEmpty())
                 throw new IllegalArgumentException("invalid supplied production capacity");
             if (releases.size() > 4096 || !releases.isEmpty()
                     && (releases.getFirst().afterTicks() != firstOutputDelayTicks
@@ -374,9 +374,9 @@ public final class SupplyPlanner {
                 }
                 if (fuel.isPresent()) {
                     var timing = ProductionInputTiming.assess(stock, stocks.get(fuel.orElseThrow().item()), process, allocated, batches,
-                            resources.inputRequired(fuel.orElseThrow().item()), deadline, process.heatPerBatch(),
+                            resources.inputRequired(fuel.orElseThrow().item()), deadline, process.burnTicksPerBatch(),
                             process.fuels().get(fuel.orElseThrow().item()),
-                            Math.max(0, process.availableHeat() - Math.multiplyExact(allocated, process.heatPerBatch())));
+                            Math.max(0, process.availableFuelTicks() - Math.multiplyExact(allocated, process.burnTicksPerBatch())));
                     dependency(stocks, capacities, demands, allocatedBatches, resources, fuel.orElseThrow().item(), fuel.orElseThrow().quantity(),
                             protectedFuel.map(FuelRequirement::quantity).orElse(0L),
                             timing.deadline(), timing.urgentRequired(), reasons, Reason.PRODUCTION_FUEL, ancestors, sourcing);
@@ -451,9 +451,9 @@ public final class SupplyPlanner {
         long inputDelay = process.inputs().entrySet().stream()
                 .filter(e -> stocks.get(e.getKey()).available() < Math.multiplyExact(batches, e.getValue()))
                 .mapToLong(e -> stocks.get(e.getKey()).policy().leadTicks()).max().orElse(0);
-        long requiredHeat = Math.multiplyExact(batches, process.heatPerBatch());
-        if (requiredHeat > process.availableHeat()) {
-            long heat = requiredHeat - process.availableHeat();
+        long requiredHeat = Math.multiplyExact(batches, process.burnTicksPerBatch());
+        if (requiredHeat > process.availableFuelTicks()) {
+            long heat = requiredHeat - process.availableFuelTicks();
             long fuelDelay = process.fuels().entrySet().stream().mapToLong(e ->
                     stocks.get(e.getKey()).available() >= Math.ceilDiv(heat, e.getValue()) ? 0 : stocks.get(e.getKey()).policy().leadTicks())
                     .min().orElseThrow();
@@ -466,7 +466,7 @@ public final class SupplyPlanner {
         stocks.keySet().forEach(item -> graph.put(item, new TreeSet<>()));
         for (var process : processes) {
             graph.get(process.product()).addAll(process.inputs().keySet());
-            if (process.heatPerBatch() > 0) graph.get(process.product()).addAll(process.fuels().keySet());
+            if (process.burnTicksPerBatch() > 0) graph.get(process.product()).addAll(process.fuels().keySet());
         }
         for (var dependency : commitments) {
             requireStock(stocks, dependency.product()); requireStock(stocks, dependency.resource());

@@ -250,7 +250,7 @@ public final class ReferenceContainerCustody {
                         : MaterialContainerImage.Slot.fungible(slot, fungible.itemKind(), fungible.quantity()));
             }
         }
-        return MaterialContainerImage.fingerprint(semanticKind(state, containerId), containerId.value(), layout(state, containerId), image);
+        return MaterialContainerImage.fingerprint(semanticKind(state, containerId), containerId.value(), state.inventory().containers().get(containerId).compartmentLayout(), image);
     }
 
     /** Same semantic grammar as {@link #canonicalFingerprint}; the adapter supplies observed stock. */
@@ -265,7 +265,7 @@ public final class ReferenceContainerCustody {
             else if (observed.fungible()) image.add(MaterialContainerImage.Slot.fungible(slot, observed.itemKind(), observed.count()));
             else image.add(MaterialContainerImage.Slot.exact(slot, observed.itemId(), observed.itemKind(), observed.count()));
         }
-        return MaterialContainerImage.fingerprint(semanticKind(state, containerId), containerId.value(), layout(state, containerId), image);
+        return MaterialContainerImage.fingerprint(semanticKind(state, containerId), containerId.value(), state.inventory().containers().get(containerId).compartmentLayout(), image);
     }
 
     /** Production stations declare fixed recipe ports; reference depot/store stock is bulk. */
@@ -309,37 +309,28 @@ public final class ReferenceContainerCustody {
         List<PhysicalStackBinding> bindings = inventory.fungibleResources().bindings().values().stream()
                 .filter(candidate -> candidate.address() instanceof PhysicalStackAddress.ContainerSlot address
                         && address.slot().containerId().equals(containerId)).toList();
-        if (!bindings.isEmpty()) {
-            for (PhysicalStackBinding binding : bindings) {
-                PhysicalStackAddress.ContainerSlot address = (PhysicalStackAddress.ContainerSlot) binding.address();
-                slots.put(address.slot().slot(), new ProjectedFungibleSlot(binding.itemKind(), binding.quantity()));
-            }
-            return Map.copyOf(slots);
-        }
-        List<CustodyAccount> accounts = inventory.fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container custody && custody.containerId().equals(containerId)).toList();
-        if (accounts.size() != 1) return Map.of();
-        Map<String, Integer> quantities = new LinkedHashMap<>();
-        accounts.getFirst().lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-            ResourceLot lot = inventory.fungibleResources().lots().get(entry.getKey());
-            if (lot == null) throw new IllegalStateException("reference custody account has unknown lot");
-            quantities.merge(lot.itemKind(), entry.getValue(), Integer::sum);
-        });
-        if (container.productionStation().isPresent()) {
-            ProductionStationSpec station = container.productionStation().orElseThrow();
-            for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
-                int slot = ProductionStationRecipe.portForItemKind(catalog, station, entry.getKey());
-                if (entry.getValue() > 64 || inventory.itemAt(containerId, slot).isPresent()
-                        || slots.putIfAbsent(slot, new ProjectedFungibleSlot(entry.getKey(), entry.getValue())) != null)
-                    throw new IllegalStateException("station custody does not fit its declared recipe port");
-            }
-            return Map.copyOf(slots);
-        }
+        var bound = bindings.stream().collect(java.util.stream.Collectors.groupingBy(PhysicalStackBinding::accountId));
         var unavailable = new java.util.HashSet<>(reservedSlots);
         for (int slot = 0; slot < container.slotCount(); slot++)
             if (inventory.itemAt(containerId, slot).isPresent()) unavailable.add(slot);
-        container.fungibleLayout().project(quantities, container.slotCount(), unavailable)
-                .forEach((slot, stack) -> slots.put(slot, new ProjectedFungibleSlot(stack.itemKind(), stack.quantity())));
+        for (var account : FungibleResourceReadIndex.containerAccounts(inventory.fungibleResources(), containerId)) {
+            if (bound.containsKey(account.id())) {
+                for (var binding : bound.get(account.id())) {
+                    var address = (PhysicalStackAddress.ContainerSlot) binding.address();
+                    slots.put(address.slot().slot(), new ProjectedFungibleSlot(binding.itemKind(), binding.quantity()));
+                }
+                continue;
+            }
+            var holder = (ResourceCustody.Container) account.custody();
+            var allowed = container.compartmentLayout().slots(holder.section());
+            var excluded = new java.util.HashSet<>(unavailable);
+            for (int slot = 0; slot < container.slotCount(); slot++) if (!allowed.contains(slot)) excluded.add(slot);
+            Map<String, Integer> quantities = new LinkedHashMap<>();
+            account.lotQuantities().forEach((id, quantity) -> quantities.merge(
+                    inventory.fungibleResources().lots().get(id).itemKind(), quantity, Math::addExact));
+            container.fungibleLayout().project(quantities, container.slotCount(), excluded)
+                    .forEach((slot, stack) -> slots.put(slot, new ProjectedFungibleSlot(stack.itemKind(), stack.quantity())));
+        }
         return Map.copyOf(slots);
     }
 

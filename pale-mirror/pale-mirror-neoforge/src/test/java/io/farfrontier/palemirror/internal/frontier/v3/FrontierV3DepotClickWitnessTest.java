@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSectionId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,12 +37,12 @@ class FrontierV3DepotClickWitnessTest {
     }
     @Test void composedWitnessFencesEveryMemberAndRecoversAsOneTransaction() {
         var second = new SubjectId("container:second-depot");
-        var left = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION, List.of(), Optional.empty());
-        var right = new FrontierV3DepotClickWitness(second, new SubjectId("custody:second-depot"), OWNER, 7,
+        var left = new FrontierV3DepotClickWitness(DEPOT, Map.of(ContainerSectionId.STOCK, ACCOUNT), OWNER, 7, PLAYER, INTERACTION, List.of(), Optional.empty());
+        var right = new FrontierV3DepotClickWitness(second, Map.of(ContainerSectionId.STOCK, new SubjectId("custody:second-depot")), OWNER, 7,
                 PLAYER, INTERACTION, List.of(), Optional.empty());
         var prepared = new FrontierV3ContainerClickTransaction(List.of(left, right));
         assertEquals(prepared, FrontierV3ContainerClickTransaction.read(prepared.save()));
-        var empty = new net.minecraft.nbt.CompoundTag(); empty.putInt("format", 4); empty.put("pending", new net.minecraft.nbt.ListTag());
+        var empty = new net.minecraft.nbt.CompoundTag(); empty.putInt("format", 5); empty.put("pending", new net.minecraft.nbt.ListTag());
         empty.put("completed", new net.minecraft.nbt.ListTag());
         var ledger = FrontierV3DepotClickLedger.load(empty, null); ledger.prepare(prepared);
         assertEquals(left, ledger.pending(DEPOT)); assertEquals(right, ledger.pending(second));
@@ -48,7 +50,7 @@ class FrontierV3DepotClickWitnessTest {
         assertThrows(IllegalArgumentException.class, () -> ledger.retire(left));
         var outcome = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved(PLAYER, INTERACTION,
                 prepared.members().stream().map(m -> new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved.Member(
-                        m.containerId(), m.accountId(), m.ownerId(), m.authorityEpoch(), m.before(), List.of())).toList(), Optional.empty());
+                        m.containerId(), m.accounts(), m.ownerId(), m.authorityEpoch(), m.before(), List.of())).toList(), Optional.empty());
         ledger.capture(prepared, outcome);
         var observed = ledger.transaction(DEPOT);
         assertThrows(IllegalArgumentException.class, () -> ledger.capture(prepared, outcome));
@@ -87,7 +89,7 @@ class FrontierV3DepotClickWitnessTest {
     }
 
     @Test void admittedLayoutRoundTripsWithoutInventingAnOutcome() {
-        var prepared = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION,
+        var prepared = new FrontierV3DepotClickWitness(DEPOT, Map.of(ContainerSectionId.STOCK, ACCOUNT), OWNER, 7, PLAYER, INTERACTION,
                 List.of(stack(0, 64), stack(1, 8)), Optional.empty());
         assertEquals(prepared, FrontierV3DepotClickWitness.read(prepared.save()));
         assertEquals(Optional.empty(), new FrontierV3ContainerClickTransaction(List.of(prepared)).outcome());
@@ -96,10 +98,10 @@ class FrontierV3DepotClickWitnessTest {
     @Test void trackedReturnCannotLoseItsDeclaredSourceInTheComposedOutcome() {
         var source = new FrontierV3DepotClickWitness.ReturnSource(new SubjectId("binding:player-return"),
                 new SubjectId("custody:player-return"), 3, 9, "minecraft:bread", 10);
-        var prepared = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION,
+        var prepared = new FrontierV3DepotClickWitness(DEPOT, Map.of(ContainerSectionId.STOCK, ACCOUNT), OWNER, 7, PLAYER, INTERACTION,
                 List.of(), Optional.of(source));
         assertEquals(prepared, FrontierV3DepotClickWitness.read(prepared.save()));
-        var member = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved.Member(DEPOT, ACCOUNT, OWNER, 7, List.of(), List.of(stack(0, 6)));
+        var member = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved.Member(DEPOT, Map.of(ContainerSectionId.STOCK, ACCOUNT), OWNER, 7, List.of(), List.of(stack(0, 6)));
         var missing = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved(PLAYER, INTERACTION, List.of(member), Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerClickTransaction(List.of(prepared), Optional.empty(), Optional.of(missing)));
         var remaining = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved.PlayerReturn(

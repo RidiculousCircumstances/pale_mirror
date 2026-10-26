@@ -117,14 +117,13 @@ export function validateScenario(scenario) {
   }
   if (scenario.zeroPlayerPrelude !== undefined && (!scenario.zeroPlayerPrelude
       || !Number.isInteger(scenario.zeroPlayerPrelude.timeoutMs)
-      // The COLD carrier has a fixed eight-instant server-thread slice. Its first physical
-      // turn never owns immutable baseline construction, which is primed before any player
-      // can join; retain the bounded five-minute ordinary-player evidence window.
-      || scenario.zeroPlayerPrelude.timeoutMs < 1_000 || scenario.zeroPlayerPrelude.timeoutMs > 300_000
+      // COLD duty cycles can span several work shifts. Keep an explicit finite carrier
+      // deadline without imposing the shorter interactive-action window on simulation.
+      || scenario.zeroPlayerPrelude.timeoutMs < 1_000 || scenario.zeroPlayerPrelude.timeoutMs > MAX_SCENARIO_WALL_BUDGET_MS
       || (scenario.zeroPlayerPrelude.kind !== undefined && scenario.zeroPlayerPrelude.kind !== 'cold_duty_cycle')
       || (scenario.zeroPlayerPrelude.targetInstant === undefined && (!Number.isInteger(scenario.zeroPlayerPrelude.advanceTicks)
           || scenario.zeroPlayerPrelude.advanceTicks < (scenario.zeroPlayerPrelude.kind === 'cold_duty_cycle' ? 1 : 24_000)
-          || scenario.zeroPlayerPrelude.advanceTicks > 240_000))
+          || scenario.zeroPlayerPrelude.advanceTicks > 24_000))
       || (scenario.zeroPlayerPrelude.targetInstant !== undefined && (!Number.isSafeInteger(scenario.zeroPlayerPrelude.targetInstant)
           || scenario.zeroPlayerPrelude.targetInstant < 1 || scenario.zeroPlayerPrelude.advanceTicks !== undefined
           || scenario.zeroPlayerPrelude.holdAtTarget !== true))
@@ -152,7 +151,7 @@ export function validateScenario(scenario) {
           && (!Number.isInteger(scenario.restart.zeroPlayerAdvanceTicks) || scenario.restart.zeroPlayerAdvanceTicks < 1
               || scenario.restart.zeroPlayerAdvanceTicks > 24_000
               || !Number.isInteger(scenario.restart.zeroPlayerTimeoutMs) || scenario.restart.zeroPlayerTimeoutMs < 1_000
-              || scenario.restart.zeroPlayerTimeoutMs > 300_000
+              || scenario.restart.zeroPlayerTimeoutMs > MAX_SCENARIO_WALL_BUDGET_MS
               || (scenario.restart.zeroPlayerSettleMs !== undefined
                   && (!Number.isInteger(scenario.restart.zeroPlayerSettleMs) || scenario.restart.zeroPlayerSettleMs < 0
                       || scenario.restart.zeroPlayerSettleMs > 120_000))))
@@ -415,7 +414,13 @@ export function scenarioDeadlineMs(scenario) {
   const actions = [...(scenario.setup ?? []), ...(scenario.actions ?? [])];
   const actionBudget = actions.reduce((total, action) => total + actionBudgetMs(action), 0);
   const captureBudget = (scenario.frames ?? []).length * SCENARIO_FRAME_CAPTURE_BUDGET_MS;
-  const requested = actionBudget + captureBudget + SCENARIO_TERMINAL_GRACE_MS;
+  // A persistent graphical client waits disconnected while its owning carrier performs
+  // a declared COLD interval and restarts Minecraft. That interval is not an action.
+  const restarts = [scenario.restart, scenario.restart?.secondary]
+    .filter(restart => restart?.zeroPlayerAdvanceTicks !== undefined);
+  const recoveryBudget = restarts.reduce((total, restart) => total + (restart.zeroPlayerTimeoutMs ?? 0)
+    + (restart.zeroPlayerSettleMs ?? 0) + 300_000, 0);
+  const requested = actionBudget + captureBudget + recoveryBudget + SCENARIO_TERMINAL_GRACE_MS;
   if (!Number.isSafeInteger(requested) || requested > MAX_SCENARIO_WALL_BUDGET_MS) {
     throw new Error(`scenario declared wall-time budget exceeds ${MAX_SCENARIO_WALL_BUDGET_MS}ms`);
   }

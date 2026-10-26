@@ -64,6 +64,11 @@ public final class FungibleResourceCustodySupport {
         return FungibleResourceReadIndex.container(state.inventory().fungibleResources(), containerId);
     }
 
+    public static Optional<CustodyAccount> accountAtContainer(FrontierWorldState state, SubjectId containerId,
+            ContainerSectionId section) {
+        return FungibleResourceReadIndex.container(state.inventory().fungibleResources(), containerId, section);
+    }
+
     /**
      * Deterministic recipe candidate, not a reservation. The caller must commit a claim and
      * retain this exact lot map before any physical write; account-level unclaimed stock alone

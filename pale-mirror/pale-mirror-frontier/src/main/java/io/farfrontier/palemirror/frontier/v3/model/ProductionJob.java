@@ -168,6 +168,25 @@ public record ProductionJob(
                     stationWork.map(StationWorkState::inputQuantity).orElse(outputCount));
         };
     }
+    /** Complete machine input, distinct from the one portion currently carried by the worker. */
+    public java.util.Map<SubjectId, Integer> recipeInputQuantities() {
+        var work = stationWork.orElseThrow();
+        return work.materials().loaded().isEmpty() ? inputQuantities() : work.materials().loadedLots();
+    }
+    public java.util.Map<SubjectId, Integer> recipeInputClaims() {
+        var work = stationWork.orElseThrow();
+        if (!work.materials().loaded().isEmpty()) return work.materials().loadedClaims();
+        var claim = inputHold instanceof ProductionInputHold.FungibleCold hold ? hold.claimId()
+                : ((ProductionInputHold.FungibleBound) inputHold).claimId();
+        return java.util.Map.of(claim, inputCount());
+    }
+    public ProductionJob nextStationMaterial(StationWorkMaterials.Loaded deposited, ProductionInputHold next) {
+        var work = stationWork.orElseThrow().nextMaterial(deposited);
+        var retained = stationWork.orElseThrow().materials().queued().getFirst();
+        if (!next.itemId().equals(retained.selection().firstLotId())) throw new IllegalArgumentException("next pickup changed its retained lot allocation");
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, next.itemId(), next, outputItemId, outputItemKind,
+                outputCount, workProgress, workTraversal, traversalCursor, java.util.Optional.of(work), spatial, rights);
+    }
     public int inputCount() { return inputQuantities().values().stream().mapToInt(Integer::intValue).sum(); }
     /** Resource representation cannot bypass labor or a live physical custodian. */
     public void requireColdCompletion(FrontierWorldState state) {

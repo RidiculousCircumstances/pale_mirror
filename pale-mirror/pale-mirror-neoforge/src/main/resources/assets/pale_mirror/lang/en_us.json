@@ -77,5 +77,6 @@
   "journeymap.pale_mirror.mine.description": "Known primary mine site.",
   "journeymap.pale_mirror.mine.infected": "The primary mine is infected and no longer supplies iron.",
   "journeymap.pale_mirror.alternate": "alternate source",
-  "journeymap.pale_mirror.alternate.description": "Potential alternate iron source reported by the settlement."
+  "journeymap.pale_mirror.alternate.description": "Potential alternate iron source reported by the settlement.",
+  "block.pale_mirror.woodworking_bench": "Woodworking Bench"
 }

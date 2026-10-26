@@ -118,7 +118,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void independentRouteLossesRetainDistinctTeamsAndAdvanceInDeterministicRotation() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-parallel"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId firstSettlement = bootstrap.settlements().get(0).id();
         SubjectId secondSettlement = bootstrap.settlements().get(1).id();
         List<BlockPosition> firstRoute = initial.routeTopology().settlementWaypoints(bootstrap, firstSettlement);
@@ -173,7 +173,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void knownRouteLossAdmitsOneExactLocalMaintenanceOwnerWithoutCreatingABypass() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-admission"), 41L);
-        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState state = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = state.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         state = state.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -197,7 +197,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void nonRouteOrUnknownLossCannotBecomeAControlledRouteRepair() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-foreign"), 41L);
-        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState state = equippedFixture(bootstrap);
         GrayboxCell nonRouteCell = FrontierGrayboxPlan.compile(state).cells().values().stream()
                 .filter(cell -> !cell.ownerId().equals(FrontierRouteNetwork.OWNER))
                 .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.FOUNDATION).findFirst().orElseThrow();
@@ -216,7 +216,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void terminalReadyMaintenanceCompactsItsBoundedOwnerInsteadOfRetainingItForever() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-close"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -248,7 +248,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void terminalToolReturnUsesOneSharedExactReadinessBoundary() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-return-readiness"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -300,7 +300,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void readyToolHolderImmediatelyStartsOneDurableReturnJourneyRatherThanAwaitingTheNextGlobalScan() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-reactive-return"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -336,7 +336,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void completedDepotMusterSchedulesImmediateToolIssueWithoutAwaitingTheGlobalMaintenanceScan() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-reactive-muster"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -382,7 +382,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void equippedExactCrewAdmitsOneBoundedAssemblyBeforeAnyRouteMaterialIsTaken() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-assembly"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -412,7 +412,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void drainedAmbientEngineerRetainsADeclaredApproachToTheSameRouteRepair() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-drained-engineer"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = new BlockPosition(-380, 64, -304);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -455,7 +455,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void workIntentResolvesItsOperationFromExactSubjectsWhileTheRouteNetworkRemainsItsCause() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-intent-owner"), 41L);
-        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState state = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = state.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         state = state.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -476,7 +476,7 @@ class RouteMaintenanceProcessTest {
     void completedMaintenanceAssemblyMayEnterItsCurrentHotWorksite() {
         WorldId world = new WorldId("frontier:route-maintenance-hot-worksite");
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(world, 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -524,7 +524,7 @@ class RouteMaintenanceProcessTest {
     void physicalMaintenanceConflictDrainsItsExactHotWorksiteInsteadOfRetainingStaleBodies() {
         WorldId world = new WorldId("frontier:route-maintenance-conflict-drain");
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(world, 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -590,7 +590,7 @@ class RouteMaintenanceProcessTest {
     @Test
     void terminalMaintenanceMayRetainItsHistoricalAssemblyWithoutBecomingAnActiveWorksite() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-terminal-assembly"), 41L);
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().settlementWaypoints(bootstrap, settlement).get(2);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -612,6 +612,19 @@ class RouteMaintenanceProcessTest {
                 "a retained terminal assembly is history, not permission to validate or materialize a new active worksite");
     }
 
+    /** These cases start after ordinary equipment procurement, not an undeclared genesis grant. */
+    private static FrontierWorldState equippedFixture(FrontierBootstrap bootstrap) {
+        var state = FrontierWorldState.initial(bootstrap); var inventory = state.inventory();
+        for (var home : bootstrap.settlements()) for (int ordinal = 0; ordinal < EngineeringRecoveryTeam.MAX_MEMBERS; ordinal++) {
+            var depot = FrontierWorldState.depotId(home.id());
+            int slot = inventory.availableSlots(depot).getFirst();
+            var id = new SubjectId("item:fixture-engineer-" + home.id().value().replace(':', '-') + "-" + ordinal);
+            var definition = bootstrap.ruleset().tools().require("minecraft:iron_pickaxe");
+            inventory = inventory.store(new ExactItemStack(id, home.id(), definition.itemKind(), 1,
+                    new InventoryCustody.ContainerSlot(depot, slot), definition.pristine()));
+        }
+        return state.withInventory(inventory);
+    }
     private static RouteMaintenanceStarted started(List<ProposedEvent> events) {
         return events.stream().map(ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance)
                 .map(RouteMaintenanceStarted.class::cast).findFirst().orElseThrow();

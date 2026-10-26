@@ -8,7 +8,7 @@ final class ContainerPhysicalReservations {
     private static final ImmutableInputView<List<ContainerSlotClaim>> CLAIMS = new ImmutableInputView<>();
     private static final ImmutableInputView<List<ContainerSlotClaim>> BACKED = new ImmutableInputView<>();
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
-    private record DemandKey(SubjectId owner, SubjectId container, String kind, ContainerInboundCapacity.Representation representation) { }
+    private record DemandKey(SubjectId owner, SubjectId container, ContainerSectionId section, String kind, ContainerInboundCapacity.Representation representation) { }
     private record Owners(ResourceSiteState sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
             io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,
             io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest,
@@ -83,12 +83,12 @@ final class ContainerPhysicalReservations {
         return DEMANDS.get(List.of(physicalClaims, demands), () -> {
             var covered = new HashMap<DemandKey, Integer>();
             physicalClaims.stream().flatMap(claim -> claim.coveredDemand().stream()).forEach(physical ->
-                    covered.merge(new DemandKey(physical.owner(), physical.container(), physical.itemKind(), physical.representation()), physical.quantity(), Math::addExact));
+                    covered.merge(new DemandKey(physical.owner(), physical.container(), physical.section(), physical.itemKind(), physical.representation()), physical.quantity(), Math::addExact));
             return demands.stream().map(demand -> {
             int remaining = Math.subtractExact(demand.quantity(), covered.getOrDefault(
-                    new DemandKey(demand.owner(), demand.container(), demand.itemKind(), demand.representation()), 0));
+                    new DemandKey(demand.owner(), demand.container(), demand.section(), demand.itemKind(), demand.representation()), 0));
             if (remaining < 0) throw new IllegalArgumentException("physical claims exceed inbound demand");
-            return remaining == 0 ? null : new ContainerInboundCapacity.Demand(demand.owner(), demand.container(), demand.itemKind(), remaining, demand.representation());
+            return remaining == 0 ? null : new ContainerInboundCapacity.Demand(demand.owner(), demand.container(), demand.itemKind(), remaining, demand.representation(), demand.section());
             }).filter(Objects::nonNull).toList();
         });
     }

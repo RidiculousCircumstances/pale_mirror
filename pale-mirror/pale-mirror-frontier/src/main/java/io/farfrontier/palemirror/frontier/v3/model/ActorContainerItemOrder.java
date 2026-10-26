@@ -50,7 +50,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                 Objects.requireNonNull(port, "exact station port");
                 Objects.requireNonNull(slot, "exact station slot");
                 if (!spec.containerId().equals(slot.containerId())
-                        || slot.slot() != spec.slot(port))
+                        || !spec.slots(port).contains(slot.slot()))
                     throw new IllegalArgumentException("exact station endpoint disagrees with its declared port");
             }
             @Override public SubjectId containerId() { return spec.containerId(); }
@@ -158,7 +158,8 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
             if (!(containerEndpoint instanceof ContainerEndpoint.FungibleContainer)
                     && !(containerEndpoint instanceof ContainerEndpoint.FungibleStation))
                 throw new IllegalArgumentException("fungible item order requires a container account, not a permanent slot");
-            ResourceCustody.Container container = new ResourceCustody.Container(containerEndpoint.containerId());
+            ResourceCustody.Container container = containerEndpoint instanceof ContainerEndpoint.FungibleStation endpoint
+                    ? endpoint.spec().custody(endpoint.port()) : new ResourceCustody.Container(containerEndpoint.containerId());
             ResourceCustody actor = actorSlot instanceof ActorItemSlot.AttachedStorage storage
                     ? new ResourceCustody.Container(storage.containerId()) : new ResourceCustody.Actor(actorId);
             if (actor.equals(container)) throw new IllegalArgumentException("actor storage and service endpoint must differ");
@@ -211,7 +212,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                     && slot.slot().containerId().equals(container.containerId())
                     && (!container.containerId().equals(containerEndpoint.containerId())
                         || !(containerEndpoint instanceof ContainerEndpoint.FungibleStation station)
-                        || station.spec().ownsSlot(slot.slot().slot()));
+                        || station.spec().slots(station.port()).contains(slot.slot().slot()));
         return ActorResourceSlotAddress.admits(actorId, actorSlot, custody, address);
     }
     @Override public ActorContainerItemOrder withPortion(Portion.Fungible replacement) {
@@ -227,13 +228,17 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                                                 List<PhysicalStackBinding> destinationBindings) {
         if (!(containerEndpoint instanceof ContainerEndpoint.FungibleStation endpoint)) return;
         var portion = (Portion.Fungible) this.portion;
-        var slot = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(endpoint.containerId(),
-                endpoint.spec().slot(endpoint.port())));
+        var allowed = endpoint.spec().slots(endpoint.port());
         var layout = direction == Direction.PLACE ? destinationBindings
                 : ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(source.id())).toList();
-        if (layout.stream().noneMatch(binding -> binding.address().equals(slot)
-                && portion.lotQuantities().entrySet().stream().allMatch(entry ->
-                    binding.lotQuantities().getOrDefault(entry.getKey(), 0) >= entry.getValue())))
-            throw new IllegalArgumentException("observed actor transfer did not use its declared machine port");
+        var received = new java.util.HashMap<SubjectId, Integer>();
+        for (var binding : layout) {
+            if (!(binding.address() instanceof PhysicalStackAddress.ContainerSlot slot)
+                    || !slot.slot().containerId().equals(endpoint.containerId()) || !allowed.contains(slot.slot().slot()))
+                throw new IllegalArgumentException("observed actor transfer crossed its declared machine compartment");
+            binding.lotQuantities().forEach((id, quantity) -> received.merge(id, quantity, Math::addExact));
+        }
+        if (portion.lotQuantities().entrySet().stream().anyMatch(entry -> received.getOrDefault(entry.getKey(), 0) < entry.getValue()))
+            throw new IllegalArgumentException("observed actor transfer lacks its complete machine input portion");
     }
 }

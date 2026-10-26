@@ -53,7 +53,7 @@ final class FrontierV3PlayerClickObservation {
                                 BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount()));
                 }
             }
-            members.add(new ContainerPlayerEditObserved.Member(member.containerId(), member.accountId(), member.ownerId(),
+            members.add(new ContainerPlayerEditObserved.Member(member.containerId(), member.accounts(), member.ownerId(),
                     member.authorityEpoch(), member.before(), stacks));
         }
         // Missing container items require an exact physical player postimage. Never

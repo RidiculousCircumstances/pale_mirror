@@ -11,16 +11,15 @@ final class GoodsProductionPricing {
                       List<SupplyPlanner.Process> processes) {
         Assessment { opportunities = Map.copyOf(opportunities); alternatives = Map.copyOf(alternatives); processes = List.copyOf(processes); }
     }
-    static Map<String, FixedScalar> floors(ProductionCatalog catalog, Map<String, FixedScalar> prices) {
+    static Map<String, FixedScalar> floors(ProductionCatalog catalog, WorkCatalog work, Map<String, FixedScalar> prices) {
         var result = new HashMap<String, FixedScalar>();
         var fuels = catalog.fuels().stream().filter(f -> prices.containsKey(f.itemKind()))
-                .map(f -> new ProductionValuation.Fuel(prices.get(f.itemKind()), f.heatUnits())).toList();
+                .map(f -> new ProductionValuation.Fuel(prices.get(f.itemKind()), f.burnTicks())).toList();
         for (var recipe : catalog.recipes()) {
-            var input = recipe.ingredient().acceptedItems().stream().filter(prices::containsKey)
-                    .min(Comparator.comparing(prices::get));
-            if (input.isEmpty()) continue;
-            ProductionValuation.unitCost(Map.of(input.orElseThrow(), recipe.ingredient().quantity()), recipe.product().quantity(),
-                    recipe.heatPerBatch(), prices, fuels).ifPresent(cost -> result.merge(recipe.product().itemKind(), cost,
+            if (recipe.ingredients().stream().anyMatch(input -> input.acceptedItems().stream().noneMatch(prices::containsKey))) continue;
+            var inputs = ProductionRecipeInputs.select(recipe, kind -> prices.containsKey(kind) ? prices.get(kind).raw() : Long.MAX_VALUE);
+            ProductionValuation.unitCost(inputs, recipe.product().quantity(),
+                    recipe.nominalBurnTicksPerBatch(work), prices, fuels).ifPresent(cost -> result.merge(recipe.product().itemKind(), cost,
                         (a, b) -> a.compareTo(b) <= 0 ? a : b));
         }
         return Map.copyOf(result);
@@ -53,7 +52,7 @@ final class GoodsProductionPricing {
                     || process.completionTicks(batches) > demand.deadlineTicks()) continue;
             if (process.inputs().entrySet().stream().anyMatch(e -> !facts.containsKey(e.getKey())
                     || facts.get(e.getKey()).covered() < Math.multiplyExact(e.getValue(), batches))) continue;
-            long heat = Math.max(0, Math.multiplyExact(process.heatPerBatch(), batches) - process.availableHeat());
+            long heat = Math.max(0, Math.multiplyExact(process.burnTicksPerBatch(), batches) - process.availableFuelTicks());
             var fuels = process.fuels().entrySet().stream().filter(e -> prices.containsKey(e.getKey()) && facts.containsKey(e.getKey())
                     && facts.get(e.getKey()).covered() >= Math.ceilDiv(heat, e.getValue()))
                     .map(e -> new ProductionValuation.Fuel(prices.get(e.getKey()), e.getValue())).toList();

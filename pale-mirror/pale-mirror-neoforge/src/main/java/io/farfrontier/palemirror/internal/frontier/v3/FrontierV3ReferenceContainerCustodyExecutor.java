@@ -792,7 +792,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (physical == null) return new Observed("sha256:missing-" + containerId.value(), "missing:" + containerId.value());
         if (!physical.containerId().equals(containerId)) throw new IllegalArgumentException("observation has a foreign container address");
         var chest = physical.inventory();
-        boolean bulk = ReferenceContainerCustody.layout(state, containerId) == MaterialContainerImage.Layout.BULK;
+        boolean bulk = true; // Fungible permutations are classified by the declared compartment fingerprint.
         Set<String> ownedKinds = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container location
                         && location.containerId().equals(containerId))

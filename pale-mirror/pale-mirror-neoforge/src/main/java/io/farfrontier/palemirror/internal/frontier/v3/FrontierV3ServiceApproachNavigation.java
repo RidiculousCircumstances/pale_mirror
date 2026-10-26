@@ -13,11 +13,11 @@ import java.util.WeakHashMap;
 /** Ephemeral waiting leg; never changes the retained owner goal or awards its arrival. */
 final class FrontierV3ServiceApproachNavigation {
     // One rebuildable local target per live body, never a canonical queue or a movement writer.
-    private record Waiting(FrontierV3ActorActuation authority, SubjectId point, int phase,
+    private record Waiting(FrontierV3ActorActuation authority, SubjectId point, long ordinal,
                            long generation, SurfaceAnchor target) { }
     private static final Map<Mob, Waiting> WAITING = new WeakHashMap<>();
     private record Search(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId authority,
-                          SubjectId point, int phase, long generation, int next) { }
+                          SubjectId point, long ordinal, long generation, int next) { }
     private static final Map<Mob, Search> SEARCHES = new WeakHashMap<>();
     private static final int MAX_CANDIDATE_PROBES = 8;
     private FrontierV3ServiceApproachNavigation() { }
@@ -26,7 +26,7 @@ final class FrontierV3ServiceApproachNavigation {
 
     /** Travel does not acquire service: reserve a local waiting target, never the shared egress. */
     static FrontierV3GoalNavigation.Result waitOutside(ServerLevel level, Mob body, FrontierWorldState state,
-            SubjectId pointId, SubjectId actorId, int phase, long generation,
+            SubjectId pointId, SubjectId actorId, long ordinal, long generation,
             FrontierV3ActorActuation actuation) {
         requireWaitingAuthority(state, actorId, actuation.id());
         var declared = ServiceBoundaryComposition.declaration(state, pointId);
@@ -36,7 +36,7 @@ final class FrontierV3ServiceApproachNavigation {
         WAITING.forEach((other, waiting) -> { if (other != body) excluded.add(waiting.target()); });
         var prior = WAITING.get(body);
         if (prior == null || !prior.authority().id().equals(actuation.id()) || !prior.point().equals(pointId)
-                || prior.phase() != phase || prior.generation() != generation
+                || prior.ordinal() != ordinal || prior.generation() != generation
                 || !point.waitingSurfaces().contains(prior.target()) || excluded.contains(prior.target())
                 || !FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, prior.target())) {
             WAITING.remove(body);
@@ -45,19 +45,19 @@ final class FrontierV3ServiceApproachNavigation {
             // Different visitors prefer different pockets, but an existing target remains stable.
             var search = SEARCHES.get(body);
             int cursor = search != null && search.authority().equals(actuation.id()) && search.point().equals(pointId)
-                    && search.phase() == phase && search.generation() == generation ? search.next() : actorId.value().hashCode();
+                    && search.ordinal() == ordinal && search.generation() == generation ? search.next() : actorId.value().hashCode();
             int first = candidates.isEmpty() ? 0 : Math.floorMod(cursor, candidates.size());
             for (int offset = 0; offset < Math.min(candidates.size(), MAX_CANDIDATE_PROBES); offset++) {
                 var candidate = candidates.get((first + offset) % candidates.size());
                 if (!FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(candidate.x(), candidate.y(), candidate.z()))
                         || !FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, candidate)) continue;
-                prior = new Waiting(actuation, pointId, phase, generation, candidate);
+                prior = new Waiting(actuation, pointId, ordinal, generation, candidate);
                 WAITING.put(body, prior);
-                SEARCHES.put(body, new Search(actuation.id(), pointId, phase, generation,
+                SEARCHES.put(body, new Search(actuation.id(), pointId, ordinal, generation,
                         (first + offset + 1) % candidates.size()));
                 break;
             }
-            if (!WAITING.containsKey(body)) SEARCHES.put(body, new Search(actuation.id(), pointId, phase, generation,
+            if (!WAITING.containsKey(body)) SEARCHES.put(body, new Search(actuation.id(), pointId, ordinal, generation,
                     first + Math.min(candidates.size(), MAX_CANDIDATE_PROBES)));
         }
         if (prior == null || !WAITING.containsKey(body)) {
@@ -69,7 +69,7 @@ final class FrontierV3ServiceApproachNavigation {
         var result = FrontierV3GoalNavigation.pursue(level, body,
                 waitingGoal(point, prior.target(), state.bootstrap().bounds(),
                     new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
-                        actuation.id().execution().activityOwnerId(), actorId, phase, generation, List.of(prior.target()),
+                        actuation.id().execution().activityOwnerId(), actorId, ordinal, generation, List.of(prior.target()),
                         TraversalCapability.PEDESTRIAN,
                         io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION)), actuation);
         // Do not preflight with canReach: a pedestrian obstruction must reach the

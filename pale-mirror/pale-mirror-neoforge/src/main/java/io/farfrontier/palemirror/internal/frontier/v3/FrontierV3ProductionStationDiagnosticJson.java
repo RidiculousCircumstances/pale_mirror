@@ -12,7 +12,7 @@ final class FrontierV3ProductionStationDiagnosticJson {
         var obligation = ProductionStationProgressObligation.describe(state, machine);
         boolean fuelReady = state.bootstrap().ruleset().production().recipes().stream()
                 .filter(recipe -> recipe.capability() == spec.capability())
-                .anyMatch(recipe -> machine.storedHeat() >= recipe.heatPerBatch());
+                .anyMatch(recipe -> !recipe.requiresCombustion() || machine.burnRemaining(checkpoint.instant().ticks()) > 0);
         String operation = machine.operation().map(value -> {
             var clock = value.progress();
             return "{\"id\":" + string(value.id().value().value()) + ",\"order\":" + string(value.orderId().value())
@@ -26,24 +26,25 @@ final class FrontierV3ProductionStationDiagnosticJson {
                     + ",\"playerAttendanceIntent\":" + (value.initiator() instanceof ProductionOperation.PlayerInitiator player
                             ? string(player.attendanceIntent().name()) : "null")
                     + ",\"inputQuantity\":" + value.inputQuantity() + ",\"outputQuantity\":" + value.outputQuantity()
-                    + ",\"committedHeat\":" + value.committedHeat() + ",\"transformed\":" + value.transformed()
+                    + ",\"transformed\":" + value.transformed()
                     + ",\"completedMilliWork\":" + clock.map(WorkProgress::completedMilliWork).orElse(0L)
                     + ",\"elapsedCompletedMilliWork\":" + clock.map(valueClock -> valueClock.completedAt(checkpoint.instant().ticks())).orElse(0L)
                     + ",\"requiredMilliWork\":" + clock.map(WorkProgress::requiredMilliWork).orElse(0L)
                     + ",\"ratePermille\":" + clock.map(WorkProgress::ratePermille).orElse(0) + "}";
         }).orElse("null");
-        String stocks = FungibleResourceCustodySupport.accountAtContainer(state, record.id()).map(account ->
-                account.lotQuantities().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
-                        .map(entry -> "{\"lot\":" + string(entry.getKey().value()) + ",\"itemKind\":"
-                                + string(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind())
-                                + ",\"quantity\":" + entry.getValue() + "}")
-                        .collect(java.util.stream.Collectors.joining(","))).orElse("");
+        String stocks = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container holder && holder.containerId().equals(record.id()))
+                .flatMap(account -> account.lotQuantities().entrySet().stream().map(entry -> "{\"lot\":" + string(entry.getKey().value())
+                        + ",\"section\":" + string(((ResourceCustody.Container) account.custody()).section().value())
+                        + ",\"itemKind\":" + string(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind())
+                        + ",\"quantity\":" + entry.getValue() + "}"))
+                .collect(java.util.stream.Collectors.joining(","));
         return FrontierV3DiagnosticJson.base("process", machine.stationId().value(), checkpoint)
                 + ",\"status\":\"ok\",\"family\":\"frontier.production-station\",\"identity\":{\"station\":"
                 + string(machine.stationId().value()) + ",\"container\":" + string(record.id().value())
                 + ",\"facility\":" + string(spec.facilityId().value()) + "},\"position\":"
                 + FrontierV3DiagnosticJson.position(state.inventory().surfaces().get(record.id()).position(state))
-                + ",\"result\":{\"storedHeat\":" + machine.storedHeat()
+                + ",\"result\":{\"remainingBurnTicks\":" + machine.burnRemaining(checkpoint.instant().ticks())
                 + ",\"fuelReady\":" + fuelReady
                 + ",\"revision\":" + machine.revision() + ",\"surface\":" + string(state.inventory().surfaces().get(record.id()).status().name())
                 + ",\"pendingFuel\":" + machine.pendingFuel().isPresent() + ",\"pendingRecipe\":" + machine.pendingRecipe().isPresent()

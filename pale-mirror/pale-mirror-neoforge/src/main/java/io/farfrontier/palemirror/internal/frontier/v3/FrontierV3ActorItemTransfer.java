@@ -126,7 +126,7 @@ final class FrontierV3ActorItemTransfer {
                         || !address.slot().containerId().equals(order.containerEndpoint().containerId())
                         || address.slot().slot() >= chest.getContainerSize()
                         || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
-                        && address.slot().slot() != station.spec().outputSlot()))
+                        && !station.spec().slots(station.port()).contains(address.slot().slot())))
                     throw new IllegalArgumentException("fungible TAKE has a foreign source slot");
             } else if ((attached == null ? source.size() != 1 || !source.getFirst().address().equals(
                     FrontierV3ActorResourceSlots.address(order.actorId(), actor, order.actorSlot()))
@@ -134,7 +134,7 @@ final class FrontierV3ActorItemTransfer {
                         || !address.slot().containerId().equals(attachedContainer.containerId()) || address.slot().slot() >= attached.getContainerSize()))
                     || destinationSlot < 0 || destinationSlot >= chest.getContainerSize()
                     || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
-                    && destinationSlot != station.spec().slot(station.port())) {
+                    && !station.spec().slots(station.port()).contains(destinationSlot)) {
                 throw new IllegalArgumentException("fungible PLACE has a foreign declared actor resource source or destination port");
             }
         }

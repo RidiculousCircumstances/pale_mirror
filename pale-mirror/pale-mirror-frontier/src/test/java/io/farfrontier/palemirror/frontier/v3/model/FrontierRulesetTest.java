@@ -51,9 +51,9 @@ class FrontierRulesetTest {
         assertEquals(prior.residentLife(), current.residentLife());
         assertNotEquals(prior.contentSha256(), current.contentSha256());
         var recipe = current.production().require(BakeryRecipes.BREAD);
-        long outputs = current.production().requireFuel("minecraft:coal").heatUnits() / recipe.heatPerBatch();
+        long outputs = current.production().requireFuel("minecraft:coal").burnTicks() / recipe.nominalBurnTicksPerBatch(current.workCatalog());
         assertEquals(20, outputs);
-        assertEquals(60, outputs * recipe.ingredient().quantity());
+        assertEquals(60, outputs * recipe.singleIngredient().quantity());
         assertEquals(FixedScalar.ONE, new FixedScalar(coal.minimumSellPrice().raw() / outputs),
                 "fuel contributes one currency unit per bread at the seed quote, not a free input");
     }

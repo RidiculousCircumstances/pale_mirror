@@ -5,7 +5,7 @@ import java.util.Optional;
 
 /** Station lifecycle service: no knowledge of bakery phases, resident needs or travel. */
 public final class ProductionStationProcessing {
-    public enum StartReadiness { READY, OPERATION_ACTIVE, FUEL_EFFECT_PENDING, OUTPUT_OCCUPIED, INSUFFICIENT_HEAT }
+    public enum StartReadiness { READY, OPERATION_ACTIVE, FUEL_EFFECT_PENDING, OUTPUT_OCCUPIED }
     private ProductionStationProcessing() { }
     public static boolean canStart(FrontierWorldState state, SubjectId stationId, ProductionRecipe.Id recipeId, int inputQuantity) {
         return startReadiness(state, stationId, recipeId, inputQuantity) == StartReadiness.READY;
@@ -18,8 +18,7 @@ public final class ProductionStationProcessing {
         if (machine.operation().isPresent()) return StartReadiness.OPERATION_ACTIVE;
         if (machine.pendingFuel().isPresent()) return StartReadiness.FUEL_EFFECT_PENDING;
         if (!ProductionStationRecipe.portVacant(state, station, ActorContainerItemOrder.StationPort.OUTPUT)) return StartReadiness.OUTPUT_OCCUPIED;
-        return machine.storedHeat() >= Math.multiplyExact(recipe.heatPerBatch(), inputQuantity / recipe.ingredient().quantity())
-                ? StartReadiness.READY : StartReadiness.INSUFFICIENT_HEAT;
+        return StartReadiness.READY;
     }
     public static ProductionOperation require(FrontierWorldState state, SubjectId stationId,
                                                SubjectId orderId, ProductionRecipe.Id recipeId) {
@@ -39,6 +38,8 @@ public final class ProductionStationProcessing {
         state.bootstrap().ruleset().production().requireEquipment(station.equipmentType()).require(recipe);
         if (recipe.capability() != station.capability() || recipe.outputForInput(operation.inputQuantity()) != operation.outputQuantity())
             throw new IllegalArgumentException("operation has no compatible declared recipe");
+        if (recipe.requiresCombustion() && station.fuelSlot().isEmpty())
+            throw new IllegalArgumentException("combustion recipe requires an explicitly declared fuel port");
         var machine = state.productionStations().require(station.id());
         if (!canStart(state, station.id(), operation.recipeId(), operation.inputQuantity()))
             throw new IllegalArgumentException("operation cannot claim an occupied output port or unavailable energy");
@@ -48,6 +49,11 @@ public final class ProductionStationProcessing {
         return state.productionStations().with(state.productionStations().require(previous.stationId())
                 .replace(previous, previous.withProgress(next)));
     }
+    public static ProductionStations progress(FrontierWorldState state, ProductionOperation previous, WorkProgress next,
+            Optional<ProductionStationClock.Attendance> attendance) {
+        return state.productionStations().with(state.productionStations().require(previous.stationId())
+                .replace(previous, previous.withAttendance(next, attendance)));
+    }
     /** Loading hands the allocation lifecycle to the installed operation without changing any lot, address or epoch. */
     public static ExactInventory adoptInputOwnership(ExactInventory inventory, ProductionOperation operation) {
         if (operation.inputCustody().materials().isEmpty()) return inventory;
@@ -55,7 +61,7 @@ public final class ProductionStationProcessing {
         var ledger = inventory.fungibleResources();
         for (var id : input.claims().keySet()) {
             var prior = ledger.claims().get(id);
-            if (prior == null || prior.quantity() != input.claims().get(id) || !prior.lotQuantities().equals(input.lots()))
+            if (prior == null || prior.quantity() != input.claims().get(id) || prior.lotQuantities().isEmpty() || prior.lotQuantities().entrySet().stream().anyMatch(entry -> input.lots().getOrDefault(entry.getKey(), 0) < entry.getValue()))
                 throw new IllegalArgumentException("station loading lost its exact allocated input");
             var next = new ClaimAllocation(id, operation.id().value(), prior.economicOwnerId(), prior.itemKind(),
                     prior.quantity(), prior.lotQuantities(), ClaimPurpose.STATION_PROCESSING);
@@ -78,8 +84,11 @@ public final class ProductionStationProcessing {
         if (output == null) throw new IllegalArgumentException("station cannot reserve absent output");
         var claim = new ClaimAllocation(operation.outputClaimId(), order.orderId(), output.economicOwnerId(), output.itemKind(),
                 operation.outputQuantity(), java.util.Map.of(output.id(), operation.outputQuantity()), ClaimPurpose.STATION_OUTPUT);
-        return inventory.withFungibleResources(epoch == 0 ? ledger.reserve(claim, input.accountId())
-                : ledger.reserveBound(claim, input.accountId(), epoch));
+        var station = inventory.containers().values().stream().flatMap(record -> record.productionStation().stream())
+                .filter(spec -> spec.id().equals(operation.stationId())).findFirst().orElseThrow();
+        var account = FungibleResourceReadIndex.container(ledger, station.containerId(), ContainerSectionId.OUTPUT).orElseThrow();
+        return inventory.withFungibleResources(epoch == 0 ? ledger.reserve(claim, account.id())
+                : ledger.reserveBound(claim, account.id(), epoch));
     }
     /** Resource handoff completed: collection reservation ends here, not after travel back to storage. */
     public static ExactInventory collectedOutput(ExactInventory inventory, ProductionOperation operation, SubjectId destinationAccount, long epoch) {

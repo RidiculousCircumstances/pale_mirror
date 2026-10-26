@@ -66,8 +66,8 @@ class ProductionModeCompositionTest {
                         .findFirst().orElseThrow();
                 if (exact) assertEquals(new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()),
                         state.inventory().items().get(job.outputItemId()).custody());
-                else assertEquals(new ResourceCustody.Container(station.containerId()),
-                        state.inventory().fungibleResources().accounts().get(job.stationWork().orElseThrow().stationAccountId()).custody());
+                else assertEquals(station.custody(ActorContainerItemOrder.StationPort.OUTPUT),
+                        FungibleResourceCustodySupport.accountAtContainer(state, station.containerId(), ContainerSectionId.OUTPUT).orElseThrow().custody());
             }
         }
         assertFalse(state.productionJobs().containsKey(job.id()), "bakery job did not finish its station sequence");

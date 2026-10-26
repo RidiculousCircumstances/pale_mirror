@@ -14,8 +14,8 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Actual machine slots, persisted by Minecraft; not a second canonical stock ledger. */
 public final class ProductionBenchBlockEntity extends BaseContainerBlockEntity {
-    public static final int INPUT = 0, OUTPUT = 1, FUEL = 2, SLOT_COUNT = 3;
-    public static final int MAINTENANCE_TARGET = 3;
+    public static final int INPUT = 0, INPUT_COUNT = 9, OUTPUT = 9, FUEL = 10, SLOT_COUNT = 11;
+    public static final int MAINTENANCE_TARGET = 11;
     private final PaleMirrorProductionStations.Layout layout;
     private NonNullList<ItemStack> items;
     public ProductionBenchBlockEntity(BlockPos position, BlockState state) {

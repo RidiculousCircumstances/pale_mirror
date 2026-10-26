@@ -18,22 +18,17 @@ class ProductionIndividualLifecycleTest {
         var record = state.inventory().containers().values().stream().filter(value -> value.productionStation()
                 .filter(spec -> spec.capability() == ProductionStationSpec.Capability.FABRICATION).isPresent())
                 .sorted(Comparator.comparing(ContainerRecord::id)).findFirst().orElseThrow();
-        var station = record.productionStation().orElseThrow(); var account = ReferenceContainerCustody.scopeId(record.id());
+        var station = record.productionStation().orElseThrow();
+        var account = ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.INPUT));
+        var fuel = ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.FUEL));
         var ledger = state.inventory().fungibleResources().issue(new ResourceLot(FUEL, record.ownerId(), "minecraft:coal", 2, "fixture:coal", List.of()),
-                new CustodyAccount(account, new ResourceCustody.Container(record.id()), Map.of(FUEL, 2), Map.of()));
-        state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        assertTrue(ProductionStationEnergy.next(state, station.id()).isEmpty(), "fuel alone does not authorize preheating an empty forge");
-        var staging = new SubjectId("custody:forge-test-staging");
-        ledger = state.inventory().fungibleResources().issue(new ResourceLot(MATERIAL, record.ownerId(), "minecraft:iron_ingot", 5, "fixture:metal", List.of()),
-                new CustodyAccount(staging, new ResourceCustody.Container(record.id()), Map.of(MATERIAL, 5), Map.of()))
-                .transfer(staging, account, Map.of(MATERIAL, 5), Map.of());
-        state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        state = ProductionStationEnergy.apply(state, station.id(), new ProductionStationFuelChanged(
-                ProductionStationFuelChanged.Stage.COLD_CONSUMED, ProductionStationEnergy.next(state, station.id()).orElseThrow(), List.of()));
-        ledger = state.inventory().fungibleResources();
+                new CustodyAccount(fuel, station.custody(ActorContainerItemOrder.StationPort.FUEL), Map.of(FUEL, 2), Map.of()));
+        ledger = ledger.issue(new ResourceLot(MATERIAL, record.ownerId(), "minecraft:iron_ingot", 5, "fixture:metal", List.of()),
+                new CustodyAccount(account, station.custody(ActorContainerItemOrder.StationPort.INPUT), Map.of(MATERIAL, 5), Map.of()));
         ledger = ledger.rebind(account, 1, FungiblePhysicalObservation.bind(ledger, account, 1, List.of(
-                ProductionStationOperatorTest.stack(station, station.inputSlot(), "minecraft:iron_ingot", 5),
-                ProductionStationOperatorTest.stack(station, station.fuelSlot(), "minecraft:coal", 1))));
+                ProductionStationOperatorTest.stack(station, station.inputSlots().getFirst(), "minecraft:iron_ingot", 5))));
+        ledger = ledger.rebind(fuel, 1, FungiblePhysicalObservation.bind(ledger, fuel, 1, List.of(
+                ProductionStationOperatorTest.stack(station, station.fuelSlot().orElseThrow(), "minecraft:coal", 2))));
         var inventory = state.inventory().withFungibleResources(ledger);
         if (repair) inventory = inventory.store(new ExactItemStack(TOOL, record.ownerId(), kind, 1,
                 new InventoryCustody.ContainerSlot(record.id(), station.maintenanceSlot().orElseThrow()), new ItemCondition(250, 200)));
@@ -41,8 +36,9 @@ class ProductionIndividualLifecycleTest {
         return new Fixture(state, station, new ProductionRecipe.Id("pale_mirror:" + (repair ? "repair_" : "make_") + kind.substring("minecraft:".length())));
     }
     private static FrontierWorldState attend(FrontierWorldState state, Fixture fixture, ProductionStationOperatorChanged.Stage stage, long tick) {
-        return ProductionStationOperator.apply(state, fixture.station().id(), new ProductionStationOperatorChanged(fixture.station().id(),
+        var next = ProductionStationOperator.apply(state, fixture.station().id(), new ProductionStationOperatorChanged(fixture.station().id(),
                 state.productionStations().require(fixture.station().id()).revision(), PLAYER, fixture.recipe(), stage, tick));
+        return stage == ProductionStationOperatorChanged.Stage.PAUSE ? next : ProductionCombustionFixtures.igniteHotIfNeeded(next, fixture.station().id(), tick);
     }
     private static FrontierWorldState finishWork(Fixture fixture) {
         var state = attend(fixture.state(), fixture, ProductionStationOperatorChanged.Stage.START, 200);
@@ -70,7 +66,7 @@ class ProductionIndividualLifecycleTest {
         var finished = ProductionStationTransformation.apply(pending, f.station().id(), completed, ProductionOperationCompletionComposition::completed);
         assertEquals(boundary.exactAfter().orElseThrow(), finished.inventory().items().get(TOOL));
         assertEquals(4, finished.inventory().fungibleResources().lots().get(MATERIAL).quantity());
-        assertEquals(1500, finished.productionStations().require(f.station().id()).storedHeat());
+        assertTrue(finished.productionStations().require(f.station().id()).combustion().isPresent());
         assertTrue(finished.productionStations().require(f.station().id()).operation().isEmpty());
         assertEquals(finished, codec.decode(codec.encode(finished)));
         assertThrows(IllegalArgumentException.class, () -> ProductionStationTransformation.apply(finished, f.station().id(), completed,
@@ -81,9 +77,11 @@ class ProductionIndividualLifecycleTest {
     void manufactureCompletesAfterHotToColdWithOneNewUsableItemAndNoFungibleToolLot(String kind) {
         var f = fixture(false, kind); var state = finishWork(f); var account = ReferenceContainerCustody.scopeId(f.station().containerId());
         var lease = state.replicaCustody().custodyByScope().get(account);
-        state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(
-                state.inventory().fungibleResources().releaseBindings(account, 1))).replicaCustody(state.replicaCustody()
-                .release(account, 1, lease.expectedCanonicalRevision(), lease.expectedReplicaRevision())));
+        var ledger = state.inventory().fungibleResources();
+        for (var id : ledger.accounts().values().stream().filter(value -> value.custody() instanceof ResourceCustody.Container holder
+                && holder.containerId().equals(f.station().containerId())).map(CustodyAccount::id).toList()) ledger = ledger.releaseBindings(id, 1);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(ledger))
+                .replicaCustody(state.replicaCustody().release(account, 1, lease.expectedCanonicalRevision(), lease.expectedReplicaRevision())));
         var boundary = ProductionStationTransformation.next(state, f.station().id()).orElseThrow();
         assertEquals(0, boundary.authorityEpoch());
         var finished = ProductionStationTransformation.apply(state, f.station().id(), new ProductionStationRecipeChanged(
@@ -94,7 +92,7 @@ class ProductionIndividualLifecycleTest {
         assertEquals(new InventoryCustody.ContainerSlot(f.station().containerId(), f.station().outputSlot()), item.custody());
         assertEquals(2, finished.inventory().fungibleResources().lots().get(MATERIAL).quantity());
         assertFalse(finished.inventory().fungibleResources().lots().containsKey(item.id()));
-        assertEquals(1400, finished.productionStations().require(f.station().id()).storedHeat());
+        assertTrue(finished.productionStations().require(f.station().id()).combustion().isPresent());
     }
     @Test void takingMaintenanceTargetCancelsOnlyThatOperationWithoutRefundOrToolReplacement() {
         var f = fixture(true); var state = attend(f.state(), f, ProductionStationOperatorChanged.Stage.START, 200);
@@ -103,7 +101,7 @@ class ProductionIndividualLifecycleTest {
         var interrupted = StationExactItemDeparture.observe(state, TOOL, tool.custody(), after);
         assertTrue(interrupted.productionStations().require(f.station().id()).operation().isEmpty());
         assertEquals(5, interrupted.inventory().fungibleResources().lots().get(MATERIAL).quantity());
-        assertEquals(1500, interrupted.productionStations().require(f.station().id()).storedHeat());
+        assertTrue(interrupted.productionStations().require(f.station().id()).combustion().isPresent());
         assertEquals(tool.withCustody(new InventoryCustody.Player(PLAYER)), interrupted.inventory().items().get(TOOL));
         var codec = new FrontierWorldStateCodec(); assertEquals(interrupted, codec.decode(codec.encode(interrupted)));
     }

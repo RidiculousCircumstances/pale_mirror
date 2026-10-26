@@ -15,7 +15,8 @@ final class ProductionStationLifecycleCodecs {
             return FrontierWorldPayloadCodecs.encodeProduction(out -> {
                 ContainerRecordStateCodec.write(out, Map.of(value.container().id(), value.container())); writePosition(out, value.position());
                 out.writeByte(value.contents().size());
-                for (var lot : value.contents()) {
+                for (var placed : value.contents()) {
+                    out.writeByte(placed.slot()); var lot = placed.lot();
                     writeString(out, lot.id().value()); writeString(out, lot.economicOwnerId().value()); writeString(out, lot.itemKind());
                     out.writeByte(lot.quantity()); writeString(out, lot.provenance());
                 }
@@ -26,10 +27,10 @@ final class ProductionStationLifecycleCodecs {
                 var records = ContainerRecordStateCodec.read(in);
                 if (records.size() != 1) throw new IllegalArgumentException("installation must declare exactly one installed container");
                 var position = readPosition(in); int count = in.readUnsignedByte();
-                if (count > 3) throw new IllegalArgumentException("installed contents exceed machine ports");
-                var lots = new ArrayList<ResourceLot>();
-                for (int index = 0; index < count; index++) lots.add(new ResourceLot(new SubjectId(readString(in)), new SubjectId(readString(in)),
-                        readString(in), in.readUnsignedByte(), readString(in), List.of()));
+                if (count > 12) throw new IllegalArgumentException("installed contents exceed machine ports");
+                var lots = new ArrayList<FixedContainerAdoption.PlacedResource>();
+                for (int index = 0; index < count; index++) lots.add(new FixedContainerAdoption.PlacedResource(in.readUnsignedByte(), new ResourceLot(new SubjectId(readString(in)), new SubjectId(readString(in)),
+                        readString(in), in.readUnsignedByte(), readString(in), List.of())));
                 return new ProductionStationInstalled(records.values().iterator().next(), position, lots);
             });
         }

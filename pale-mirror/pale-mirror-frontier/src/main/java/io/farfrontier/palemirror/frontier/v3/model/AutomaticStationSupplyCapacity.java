@@ -24,18 +24,16 @@ final class AutomaticStationSupplyCapacity implements SupplyCapacityPort {
                 var station = record.productionStation().orElseThrow();
                 var machine = state.productionStations().require(station.id());
                 if (executable && ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) continue;
-                var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.heatUnits()));
-                var ingredient = recipe.ingredient().acceptedItems().stream().sorted(Comparator
-                        .<String>comparingLong(kind -> stocks.containsKey(kind) ? stocks.get(kind).covered() : 0).reversed()
-                        .thenComparing(java.util.function.Function.identity())).findFirst().orElseThrow();
+                var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.burnTicks()));
+                var inputs = ProductionRecipeInputs.select(recipe, kind -> -(stocks.containsKey(kind) ? stocks.get(kind).covered() : 0L));
                 long duration = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE).workUnits();
                 long occupied = machine.operation().filter(operation -> !operation.transformed())
-                        .map(operation -> Math.multiplyExact(duration, operation.inputQuantity() / recipe.ingredient().quantity())).orElse(0L);
+                        .map(operation -> Math.multiplyExact(duration, operation.inputQuantity() / recipe.inputUnitsPerBatch())).orElse(0L);
                 long first = Math.addExact(occupied, duration);
                 int maximum = (int) Math.min(4096, Math.max(1, window.ticks() / duration));
                 result.add(new SupplyPlanner.Process(recipe.id().value() + "/" + station.id().value(), recipe.product().itemKind(),
-                        recipe.product().quantity(), Map.of(ingredient, recipe.ingredient().quantity()), recipe.heatPerBatch(), fuels,
-                        ProductionStationEnergy.suppliedHeat(state, station.id()), first, duration, maximum, 0, Map.of(), 1));
+                        recipe.product().quantity(), inputs, recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), fuels,
+                        ProductionStationEnergy.unlitFuelTicks(state, station.id()), first, duration, maximum, 0, Map.of(), 1));
             }
         }
         return List.copyOf(result);

@@ -22,7 +22,7 @@ public final class ProductionInputAccess {
         if (record == null || !record.ownerId().equals(home) || ReferenceContainerCustody.blocksCanonicalUse(state, container)) return false;
         var recipe = state.bootstrap().ruleset().production().require(recipeId);
         if (record.storage().isPresent()) return record.storage().orElseThrow().role() == ResourceStorageRole.WAREHOUSE
-                && recipe.ingredient().acceptedItems().stream().anyMatch(record.storage().orElseThrow().filter()::accepts);
+                && recipe.ingredients().stream().flatMap(input -> input.acceptedItems().stream()).anyMatch(record.storage().orElseThrow().filter()::accepts);
         return record.productionStation().filter(s -> s.facilityId().equals(facility) && s.capability() == recipe.capability())
                 .filter(s -> state.productionStations().machines().containsKey(s.id()))
                 .filter(s -> state.productionStations().require(s.id()).operation().isEmpty()).isPresent();

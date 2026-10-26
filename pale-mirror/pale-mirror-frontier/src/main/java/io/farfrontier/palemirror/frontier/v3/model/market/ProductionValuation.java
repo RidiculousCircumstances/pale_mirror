@@ -6,8 +6,8 @@ import java.util.*;
 
 /** Material replacement valuation, not wages, inventory, utility or a production executor. */
 public final class ProductionValuation {
-    public record Fuel(FixedScalar price, long heatUnits) {
-        public Fuel { Objects.requireNonNull(price); if (price.raw() <= 0 || heatUnits < 1) throw new IllegalArgumentException("invalid valued fuel"); }
+    public record Fuel(FixedScalar price, long burnTicks) {
+        public Fuel { Objects.requireNonNull(price); if (price.raw() <= 0 || burnTicks < 1) throw new IllegalArgumentException("invalid valued fuel"); }
     }
     /** Costs are amortized across batches: one coal's unused heat is not charged again to each loaf. */
     public static Optional<FixedScalar> unitCost(Map<String, Integer> inputs, int output, long heat,
@@ -21,11 +21,11 @@ public final class ProductionValuation {
             cost = cost.add(BigInteger.valueOf(price.raw()).multiply(BigInteger.valueOf(entry.getValue())));
         }
         if (heat > 0) {
-            var fuel = fuels.stream().min((a, b) -> BigInteger.valueOf(a.price().raw()).multiply(BigInteger.valueOf(b.heatUnits()))
-                    .compareTo(BigInteger.valueOf(b.price().raw()).multiply(BigInteger.valueOf(a.heatUnits())))).orElse(null);
+            var fuel = fuels.stream().min((a, b) -> BigInteger.valueOf(a.price().raw()).multiply(BigInteger.valueOf(b.burnTicks()))
+                    .compareTo(BigInteger.valueOf(b.price().raw()).multiply(BigInteger.valueOf(a.burnTicks())))).orElse(null);
             if (fuel == null) return Optional.empty();
             var energy = BigInteger.valueOf(fuel.price().raw()).multiply(BigInteger.valueOf(heat));
-            var divisor = BigInteger.valueOf(fuel.heatUnits());
+            var divisor = BigInteger.valueOf(fuel.burnTicks());
             cost = cost.add(energy.add(divisor).subtract(BigInteger.ONE).divide(divisor));
         }
         var divisor = BigInteger.valueOf(output);

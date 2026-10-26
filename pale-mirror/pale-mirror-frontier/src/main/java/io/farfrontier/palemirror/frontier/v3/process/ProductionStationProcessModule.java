@@ -21,7 +21,7 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
                 id.value().getBytes(java.nio.charset.StandardCharsets.UTF_8))), new SimInstant(at), 8, id, REVIEW, 1);
     }
     @Override public List<ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {
-        if (bootstrap.ruleset().production().recipes().stream().noneMatch(recipe -> recipe.heatPerBatch() > 0
+        if (bootstrap.ruleset().production().recipes().stream().noneMatch(recipe -> recipe.requiresCombustion()
                 || recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)) return List.of();
         return bootstrap.settlements().stream().flatMap(home -> home.structures().stream()).filter(facility -> ProductionFacilityLayout.supports(facility.kind()))
                 .map(ProductionFacilityLayout::station).map(station -> review(station.id(), 1)).toList();
@@ -50,17 +50,27 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
             events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), review(action.subject(), Math.addExact(now.ticks(), 20)))));
             return List.copyOf(events);
         }
-        ProductionStationEnergy.next(state, action.subject()).filter(burn -> burn.authorityEpoch() == 0).ifPresent(burn ->
-                events.add(new ProposedEvent(action.subject(), new ProductionStationFuelChanged(
-                        ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn, List.of()))));
+        var fuel = ProductionStationEnergy.next(state, action.subject(), now.ticks()).filter(burn -> burn.authorityEpoch() == 0);
+        if (fuel.isPresent()) return List.of(new ProposedEvent(action.subject(), new ProductionStationFuelChanged(
+                ProductionStationFuelChanged.Stage.COLD_CONSUMED, fuel.orElseThrow(), List.of(), now.ticks())),
+                new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), review(action.subject(), Math.addExact(now.ticks(), 1L)))));
         ProductionStationProgressed.automatic(state, action.subject(), now.ticks()).ifPresent(progress ->
                 events.add(new ProposedEvent(action.subject(), progress)));
         ProductionStationTransformation.next(state, action.subject()).filter(boundary -> boundary.authorityEpoch() == 0).ifPresent(boundary ->
                 events.add(new ProposedEvent(action.subject(), new ProductionStationRecipeChanged(
                         ProductionStationRecipeChanged.Stage.COLD_COMPLETED, boundary, List.of()))));
         events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
-                review(action.subject(), Math.addExact(Math.max(now.ticks(), action.dueAt().ticks()), 20)))));
+                review(action.subject(), nextReview(state, action.subject(), now.ticks(), events)))));
         return List.copyOf(events);
+    }
+    /** A retained work/burn/attendance boundary is exact. Only an unknown resource/physical wait uses the bounded retry. */
+    private static long nextReview(FrontierWorldState state, SubjectId station, long now, List<ProposedEvent> events) {
+        var progress = events.stream().map(ProposedEvent::payload).filter(ProductionStationProgressed.class::isInstance)
+                .map(ProductionStationProgressed.class::cast).map(ProductionStationProgressed::next).findFirst()
+                .or(() -> state.productionStations().require(station).operation().flatMap(ProductionOperation::progress));
+        if (progress.filter(WorkProgress::complete).isPresent()) return Math.addExact(now, 1);
+        return progress.filter(WorkProgress::running).filter(clock -> clock.activeUntilTick() > now)
+                .map(WorkProgress::activeUntilTick).orElseGet(() -> Math.addExact(now, 20));
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
@@ -82,6 +92,7 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
             SubjectId subject;
             switch (command.payload()) {
                 case ProductionStationFuelChanged changed -> {
+                    if (changed.atTick() > command.submittedAt().ticks()) return FrontierWorldCommandPlanner.rejected("fuel receipt is from a future simulation instant");
                     if (changed.stage() == ProductionStationFuelChanged.Stage.COLD_CONSUMED)
                         return FrontierWorldCommandPlanner.rejected("physical executor cannot consume COLD fuel");
                     subject = changed.burn().stationId();

@@ -55,6 +55,7 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
                 throw new IllegalArgumentException("maintenance target is not a shipment resource port");
         }
         @Override public Kind kind() { return Kind.PRODUCTION_PORT; }
+        @Override public ResourceCustody.Container custody() { return spec.custody(port); }
         @Override public SubjectId containerId() { return spec.containerId(); }
         @Override public SurfaceAnchor station() { return spec.workerStation(); }
         @Override public ProductionPort withStation(SurfaceAnchor selected) {

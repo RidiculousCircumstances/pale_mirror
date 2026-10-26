@@ -14,27 +14,19 @@ public final class ProductionStationRecipe {
      * occupies its catalog-declared port, regardless of available packing slots. */
     public static boolean portVacant(FrontierWorldState state, ProductionStationSpec station,
                                      ActorContainerItemOrder.StationPort port) {
-        int slot = station.slot(port);
-        if (!state.inventory().slotVacant(new InventoryCustody.ContainerSlot(station.containerId(), slot))) return false;
-        var ledger = state.inventory().fungibleResources();
-        return ledger.accounts().values().stream().filter(account -> account.custody().equals(
-                        new ResourceCustody.Container(station.containerId())))
-                .flatMap(account -> account.lotQuantities().keySet().stream())
-                .noneMatch(id -> portForItemKind(state.bootstrap().ruleset().production(), station,
-                        ledger.lots().get(id).itemKind()) == slot);
+        for (int slot : station.slots(port)) if (!state.inventory().slotVacant(new InventoryCustody.ContainerSlot(station.containerId(), slot))) return false;
+        return FungibleResourceCustodySupport.accountAtContainer(state, station.containerId(), station.section(port))
+                .map(account -> account.lotQuantities().isEmpty()).orElse(true);
     }
 
-    /** Declared recipe port for an unbound station lot; never compact machine output into input. */
-    public static int portForItemKind(ProductionCatalog catalog, ProductionStationSpec station, String itemKind) {
-        Objects.requireNonNull(station, "station port capability");
-        Objects.requireNonNull(itemKind, "station port item kind");
+    /** Validates a producer-declared compartment; it never chooses a compartment from an item kind. */
+    public static boolean accepts(ProductionCatalog catalog, ProductionStationSpec station, ContainerSectionId section, String kind) {
+        if (!station.compartmentLayout().sections().containsKey(section)) return false;
         var supported = catalog.recipes().stream().filter(recipe -> recipe.capability() == station.capability()).toList();
-        boolean input = supported.stream().anyMatch(recipe -> recipe.ingredient().accepts(itemKind));
-        boolean output = supported.stream().anyMatch(recipe -> recipe.product().itemKind().equals(itemKind));
-        boolean fuel = catalog.fuels().stream().anyMatch(value -> value.itemKind().equals(itemKind));
-        if ((input ? 1 : 0) + (output ? 1 : 0) + (fuel ? 1 : 0) != 1)
-            throw new IllegalArgumentException("station has no unambiguous declared port for " + itemKind);
-        return input ? station.inputSlot() : output ? station.outputSlot() : station.fuelSlot();
+        if (section.equals(ContainerSectionId.INPUT)) return supported.stream().anyMatch(recipe -> recipe.acceptsInput(kind));
+        if (section.equals(ContainerSectionId.OUTPUT)) return supported.stream().anyMatch(recipe -> recipe.product().itemKind().equals(kind));
+        if (section.equals(ContainerSectionId.FUEL)) return catalog.fuels().stream().anyMatch(fuel -> fuel.itemKind().equals(kind));
+        return false;
     }
 
     /** Exact-stack variant of the same COLD station-local transformation. */
@@ -46,7 +38,9 @@ public final class ProductionStationRecipe {
         Objects.requireNonNull(output, "exact recipe output");
         requireRecipe(state, station, recipeId, Map.of(input.itemKind(), input.count()), output.itemKind(), output.count());
         ContainerRecord container = state.inventory().containers().get(station.containerId());
-        InventoryCustody.ContainerSlot source = new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot());
+        if (!(input.custody() instanceof InventoryCustody.ContainerSlot source)
+                || !source.containerId().equals(station.containerId()) || !station.inputSlots().contains(source.slot()))
+            throw new IllegalArgumentException("exact recipe input is outside its declared input inventory");
         InventoryCustody.ContainerSlot destination = new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot());
         if (container == null || !container.productionStation().equals(java.util.Optional.of(station))
                 || !input.custody().equals(source) || !output.custody().equals(destination)
@@ -75,7 +69,8 @@ public final class ProductionStationRecipe {
         // mutually exclusive no-physical-writer condition.
         ContainerRecord container = state.inventory().containers().get(station.containerId());
         if (container == null || !container.productionStation().equals(java.util.Optional.of(station))
-                || !input.custody().equals(new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot()))
+                || !(input.custody() instanceof InventoryCustody.ContainerSlot source
+                    && source.containerId().equals(station.containerId()) && station.inputSlots().contains(source.slot()))
                 || !output.custody().equals(new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()))
                 || !input.economicOwnerId().equals(output.economicOwnerId())
                 || !input.equals(state.inventory().items().get(input.id()))
@@ -95,7 +90,9 @@ public final class ProductionStationRecipe {
             throw new IllegalArgumentException("cold station recipe competes with current physical machine authority");
         if (!portVacant(state, station, ActorContainerItemOrder.StationPort.OUTPUT))
             throw new IllegalArgumentException("cold station recipe has no free declared output port");
-        return state.inventory().withFungibleResources(ledger.transformCold(accountId, inputs, claims, output));
+        return state.inventory().withFungibleResources(ledger.transformCold(accountId, inputs, claims, output,
+                ContainerResourceAccounts.id(station.custody(ActorContainerItemOrder.StationPort.OUTPUT)),
+                station.custody(ActorContainerItemOrder.StationPort.OUTPUT)));
     }
 
     public static ExactInventory transformObserved(FrontierWorldState state, ProductionStationSpec station, ProductionRecipe.Id recipeId,
@@ -108,29 +105,19 @@ public final class ProductionStationRecipe {
                 && ContainerPhysicalAuthorityComposition.pending(state, station.containerId()))
                 || ReferenceContainerCustody.blocksCanonicalUse(state, station.containerId()))
             throw new IllegalArgumentException("observed station recipe has no current physical machine authority");
-        InventoryCustody.ContainerSlot inputSlot = new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot());
-        InventoryCustody.ContainerSlot outputSlot = new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot());
-        List<PhysicalStackBinding> before = ledger.bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(accountId)).toList();
-        var inputBinding = before.stream().filter(binding -> binding.address().equals(
-                new PhysicalStackAddress.ContainerSlot(inputSlot))).toList();
-        var retained = before.stream().filter(binding -> !binding.address().equals(
-                new PhysicalStackAddress.ContainerSlot(inputSlot))).toList();
-        var product = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(outputSlot), output.itemKind(), output.quantity());
-        int consumed = inputs.values().stream().mapToInt(Integer::intValue).sum();
-        int inputRemainder = inputBinding.size() == 1 ? inputBinding.getFirst().quantity() - consumed : 0;
-        var remainder = inputRemainder > 0 ? new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(inputSlot),
-                inputBinding.getFirst().itemKind(), inputRemainder) : null;
-        if (inputBinding.size() != 1 || before.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch)
-                || inputs.entrySet().stream().anyMatch(entry -> inputBinding.getFirst().lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
-                || !inputBinding.getFirst().claimQuantities().equals(claims)
-                || inputRemainder < 0 || observed.size() != retained.size() + 1 + (remainder == null ? 0 : 1)
-                || !observed.contains(product) || remainder != null && !observed.contains(remainder)
-                || retained.stream().anyMatch(binding -> !observed.contains(new FungiblePhysicalObservation.Stack(
-                    binding.address(), binding.itemKind(), binding.quantity()))))
-            throw new IllegalArgumentException("observed recipe must replace the exact input port with the exact output port");
-        return state.inventory().withFungibleResources(
-                ledger.transformObserved(accountId, authorityEpoch, inputs, claims, output, observed));
+        var materials = new ProductionOperation.FungibleInput(accountId, inputs, claims);
+        var image = ProductionStationMaterialImage.of(ledger, station, materials);
+        var expected = new java.util.HashSet<>(image.remaining());
+        var product = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot())), output.itemKind(), output.quantity());
+        expected.add(product);
+        if (image.epoch() != authorityEpoch || observed.size() != expected.size() || !expected.equals(new java.util.HashSet<>(observed)))
+            throw new IllegalArgumentException("observed recipe differs from its complete reserved material transformation");
+        var reduced = ledger.destroyObserved(accountId, authorityEpoch, inputs, claims, image.remaining());
+        var holder = station.custody(ActorContainerItemOrder.StationPort.OUTPUT); var destination = ContainerResourceAccounts.id(holder);
+        var transformed = reduced.issue(output, new CustodyAccount(destination, holder, Map.of(output.id(), output.quantity()), Map.of()));
+        return state.inventory().withFungibleResources(transformed.rebind(destination, authorityEpoch,
+                FungiblePhysicalObservation.bind(transformed, destination, authorityEpoch, List.of(product))));
     }
 
     private static FungibleResourceLedger requireInput(FrontierWorldState state, ProductionStationSpec station, ProductionRecipe.Id recipeId,
@@ -146,7 +133,7 @@ public final class ProductionStationRecipe {
         FungibleResourceLedger ledger = state.inventory().fungibleResources();
         CustodyAccount account = ledger.accounts().get(accountId);
         if (container == null || !container.productionStation().equals(java.util.Optional.of(station))
-                || account == null || !account.custody().equals(new ResourceCustody.Container(station.containerId()))
+                || account == null || !account.custody().equals(station.custody(ActorContainerItemOrder.StationPort.INPUT))
                 || inputs.entrySet().stream().anyMatch(entry -> account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
                 || claims.entrySet().stream().anyMatch(entry -> account.claimQuantities().getOrDefault(entry.getKey(), 0) != entry.getValue())
                 || inputs.keySet().stream().anyMatch(id -> ledger.lots().get(id) == null
@@ -170,12 +157,11 @@ public final class ProductionStationRecipe {
         var recipe = state.bootstrap().ruleset().production().require(recipeId);
         recipe.requireTransformation(station.capability(), inputs, outputKind, outputQuantity);
         state.bootstrap().ruleset().production().requireEquipment(station.equipmentType()).require(recipe);
-        if (recipe.heatPerBatch() != 0 || recipe.processingMode() != ProductionRecipe.ProcessingMode.ATTENDED) {
+        {
             var operation = state.productionStations().require(station.id()).operation().orElseThrow();
             int inputQuantity = inputs.values().stream().reduce(0, Math::addExact);
             if (!operation.recipeId().equals(recipeId) || operation.transformed() || !operation.complete()
-                    || operation.inputQuantity() != inputQuantity || operation.outputQuantity() != outputQuantity
-                    || operation.committedHeat() != Math.multiplyExact(recipe.heatPerBatch(), inputQuantity / recipe.ingredient().quantity()))
+                    || operation.inputQuantity() != inputQuantity || operation.outputQuantity() != outputQuantity)
                 throw new IllegalArgumentException("recipe requires its exact completed station-owned processing operation");
         }
     }

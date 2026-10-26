@@ -12,7 +12,7 @@ public final class SupplyCapacityComposition {
     }
     private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(
             new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity(), new AutomaticStationSupplyCapacity(),
-            new IndividualStationSupplyCapacity()));
+            new IndividualStationSupplyCapacity(), new AttendedStockSupplyCapacity(), new ForestrySupplyCapacity()));
     private static final ImmutableKeyedInputView<SubjectId, List<SupplyPlanner.Process>> VALUATIONS = new ImmutableKeyedInputView<>(256);
     private SupplyCapacityComposition() { }
     public static Map<SupplyCapacityPort.Key, SupplyCapacityPort> register(List<SupplyCapacityPort> ports) {
@@ -30,6 +30,7 @@ public final class SupplyCapacityComposition {
     private static List<SupplyPlanner.Process> valueInstalled(FrontierWorldState state, GoodsParticipant participant) {
         var stocks = new TreeMap<String, SupplyPlanner.Stock>();
         var rules = state.bootstrap().ruleset().goodsTrade();
+        if (!rules.supplyPlanning().enabled()) return List.of(); // This content declares no supply/cost model.
         for (var commodity : rules.policies().get(participant.policy())) {
             var kind = commodity.itemKind();
             stocks.put(kind, new SupplyPlanner.Stock(GoodsParticipantStorage.unclaimed(state, participant, kind),

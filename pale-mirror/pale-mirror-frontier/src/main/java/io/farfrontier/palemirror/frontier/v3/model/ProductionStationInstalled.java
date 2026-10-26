@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import java.util.*;
 
 /** An ordinary placed machine is a new instance with an explicitly supplied facility/capability relation. */
-public record ProductionStationInstalled(ContainerRecord container, BlockPosition position, List<ResourceLot> contents) implements FrontierPayload {
+public record ProductionStationInstalled(ContainerRecord container, BlockPosition position, List<FixedContainerAdoption.PlacedResource> contents) implements FrontierPayload {
     public static final String TYPE = "frontier.production_station_installed";
     public ProductionStationInstalled {
         Objects.requireNonNull(container); Objects.requireNonNull(position); contents = List.copyOf(contents);
@@ -31,16 +31,13 @@ public record ProductionStationInstalled(ContainerRecord container, BlockPositio
                     .anyMatch(prior -> prior.id().equals(spec.id()) || prior.facilityId().equals(spec.facilityId())
                         && state.inventory().surfaces().get(prior.containerId()).status() != ContainerSurfaceStatus.RETIRED))
             throw new IllegalArgumentException("machine installation has foreign instance/facility/socket or competing equipment");
-        var quantities = new HashMap<String, Integer>(); contents.forEach(lot -> quantities.merge(lot.itemKind(), lot.quantity(), Math::addExact));
-        var observed = new HashMap<String, Integer>();
-        for (var entry : container.fungibleLayout().slots().entrySet()) {
-            if (entry.getKey() != ProductionStationRecipe.portForItemKind(state.bootstrap().ruleset().production(), spec, entry.getValue().itemKind()))
-                throw new IllegalArgumentException("installed stock occupies a foreign semantic machine port");
-            observed.merge(entry.getValue().itemKind(), entry.getValue().quantity(), Math::addExact);
+        for (var value : contents) {
+            var section = container.compartmentLayout().sectionAt(value.slot());
+            if (!ProductionStationRecipe.accepts(state.bootstrap().ruleset().production(), spec, section, value.lot().itemKind()))
+                throw new IllegalArgumentException("installed material is not admitted by its declared compartment");
         }
-        if (!observed.equals(quantities)) throw new IllegalArgumentException("installed stock differs from the witnessed physical port layout");
         return state.withChanges(FrontierWorldStateUpdate.begin()
-                .inventory(FixedContainerAdoption.adopt(state.inventory(), container, position, contents))
+                .inventory(FixedContainerAdoption.adoptPlaced(state.inventory(), container, position, contents))
                 .fencedRecovery(FixedContainerAdoption.prepare(state.fencedRecovery(), container))
                 .productionStations(state.productionStations().with(ProductionStations.Machine.installed(subject)))
                 .merge(installationPort.apply(state, spec)));

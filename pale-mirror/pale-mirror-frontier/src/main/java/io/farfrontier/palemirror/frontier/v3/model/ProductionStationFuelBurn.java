@@ -6,11 +6,11 @@ import java.util.*;
 /** Frozen before-effect fuel portion; machine revision rejects late or duplicate receipts. */
 public record ProductionStationFuelBurn(SubjectId stationId, SubjectId containerId, SubjectId accountId,
         long machineRevision, long authorityEpoch, String itemKind, Map<SubjectId, Integer> lots,
-        long heat, List<MaterialSourceSelection.Slice> source) {
+        long durationTicks, List<MaterialSourceSelection.Slice> source, long requestedAtTick) {
     public ProductionStationFuelBurn {
         Objects.requireNonNull(stationId); Objects.requireNonNull(containerId); Objects.requireNonNull(accountId);
         lots = Map.copyOf(lots); source = List.copyOf(source);
-        if (machineRevision < 1 || authorityEpoch < 0 || heat < 1 || heat > 1_000_000_000L
+        if (machineRevision < 1 || authorityEpoch < 0 || requestedAtTick < 0 || durationTicks < 1 || durationTicks > 1_000_000_000L
                 || itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
                 || lots.isEmpty() || lots.values().stream().anyMatch(value -> value < 1)
                 || lots.values().stream().reduce(0, Math::addExact) != 1

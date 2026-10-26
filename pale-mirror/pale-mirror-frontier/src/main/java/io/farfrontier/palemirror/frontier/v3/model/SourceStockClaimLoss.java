@@ -70,7 +70,10 @@ public final class SourceStockClaimLoss {
         var departed = cleared.departObserved(source, epoch, departedLots, remaining);
         var transaction = new SourceStockClaimLossOwner.Settlement(FungibleForfeitureSettlement.from(state,
                 state.inventory().withFungibleResources(departed)), state.humanPopulation());
-        for (var claim : claims) transaction = require(claim).settle(state, claim, transaction);
+        for (var purpose : claims.stream().map(ClaimAllocation::purpose).distinct().sorted(java.util.Comparator.comparing(ClaimPurpose::name)).toList()) {
+            var group = claims.stream().filter(claim -> claim.purpose() == purpose).toList();
+            transaction = require(group.getFirst()).settle(state, group, transaction);
+        }
         return state.withChanges(transaction.resources().withPopulation(transaction.population()).contribution());
     }
 
@@ -82,7 +85,7 @@ public final class SourceStockClaimLoss {
     public static List<ReleasedActivity> released(FrontierWorldState before, Set<SubjectId> forfeited) {
         return forfeited.stream().sorted().map(before.inventory().fungibleResources().claims()::get)
                 .flatMap(claim -> require(claim).released(before, claim).stream())
-                .map(value -> new ReleasedActivity(value.actor(), value.cancelledProgress(), value.retargetAtTick())).toList();
+                .map(value -> new ReleasedActivity(value.actor(), value.cancelledProgress(), value.retargetAtTick())).distinct().toList();
     }
     private static SourceStockClaimLossOwner require(ClaimAllocation claim) {
         var owner = OWNERS.get(claim.purpose());

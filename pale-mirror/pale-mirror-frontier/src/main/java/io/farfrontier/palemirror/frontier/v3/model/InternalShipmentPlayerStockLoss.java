@@ -13,8 +13,8 @@ final class InternalShipmentPlayerStockLoss implements SourceStockClaimLossOwner
             throw new IllegalArgumentException("local haul source loss has no exact issuing account");
         ShipmentStateSupport.requireSourceWithdrawal(state, claim.id());
     }
-    @Override public Settlement settle(FrontierWorldState state, ClaimAllocation claim, Settlement transaction) {
-        return new Settlement(new InternalShipmentForfeitureOwner().settle(state, List.of(claim), transaction.resources()),
+    @Override public Settlement settle(FrontierWorldState state, List<ClaimAllocation> claims, Settlement transaction) {
+        return new Settlement(new InternalShipmentForfeitureOwner().settle(state, claims, transaction.resources()),
                 transaction.population());
     }
     @Override public List<ReleasedActivity> released(FrontierWorldState before, ClaimAllocation claim) {

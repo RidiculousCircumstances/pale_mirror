@@ -14,7 +14,7 @@ public final class ShipmentDeliveryForecast {
         if (shipment.reception().isPresent()) return DeliveryEstimate.unknown(AWAITING_ACCEPTANCE);
         if (shipment.terminal()) return DeliveryEstimate.unknown(TERMINAL);
         if (shipment.status() != Shipment.Status.CARRYING) return DeliveryEstimate.unknown(LOADING);
-        if (!ContainerStorageAdmission.receive(state, shipment.receiver().containerId(), shipment.itemKind(), shipment.quantity(),
+        if (!ContainerStorageAdmission.receive(state, (ResourceCustody.Container) shipment.receiver().custody(), shipment.itemKind(), shipment.quantity(),
                 ShipmentAuthorizationComposition.capacityCompletionOwner(shipment))) return DeliveryEstimate.unknown(RECEIVER_UNAVAILABLE);
         if (shipment.transportMissionId().isEmpty()) return single(state, shipment);
         var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());

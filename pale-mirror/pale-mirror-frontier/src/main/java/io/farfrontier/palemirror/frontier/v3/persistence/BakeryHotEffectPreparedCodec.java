@@ -14,13 +14,13 @@ final class BakeryHotEffectPreparedCodec implements PayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(output, value.jobId());
             FrontierWorldStateCodec.writeString(output, value.leaseId().value());
             output.writeByte(value.phase().wireTag());
-            output.writeByte(value.destinationSlot());
+            output.writeByte(value.destinationSlot()); output.writeLong(value.workflowOrdinal());
         });
     }
     @Override public FrontierPayload decode(byte[] bytes) {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new BakeryHotEffectPrepared(
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
                 new SceneLeaseId(FrontierWorldStateCodec.readString(input)),
-                StationWorkState.Phase.fromWireTag(input.readUnsignedByte()), input.readByte()));
+                StationWorkState.Phase.fromWireTag(input.readUnsignedByte()), input.readByte(), input.readLong()));
     }
 }
