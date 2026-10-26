@@ -11,6 +11,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ChunkMap.class)
 abstract class FrontierV3TerrainSavePassMixin implements FrontierV3TerrainStorageOwner {
     @Shadow @Final private ServerLevel level;
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method = "saveAllChunks")
+    private void frontierV3$measureTerrainSave(boolean flush,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> original) {
+        try (var span = FrontierV3HostTiming.beginNativeSave(level.getServer(), "terrain", level.dimension().location().toString())) {
+            original.call(flush);
+        }
+    }
     @Override public ServerLevel frontierV3$terrainLevel() { return level; }
     @Inject(method = {"saveAllChunks", "processUnloads"}, at = @At("TAIL"), require = 2)
     private void frontierV3$completeTerrainPass(CallbackInfo callback) {

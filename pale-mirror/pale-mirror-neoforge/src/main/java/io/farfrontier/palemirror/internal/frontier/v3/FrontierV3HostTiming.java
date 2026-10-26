@@ -29,6 +29,11 @@ public final class FrontierV3HostTiming {
         var span = TICKS.remove(server);
         if (span != null) span.close();
     }
+    public static FrontierExecutionMetrics.Span beginNativeSave(MinecraftServer server, String part, String owner) {
+        var runtime = FrontierV3ServerLifecycle.runtimeFor(server);
+        return FrontierExecutionMetrics.safelyBegin(runtime == null ? FrontierExecutionMetrics.noOp() : runtime.executionMetrics(),
+                FrontierExecutionMetrics.Stage.PHYSICAL, "native-save-" + part, owner);
+    }
     static FrontierExecutionMetrics.Span beginPmTurn(FrontierExecutionMetrics metrics) {
         return FrontierExecutionMetrics.safelyBegin(metrics, FrontierExecutionMetrics.Stage.HOST_TURN,
                 "pm-turn-including-durability", "world");

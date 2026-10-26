@@ -407,6 +407,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
      * Explicit player/entity interactions keep their ordinary native boundary. */
     private final FrontierV3EnvironmentalAdmission environmentalAdmission = new FrontierV3EnvironmentalAdmission(System::nanoTime);
     void beginEnvironmentalTurn(long allowanceNanos) { environmentalAdmission.begin(allowanceNanos); }
+    boolean runEnvironmentalMutation(java.util.function.BooleanSupplier mutation) {
+        return environmentalAdmission.mutate(mutation);
+    }
     void runEnvironmentalSample(Runnable sample) {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || engine.hasPendingCalculation()) {
             yieldedEnvironmentalSamples++; return;

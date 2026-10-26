@@ -112,3 +112,28 @@ Saved native adoption proof and post-canonical SETTLED cleanup submit async
 metadata; fresh mutation still requires its exact actor/operation durable prefix.
 Mid-effect mining witness persistence remains a separate protected effect window
 and is not blindly converted to an unsafe fire-and-forget write.
+
+Final first-HOT capture still exposed100–145ms grass-spread turns: one vanilla
+random sample issues several independent neighbour writes. Admission now checks
+the shared environmental allowance before each outer native set/destroy, while
+letting every nested consequence of an admitted write complete. Destroy admission
+precedes drops. Exhausted optional neighbours resample naturally; explicit player
+and owned effects outside the random scope retain their ordinary protocol.
+Deterministic injected-clock coverage checks nesting, exception cleanup and
+explicit-write immunity; it asserts semantics, not wall-clock performance.
+
+Vanilla MC1.21.1 autosave still produced a131ms native tick at host sample6000.
+ModLens snapshot ac5901ef confirms MinecraftServer.tickServer calls synchronous
+saveEverything(true,false,false); all worlds are visited together and ChunkMap's
+non-flush branch serializes every dirty visible candidate. This is a separate
+native save boundary, not attributed to the2ms extraction stage that happened
+to precede it. Added read-only native-save all/terrain spans to distinguish its
+components before changing persistence semantics. JFR proves a10ms level.dat
+force inside that tick, not the full131ms cause. ptrace syscall tracing was
+unavailable (OS restriction); no safety/force policy was weakened.
+
+Destroy preparation also delegates to the complete registered owner composition
+before vanilla emits drops, rather than admitting geometry alone and discovering
+an owner refusal only after drops. The nested setBlock retains those same
+idempotent witnesses. Native block-extraction/terrain-admission4 tests passed;
+the shared storage/body/field54 tests passed for the environmental wrapper.
