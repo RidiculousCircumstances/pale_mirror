@@ -108,7 +108,8 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
         var recipe = BakeryRecipes.bread(state);
         if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION) {
             int feasible = ProductionBatchSizing.inputQuantity(recipe, maximum, 64,
-                    state.productionStations().require(stationId).storedHeat());
+                    Math.max(0, ProductionStationEnergy.obtainableHeat(state, stationId)
+                            - BakerySupplyObligations.requiredHeat(state, stationId)));
             // One restart batch keeps its explicit fuel obligation when no heat
             // exists; it must not reserve an entire unavailable production run.
             maximum = Math.min(maximum, Math.max(recipe.ingredient().quantity(), feasible));

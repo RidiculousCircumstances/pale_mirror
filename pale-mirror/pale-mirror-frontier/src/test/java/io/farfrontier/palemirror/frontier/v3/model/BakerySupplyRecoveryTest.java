@@ -9,6 +9,39 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakerySupplyRecoveryTest {
+    @Test void unburnedWarehouseFuelBacksAFullLoadButReservedFuelCannotBackAnotherOne() {
+        var state = BakeryPartialBatchTest.fixture(63, FrontierRulesets.marketQuarryGraybox());
+        var home = state.bootstrap().settlements().getFirst();
+        var workshop = home.structures().stream().filter(s -> s.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        var station = ProductionStationSelection.usable(state, workshop.id(), BakeryRecipes.BREAD).orElseThrow();
+        var machine = state.productionStations().require(station.id());
+        state = state.withChanges(FrontierWorldStateUpdate.begin().productionStations(state.productionStations().with(
+                new ProductionStations.Machine(machine.stationId(), 0, Optional.empty(), machine.revision(), Optional.empty()))));
+        assertEquals(3, BakeryBatchSelection.available(state, home.id()).orElseThrow().quantity());
+        var depot = FrontierWorldState.depotId(home.id());
+        var account = ReferenceContainerCustody.scopeId(depot);
+        var lot = new SubjectId("lot:unburned-bakery-fuel");
+        var recipe = BakeryRecipes.bread(state);
+        int fuel = Math.toIntExact(Math.ceilDiv(recipe.heatPerBatch() * 21,
+                state.bootstrap().ruleset().production().requireFuel("minecraft:coal").heatUnits()));
+        var staging = new SubjectId("custody:unburned-bakery-fuel");
+        var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, home.id(), "minecraft:coal", fuel,
+                "fixture:warehouse-fuel", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(depot),
+                Map.of(lot, fuel), Map.of())).transfer(staging, account, Map.of(lot, fuel), Map.of());
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        assertEquals(63, BakeryBatchSelection.available(state, home.id()).orElseThrow().quantity(),
+                "a cold furnace must not force a one-bread job while real warehouse fuel can supply the batch");
+        assertFalse(ProductionStationProcessing.canStart(state, station.id(), recipe.id(), 63),
+                "material backing does not burn fuel or authorize processing");
+        assertEquals(ledger, state.inventory().fungibleResources(), "sizing must not consume or reserve resources");
+        var claim = new ClaimAllocation(new SubjectId("claim:fuel-for-another-owner"), new SubjectId("work:other-fuel"),
+                home.id(), "minecraft:coal", fuel, Map.of(lot, fuel), ClaimPurpose.EXTERNAL_RESERVATION);
+        ledger = ledger.reserve(claim, account);
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        assertEquals(3, BakeryBatchSelection.available(state, home.id()).orElseThrow().quantity(),
+                "a proposal must not borrow fuel already committed elsewhere");
+    }
+
     @Test void retainedLargeLoadProcessesExecutablePortionAndPreservesReusableStationRemainder() {
         var state = BakeryPartialBatchTest.fixture(63, FrontierRulesets.marketQuarryGraybox());
         var task = state.strategicPlans().tasks().values().iterator().next();

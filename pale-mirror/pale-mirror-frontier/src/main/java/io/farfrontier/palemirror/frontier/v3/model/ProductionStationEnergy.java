@@ -5,6 +5,27 @@ import java.util.*;
 
 /** Machine energy owner. Catalog supplies properties; the existing ledger consumes real stock. */
 public final class ProductionStationEnergy {
+    /** Material backing for a proposed load, not permission to process it. Fuel
+     * logistics and the machine still reserve, deliver and burn the real stock.
+     * Looking only at already burned heat makes an otherwise supplied station
+     * propose a single restart recipe after every exhausted firing. */
+    public static long obtainableHeat(FrontierWorldState state, SubjectId stationId) {
+        var record = record(state, stationId);
+        if (state.inventory().surfaces().get(record.id()).status() == ContainerSurfaceStatus.RETIRED) return 0;
+        long available = suppliedHeat(state, stationId);
+        var ledger = state.inventory().fungibleResources();
+        for (var fuel : state.bootstrap().ruleset().production().fuels()) {
+            for (var container : ResourceStorageSelection.containers(state, record.ownerId(), fuel.itemKind(),
+                    Set.of(ResourceStorageRole.WAREHOUSE))) {
+                if (container.equals(record.id())) continue;
+                long quantity = FungibleResourceCustodySupport.accountAtContainer(state, container)
+                        .map(account -> (long) ledger.unclaimedQuantity(account.id(), record.ownerId(), fuel.itemKind())).orElse(0L);
+                available = Math.addExact(available, Math.multiplyExact(quantity, fuel.heatUnits()));
+            }
+        }
+        return available;
+    }
+
     /** Supply forecast only: stored fuel and admitted deliveries do not authorize recipe execution. */
     public static long suppliedHeat(FrontierWorldState state, SubjectId stationId) {
         var record = record(state, stationId);
