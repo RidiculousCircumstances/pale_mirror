@@ -17,10 +17,43 @@ import java.util.UUID;
  * visits the declared field once, not once per simulation tick.
  */
 public final class ResourceFieldCycle {
-    public enum Soil {
-        UNKNOWN, FARMLAND, DIRT, OBSTRUCTED, GRASS;
-        public boolean untilled() { return this == DIRT || this == GRASS; }
-        public boolean cultivable() { return this == FARMLAND || untilled(); }
+    /** Interned immutable definitions: wire identity and behavior come from the pinned data catalog. */
+    public static final class Soil {
+        private static final io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog CATALOG =
+                io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.load();
+        public static final Soil UNKNOWN = CATALOG.require("UNKNOWN"), FARMLAND = CATALOG.require("FARMLAND"),
+                DIRT = CATALOG.require("DIRT"), OBSTRUCTED = CATALOG.require("OBSTRUCTED"), GRASS = CATALOG.require("GRASS");
+        private final String name, block; private final int wireTag;
+        private final io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role role;
+        public Soil(String name, int wireTag, String block,
+                io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role role) {
+            this.name = java.util.Objects.requireNonNull(name); this.wireTag = wireTag;
+            this.block = java.util.Objects.requireNonNull(block); this.role = java.util.Objects.requireNonNull(role);
+            if (name.isBlank() || name.length() > 64 || wireTag < 1 || wireTag > 255 || block.length() > 255
+                    || (role == io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role.PREPARABLE
+                        || role == io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role.SEEDBED)
+                            && !block.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                    || (role == io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role.UNKNOWN
+                        || role == io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role.FOREIGN) && !block.isEmpty())
+                throw new IllegalArgumentException("invalid soil definition");
+        }
+        public String name() { return name; }
+        public int wireTag() { return wireTag; }
+        public String blockKind() {
+            if (block.isEmpty()) throw new IllegalArgumentException("unobserved/foreign soil has no owned block");
+            return block;
+        }
+        public boolean untilled() { return role == io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role.PREPARABLE; }
+        public boolean cultivable() { return untilled() || role == io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog.Role.SEEDBED; }
+        public static Soil valueOf(String name) { return CATALOG.require(name); }
+        public static Soil fromWireTag(int tag) { return CATALOG.require(tag); }
+        public static Soil fromBlock(String block) { return CATALOG.byBlock(block).orElse(null); }
+        public static void requireDeclared(Soil soil) {
+            if (CATALOG.require(soil.name()) != soil) throw new IllegalArgumentException("foreign soil declaration");
+        }
+        public static Soil[] values() { return CATALOG.soils().toArray(Soil[]::new); }
+        public static io.farfrontier.palemirror.frontier.v3.model.agriculture.SoilPreparationCatalog catalog() { return CATALOG; }
+        @Override public String toString() { return name; }
     }
     public enum Crop { UNKNOWN, ABSENT, GROWING, MATURE, OBSTRUCTED }
     public enum WorkOutcome { HARVESTED, PLANTED, TILLED, SKIPPED_IMMATURE, SKIPPED_BLOCKED }
@@ -44,6 +77,7 @@ public final class ResourceFieldCycle {
         }
         public CellState {
             Objects.requireNonNull(soil, "field soil condition");
+            Soil.requireDeclared(soil);
             Objects.requireNonNull(crop, "field crop condition");
             if (growthStage < 0 || growthStage > ResourceSiteLifecycle.MATURE_STAGE
                     || crop == Crop.MATURE && growthStage != ResourceSiteLifecycle.MATURE_STAGE
@@ -530,8 +564,8 @@ public final class ResourceFieldCycle {
     public ResourceFieldCycle tilled(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
         if (!prior.soil().untilled() || prior.crop() != Crop.ABSENT || !sowing.cells().contains(id))
-            throw new IllegalArgumentException("field tillage requires observed plain dirt");
-        return replaceGeneration(id, new CellState(Soil.FARMLAND, Crop.ABSENT, 0, prior.accounted(), prior.yielded()));
+            throw new IllegalArgumentException("field preparation requires observed declared preparable soil");
+        return replaceGeneration(id, new CellState(Soil.catalog().step(prior.soil()).after(), Crop.ABSENT, 0, prior.accounted(), prior.yielded()));
     }
 
     /** The farmer plants a missing crop without claiming current-cycle yield. */

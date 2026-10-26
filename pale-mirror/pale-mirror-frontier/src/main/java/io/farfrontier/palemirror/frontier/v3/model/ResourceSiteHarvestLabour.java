@@ -9,15 +9,18 @@ public final class ResourceSiteHarvestLabour {
         return switch (cycle.expectedWorkOutcome(cell)) {
             case HARVESTED -> WorkOperation.HARVEST;
             case PLANTED -> WorkOperation.SOW;
-            case TILLED -> WorkOperation.TILL;
+            case TILLED -> ResourceFieldCycle.Soil.catalog().step(cycle.cell(cell).soil()).operation();
             case SKIPPED_BLOCKED, SKIPPED_IMMATURE -> throw new IllegalArgumentException("excluded cell has no labour operation");
         };
     }
     public static WorkProgress next(FrontierWorldState state, ResourceSiteHarvestJob job, long tick, boolean run) {
         var definition = state.bootstrap().ruleset().workCatalog().require(
                 state.resourceSite(job.siteId()).kind().resourceKind(), operation(state, job));
-        var prior = job.progress().work().orElseGet(() -> WorkProgress.pending(definition.workUnits(), tick));
-        if (prior.requiredMilliWork() != Math.multiplyExact(definition.workUnits(), 1_000L))
+        var cycle = state.resourceSites().cycle(job.siteId()); var cell = job.target().cellId();
+        long units = cycle.expectedWorkOutcome(cell) == ResourceFieldCycle.WorkOutcome.TILLED
+                ? ResourceFieldCycle.Soil.catalog().step(cycle.cell(cell).soil()).workUnits(definition.workUnits()) : definition.workUnits();
+        var prior = job.progress().work().orElseGet(() -> WorkProgress.pending(units, tick));
+        if (prior.requiredMilliWork() != Math.multiplyExact(units, 1_000L))
             throw new IllegalArgumentException("retained labour belongs to a different operation");
         if (!run) return prior.pause(tick);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job) || job.navigationBlock().isPresent()
@@ -28,14 +31,10 @@ public final class ResourceSiteHarvestLabour {
         var resident = state.humanPopulation().resident(job.workerId());
         long until = ResidentWorkIntervals.permittedUntil(state, resident.id(), tick);
         int speed = ResidentWorkStatistics.speedPermille(resident, definition, state.bootstrap().ruleset().workCatalog());
-        var required = FieldEquipment.requirement(cycleOutcome(state, job));
+        var required = FieldEquipment.requirement(state.resourceSites().cycle(job.siteId()), job.target().cellId());
         if (required.isPresent()) speed = io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
                 speed, state.bootstrap().ruleset().tools(), FieldEquipment.held(state, job), required.orElseThrow());
         return prior.resume(tick, speed, until);
-    }
-    private static ResourceFieldCycle.WorkOutcome cycleOutcome(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        var cycle = state.resourceSites().cycle(job.siteId());
-        return cycle.expectedWorkOutcome(cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id());
     }
     public static FrontierWorldState pause(FrontierWorldState state, HumanAssignment assignment, long tick) {
         return pauseJob(state, assignedJob(state, assignment), tick);

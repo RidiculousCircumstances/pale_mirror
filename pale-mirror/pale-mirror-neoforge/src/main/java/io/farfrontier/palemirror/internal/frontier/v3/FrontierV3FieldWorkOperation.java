@@ -86,7 +86,8 @@ final class FrontierV3FieldWorkOperation {
         var writes = pending.transition().steps().stream().map(step -> new FrontierV3ManagedBlockWrites.PlannedWrite(
                 position(cell, step.part()), block(step))).toList();
         return FrontierV3MinecraftOperation.applyDeferred(level, new FrontierV3MinecraftOperation.Request(binding.declaration(), binding.participants(),
-                () -> condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
+                () -> preparationPermitted(level, worker, cell, pending)
+                        && condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
                         && toolMatches(worker, job, false)
                         && pending.handEffect().map(effect -> FrontierV3ActorHandObservation.observe(level, state, lease, job).matchesBefore(effect)).orElse(true),
                 FrontierV3ManagedBlockWrites.effect(level, writes, () -> mutate(level, worker, cell, pending, extraction)
@@ -134,6 +135,19 @@ final class FrontierV3FieldWorkOperation {
     private static FrontierV3ResourceFieldObservation.Reading condition(ServerLevel level, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending) {
         return FrontierV3ResourceFieldObservation.read(level, cell, pending.causationId());
+    }
+    /** Validate the configured pure block transformation through the real engine
+     * ability hook before admitting its journalled mutation. No simulated tool use. */
+    static boolean preparationPermitted(ServerLevel level, Mob worker, ResourceFieldLayout.Cell cell,
+            FrontierV3ResourceFieldWitness.Pending pending) {
+        var transition = pending.transition();
+        if (transition.before().soil() == transition.after().soil()) return true;
+        if (!transition.before().soil().untilled() || transition.before().crop() != ResourceFieldCycle.Crop.ABSENT
+                || transition.after().crop() != ResourceFieldCycle.Crop.ABSENT) return false;
+        var preparation = ResourceFieldCycle.Soil.catalog().step(transition.before().soil());
+        if (preparation.after() != transition.after().soil()) return false;
+        return FrontierV3SoilPreparation.result(level, worker.getMainHandItem(),
+                position(cell, ResourceFieldCellTransition.Part.SOIL), preparation).isPresent();
     }
     private static boolean mutate(ServerLevel level, Mob worker, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending, BlockExtractionPort extraction) {

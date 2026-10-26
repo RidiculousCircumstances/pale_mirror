@@ -6,7 +6,35 @@ import java.util.*;
 
 /** Agriculture's suitability predicate over shared geometry and reachable-area discovery. No mutation or forced chunks. */
 final class FieldDevelopmentLand {
+    /** Opaque reachability/suitability result tied to one exact immutable world input. */
+    static final class Survey {
+        private final FrontierWorldState state; private final SubjectId home;
+        private final List<ResourceSite> fields; private final List<FieldDevelopmentCell> cells;
+        private Survey(FrontierWorldState state, SubjectId home, List<ResourceSite> fields, List<FieldDevelopmentCell> cells) {
+            this.state = state; this.home = home; this.fields = List.copyOf(fields); this.cells = List.copyOf(cells);
+        }
+        List<FieldDevelopmentCell> cells() { return cells; }
+        Survey select(List<FieldDevelopmentCell> selected) {
+            if (!new HashSet<>(cells).containsAll(selected) || new HashSet<>(selected).size() != selected.size())
+                throw new IllegalArgumentException("land selection contains unsurveyed or duplicate cells");
+            return new Survey(state, home, fields, selected);
+        }
+        void require(FrontierWorldState current, SubjectId owner, List<ResourceSite> sourceFields) {
+            if (state != current || !home.equals(owner) || !fields.equals(sourceFields))
+                throw new IllegalArgumentException("land admission has stale or foreign survey evidence");
+        }
+    }
+    static Survey survey(FrontierWorldState state, SubjectId home, List<ResourceSite> fields, int limit) {
+        if (fields.stream().map(ResourceSite::id).distinct().count() != fields.size()
+                || fields.stream().anyMatch(field -> !field.settlementId().equals(home)
+                    || !field.equals(state.resourceSiteDescriptors().get(field.id()))))
+            throw new IllegalArgumentException("field survey has stale or foreign declared sources");
+        return new Survey(state, home, fields, discover(state, home, fields, limit));
+    }
     static List<FieldDevelopmentCell> read(FrontierWorldState state, SubjectId home, List<ResourceSite> fields, int limit) {
+        return survey(state, home, fields, limit).cells();
+    }
+    private static List<FieldDevelopmentCell> discover(FrontierWorldState state, SubjectId home, List<ResourceSite> fields, int limit) {
         if (limit <= 0 || fields.isEmpty()) return List.of();
         var rules = state.bootstrap().ruleset().fields().cultivation().orElseThrow();
         var knowledge = new DevelopmentGroundKnowledge(state);

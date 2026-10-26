@@ -14,7 +14,8 @@ final class FrontierStateSchema {
     // Accepted plans retain nominal supplier-owned conditional price advice.
     // Economic operating envelopes and bounded stock-recovery sale plans are explicit.
     // Explicit tree generations and sparse source losses; old disposable worlds are rejected.
-    static final int VERSION = 306;
+    // Data-declared soil wire identities replace closed observation-specific soil tags.
+    static final int VERSION = 307;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

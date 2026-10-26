@@ -242,8 +242,8 @@ public final class ResourceSiteHarvestProcess {
         // Check every completed operation, not only the operation that wore the tool.
         var nextJob = advanced.harvestJob(job.id()).orElseThrow();
         if (retired.isEmpty() && !nextJob.progress().complete()) {
-            var nextRequirement = FieldEquipment.requirement(worked.expectedWorkOutcome(
-                    worked.layout().cells().get(nextJob.progress().nextCropSlotIndex()).id()));
+            var nextRequirement = FieldEquipment.requirement(worked,
+                    worked.layout().cells().get(nextJob.progress().nextCropSlotIndex()).id());
             var nextTool = inventory.items().get(job.equipment().itemId());
             if (nextRequirement.filter(required -> !state.bootstrap().ruleset().tools().serviceable(nextTool, required)).isPresent())
                 advanced = advanced.endHarvestOffer(nextJob);

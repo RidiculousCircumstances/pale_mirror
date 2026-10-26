@@ -21,11 +21,8 @@ public record ResourceFieldForeignCellObserved(ResourceFieldForeignChangeHeld ho
                 || after.soil() == ResourceFieldCycle.Soil.UNKNOWN
                 || after.crop() == ResourceFieldCycle.Crop.UNKNOWN)
             throw new IllegalArgumentException("foreign field result lacks an exact local postcondition");
-        if (after.soil() == ResourceFieldCycle.Soil.FARMLAND && !soilBlockName.equals("minecraft:farmland")
-                || after.soil() == ResourceFieldCycle.Soil.DIRT && !soilBlockName.equals("minecraft:dirt")
-                || after.soil() == ResourceFieldCycle.Soil.GRASS && !soilBlockName.equals("minecraft:grass_block")
-                || after.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
-                && (soilBlockName.equals("minecraft:farmland") || soilBlockName.equals("minecraft:dirt"))
+        if (after.soil().cultivable() && !soilBlockName.equals(after.soil().blockKind())
+                || after.soil() == ResourceFieldCycle.Soil.OBSTRUCTED && ResourceFieldCycle.Soil.fromBlock(soilBlockName) != null
                 || after.crop() == ResourceFieldCycle.Crop.ABSENT && !cropBlockName.equals("minecraft:air")
                 || (after.crop() == ResourceFieldCycle.Crop.GROWING || after.crop() == ResourceFieldCycle.Crop.MATURE)
                 && !cropBlockName.equals("minecraft:wheat")

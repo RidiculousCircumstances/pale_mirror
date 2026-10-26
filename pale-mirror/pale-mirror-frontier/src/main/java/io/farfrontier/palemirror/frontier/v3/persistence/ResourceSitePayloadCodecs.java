@@ -800,10 +800,7 @@ final class ResourceSitePayloadCodecs {
     }
 
     private static byte[] foreignCellBytes(ResourceFieldCycle.CellState cell) {
-        return new byte[] {(byte) switch (cell.soil()) {
-            case FARMLAND -> 1; case DIRT -> 2; case OBSTRUCTED -> 3; case GRASS -> 4;
-            case UNKNOWN -> throw new IllegalArgumentException("unknown foreign field soil");
-        }, (byte) switch (cell.crop()) {
+        return new byte[] {(byte) cell.soil().wireTag(), (byte) switch (cell.crop()) {
             case ABSENT -> 1; case GROWING -> 2; case MATURE -> 3; case OBSTRUCTED -> 4;
             case UNKNOWN -> throw new IllegalArgumentException("unknown foreign field crop");
         }, (byte) cell.growthStage(), (byte) (cell.accounted() ? 1 : 0), (byte) (cell.yielded() ? 1 : 0),
@@ -812,11 +809,7 @@ final class ResourceSitePayloadCodecs {
 
     private static ResourceFieldCycle.CellState readForeignCell(ByteBuffer input) {
         if (input.remaining() < 6) throw new IllegalArgumentException("truncated foreign field cell");
-        var soil = switch (Byte.toUnsignedInt(input.get())) {
-            case 1 -> ResourceFieldCycle.Soil.FARMLAND; case 2 -> ResourceFieldCycle.Soil.DIRT;
-            case 3 -> ResourceFieldCycle.Soil.OBSTRUCTED; case 4 -> ResourceFieldCycle.Soil.GRASS;
-            default -> throw new IllegalArgumentException("unknown foreign field soil tag");
-        };
+        var soil = ResourceFieldCycle.Soil.fromWireTag(Byte.toUnsignedInt(input.get()));
         var crop = switch (Byte.toUnsignedInt(input.get())) {
             case 1 -> ResourceFieldCycle.Crop.ABSENT; case 2 -> ResourceFieldCycle.Crop.GROWING;
             case 3 -> ResourceFieldCycle.Crop.MATURE; case 4 -> ResourceFieldCycle.Crop.OBSTRUCTED;
@@ -854,16 +847,8 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
-    private static int soilTag(ResourceFieldCycle.Soil soil) {
-        return switch (soil) { case FARMLAND -> 1; case DIRT -> 2; default -> throw new IllegalArgumentException("unowned field soil cannot enter an exact observation"); };
-    }
-    private static ResourceFieldCycle.Soil soil(byte tag) {
-        return switch (Byte.toUnsignedInt(tag)) {
-            case 1 -> ResourceFieldCycle.Soil.FARMLAND;
-            case 2 -> ResourceFieldCycle.Soil.DIRT;
-            default -> throw new IllegalArgumentException("unknown field observation soil wire tag");
-        };
-    }
+    private static int soilTag(ResourceFieldCycle.Soil soil) { return soil.wireTag(); }
+    private static ResourceFieldCycle.Soil soil(byte tag) { return ResourceFieldCycle.Soil.fromWireTag(Byte.toUnsignedInt(tag)); }
     private static int cropTag(ResourceFieldCycle.Crop crop) {
         return switch (crop) {
             case ABSENT -> 1; case GROWING -> 2; case MATURE -> 3;

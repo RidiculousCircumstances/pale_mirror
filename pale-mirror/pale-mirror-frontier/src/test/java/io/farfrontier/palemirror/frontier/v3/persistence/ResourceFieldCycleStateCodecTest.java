@@ -18,6 +18,30 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResourceFieldCycleStateCodecTest {
+    @Test void recoveryAfterEachPreparationStepResumesFromTheActualIntermediateSoil() throws IOException {
+        var support = SurfaceAnchor.at(17, 63, -2); var id = new ResourceFieldLayout.CellId(1);
+        var layout = new ResourceFieldLayout(1, 2, List.of(new ResourceFieldLayout.Cell(id,
+                support.support().offset(0, 1, 0), support, support)), List.of());
+        var soil = ResourceFieldCycle.Soil.fromBlock("minecraft:coarse_dirt");
+        var cycle = ResourceFieldCycle.restore(new SubjectId("site:coarse-recovery"), layout, 1,
+                java.util.Map.of(id, new ResourceFieldCycle.CellState(soil, ResourceFieldCycle.Crop.ABSENT, 0, false, false)));
+        int wear = 0;
+        for (var expected : java.util.List.of(ResourceFieldCycle.Soil.DIRT, ResourceFieldCycle.Soil.FARMLAND)) {
+            assertEquals(ResourceFieldCycle.WorkOutcome.TILLED, cycle.expectedWorkOutcome(id));
+            wear += ResourceFieldCycle.Soil.catalog().step(cycle.cell(id).soil()).tool().wear();
+            var effect = cycle.physicalWorkTransition(id).orElseThrow();
+            assertEquals(expected, effect.after().soil());
+            assertEquals(ResourceFieldCycle.Crop.ABSENT, effect.after().crop());
+            cycle = cycle.worked(id);
+            var bytes = new ByteArrayOutputStream(); ResourceFieldCycleStateCodec.write(new DataOutputStream(bytes), cycle);
+            cycle = ResourceFieldCycleStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+            assertEquals(expected, cycle.cell(id).soil()); assertEquals(0, cycle.harvestedCount());
+        }
+        assertEquals(2, wear, "two real preparation operations, not one shortcut");
+        assertEquals(ResourceFieldCycle.WorkOutcome.PLANTED, cycle.expectedWorkOutcome(id));
+        assertEquals(ResourceFieldCycle.Crop.GROWING, cycle.worked(id).cell(id).crop());
+    }
+
     @Test void extensionRecoveryRetainsBareGroundLineageAndFutureSowingSeparately() throws IOException {
         var first = SurfaceAnchor.at(1, 63, 2); var second = SurfaceAnchor.at(2, 63, 2);
         var id = new ResourceFieldLayout.CellId(1); var addedId = new ResourceFieldLayout.CellId(2);

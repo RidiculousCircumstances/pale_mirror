@@ -340,9 +340,8 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         }
         if (!(reading instanceof FrontierV3ResourceFieldObservation.Foreign)) return null;
         String soil = blocks.soil().getString("Name");
-        ResourceFieldCycle.Soil kind = Objects.equals(soil, "minecraft:farmland")
-                ? ResourceFieldCycle.Soil.FARMLAND : Objects.equals(soil, "minecraft:dirt")
-                ? ResourceFieldCycle.Soil.DIRT : ResourceFieldCycle.Soil.OBSTRUCTED;
+        ResourceFieldCycle.Soil kind = ResourceFieldCycle.Soil.fromBlock(soil);
+        if (kind == null) kind = ResourceFieldCycle.Soil.OBSTRUCTED;
         return new ResourceFieldCycle.CellState(kind, ResourceFieldCycle.Crop.OBSTRUCTED, 0,
                 before.accounted(), before.yielded(), before.workAccessBlocked());
     }

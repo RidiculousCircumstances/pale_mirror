@@ -26,7 +26,7 @@ import java.util.UUID;
 
 /** Versioned value for the replacement SavedData field claim; not a second runtime owner. */
 final class FrontierV3ResourceFieldWitness {
-    private static final int FORMAT = 10;
+    private static final int FORMAT = 11;
 
     /** Raw block-state NBT is retained verbatim, never guessed from an OBSTRUCTED enum. */
     static final class ForeignIncident {
@@ -877,11 +877,13 @@ final class FrontierV3ResourceFieldWitness {
         return new ResourceFieldPhysicalSurface.Condition(soil(tag.getInt("soil")), crop(tag.getInt("crop")), tag.getInt("stage"));
     }
     private static int soilTag(ResourceFieldCycle.Soil soil) {
-        return switch (soil) { case FARMLAND -> 1; case DIRT -> 2; case GRASS -> 3; default -> throw new IllegalArgumentException("unowned soil claim"); };
+        if (!soil.cultivable()) throw new IllegalArgumentException("unowned soil claim");
+        return soil.wireTag();
     }
     private static ResourceFieldCycle.Soil soil(int tag) {
-        return switch (tag) { case 1 -> ResourceFieldCycle.Soil.FARMLAND; case 2 -> ResourceFieldCycle.Soil.DIRT; case 3 -> ResourceFieldCycle.Soil.GRASS;
-            default -> throw new IllegalArgumentException("unknown physical soil tag " + tag); };
+        var soil = ResourceFieldCycle.Soil.fromWireTag(tag);
+        if (!soil.cultivable()) throw new IllegalArgumentException("unowned soil claim");
+        return soil;
     }
     private static int cropTag(ResourceFieldCycle.Crop crop) {
         return switch (crop) { case ABSENT -> 1; case GROWING -> 2; case MATURE -> 3;

@@ -7,9 +7,6 @@ import java.util.Objects;
 /** A land proposal carries actual soil and clearance predecessors; it is not a completed till operation. */
 public record FieldDevelopmentCell(SurfaceAnchor support, KnownBlockGeometry.Sample<NavigationBlockState> soil,
                                    KnownBlockGeometry.Sample<NavigationBlockState> cropSpace) {
-    private static final java.util.Map<String, ResourceFieldCycle.Soil> SOILS = java.util.Map.of(
-            "minecraft:dirt", ResourceFieldCycle.Soil.DIRT, "minecraft:grass_block", ResourceFieldCycle.Soil.GRASS,
-            "minecraft:farmland", ResourceFieldCycle.Soil.FARMLAND);
     public FieldDevelopmentCell {
         Objects.requireNonNull(support); Objects.requireNonNull(soil); Objects.requireNonNull(cropSpace);
         if (soil.permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
@@ -25,10 +22,10 @@ public record FieldDevelopmentCell(SurfaceAnchor support, KnownBlockGeometry.Sam
         return soil.permission() == KnownBlockGeometry.Sample.Permission.PUBLIC
                 && cropSpace.permission() == KnownBlockGeometry.Sample.Permission.PUBLIC
                 && cropSpace.block().kind().equals("minecraft:air")
-                && SOILS.containsKey(soil.block().kind());
+                && ResourceFieldCycle.Soil.fromBlock(soil.block().kind()) != null;
     }
     private static ResourceFieldCycle.Soil soilKind(NavigationBlockState block) {
-        var soil = SOILS.get(block.kind());
+        var soil = ResourceFieldCycle.Soil.fromBlock(block.kind());
         if (soil == null) throw new IllegalArgumentException("ground is not declared cultivable soil");
         return soil;
     }

@@ -6,7 +6,10 @@ import java.util.*;
 /** Agriculture declares the operation's tool requirement; shared equipment owns eligibility and transfers. */
 public final class FieldEquipment {
     public static EquipmentRequirements requirements() {
-        return EquipmentRequirements.allOf(Set.of(FieldHarvestExtraction.DEFINITION.toolRequirement(), new ToolRequirement(ToolAbilities.TILL, 0, 1)));
+        var requirements = new HashSet<ToolRequirement>(); requirements.add(FieldHarvestExtraction.DEFINITION.toolRequirement());
+        ResourceFieldCycle.Soil.catalog().soils().stream().filter(ResourceFieldCycle.Soil::untilled)
+                .map(soil -> ResourceFieldCycle.Soil.catalog().step(soil).tool()).forEach(requirements::add);
+        return EquipmentRequirements.allOf(requirements);
     }
     public static boolean pendingForContainer(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId container) {
         return state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
@@ -24,10 +27,10 @@ public final class FieldEquipment {
                     && requirements().serviceable(state.bootstrap().ruleset().tools(), item)
                 : ContainerStorageAdmission.first(state, container.id(), Optional.empty(), slot -> false).isPresent();
     }
-    public static Optional<ToolRequirement> requirement(ResourceFieldCycle.WorkOutcome outcome) {
-        return switch (outcome) {
+    public static Optional<ToolRequirement> requirement(ResourceFieldCycle cycle, ResourceFieldLayout.CellId cell) {
+        return switch (cycle.expectedWorkOutcome(cell)) {
             case HARVESTED -> Optional.of(FieldHarvestExtraction.DEFINITION.toolRequirement());
-            case TILLED -> Optional.of(new ToolRequirement(ToolAbilities.TILL, 0, 1));
+            case TILLED -> Optional.of(ResourceFieldCycle.Soil.catalog().step(cycle.cell(cell).soil()).tool());
             default -> Optional.empty();
         };
     }
@@ -39,7 +42,9 @@ public final class FieldEquipment {
         return item;
     }
     public static Optional<ToolUse> use(FrontierWorldState state, ResourceSiteHarvestJob job, ResourceFieldCycle.WorkOutcome outcome) {
-        return requirement(outcome).map(required -> ToolUse.prepare(held(state, job), state.bootstrap().ruleset().tools(), required));
+        var cycle = state.resourceSites().cycle(job.siteId()); var cell = job.target().cellId();
+        if (cycle.expectedWorkOutcome(cell) != outcome) throw new IllegalArgumentException("tool use has a foreign field operation");
+        return requirement(cycle, cell).map(required -> ToolUse.prepare(held(state, job), state.bootstrap().ruleset().tools(), required));
     }
     public static boolean transferring(ResourceSiteHarvestJob job) {
         return job.equipment().stage() == WorkToolAssignment.Stage.ACQUIRING

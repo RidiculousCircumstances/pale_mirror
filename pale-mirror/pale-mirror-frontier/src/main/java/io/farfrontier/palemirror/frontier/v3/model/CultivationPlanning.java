@@ -25,7 +25,8 @@ public final class CultivationPlanning {
         if (fields.isEmpty()) return new Plan(sites, List.of());
         int area = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home))
                 .mapToInt(field -> field.layout().cells().size()).sum();
-        var land = FieldDevelopmentLand.read(state, home, fields, Math.max(0, rules.maximumCells() - area));
+        var survey = FieldDevelopmentLand.survey(state, home, fields, Math.max(0, rules.maximumCells() - area));
+        var land = survey.cells();
         var accepted = state.companies().goodsTrade().participants().economicState(home);
         if (accepted.accepted().isEmpty() || accepted.awaitingResources(atTick,
                 state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().keySet()).contains(FieldHarvestExtraction.ITEM))
@@ -60,7 +61,7 @@ public final class CultivationPlanning {
         for (var field : fields) next = next.planSowing(field.id(), field.layout().cells().stream()
                 .filter(cell -> decision.sow().contains(cell.crop())).map(ResourceFieldLayout.Cell::id).collect(java.util.stream.Collectors.toSet()));
         var additions = land.stream().filter(cell -> decision.sow().contains(cell.crop())).toList();
-        var admitted = FieldLandAdmission.admit(state, next, home, fields, additions, rules);
+        var admitted = FieldLandAdmission.admit(state, next, home, fields, survey.select(additions), rules);
         next = admitted.sites();
         int selected = 0, planted = 0, reserve = 0; long output = 0, first = Long.MAX_VALUE;
         for (var declaration : next.declarations().values()) if (declaration.settlementId().equals(home)) {

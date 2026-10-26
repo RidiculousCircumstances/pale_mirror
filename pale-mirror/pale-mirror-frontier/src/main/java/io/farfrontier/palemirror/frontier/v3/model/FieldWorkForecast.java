@@ -7,10 +7,12 @@ import java.util.*;
 /** One agriculture-owned estimate for capacity, land comparison and restart reserves.
  * Travel is a geometric cost estimate, never a path or confirmed delivery. */
 final class FieldWorkForecast {
+    private record PreparationCost(WorkOperation operation, io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement tool, int effortPermille) { }
     private final FrontierBootstrap bootstrap;
     private final SettlementDailySchedule schedule;
     private final List<BlockPosition> stores;
-    private final long sowTicks, tillTicks, harvestTicks, distanceFactor;
+    private final long sowTicks, harvestTicks, distanceFactor;
+    private final Map<ResourceFieldCycle.Soil, Long> preparationTicks;
 
     /** One immutable input view per assessment, shared by every candidate cell. */
     FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers) {
@@ -18,9 +20,16 @@ final class FieldWorkForecast {
     }
     FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers, boolean equipmentBacked) {
         bootstrap = state.bootstrap(); schedule = state.humanPopulation().schedule(home);
-        sowTicks = duration(state, workers, WorkOperation.SOW, equipmentBacked);
-        tillTicks = duration(state, workers, WorkOperation.TILL, equipmentBacked);
-        harvestTicks = duration(state, workers, WorkOperation.HARVEST, equipmentBacked);
+        sowTicks = duration(state, workers, WorkOperation.SOW, equipmentBacked, null, 1000);
+        harvestTicks = duration(state, workers, WorkOperation.HARVEST, equipmentBacked, FieldHarvestExtraction.DEFINITION.toolRequirement(), 1000);
+        var stages = new HashMap<PreparationCost, Long>();
+        var preparations = new HashMap<ResourceFieldCycle.Soil, Long>();
+        for (var soil : ResourceFieldCycle.Soil.catalog().soils()) if (soil.untilled()) {
+            long total = ResourceFieldCycle.Soil.catalog().path(soil).stream().mapToLong(step -> stages.computeIfAbsent(new PreparationCost(step.operation(), step.tool(), step.effortPermille()),
+                    key -> duration(state, workers, key.operation(), equipmentBacked, key.tool(), key.effortPermille()))).reduce(0L, Math::addExact);
+            preparations.put(soil, total);
+        }
+        preparationTicks = Map.copyOf(preparations);
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         stores = GoodsParticipantStorage.containers(state, participant, FieldHarvestExtraction.ITEM).stream()
                 .map(id -> state.inventory().surfaces().get(id).position(state)).toList();
@@ -50,7 +59,7 @@ final class FieldWorkForecast {
         long travel = travel(cell.crop(), FieldAgronomy.yield(bootstrap, cell.crop()));
         long sow = Math.addExact(sowTicks, travel);
         return new RenewableWorkForecast.Source(FieldAgronomy.yield(bootstrap, cell.crop()),
-                planted ? 0 : Math.addExact(sow, condition.soil().untilled() ? tillTicks : 0),
+                planted ? 0 : Math.addExact(sow, preparationTicks.getOrDefault(condition.soil(), 0L)),
                 Math.addExact(harvestTicks, travel),
                 Math.multiplyExact(ResourceSiteLifecycle.MATURE_STAGE - condition.growthStage(), growthStage),
                 Math.multiplyExact(ResourceSiteLifecycle.MATURE_STAGE, growthStage), sow, planted, cell.renew());
@@ -61,13 +70,12 @@ final class FieldWorkForecast {
         return Math.addExact(source.remainingGrowth(), SupplyPlanningWindow.completionDelay(schedule,
                 Math.addExact(source.preparation(), source.harvest())));
     }
-    private static long duration(FrontierWorldState state, List<ResidentProfile> workers, WorkOperation operation, boolean equipmentBacked) {
+    private static long duration(FrontierWorldState state, List<ResidentProfile> workers, WorkOperation operation, boolean equipmentBacked,
+            io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement requirement, int effortPermille) {
         var catalog = state.bootstrap().ruleset().workCatalog(); var definition = catalog.require(FieldHarvestExtraction.ITEM, operation);
         int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition, catalog))
                 .min().orElse(catalog.minSpeedPermille());
-        if (operation != WorkOperation.SOW && !workers.isEmpty()) {
-            var requirement = operation == WorkOperation.TILL ? FieldEquipment.requirement(ResourceFieldCycle.WorkOutcome.TILLED).orElseThrow()
-                    : FieldHarvestExtraction.DEFINITION.toolRequirement();
+        if (requirement != null && !workers.isEmpty()) {
             var equipment = EquipmentProductiveCapacity.items(state, workers.getFirst().settlementId(), workers.stream().map(ResidentProfile::id)
                     .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
             final int workerSpeed = speed;
@@ -76,7 +84,7 @@ final class FieldWorkForecast {
                     : state.bootstrap().ruleset().tools().definitions().values().stream().filter(tool -> tool.supports(requirement))
                         .mapToInt(tool -> Math.toIntExact(Math.max(1, (long) workerSpeed * tool.speedPermille() / 1000))).min().orElse(speed);
         }
-        return Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
+        return Math.ceilDiv(Math.multiplyExact(Math.ceilDiv(Math.multiplyExact(definition.workUnits(), effortPermille), 1000), 1000L), speed);
     }
     private long travel(BlockPosition crop, int yield) {
         long distance = stores.stream()

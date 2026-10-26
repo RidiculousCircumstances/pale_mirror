@@ -18,5 +18,6 @@ public record FieldBalance(int ordinarySide, int extractiveSide,
     public static FieldBalance uniform() { return new FieldBalance(16, 16); }
     public String canonicalText() { return ordinarySide + ":" + extractiveSide
             + agriculture.map(value -> "|agriculture=" + value.canonicalText()).orElse("")
-            + cultivation.map(value -> "|cultivation=" + value.canonicalText()).orElse(""); }
+            + cultivation.map(value -> "|cultivation=" + value.canonicalText()).orElse("")
+            + "|soilPreparation=" + ResourceFieldCycle.Soil.catalog().canonicalText(); }
 }

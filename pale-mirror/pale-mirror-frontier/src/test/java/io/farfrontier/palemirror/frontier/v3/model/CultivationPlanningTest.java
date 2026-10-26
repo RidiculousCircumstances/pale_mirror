@@ -8,6 +8,45 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CultivationPlanningTest {
+    @Test void separatedSoilPatchesShareOneBoundedReachableWorkAreaAndRejectStaleSurveys() {
+        var state = prepared(); var home = new SubjectId("settlement:1");
+        for (int turn = 0; turn < 3; turn++) {
+            var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home))
+                    .sorted(Comparator.comparing(ResourceSite::id)).toList();
+            var survey = FieldDevelopmentLand.survey(state, home, fields, 64);
+            assertEquals(64, survey.cells().size());
+            var before = state;
+            assertThrows(IllegalArgumentException.class, () -> FieldDevelopmentLand.survey(before,
+                    new SubjectId("settlement:2"), fields, 64));
+            var result = FieldLandAdmission.admit(state, state.resourceSites(), home, fields, survey,
+                    state.bootstrap().ruleset().fields().cultivation().orElseThrow());
+            assertFalse(result.deferred());
+            state = state.withResourceSites(result.sites());
+            var next = state;
+            assertThrows(IllegalArgumentException.class, () -> FieldLandAdmission.admit(next, next.resourceSites(), home,
+                    fields, survey, next.bootstrap().ruleset().fields().cultivation().orElseThrow()));
+        }
+        var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
+        assertEquals(1, fields.size(), "soil islands are not separate worksite declarations");
+        assertEquals(256, fields.getFirst().layout().cells().size());
+    }
+
+    @Test void miningSettlementCanAdmitRealCoarseGroundWithoutPretendingItIsAlreadyTilled() {
+        var state = prepared(); var home = new SubjectId("settlement:1");
+        var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
+        var survey = FieldDevelopmentLand.survey(state, home, fields, 3);
+        var land = survey.cells();
+        assertFalse(land.isEmpty(), "rocky territory has native-preparable soil");
+        assertTrue(land.stream().allMatch(cell -> cell.soil().block().kind().equals("minecraft:coarse_dirt")));
+        var admitted = FieldLandAdmission.admit(state, state.resourceSites(), home, fields, survey,
+                state.bootstrap().ruleset().fields().cultivation().orElseThrow());
+        long coarse = admitted.sites().cycles().values().stream().flatMap(c -> c.layout().cells().stream()
+                .map(cell -> c.cell(cell.id()))).filter(cell -> cell.soil() == ResourceFieldCycle.Soil.fromBlock("minecraft:coarse_dirt")).count();
+        assertEquals(land.size(), coarse);
+        var decoded = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state.withResourceSites(admitted.sites())));
+        assertEquals(admitted.sites().declarations(), decoded.resourceSites().declarations());
+    }
+
     @Test void registeredReviewExecutesInTheRealEngineAndRetainsItsContinuation() {
         var configuration = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
                 new WorldId("frontier:cultivation-engine"), 125L, FrontierRulesets.dynamicFarmingGraybox());
@@ -59,9 +98,10 @@ class CultivationPlanningTest {
     @Test void runtimeLandAdmissionExtendsOnlyRealSurveyedTerrainAndRetainsExistingCellIdentities() {
         var state = prepared(); var home = new SubjectId("settlement:7");
         var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
-        var land = FieldDevelopmentLand.read(state, home, fields, 3);
+        var survey = FieldDevelopmentLand.survey(state, home, fields, 3);
+        var land = survey.cells();
         assertFalse(land.isEmpty(), "graybox must expose real cultivable adjacent terrain");
-        var outcome = FieldLandAdmission.admit(state, state.resourceSites(), home, fields, land,
+        var outcome = FieldLandAdmission.admit(state, state.resourceSites(), home, fields, survey,
                 state.bootstrap().ruleset().fields().cultivation().orElseThrow());
         assertTrue(outcome.sites().cycles().values().stream().mapToInt(c -> c.layout().cells().size()).sum()
                 > state.resourceSites().cycles().values().stream().mapToInt(c -> c.layout().cells().size()).sum());

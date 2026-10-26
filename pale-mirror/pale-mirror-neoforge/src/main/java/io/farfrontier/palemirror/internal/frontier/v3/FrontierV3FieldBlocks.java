@@ -7,18 +7,14 @@ import net.minecraft.world.level.block.state.BlockState;
 /** Exact engine representation of owned cultivable soils; grass is not silently rewritten as dirt. */
 final class FrontierV3FieldBlocks {
     static ResourceFieldCycle.Soil soil(BlockState block) {
-        if (block.is(Blocks.FARMLAND)) return ResourceFieldCycle.Soil.FARMLAND;
-        if (block.is(Blocks.DIRT)) return ResourceFieldCycle.Soil.DIRT;
-        if (block.is(Blocks.GRASS_BLOCK)) return ResourceFieldCycle.Soil.GRASS;
-        return null;
+        return ResourceFieldCycle.Soil.fromBlock(net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .getKey(block.getBlock()).toString());
     }
     static BlockState soil(ResourceFieldCycle.Soil value) {
-        return switch (value) {
-            case FARMLAND -> Blocks.FARMLAND.defaultBlockState();
-            case DIRT -> Blocks.DIRT.defaultBlockState();
-            case GRASS -> Blocks.GRASS_BLOCK.defaultBlockState();
-            default -> throw new IllegalArgumentException("unobserved or foreign soil has no owned block representation");
-        };
+        var id = net.minecraft.resources.ResourceLocation.parse(value.blockKind());
+        var registry = net.minecraft.core.registries.BuiltInRegistries.BLOCK;
+        if (!registry.containsKey(id)) throw new IllegalArgumentException("configured soil block is unavailable: " + id);
+        return registry.get(id).defaultBlockState();
     }
     private FrontierV3FieldBlocks() { }
 }

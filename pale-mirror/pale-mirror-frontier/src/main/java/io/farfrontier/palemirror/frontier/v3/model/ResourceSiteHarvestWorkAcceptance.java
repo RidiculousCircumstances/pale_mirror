@@ -30,7 +30,8 @@ public record ResourceSiteHarvestWorkAcceptance(ResourceSiteHarvestProgressed re
                 if (!transition.before().equals(new ResourceFieldPhysicalSurface.Condition(soil, ResourceFieldCycle.Crop.ABSENT, 0)))
                     throw new IllegalArgumentException("accepted sowing has a foreign declared work predecessor");
                 yield ResourceFieldCellTransition.between(receipt.siteId(), receipt.epoch(), receipt.layoutRevision(), receipt.cellId(),
-                        transition.before(), new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                        transition.before(), new ResourceFieldPhysicalSurface.Condition(receipt.outcome() == ResourceFieldCycle.WorkOutcome.TILLED
+                                ? ResourceFieldCycle.Soil.catalog().step(soil).after() : ResourceFieldCycle.Soil.FARMLAND,
                                 receipt.outcome() == ResourceFieldCycle.WorkOutcome.PLANTED
                                         ? ResourceFieldCycle.Crop.GROWING : ResourceFieldCycle.Crop.ABSENT, 0));
             }
