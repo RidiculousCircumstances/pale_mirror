@@ -1,9 +1,11 @@
-# Active continuity — 2026-10-26, economy repair and LAN analytics
+# Active continuity — 2026-10-26, independent restart funding and cycle diagnosis
 
 ## Assignment and authority
 
-Active user request: diagnose and FIX the R267 economy crisis, then verify,
-commit and deploy. Main alone, no Terra/subagents/push. Preserve current R267
+Active user request: check recurring production/trade viability and fix the
+R269 all-or-nothing production restart priority. Scoped fix delivered; the
+existing economy crisis remains unresolved, with concrete causes below.
+Main alone, no Terra/subagents/push. Preserve current R267
 for diagnosis/recovery unless a demonstrated schema change requires a new world.
 Read source and exact current decisions first; do not mask deficits with starter
 stock, free money, forced sales or relaxed physical/persistence fences.
@@ -20,22 +22,21 @@ Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror
 (Git root parent), branch feat/baker-carry-orders-20260926, CLEAN.
 Feature70b670821ec3b2b5d4abfe304bcbb11d6a02cbc0, preflight8631f679f;
 Forestry HEAD248be0f83 includes shutdown/reach closure; player-map HEADa9d5b36ef.
-Current source HEAD2e2897013 adds LAN/VPN analytics above economy repair2ff550333.
-Minecraft still runs the verified2ff550333 artifact; this latest Python-only change
-did not rebuild/restart the game. Source clean.
-Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detached2e2897013.
+Current source HEAD384946347 independently funds complete production bundles
+and fixes the purchase-boundary sibling veto; source CLEAN.
+Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detached384946347.
 Pack /home/rd/proj/minecraft, HEADcfdc160, tracked CLEAN; retain unrelated
 untracked .f0v-baseline/. No push. Governance retains extensive unrelated WIP;
-only task-owned ledger/archive/order/design and forestry-only architecture/
-materialization sections are staged. Never stage-all governance.
+only the task-owned continuity update is committed in this delivery.
+Never stage-all governance.
 
 Runtime /home/rd/far-frontier-server, far-frontier-v3-live.service ACTIVE.
 Fresh world frontier-v3-r267-hot-navigation-20261026,
 UUIDc3762b96-ead4-475e-847e-04e60dfba421, seed126/r28/schema306; native operation format6.
-Current wrapper PID2488377, startup2026-10-26 08:02:47 +05. Artifact SHA512:
-f49e26a2486426119379878d79840a3bec9ed8ded31cac133bb3d10179816eb1c3c6e6d1ebe81442719e2f352a3c0e95b1f1e4e68ad68a96a55c3bd31d0f996f.
-Exact root publish/install/preflight/start/verify succeeded; source build
-hot-movement-audit/release-shutdown-build.log PASS7sec; deployment build/r267-hot-navigation-*.log in IMPL.
+Current wrapper PID2931744, startup2026-10-26 10:00:47 +05. Artifact SHA512:
+f2daa5de63f187d8da73de4e73b0c035b7ce5bafd0d8f2ef1842b7338755d86b991e88b1f50da0ed1c4458c2cde2dafd1ba95e882b64f0d35f4063bb1828e6e4.
+Exact root publish/install/preflight/start/verify succeeded for384946347;
+R270 receipts in IMPL/build/economy-restart-r270/, release-build PASS7sec.
 R264 retained as normal production evidence, not migrated: old jobs can contain
 unsafe former workstations. Production world grants no initial axes or logs.
 Client updater required from pre-forestry builds; current pack selects r28.
@@ -472,3 +473,50 @@ CORRECT deployed git tree hash, not a wrong commit. Incident JAR is unavailable;
 native CodeSource failure branch not observed. Record as provenance gap, not
 claim of stale deployment. Source report/diff-check/guardrails PASS10sec; no
 new tests, client campaign, reset, simulation/artifact change or push.
+
+
+## R270 delivered — independent restarts, viability remains open
+
+Source384946347f8fee26cc125d3e5c92434c395d3b55; source and clean detached release
+match. Same R267 UUID/rules/schema; normal-stop final save verified, no reset,
+no push. Root tracked clean, .f0v-baseline/ retained. Governance unrelated WIP
+preserved. Only continuity is committed for this delivery.
+
+SupplyPlanner now emits ephemeral complete recipe/fuel/commitment bundles from
+its selected source pass. EconomicRestartFunding independently allocates quoted
+bundles under one shared stock/cash envelope. Missing/expensive sibling inputs
+cannot erase a feasible restart; partial optional allocations never promote an
+incomplete bundle. Finished recovery-input purchase and its manufacture remain
+separate alternatives. EconomicPurchaseFunding removes the same sibling veto,
+protects the funded contribution of shared inputs rather than unfunded global
+wishes, and releases protection once the remaining restart quantity is zero.
+Existing persisted EconomicPlan shape retained; no compatibility/schema work.
+No cash/stock grants, commodity-specific priority, forced prices or waived food.
+
+Final verification guardrails +100affected tests/13classes incl publication,
+funding, supply, selection, logistics quotation and nonempty funded-plan codec
+recovery PASS25sec; JAR/verifyPackagedJar PASS. Clean detached build PASS7sec.
+Actual deployment verify OK, PID2931744/port25565; fresh ready source384946347.
+Post-restart summary702614 green: required/scene/inventory/custody conflicts0,
+incidentIndex5 unchanged. Ordinary COLD simulation advanced >1000ticks; cash1200,
+observatory no errors. No HOT client run or sustainable-world-recovery claim.
+
+Durable source report docs/economy-restart-funding-r270.md; raw R270 checkpoint
+revision2677907/tick691653, read-only probes and trade_days retained under build.
+Westhaven sold39coal for52.26 then bought3bread+2wheat for53.481168 total incl
+freight: this observed sequence spent1.221168 more and covers little food.
+This does not prove every alternative trade loses money. Dawnbridge can pay
+2.68 for2coal (cash18.900018), but65,750tick trip needs3bread for seller or4
+for buyer; both have0warehouse bread and material admission fails. Sampled
+Mossbrook/Westhaven route needs3bread for either organiser over59,000ticks,
+also absent. Recomputed actual markets do not supply executable restart quotes;
+all12 funded item sets remain empty. The structural priority repair alone
+cannot cure the current starvation/provisioning trap.
+
+Current advertised fields forecast2671wheat/96kticks vs1419recurring bread
+requiring4257wheat, before325immediate food needs and caravan provisions.
+This is current exposed capacity advice, NOT all possible future field/mine
+capacity or proof of no viable equilibrium. No long-run balance is established.
+Next unresolved economy work: compare feasible provisioned recovery packages,
+recurring production/export/import quantities and working capital. Do not call
+inequality a bug or force prices/free money to conceal missing real inputs.
