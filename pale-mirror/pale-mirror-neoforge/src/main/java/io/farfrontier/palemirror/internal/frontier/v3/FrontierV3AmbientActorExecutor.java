@@ -746,7 +746,10 @@ final class FrontierV3AmbientActorExecutor {
                 io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch());
         var carrier = ledger.reconciliation(declaration, false);
         if (!cancelledUnstarted && !preparedCancellationHasEvidence(carrier, hasNeverCreatedFirstAdmission(ledger, declaration))) return Optional.empty();
-        ledger.persist(level, state.bootstrap().worldId());
+        // Cancellation consumes this actor's saved absence proof, not a global
+        // journal barrier. Withhold the transition until that exact prefix is
+        // durable; unrelated actors continue while the writer acknowledges it.
+        if (!ledger.prepareActorDurable(level, state.bootstrap().worldId(), actorId)) return Optional.empty();
         var result = submit(runtime, "ambient-reserved-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
         var draining = lease.withStatus(AmbientLeaseStatus.DRAINING);

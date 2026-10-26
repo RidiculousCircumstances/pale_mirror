@@ -383,3 +383,38 @@ renew the budget. Composition coverage requires one stage per registered family
 and forbids the lost aggregate continuation. Existing physical-pass tests cover
 delayed acknowledgement/suffix order/non-replay; native shared storage/lifetime/
 field56 and scoped registry/actuation tests pass flat-physical-pass-check.log.
+
+
+After flattening, the clean three-minute HOT observation on d73092332 recorded
+native max67.743ms and ready max44.965ms. Ordinary debt initially109->57, ending
+238. This is a bounded improvement, not a hard worst-case guarantee. No new
+scene/inventory conflict appeared; the retained75502 incident remains unchanged.
+A close exact-body observation of resident:6-13 captured600 native poses at the
+same station with field-work animation. Its canonical labour and cell stages
+continued; standing during that work is not proof of a next-activity selection
+stall. The linked frame and full samples remain in farmer-close-result.json.
+
+Disconnect still exposed a real136.90ms native tick, including83.89ms in worksite
+projection. The timestamp-matched JFR samples show ExtractionWorksiteOwner's
+beforeTurn repeatedly decoding paged worksite witnesses while capturing several
+non-ticking source regions in one invocation. Its ordinary departure review now
+uses the existing cooperative suffix cursor and configured read/time admission
+between complete source regions. Every region rechecks current state/chunk and
+retains all positive observation/durability conditions. No partial scan grants
+COLD custody. Native unload still captures its final complete physical image;
+shutdown retains its final drain. Changing the declared geometry resets the
+scheduling cursor, never an ownership receipt.
+
+The same disconnect profile contains a10.69ms journal join from
+abandonPreparedForReservation. That retryable cancellation now uses the existing
+exact-actor durability gate. It withholds DRAINING until the current absence
+record is durable while unrelated actors proceed. One-shot body release and
+unattempted insertion rollback retain their separate mandatory barriers; this
+change does not claim that all synchronous recovery/rollback work is eliminated.
+
+The first verification invocation accidentally selected the broad default scene
+suite. It exposed route-patrol fixture failures (fixed-tick checks before HOT
+admission) and was stopped; it is not a passing receipt. Those inactive patrol
+fixtures were not changed or used to excuse active product behavior. The actual
+changed boundary uses the existing shared-storage/body-lifetime/field slice and
+scoped cancellation, record-durability, suffix and worksite-witness coverage.

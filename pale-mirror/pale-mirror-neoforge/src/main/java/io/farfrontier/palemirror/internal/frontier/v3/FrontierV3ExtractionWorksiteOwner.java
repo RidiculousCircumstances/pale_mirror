@@ -32,6 +32,12 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     private ExtractionGeometryIndex geometry;
     private ExtractionGeometryIndex declarationGeometry;
     private Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ExtractionDeposit> geometryDeposits;
+    private static final class DeparturePass {
+        final ExtractionGeometryIndex geometry;
+        final FrontierV3CooperativeStageCursor cursor = new FrontierV3CooperativeStageCursor();
+        DeparturePass(ExtractionGeometryIndex geometry) { this.geometry = geometry; }
+    }
+    private final Map<ServerLevel, DeparturePass> departurePasses = new WeakHashMap<>();
     private ExtractionGeometryIndex geometry(FrontierWorldState state) {
         var deposits = state.extractionSites().deposits();
         if (geometry != null && geometryDeposits == deposits) return geometry;
@@ -46,18 +52,33 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         afterProjection(level, runtime);
         // A cached loaded chunk is not an active physical custodian. Reuse the same
         // positive current-block departure proof when its natural ticking demand ends.
-        var state = runtime.decodedState().orElseThrow();
-        for (var region : geometry(state).chunks()) {
-            var chunk = level.getChunkSource().getChunkNow(region.x(), region.z());
-            if (chunk != null && !level.shouldTickBlocksAt(new BlockPos(region.x() * 16, level.getMinBuildHeight(), region.z() * 16)))
-                departure(level, runtime, chunk, false);
+        var index = geometry(runtime.decodedState().orElseThrow());
+        var pass = departurePasses.get(level);
+        if (pass == null || pass.geometry != index) {
+            pass = new DeparturePass(index); departurePasses.put(level, pass);
         }
-        // Includes already-unloaded regions after recovery. Withdrawal is based on
-        // durable write/effect journals, never on elapsed time or invented observation.
-        for (var region : geometry(runtime.decodedState().orElseThrow()).regions()) {
-            if (level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ()) == null)
+        var budget = new FrontierV3FirstVisibilityBudget(
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get(), 1,
+                (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
+                System::nanoTime);
+        // Keep the suffix across turns. Re-reading every saved region while its
+        // write is pending thrashes the bounded physical-record cache on HOT exit.
+        // A region remains exclusively physical until its complete exact proof
+        // and durability gate pass; yielding grants no COLD permission.
+        pass.cursor.run(index.regions().size(), budget::takeRead, offset -> {
+            var region = index.regions().get(offset);
+            var state = runtime.decodedState().orElseThrow();
+            var chunk = level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ());
+            if (chunk == null) {
                 withdrawProjection(level, runtime, region);
-        }
+            } else if (!level.shouldTickBlocksAt(new BlockPos(region.chunkX() * 16, level.getMinBuildHeight(), region.chunkZ() * 16))) {
+                var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
+                if (lease != null && lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
+                    captureDeparture(level, state, chunk, region, FrontierV3GrayboxLedger.get(level));
+                    withdrawProjection(level, runtime, region);
+                }
+            }
+        });
     }
     @Override public List<WorksiteBlock> declarations(FrontierWorldState state) {
         var currentGeometry = geometry(state);
