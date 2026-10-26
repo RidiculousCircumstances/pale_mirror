@@ -6,6 +6,7 @@ import io
 import json
 import threading
 import time
+from contextlib import contextmanager, ExitStack
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -46,11 +47,11 @@ def collect(source, store, stopping):
 class Server(ThreadingHTTPServer):
     daemon_threads=True
     request_queue_size=16
-    def __init__(self, address, store, performance, players):
+    def __init__(self, address, store, performance, players, requests):
         self.store=store
         self.performance=performance
         self.players=players
-        self.requests=threading.BoundedSemaphore(8)
+        self.requests=requests
         super().__init__(address,Handler)
     def process_request(self, request, client_address):
         if not self.requests.acquire(blocking=False):
@@ -61,6 +62,17 @@ class Server(ThreadingHTTPServer):
     def process_request_thread(self, request, client_address):
         try: super().process_request_thread(request,client_address)
         finally: self.requests.release()
+
+@contextmanager
+def bind_servers(addresses, port, store, performance, players):
+    if not addresses or len(set(addresses)) != len(addresses):
+        raise ValueError('explicit distinct HTTP bind addresses required')
+    requests=threading.BoundedSemaphore(8)
+    with ExitStack() as sockets:
+        # Bind every requested interface before starting the sole collector.
+        # Failure on a later address closes all preceding sockets.
+        yield [sockets.enter_context(Server((address,port),store,performance,players,requests))
+               for address in addresses]
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
@@ -100,14 +112,23 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--source',required=True,type=Path)
     parser.add_argument('--database',required=True,type=Path)
-    parser.add_argument('--bind',default='127.0.0.1'); parser.add_argument('--port',type=int,default=8093)
+    parser.add_argument('--bind',action='append',help='Listen address; repeat for LAN and VPN interfaces')
+    parser.add_argument('--port',type=int,default=8093)
     args=parser.parse_args(); store=Store(args.database); stop=threading.Event()
-    worker=threading.Thread(target=collect,args=(args.source,store,stop),daemon=True,name='economic-collector');worker.start()
     performance=Performance(args.source)
-    monitor=threading.Thread(target=performance.collect,args=(stop,),daemon=True,name="performance-collector");monitor.start()
     players=Players(args.source)
-    positions=threading.Thread(target=players.collect,args=(stop,),daemon=True,name="player-position-collector");positions.start()
-    server=Server((args.bind,args.port),store,performance,players)
-    try: server.serve_forever()
-    finally: stop.set();server.server_close();worker.join(timeout=3);monitor.join(timeout=3);positions.join(timeout=3)
+    with bind_servers(args.bind or ['127.0.0.1'],args.port,store,performance,players) as servers:
+        worker=threading.Thread(target=collect,args=(args.source,store,stop),daemon=True,name='economic-collector');worker.start()
+        monitor=threading.Thread(target=performance.collect,args=(stop,),daemon=True,name="performance-collector");monitor.start()
+        positions=threading.Thread(target=players.collect,args=(stop,),daemon=True,name="player-position-collector");positions.start()
+        listeners=[]
+        try:
+            for server in servers[1:]:
+                listener=threading.Thread(target=server.serve_forever,daemon=True,name='economic-http-'+server.server_address[0])
+                listener.start(); listeners.append((server,listener))
+            servers[0].serve_forever()
+        finally:
+            stop.set()
+            for server,listener in listeners: server.shutdown(); listener.join(timeout=3)
+            worker.join(timeout=3);monitor.join(timeout=3);positions.join(timeout=3)
 if __name__=='__main__': main()

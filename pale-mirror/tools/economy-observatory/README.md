@@ -41,9 +41,16 @@ python3 server.py --source /absolute/runtime --database /separate/path/economy.s
 ```
 For the test host, use the pack-owned `scripts/install-economy-observatory.sh`
 with a verified source `tools/economy-observatory/`, separate target directory,
-server runtime and private interface address. Default loopback; bind only the
-private VPN interface for user access. Server installation and analytical service
+server runtime and private interface address. Default loopback; bind explicit
+private LAN or VPN addresses for user access. Server installation and analytical service
 are separate; disabling analytics leaves simulation and existing data intact.
+
+Repeat `--bind` to expose the same read-only UI on explicit LAN and VPN addresses,
+for example `--bind 192.168.0.103 --bind 100.100.78.29`. The installer preserves
+every address. One process shares the database, the three collection loops and
+the global eight-request limit across all listeners. All sockets must bind
+before collection starts; failure rolls back previously bound sockets. A single
+`--bind` retains the existing behavior; omitting it selects loopback.
 
 Checks: `python3 -m unittest discover -s tools/economy-observatory` from source
 root; NeoForge `FrontierV3EconomyProjectionTest`; kernel
