@@ -36,35 +36,39 @@ public final class FrontierV3SharedStorageGameTests {
     public static void scheduledNativeSuffixRetainsItsOriginalOrderAndPersistentChunkOwner(GameTestHelper helper) {
         var clock = new java.util.concurrent.atomic.AtomicLong();
         var allowance = new FrontierV3EnvironmentalAdmission(clock::get); allowance.begin(1);
-        var ticks = new net.minecraft.world.ticks.LevelTicks<String>(chunk -> true,
+        var ticks = new net.minecraft.world.ticks.LevelTicks<net.minecraft.world.level.block.Block>(chunk -> true,
                 () -> net.minecraft.util.profiling.InactiveProfiler.INSTANCE);
-        var chunk = new net.minecraft.world.ticks.LevelChunkTicks<String>();
+        var chunk = new net.minecraft.world.ticks.LevelChunkTicks<net.minecraft.world.level.block.Block>();
         ticks.addContainer(new net.minecraft.world.level.ChunkPos(0, 0), chunk);
-        var first = new net.minecraft.world.ticks.ScheduledTick<>("first", new net.minecraft.core.BlockPos(1, 63, 1),
+        var first = new net.minecraft.world.ticks.ScheduledTick<>(net.minecraft.world.level.block.Blocks.STONE, new net.minecraft.core.BlockPos(1, 63, 1),
                 0L, net.minecraft.world.ticks.TickPriority.HIGH, 3L);
-        var second = new net.minecraft.world.ticks.ScheduledTick<>("second", new net.minecraft.core.BlockPos(2, 63, 1),
+        var second = new net.minecraft.world.ticks.ScheduledTick<>(net.minecraft.world.level.block.Blocks.DIRT, new net.minecraft.core.BlockPos(2, 63, 1),
                 0L, net.minecraft.world.ticks.TickPriority.NORMAL, 4L);
-        var future = new net.minecraft.world.ticks.ScheduledTick<>("future", new net.minecraft.core.BlockPos(3, 63, 1),
+        var future = new net.minecraft.world.ticks.ScheduledTick<>(net.minecraft.world.level.block.Blocks.COBBLESTONE, new net.minecraft.core.BlockPos(3, 63, 1),
                 100L, net.minecraft.world.ticks.TickPriority.NORMAL, 5L);
-        ticks.schedule(first); ticks.schedule(second); ticks.schedule(future);
-        var executed = new ArrayList<String>();
-        java.util.function.BiConsumer<net.minecraft.core.BlockPos, String> callback = (position, type) -> {
+        // Collection consumes only the first record of the NORMAL queue. Lithium
+        // retains a consumed prefix in that queue when its remaining tail is sorted.
+        var third = new net.minecraft.world.ticks.ScheduledTick<>(net.minecraft.world.level.block.Blocks.SAND,
+                new net.minecraft.core.BlockPos(4, 63, 1), 0L, net.minecraft.world.ticks.TickPriority.NORMAL, 5L);
+        ticks.schedule(first); ticks.schedule(second); ticks.schedule(third); ticks.schedule(future);
+        var executed = new ArrayList<net.minecraft.world.level.block.Block>();
+        java.util.function.BiConsumer<net.minecraft.core.BlockPos, net.minecraft.world.level.block.Block> callback = (position, type) -> {
             executed.add(type); clock.addAndGet(2);
-            if (type.equals("first")) ticks.schedule(new net.minecraft.world.ticks.ScheduledTick<>("second", second.pos(),
+            if (type == first.type()) ticks.schedule(new net.minecraft.world.ticks.ScheduledTick<>(net.minecraft.world.level.block.Blocks.DIRT, second.pos(),
                     50L, net.minecraft.world.ticks.TickPriority.NORMAL, 6L));
         };
         FrontierV3ScheduledNativeTicks.within(allowance::scheduledAvailable, allowance::scheduled,
-                () -> ticks.tick(1L, 256, callback));
-        helper.assertTrue(executed.equals(List.of("first")), "one admitted callback finishes, suffix must not execute");
-        helper.assertTrue(chunk.getAll().toList().containsAll(List.of(second, future)) && chunk.count() == 2,
+                () -> ticks.tick(1L, 2, callback));
+        helper.assertTrue(executed.equals(List.of(first.type())), "one admitted callback finishes, suffix must not execute");
+        helper.assertTrue(chunk.getAll().toList().containsAll(List.of(second, third, future)) && chunk.count() == 3,
                 "deferred exact record including its deadline/priority/order belongs to vanilla's saved chunk queue");
         helper.assertTrue(!FrontierV3ScheduledNativeTicks.active(), "scheduler allowance cannot escape its native batch");
         allowance.begin(1);
         FrontierV3ScheduledNativeTicks.within(allowance::scheduledAvailable, allowance::scheduled,
                 () -> ticks.tick(1L, 256, callback));
-        helper.assertTrue(executed.equals(List.of("first", "second")), "original due tick must not be postponed by its later duplicate");
+        helper.assertTrue(executed.equals(List.of(first.type(), second.type())), "original due tick must not be postponed by its later duplicate");
         ticks.tick(100L, 256, callback);
-        helper.assertTrue(executed.equals(List.of("first", "second", "future")), "ordinary native scheduling remains intact");
+        helper.assertTrue(executed.equals(List.of(first.type(), second.type(), third.type(), future.type())), "ordinary native scheduling remains intact");
         helper.succeed();
     }
     private record Entry(FrontierV3JournaledSavedData ledger, Function<CompoundTag,FrontierV3JournaledSavedData> decode) { }

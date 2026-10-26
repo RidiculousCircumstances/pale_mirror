@@ -537,3 +537,37 @@ a constantly awakened actor cannot starve census work. This replaces the old
 FIFO treatment of every wake as ordinary deferred work, without another scheduler
 or canonical activity queue. The queue regression covers a wake behind100 census
 entries, duplicate notification/deferral, alternating progress and retired actors.
+
+
+## Scheduled native tick crash with the deployed scheduler
+
+At21:24:40 the retained ff4dcf080 server crashed after the human player entered.
+The cause was restore->LevelChunkTicks.removeIf->our predicate dereferencing null,
+not an actor observation callback. The existing cooperative scheduled-update
+change b14da2f60 introduced that bulk removal. Runtime Lithium0.15.4+mc1.21.1
+replaces this method: it loops zero to queue.size(), whereas getTickAtIndex uses
+an absolute array index and poll leaves a consumed prefix. A partial collection
+can therefore expose nulls and omit live tail entries. A null guard alone would
+hide the crash while allowing a later duplicate to suppress the original tick.
+
+Restore now uses the public peek/poll/schedule protocol. It identifies only keys
+actually duplicated in the loaded queue, polls through those records, retains
+unrelated records unchanged and then restores the original collected suffix.
+Queues without duplicates are not drained. There is no Lithium class dependency,
+internal-array access, swallowed exception, discarded suffix or forced reload.
+Deadlines, priorities, original sub-order and native chunk-save ownership remain.
+
+The existing native suffix fixture now uses registered block types and leaves
+an uncollected same-priority tail after a consumed prefix. With the exact installed
+Lithium JAR injected into the existing native run via runtimeOnly, the old source
+reproduced the same NPE (lithium-suffix-before-fix.log); the fix passes all56 native
+shared-storage/lifetime/field tests (lithium-suffix-fixed.log). The native run logs
+explicitly identify Lithium0.15.4. The JAR SHA512 is pinned by the pack manifest,
+2735da2088b88a8bdcd4ad02a2b6fffbfd3925557cefd4fa54b5477dfb9e582ea7f521300c060f57dff1325dd21bff276b7333363ad3371ed6893e3de9eca9cd.
+The earlier native fixture ran without this server-only scheduler replacement;
+previous full-pack client visits did not trigger the partial-queue combination.
+Those positive results were narrower than pack scheduler compatibility. Future
+changes to native scheduler internals must qualify this existing fixture with
+the installed scheduler replacement as well as vanilla, using the same harness.
+The local init receipt is build/r274-runtime-repair/lithium-native.init.gradle;
+no dependency JAR or private runtime file is added to source or packaged.

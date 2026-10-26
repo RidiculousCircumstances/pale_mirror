@@ -33,7 +33,9 @@ public final class FrontierV3ScheduledNativeTicks {
 
     /** Equivalent to leaving the unexecuted suffix uncollected. A callback may have
      * scheduled a later duplicate after collection; the earlier original keeps its turn.
-     * Group by chunk so removing those duplicates scans each affected queue only once. */
+     * Poll only through actual later duplicates, preserving every unrelated record.
+     * Native scheduler implementations may retain consumed array slots internally;
+     * bulk predicate removal is not a portable view of their live queue. */
     public static <T> void restore(Queue<ScheduledTick<T>> deferred,
             it.unimi.dsi.fastutil.longs.Long2ObjectMap<LevelChunkTicks<T>> containers,
             Consumer<ScheduledTick<T>> schedule) {
@@ -44,9 +46,15 @@ public final class FrontierV3ScheduledNativeTicks {
         }
         for (var entry : chunks.entrySet()) {
             var container = Objects.requireNonNull(containers.get(entry.getKey()), "deferred native tick lost its loaded container");
-            var keys = new HashSet<Key<T>>();
-            entry.getValue().forEach(tick -> keys.add(new Key<>(tick.type(), tick.pos())));
-            container.removeIf(tick -> keys.contains(new Key<>(tick.type(), tick.pos())));
+            var duplicates = new HashSet<Key<T>>();
+            entry.getValue().stream().filter(tick -> container.hasScheduledTick(tick.pos(), tick.type()))
+                    .forEach(tick -> duplicates.add(new Key<>(tick.type(), tick.pos())));
+            var displaced = new ArrayList<ScheduledTick<T>>();
+            while (!duplicates.isEmpty()) {
+                var tick = Objects.requireNonNull(container.poll(), "loaded native tick identity has no queued record");
+                if (!duplicates.remove(new Key<>(tick.type(), tick.pos()))) displaced.add(tick);
+            }
+            displaced.forEach(schedule);
             entry.getValue().forEach(schedule);
         }
     }
