@@ -31,8 +31,8 @@ class ReplenishmentLotTest {
         var need = new SupplyPlanner.Demand(2, 0, 0, Long.MAX_VALUE,
                 java.util.Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT), java.util.Optional.empty());
         assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(
-                List.of(new TripDispatchPolicy.Goods(2, target, need, false)), 1000, 400));
+                List.of(new TripDispatchPolicy.Goods(2, target, need, false, TripDispatchPolicy.Continuity.RECURRING)), 1000, 400));
         assertEquals(TripDispatchPolicy.Cause.ECONOMIC_LOT, TripDispatchPolicy.assess(
-                List.of(new TripDispatchPolicy.Goods(10, 10, need, false)), 1000, 400));
+                List.of(new TripDispatchPolicy.Goods(10, 10, need, false, TripDispatchPolicy.Continuity.RECURRING)), 1000, 400));
     }
 }

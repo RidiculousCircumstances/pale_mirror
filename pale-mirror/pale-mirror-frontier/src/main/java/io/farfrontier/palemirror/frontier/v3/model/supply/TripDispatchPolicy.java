@@ -6,11 +6,12 @@ import java.util.*;
  * its deadline (including selected local production); logistics supplies its
  * conservative journey forecast. Deferral is not a promise of future stock. */
 public final class TripDispatchPolicy {
+    public enum Continuity { RECURRING, FINITE }
     public enum Cause { ECONOMIC_LOT, SUPPLY_DEADLINE, ACCUMULATING, AWAITING_ECONOMIC_PLAN;
         public boolean permitsDeparture() { return this == ECONOMIC_LOT || this == SUPPLY_DEADLINE; }
     }
-    public record Goods(int quantity, long plannedLot, SupplyPlanner.Demand demand, boolean uncoveredNeed) {
-        public Goods { Objects.requireNonNull(demand);
+    public record Goods(int quantity, long plannedLot, SupplyPlanner.Demand demand, boolean uncoveredNeed, Continuity continuity) {
+        public Goods { Objects.requireNonNull(demand); Objects.requireNonNull(continuity);
             if (quantity < 1 || plannedLot < 0) throw new IllegalArgumentException("invalid trip demand"); }
     }
     public static Cause assess(List<Goods> manifest, long journeyTicks, long reviewTicks) {
@@ -29,6 +30,11 @@ public final class TripDispatchPolicy {
         var numerator = java.math.BigInteger.ZERO;
         var denominator = java.math.BigInteger.ONE;
         for (var goods : manifest) {
+            // A known future one-off use is not a recurring inventory cycle.
+            // Its entire tiny requirement cannot justify an early dedicated trip
+            // merely by equalling its own lot. The deadline branch above still
+            // permits timely or late recovery, including the only feasible unit.
+            if (goods.continuity() == Continuity.FINITE && goods.demand().deadlineTicks() != Long.MAX_VALUE) continue;
             if (goods.plannedLot() == 0) continue;
             var lot = java.math.BigInteger.valueOf(goods.plannedLot());
             numerator = numerator.multiply(lot).add(denominator.multiply(java.math.BigInteger.valueOf(goods.quantity())));
@@ -51,8 +57,9 @@ public final class TripDispatchPolicy {
             arrivals.add(new SupplyPlanner.Arrival(demand.production(), demand.deadlineTicks()));
         if (need.consumption().numerator().signum() == 0) {
             if (demand.deadlineTicks() == Long.MAX_VALUE) return false;
-            long required = Math.max(need.immediate(), Math.max(demand.protectedInput(),
-                    Math.addExact(available, demand.urgentPurchase())));
+            // The net urgency belongs to the accepted plan. Adding today's
+            // stock would recreate that shortage whenever new stock arrives.
+            long required = Math.max(need.immediate(), Math.max(demand.protectedInput(), demand.urgentPurchase()));
             long horizon = Math.addExact(arrivalTicks, reviewTicks);
             long covered = Math.addExact(available, arrivals.stream()
                     .filter(arrival -> arrival.afterTicks() <= horizon)

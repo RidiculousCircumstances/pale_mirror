@@ -23,8 +23,19 @@ public final class GoodsDispatchAdvice {
             var stock = view.stocks().get(e.getKey());
             return new TripDispatchPolicy.Goods(e.getValue(), plannedLot(state, view, organizer, mode, e.getKey(), unitPrices.get(e.getKey()), durationTicks, atTick), demand,
                     TripDispatchPolicy.uncovered(demand, needs.get(e.getKey()), stock.unclaimedInStorage(),
-                            incoming.getOrDefault(e.getKey(), List.of()), journeyTicks, rules.reviewInterval()));
+                            incoming.getOrDefault(e.getKey(), List.of()), journeyTicks, rules.reviewInterval()),
+                    continuity(accepted.orElseThrow(), e.getKey()));
         }).toList(), journeyTicks, rules.reviewInterval());
+    }
+    static TripDispatchPolicy.Continuity continuity(SettlementEconomicPlan accepted, String item) {
+        if (accepted.needs().get(item).consumption().numerator().signum() > 0)
+            return TripDispatchPolicy.Continuity.RECURRING;
+        // Follow the economic owner's declared dependency graph and selected
+        // production, not all installed recipes or a commodity-name inference.
+        boolean repeatedOutput = accepted.affectedProducts().get(item).stream().anyMatch(product ->
+                accepted.needs().get(product).consumption().numerator().signum() > 0
+                        && accepted.domestic().require(product).process().isPresent());
+        return repeatedOutput ? TripDispatchPolicy.Continuity.RECURRING : TripDispatchPolicy.Continuity.FINITE;
     }
     public static long plannedLot(FrontierWorldState state, GoodsParticipantView view, GoodsParticipant organizer, GoodsTradeFulfillment.Mode mode, String item, long price, long durationTicks, long atTick) {
         if (price < 1) throw new IllegalArgumentException("lot advice lacks its real unit price");

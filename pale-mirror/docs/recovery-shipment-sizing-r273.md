@@ -44,6 +44,28 @@ No fixed minimum64, free resources, price override or automatic contract growth.
 A genuinely useful small partial shipment remains possible when that is the
 feasible recovery alternative. Existing admitted contracts are not rewritten.
 
+## Dated finite service
+
+The first retained-world5000tick observation on58e0f1482 completed without
+conflicts, but admitted another coal1 trip to Sunreach alongside a coal10 trip
+to Mossbrook. This was not declared solved: Sunreach's subsequent accepted view
+showed a total need1 and a service deadline about169000ticks away. A lot capped
+by useful demand1 had passed the ordinary economic-lot branch even though the
+separate urgency branch did not require departure.
+
+Dispatch now receives explicit FINITE/RECURRING continuity. The composition reads
+the accepted economic owner's direct consumption and dependency graph, following
+selected own production rather than all installed recipes. A dated finite need
+cannot justify an early standalone journey merely by equalling its own tiny lot.
+It waits until the route reaches the last safe review, or shares another justified
+manifest. Undated explicit reserve stocking and recurring replenishment retain
+their economic-lot policy. Due and late recovery remain permitted. This changes
+uncommitted choices, not existing contracts, inventory or a delivery deadline.
+
+An accepted net urgency also cannot be added to today's newly arrived stock:
+doing that would recreate the old shortage after every receipt. Current coverage
+is compared with the declared recovery requirement, without rebasing urgency.
+
 ## Verification
 
 Read-only recomputation of the SAME sealed tick800 state now requests2coal for
