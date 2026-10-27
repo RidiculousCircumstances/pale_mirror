@@ -39,6 +39,11 @@ class IncrementalValidationTest {
         var lot = new SubjectId("lot:bootstrap-1-wheat");
         var action = new ScheduledAction(new ScheduleId("schedule:lot-observation"), new SimInstant(1), 1, lot, "test.reference", 1);
         FrontierReferenceClosure.validateScheduledSubjects(before, List.of(action));
+        var terrainChanged = before.recordPhysicalDelta(new PhysicalDelta(new BlockPosition(0, 64, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, java.util.Optional.empty(), java.util.Optional.empty(), "ordinary-observation"));
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransaction(before, terrainChanged, List.of(),
+                () -> { throw new AssertionError("ordinary validation copied the entire pre-queue"); },
+                () -> { throw new AssertionError("ordinary validation copied the entire post-queue"); }, List.of()));
         var ledger = before.inventory().fungibleResources();
         var amount = ledger.lots().get(lot).quantity();
         var changed = ledger.transformCold(ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(owner)),
@@ -46,9 +51,9 @@ class IncrementalValidationTest {
                         ResidentMeal.BREAD_KIND, 1, "test", List.of()));
         var after = before.withInventory(before.inventory().withFungibleResources(changed));
         assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validateTransition(before, after,
-                List.of(action), List.of()), "retirement cannot evade validation by leaving the schedule unchanged");
-        assertDoesNotThrow(() -> FrontierReferenceClosure.validateTransition(before, after, List.of(), List.of()));
+                () -> List.of(action), List.of()), "retirement cannot evade validation by leaving the schedule unchanged");
+        assertDoesNotThrow(() -> FrontierReferenceClosure.validateTransition(before, after, List::of, List.of()));
         assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validateTransition(after, after,
-                List.of(action), List.of(action)), "new references must also exist");
+                () -> List.of(action), List.of(action)), "new references must also exist");
     }
 }

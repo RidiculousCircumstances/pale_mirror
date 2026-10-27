@@ -637,8 +637,10 @@ class InMemoryFrontierEngineTest {
                 if (state.value() != 0 && !schedules.isEmpty()) throw new IllegalArgumentException("retired owner");
             }
             @Override public void validateTransaction(Counter previous, Counter next, List<FrontierEvent> events,
-                                                       List<ScheduledAction> before, List<ScheduledAction> after) {
-                validateScheduleChanges(next, after);
+                                                       java.util.function.Supplier<List<ScheduledAction>> before,
+                                                       java.util.function.Supplier<List<ScheduledAction>> after,
+                                                       List<ScheduledAction> retainedChanges) {
+                validateScheduleChanges(next, after.get());
             }
         };
         java.util.function.Supplier<InMemoryFrontierEngine<Counter, CounterProjection>> factory = () ->

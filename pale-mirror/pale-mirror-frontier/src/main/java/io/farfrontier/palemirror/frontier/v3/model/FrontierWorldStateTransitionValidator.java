@@ -37,12 +37,8 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
     }
 
     @Override public void validateTransaction(FrontierWorldState previous, FrontierWorldState next, List<FrontierEvent> events,
-                                              List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter) {
-        validateTransaction(previous, next, events, schedulesBefore, schedulesAfter, schedulesAfter);
-    }
-
-    @Override public void validateTransaction(FrontierWorldState previous, FrontierWorldState next, List<FrontierEvent> events,
-                                              List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter,
+                                              java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
+                                              java.util.function.Supplier<List<ScheduledAction>> schedulesAfter,
                                               List<ScheduledAction> retainedChanges) {
         validateTransition(previous, next);
         // This is the one composed publication barrier.  Reducers may construct transient
@@ -64,12 +60,12 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
             validateSubject(proof.leaseOrCarrier(), proof.relations(), "lease/carrier");
             validateSubject(proof.commitment(), proof.relations(), "resource commitment");
             if (proof.continuation() instanceof PhysicalIntentRetirementProof.ExactSchedule exact) {
-                if (schedulesBefore.stream().noneMatch(action -> action.id().equals(exact.value()))) {
+                if (schedulesBefore.get().stream().noneMatch(action -> action.id().equals(exact.value()))) {
                     throw new IllegalArgumentException("retirement proof schedule is absent from engine pre-state");
                 }
                 long dispositions = events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance)
                         .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, exact.value())).count();
-                if (dispositions != 1L || schedulesAfter.stream().anyMatch(action -> action.id().equals(exact.value()))) {
+                if (dispositions != 1L || schedulesAfter.get().stream().anyMatch(action -> action.id().equals(exact.value()))) {
                     throw new IllegalArgumentException("retirement proof schedule does not have one engine-owned disposition");
                 }
             } else if (events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance).map(ScheduleEffect.class::cast)

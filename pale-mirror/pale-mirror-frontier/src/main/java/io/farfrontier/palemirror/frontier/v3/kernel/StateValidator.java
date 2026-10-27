@@ -41,20 +41,16 @@ public interface StateValidator<S> {
     }
 
     /**
-     * Transaction boundary with the complete committed batch and engine-owned schedule result.
-     * Implementations that only validate aggregate state retain their existing transition audit.
+     * Transaction barrier. Complete schedule images are borrowed, lazy readers valid
+     * only during this synchronous call, before the queue mutation commits. Delta
+     * validation must not copy unchanged future work. Retirement checks request the
+     * complete image when needed; readers may not escape into a retained result.
      */
     default void validateTransaction(S previous, S next, List<FrontierEvent> events,
-                                     List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter) {
-        validateTransition(previous, next);
-    }
-
-    /** Exact engine-owned retained delta; owner retirement must still check
-     * unchanged incoming references against the complete post-queue. */
-    default void validateTransaction(S previous, S next, List<FrontierEvent> events,
-                                     List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter,
+                                     java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
+                                     java.util.function.Supplier<List<ScheduledAction>> schedulesAfter,
                                      List<ScheduledAction> retainedChanges) {
-        validateTransaction(previous, next, events, schedulesBefore, schedulesAfter);
+        validateTransition(previous, next);
     }
 
     static <S> StateValidator<S> none() {

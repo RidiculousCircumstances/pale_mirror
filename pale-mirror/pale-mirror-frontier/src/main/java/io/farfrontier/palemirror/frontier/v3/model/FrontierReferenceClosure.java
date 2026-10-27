@@ -35,9 +35,10 @@ final class FrontierReferenceClosure {
     }
 
     static void validateTransition(FrontierWorldState before, FrontierWorldState after, List<ScheduledAction> schedules) {
-        validateTransition(before, after, schedules, schedules);
+        validateTransition(before, after, () -> schedules, schedules);
     }
-    static void validateTransition(FrontierWorldState before, FrontierWorldState after, List<ScheduledAction> schedules,
+    static void validateTransition(FrontierWorldState before, FrontierWorldState after,
+                                   java.util.function.Supplier<List<ScheduledAction>> schedules,
                                    List<ScheduledAction> retainedChanges) {
         GoodsTradeStateSupport.validateTransition(before, after);
         ShipmentStateSupport.validateTransition(before, after);
@@ -52,7 +53,7 @@ final class FrontierReferenceClosure {
         var subjects = ScheduledSubjectExistence.subjects(after);
         if (oldSubjects != subjects) {
             var removed = new java.util.HashSet<>(oldSubjects); removed.removeAll(subjects);
-            for (var action : schedules) if (removed.contains(action.subject())
+            if (!removed.isEmpty()) for (var action : schedules.get()) if (removed.contains(action.subject())
                     && !SYSTEM_SUBJECTS.contains(action.subject().value()))
                 throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
         }

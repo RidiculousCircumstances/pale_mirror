@@ -814,3 +814,21 @@ enum token; no global identity registry or mutable world epoch is introduced.
 The existing regression also exercises foreign pristine-world rejection and return
 after twelve other worlds evict the completed-image cache. Ordinary100debt is still
 OPEN; do not interpret source correctness as throughput acceptance.
+
+
+B7453d0c9 compact pristine facts: focused42s and exact selected release58s PASS;
+both retained worlds verified SHA5128ed418edfc3c17e75526ed4f434aec97a9c0a5a551e2ead36675ab0c853f75229601007eb69fe919a8b155d62a23577a470735dda823850433e38543f361c683.
+Compact-pristine-region-native.jfr has0whole-bootstrap-hash samples vs94/350server
+samples before;180server-thread samples remain, including22in queue snapshots.
+Ordinary100clock still accumulates debt; no throughput acceptance.
+
+The kernel's pre-WAL barrier unconditionally materialized both complete schedule
+images even when no validator read them. It now supplies borrowed synchronous
+lazy readers plus the exact retained-action delta through one transaction API.
+Both ordinary publication and WAL replay use it. Subject retirement still requests
+the full post-queue; exact physical retirement still reads pre/post membership.
+Ingress/recovery audits remain complete. No queue mutation, durable state, action
+ordering or retirement permission changes. Existing kernel/replay and reference
+negative tests retain rejected retirement and valid atomic cancellation; the
+ordinary terrain-change case rejects any unnecessary complete-queue read.
+Affected checks pass25s; strengthened real changed-state case passes14s.

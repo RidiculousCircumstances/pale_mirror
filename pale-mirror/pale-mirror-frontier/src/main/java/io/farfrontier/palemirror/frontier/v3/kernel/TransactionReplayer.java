@@ -44,7 +44,7 @@ public final class TransactionReplayer {
                 }
                 else next = Objects.requireNonNull(reducer.apply(next, event), "reducer state");
             }
-            if (next != state) stateValidator.validateTransaction(state, next, transaction.events(), schedules.snapshot(), nextSchedules.snapshot());
+            if (next != state) stateValidator.validateTransaction(state, next, transaction.events(), schedules::snapshot, nextSchedules::snapshot, nextSchedules.retainedChanges());
             else if (!nextSchedules.retainedChanges().isEmpty()) {
                 stateValidator.validateScheduleChanges(state, nextSchedules.retainedChanges());
             }
