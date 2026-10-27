@@ -10,6 +10,9 @@ public final class PedestrianGeometryRevision {
     private final Object scope, geometryScope, baseline;
     private final Map<Region, Object> revisions;
     private final int hash;
+    private record ProfileScope(Object terrain, UnitNavigationProfile profile) { }
+    private static final int MAX_PROFILE_VIEWS = 8;
+    private final Map<UnitNavigationProfile, PedestrianGeometryRevision> profileViews = new java.util.LinkedHashMap<>(8, .75f, true);
     public static final int MAX_REGIONS = 16_384;
     public record Region(int x, int z) {
         public static Region at(BlockPosition position) {
@@ -23,6 +26,29 @@ public final class PedestrianGeometryRevision {
         // Hash immutable facts once, not for every queue/map lookup of a route request.
         // Equality still checks the complete facts: a hash is never route authority.
         this.hash = Objects.hash(scope, geometryScope, baseline, this.revisions);
+    }
+    /** The immutable terrain owner shares its body-envelope revision. This is a
+     * bounded rebuildable projection; neither live positions nor access enter it. */
+    public PedestrianGeometryRevision profiled(UnitNavigationProfile profile) {
+        Objects.requireNonNull(profile);
+        synchronized (profileViews) { var prior = profileViews.get(profile); if (prior != null) return prior; }
+        var expanded = new java.util.LinkedHashMap<Region, Object>();
+        int margin = profile.footprintRadius() == 0 ? 0 : 1;
+        revisions.entrySet().stream().sorted(java.util.Comparator
+                .comparingInt((Map.Entry<Region, Object> entry) -> entry.getKey().x())
+                .thenComparingInt(entry -> entry.getKey().z())).forEach(entry -> {
+            var region = entry.getKey(); var token = entry.getValue();
+            for (int x = -margin; x <= margin; x++) for (int z = -margin; z <= margin; z++)
+                expanded.merge(new Region(region.x() + x, region.z() + z), token,
+                        (left, right) -> java.util.List.of(left, right));
+        });
+        var result = new PedestrianGeometryRevision(new ProfileScope(scope, profile),
+                new ProfileScope(geometryScope, profile), baseline, expanded);
+        synchronized (profileViews) {
+            var prior = profileViews.get(profile); if (prior != null) return prior;
+            if (profileViews.size() >= MAX_PROFILE_VIEWS) profileViews.remove(profileViews.keySet().iterator().next());
+            profileViews.put(profile, result); return result;
+        }
     }
     public Object scope() { return scope; }
     public Object geometryScope() { return geometryScope; }

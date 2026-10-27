@@ -428,3 +428,17 @@ store/runtime/durability recovery and guardrails passed in45seconds
 (`cooperative-wal-groups-final.log`). This closes the source contradiction where
 every cooperative yield forced a tiny group; deployed throughput remains to be
 measured and G stays open.
+
+Subsequent native100town profiling found repeated world-sized destination claim
+sets on the server thread. Read-only surface indexes now retain immutable body,
+movement and meal inputs separately; callers query exact local candidates and
+keep original self/incoming/physical exclusions. Current2fb2 native55 and affected
+service/meal negative/recovery cases pass. After this correction the100stand
+advanced24012->24784over333seconds while ordinary debt still grew378->6267;
+this is progress, not sufficient throughput. A native profile then established
+repeated body-profile regional revision expansion/hashing, immutable facility
+port reconstruction and pending-food-container scans. These projections now
+reuse complete immutable owner inputs with explicit retention bounds; changed
+terrain, structure or meal/obligation maps still invalidate them. Existing narrow/
+wide-body, neighbour-change, service and meal cases passed39seconds in
+immutable-service-geometry-focused.log. G remains open.

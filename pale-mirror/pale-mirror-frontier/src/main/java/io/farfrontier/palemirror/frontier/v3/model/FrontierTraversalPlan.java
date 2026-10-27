@@ -13,6 +13,9 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
                                    Map<SubjectId, FacilityBinding> facilities) {
     public static final int MAX_TOPOLOGIES = 128;
     public static final int MAX_PORTS = 128;
+    private static final int MAX_PORT_VIEWS = 4_096;
+    private static final Map<SettlementStructure, Optional<FacilityTraversalPort>> PORT_VIEWS =
+            new LinkedHashMap<>(128, .75f, true);
 
     public FrontierTraversalPlan {
         topologies = boundedCopy(Objects.requireNonNull(topologies, "frontier traversal topologies"), MAX_TOPOLOGIES,
@@ -55,13 +58,19 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
     /** The structure plan's one typed pedestrian entrance, shared by topology and route knowledge. */
     public static Optional<FacilityTraversalPort> facilityPort(SettlementStructure structure) {
         Objects.requireNonNull(structure, "facility port structure");
-        return Optional.ofNullable(switch (structure.kind()) {
+        synchronized (PORT_VIEWS) { var prior = PORT_VIEWS.get(structure); if (prior != null) return prior; }
+        var result = Optional.ofNullable(switch (structure.kind()) {
             case HALL -> SettlementAccessPort.forHall(structure).topologyPort();
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
             case WORKSHOP, SMELTERY, FORGE, WOODSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
             case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
             default -> null;
         });
+        synchronized (PORT_VIEWS) {
+            var prior = PORT_VIEWS.get(structure); if (prior != null) return prior;
+            if (PORT_VIEWS.size() >= MAX_PORT_VIEWS) PORT_VIEWS.remove(PORT_VIEWS.keySet().iterator().next());
+            PORT_VIEWS.put(structure, result); return result;
+        }
     }
 
     /** The named public topology a port must join, never a runtime nearest-route search. */

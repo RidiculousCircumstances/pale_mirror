@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 /** Food-owner authority while a prepared effect may have changed its source or actor inventory. */
 public final class ResidentMealPhysicalAuthority {
     private ResidentMealPhysicalAuthority() { }
+    private static final ImmutableInputView<java.util.Set<SubjectId>> PENDING = new ImmutableInputView<>();
 
     public static java.util.Optional<SubjectId> pendingOwnerForActor(FrontierWorldState state, SubjectId actor) {
         var meal = state.humanPopulation().meals().get(actor);
@@ -13,11 +14,15 @@ public final class ResidentMealPhysicalAuthority {
     }
 
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId containerId) {
-        return state.humanPopulation().meals().values().stream().anyMatch(meal ->
-                !meal.portable() && meal.depotId().equals(containerId) && meal.phase() == ResidentMeal.Phase.TAKE
-                        && meal.pendingPhysicalStep().isPresent())
-                || state.humanPopulation().mealResourceObligations().values().stream().anyMatch(obligation ->
-                    !obligation.portable() && obligation.depotId().equals(containerId)
-                        && obligation.custodyState() == ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING);
+        return PENDING.get(java.util.List.of(state.humanPopulation().meals(), state.humanPopulation().mealResourceObligations()), () -> {
+            var containers = new java.util.HashSet<SubjectId>();
+            for (var meal : state.humanPopulation().meals().values())
+                if (!meal.portable() && meal.phase() == ResidentMeal.Phase.TAKE && meal.pendingPhysicalStep().isPresent())
+                    containers.add(meal.depotId());
+            for (var obligation : state.humanPopulation().mealResourceObligations().values())
+                if (!obligation.portable() && obligation.custodyState() == ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING)
+                    containers.add(obligation.depotId());
+            return java.util.Set.copyOf(containers);
+        }).contains(containerId);
     }
 }

@@ -16,7 +16,6 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<io.farfrontier.palemirror.frontier.v3.model.TerrainColumn, Boolean> detailedColumns = new java.util.LinkedHashMap<>(128, 0.75f, true);
-    private record Scope(Object terrain, UnitNavigationProfile profile) { }
     private record Version(Object terrain, UnitNavigationProfile profile) { }
     private final PedestrianRouteGeometry terrain;
     private final UnitNavigationProfile profile;
@@ -31,23 +30,9 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         this.terrain = Objects.requireNonNull(terrain); this.profile = Objects.requireNonNull(profile);
         this.poseOffsets = NavigationBodyGeometry.poseOffsets(profile);
         this.occupied = Objects.requireNonNull(occupied); this.version = new Version(terrain.version(), profile);
-        this.revision = terrain.regionalRevision().map(source -> {
-            // A body at a region edge also observes the neighbouring region's obstacles.
-            var expanded = new java.util.LinkedHashMap<PedestrianGeometryRevision.Region, Object>();
-            int margin = profile.footprintRadius() == 0 ? 0 : 1;
-            // Equal footprint dependencies must compose in coordinate order,
-            // not MapN iteration order that changes after an unrelated insert.
-            source.revisions().entrySet().stream().sorted(java.util.Comparator
-                    .comparingInt((java.util.Map.Entry<PedestrianGeometryRevision.Region, Object> entry) -> entry.getKey().x())
-                    .thenComparingInt(entry -> entry.getKey().z())).forEach(entry -> {
-                var region = entry.getKey(); var token = entry.getValue();
-                for (int x = -margin; x <= margin; x++) for (int z = -margin; z <= margin; z++)
-                    expanded.merge(new PedestrianGeometryRevision.Region(region.x() + x, region.z() + z), token,
-                            (left, right) -> java.util.List.of(left, right));
-            });
-            return new PedestrianGeometryRevision(new Scope(source.scope(), profile),
-                    new Scope(source.geometryScope(), profile), source.baseline(), expanded);
-        });
+        // Regional expansion/hash depends only on immutable terrain + explicit body
+        // profile, not the query, actor or live collision predicate.
+        this.revision = terrain.regionalRevision().map(source -> source.profiled(profile));
     }
     @Override public Object version() { return version; }
     @Override public Optional<PedestrianGeometryRevision> regionalRevision() { return revision; }

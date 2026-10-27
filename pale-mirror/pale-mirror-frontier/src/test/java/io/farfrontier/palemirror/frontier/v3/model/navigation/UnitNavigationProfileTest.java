@@ -29,6 +29,10 @@ class UnitNavigationProfileTest {
     @Test void rebuildingWideFootprintTokensCannotDiscardAnUnchangedAcceptedRouteButRealLocalDamageDoes() {
         var source = PedestrianGeometryRevision.initial().changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)))
                 .changed(Set.of(new PedestrianGeometryRevision.Region(1, 0)));
+        var equalProfile = new UnitNavigationProfile(UnitNavigationProfile.DONKEY.widthMicros(),
+                UnitNavigationProfile.DONKEY.heightMicros(), 1, 1, UnitNavigationProfile.DONKEY.capabilities());
+        assertSame(source.profiled(UnitNavigationProfile.DONKEY), source.profiled(equalProfile),
+                "equal declared body envelopes reuse the complete immutable revision");
         var distant = source.changed(Set.of(new PedestrianGeometryRevision.Region(20, 20)));
         var original = new ProfiledPedestrianGeometry(terrain(Set.of(), source, UnitNavigationProfileTest::floor),
                 UnitNavigationProfile.DONKEY, ignored -> false);
