@@ -11,6 +11,35 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void deliveryDuringDetachedPreparationSurvivesItsOlderCompletionAndSharedEviction() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("in-flight-delivery", 20); var query = request(3);
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index)) {
+            planner.query(GROUND, query.start(), query.target()); index.replace(owner, List.of(query));
+            var oldCompletion = PedestrianPlanningContinuations.prepare(owner, () -> {
+                var result = PedestrianRoutePlanning.query(GROUND, query.start(), query.target());
+                assertEquals(PedestrianRouteResult.Status.PLANNING, result.status()); PedestrianRoutePlanning.await(query);
+                return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), action("in-flight-delivery", 21))));
+            }).prepare();
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges(), planner::readFact);
+            for (int i = 0; i < 140; i++) {
+                var point = SurfaceAnchor.at(i % 28 + 1, 63, i / 28 + 3);
+                planner.query(GROUND, point, SurfaceAnchor.at(point.x() + 1, 63, point.z()));
+                while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            }
+            assertTrue(planner.peek(GROUND, query.start(), query.target()).isEmpty());
+            oldCompletion.get();
+            assertEquals(0, planner.pendingCount(), "older detached advice must acquire the delivered fact, not restart its evicted route");
+            assertTrue(index.reads(owner).holdsReadFor(query), "publication must merge owner-side delivery received during preparation");
+            assertFalse(index.waiting(owner));
+            var terminal = PedestrianPlanningContinuations.prepare(owner, () -> {
+                assertEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.query(GROUND, query.start(), query.target()).status());
+                return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Cancelled(owner.id())));
+            }).prepare().get();
+            assertInstanceOf(ScheduleEffect.Cancelled.class, terminal.getFirst().payload()); assertEquals(0, index.waitingCount());
+        }
+    }
     @Test void completedDataReleasesSharedCapacityBeforeFutureOwnersExecute() throws Exception {
         var index = new PedestrianPlanningWakeIndex();
         var owners = new java.util.ArrayList<ScheduledAction>();

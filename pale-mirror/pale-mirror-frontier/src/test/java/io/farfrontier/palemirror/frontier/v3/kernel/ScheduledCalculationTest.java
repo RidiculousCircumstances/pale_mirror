@@ -49,17 +49,20 @@ class ScheduledCalculationTest {
         assertEquals(Revision.ZERO, waiting.revision());
         assertTrue(waiting.transactions().isEmpty());
         assertTrue(engine.hasPendingCalculation());
+        assertEquals(Optional.of(action), engine.pendingScheduledCalculation());
         assertEquals(List.of(action), engine.checkpoint().schedules());
         var checkpoint = engine.checkpoint();
         var recovered = FrontierEngines.recover(configuration(), new RecoveryImage(WORLD,
                 Optional.of(new SnapshotRecord(checkpoint, 1)), List.of()));
         assertTrue(!recovered.hasPendingCalculation());
+        assertTrue(recovered.pendingScheduledCalculation().isEmpty());
         ready.set(true);
         engine.advanceTo(new SimInstant(10), new WorkBudget(2, 10));
         recovered.advanceTo(new SimInstant(10), new WorkBudget(2, 10));
         assertEquals(recovered.checkpoint(), engine.checkpoint());
         assertEquals(1, starts.get());
         assertTrue(!engine.hasPendingCalculation());
+        assertTrue(engine.pendingScheduledCalculation().isEmpty());
     }
 
     @Test void aSmallerResumeBudgetCannotMoveTimePastThePreparedTransaction() {

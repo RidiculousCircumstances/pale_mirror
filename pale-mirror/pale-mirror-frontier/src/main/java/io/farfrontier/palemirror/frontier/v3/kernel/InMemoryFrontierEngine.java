@@ -55,6 +55,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private record PendingCalculation<S>(S state, Revision revision, ScheduledAction action,
             SimInstant instant, ScheduledCalculation calculation) { }
     @Override public boolean hasPendingCalculation() { requireOwnerThread(); return pendingCalculation != null; }
+    @Override public Optional<ScheduledAction> pendingScheduledCalculation() {
+        requireOwnerThread(); return pendingCalculation == null ? Optional.empty() : Optional.of(pendingCalculation.action());
+    }
     @Override public void cancelPendingCalculation() {
         requireOwnerThread();
         cancelExactCalculation();

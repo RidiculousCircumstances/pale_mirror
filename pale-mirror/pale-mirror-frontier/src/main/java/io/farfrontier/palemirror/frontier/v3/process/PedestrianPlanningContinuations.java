@@ -82,7 +82,7 @@ public final class PedestrianPlanningContinuations {
             var prepared = PedestrianRoutePlanning.prepare(view, reads, planning);
             return () -> {
                 if (current != index) throw new IllegalStateException("prepared planning lost its runtime owner");
-                var ready = prepared.acquire();
+                var ready = prepared.acquire(index == null ? PedestrianCalculationMemory.empty() : index.reads(action));
                 if (index == null) return prepared.observation().result();
                 var result = publish(index, action, prepared.observation(), prepared.reads());
                 index.changed(ready, PedestrianRoutePlanning::readFact);
@@ -104,14 +104,14 @@ public final class PedestrianPlanningContinuations {
                 @Override public java.util.Optional<ScheduledPreparation> revalidate(FrontierWorldState state, SimInstant at) {
                     if (current != index) throw new IllegalStateException("advice lost its planning runtime owner");
                     return prepared.observation().result().revalidate(state, at).map(preparation -> {
-                        var ready = prepared.acquire();
+                        var ready = prepared.acquire(index == null ? PedestrianCalculationMemory.empty() : index.reads(action));
                         if (index != null) index.changed(ready, PedestrianRoutePlanning::readFact);
                         var exactView = PedestrianRoutePlanning.readView();
                         return () -> {
                             var exact = PedestrianRoutePlanning.prepare(exactView, prepared.reads(), preparation::prepare);
                             return () -> {
                                 if (current != index) throw new IllegalStateException("advice continuation lost its planning owner");
-                                var changes = exact.acquire();
+                                var changes = exact.acquire(index == null ? PedestrianCalculationMemory.empty() : index.reads(action));
                                 var completion = PedestrianRoutePlanning.observe(exact.reads(), exact.observation().result());
                                 if (index == null) return completion.result();
                                 var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
@@ -149,7 +149,8 @@ public final class PedestrianPlanningContinuations {
                 successor = null;
         }
         if (successor == null) index.remove(action.id());
-        else index.stage(action, successor, observation.requests(), calculationOnly ? reads : PedestrianCalculationMemory.empty());
+        else index.stage(action, successor, observation.requests(), calculationOnly
+                ? index.reads(action).merge(reads) : PedestrianCalculationMemory.empty());
         return result;
     }
 }

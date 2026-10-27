@@ -103,6 +103,10 @@ public final class PedestrianRoutePlanning {
     public record Prepared<T>(Observation<T> observation, Map<PedestrianRouteRequest, PedestrianPlanningService> demands) {
         public Prepared { Objects.requireNonNull(observation); demands = Map.copyOf(demands); }
         public PedestrianCalculationMemory reads() { return observation.reads(); }
+        /** Owner-side delivery may have advanced since this detached view was captured. */
+        public java.util.List<PedestrianPlanningChange> acquire(PedestrianCalculationMemory delivered) {
+            return withReadMemory(delivered, this::acquire);
+        }
         /** Accepted advice alone may request retained dependencies. Cancelled advice has no effects. */
         public java.util.List<PedestrianPlanningChange> acquire() {
             var ready = new java.util.ArrayList<PedestrianPlanningChange>();
@@ -156,13 +160,16 @@ public final class PedestrianRoutePlanning {
     /** Resume one caller's completed reads while fresh queries still use the live
      * capability. Missing facts cannot be supplied by calculation memory. */
     public static <T> Observation<T> observe(PedestrianCalculationMemory memory, java.util.function.Supplier<T> calculation) {
+        var observed = withReadMemory(memory, () -> observe(calculation));
+        return new Observation<>(observed.result(), observed.requests(), memory.merge(observed.reads()));
+    }
+    /** Does not establish an observation/acquisition scope: delivery must not
+     * accidentally abandon a newly acquired, still required dependency. */
+    private static <T> T withReadMemory(PedestrianCalculationMemory memory, java.util.function.Supplier<T> calculation) {
         var previous = readBinding.get(); PedestrianRoutePlanner delegate;
         synchronized (PedestrianRoutePlanning.class) { delegate = previous == null ? current : previous; }
         readBinding.set(new Remembering(delegate, memory));
-        try {
-            var observed = observe(calculation);
-            return new Observation<>(observed.result(), observed.requests(), memory.merge(observed.reads()));
-        }
+        try { return calculation.get(); }
         finally { if (previous == null) readBinding.remove(); else readBinding.set(previous); }
     }
     private record Remembering(PedestrianRoutePlanner delegate, PedestrianCalculationMemory memory) implements PedestrianRoutePlanner {

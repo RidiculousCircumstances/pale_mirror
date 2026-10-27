@@ -1587,3 +1587,28 @@ continuation/planner source probe now reaches110completed navigation demands, em
 This proves preparation terminates against real retained geometry; no WAL/native
 state was written and it does NOT prove a native delivery or ordinary100throughput.
 Exactref release, BOTH retained-world deployments and native100observation follow.
+
+
+### Preserve owner-side deliveries while detached preparation is in flight (2026-10-28)
+
+f8345bede exact release98sPASS195frontier/35classes+29runtime/guardrails/package;
+both retained311deployments VERIFIED. Ordinary100still accumulating debt; no
+throughput acceptance. First native named snapshots show protectedResults0 and
+completed searches331→539 while preparation still dominates a20sJFR. Source-only
+termination on the earlier snapshot is narrower evidence than native throughput.
+
+Connected asynchronous counterexample: a worker captures an old read view/private
+memory, then a route completes and is acknowledged to its owner before that worker
+publishes. Its stale acquire could request the evicted result again; publication
+also replaced the newly delivered owner memory with its older captured subset.
+The same source-level interleaving is reproducible without a timing assertion.
+Prepared.acquire now consults the exact owner's latest delivered memory without
+creating a new observation scope or abandoning required live work. Calculation-only
+publication merges current exact-generation delivery with captured reads. Business
+transitions still release memory. The regression completes a real search after
+snapshot capture, acknowledges it, evicts the shared result, then publishes older
+advice: no new search, a ready owner, terminal cancellation and memory release.
+Focused wake/demand/economic-advice checks plusguardrailsPASS23s. Pending calculation
+identity is also exposed through the existing named read-only planning diagnostic,
+so an evolving native hold can be tied to its exact action rather than a guessed
+family. Scheduled calculation/recovery identity and NeoForgecompile checks pending.

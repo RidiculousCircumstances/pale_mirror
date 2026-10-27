@@ -12,6 +12,8 @@ public interface FrontierEngine<P extends FrontierProjection> {
     boolean advanceDurability();
     boolean hasPendingCommit();
     default boolean hasPendingCalculation() { return false; }
+    /** Exact owner of an unpublished scheduled calculation; read-only diagnostic identity. */
+    default Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> pendingScheduledCalculation() { return Optional.empty(); }
     /** An external intervention invalidates unpublished advice, never committed effects. */
     default void cancelPendingCalculation() { }
 

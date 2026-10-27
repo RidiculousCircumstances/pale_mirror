@@ -333,6 +333,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             pendingOrdinaryTicks = Math.addExact(pendingOrdinaryTicks, 1L);
     }
     long pendingOrdinaryTicks() { return pendingOrdinaryTicks; }
+    Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> pendingScheduledCalculation() {
+        return engine == null ? Optional.empty() : engine.pendingScheduledCalculation();
+    }
     String preparationDiagnostic() {
         String base = preparations.diagnostic(engine != null && engine.hasPendingCalculation());
         return base.substring(0, base.length() - 1) + ",\"commandInvalidations\":" + commandPreparationInvalidations

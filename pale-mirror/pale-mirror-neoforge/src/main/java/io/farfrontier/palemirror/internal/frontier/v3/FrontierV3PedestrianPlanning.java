@@ -180,6 +180,10 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"protectedResults\":" + (owner == runtime ? planner.protectedResultCount() : 0)
                 + ",\"readyDeferred\":" + (owner == runtime ? deferredReady : 0)
                 + (details ? ",\"continuationSamples\":" + (owner == runtime ? continuationSamples() : "[]") : "")
+                + (details ? ",\"pendingScheduledCalculation\":" + runtime.pendingScheduledCalculation()
+                        .map(action -> new com.google.gson.Gson().toJson(java.util.Map.of("id", action.id().value(),
+                                "kind", action.kind(), "owner", action.subject().value(), "due", action.dueAt().ticks())))
+                        .orElse("null") : "")
                 + ",\"activeSearches\":" + (owner == runtime ? planner.pendingCount() : 0)
                 + ",\"inFlightSlices\":" + (owner == runtime ? planner.inFlightCount() : 0)
                 + ",\"runningWorkers\":" + (owner == runtime ? workers.getActiveCount() : 0)
