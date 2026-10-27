@@ -14,6 +14,7 @@ public final class KnownPedestrianGround {
     private static ChunkSurfaceIndex bootstrapRoads;
     private static ChunkSurfaceIndex frontierLocal;
     private static final Map<SubjectId, ChunkSurfaceIndex> LOCAL = new LinkedHashMap<>();
+    private static final ImmutableResultView<String, java.util.Set<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region>> SURVEYS = new ImmutableResultView<>(4);
     private static final ImmutableInputView<io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet> UNKNOWN = new ImmutableInputView<>();
     private KnownPedestrianGround() { }
 
@@ -51,6 +52,10 @@ public final class KnownPedestrianGround {
         var unknown = UNKNOWN.get(java.util.List.of(state.physicalDeltas()), () ->
                 io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(state.physicalDeltas().keySet()));
         return new BoundedPedestrianApproach.SurveyedSurface() {
+            @Override public java.util.OptionalInt uniformSupport(WorldBounds area) {
+                return io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationRegionCoverage.intersects(unknown.regions(), area)
+                        ? java.util.OptionalInt.empty() : source.uniformSupport(area);
+            }
             @Override public SurfaceAnchor at(int x, int z) { return source.at(x, z); }
             @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return source.surfacesAt(x, z); }
             @Override public boolean excluded(SurfaceAnchor surface) { return source.excluded(surface); }
@@ -75,7 +80,21 @@ public final class KnownPedestrianGround {
         // clustered probing of coordinate hashes made absent-column queries costly
         // for every body-volume sample in long-distance region construction.
         var siteIndex = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalSurfaceMap.copyOf(sites.supports());
+        var surveyRegions = SURVEYS.get(java.util.List.of(bootstrap.terrain()), "survey-regions", () -> bootstrap.terrain().surveyedSupportY().keySet().stream()
+                .map(column -> new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(column.x() >> 4, column.z() >> 4))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet()));
+        var supports = siteIndex.regions();
+        var withdrawals = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(sites.withdrawnSupports()).regions();
+        var missing = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(sites.unknown()).regions();
         return new BoundedPedestrianApproach.SurveyedSurface() {
+            @Override public java.util.OptionalInt uniformSupport(WorldBounds area) {
+                if (area.minX() < bootstrap.bounds().minX() || area.minZ() < bootstrap.bounds().minZ()
+                        || area.maxXExclusive() > bootstrap.bounds().maxXExclusive() || area.maxZExclusive() > bootstrap.bounds().maxZExclusive()
+                        || roads.intersects(area) || local.intersects(area)) return java.util.OptionalInt.empty();
+                for (var regions : java.util.List.of(surveyRegions, supports, withdrawals, missing))
+                    if (io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationRegionCoverage.intersects(regions, area)) return java.util.OptionalInt.empty();
+                return java.util.OptionalInt.of(bootstrap.terrain().baselineSupportY());
+            }
             @Override public boolean excluded(SurfaceAnchor surface) { return sites.withdrawnSupports().contains(surface.support()); }
             @Override public boolean blockKnown(BlockPosition position) { return !sites.unknown().contains(position); }
             @Override public SurfaceAnchor at(int x, int z) {

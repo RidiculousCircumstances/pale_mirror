@@ -13,7 +13,16 @@ public final class KnownBlockSurfaceOverlay {
     }
     public static BoundedPedestrianApproach.SurveyedSurface apply(BoundedPedestrianApproach.SurveyedSurface base,
             Function<BlockPosition, Optional<Cell>> facts, Function<TerrainColumn, List<BlockPosition>> columns) {
+        return apply(base, facts, columns, area -> true);
+    }
+    /** Producer-declared complete coverage, not a sampled absence of blocks. */
+    public static BoundedPedestrianApproach.SurveyedSurface apply(BoundedPedestrianApproach.SurveyedSurface base,
+            Function<BlockPosition, Optional<Cell>> facts, Function<TerrainColumn, List<BlockPosition>> columns,
+            java.util.function.Predicate<WorldBounds> touches) {
         return new BoundedPedestrianApproach.SurveyedSurface() {
+            @Override public OptionalInt uniformSupport(WorldBounds area) {
+                return touches.test(area) ? OptionalInt.empty() : base.uniformSupport(area);
+            }
             private Optional<NavigationCell> current(BlockPosition position) {
                 var fact = facts.apply(position);
                 if (fact.isEmpty()) return base.collisionAt(position);

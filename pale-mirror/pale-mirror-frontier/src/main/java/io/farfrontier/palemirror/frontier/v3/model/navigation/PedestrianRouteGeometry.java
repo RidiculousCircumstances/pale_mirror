@@ -10,6 +10,10 @@ public interface PedestrianRouteGeometry {
     /** Explicit compatible scope and per-region revisions; absent providers invalidate conservatively. */
     default java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return java.util.Optional.empty(); }
     WorldBounds bounds();
+    /** Optional exact homogeneous region: one dry clear plane and all horizontal
+     * edges legal for this geometry's declared body. No certificate is inferred. */
+    default java.util.OptionalInt uniformSupport(WorldBounds area) { return java.util.OptionalInt.empty(); }
+
     SurfaceAnchor supportAt(int x, int z);
     /** Exact levels, not a heightmap. Empty means missing column knowledge. */
     default java.util.List<SurfaceAnchor> surfacesAt(int x, int z) {

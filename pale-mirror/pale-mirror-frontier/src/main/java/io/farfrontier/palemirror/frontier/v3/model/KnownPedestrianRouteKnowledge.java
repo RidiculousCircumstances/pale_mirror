@@ -166,7 +166,7 @@ public final class KnownPedestrianRouteKnowledge {
     }
     private io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry profiled(
             io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry terrain) {
-        return profile == null ? terrain : new io.farfrontier.palemirror.frontier.v3.model.navigation.ProfiledPedestrianGeometry(terrain, profile, hard::contains);
+        return profile == null ? terrain : new io.farfrontier.palemirror.frontier.v3.model.navigation.ProfiledPedestrianGeometry(terrain, profile, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObstacleView.indexed(hard));
     }
 
     public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,
@@ -437,6 +437,9 @@ public final class KnownPedestrianRouteKnowledge {
             @Override public Object version() { return revision; }
             @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision> regionalRevision() {
                 return Optional.of(revision);
+            }
+            @Override public java.util.OptionalInt uniformSupport(WorldBounds area) {
+                return area.contains(start.support()) ? java.util.OptionalInt.empty() : terrainGeometry.uniformSupport(area);
             }
             @Override public SurfaceAnchor supportAt(int x, int z) { return x == start.x() && z == start.z() ? start : surveyed.at(x, z); }
             @Override public List<SurfaceAnchor> surfacesAt(int x, int z) {

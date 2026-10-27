@@ -726,3 +726,32 @@ lending/reclaim, late cancellation, result retention/backpressure and eventual
 local/distant completion. Queue/negative tests+guardrails pass17s; combined
 forestry/queue pass29s; augmented external-loss lifecycle passes25s. No timing
 assertion or capacity increase. Native effect remains to be measured.
+
+B212 exact selected release/packaged/economy55/route-patrol4 passes58s; both
+retained worlds verified SHA5127f6c3d459f89852ee8f601b4da581cb640b9b14256175984555fb66bb8081e537dcb870eea2f17706a4f8895c444e687045f6e91941d9f6e36e75c4aa1679c51.
+Ordinary main12town sample has zero debt and recent3–7ms host ticks.100town
+88907->90119/333s still accumulates199->5648debt. The indexed-admission JFR removes
+the former fairness hotspot; navigation workers now account for773samples while
+the server has252. Most navigation cost constructs16×16graphs by repeatedly
+reading the full block/provider/body pipeline even over homogeneous known ground.
+
+The shared geometry API now admits an OPTIONAL exact uniformSupport certificate.
+It means one known dry plane, no other levels/obstacles/unknown blocks above it,
+and legal horizontal edges for the bound body. Default is no certificate.
+Sparse regional coverage rejects surveyed-height overrides, authored floors/roads,
+site withdrawals/missing knowledge, hard obstacles, scars, observed contextual
+shapes, natural relief and forest regions. Each overlay either supplies its
+complete affected-region coverage or conservatively withholds the certificate.
+An indexed NavigationObstacleView supplies point and area facts from one immutable
+set; a bare point predicate supplies no area proof. Body envelopes request an
+expanded certified rectangle. Existing refined departures withhold it locally.
+
+Only the existing region builder consumes the capability. It creates the same
+flat directed graph from the canonical stencil, using the same resumable work
+budget, cache, dependencies, fallback search and ownership. There is no second
+navigator, forced chunk observation, assumed unknown air, increased budget or new
+durable schema. Exact topology/stable edge order matches the ordinary builder.
+The real provider withdraws the certificate for an unclassified player edit,
+including after codec recovery; unknown stays UNKNOWN_GEOMETRY. Focused region,
+negative/recovery, body-profile, forest and guardrails checks pass19s. Runtime
+speed and full long-route completion are still unmeasured; G remains open.

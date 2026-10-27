@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Predicate;
 import io.farfrontier.palemirror.frontier.v3.model.geometry.*;
 
 /** Physical-envelope decorator. Terrain and immutable obstacles remain owned by their provider. */
@@ -19,14 +18,14 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private record Version(Object terrain, UnitNavigationProfile profile) { }
     private final PedestrianRouteGeometry terrain;
     private final UnitNavigationProfile profile;
-    private final Predicate<BlockPosition> occupied;
+    private final NavigationObstacleView occupied;
     private final Object version;
     private final Optional<PedestrianGeometryRevision> revision;
     private final double[] poseOffsets;
     private final java.util.Map<SurfaceAnchor, java.util.List<NavigationContact>> contacts = new java.util.LinkedHashMap<>();
 
     public ProfiledPedestrianGeometry(PedestrianRouteGeometry terrain, UnitNavigationProfile profile,
-                                      Predicate<BlockPosition> occupied) {
+                                      NavigationObstacleView occupied) {
         this.terrain = Objects.requireNonNull(terrain); this.profile = Objects.requireNonNull(profile);
         this.poseOffsets = NavigationBodyGeometry.poseOffsets(profile);
         this.occupied = Objects.requireNonNull(occupied); this.version = new Version(terrain.version(), profile);
@@ -37,6 +36,12 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     @Override public Object version() { return version; }
     @Override public Optional<PedestrianGeometryRevision> regionalRevision() { return revision; }
     @Override public WorldBounds bounds() { return terrain.bounds(); }
+    @Override public java.util.OptionalInt uniformSupport(WorldBounds area) {
+        // A body envelope and its swept volume must fit the certified plane,
+        // including neighbouring columns. The provider certifies full clear air.
+        var envelope = NavigationRegionCoverage.expanded(area, profile.footprintRadius() + 1);
+        return occupied.emptyArea(envelope) ? terrain.uniformSupport(envelope) : java.util.OptionalInt.empty();
+    }
     @Override public SurfaceAnchor supportAt(int x, int z) { return terrain.supportAt(x, z); }
     @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return terrain.surfacesAt(x, z); }
     @Override public boolean supportExcluded(SurfaceAnchor surface) { return terrain.supportExcluded(surface); }

@@ -71,7 +71,16 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
                 return value == null ? Optional.empty() : Optional.of(new KnownBlockSurfaceOverlay.Cell(value.value(),
                         value.aftermath() ? KnownBlockSurfaceOverlay.Precedence.DECLARATION_FIRST
                                 : KnownBlockSurfaceOverlay.Precedence.OBSERVATION_FIRST));
-            }, column -> image(new ForestRegion(column.x() >> 4, column.z() >> 4)).columns().getOrDefault(column, List.of()));
+            }, column -> image(new ForestRegion(column.x() >> 4, column.z() >> 4)).columns().getOrDefault(column, List.of()),
+                    area -> {
+                        if (!NavigationRegionCoverage.bounded(area)) return true;
+                        for (int x = area.minX() >> 4; x <= (area.maxXExclusive() - 1) >> 4; x++)
+                            for (int z = area.minZ() >> 4; z <= (area.maxZExclusive() - 1) >> 4; z++) {
+                                var region = new ForestRegion(x, z);
+                                if (plan.mayTouch(region) || forest.touches(region)) return true;
+                            }
+                        return false;
+                    });
         }
 
         @Override public Set<Region> changesFrom(KnownNaturalGeometry.Snapshot previous) {

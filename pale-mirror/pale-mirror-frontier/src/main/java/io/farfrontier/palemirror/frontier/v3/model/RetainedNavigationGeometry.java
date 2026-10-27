@@ -28,6 +28,11 @@ final class RetainedNavigationGeometry {
                     return size() > 8192;
                 }
             };
+            @Override public OptionalInt uniformSupport(WorldBounds area) {
+                // Same three-cell contextual-shape halo as detailedCollisionAt.
+                return NavigationRegionCoverage.intersects(cells.regions(), NavigationRegionCoverage.expanded(area, 3))
+                        ? OptionalInt.empty() : base.uniformSupport(area);
+            }
             @Override public SurfaceAnchor at(int x, int z) { var all = surfacesAt(x, z); return all.isEmpty() ? null : all.getLast(); }
             @Override public List<SurfaceAnchor> surfacesAt(int x, int z) {
                 var column = new TerrainColumn(x, z);

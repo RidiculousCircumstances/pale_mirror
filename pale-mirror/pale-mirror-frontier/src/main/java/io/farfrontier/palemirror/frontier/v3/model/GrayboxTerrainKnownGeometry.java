@@ -18,7 +18,7 @@ final class GrayboxTerrainKnownGeometry implements KnownNaturalGeometry.Provider
             if (plan.empty()) return base;
             return KnownBlockSurfaceOverlay.apply(base, position -> plan.collisionAt(position)
                     .map(cell -> new KnownBlockSurfaceOverlay.Cell(cell, KnownBlockSurfaceOverlay.Precedence.OBSERVATION_FIRST)),
-                    column -> plan.column(column.x(), column.z()));
+                    column -> plan.column(column.x(), column.z()), area -> io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationRegionCoverage.intersects(plan.regions(), area));
         }
         @Override public Set<Region> changesFrom(KnownNaturalGeometry.Snapshot previous) {
             if (!(previous instanceof Snapshot before)) throw new IllegalArgumentException("foreign initial terrain snapshot");

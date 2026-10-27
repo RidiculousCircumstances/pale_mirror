@@ -23,6 +23,10 @@ public final class BoundedPedestrianApproach {
     @FunctionalInterface
     public interface SurveyedSurface {
         SurfaceAnchor at(int x, int z);
+        /** Optional exact known plane with no other levels, obstacles, liquids or
+         * unknown blocks above it throughout the rectangle. Empty grants nothing. */
+        default java.util.OptionalInt uniformSupport(WorldBounds area) { return java.util.OptionalInt.empty(); }
+
         /** All independently known contacts. The scalar view is only a presentation preference. */
         default List<SurfaceAnchor> surfacesAt(int x, int z) {
             var surface = at(x, z);
@@ -48,6 +52,10 @@ public final class BoundedPedestrianApproach {
         var excluded = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(contacts);
         if (excluded.isEmpty()) return source;
         return new SurveyedSurface() {
+            @Override public java.util.OptionalInt uniformSupport(WorldBounds area) {
+                return io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationRegionCoverage.intersects(excluded.regions(), area)
+                        ? java.util.OptionalInt.empty() : source.uniformSupport(area);
+            }
             @Override public SurfaceAnchor at(int x, int z) { return source.at(x, z); }
             @Override public List<SurfaceAnchor> surfacesAt(int x, int z) { return source.surfacesAt(x, z); }
             @Override public boolean clearanceKnown(SurfaceAnchor surface) { return source.clearanceKnown(surface); }

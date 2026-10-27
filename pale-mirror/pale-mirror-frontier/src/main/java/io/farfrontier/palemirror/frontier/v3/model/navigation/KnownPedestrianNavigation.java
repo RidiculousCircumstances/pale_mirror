@@ -67,6 +67,10 @@ public final class KnownPedestrianNavigation {
             @Override public Object version() { return version; }
             @Override public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return regionalRevision; }
             @Override public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return bootstrap.bounds(); }
+            @Override public java.util.OptionalInt uniformSupport(io.farfrontier.palemirror.frontier.v3.model.WorldBounds area) {
+                return io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationRegionCoverage.intersects(hard.regions(), area)
+                        ? java.util.OptionalInt.empty() : surveyed.uniformSupport(area);
+            }
             @Override public SurfaceAnchor supportAt(int x, int z) { return surveyed.at(x, z); }
             @Override public List<SurfaceAnchor> surfacesAt(int x, int z) { return surveyed.surfacesAt(x, z); }
             @Override public boolean blocked(SurfaceAnchor surface) {

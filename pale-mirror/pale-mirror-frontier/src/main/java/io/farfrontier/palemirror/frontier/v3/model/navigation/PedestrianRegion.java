@@ -7,6 +7,18 @@ import java.util.*;
 final class PedestrianRegion {
     static final int SIDE = 16, CELLS = SIDE * SIDE;
     static final int BUILD_WORK = CELLS * 9; // Existing flat-world slice size, not a layered build estimate.
+    private static final List<List<Integer>> FLAT_EDGES = flatEdges();
+    private static List<List<Integer>> flatEdges() {
+        var result = new ArrayList<List<Integer>>(CELLS);
+        for (int z = 0; z < SIDE; z++) for (int x = 0; x < SIDE; x++) {
+            var adjacent = new ArrayList<Integer>(); int at = z * SIDE + x;
+            if (z > 0) adjacent.add(at - SIDE); if (x > 0) adjacent.add(at - 1);
+            if (x + 1 < SIDE) adjacent.add(at + 1); if (z + 1 < SIDE) adjacent.add(at + SIDE);
+            result.add(List.copyOf(adjacent));
+        }
+        return List.copyOf(result);
+    }
+    static List<Integer> flatOutgoing(int index) { return FLAT_EDGES.get(index); }
     record Tile(int x, int z) implements Comparable<Tile> {
         static Tile at(SurfaceAnchor surface) { return new Tile(Math.floorDiv(surface.x(), SIDE), Math.floorDiv(surface.z(), SIDE)); }
         @Override public int compareTo(Tile other) { int order = Integer.compare(x, other.x); return order != 0 ? order : Integer.compare(z, other.z); }

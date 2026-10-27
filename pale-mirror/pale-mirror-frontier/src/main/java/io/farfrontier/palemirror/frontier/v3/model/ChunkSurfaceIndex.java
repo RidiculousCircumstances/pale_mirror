@@ -40,6 +40,13 @@ public final class ChunkSurfaceIndex {
         return new ChunkSurfaceIndex(chunks);
     }
 
+    public boolean intersects(WorldBounds area) {
+        if (!io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationRegionCoverage.bounded(area)) return true;
+        for (int x = area.minX() >> 4; x <= (area.maxXExclusive() - 1) >> 4; x++)
+            for (int z = area.minZ() >> 4; z <= (area.maxZExclusive() - 1) >> 4; z++)
+                if (chunks.containsKey(new Chunk(x, z))) return true;
+        return false;
+    }
     public SurfaceAnchor at(int x, int z) {
         var levels = surfacesAt(x, z);
         return levels.isEmpty() ? null : levels.getLast();

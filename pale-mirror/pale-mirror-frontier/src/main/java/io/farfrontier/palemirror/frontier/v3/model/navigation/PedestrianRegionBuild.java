@@ -8,6 +8,7 @@ final class PedestrianRegionBuild {
     static final int MAX_LEVELS = 64, MAX_SURFACES = 4_096, MAX_EDGES = 32_768;
     private final PedestrianRouteGeometry geometry;
     private final PedestrianRegion.Tile tile;
+    private final OptionalInt uniform;
     private final List<SurfaceAnchor> surfaces = new ArrayList<>();
     private final List<Integer>[] columns, edges;
     private final int[] parents = new int[MAX_SURFACES];
@@ -20,6 +21,12 @@ final class PedestrianRegionBuild {
     @SuppressWarnings("unchecked")
     PedestrianRegionBuild(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
         this.geometry = geometry; this.tile = tile;
+        var area = new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(tile.x() * PedestrianRegion.SIDE,
+                tile.z() * PedestrianRegion.SIDE, PedestrianRegion.SIDE, PedestrianRegion.SIDE);
+        var bounds = geometry.bounds();
+        uniform = area.minX() >= bounds.minX() && area.minZ() >= bounds.minZ()
+                && area.maxXExclusive() <= bounds.maxXExclusive() && area.maxZExclusive() <= bounds.maxZExclusive()
+                ? geometry.uniformSupport(area) : OptionalInt.empty();
         columns = (List<Integer>[]) new List<?>[PedestrianRegion.CELLS];
         edges = (List<Integer>[]) new List<?>[MAX_SURFACES];
         for (int i = 0; i < columns.length; i++) columns[i] = new ArrayList<>();
@@ -52,6 +59,11 @@ final class PedestrianRegionBuild {
         if (x < bounds.minX() || x >= bounds.maxXExclusive() || z < bounds.minZ() || z >= bounds.maxZExclusive()) {
             column++; return;
         }
+        if (uniform.isPresent()) {
+            int index = surfaces.size(); surfaces.add(SurfaceAnchor.at(x, uniform.orElseThrow(), z));
+            columns[column++].add(index); parents[index] = 0; edges[index] = PedestrianRegion.flatOutgoing(index);
+            return;
+        }
         if (pending == null) {
             pending = geometry.surfacesAt(x, z);
             if (pending.size() > MAX_LEVELS) { limited = true; return; }
@@ -70,6 +82,7 @@ final class PedestrianRegionBuild {
         int index = surfaces.size(); surfaces.add(surface); columns[column].add(index); parents[index] = index; edges[index] = new ArrayList<>();
     }
     private void connect() {
+        if (uniform.isPresent()) { node = surfaces.size(); return; }
         if (direction == 2) { node++; direction = 0; neighbour = 0; return; }
         var from = surfaces.get(node);
         int x = Math.floorMod(from.x(), PedestrianRegion.SIDE), z = Math.floorMod(from.z(), PedestrianRegion.SIDE);
