@@ -305,3 +305,19 @@ checks pass25s (dated-market-observations-final.log). No sustained throughput
 claim follows from this source check. The terrain pilot also uses grounded visit
 anchors: creative mode alone does not suspend gravity, so airborne exact anchors
 were an invalid visit precondition, not a chunk-loading defect.
+
+The100town canonical JFR (canonical-scale-progress.jfr,30s) attributes158
+execution samples directly to the nested global pending-order predicate. Quote
+publication now derives one exact local key set after withdrawals and updates it
+only after a successfully placed order. All peer/item/side/container/availability/
+expiry predicates are preserved. Existing autonomous dispatch, expiry, partial
+purchase, stock/payment and conditional-consent checks plus guardrails PASS36s
+(local-quote-book-final.log); no timing assertion or new test framework.
+
+909 terrain full-pack pilot passed27actions and six visibility assertions; all six
+frames inspected. Tunnel/bridge/narrow/low-ceiling geometry is visible. The field
+frame is partly obscured by the smeltery, so it does not prove a complete work
+story or visual acceptance. Task-owned20FPS client/display exited after the run.
+Main/private same-schema same-world deployments909 verified with pinned SHA;
+ordinary-time samples remain in dated-market-live-samples.jsonl. No debt-closure
+claim yet.

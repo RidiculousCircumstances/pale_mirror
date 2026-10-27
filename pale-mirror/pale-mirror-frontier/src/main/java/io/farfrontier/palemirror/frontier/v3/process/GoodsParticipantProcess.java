@@ -122,23 +122,27 @@ public final class GoodsParticipantProcess {
             events.add(new ProposedEvent(participant.party().id(), withdrawal));
             state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().withdraw(participant.party().id(), withdrawal)));
         }
+        // One exact local view per review. Rechecking every global order for each
+        // peer/endpoint made quote publication quadratic in the world order book.
+        var pendingQuotes = new HashSet<QuoteKey>();
+        for (var order : state.companies().goodsTrade().orders().values())
+            if (order.party().equals(participant.party()) && order.availableQuantity() > 0 && order.expiresAtTick() >= now)
+                pendingQuotes.add(new QuoteKey(order.counterparty(), order.itemKind(), order.side(), order.containerId()));
         int published = 0;
         for (var intent : intents) for (var peer : participant.known()) {
             var counterparty = state.companies().goodsTrade().participants().participants().get(peer.party().id());
             if (counterparty == null || !counterparty.party().equals(peer.party()) || !counterparty.settlementId().equals(peer.settlementId())) continue;
             for (var endpoint : GoodsParticipantStorage.quoteEndpoints(state, participant, intent)) {
-            boolean pending = state.companies().goodsTrade().orders().values().stream().anyMatch(order ->
-                    order.party().equals(participant.party()) && order.counterparty().equals(peer.party()) && order.itemKind().equals(intent.itemKind())
-                            && order.containerId().equals(endpoint.containerId())
-                            && order.side() == intent.side() && order.availableQuantity() > 0 && order.expiresAtTick() >= now);
-            if (pending || state.companies().goodsTrade().orders().size() >= GoodsTradeState.MAX_ORDERS) continue;
+            var quoteKey = new QuoteKey(peer.party(), intent.itemKind(), intent.side(), endpoint.containerId());
+            if (pendingQuotes.contains(quoteKey) || state.companies().goodsTrade().orders().size() >= GoodsTradeState.MAX_ORDERS) continue;
             var id = new SubjectId("order:goods-policy/" + WorkOpportunityIdentity.digest(participant.party().id().value() + "|" + participant.reviewRevision()
                     + "|" + peer.party().id().value() + "|" + intent.itemKind() + "|" + intent.side().wireTag() + "|" + endpoint.containerId().value()));
             var order = new GoodsTradeOrder(id, participant.party(), peer.party(), intent.side(), endpoint.containerId(),
                     intent.itemKind(), intent.quantity(), 0, intent.limit(), retainedExpiry.getOrDefault(
-                            new QuoteKey(peer.party(), intent.itemKind(), intent.side(), endpoint.containerId()), Math.addExact(now, rules.orderLifetime())));
+                            quoteKey, Math.addExact(now, rules.orderLifetime())));
             state = GoodsTradeStateSupport.place(state, participant.party().id(), order, now);
-            events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order))); published++;
+            events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order)));
+            pendingQuotes.add(quoteKey); published++;
             }
         }
         var trip = rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.prepare(state, participant, now))
