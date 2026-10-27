@@ -66,8 +66,9 @@ final class FieldDevelopmentLand {
             cells = discover(state, fields, limit, reads, geometry);
             var complete = reads.completed();
             if (complete.isPresent()) {
-                var facts = new Facts(state.bootstrap(), List.copyOf(fields), geometry.version(),
-                        currentRegional, regions(state, fields), complete.orElseThrow(), cells);
+                var footprint = regions(state, fields);
+                var facts = new Facts(state.bootstrap(), List.copyOf(fields), currentRegional.isPresent() ? null : geometry.version(),
+                        currentRegional.map(revision -> revision.restrictedTo(footprint)), footprint, complete.orElseThrow(), cells);
                 synchronized (LAND) {
                     var old = LAND.put(query, facts);
                     retainedReads += facts.blocks().size() - (old == null ? 0 : old.blocks().size());

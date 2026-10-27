@@ -31,6 +31,27 @@ class CultivationPlanningTest {
         assertDoesNotThrow(() -> current.require(distant, home, fields));
     }
 
+    @Test void remoteFieldAdmissionDoesNotRetainOrInvalidateAllWorldPermissions() {
+        var state = prepared(); var home = new SubjectId("settlement:1"); var remote = new SubjectId("settlement:7");
+        var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
+        var other = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(remote)).toList();
+        var first = FieldDevelopmentLand.survey(state, home, fields, 3);
+        var remoteSurvey = FieldDevelopmentLand.survey(state, remote, other, 3);
+        var position = remoteSurvey.cells().getFirst().support().support();
+        var localRegion = Set.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region.at(first.cells().getFirst().support().support()));
+        var remoteRegion = Set.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region.at(position));
+        var before = new DevelopmentGroundKnowledge(state);
+        var result = FieldLandAdmission.admit(state, state.resourceSites(), remote, other, remoteSurvey,
+                state.bootstrap().ruleset().fields().cultivation().orElseThrow());
+        var changed = state.withResourceSites(result.sites()); var after = new DevelopmentGroundKnowledge(changed);
+        assertEquals(before.regionalReadVersion(localRegion), after.regionalReadVersion(localRegion));
+        assertNotEquals(before.regionalReadVersion(remoteRegion), after.regionalReadVersion(remoteRegion));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PUBLIC, before.at(position).orElseThrow().permission());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PROTECTED, after.at(position).orElseThrow().permission());
+        assertSame(first.cells().getFirst(), FieldDevelopmentLand.survey(changed, home, fields, 3).cells().getFirst());
+        assertThrows(IllegalArgumentException.class, () -> first.require(changed, home, fields));
+    }
+
     @Test void disposingRouteViewsDoesNotInvalidateUnchangedLandFacts() {
         var state = prepared(); var home = new SubjectId("settlement:1");
         var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();

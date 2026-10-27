@@ -1,0 +1,303 @@
+{
+  "schema": 1,
+  "id": "live_r31_terrain_profile",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok"
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -365,
+        "y": 64,
+        "z": 14
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -356,
+        "y": 67,
+        "z": 14
+      },
+      "block": "minecraft:stone",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -356,
+        "y": 67,
+        "z": 14
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -356,
+        "y": 67,
+        "z": 14
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -370,
+        "y": 77,
+        "z": -15
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -340,
+        "y": 71,
+        "z": 17
+      },
+      "block": "minecraft:stone",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -340,
+        "y": 71,
+        "z": 17
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -340,
+        "y": 71,
+        "z": 17
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -93,
+        "y": 65,
+        "z": 8
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -80,
+        "y": 63,
+        "z": 14
+      },
+      "block": "minecraft:stone",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -80,
+        "y": 63,
+        "z": 14
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -80,
+        "y": 63,
+        "z": 14
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -100,
+        "y": 65,
+        "z": 140
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -89,
+        "y": 65,
+        "z": 144
+      },
+      "block": "minecraft:stone",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -89,
+        "y": 65,
+        "z": 144
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -89,
+        "y": 65,
+        "z": 144
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -80,
+        "y": 64,
+        "z": 210
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -80,
+        "y": 66,
+        "z": 206
+      },
+      "block": "minecraft:stone",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -80,
+        "y": 66,
+        "z": 206
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -80,
+        "y": 66,
+        "z": 206
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": 4,
+        "z": -8
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:7-wheat-field"
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    }
+  ],
+  "assertions": [],
+  "frames": [
+    {
+      "after": 4,
+      "name": "tunnel-under-hill"
+    },
+    {
+      "after": 8,
+      "name": "hill-upper-surface"
+    },
+    {
+      "after": 12,
+      "name": "bridge-over-river"
+    },
+    {
+      "after": 16,
+      "name": "narrow-passage-and-bypass"
+    },
+    {
+      "after": 20,
+      "name": "low-ceiling-recess"
+    },
+    {
+      "after": 25,
+      "name": "settlement-and-field-on-terrain-profile"
+    }
+  ]
+}

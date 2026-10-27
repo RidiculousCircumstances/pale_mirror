@@ -31,6 +31,16 @@ public final class RegionalBlockSet extends AbstractSet<BlockPosition> {
     public static RegionalBlockSet copyOf(Set<BlockPosition> values) {
         return values instanceof RegionalBlockSet indexed ? indexed : EMPTY.overlay(Set.of(), values);
     }
+    /** Compose immutable contributions without copying disjoint regional contents. */
+    public static RegionalBlockSet union(Collection<RegionalBlockSet> sources) {
+        var parts = new HashMap<Region, Blocks>();
+        for (var source : sources) source.regions.forEach((region, blocks) -> parts.merge(region, blocks, (left, right) -> {
+            if (left.equals(right) || left.values.containsAll(right.values)) return left;
+            if (right.values.containsAll(left.values)) return right;
+            var values = new HashSet<>(left.values); values.addAll(right.values); return new Blocks(values);
+        }));
+        return parts.isEmpty() ? EMPTY : new RegionalBlockSet(parts);
+    }
     public Set<Region> regions() { return regions.keySet(); }
     public Object token(Region region) { return regions.getOrDefault(region, EMPTY_BLOCKS); }
     private static final Blocks EMPTY_BLOCKS = new Blocks(Set.of());

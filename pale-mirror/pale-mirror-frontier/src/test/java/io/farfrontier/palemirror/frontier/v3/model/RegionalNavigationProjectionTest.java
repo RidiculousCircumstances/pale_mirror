@@ -7,6 +7,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RegionalNavigationProjectionTest {
+    @Test void regionalUnionsShareRemoteContentsAndColumnsPreserveSetSemantics() {
+        var a = new BlockPosition(1, 60, 1); var b = new BlockPosition(33, 70, 1); var c = a.offset(1, 0, 0);
+        var first = RegionalBlockSet.copyOf(Set.of(a, b)); var second = RegionalBlockSet.copyOf(Set.of(a, c));
+        var union = RegionalBlockSet.union(List.of(first, second));
+        assertEquals(Set.of(a, b, c), union); assertEquals(Set.of(a, b), first);
+        assertSame(first.token(Region.at(b)), union.token(Region.at(b)), "remote blocks need no duplicated set");
+        var columns = RegionalColumnSet.fromPositions(List.of(a, a.offset(0, 20, 0), b));
+        var expected = Set.of(new TerrainColumn(a.x(), a.z()), new TerrainColumn(b.x(), b.z()));
+        assertEquals(expected, columns); assertEquals(columns, expected); assertEquals(expected.hashCode(), columns.hashCode());
+        var projectedUnion = RegionalColumnSet.union(List.of(columns, RegionalColumnSet.fromPositions(List.of(c))));
+        assertEquals(3, projectedUnion.size());
+        assertSame(columns.token(Region.at(b)), projectedUnion.token(Region.at(b)));
+        assertNotEquals(columns.token(Region.at(a)), projectedUnion.token(Region.at(a)));
+        assertThrows(UnsupportedOperationException.class, () -> projectedUnion.add(new TerrainColumn(4, 4)));
+    }
     @Test void independentSnapshotsReuseExactEqualityWithoutHidingHashCollisionsOrEdits() {
         var position = new BlockPosition(1, 60, 1);
         var comparisons = new java.util.concurrent.atomic.AtomicInteger();

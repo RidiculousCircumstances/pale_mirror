@@ -5,10 +5,10 @@ import java.util.*;
 
 /** Shared read-only land-development view. Observed uncertainty overrides the authored terrain baseline. */
 public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<NavigationBlockState> {
-    private static final ImmutableResultView<String, Set<TerrainColumn>> PROTECTED = new ImmutableResultView<>(16);
+    private static final ImmutableResultView<String, RegionalColumnSet> PROTECTED = new ImmutableResultView<>(16);
     private static final ImmutableInputView<RegionalBlockMap<PhysicalDelta>> DELTAS = new ImmutableInputView<>();
     private final FrontierWorldState state;
-    private final Set<TerrainColumn> protectedColumns;
+    private final RegionalColumnSet protectedColumns;
     public DevelopmentGroundKnowledge(FrontierWorldState state) {
         this.state = Objects.requireNonNull(state);
         var land = LandUseExclusions.columns(state);
@@ -16,14 +16,9 @@ public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<Navi
                 .sorted(Comparator.comparing(deposit -> deposit.site().id())).map(deposit -> deposit.site().layout()).toList();
         var inputs = new ArrayList<Object>(); inputs.add(land); inputs.addAll(layouts);
         protectedColumns = PROTECTED.get(inputs, "columns", () -> {
-            var protectedLand = new HashSet<>(land);
-            for (var layout : layouts) {
-                layout.cells().forEach(cell -> add(protectedLand, cell.source()));
-                layout.terrainSupports().keySet().forEach(p -> add(protectedLand, p));
-                layout.fixedBlocks().keySet().forEach(p -> add(protectedLand, p));
-                layout.accessSurfaces().forEach(surface -> add(protectedLand, surface.support()));
-            }
-            return Collections.unmodifiableSet(protectedLand);
+            var parts = new ArrayList<>(List.of(land));
+            layouts.forEach(layout -> parts.add(ExtractionLandProtection.of(layout).developmentColumns()));
+            return RegionalColumnSet.union(parts);
         });
     }
 
@@ -33,8 +28,8 @@ public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<Navi
         var exclusions = RegionalBlockSet.copyOf(state.extractionSites().geologicalExclusions().positions());
         var facts = new HashMap<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region, List<Object>>();
         for (var region : regions) facts.put(region, List.of(observations.token(region), deltas.token(region),
-                exclusions.token(region), state.extractionSites().geology().in(region)));
-        return Optional.of(new RegionalReadVersion(List.of(state.bootstrap(), protectedColumns), facts));
+                exclusions.token(region), state.extractionSites().geology().in(region), protectedColumns.token(region)));
+        return Optional.of(new RegionalReadVersion(List.of(state.bootstrap()), facts));
     }
 
     @Override public Optional<Sample<NavigationBlockState>> at(BlockPosition position) {
@@ -50,5 +45,4 @@ public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<Navi
                 .map(sample -> new Sample<>(new NavigationBlockState(sample.block().kind(), sample.block().properties()),
                         sample.revision(), permission));
     }
-    private static void add(Set<TerrainColumn> columns, BlockPosition p) { columns.add(new TerrainColumn(p.x(), p.z())); }
 }

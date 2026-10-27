@@ -46,6 +46,13 @@ public final class PedestrianGeometryRevision {
     }
     public static PedestrianGeometryRevision initial(Object scope) { return new PedestrianGeometryRevision(scope, new Object(), Map.of()); }
     public Object at(int regionX, int regionZ) { return revisions.getOrDefault(new Region(regionX, regionZ), baseline); }
+    /** A completed local reader retains only the facts it consulted, not every
+     * remote region and its historical block sets. No parent snapshot is kept. */
+    public PedestrianGeometryRevision restrictedTo(Set<Region> dependencies) {
+        var local = new java.util.HashMap<Region, Object>();
+        for (var region : dependencies) if (revisions.containsKey(region)) local.put(region, revisions.get(region));
+        return new PedestrianGeometryRevision(scope, geometryScope, baseline, local);
+    }
     public PedestrianGeometryRevision changed(Set<Region> regions) {
         if (regions.isEmpty()) return this;
         var next = new java.util.LinkedHashMap<>(revisions);

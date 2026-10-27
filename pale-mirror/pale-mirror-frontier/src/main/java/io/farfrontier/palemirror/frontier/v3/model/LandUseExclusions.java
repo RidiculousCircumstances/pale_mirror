@@ -1,17 +1,38 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalColumnSet;
 
 /** Shared protected land for development owners. Crop work never recompiles this geometry. */
 public final class LandUseExclusions {
     private record AccessImage(List<ServiceAccessBoundary> boundaries) {
         private AccessImage { boundaries = List.copyOf(boundaries); }
     }
-    private static final ImmutableResultView<AccessImage, Set<TerrainColumn>> VIEW = new ImmutableResultView<>(16);
-    public static Set<TerrainColumn> columns(FrontierWorldState state) {
-        var inputs = new ArrayList<Object>(List.of(state.bootstrap(), state.routeTopology(), state.hiveColony().addedOrgans()));
-        state.resourceSites().cycles().entrySet().stream().sorted(Map.Entry.comparingByKey())
-                .forEach(entry -> inputs.add(entry.getValue().layout()));
+    private static final ImmutableResultView<AccessImage, RegionalColumnSet> VIEW = new ImmutableResultView<>(16);
+    private static final ImmutableResultView<String, RegionalColumnSet> BASE = new ImmutableResultView<>(4), ROADS = new ImmutableResultView<>(4), ORGANS = new ImmutableResultView<>(4);
+    private static final ImmutableResultView<io.farfrontier.palemirror.frontier.v3.api.SubjectId, RegionalColumnSet> FIELDS = new ImmutableResultView<>(SimulationCapacity.MAX_SETTLEMENTS * 2);
+    public static RegionalColumnSet columns(FrontierWorldState state) {
+        var base = BASE.get(List.of(state.bootstrap()), "initial", () -> {
+            var positions = new HashSet<BlockPosition>();
+            for (var settlement : state.bootstrap().settlements()) {
+                positions.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures()));
+                settlement.residents().forEach(resident -> positions.add(resident.home()));
+            }
+            positions.addAll(FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs()));
+            return RegionalColumnSet.fromPositions(positions);
+        });
+        var roads = ROADS.get(List.of(state.bootstrap(), state.routeTopology()), "routes", () -> {
+            var footprint = FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology());
+            var positions = new HashSet<>(footprint.foundationCells()); positions.addAll(footprint.surfaceCells());
+            return RegionalColumnSet.fromPositions(positions);
+        });
+        var organs = ORGANS.get(List.of(state.hiveColony().addedOrgans()), "added", () -> RegionalColumnSet.fromPositions(
+                FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values()))));
+        var parts = new ArrayList<>(List.of(base, roads, organs));
+        state.resourceSites().cycles().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
+                parts.add(FIELDS.get(List.of(entry.getValue().layout()), entry.getKey(),
+                        () -> RegionalColumnSet.fromPositions(entry.getValue().layout().managedSlots()))));
+        var inputs = new ArrayList<Object>(parts);
         var endpoints = state.inventory().containers().values().stream().filter(container -> container.storage().isPresent())
                 .sorted(Comparator.comparing(ContainerRecord::id)).map(container -> container.storage().orElseThrow().endpoint()).toList();
         inputs.addAll(endpoints);
@@ -23,25 +44,10 @@ public final class LandUseExclusions {
         // The preparation worker and reducer consume the same immutable land.
         // Share only completed results; no global monitor covers geometry work.
         return VIEW.get(inputs, accessImage, () -> {
-            var result = new HashSet<TerrainColumn>();
-            for (var settlement : state.bootstrap().settlements()) {
-                FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures())
-                        .forEach(position -> add(result, position));
-                settlement.residents().forEach(resident -> add(result, resident.home()));
-            }
-            state.resourceSites().cycles().values().forEach(cycle -> cycle.layout().managedSlots().forEach(p -> add(result, p)));
-            var roads = FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology());
-            roads.foundationCells().forEach(p -> add(result, p)); roads.surfaceCells().forEach(p -> add(result, p));
-            FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs()).forEach(p -> add(result, p));
-            FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values())).forEach(p -> add(result, p));
-            access.forEach(value -> value.ownedAccessSurfaces().forEach(surface -> add(result, surface.support())));
-            // Grid coordinates have clustered hashes. HashSet avoids the long
-            // linear probe chains of the JDK's compact immutable SetN here.
-            return Collections.unmodifiableSet(result);
+            parts.add(RegionalColumnSet.fromPositions(access.stream().flatMap(value -> value.ownedAccessSurfaces().stream())
+                    .map(SurfaceAnchor::support).toList()));
+            return RegionalColumnSet.union(parts);
         });
-    }
-    private static void add(Set<TerrainColumn> columns, BlockPosition position) {
-        columns.add(new TerrainColumn(position.x(), position.z()));
     }
     private LandUseExclusions() { }
 }

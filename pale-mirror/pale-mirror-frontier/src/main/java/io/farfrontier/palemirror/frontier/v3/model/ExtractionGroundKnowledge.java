@@ -40,23 +40,17 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
         return new ExtractionGroundKnowledge(state, other.columns(), other.blocks(), deposit);
     }
     private static Protection protection(FrontierWorldState state, Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> localSite) {
-        var columns = new HashSet<>(baseColumns(state));
-        state.physicalDeltas().keySet().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-        state.extractionSites().geologicalExclusions().positions().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-        var declared = new HashSet<BlockPosition>();
+        var columns = new ArrayList<>(List.of(LandUseExclusions.columns(state),
+                RegionalColumnSet.fromPositions(state.physicalDeltas().keySet()),
+                RegionalColumnSet.fromPositions(state.extractionSites().geologicalExclusions().positions())));
+        var declared = new ArrayList<RegionalBlockSet>();
         for (var deposit : state.extractionSites().deposits().values()) {
-            declared.addAll(deposit.site().layout().fixedBlocks().keySet());
+            var part = ExtractionLandProtection.of(deposit.site().layout());
             if (!localSite.filter(deposit.site().id()::equals).isPresent()) {
-                deposit.site().layout().cells().forEach(cell -> declared.add(cell.source()));
-                declared.addAll(deposit.site().layout().terrainSupports().keySet());
-                deposit.site().layout().accessSurfaces().forEach(surface -> columns.add(new TerrainColumn(surface.x(), surface.z())));
-                deposit.site().layout().fixedBlocks().keySet().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-                deposit.site().layout().cells().forEach(cell -> columns.add(new TerrainColumn(cell.source().x(), cell.source().z())));
-            }
+                columns.add(part.worksiteColumns()); declared.add(part.declaredBlocks());
+            } else declared.add(part.fixedBlocks());
         }
-        // Dense grid hashes are highly clustered; retain bucketed immutable views,
-        // not SetN's quadratic linear-probe construction across all worksite blocks.
-        return new Protection(Collections.unmodifiableSet(columns), Collections.unmodifiableSet(declared));
+        return new Protection(RegionalColumnSet.union(columns), RegionalBlockSet.union(declared));
     }
 
     /** Excavation fronts change frequently; immutable towns/roads do not. */

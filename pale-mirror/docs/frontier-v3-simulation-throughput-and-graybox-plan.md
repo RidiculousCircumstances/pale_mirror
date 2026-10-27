@@ -264,3 +264,15 @@ geometry and expiry remain strict; only actual quoted buyer envelopes become
 publication dependencies. Current stock/cash/crew/contract admission is unchanged.
 The targeted market/advice/conditional-offer and architecture checks pass in
 local-advice-dependencies-final.log. This does not yet establish scale throughput.
+
+The2GB long-run failure was traced with a task-local heap dump, rather than
+fixing its last allocation stack. Completed land facts retained273MB through
+FieldDevelopmentLand alone;32old full-world protected-column sets retained
+another320MB. Land permissions now compose shared immutable regional producer
+parts. Field witnesses retain only consulted permission/geometry tokens; current
+samples and exact admission checks still run. The same column/block mechanism
+serves field and extraction ground readers, preserving local-vs-foreign worksite
+protection. Existing cultivation, damaged/unknown ground, extraction extension
+and navigation tests plus local permission-change checks pass45s. The retained
+heap report is scale-live-retained_Leak_Suspects.zip; no simulation snapshot or
+physical ownership protocol changed.
