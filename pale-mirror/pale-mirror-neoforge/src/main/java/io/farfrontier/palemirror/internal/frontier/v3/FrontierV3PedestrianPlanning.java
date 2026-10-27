@@ -132,12 +132,13 @@ final class FrontierV3PedestrianPlanning {
     }
     private static String continuationSamples() {
         var samples = new java.util.ArrayList<java.util.Map<String, Object>>();
-        for (var wait : continuations.diagnostics(8)) {
+        for (var wait : continuations.diagnostics(2)) {
             var requests = new java.util.ArrayList<java.util.Map<String, Object>>();
-            for (var request : wait.requests().stream().limit(4).toList()) {
+            for (var request : wait.requests().stream().limit(1).toList()) {
                 var result = planner.peek(request.geometry(), request.start(), request.target(), request.extent());
-                requests.add(java.util.Map.of("from", request.start(), "to", request.target(),
-                        "retained", result.map(value -> value.status().name() + ":" + value.reason()).orElse("NONE")));
+                requests.add(java.util.Map.of("from", java.util.List.of(request.start().x(), request.start().y(), request.start().z()),
+                        "to", java.util.List.of(request.target().x(), request.target().y(), request.target().z()),
+                        "retained", result.map(value -> value.status().name() + ":" + value.reason().substring(0, Math.min(128, value.reason().length()))).orElse("NONE")));
             }
             samples.add(java.util.Map.of("action", wait.action().id().value(), "due", wait.action().dueAt().ticks(),
                     "parked", wait.parked(), "runnable", wait.runnable(), "ownerHeld", wait.ownerHeld(),
