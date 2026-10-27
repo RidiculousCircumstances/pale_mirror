@@ -12,7 +12,9 @@ class GoodsParticipantReviewAdviceTest {
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
         var home = state.bootstrap().settlements().get(6).id();
         var action = GoodsParticipantProcess.review(home, 4000); var at = new SimInstant(4000);
-        var completion = GoodsParticipantReviewAdvice.capture(state, action, at).prepare();
+        var completion = FrontierWorldProcessCatalog.adviceScheduled(
+                io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry(),
+                state, action, at).orElseThrow().prepare();
         assertTrue(completion.revalidate(state, new SimInstant(4001)).isPresent());
         var resident = state.humanPopulation().residents().values().iterator().next();
         var body = state.actorLocations().get(resident.id()).body();
@@ -22,6 +24,7 @@ class GoodsParticipantReviewAdviceTest {
         var invalidated = registry.withEconomicState(home, registry.economicState(home).invalidate(
                 Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of())));
         assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(invalidated))), at).isEmpty());
+        assertEquals("OWNER_INPUT", completion.rejectionReason(), "registered decorators must retain the owner's diagnosis");
         var owner = registry.participants().get(home); var peer = registry.participants().get(owner.known().getFirst().party().id());
         var peerChanged = registry.withEconomicState(peer.party().id(), registry.economicState(peer.party().id()).invalidate(
                 Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread"))));

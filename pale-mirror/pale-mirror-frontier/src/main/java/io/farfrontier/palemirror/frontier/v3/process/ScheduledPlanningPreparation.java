@@ -30,14 +30,19 @@ final class ScheduledPlanningPreparation {
         java.util.Objects.requireNonNull(planner, "registered advisory planner");
         return planner.advice(state, action, instant).map(value -> PedestrianPlanningContinuations.advisory(action, value)).map(advice -> () -> {
             var completion = advice.prepare();
-            return (current, at) -> completion.revalidate(current, at).map(preparation -> () -> {
-                var exact = preparation.prepare();
-                return () -> {
-                    var events = exact.get();
-                    return registry.validateEmissions(processId, events.isEmpty()
-                            ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()))) : events);
-                };
-            });
+            return new ScheduledAdvisory.Completion<FrontierWorldState>() {
+                @Override public String rejectionReason() { return completion.rejectionReason(); }
+                @Override public java.util.Optional<ScheduledPreparation> revalidate(FrontierWorldState current, SimInstant at) {
+                    return completion.revalidate(current, at).map(preparation -> () -> {
+                        var exact = preparation.prepare();
+                        return () -> {
+                            var events = exact.get();
+                            return registry.validateEmissions(processId, events.isEmpty()
+                                    ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()))) : events);
+                        };
+                    });
+                }
+            };
         });
     }
 

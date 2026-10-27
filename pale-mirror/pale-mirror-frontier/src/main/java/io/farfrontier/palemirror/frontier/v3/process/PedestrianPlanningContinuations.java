@@ -1,6 +1,10 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning;
@@ -86,26 +90,29 @@ public final class PedestrianPlanningContinuations {
         var index = current; var view = PedestrianRoutePlanning.readView();
         return () -> {
             var prepared = PedestrianRoutePlanning.prepare(view, advice::prepare);
-            return (state, at) -> {
-                if (current != index) throw new IllegalStateException("advice lost its planning runtime owner");
-                return prepared.observation().result().revalidate(state, at).map(preparation -> {
-                    var ready = prepared.acquire();
-                    if (index != null) index.changed(ready);
-                    var exactView = PedestrianRoutePlanning.readView();
-                    return () -> {
-                        var exact = PedestrianRoutePlanning.prepare(exactView, preparation::prepare);
+            return new ScheduledAdvisory.Completion<FrontierWorldState>() {
+                @Override public String rejectionReason() { return prepared.observation().result().rejectionReason(); }
+                @Override public java.util.Optional<ScheduledPreparation> revalidate(FrontierWorldState state, SimInstant at) {
+                    if (current != index) throw new IllegalStateException("advice lost its planning runtime owner");
+                    return prepared.observation().result().revalidate(state, at).map(preparation -> {
+                        var ready = prepared.acquire();
+                        if (index != null) index.changed(ready);
+                        var exactView = PedestrianRoutePlanning.readView();
                         return () -> {
-                            if (current != index) throw new IllegalStateException("advice continuation lost its planning owner");
-                            var changes = exact.acquire();
-                            var completion = PedestrianRoutePlanning.observe(exact.observation().result());
-                            if (index == null) return completion.result();
-                            var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
-                            requests.addAll(exact.observation().requests()); requests.addAll(completion.requests());
-                            var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)));
-                            index.changed(changes); return result;
+                            var exact = PedestrianRoutePlanning.prepare(exactView, preparation::prepare);
+                            return () -> {
+                                if (current != index) throw new IllegalStateException("advice continuation lost its planning owner");
+                                var changes = exact.acquire();
+                                var completion = PedestrianRoutePlanning.observe(exact.observation().result());
+                                if (index == null) return completion.result();
+                                var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
+                                requests.addAll(exact.observation().requests()); requests.addAll(completion.requests());
+                                var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)));
+                                index.changed(changes); return result;
+                            };
                         };
-                    };
-                });
+                    });
+                }
             };
         };
     }
