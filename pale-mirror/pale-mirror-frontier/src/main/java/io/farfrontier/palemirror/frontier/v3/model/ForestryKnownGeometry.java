@@ -7,11 +7,11 @@ import java.util.*;
 
 /** Forest geometry provider only. No routes, extraction progress, resource issue or native chunk reads. */
 final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
-    private final ImmutableInputView<KnownNaturalGeometry.Snapshot> snapshots = new ImmutableInputView<>();
+    private final ImmutableResultView<String, KnownNaturalGeometry.Snapshot> snapshots = new ImmutableResultView<>(4);
     private final ImmutableInputView<Set<NavigationBlockState>> palettes = new ImmutableInputView<>();
     @Override public KnownNaturalGeometry.Key key() { return KnownNaturalGeometry.Key.FOREST; }
     @Override public KnownNaturalGeometry.Snapshot snapshot(FrontierWorldState state) {
-        return snapshots.get(List.of(state.bootstrap(), state.forest().regions()), () -> new Snapshot(state.bootstrap(), state.forest()));
+        return snapshots.get(List.of(state.bootstrap(), state.forest().regions()), "forest", () -> new Snapshot(state.bootstrap(), state.forest()));
     }
     @Override public Set<NavigationBlockState> palette(FrontierWorldState state) {
         return palettes.get(List.of(state.bootstrap().ruleset().forestry()), () -> paletteFor(state));

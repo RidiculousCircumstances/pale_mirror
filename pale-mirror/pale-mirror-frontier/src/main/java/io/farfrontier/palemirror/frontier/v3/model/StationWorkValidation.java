@@ -30,14 +30,7 @@ final class StationWorkValidation {
         var destination = inventory.fungibleResources().accounts().get(work.destinationAccountId());
         if (destination != null && !destination.custody().equals(new ResourceCustody.Container(job.rights().destinationContainerId())))
             throw new IllegalArgumentException("bakery destination account belongs to another storage endpoint");
-        ProductionStationSpec station = null;
-        for (ContainerRecord container : inventory.containers().values()) {
-            var candidate = container.productionStation();
-            if (candidate.isEmpty() || !candidate.orElseThrow().id().equals(work.stationId())) continue;
-            if (station != null) throw new IllegalArgumentException("bakery work has duplicate station identity");
-            station = candidate.orElseThrow();
-        }
-        if (station == null) throw new IllegalArgumentException("bakery work has no current declared station");
+        var station = ProductionStationDirectory.require(inventory, work.stationId()).productionStation().orElseThrow();
         if (!station.facilityId().equals(job.facilityId()) || station.capability() != recipe.capability())
             throw new IllegalArgumentException("bakery work station differs from the job facility or capability");
         recipe.requireTransformation(station.capability(), StationWorkMaterialAccounting.plannedKinds(job), job.outputItemKind(), job.outputCount());

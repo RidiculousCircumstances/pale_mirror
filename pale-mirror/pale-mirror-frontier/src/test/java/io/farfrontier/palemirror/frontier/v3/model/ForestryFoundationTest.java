@@ -12,6 +12,21 @@ class ForestryFoundationTest {
     private static final FrontierBootstrap BOOTSTRAP = FrontierBootstrapper.create(new WorldId("frontier:forest"), 126,
             FrontierRulesets.installed("frontier-v3-forestry-graybox-r28"));
 
+    @Test void immutableNaturalFactsAreSharedAcrossPreparationAndPublicationThreads() throws Exception {
+        var state = FrontierWorldState.initial(BOOTSTRAP);
+        var provider = new ForestryKnownGeometry();
+        var snapshot = provider.snapshot(state);
+        try (var worker = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            assertSame(snapshot, worker.submit(() -> provider.snapshot(state)).get(),
+                    "an unchanged forest must not invalidate all route views when the preparation thread changes");
+            var tree = firstTree();
+            var changed = state.withChanges(FrontierWorldStateUpdate.begin().forest(state.forest().admit(tree)));
+            var next = worker.submit(() -> provider.snapshot(changed)).get();
+            assertNotSame(snapshot, next, "a changed forest retains its own immutable geometry image");
+            assertSame(snapshot, provider.snapshot(state), "a predecessor read cannot overwrite the successor image");
+            assertSame(next, provider.snapshot(changed));
+        }
+    }
     @Test void authoredForestUsesThreeDeclaredHomesAndOneConsistentTreeAcrossChunkQueries() {
         var rules = BOOTSTRAP.ruleset().forestry(); var plan = GrayboxForestPlan.compile(BOOTSTRAP);
         var miners = GrayboxQuarryPlan.producerSettlements(BOOTSTRAP).stream().map(Settlement::id).collect(java.util.stream.Collectors.toSet());

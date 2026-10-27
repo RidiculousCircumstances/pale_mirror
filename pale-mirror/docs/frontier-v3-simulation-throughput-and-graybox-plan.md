@@ -680,3 +680,26 @@ This avoids calculating a compatible local round trip twice; unsafe candidates
 fall back to the existing search. Focused common-navigation, storage, forestry
 and mining tests pass46s (profiled-route-focused.log). Native effect unmeasured;
 not a debt-closure claim.
+
+E377 exact release gate passes1minute, including affected navigation/storage/work
+and adapter tests, architecture, packaged artifact, economy55 and production-work2.
+Both retained worlds deployed/verified SHA512dd2995fabe132b2160e94389edaa2cb92af0cc982a4e4d478cabb868e55e312ca0ff9c817915141edbf47eb27f9f085591c7b3edbb3c8e22e73a72f81d850c92.
+Actual forestry2 moves from SELECT_TREE/revision18 to the next operation/revision19;
+a second worker is admitted.100town ordinary sample84049->85782 in333s still
+accumulates412->5347debt. This is real owner progress, not G closure.
+
+A bounded20s exact-native JFR (profiled-storage-route-native.jfr, full-stack JSON)
+identifies97/335preparation samples constructing route views and89/355server
+samples in complete-state validation. Source establishes that ForestryKnownGeometry
+used thread-local snapshot identity for immutable natural facts. Switching from
+preparation to publication therefore changed Composite identity and cleared all
+navigation views despite identical forest regions. That provider now shares four
+immutable snapshots over the exact bootstrap/region map; its bounded spatial memo
+is already thread-safe. The focused cross-thread predecessor/successor case
+requires identity reuse and genuine-change separation. No terrain/route authority
+is weakened. SettlementPolicyValidation also skips its row traversal when all
+six actual immutable inputs are unchanged; full audits still bypass the cache.
+StationWorkValidation uses the existing duplicate-rejecting installation directory
+instead of scanning every container per job. Focused changed/negative/recovery
+validation, forest, population, nutrition and station tests plus guardrails pass34s
+(shared-forest-and-invariant-focused.log). Native speed effect still unmeasured.

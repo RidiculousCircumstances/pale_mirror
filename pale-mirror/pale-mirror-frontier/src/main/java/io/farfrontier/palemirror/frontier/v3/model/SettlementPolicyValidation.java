@@ -12,10 +12,15 @@ final class SettlementPolicyValidation {
     private record Row(ResidentProfile profile, ResidentNutrition nutrition, Object health) { }
     private record Image(FrontierBootstrap bootstrap, Map<SubjectId, Row> rows) { }
     private static final ThreadLocal<Image> IMAGE = new ThreadLocal<>();
+    private static final ImmutableInvariantCheck<Void> COMPLETE = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> DECLARATIONS = new ImmutableInvariantCheck<>();
     private SettlementPolicyValidation() { }
 
     static void validate(FrontierBootstrap bootstrap, HumanPopulation population) {
+        COMPLETE.validate(() -> validateRows(bootstrap, population), bootstrap, population.quarantines(),
+                population.schedules(), population.residents(), population.nutrition(), population.health());
+    }
+    private static void validateRows(FrontierBootstrap bootstrap, HumanPopulation population) {
         DECLARATIONS.validate(() -> {
             Set<SubjectId> expected = bootstrap.settlements().stream().map(Settlement::id)
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
