@@ -1360,3 +1360,26 @@ including complete withdrawal. Existing unknown/foreign-world/shape invalidation
 worker and terminal-route coverage retained. Focused guardrails/navigation PASS37s;
 final immutable seed and zero-halo selection PASS44s. Native impact remains open
 until exactref packaging, retained-world deployment and ordinary100 observation.
+
+
+### Admit expensive graphs rather than clear-plane traffic (2026-10-28)
+
+c8953a4ea clean release PASS52s (144navigation/shape/scope, runtime/package;
+unchanged physical economy55 coverage reused). Both retained311 worlds verified.
+Ordinary10020096→20195/151.4s,debt396→3327 still FAIL. New20s JFR no longer
+puts world-fact hash/copy among preparation leaders. Navigation still repeatedly
+surveys layered regions; region counters show most builds are certified planes.
+A source counterexample is direct: at the common2048-region retention boundary,
+one-unit certified-plane traffic displaces completed expensive town graphs.
+
+The common cache now checks a positive producer certificate outside its lock
+and before reserving any graph capacity. The result is a compact arithmetic plane
+returned to the exact requesting search; it is not admitted to the expensive-graph
+LRU. Negative certification enters the unchanged layered builder/cache lifecycle.
+Graph/surface/builder bounds and worker count are unchanged. No world key, body
+profile, unknown-cell rule or denied passage is approximated. Existing graph
+comparison and current-world/recovery invalidation tests remain. The existing
+retention case now proves both unfinished and completed graph survival under cheap
+traffic, and an additional bounded case proves actual layered-capacity eviction
+protects unfinished work and subsequent planes cannot evict even a full cache.
+Focused navigation/shape/scopes/guardrails PASS30s. Native impact still open.

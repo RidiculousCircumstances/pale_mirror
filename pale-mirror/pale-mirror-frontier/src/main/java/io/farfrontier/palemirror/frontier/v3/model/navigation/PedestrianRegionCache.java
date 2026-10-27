@@ -32,9 +32,8 @@ final class PedestrianRegionCache {
             if (!builderLock.tryLock()) return new Lookup(null, 1, false);
             try {
                 if (region != null || limited) return new Lookup(region, 1, limited);
-                // The provider's certificate may consult indexed geometry. It
-                // belongs to this worker/region, never the shared cache lock.
-                if (build == null) { build = new PedestrianRegionBuild(initialGeometry, tile); initialGeometry = null; }
+                // The immutable negative certificate was checked before admission.
+                if (build == null) { build = new PedestrianRegionBuild(initialGeometry, tile, OptionalInt.empty()); initialGeometry = null; }
                 int work = build.advance(budget, mayContinue); region = build.result(); limited = build.limited();
                 if (region != null || limited) build = null;
                 return new Lookup(region, work, limited);
@@ -104,9 +103,20 @@ final class PedestrianRegionCache {
     private <K> Lookup advance(Bucket<K> bucket, K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile,
                                 int budget, java.util.function.BooleanSupplier mayContinue) {
         Entry entry;
-        synchronized (this) {
-            lookups++; if (!bucket.entries.containsKey(key)) buildsStarted++;
-            entry = bucket.acquire(key, geometry, tile); trim();
+        synchronized (this) { lookups++; entry = bucket.entries.get(key); }
+        if (entry == null) {
+            // Certify outside the cache lock and before reserving graph space.
+            // A plane is one arithmetic descriptor, not a survey worth retaining;
+            // even a full cache must survive long clear journeys unchanged.
+            var plane = PedestrianRegionBuild.uniformSupport(geometry, tile);
+            if (plane.isPresent()) {
+                synchronized (this) { buildsStarted++; certifiedPlanes++; }
+                return new Lookup(PedestrianRegion.certifiedPlane(tile, plane.orElseThrow()), 1, false);
+            }
+            synchronized (this) {
+                if (!bucket.entries.containsKey(key)) buildsStarted++;
+                entry = bucket.acquire(key, geometry, tile); trim();
+            }
         }
         // Different regions build concurrently; the same region has one builder.
         // Neither a second worker nor the host blocks behind its survey.

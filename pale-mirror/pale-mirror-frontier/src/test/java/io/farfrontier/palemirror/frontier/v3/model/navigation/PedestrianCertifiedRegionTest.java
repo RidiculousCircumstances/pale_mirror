@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianCertifiedRegionTest {
-    @Test void certifiedTrafficCannotDiscardAnUnfinishedLayeredSurvey() {
+    @Test void certifiedTrafficCannotDiscardLayeredGraphsOrUnfinishedSurveys() {
         var revision = PedestrianGeometryRevision.initial(); var firstColumn = new AtomicInteger();
         PedestrianRouteGeometry geometry = new PedestrianRouteGeometry() {
             public Object version() { return revision; }
@@ -26,12 +26,37 @@ class PedestrianCertifiedRegionTest {
         var cache = new PedestrianRegionCache(); var first = new PedestrianRegion.Tile(0, 0);
         assertNull(cache.region(geometry, first, 1).region());
         for (int x = 1; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 1).region());
-        assertTrue(cache.diagnostic().evictions() > 0, "the ordinary graph retention bound must still apply");
+        assertEquals(0, cache.diagnostic().evictions(), "one-unit plane proofs do not displace expensive graphs");
         var completed = cache.region(geometry, first, 100_000).region(); assertNotNull(completed);
         assertEquals(1, firstColumn.get(), "unrelated ready graphs cannot restart the admitted survey");
+        for (int x = 1; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 1).region());
+        assertSame(completed, cache.region(geometry, first, 1).region(), "the completed layered graph also survives cheap traffic");
         var route = completed.refine(SurfaceAnchor.at(0, 63, 0), SurfaceAnchor.at(15, 63, 15));
         for (int turn = 0; turn < 100 && route.result() == null; turn++) route.advance(32);
         KnownPedestrianNavigation.requireRoute(geometry, Objects.requireNonNull(route.result()));
+    }
+    @Test void actualLayeredRetentionPressureProtectsUnfinishedSurvey() {
+        var revision = PedestrianGeometryRevision.initial(); var firstColumn = new AtomicInteger();
+        PedestrianRouteGeometry geometry = new PedestrianRouteGeometry() {
+            public Object version() { return revision; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(revision); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 80_000, 16); }
+            public OptionalInt uniformSupport(WorldBounds area) { return area.minX() >= 2201 * 16 ? OptionalInt.of(63) : OptionalInt.empty(); }
+            public SurfaceAnchor supportAt(int x, int z) {
+                if (x == 0 && z == 0) firstColumn.incrementAndGet();
+                return x < 16 || x >= 2201 * 16 || x % 16 == 0 && z == 0 ? SurfaceAnchor.at(x, 63, z) : null;
+            }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+        };
+        var cache = new PedestrianRegionCache(); var first = new PedestrianRegion.Tile(0, 0);
+        assertNull(cache.region(geometry, first, 1).region());
+        for (int x = 1; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 100_000).region());
+        assertTrue(cache.diagnostic().evictions() > 0, "real layered graphs still obey the unchanged retention bound");
+        assertNotNull(cache.region(geometry, first, 100_000).region());
+        long evictions = cache.diagnostic().evictions();
+        for (int x = 2201; x <= 4400; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 1).region());
+        assertEquals(evictions, cache.diagnostic().evictions(), "plane certificates cannot evict a graph even when the cache is full");
+        assertEquals(1, firstColumn.get(), "completed graph pressure cannot erase unfinished work");
     }
     private static PedestrianRouteGeometry plane(boolean certified, AtomicInteger reads) {
         return new PedestrianRouteGeometry() {

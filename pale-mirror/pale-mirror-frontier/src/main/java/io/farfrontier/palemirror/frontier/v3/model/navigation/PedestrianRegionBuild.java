@@ -20,18 +20,25 @@ final class PedestrianRegionBuild {
     private final Map<Integer, Integer> componentIds = new LinkedHashMap<>();
     @SuppressWarnings("unchecked")
     PedestrianRegionBuild(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
-        this.geometry = geometry; this.tile = tile;
-        var area = new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(tile.x() * PedestrianRegion.SIDE,
-                tile.z() * PedestrianRegion.SIDE, PedestrianRegion.SIDE, PedestrianRegion.SIDE);
-        var bounds = geometry.bounds();
-        uniform = area.minX() >= bounds.minX() && area.minZ() >= bounds.minZ()
-                && area.maxXExclusive() <= bounds.maxXExclusive() && area.maxZExclusive() <= bounds.maxZExclusive()
-                ? geometry.uniformSupport(area) : OptionalInt.empty();
+        this(geometry, tile, uniformSupport(geometry, tile));
+    }
+    /** A cached layered builder already received a negative immutable certificate. */
+    @SuppressWarnings("unchecked")
+    PedestrianRegionBuild(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, OptionalInt uniform) {
+        this.geometry = geometry; this.tile = tile; this.uniform = uniform;
         int initial = uniform.isPresent() ? 0 : PedestrianRegion.CELLS;
         parents = new int[initial]; components = new int[initial];
         columns = (List<Integer>[]) new List<?>[initial];
         edges = (List<Integer>[]) new List<?>[initial];
         for (int i = 0; i < columns.length; i++) columns[i] = new ArrayList<>();
+    }
+    static OptionalInt uniformSupport(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
+        var area = new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(tile.x() * PedestrianRegion.SIDE,
+                tile.z() * PedestrianRegion.SIDE, PedestrianRegion.SIDE, PedestrianRegion.SIDE);
+        var bounds = geometry.bounds();
+        return area.minX() >= bounds.minX() && area.minZ() >= bounds.minZ()
+                && area.maxXExclusive() <= bounds.maxXExclusive() && area.maxZExclusive() <= bounds.maxZExclusive()
+                ? geometry.uniformSupport(area) : OptionalInt.empty();
     }
     int advance(int budget) {
         return advance(budget, () -> true);
