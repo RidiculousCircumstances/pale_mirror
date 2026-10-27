@@ -58,4 +58,36 @@ class GoodsParticipantReviewAdviceTest {
         assertTrue(completion.revalidate(state, new SimInstant(4000 + state.bootstrap().ruleset().goodsTrade().reviewInterval())).isEmpty());
         assertTrue(completion.revalidate(state, new SimInstant(3999)).isEmpty());
     }
+    @Test void marketOpportunityUsesPublishedConsentWithoutRenewingTheEconomicForecast() {
+        var rules = FrontierRulesets.installed("frontier-v3-simulation-baseline-r31");
+        var config = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
+                new WorldId("frontier:market-wake"), 126L, rules);
+        var initial = config.initialState(); var home = initial.bootstrap().settlements().get(6).id();
+        var owner = initial.companies().goodsTrade().participants().participants().get(home);
+        var plan = SettlementEconomicPlanPreparation.prepare(initial, owner,
+                SettlementEconomicEvaluation.domestic(initial, owner, 4000), 4000);
+        var planned = SettlementEconomicPublication.apply(initial, home, plan, 4000);
+        var trade = planned.companies().goodsTrade(); var registry = trade.participants();
+        var market = planned.withCompanies(planned.companies().withGoodsTrade(trade.withParticipants(
+                registry.withEconomicState(home, registry.economicState(home).invalidate(
+                    Map.of(SettlementEconomicPlanningState.Change.MARKET, Set.of("minecraft:bread")))))));
+        var reviews = SettlementEconomicReviewRequests.changed(planned, market, 4001);
+        assertEquals(List.of(GoodsParticipantProcess.review(home, plan.reviewAtTick())), reviews,
+                "an external quote must not advance the whole-economy deadline");
+        var wake = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested)
+                GoodsParticipantWakeup.party(market, home, "new-quote", 4001).getFirst().payload()).action();
+        assertEquals(GoodsParticipantWakeup.OPPORTUNITY, wake.kind());
+        assertNotEquals(reviews.getFirst().id(), wake.id());
+        assertTrue(config.scheduledPlanner().advice(market, wake, new SimInstant(4002)).isEmpty());
+        var events = config.scheduledPlanner().plan(market, wake, new SimInstant(4002));
+        assertFalse(events.isEmpty());
+        assertTrue(events.stream().noneMatch(event -> event.payload() instanceof SettlementEconomicPlanPublished
+                || event.payload() instanceof GoodsParticipantPricesReviewed || event.payload() instanceof GoodsParticipantReviewed),
+                "current-plan matching must not invoke or republish the economic solver");
+        var hard = planned.withCompanies(planned.companies().withGoodsTrade(trade.withParticipants(
+                registry.withEconomicState(home, registry.economicState(home).invalidate(
+                    Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of()))))));
+        assertEquals(List.of(GoodsParticipantProcess.review(home, 4002)), SettlementEconomicReviewRequests.changed(planned, hard, 4001));
+    }
+
 }

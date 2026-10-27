@@ -14,7 +14,12 @@ public final class GoodsParticipantProcess {
             }
             @Override public Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<FrontierWorldState>> advice(
                     FrontierWorldState state, ScheduledAction action, SimInstant instant) {
-                return Optional.of(GoodsParticipantReviewAdvice.capture(state, action, instant));
+                return action.kind().equals(REVIEW) ? Optional.of(GoodsParticipantReviewAdvice.capture(state, action, instant))
+                        : Optional.empty();
+            }
+            @Override public Optional<ScheduledPreparation> preparation(FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return action.kind().equals(GoodsParticipantWakeup.OPPORTUNITY)
+                        ? Optional.of(() -> prepare(state, action, instant)) : Optional.empty();
             }
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
                     io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
@@ -42,7 +47,14 @@ public final class GoodsParticipantProcess {
         return ImmutablePlanningScope.within(() -> prepare(state, action, executionInstant).get());
     }
     static java.util.function.Supplier<List<ProposedEvent>> prepare(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
-        return prepare(state, action, executionInstant, SettlementEconomicPlanPreparation.review(state, action, executionInstant));
+        var participant = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(action.subject()), "trade opportunity owner");
+        // A current quote is a matching opportunity, not a request to solve the
+        // entire economy again. Existing consent is still checked against current
+        // resources/cash/expiry; hard invalidations schedule their own full review.
+        var assessment = action.kind().equals(GoodsParticipantWakeup.OPPORTUNITY)
+                ? new SettlementEconomicPlanPreparation.Review(executionInstant.ticks(), participant.prices(), Optional.empty())
+                : SettlementEconomicPlanPreparation.review(state, action, executionInstant);
+        return prepare(state, action, executionInstant, assessment);
     }
     static java.util.function.Supplier<List<ProposedEvent>> prepare(FrontierWorldState state, ScheduledAction action,
             SimInstant executionInstant, SettlementEconomicPlanPreparation.Review advice) {
@@ -135,7 +147,7 @@ public final class GoodsParticipantProcess {
             for (var endpoint : GoodsParticipantStorage.quoteEndpoints(state, participant, intent)) {
             var quoteKey = new QuoteKey(peer.party(), intent.itemKind(), intent.side(), endpoint.containerId());
             if (pendingQuotes.contains(quoteKey) || state.companies().goodsTrade().orders().size() >= GoodsTradeState.MAX_ORDERS) continue;
-            var id = new SubjectId("order:goods-policy/" + WorkOpportunityIdentity.digest(participant.party().id().value() + "|" + participant.reviewRevision()
+            var id = new SubjectId("order:goods-policy/" + WorkOpportunityIdentity.digest(participant.party().id().value() + "|" + participant.reviewRevision() + "|" + action.id().value() + "|" + now
                     + "|" + peer.party().id().value() + "|" + intent.itemKind() + "|" + intent.side().wireTag() + "|" + endpoint.containerId().value()));
             var order = new GoodsTradeOrder(id, participant.party(), peer.party(), intent.side(), endpoint.containerId(),
                     intent.itemKind(), intent.quantity(), 0, intent.limit(), retainedExpiry.getOrDefault(
@@ -156,10 +168,11 @@ public final class GoodsParticipantProcess {
         var events = new ArrayList<>(preparedEvents);
         var rules = state.bootstrap().ruleset().goodsTrade();
         boolean periodic = action.kind().equals(REVIEW);
-        String decision;
+        String decision; boolean awaitingNavigation = false;
         if (rules.supplyPlanning().enabled()) {
             var trip = preparedTrip.orElseThrow().get();
             state = trip.state(); events.addAll(trip.events()); decision = trip.decision() + "; published=" + published;
+            awaitingNavigation = trip.awaitingNavigation();
         } else {
         var search = state.companies().goodsTrade().contracts().size() < GoodsTradeState.MAX_CONTRACTS
                 ? GoodsOrderMatching.first(state, participant, now) : new GoodsOrderMatching.Search(Optional.empty(), "CONTRACT_RETENTION_LIMIT", 0);
@@ -179,23 +192,35 @@ public final class GoodsParticipantProcess {
                 decision = "CONTRACT_RESERVED; contract=" + value.contract().id().value();
                 var dispatch = GoodsShipmentPlanning.dispatch(state, seller, now); events.addAll(dispatch);
                 if (!value.contract().sourceContainerId().equals(value.contract().receiverContainerId()) && dispatch.isEmpty()) decision = "RESERVED_AWAITING_AVAILABLE_COURIER";
-            } else decision = "NAVIGATION_" + routeStatus.name();
+            } else {
+                decision = "NAVIGATION_" + routeStatus.name();
+                awaitingNavigation = routeStatus == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING
+                        || routeStatus == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY;
+            }
         } else events.addAll(GoodsShipmentPlanning.dispatch(state, participant, now));
         }
-        decision += "; withdrawn=" + commitments.events().stream().mapToInt(event ->
-                    ((GoodsTradeCancelled) event.payload()).disposition().quantity()).sum()
-                + "; reasons=" + commitments.events().stream().map(event ->
-                    ((GoodsTradeCancelled) event.payload()).disposition().reason().name()).distinct().toList()
-                + "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantAssessment.trading(state, participant, now), rules);
-        if (decision.length() > 512) decision = decision.substring(0, 512);
-        events.add(new ProposedEvent(participant.party().id(), new GoodsParticipantReviewed(participant.reviewRevision(), decision, now)));
-        long nextReview = state.companies().goodsTrade().participants().economicState(participant.party().id()).accepted()
-                .map(SettlementEconomicPlan::reviewAtTick).orElse(Math.addExact(now, rules.reviewInterval()));
-        events.add(new ProposedEvent(participant.party().id(), new ScheduleEffect.ReconsiderationRequested(
-                review(participant.party().id(), Math.max(Math.addExact(now, 1), nextReview)))));
+        if (periodic) {
+            decision += "; withdrawn=" + commitments.events().stream().mapToInt(event ->
+                        ((GoodsTradeCancelled) event.payload()).disposition().quantity()).sum()
+                    + "; reasons=" + commitments.events().stream().map(event ->
+                        ((GoodsTradeCancelled) event.payload()).disposition().reason().name()).distinct().toList()
+                    + "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantAssessment.trading(state, participant, now), rules);
+            if (decision.length() > 512) decision = decision.substring(0, 512);
+            events.add(new ProposedEvent(participant.party().id(), new GoodsParticipantReviewed(participant.reviewRevision(), decision, now)));
+            long nextReview = state.companies().goodsTrade().participants().economicState(participant.party().id()).accepted()
+                    .map(SettlementEconomicPlan::reviewAtTick).orElse(Math.addExact(now, rules.reviewInterval()));
+            events.add(new ProposedEvent(participant.party().id(), new ScheduleEffect.ReconsiderationRequested(
+                    review(participant.party().id(), Math.max(Math.addExact(now, 1), nextReview)))));
+        }
         if (published > 0) for (var peer : participant.known())
             events.addAll(GoodsParticipantWakeup.party(state, peer.party().id(), "quote|" + participant.party().id().value()
                     + "|" + participant.reviewRevision(), now));
+        if (awaitingNavigation) {
+            var retry = GoodsParticipantWakeup.action(participant.party().id(), Math.addExact(now, 1));
+            events.add(new ProposedEvent(participant.party().id(), periodic
+                    ? new ScheduleEffect.ReconsiderationRequested(retry) : new ScheduleEffect.Rescheduled(action.id(), retry)));
+        }
+        if (events.isEmpty()) events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         return List.copyOf(events);
     }
     private static Optional<GoodsTradeRetired> closedRetirement(FrontierWorldState state, long now) {

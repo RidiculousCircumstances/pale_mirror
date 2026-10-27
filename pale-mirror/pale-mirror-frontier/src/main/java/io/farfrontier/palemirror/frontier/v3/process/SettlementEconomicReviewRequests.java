@@ -18,11 +18,10 @@ public final class SettlementEconomicReviewRequests {
             boolean urgent = current.accepted().isEmpty()
                     || reasons.contains(SettlementEconomicPlanningState.Change.NEED)
                     || reasons.contains(SettlementEconomicPlanningState.Change.CAPACITY)
-                    || reasons.contains(SettlementEconomicPlanningState.Change.MARKET)
                     || reasons.contains(SettlementEconomicPlanningState.Change.CASH)
                     || reasons.contains(SettlementEconomicPlanningState.Change.DELIVERY);
             long due = urgent ? Math.addExact(now, 1) : Math.max(Math.addExact(now, 1), current.accepted().orElseThrow().reviewAtTick());
-            result.add(GoodsParticipantWakeup.action(entry.getKey(), due));
+            result.add(GoodsParticipantProcess.review(entry.getKey(), due));
         }
         return List.copyOf(result);
     }

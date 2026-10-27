@@ -75,8 +75,10 @@ class AutonomousGoodsTradeTest {
         for (int boundary = 0; boundary < 2000; boundary++) {
             var participant = engine.canonicalState().state().companies().goodsTrade().participants().participants().get(HOME);
             if (participant != null && participant.reviewRevision() > 0) break;
-            var next = engine.checkpoint().schedules().stream().sorted().findFirst().orElseThrow();
-            var result = engine.advanceTo(next.dueAt(), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
+            var state = engine.canonicalState().state();
+            var next = engine.checkpoint().schedules().stream().filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(state, action))
+                    .sorted().findFirst().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), next.dueAt().ticks())), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
         assertTrue(engine.canonicalState().state().companies().companies().isEmpty());
@@ -173,7 +175,9 @@ class AutonomousGoodsTradeTest {
                 // Exercise the registered dispatcher, not a helper that might bypass the lost clock.
                 var events = FrontierWorldRuntimeDefinition.planScheduled(recovered, action, new SimInstant(executedAt));
                 var next = apply(recovered, events, executedAt, "goods-trade");
-                assertEquals(executedAt, next.companies().goodsTrade().participants().participants().get(COMPANY).reviewedAtTick());
+                assertEquals(periodic ? executedAt : recovered.companies().goodsTrade().participants().participants().get(COMPANY).reviewedAtTick(),
+                        next.companies().goodsTrade().participants().participants().get(COMPANY).reviewedAtTick(),
+                        "matching an opportunity must not renew the independent economic forecast");
                 if (executedAt == sell.expiresAtTick()) {
                     var contract = next.companies().goodsTrade().contracts().values().stream().findFirst().orElseThrow();
                     assertEquals(sell.id(), contract.sellOrderId());
@@ -190,8 +194,8 @@ class AutonomousGoodsTradeTest {
                 var nextReviews = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.ReconsiderationRequested.class::isInstance)
                         .map(ScheduleEffect.ReconsiderationRequested.class::cast).map(ScheduleEffect.ReconsiderationRequested::action)
                         .filter(scheduled -> scheduled.kind().equals(GoodsParticipantProcess.REVIEW) && scheduled.subject().equals(COMPANY)).toList();
-                assertEquals(1, nextReviews.size());
-                assertEquals(executedAt + rules.reviewInterval(), nextReviews.getFirst().dueAt().ticks());
+                assertEquals(periodic ? 1 : 0, nextReviews.size());
+                if (periodic) assertEquals(executedAt + rules.reviewInterval(), nextReviews.getFirst().dueAt().ticks());
             }
         }
     }

@@ -19,7 +19,8 @@ public final class GoodsParticipantWakeup {
                 .flatMap(value -> party(state, value.party().id(), cause, now).stream()).toList();
     }
     static ScheduledAction action(SubjectId party, long due) {
-        return GoodsParticipantProcess.review(party, due);
+        return new ScheduledAction(new ScheduleId("schedule:goods-opportunity/" + party.value().replace(':', '-')),
+                new SimInstant(due), 0, party, OPPORTUNITY, 1);
     }
     private GoodsParticipantWakeup() { }
 }

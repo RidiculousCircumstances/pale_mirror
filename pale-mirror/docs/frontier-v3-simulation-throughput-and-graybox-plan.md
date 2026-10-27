@@ -384,3 +384,27 @@ OPPORTUNITY kind into current-plan quote/matching work and retain full reviews
 for addressed hard inputs/ordinary review deadline. This is not artificial price
 smoothing or delayed physical work. Current consent, expiry, resources, finances
 and actual contract admission remain authoritative.
+
+Current-plan trading now uses the already registered OPPORTUNITY schedule with
+its own coalesced identity. It matches/publishes actual orders from retained
+consent and current stock/cash/expiry; it neither runs the economic solver nor
+renews prices, accepted plans, review revisions or the full-review deadline.
+MARKET-only input changes retain the accepted plan's full-review deadline; NEED,
+CAPACITY, CASH and DELIVERY still request prompt full review. New order identities
+include the exact action/execution generation because an opportunity does not
+increment economic reviewRevision. A typed trip navigation-wait result retains
+its opportunity successor through common route waits/recovery rather than losing
+selected pending work or relying on a diagnostic string. No-business completion
+uses the already declared cancellation effect, not an undeclared consumed payload.
+
+Commercial expiry/partial-payment/conditional-offer and mixed-trip in-flight
+recovery/return checks passed. One bootstrap fixture selected a held schedule and
+relied on the removed REVIEW alias; it now selects an actually eligible action.
+Current runtime-composition/ordinary trading/publication recovery checks PASS31s
+in current-plan-recovery-final.log. The broader preceding commercial slice had
+only that classified fixture failure; its mixed-trip terminal checks passed.
+
+The obsolete2c100town diagnostic was intentionally stopped after62m36 with last
+reported18000/rev145685, no memory/capacity quarantine;30000 was not proved. It
+still ran the superseded immediate full-review market cascade. Its JFR/logs are
+retained. A fresh current-code run, not further waiting on old classes, follows.

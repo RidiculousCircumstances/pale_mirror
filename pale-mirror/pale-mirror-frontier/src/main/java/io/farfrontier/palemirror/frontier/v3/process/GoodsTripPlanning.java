@@ -9,7 +9,9 @@ import java.util.*;
 
 /** One transaction publishes sales only after exact logistics admission has succeeded on an immutable draft. */
 final class GoodsTripPlanning {
-    record Result(FrontierWorldState state, List<ProposedEvent> events, String decision) { }
+    record Result(FrontierWorldState state, List<ProposedEvent> events, String decision, boolean awaitingNavigation) {
+        Result(FrontierWorldState state, List<ProposedEvent> events, String decision) { this(state, events, decision, false); }
+    }
     private record Candidate(FrontierWorldState draft, List<ProposedEvent> reservations,
             GoodsParticipant seller, List<GoodsTripAssembly.Parcel> parcels, GoodsTradeFulfillment.Mode mode,
             ProcurementSelection.Offer offer, List<FrontierWorldState> prefixes, ExpeditionTiming timing) { }
@@ -23,7 +25,7 @@ final class GoodsTripPlanning {
         return () -> {
             var planned = completion.get();
             var events = new ArrayList<>(retirement.events()); events.addAll(planned.events());
-            return new Result(planned.state(), List.copyOf(events), planned.decision());
+            return new Result(planned.state(), List.copyOf(events), planned.decision(), planned.awaitingNavigation());
         };
     }
     private static java.util.function.Supplier<Result> prepareInScope(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
@@ -114,6 +116,7 @@ final class GoodsTripPlanning {
     private static Result finish(FrontierWorldState initial, GoodsParticipant buyer, long now,
             List<ProcurementSelection.Requirement> requirements, List<Candidate> preparedCandidates, String decision) {
         var candidates = new ArrayList<>(preparedCandidates);
+        boolean awaitingNavigation = false;
         while (!candidates.isEmpty()) {
             var selected = new ProcurementSelection().select(requirements, candidates.stream().map(Candidate::offer).toList(),
                     initial.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(SourcingRules::labourValuePerTick).orElse(0L));
@@ -130,7 +133,9 @@ final class GoodsTripPlanning {
                 decision = "WAITING_FOR_SELECTED_TRIP; status=" + unavailable.status() + "; reserved=0";
                 // One selected pending preparation, never full-route fan-out for all quotes.
                 if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
-                    return new Result(initial, List.of(), decision);
+                    return new Result(initial, List.of(), decision, true);
+                if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY)
+                    awaitingNavigation = true;
                 smaller(initial, buyer, candidate, now).ifPresent(candidates::add);
                 continue;
             }
@@ -180,7 +185,7 @@ final class GoodsTripPlanning {
                     + "; workerTicks=" + cost.workerTicks()
                     + "; members=" + declaration.group().members().size() + "; mission=" + declaration.mission().id().value());
         }
-        return new Result(initial, List.of(), decision);
+        return new Result(initial, List.of(), decision, awaitingNavigation);
     }
     private static Optional<Candidate> smaller(FrontierWorldState initial, GoodsParticipant buyer, Candidate previous, long now) {
         for (int count = previous.parcels().size() - 1; count > 0; count--) {
