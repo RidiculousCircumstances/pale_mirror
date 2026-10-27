@@ -18,7 +18,12 @@ public final class HierarchicalPedestrianSearch {
     public static final int MIN_SLICE_WORK = PedestrianRegion.BUILD_WORK * 5 + 256;
     private record Node(PedestrianRegion.Tile tile, int component) { }
     private record Candidate(Node node, int distance, int estimate) { }
-    private record Edge(Node previous, SurfaceAnchor exit, SurfaceAnchor entrance) { }
+    private record Edge(Node previous, SurfaceAnchor exit, SurfaceAnchor entrance,
+                        java.util.Optional<PedestrianOpenRegionShortcut.Proof> shortcut) {
+        Edge(Node previous, SurfaceAnchor exit, SurfaceAnchor entrance) { this(previous, exit, entrance, java.util.Optional.empty()); }
+        Edge(Node previous, PedestrianOpenRegionShortcut.Proof shortcut) { this(previous, shortcut.exit(), shortcut.entrance(), java.util.Optional.of(shortcut)); }
+        int span() { return shortcut.map(PedestrianOpenRegionShortcut.Proof::span).orElse(1); }
+    }
     private PedestrianRouteGeometry geometry;
     private final PedestrianRegionCache regionCache;
     private final SurfaceAnchor start, target;
@@ -33,7 +38,7 @@ public final class HierarchicalPedestrianSearch {
     private List<PedestrianItineraryCache.Portal> itinerary;
     private Node rewind;
     private final List<PedestrianItineraryCache.Portal> reverseItinerary = new ArrayList<>();
-    private int refinement;
+    private int refinement, macroDirection, rewindHop;
     private long estimatedEdges;
     private SurfaceAnchor refinementStart;
     private final List<SurfaceAnchor> route = new ArrayList<>();
@@ -282,7 +287,7 @@ public final class HierarchicalPedestrianSearch {
                 if (candidate.node().equals(destination)) { beginRefinement(candidate.node()); break; }
                 if (regions.size() + 4 > MAX_REGIONS || distance.size() > MAX_NODES)
                     return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_SEARCH_SAFETY_LIMIT");
-                expanding = candidate; expansionNode = expansionEdge = expansionOffset = expansionExit = expansionEntrance = 0;
+                expanding = candidate; macroDirection = 0; expansionNode = expansionEdge = expansionOffset = expansionExit = expansionEntrance = 0;
                 expansionDirection = -1; expansionExits.clear(); publishingExits = null; publication = 0;
             }
             // Selecting a candidate is itself charged work. Retain that candidate
@@ -298,7 +303,11 @@ public final class HierarchicalPedestrianSearch {
             if (edge == null) {
                 itinerary = List.copyOf(reverseItinerary.reversed()); rewind = null; refinementStart = start;
             }
-            else { reverseItinerary.add(new PedestrianItineraryCache.Portal(edge.exit(), edge.entrance(),
+            else if (edge.shortcut().isPresent()) {
+                if (rewindHop == 0) rewindHop = edge.span();
+                reverseItinerary.add(edge.shortcut().orElseThrow().portal(--rewindHop));
+                if (rewindHop == 0) rewind = edge.previous();
+            } else { reverseItinerary.add(new PedestrianItineraryCache.Portal(edge.exit(), edge.entrance(),
                     edge.previous().component(), rewind.component())); rewind = edge.previous(); }
         }
         while (itinerary != null && work < limit && mayContinue.getAsBoolean()) {
@@ -448,7 +457,20 @@ public final class HierarchicalPedestrianSearch {
     }
     private void expandStep() {
         var candidate = expanding;
-        var local = regions.get(candidate.node().tile());
+        var local = region(candidate.node().tile());
+        if (local == null || terminal != null) return;
+        if (macroDirection < 4) {
+            work++;
+            var shortcut = candidate.node().component() == 0
+                    ? PedestrianOpenRegionShortcut.find(geometry, local.tile, macroDirection) : java.util.Optional.<PedestrianOpenRegionShortcut.Proof>empty();
+            macroDirection++;
+            shortcut.ifPresent(proof -> {
+                for (var tile : proof.covered()) dependencies.put(tile,
+                        geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z())).orElse(geometry.version()));
+                expansionExits.put(new Node(proof.target(), 0), new Edge(candidate.node(), proof));
+            });
+            return;
+        }
         if (expansionDirection < 0) {
             work++;
             if (expansionNode == local.size()) { expansionDirection = 0; return; }
@@ -496,7 +518,7 @@ public final class HierarchicalPedestrianSearch {
         work++;
         if (publication < publishingExits.size()) {
             var entry = publishingExits.get(publication++);
-            Node node = entry.getKey(); int nextDistance = candidate.distance() + 1;
+            Node node = entry.getKey(); int nextDistance = candidate.distance() + entry.getValue().span();
             if (distance.getOrDefault(node, Integer.MAX_VALUE) <= nextDistance) return;
             if (!distance.containsKey(node) && distance.size() >= MAX_NODES) {
                 finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_NODE_SAFETY_LIMIT"); return;

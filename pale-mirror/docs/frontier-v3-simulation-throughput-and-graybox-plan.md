@@ -755,3 +755,26 @@ The real provider withdraws the certificate for an unclassified player edit,
 including after codec recovery; unknown stays UNKNOWN_GEOMETRY. Focused region,
 negative/recovery, body-profile, forest and guardrails checks pass19s. Runtime
 speed and full long-route completion are still unmeasured; G remains open.
+
+D5 selected release/packaged/economy55/route-patrol4 gate passes61s and both retained
+worlds are verified SHA5125a818105ee45bf590881db43c855b861e26d6aec6e4010977c7ebcf2b52e1523367fbf232da89cd07a2a9543554f56b0a98bd2a47f37b356cbad0518b8b4a8a5.
+Native100town ordinary debt still grows; no G closure. Static review identifies a
+remaining scale contradiction: even a flat long itinerary expands/builds several
+16×16neighbours per traversed tile, so the4096region safety bound can refuse a
+valid tens-of-thousands-block journey. Merely raising it would retain millions
+of extra detailed surfaces for each concurrent search.
+
+The SAME optional positive plane certificate now also supplies16region shortcuts
+inside HierarchicalPedestrianSearch. Each shortcut records every crossed regional
+token, has its actual regional distance, and expands back into ordinary adjacent
+portals during bounded rewind. Movement still refines only its normal near prefix;
+quotes count the ordinary connected edges. The original full search remains as
+fallback, including all ordinary edges. No shortcut crosses an uncertified area,
+changes arrival/time semantics, raises worker/graph/result capacity or adds another
+navigation owner. Coverage probes are bounded to320block side/128regions, including
+body/context halos; they inspect sparse producer metadata, not each remote block.
+A40kjourney now reaches ESTIMATED and an adjacent movement prefix within the
+existing graph bounds. A complete wall stays NO_PATH. An edit inside an unexpanded
+shortcut invalidates its dependency proof; a remote irrelevant edit preserves it.
+Focused changed-region/body/worker/negative tests and guardrails pass21s; extended
+proof case passes11s. Native throughput effect remains to be measured.
