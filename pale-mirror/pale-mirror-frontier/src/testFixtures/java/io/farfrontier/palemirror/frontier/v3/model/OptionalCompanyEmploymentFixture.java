@@ -45,10 +45,9 @@ public final class OptionalCompanyEmploymentFixture {
                 job.stationWork().isPresent() ? ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 512
                         : ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + job.workTraversal().linearCorridorSurfaces().size() + 4).sum();
         for (int step = 0; !state.productionJobs().isEmpty() && step < remaining; step++) {
-            var jobs = state.productionJobs().keySet();
-            var next = engine.checkpoint().schedules().stream().filter(action -> jobs.contains(action.subject()))
-                    .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction::dueAt)
-                    .min(java.util.Comparator.naturalOrder()).orElseThrow();
+            // Travel has its own actor subject and timed deadline. Follow the
+            // registered engine boundary, not only the parent job's review timer.
+            var next = engine.nextExecutionBoundary().orElseThrow();
             var target = next.compareTo(engine.checkpoint().instant()) > 0 ? next : engine.checkpoint().instant();
             var result = engine.advanceTo(target, budget);
             if (result.status().kind() != EngineStatus.Kind.ACTIVE)
@@ -59,7 +58,8 @@ public final class OptionalCompanyEmploymentFixture {
                 || state.companies().market().workOrders().values().stream().noneMatch(order -> order.terminalReceipt().isPresent()))
             throw new IllegalStateException("commercial fixture did not reach its terminal work receipt: tick="
                     + engine.checkpoint().instant() + ", jobs=" + state.productionJobs().keySet()
-                    + ", orders=" + state.companies().market().workOrders().values());
+                    + ", orders=" + state.companies().market().workOrders().values()
+                    + ", movements=" + state.actorMovements() + ", next=" + engine.checkpoint().schedules().stream().limit(6).toList());
         return engine;
     }
     /** Actual optional commercial service queue, distinct from ordinary direct settlement production. */

@@ -33,6 +33,7 @@ class BakeryRecipeRatioIntegrationTest {
         state = ProductionProcess.reduceStarted(state, task.ownerId(), start);
         var codecs = FrontierWorldPayloadCodecs.create();
         for (long due = 300, turns = 0; state.productionJobs().containsKey(job.id()) && turns < 700; due += 20, turns++) {
+            state = BakeryTestClock.arrive(state, job, due);
             due = BakeryTestClock.due(state, job, due);
             var current = state.productionJobs().get(job.id());
             var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due)).stream()

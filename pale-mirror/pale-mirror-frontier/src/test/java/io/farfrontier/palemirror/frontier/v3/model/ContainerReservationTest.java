@@ -56,6 +56,7 @@ class ContainerReservationTest {
         while (state.productionJobs().get(started.job().id()).stationWork().orElseThrow().phase()
                 == StationWorkState.Phase.DEPOT_PICKUP && due < 10_000L) {
             var job = state.productionJobs().get(started.job().id());
+            state = BakeryTestClock.arrive(state, job, due);
             var step = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.planCompletion(state,
                     io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.complete(job, due)).stream()
                     .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)

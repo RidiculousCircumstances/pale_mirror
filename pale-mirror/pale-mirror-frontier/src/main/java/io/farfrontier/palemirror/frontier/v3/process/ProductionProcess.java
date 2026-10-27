@@ -860,6 +860,13 @@ public final class ProductionProcess {
                 && (job.stationWork().isEmpty() || StationWorkMovementPlanning.held(state, job, action.dueAt().ticks())));
     }
 
+    /** This parent waits for its declared worker/owner, not an unaddressed per-tick poll. */
+    public static java.util.Set<SubjectId> completionWakeDependencies(FrontierWorldState state, ScheduledAction action) {
+        var job = state.productionJobs().get(action.subject());
+        if (job == null) return java.util.Set.of();
+        return java.util.Set.of(job.id(), job.workerId(), job.facilityId(), job.settlementId());
+    }
+
     private static boolean hasOpenWorkScene(FrontierWorldState state, SubjectId jobId) {
         return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isProductionWork)
                 .anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && FrontierSceneBehaviors.productionWork(lease).jobId().equals(jobId));

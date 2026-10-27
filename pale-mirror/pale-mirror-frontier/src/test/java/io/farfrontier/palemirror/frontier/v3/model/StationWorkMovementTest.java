@@ -36,6 +36,16 @@ class StationWorkMovementTest {
         state = ActorMovementProcess.reduceColdAdvanced(state, job.workerId(), leg);
         var movement = state.actorMovements().get(job.workerId()); var interval = movement.coldTravel().orElseThrow();
         assertTrue(interval.route().size() > 2);
+        var base = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
+        var waiting = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(
+                new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(state.bootstrap().worldId(), state,
+                        new SimInstant(301), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                        base.projectionMapper(), base.limits(), List.of(ProductionProcess.complete(job, 301),
+                            ActorMovementProcess.progress(movement, interval.arrivalTick())), base.transactionCommitter(), base.stateValidator()));
+        var held = waiting.advanceTo(new SimInstant(302), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(8, 64));
+        assertTrue(held.transactions().isEmpty());
+        assertEquals(new SimInstant(interval.arrivalTick()), waiting.nextExecutionBoundary().orElseThrow(),
+                "the waiting production owner cannot keep an unaddressed old poll before the actual travel deadline");
         assertEquals(fixture.state().actorLocations(), state.actorLocations(), "retaining an interval cannot replay all its cells");
         var codecs = FrontierWorldPayloadCodecs.create();
         assertEquals(start, codecs.decode(start.type(), codecs.encode(start)));

@@ -78,10 +78,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 job.stationWork().isPresent() ? ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 512
                         : job.workTraversal().linearCorridorSurfaces().size() + ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 4).sum();
         for (int step = 0; !state.productionJobs().isEmpty() && step < budget; step++) {
-            var jobs = state.productionJobs().keySet();
-            var due = engine.checkpoint().schedules().stream().filter(action -> jobs.contains(action.subject())
-                            && action.kind().equals("frontier.settlement.production.task.complete"))
-                    .map(ScheduledAction::dueAt).min(java.util.Comparator.naturalOrder()).orElseThrow();
+            var due = engine.nextExecutionBoundary().orElseThrow();
             // Bounded execution may retain due work after advancing the clock. Drain it at
             // the current instant instead of requiring every retained action to be future.
             var target = due.compareTo(engine.checkpoint().instant()) > 0 ? due : engine.checkpoint().instant();
@@ -170,17 +167,19 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 .productionJobs().get(boundJob.id()));
         assertFalse(ReferenceContainerCustody.hasOperationalCustody(bound, depot),
                 "a physical stack binding alone does not grant container write authority");
-        assertInstanceOf(ScheduleEffect.Rescheduled.class,
-                ProductionProcess.planCompletion(bound, ProductionProcess.complete(boundJob, 200L))
-                        .getFirst().payload());
+        var boundPlan = ProductionProcess.planCompletion(bound, ProductionProcess.complete(boundJob, 200L));
+        assertTrue(boundPlan.stream().anyMatch(event -> event.payload() instanceof ScheduleEffect.Rescheduled));
+        assertTrue(boundPlan.stream().noneMatch(event -> event.payload() instanceof BakeryColdStep),
+                "goal admission cannot consume physically bound source stock");
 
         FrontierWorldState unbound = ProductionResourceCustody.release(bound, accountId, 3L);
         assertEquals(reserved.productionJobs(), unbound.productionJobs());
-        BakeryColdStep next = ProductionProcess.planCompletion(unbound,
+        var next = ProductionProcess.planCompletion(unbound,
                         ProductionProcess.complete(started.job(), 220L)).stream()
-                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-        FrontierWorldState advanced = ProductionProcess.reduceBakeryColdStep(unbound, settlement, next);
+                .map(ProposedEvent::payload).filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState advanced = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.reduceStarted(
+                unbound, started.job().workerId(), next);
         assertEquals(64, advanced.inventory().fungibleResources().accounts().get(accountId)
                 .claimQuantities().get(hold.claimId()));
         assertEquals(started.job().workerId(), advanced.productionJobs().get(started.job().id()).workerId());

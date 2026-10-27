@@ -396,7 +396,8 @@ public final class FrontierV3FixtureCatalog {
         for (int step = 0; step < 300; step++) {
             var checkpoint = engine.checkpoint();
             if (checkpoint.schedules().isEmpty()) break;
-            engine.advanceTo(checkpoint.schedules().getFirst().dueAt(),
+            var due = engine.nextExecutionBoundary().orElseThrow();
+            engine.advanceTo(new SimInstant(Math.max(checkpoint.instant().ticks(), due.ticks())),
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(100, 100));
             var current = engine.canonicalState().state();
             if (current.productionJobs().size() == 1 && current.productionJobs().values().iterator().next()

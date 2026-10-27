@@ -9,7 +9,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakerySourceRecoveryTest {
-    @Test void isolatedUnladenWorkerDoesNotReserveAFutureTurnAndCanReleaseWithoutMovingStock() {
+    @Test void unladenPickupConflictReleasesOnlyTheExactUnchangedInputAndBody() {
         var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
                 FrontierBootstrapper.create(new WorldId("frontier:bakery-source-recovery"), 91L)), StrategicTaskStatus.PENDING);
         var task = state.strategicPlans().tasks().values().iterator().next();
@@ -19,16 +19,24 @@ class BakerySourceRecoveryTest {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
-        var job = started.job(); var actor = state.actorLocations().get(job.workerId());
+        var job = started.job();
+        state = state.withActorBody(job.workerId(), StationWorkGoal.current(state, job).station().standingBody());
+        var sourceActor = state.actorLocations().get(job.workerId());
         var point = StationWorkStorage.source(job);
         var leaseId = new SceneLeaseId("lease:bakery-source-recovery");
         var lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
-                actor.supportingSurface().support(), new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED,
+                sourceActor.supportingSurface().support(), new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED,
                 List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))),
                 Set.of(), Optional.empty());
         state = FrontierTestActorBodies.present(state.prepareSceneLease(lease), lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertTrue(ServiceAccessCapabilities.current(state, point).stream().anyMatch(d -> d.identity().actorId().equals(job.workerId())));
-        var conflicted = state.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        var occupiedConflict = state.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        assertTrue(ServiceAccessCapabilities.current(occupiedConflict, point).stream().anyMatch(d ->
+                d.identity().actorId().equals(job.workerId()) && d.presence() == ServiceAccessDemand.Presence.OCCUPIED));
+        // A witnessed departure removes actual occupancy; a conflicted source scene
+        // may not retain a future service turn. It is never a travel executor.
+        var conflicted = occupiedConflict.withActorBody(job.workerId(), sourceActor.body().offset(8, 0, 0));
+        var actor = conflicted.actorLocations().get(job.workerId());
         assertTrue(ServiceAccessCapabilities.current(conflicted, point).stream().noneMatch(d -> d.identity().actorId().equals(job.workerId())),
                 "a conflicted distant worker cannot starve all deliveries to the warehouse");
         assertTrue(ServiceAccessCoordinator.wakePoints(state, conflicted).contains(point));

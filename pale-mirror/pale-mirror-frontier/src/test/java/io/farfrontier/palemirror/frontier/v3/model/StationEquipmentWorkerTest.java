@@ -31,6 +31,7 @@ class StationEquipmentWorkerTest {
         var f = fixture(true); var state = f.state(); var job = f.job();
         for (long tick = 300; tick < 10_000 && state.productionJobs().get(job.id()).stationWork().orElseThrow().phase()
                 == StationWorkState.Phase.TARGET_PICKUP; tick += 20) {
+            state = BakeryTestClock.arrive(state, job, tick);
             var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, tick)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
             state = ProductionProcess.reduceBakeryColdStep(state, job.settlementId(), step);
@@ -76,6 +77,7 @@ class StationEquipmentWorkerTest {
         var codec = new FrontierWorldStateCodec(); var phases = EnumSet.noneOf(StationWorkState.Phase.class);
         for (long tick = 300, attempts = 0; state.productionJobs().containsKey(job.id()) && attempts < 800; tick += 20, attempts++) {
             boolean enteringPhase = phases.add(state.productionJobs().get(job.id()).stationWork().orElseThrow().phase());
+            state = BakeryTestClock.arrive(state, job, tick);
             tick = BakeryTestClock.due(state, job, tick);
             var events = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, tick));
             var step = events.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)

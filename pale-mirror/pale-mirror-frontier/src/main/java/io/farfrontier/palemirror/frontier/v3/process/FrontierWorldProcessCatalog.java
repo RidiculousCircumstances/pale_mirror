@@ -241,6 +241,9 @@ public final class FrontierWorldProcessCatalog {
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ProductionProcess.completionHeld(state, action);
                 }
+                @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+                    return ProductionProcess.completionWakeDependencies(state, action);
+                }
             })),
             Map.entry("frontier.hive.growth.task.start", (state, action) -> HiveGrowthProcess.planStart(state, action)),
             Map.entry("frontier.hive.growth.task.complete", (state, action) -> HiveGrowthProcess.planCompletion(state, action)),
