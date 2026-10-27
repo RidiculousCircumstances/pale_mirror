@@ -535,3 +535,21 @@ restart checks pass24s(single-goal-meal-approach-focused2.log); final retirement
 checks pass20s(single-goal-departure-retirement.log). This does not award arrival or change service admission/timing.
 The original-prefix data is compound-meal-route-demands.txt; no native outcome is
 inferred from those direct read-only probes. G requires updated native results.
+
+
+Actuald9ordinary100town continuation now reached CONSUME/CLEAR_ACCESS with238
+in-flight meals, but debt still grew; do not closeG. The next source-proven
+publication race: process planning registers its computed successor before the
+kernel's asynchronous WAL publication. Ready-index cleanup previously removed
+that exact successor because only its predecessor was still canonical. Producer
+registration now explicitly stages both exact generations. A result stays retained
+and cannot be exposed as runnable while the predecessor is canonical; after
+publication it can wake the successor. Neither generation retained means actual
+cancellation/supersession and releases it. Pending disk is never interpreted as
+stale work. Focused original-consumer/delayed-publication/stale-generation and
+actual adapter recovery+guardrails pass21s(continuation-publication-focused.log).
+The graphical terrain visit produced5inspected landmark frames; the field check
+was an invalid fixed-crop assertion, then an airborne visit unsupported by the
+ordinary player's gravity. The checked scenario now targets the actual board and
+uses a grounded east-side camera. Earlier failed receipts are retained explicitly;
+no full graphical or station-terminal acceptance is claimed from them.

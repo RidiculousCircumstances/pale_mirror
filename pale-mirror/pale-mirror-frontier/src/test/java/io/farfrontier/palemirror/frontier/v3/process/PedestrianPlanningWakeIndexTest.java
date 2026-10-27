@@ -74,6 +74,20 @@ class PedestrianPlanningWakeIndexTest {
         assertEquals(List.of(fast, slow), released, "cancelled successor must release remaining work");
         assertThrows(IllegalArgumentException.class, () -> index.resumed(owner, continuation));
     }
+    @Test void computedSuccessorRetainsItsReadyResultUntilItsExactCanonicalPublication() {
+        var index = new PedestrianPlanningWakeIndex(); var before = action("publishing", 20); var next = action("publishing", 40);
+        var query = request(3); index.stage(before, next, List.of(query));
+        index.changed(List.of(new PedestrianPlanningChange(query, PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+        assertTrue(index.ready(view(20, before)).isEmpty(), "an unpublished successor has no execution authority");
+        assertEquals(1, index.waitingCount()); assertEquals(1, index.readyCount());
+        assertEquals(List.of(query), index.retainedRequests(new SimInstant(20)), "durability delay cannot evict the successor's route");
+        index.releaseUnused(ignored -> fail("pending publication cannot cancel the calculation"));
+        assertEquals(List.of(next), index.ready(view(20, next)));
+        index.resumed(next, next); assertFalse(index.waiting(next));
+        index.stage(next, action("publishing", 60), List.of(query));
+        assertTrue(index.ready(view(20, action("publishing", 80))).isEmpty());
+        assertEquals(0, index.waitingCount(), "a genuinely superseded or cancelled producer releases its staged result");
+    }
     @Test void naturallyDueOwnerKeepsItsDemandUntilItsReviewRuns() {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("due", 20);
         index.replace(owner, List.of(request(3), request(20)));

@@ -134,7 +134,7 @@ public final class PedestrianPlanningContinuations {
                 successor = null;
         }
         if (successor == null) index.remove(action.id());
-        else index.replace(successor, observation.requests());
+        else index.stage(action, successor, observation.requests());
         return observation.result();
     }
 }

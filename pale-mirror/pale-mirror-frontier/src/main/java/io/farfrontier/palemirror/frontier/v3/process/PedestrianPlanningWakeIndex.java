@@ -12,7 +12,8 @@ import java.util.*;
 /** Derived runtime index. One wake per exact retained continuation, irrespective of repeated calculation signals. */
 public final class PedestrianPlanningWakeIndex {
     private enum Origin { LIVE_CONTINUATION, RECOVERY_PREVIEW }
-    private record Wait(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin) { }
+    private record Wait(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
+                        Optional<ScheduledAction> predecessor) { }
     private final Map<ScheduleId, Wait> waits = new LinkedHashMap<>();
     private final Map<PedestrianDemandKey, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
@@ -22,18 +23,26 @@ public final class PedestrianPlanningWakeIndex {
     private final Set<PedestrianRouteRequest> released = new LinkedHashSet<>();
 
     public void replace(ScheduledAction action, List<PedestrianRouteRequest> requests) {
-        replace(action, requests, Origin.LIVE_CONTINUATION);
+        replace(action, requests, Origin.LIVE_CONTINUATION, Optional.empty());
     }
     void restore(ScheduledAction action, List<PedestrianRouteRequest> requests) {
-        replace(action, requests, Origin.RECOVERY_PREVIEW);
+        replace(action, requests, Origin.RECOVERY_PREVIEW, Optional.empty());
     }
-    private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin) {
+    /** A producer may have computed its successor before the WAL publishes it.
+     * Retain delivery while its exact predecessor is still canonical, but never
+     * expose that unpublished generation as runnable work. */
+    void stage(ScheduledAction predecessor, ScheduledAction successor, List<PedestrianRouteRequest> requests) {
+        if (!predecessor.id().equals(successor.id())) throw new IllegalArgumentException("planning successor changed its schedule identity");
+        replace(successor, requests, Origin.LIVE_CONTINUATION, Optional.of(predecessor));
+    }
+    private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
+                         Optional<ScheduledAction> predecessor) {
         remove(action.id());
         if (requests.isEmpty()) return;
         var demands = new LinkedHashMap<PedestrianDemandKey, PedestrianRouteRequest>();
         requests.forEach(request -> demands.put(PedestrianDemandKey.of(request), request));
         var distinct = List.copyOf(demands.values());
-        waits.put(action.id(), new Wait(action, distinct, origin));
+        waits.put(action.id(), new Wait(action, distinct, origin, predecessor));
         for (var request : distinct) dependents.computeIfAbsent(PedestrianDemandKey.of(request), ignored -> new LinkedHashSet<>()).add(action.id());
     }
     public void remove(ScheduleId id) {
@@ -85,7 +94,7 @@ public final class PedestrianPlanningWakeIndex {
                 || !expected.kind().equals(replacement.kind()) || expected.priority() != replacement.priority()
                 || expected.weight() != replacement.weight())
             throw new IllegalArgumentException("planning resume lost its exact continuation");
-        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION));
+        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION, Optional.empty()));
         makeRunnable(expected.id());
     }
     private void makeRunnable(ScheduleId id) {
@@ -112,16 +121,19 @@ public final class PedestrianPlanningWakeIndex {
     public List<ScheduledAction> ready(io.farfrontier.palemirror.frontier.v3.api.SimInstant instant,
                                        java.util.function.Predicate<ScheduledAction> retained) {
         if (waits.isEmpty()) return List.of();
+        var unpublished = new HashSet<ScheduleId>();
         for (var entry : List.copyOf(waits.entrySet())) {
-            var action = entry.getValue().action();
-            if (!retained.test(action)) remove(entry.getKey());
-            else if (ready.contains(entry.getKey()) && !parked.contains(entry.getKey())
+            var wait = entry.getValue(); var action = wait.action();
+            if (!retained.test(action)) {
+                if (wait.predecessor().filter(retained).isPresent()) unpublished.add(entry.getKey());
+                else remove(entry.getKey());
+            } else if (ready.contains(entry.getKey()) && !parked.contains(entry.getKey())
                     && (action.dueAt().ticks() <= instant.ticks()
                         || action.dueAt().ticks() - instant.ticks() == 1L)) makeRunnable(entry.getKey());
         }
         // Completion order, not original registration order: a repeatedly rearmed owner
         // joins the tail and cannot starve another retained ready continuation.
-        return ready.stream().map(id -> waits.get(id).action()).toList();
+        return ready.stream().filter(id -> !unpublished.contains(id)).map(id -> waits.get(id).action()).toList();
     }
 
     /** Bounded read-only explanation of retained calculation subscriptions. */
