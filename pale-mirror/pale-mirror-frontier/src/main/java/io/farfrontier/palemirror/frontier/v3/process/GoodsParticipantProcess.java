@@ -12,6 +12,10 @@ public final class GoodsParticipantProcess {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                 throw new IllegalArgumentException("economic review requires its execution instant");
             }
+            @Override public Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<FrontierWorldState>> advice(
+                    FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return Optional.of(GoodsParticipantReviewAdvice.capture(state, action, instant));
+            }
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
                     io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
                 return GoodsParticipantProcess.plan(state, action, instant);
@@ -38,6 +42,10 @@ public final class GoodsParticipantProcess {
         return ImmutablePlanningScope.within(() -> prepare(state, action, executionInstant).get());
     }
     static java.util.function.Supplier<List<ProposedEvent>> prepare(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
+        return prepare(state, action, executionInstant, SettlementEconomicPlanPreparation.review(state, action, executionInstant));
+    }
+    static java.util.function.Supplier<List<ProposedEvent>> prepare(FrontierWorldState state, ScheduledAction action,
+            SimInstant executionInstant, SettlementEconomicPlanPreparation.Review advice) {
         Objects.requireNonNull(executionInstant, "goods review execution instant");
         if (executionInstant.compareTo(action.dueAt()) < 0)
             throw new IllegalArgumentException("goods participant review cannot execute before its due time");
@@ -50,6 +58,20 @@ public final class GoodsParticipantProcess {
         long now = executionInstant.ticks();
         var events = new ArrayList<ProposedEvent>();
         var previousParticipant = registered;
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        if (!advice.prices().equals(previousParticipant.prices())) {
+            var review = new GoodsParticipantPricesReviewed(previousParticipant.reviewRevision(), advice.atTick(), advice.prices());
+            events.add(new ProposedEvent(previousParticipant.party().id(), review));
+            state = GoodsParticipantPricing.applyCommitted(state, previousParticipant.party().id(), review, now);
+        }
+        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
+        if (advice.publication().isPresent()) {
+            var publication = advice.publication().orElseThrow();
+            events.add(new ProposedEvent(participant.party().id(), new SettlementEconomicPlanPublished(publication)));
+            state = SettlementEconomicPublication.apply(state, participant.party().id(), publication, now);
+            if (publication.cultivation().isPresent()) events.add(new ProposedEvent(participant.party().id(),
+                    new ScheduleEffect.ReconsiderationRequested(CultivationProcessModule.next(participant.party().id(), Math.addExact(now, 1)))));
+        }
         // Retire only obligations already terminal in this transaction's pre-state.
         // Newly withdrawn promises must retain their settlement until a later review.
         var retirement = closedRetirement(state, now);
@@ -74,24 +96,6 @@ public final class GoodsParticipantProcess {
                 events.addAll(GoodsParticipantWakeup.party(state, contract.seller().id(), receipt.id().value(), now));
                 break; // One exact reception per contract/review.
             }
-        }
-        var rules = state.bootstrap().ruleset().goodsTrade();
-        var evaluation = SettlementEconomicEvaluation.domestic(state, previousParticipant, now);
-        var prices = GoodsParticipantPricing.review(state, previousParticipant, now, evaluation);
-        if (!prices.equals(previousParticipant.prices())) {
-            var review = new GoodsParticipantPricesReviewed(previousParticipant.reviewRevision(), now, prices);
-            events.add(new ProposedEvent(previousParticipant.party().id(), review));
-            state = GoodsParticipantPricing.applyCommitted(state, previousParticipant.party().id(), review, now);
-            evaluation = SettlementEconomicEvaluation.domestic(state,
-                    state.companies().goodsTrade().participants().participants().get(action.subject()), now);
-        }
-        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
-        if (evaluation.view().supplyPlan().isPresent()) {
-            var publication = SettlementEconomicPlanPreparation.prepare(state, participant, evaluation, now);
-            events.add(new ProposedEvent(participant.party().id(), new SettlementEconomicPlanPublished(publication)));
-            state = SettlementEconomicPublication.apply(state, participant.party().id(), publication, now);
-            if (publication.cultivation().isPresent()) events.add(new ProposedEvent(participant.party().id(),
-                    new ScheduleEffect.ReconsiderationRequested(CultivationProcessModule.next(participant.party().id(), Math.addExact(now, 1)))));
         }
         var commitments = GoodsCommitmentReview.plan(state, previousParticipant, now);
         state = commitments.state(); events.addAll(commitments.events());

@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -250,11 +253,20 @@ class FrontierV3ServerRuntimeTest {
 
     @Test
     void skippedPersistenceTurnsRetainHostTimeWithoutAddingItToOperatorAdvances(@TempDir Path directory) {
-        var definition = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:host-time-debt"), 91L);
+        // This is clock/debt equivalence, not equality of independently timed advisory decisions.
+        // Retain real due transactions and the file-store boundary without an unrelated economy.
+        var base = configuration();
+        var actions = java.util.stream.LongStream.of(1, 37, 80, 119).mapToObj(tick ->
+                new ScheduledAction(new ScheduleId("schedule:debt-" + tick), new SimInstant(tick), 0, SUBJECT, "test.debt", 1)).toList();
+        var definition = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),
+                base.commandPlanner(), (state, action) -> List.of(new ProposedEvent(SUBJECT, new Delta(1))),
+                base.reducer(), base.stateCodec(), base.projectionMapper(), new EngineLimits(8, 100, 16, 16),
+                actions, base.transactionCommitter());
+        var payloads = PayloadCodecs.merge(codecs(), io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs.scheduleEffects());
         var ordinary = FrontierV3ServerRuntime.start(definition,
-                new FrontierFileStore(directory.resolve("ordinary"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
+                new FrontierFileStore(directory.resolve("ordinary"), payloads), 37);
         var delayed = FrontierV3ServerRuntime.start(definition,
-                new FrontierFileStore(directory.resolve("delayed"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
+                new FrontierFileStore(directory.resolve("delayed"), payloads), 37);
         var budget = new WorkBudget(64, 512);
         advanceLogicalTicks(ordinary, 120, budget);
         for (int i = 0; i < 120; i++) delayed.observeOrdinaryHostTick();
@@ -268,6 +280,7 @@ class FrontierV3ServerRuntimeTest {
             awaitPreparationTurn(delayed);
         }
         assertTrue(largestAdvance > 1, "unused capacity must repay multiple elapsed ticks; worker poll count is not logical progress");
+        assertEquals(4, delayed.canonicalState().orElseThrow().state().value());
         assertEquals(ordinary.checkpointImage().orElseThrow(), delayed.checkpointImage().orElseThrow());
         delayed.observeOrdinaryHostTick();
         advanceLogicalTicks(delayed, 123, budget);

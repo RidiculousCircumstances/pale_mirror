@@ -48,11 +48,19 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final CommandPlanner<S> commandPlanner;
     private final ScheduledActionPlanner<S> scheduledPlanner;
     private PendingCalculation<S> pendingCalculation;
+    // Volatile, bounded advice only. Membership/deadline remain in the canonical queue.
+    private static final int MAX_PENDING_ADVICE = 8;
+    private record PendingAdvice<S>(ScheduledAction action, ScheduledAdviceCalculation<S> calculation) { }
+    private final java.util.Map<io.farfrontier.palemirror.frontier.v3.api.ScheduleId, PendingAdvice<S>> pendingAdvice = new java.util.LinkedHashMap<>();
     private record PendingCalculation<S>(S state, Revision revision, ScheduledAction action,
             SimInstant instant, ScheduledCalculation calculation) { }
     @Override public boolean hasPendingCalculation() { requireOwnerThread(); return pendingCalculation != null; }
     @Override public void cancelPendingCalculation() {
         requireOwnerThread();
+        cancelExactCalculation();
+        pendingAdvice.values().forEach(value -> value.calculation().cancel()); pendingAdvice.clear();
+    }
+    private void cancelExactCalculation() {
         if (pendingCalculation != null) { pendingCalculation.calculation().cancel(); pendingCalculation = null; }
     }
     private final EventReducer<S> reducer;
@@ -240,7 +248,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 return new CommandResult.Rejected(command.id(), revision, rejected.rejection());
             }
             // A rejected command changes no input of the retained calculation.
-            cancelPendingCalculation();
+            cancelExactCalculation();
             CommandPlan.Accepted accepted = (CommandPlan.Accepted) plan;
             TransactionId transactionId = new TransactionId("transaction:revision-" + revision.next().value());
             CommandReceipt receipt = new CommandReceipt(command.id(), command.submittedAt(), transactionId, revision.next());
@@ -266,12 +274,16 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         }
         if (pendingCommit != null) return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
+        for (var iterator = pendingAdvice.values().iterator(); iterator.hasNext();) {
+            var value = iterator.next();
+            if (!schedules.containsExact(value.action())) { value.calculation().cancel(); iterator.remove(); }
+        }
         admissionIndex.begin(budget);
         schedules.beginExecutionPass(target, budget.maxClassificationEvaluations(), revision);
         List<TransactionId> completed = new ArrayList<>();
-        int weight = 0;
+        int weight = 0, adviceAttempts = 0;
         ScheduledAction blocked = null;
-        while (completed.size() < budget.maxActions()) {
+        while (completed.size() + adviceAttempts < budget.maxActions()) {
             ScheduledAction action;
             try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION, "due-actions", worldId.value())) {
                 if (pendingCalculation == null) {
@@ -282,7 +294,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             } catch (RuntimeException error) {
                 quarantine(CauseChain.root(new CommandId("scheduler:allocation")),
                         KernelQuarantineReporter.Boundary.DUE_TRANSACTION, error);
-                return advanceResult(completed, Optional.empty(), consumption(budget, completed.size(), weight));
+                return advanceResult(completed, Optional.empty(), consumption(budget, completed.size() + adviceAttempts, weight));
             }
             if (action == null) break;
             try {
@@ -295,29 +307,66 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 var decision = admissionIndex.recheckSelected(state, action);
                 if (decision == ScheduleAdmissionIndex.Decision.DEFERRED) { blocked = action; break; }
                 if (decision == ScheduleAdmissionIndex.Decision.HELD) {
-                    cancelPendingCalculation();
+                    cancelExactCalculation();
                     schedules.holdSelected(action, admissionIndex.wakeKeys(state, action), target);
                     continue;
                 }
                 if (transactions.size() == limits.maxTransactions()) {
                     quarantine(CauseChain.root(ScheduledCauseIdentity.of(action.id())),
                             KernelQuarantineReporter.Boundary.DUE_CAPACITY, new IllegalStateException("transaction retention capacity exhausted during due work"));
-                    return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
+                    return advanceResult(completed, Optional.of(action), consumption(budget, completed.size() + adviceAttempts, weight));
                 }
                 List<ProposedEvent> planned;
                 SimInstant executionAt = pendingCalculation == null
                         ? laterOf(laterOf(instant, action.dueAt()), schedules.readyNotBefore(action)) : pendingCalculation.instant();
                 if (executionAt.compareTo(target) > 0) throw new IllegalStateException("ready admission lies after execution target");
                 try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_PLAN, action.kind(), action.subject().value())) {
+                    ScheduledPreparation acceptedAdvice = null;
+                    if (pendingCalculation == null) {
+                        var retainedAdvice = pendingAdvice.get(action.id());
+                        if (retainedAdvice != null && !retainedAdvice.action().equals(action)) {
+                            retainedAdvice.calculation().cancel(); pendingAdvice.remove(action.id()); retainedAdvice = null;
+                        }
+                        var declared = retainedAdvice == null ? scheduledPlanner.advice(state, action, executionAt)
+                                : Optional.<ScheduledAdvisory<S>>empty();
+                        if (retainedAdvice != null || declared.isPresent()) {
+                            if (retainedAdvice == null) {
+                                var started = scheduledPlanner.beginAdvice(declared.orElseThrow());
+                                if (started.isPresent()) {
+                                    retainedAdvice = new PendingAdvice<>(action, started.orElseThrow());
+                                    if (pendingAdvice.size() >= MAX_PENDING_ADVICE) {
+                                        // Advice is disposable: an indefinitely held owner may not
+                                        // retain every slot and exclude independent due reviews.
+                                        var oldest = pendingAdvice.values().iterator().next();
+                                        oldest.calculation().cancel(); pendingAdvice.remove(oldest.action().id());
+                                    }
+                                    pendingAdvice.put(action.id(), retainedAdvice);
+                                }
+                            }
+                            var calculated = retainedAdvice == null ? Optional.<ScheduledAdvisory.Completion<S>>empty()
+                                    : retainedAdvice.calculation().poll();
+                            if (calculated.isPresent()) {
+                                pendingAdvice.remove(action.id());
+                                acceptedAdvice = calculated.orElseThrow().revalidate(state, executionAt).orElse(null);
+                            }
+                            if (acceptedAdvice == null) {
+                                // Fair volatile polling preserves the exact original due generation.
+                                // No no-op retry transaction or global pending predecessor is created.
+                                schedules.holdSelected(action, Set.of(), executionAt);
+                                adviceAttempts++; weight = Math.addExact(weight, cost); continue;
+                            }
+                        }
+                    }
                     if (pendingCalculation == null) pendingCalculation = new PendingCalculation<>(state, revision, action,
-                            executionAt, scheduledPlanner.begin(state, action, executionAt));
+                            executionAt, acceptedAdvice == null ? scheduledPlanner.begin(state, action, executionAt)
+                                    : scheduledPlanner.beginPreparation(acceptedAdvice));
                     if (pendingCalculation.state() != state || !pendingCalculation.revision().equals(revision)
                             || !pendingCalculation.action().equals(action))
                         throw new IllegalStateException("scheduled preparation lost its exact canonical predecessor");
                     var result = pendingCalculation.calculation().poll();
                     if (result.isEmpty()) {
                         observeQueue(target, schedules.size(), schedules.parkedCount(), Optional.of(action));
-                        return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
+                        return advanceResult(completed, Optional.of(action), consumption(budget, completed.size() + adviceAttempts, weight));
                     }
                     planned = List.copyOf(result.orElseThrow());
                     pendingCalculation = null;
@@ -338,7 +387,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 // make the WAL move backwards after an intervening physical command.
                 var committed = commit(CauseChain.root(cause), executionAt, events, Optional.empty());
                 if (pendingCommit != null)
-                    return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
+                    return advanceResult(completed, Optional.of(action), consumption(budget, completed.size() + adviceAttempts, weight));
                 completed.add(committed);
                 weight = Math.addExact(weight, cost);
             } catch (RuntimeException error) {
@@ -346,20 +395,20 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 quarantine(CauseChain.root(ScheduledCauseIdentity.of(action.id())),
                         KernelQuarantineReporter.Boundary.DUE_TRANSACTION,
                         new IllegalStateException("scheduled action " + action.kind() + "/" + action.id().value() + " failed", error));
-                return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
+                return advanceResult(completed, Optional.of(action), consumption(budget, completed.size() + adviceAttempts, weight));
             }
         }
         if (pendingCalculation != null) {
             observeQueue(target, schedules.size(), schedules.parkedCount(), Optional.of(pendingCalculation.action()));
-            return advanceResult(completed, Optional.of(pendingCalculation.action()), consumption(budget, completed.size(), weight));
+            return advanceResult(completed, Optional.of(pendingCalculation.action()), consumption(budget, completed.size() + adviceAttempts, weight));
         }
         instant = target;
         pruneReceipts();
-        if (blocked == null && completed.size() == budget.maxActions()) blocked = schedules.firstReady();
+        if (blocked == null && completed.size() + adviceAttempts == budget.maxActions()) blocked = schedules.firstReady();
         if (blocked == null && admissionIndex.remainingChecks() == 0) blocked = schedules.firstChecking(target);
         var deferred = Optional.ofNullable(blocked).or(admissionIndex::deferredAction);
         observeQueue(target, schedules.size(), schedules.parkedCount(), deferred);
-        return advanceResult(completed, deferred, consumption(budget, completed.size(), weight));
+        return advanceResult(completed, deferred, consumption(budget, completed.size() + adviceAttempts, weight));
     }
 
     @Override

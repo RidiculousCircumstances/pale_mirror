@@ -69,7 +69,7 @@ economic content and cannot establish a precise r30 speed ratio.
   dependencies and bounded caches/indexes. A block or permission change invalidates
   its dependent facts. The economic owner consumes suitability/capacity facts;
   it does not own terrain surveying, collision or resource production.
-- [ ] D. Decouple expensive advisory preparation from global canonical waiting.
+- [x] D. Decouple expensive advisory preparation from global canonical waiting.
   Use explicit owner-declared input versions and bounded snapshot calculations.
   Publish decisions under the existing single canonical authority after validating
   current dependencies. Retain safe behavior while new advice is pending; stale
@@ -204,3 +204,39 @@ horizon precedes the first economic reviews: it does not establish market balanc
 long-run memory, host throughput, five-player performance or HOT acceptance.
 Evidence: build/simulation-throughput/{local-service-geometry-final.log,
 scale-runtime-1000e.log,terrain-scale-final.log,scale-runtime-1000c.jfr}.
+
+## Advisory execution boundary (phase D)
+
+Registered scheduled owners may explicitly expose disposable snapshot advice through
+ScheduledAdvisory. The kernel holds only a bounded volatile calculation binding;
+the original action and deadline remain canonical. Pending/busy/obsolete advice
+uses fair existing readiness polling, consumes the same original turn allowance,
+and emits no retry WAL. Independent due work continues. Cancellation/recovery
+rebuilds advice from the retained action, never inferred mutations.
+
+The owner validates current dependencies and freshness, then supplies a fresh
+ScheduledPreparation bound to the current exact predecessor. Only this short exact
+stage may publish events under the ordinary WAL fence. Kernel/coordinator code
+contains no economic or other family branches. The existing bounded preparation
+worker serves both stages and checkpoint encoding; busy capacity is backpressure,
+not a fatal rejected execution. Navigation read snapshots/dependencies are carried
+through the same existing planning-continuation owner, including final wake binding.
+
+Economic advice contains prices and a conditional supply/cultivation forecast,
+not reservations, contracts, worker assignments or resource effects. Its owner
+checks its input generation, participant terms, peer input/publication bases,
+geometry captures and review expiry before exact current trade planning. Ordinary
+body motion does not invalidate this conditional forecast or award arrival.
+Exact pickup, stock/title/cash/worker admission and physical effects remain with
+their existing owners. The host wrapper also forwards the economic owner's
+addressed reconsideration requests; it previously omitted that capability.
+
+D focused evidence: advisory-owner-final.log passes kernel/owner/company/common
+travel and real worker boundaries; advisory-integration-final.log passes the
+Frontier architecture/quote/economic slice and30of31runtime tests. The remaining
+clock-debt test incorrectly compared two independently timed full economic worlds;
+it now checks the same clock/debt equivalence with four real pure due transactions
+and WAL, preserving budget, operator-time and recovery assertions. The corrected
+case passes in clock-debt-final.log. Native throughput/late-result pressure remain
+G. Advice diagnostics expose separate completed/accepted/rejected work counts and
+measured CPU duration, never using them to control canonical policy.

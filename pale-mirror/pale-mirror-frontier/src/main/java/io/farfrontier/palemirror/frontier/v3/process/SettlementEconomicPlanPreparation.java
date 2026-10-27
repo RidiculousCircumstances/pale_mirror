@@ -1,11 +1,31 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.*;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.*;
 
 /** One economic owner captures its decision and bases before publication. */
 final class SettlementEconomicPlanPreparation {
+    record Review(long atTick, Map<String, MarketPricePolicy.Quote> prices, Optional<SettlementEconomicPlan> publication) {
+        Review { prices = Map.copyOf(prices); Objects.requireNonNull(publication); }
+    }
+    static Review review(FrontierWorldState state, ScheduledAction action, SimInstant at) {
+        var participant = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(action.subject()), "economic forecast owner");
+        var evaluation = SettlementEconomicEvaluation.domestic(state, participant, at.ticks());
+        var prices = GoodsParticipantPricing.review(state, participant, at.ticks(), evaluation);
+        if (!prices.equals(participant.prices())) {
+            state = GoodsParticipantPricing.applyCommitted(state, participant.party().id(),
+                    new GoodsParticipantPricesReviewed(participant.reviewRevision(), at.ticks(), prices), at.ticks());
+            participant = state.companies().goodsTrade().participants().participants().get(action.subject());
+            evaluation = SettlementEconomicEvaluation.domestic(state, participant, at.ticks());
+        }
+        var publication = evaluation.view().supplyPlan().isPresent()
+                ? Optional.of(SettlementEconomicPlanPreparation.prepare(state, participant, evaluation, at.ticks())) : Optional.<SettlementEconomicPlan>empty();
+        return new Review(at.ticks(), prices, publication);
+    }
+
     static SettlementEconomicPlan prepare(FrontierWorldState state, GoodsParticipant participant,
             GoodsParticipantAssessment.Assessment domestic, long now) {
         var registry = state.companies().goodsTrade().participants();

@@ -78,6 +78,37 @@ public final class PedestrianPlanningContinuations {
             };
         };
     }
+    /** Advice and its fresh exact continuation share one declared route-dependency story.
+     * Worker reads never acquire native work; only revalidated owner completion does. */
+    static io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState> advisory(
+            ScheduledAction action,
+            io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState> advice) {
+        var index = current; var view = PedestrianRoutePlanning.readView();
+        return () -> {
+            var prepared = PedestrianRoutePlanning.prepare(view, advice::prepare);
+            return (state, at) -> {
+                if (current != index) throw new IllegalStateException("advice lost its planning runtime owner");
+                return prepared.observation().result().revalidate(state, at).map(preparation -> {
+                    var ready = prepared.acquire();
+                    if (index != null) index.changed(ready);
+                    var exactView = PedestrianRoutePlanning.readView();
+                    return () -> {
+                        var exact = PedestrianRoutePlanning.prepare(exactView, preparation::prepare);
+                        return () -> {
+                            if (current != index) throw new IllegalStateException("advice continuation lost its planning owner");
+                            var changes = exact.acquire();
+                            var completion = PedestrianRoutePlanning.observe(exact.observation().result());
+                            if (index == null) return completion.result();
+                            var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
+                            requests.addAll(exact.observation().requests()); requests.addAll(completion.requests());
+                            var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)));
+                            index.changed(changes); return result;
+                        };
+                    };
+                });
+            };
+        };
+    }
     private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
             PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation) {
         ScheduledAction successor = null;

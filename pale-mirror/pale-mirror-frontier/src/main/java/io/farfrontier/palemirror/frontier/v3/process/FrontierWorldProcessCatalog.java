@@ -558,6 +558,24 @@ public final class FrontierWorldProcessCatalog {
         });
     }
 
+    public static java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<FrontierWorldState>> adviceScheduled(
+            DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action,
+            io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
+        String processId = registry.requireScheduledOwner(action.kind());
+        var planner = java.util.Objects.requireNonNull(SCHEDULED_PLANNERS.get(action.kind()), "registered advisory planner");
+        return planner.advice(state, action, instant).map(value -> PedestrianPlanningContinuations.advisory(action, value)).map(advice -> () -> {
+            var completion = advice.prepare();
+            return (current, at) -> completion.revalidate(current, at).map(preparation -> () -> {
+                var exact = preparation.prepare();
+                return () -> {
+                    var events = exact.get();
+                    return registry.validateEmissions(processId, events.isEmpty()
+                            ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()))) : events);
+                };
+            });
+        });
+    }
+
     /** Rebuild volatile dependencies once on runtime admission, without committing or replaying domain effects. */
     public static java.util.function.Supplier<PedestrianPlanningContinuations.Recovery> preparePlanningWaits(
             DeterministicProcessRegistry registry, FrontierWorldState state,

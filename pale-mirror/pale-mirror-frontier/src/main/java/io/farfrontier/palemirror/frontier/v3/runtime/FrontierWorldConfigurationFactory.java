@@ -67,6 +67,21 @@ final class FrontierWorldConfigurationFactory {
                     FrontierWorldState state, ScheduledAction action, SimInstant instant) {
                 return prepareScheduled(registry, state, action, instant);
             }
+            @Override public Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<FrontierWorldState>> advice(
+                    FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return FrontierWorldProcessCatalog.adviceScheduled(registry, state, action, instant).map(advice -> () -> {
+                    var completion = FrontierWorldState.duringUnpublishedTransition(() ->
+                            io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(advice::prepare));
+                    return (current, at) -> FrontierWorldState.duringUnpublishedTransition(() ->
+                            io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(() -> completion.revalidate(current, at)))
+                            .map(preparation -> () -> {
+                                var exact = FrontierWorldState.duringUnpublishedTransition(() ->
+                                        io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(preparation::prepare));
+                                return () -> FrontierWorldState.duringUnpublishedTransition(() ->
+                                        io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(exact));
+                            });
+                });
+            }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledHeld(state, action);
             }

@@ -18,6 +18,9 @@ final class ScheduledPlanningRecovery {
                     FrontierWorldState state, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
                 return delegate.preparation(state, action, instant);
             }
+            @Override public Optional<ScheduledAdvisory<FrontierWorldState>> advice(FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return delegate.advice(state, action, instant);
+            }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return delegate.held(state, action); }
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
                     holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }

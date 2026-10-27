@@ -27,6 +27,19 @@ public interface ScheduledActionPlanner<S> {
         return java.util.Optional.empty();
     }
 
+    /** Opt-in advice has no event authority and cannot freeze the global timeline. */
+    default java.util.Optional<ScheduledAdvisory<S>> advice(S state, ScheduledAction action, SimInstant instant) {
+        return java.util.Optional.empty();
+    }
+    /** Empty means bounded host capacity is busy; the original action remains due. */
+    default java.util.Optional<ScheduledAdviceCalculation<S>> beginAdvice(ScheduledAdvisory<S> advice) {
+        var result = advice.prepare();
+        return java.util.Optional.of(() -> java.util.Optional.of(result));
+    }
+    default ScheduledCalculation beginPreparation(ScheduledPreparation preparation) {
+        return ScheduledCalculation.immediate(() -> preparation.prepare().get());
+    }
+
     /** The default host executes inline; asynchronous hosts may isolate explicitly declared preparation. */
     default ScheduledCalculation begin(S state, ScheduledAction action, SimInstant instant) {
         var preparation = preparation(state, action, instant);
