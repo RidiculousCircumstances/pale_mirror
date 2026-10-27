@@ -514,3 +514,24 @@ assertions requiring spurious refresh notifications were replaced with no-wake
 assertions; changed-terrain NO_PATH and final result delivery remain required.
 No domain outcome, physical timing or cache-validity requirement was relaxed.
 G remains open pending current-code native throughput and lifecycle evidence.
+
+
+Current100town liveness is still NOT accepted: a9 advanced38622->48004 in575s,
+with intermittentcatchup but netdebt454->2579; snapshot44465 still had2937hungry,
+2935MOVE/noTravel meals and399idle stations. An actual resident had service access,
+108usable bread and an overdue calculation-held meal. The bounded continuation
+probe and read-only saved-state calculation trace then isolated compound meal
+routing: residents93-19/93-2 required two separate cached queries to enter the
+same service point; resident1-1 required four alternative queries before a legal
+waiting route. A successful prefix could be evicted while awaiting the next query.
+The meal owner now declares one semantic interaction/waiting goal to the common
+navigator, granting the actual departure and selected destination permissions in
+one geometry view. Waiting approaches exclude the service boundary while outside;
+private departure retains its existing escape permission and no-reentry validation.
+The retired exitToPublic prefix builder had no other production callers and was
+removed; its contact/permission/pending tests now exercise the current shared
+knowledge APIs. Meal, custody loss, approach/replay, HOT service and actual adapter
+restart checks pass24s(single-goal-meal-approach-focused2.log); final retirement
+checks pass20s(single-goal-departure-retirement.log). This does not award arrival or change service admission/timing.
+The original-prefix data is compound-meal-route-demands.txt; no native outcome is
+inferred from those direct read-only probes. G requires updated native results.

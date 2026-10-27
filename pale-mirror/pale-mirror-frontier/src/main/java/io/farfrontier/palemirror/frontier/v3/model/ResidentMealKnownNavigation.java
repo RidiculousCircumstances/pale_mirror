@@ -89,19 +89,21 @@ public final class ResidentMealKnownNavigation {
         var point = point(state, meal);
         boolean admitted = ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId());
         if (admitted && start.equals(service)) return List.of(start);
-        if (admitted && start.equals(exterior))
-            return serviceLeg(state, meal, port, exterior);
-
-        List<SurfaceAnchor> prefix = PedestrianLocalDeparture.exitToPublic(state, meal.residentId(), start);
-        SurfaceAnchor outdoorStart = prefix.getLast();
-        KnownPedestrianRouteKnowledge routeKnowledge = ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).forActor(state, meal.residentId());
         // A distant applicant is not an occupant and does not own the service
         // turn. Route it to a side pocket first, then reconsider the short
         // entrance from there. A legitimate pocket can be farther than three
         // blocks from the exterior station on irregular terrain.
         boolean directService = admitted && (Math.abs(start.x() - exterior.x())
                 + Math.abs(start.z() - exterior.z()) <= 3 || point.waitingSurfaces().contains(start));
-        List<SurfaceAnchor> destinations = directService ? List.of(exterior)
+        // One semantic goal owns one calculation. Joining separately cached
+        // departure/outdoor/entry legs can livelock when many consumers evict
+        // each other's successful prefix while waiting for the next leg.
+        var routeKnowledge = directService ? departureKnowledge(state, meal, start)
+                : PedestrianLocalDeparture.departure(state, start).forActor(state, meal.residentId());
+        if (!directService && PedestrianLocalDeparture.publicPosition(state, start)
+                && !port.accessBoundary().occupied(start.standingBody()))
+            routeKnowledge = routeKnowledge.withTaskExclusions(port.accessBoundary().occupiedSurfaces());
+        List<SurfaceAnchor> destinations = directService ? List.of(service)
                 : waitingSurfaces(state, meal, point).stream()
                     .filter(availableWaitingStation).toList();
         KnownPedestrianNavigation.RouteUnavailable lastUnavailable = null;
@@ -111,15 +113,9 @@ public final class ResidentMealKnownNavigation {
                     FrontierWireTags.tag(meal.phase()), 1L, List.of(destination),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
-                List<SurfaceAnchor> route = routeKnowledge.plannedPath(outdoorStart, outdoor);
-                if (!directService && !port.accessBoundary().allowsWaitingRoute(route)) continue;
-                List<SurfaceAnchor> result = new ArrayList<>(prefix);
-                result.addAll(route.subList(1, route.size()));
-                if (directService) {
-                    List<SurfaceAnchor> finalLeg = serviceLeg(state, meal, port, exterior);
-                    result.addAll(finalLeg.subList(1, finalLeg.size()));
-                }
-                return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathComposition.withoutLoops(result);
+                List<SurfaceAnchor> route = routeKnowledge.plannedPath(start, outdoor);
+                if (!directService && !port.accessBoundary().allowsWaitingRoute(PedestrianLocalDeparture.publicContinuation(state, route))) continue;
+                return route;
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 lastUnavailable = unavailable;
                 if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
@@ -193,12 +189,4 @@ public final class ResidentMealKnownNavigation {
         return ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, meal.depotId()).identity());
     }
 
-    private static List<SurfaceAnchor> serviceLeg(FrontierWorldState state, ResidentMeal meal,
-                                                   ResourceStorageAccess port, SurfaceAnchor start) {
-        MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
-                FrontierWireTags.tag(meal.phase()), 1L,
-                List.of(port.interactionStation(state)),
-                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).forActor(state, meal.residentId()).plannedPath(start, order);
-    }
 }

@@ -468,6 +468,12 @@ class ResidentMealKnownNavigationTest {
         List<SurfaceAnchor> shortEntry = ResidentMealKnownNavigation.path(
                 state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(waitingActors)), meal);
         assertEquals(port.serviceSurface(), shortEntry.getLast());
+        var arrived = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(waitingActors));
+        var calculation = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.prepare(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.readView(),
+                () -> ResidentMealKnownNavigation.path(arrived, meal));
+        assertEquals(shortEntry, calculation.observation().result());
+        assertEquals(1, calculation.demands().size(), "the complete admitted approach must not depend on separately cached legs");
         assertTrue(route.size() > 1);
     }
 

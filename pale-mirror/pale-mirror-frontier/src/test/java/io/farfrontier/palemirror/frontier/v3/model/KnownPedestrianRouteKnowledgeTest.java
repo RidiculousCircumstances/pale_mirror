@@ -154,7 +154,7 @@ class KnownPedestrianRouteKnowledgeTest {
             var knowledge = PedestrianLocalDeparture.departure(current, start).forActor(current, actor);
             assertTrue(knowledge.geometry().knowsSupport(start));
             assertTrue(knowledge.geometry().blocked(start), "known contact is still forbidden as a new transit goal");
-            var route = PedestrianLocalDeparture.exitToPublic(current, actor, start);
+            var route = knowledge.localMovementTo(start, surface -> PedestrianLocalDeparture.publicPosition(current, surface));
             assertTrue(route.size() > 1);
             knowledge.requireRoute(route);
             assertTrue(PedestrianLocalDeparture.publicPosition(current, route.getLast()));
@@ -286,7 +286,9 @@ class KnownPedestrianRouteKnowledgeTest {
         assertTrue(PedestrianLocalDeparture.departure(state, start).traversable(List.of(start)));
         assertTrue(!PedestrianLocalDeparture.publicPosition(state, start),
                 "an escape passage does not grant permission to park on an internal station");
-        var exit = PedestrianLocalDeparture.exitToPublic(state, new SubjectId("resident:7-12"), start);
+        var knowledge = PedestrianLocalDeparture.departure(state, start).forActor(state, new SubjectId("resident:7-12"));
+        var exterior = SettlementServiceAccessPoints.depotPort(state, new SubjectId("settlement:7")).exteriorApproach();
+        var exit = knowledge.plannedBetween(start, exterior);
         assertEquals(start, exit.getFirst());
         assertTrue(exit.size() > 1 && PedestrianLocalDeparture.publicPosition(state, exit.getLast()));
         for (var status : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
@@ -299,7 +301,7 @@ class KnownPedestrianRouteKnowledgeTest {
             })) {
                 var pending = org.junit.jupiter.api.Assertions.assertThrows(
                         io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
-                        () -> PedestrianLocalDeparture.exitToPublic(state, new SubjectId("resident:7-12"), start));
+                        () -> knowledge.plannedBetween(start, exterior));
                 assertEquals(status, pending.status(), "pending private departure cannot become a route miss");
                 assertEquals(1, queries.get());
             }

@@ -33,36 +33,6 @@ public final class PedestrianLocalDeparture {
         throw new IllegalArgumentException("private departure route never reaches public geometry");
     }
 
-    /** Any subsequent activity can leave a declared private station from actual position. */
-    public static List<SurfaceAnchor> exitToPublic(FrontierWorldState state,
-            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, SurfaceAnchor start) {
-        if (publicPosition(state, start)) return List.of(start);
-        var knowledge = departure(state, start).forActor(state, actor);
-        var declaredExits = exits(state, start);
-        if (declaredExits.isEmpty()) {
-            // A compatible witnessed off-datum origin has no private facility to exit.
-            // Use the common bounded geometry proof, not an invented scalar height or teleport.
-            return knowledge.localMovementTo(start, target -> publicPosition(state, target));
-        }
-        for (var exit : declaredExits) {
-            var target = FrontierTraversalPlan.facilityPort(exit.passage().facility()).orElseThrow()
-                    .exteriorApproach().getFirst();
-            if (!publicPosition(state, target)) continue;
-            var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(actor, actor, 0, 1,
-                    List.of(target), TraversalCapability.PEDESTRIAN,
-                    io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
-            try {
-                return knowledge.plannedPath(start, order);
-            } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
-                    throw unavailable;
-                // Only a proved route miss can move to another declared exit.
-            }
-        }
-        throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
-                "actual facility position has no declared public exit");
-    }
-
     private static List<KnownPedestrianRouteKnowledge.SettlementPassage> exits(FrontierWorldState state, SurfaceAnchor start) {
         return state.bootstrap().settlements().stream()
                 .flatMap(settlement -> settlement.structures().stream()
