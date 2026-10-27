@@ -1383,3 +1383,35 @@ retention case now proves both unfinished and completed graph survival under che
 traffic, and an additional bounded case proves actual layered-capacity eviction
 protects unfinished work and subsequent planes cannot evict even a full cache.
 Focused navigation/shape/scopes/guardrails PASS30s. Native impact still open.
+
+
+### Preserve measured trade comparison across addressed route waits (2026-10-28)
+
+d9c8b004d native10020323→20325/151.4s,debt451→3477 remains FAIL.
+The bounded ae7b0181d diagnostic, verified privately after37s exact release,
+discriminates the next problem:573completions were313ESTIMATED+260FOUND, with
+1926distinct scoped tiles/1926entries and524126reserved surface slots. Later
+6089ESTIMATED+3460FOUND,1963distinct tiles/1963entries. These are successful
+calculations, not mass NO_PATH or multiple stale revisions of the same tile.
+An offline read-only snapshot337743/tick20320 endpoint18→48 probe finds the
+14389edge journey for both human and donkey,337regions(56layered+281planes),
+~0.48/0.86s. It is not a native queue or comparative throughput acceptance.
+
+Actual GoodsTripPlanning selects an optimistic proposal, obtains its exact
+journey/cost, reranks it against other optimistic alternatives, and can then
+yield on another route. The next callback reconstructs every proposal from
+its optimistic quote and forgets the already measured comparison. Bounded
+route-result retention cannot be the sole memory of an economic deliberation: a
+later async leg can make the same expensive alternative look cheap again.
+
+The economic owner now retains at most2048 measured scalar offer/timing comparisons
+(the existing procurement alternative ceiling) per exact unchanged participant/state/
+instant decision, bounded256owners and one instant. Inputs use complete immutable identities; a changed world, participant
+or execution instant drops the corresponding comparison. No draft state, crew,
+reservation, route receipt or dispatch permission is retained in those values.
+Selected offers still repeat current exact stock/funding/crew/geometry/provision
+and price admission before emitting their ordinary transaction. Every alternative
+remains available; neither a top-k cutoff nor a gameplay price/availability change
+is introduced. Existing quote/recovery coverage adds an expensive-first-option/
+second-wait ranking case and changed funding/participant/time fences. Verification
+and native impact pending; no throughput acceptance claimed.

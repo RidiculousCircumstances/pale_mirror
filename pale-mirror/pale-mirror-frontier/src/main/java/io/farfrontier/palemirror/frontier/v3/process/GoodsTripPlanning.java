@@ -48,6 +48,7 @@ final class GoodsTripPlanning {
                         demand.supplyPlan().map(plan -> plan.require(intent.itemKind()).deadlineTicks()).orElse(Long.MAX_VALUE),
                         GoodsParticipantFunding.fundsRestart(demand, initial.bootstrap().ruleset().goodsTrade(), intent.itemKind()))).toList();
         if (requirements.isEmpty()) return new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
+        var comparisons = GoodsTripComparisonFacts.forDecision(initial, buyer, now);
         for (var seller : GoodsOrderMatching.sellers(initial, buyer, now)) {
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, seller, buyer, now)) {
                 var lines = GoodsTripQuotes.lines(initial, seller, buyer, endpoints, now);
@@ -62,12 +63,13 @@ final class GoodsTripPlanning {
                             + endpoints.source().value() + "|" + endpoints.receiver().value()));
                     // Optimistic, non-binding ranking only. Exact stock, funding, lot
                     // departure and full crew cost belong to the selected draft below.
-                    candidates.add(new Proposal(seller, endpoints, mode, new ProcurementSelection.Offer(id, lines,
-                            cost.resourceExpense(), timing.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.READY), timing));
+                    var ranked = comparisons.rank(new ProcurementSelection.Offer(id, lines,
+                            cost.resourceExpense(), timing.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.READY), timing);
+                    candidates.add(new Proposal(seller, endpoints, mode, ranked.offer(), ranked.timing()));
                 }
             }
         }
-        return finish(initial, buyer, now, requirements, candidates, "NO_MUTUAL_KNOWN_QUOTE");
+        return finish(initial, buyer, now, requirements, candidates, comparisons, "NO_MUTUAL_KNOWN_QUOTE");
     }
     private static Optional<Candidate> reserveSelected(FrontierWorldState initial, GoodsParticipant buyer, Proposal proposal,
             long now, Map<GoodsTradeParty, Map<GoodsTradeFulfillment.Mode, Integer>> reviewsBySeller) {
@@ -109,7 +111,8 @@ final class GoodsTripPlanning {
                         proposal.offer().id(), parcels, timing, now), List.copyOf(reservedPrefixes), timing));
     }
     private static Result finish(FrontierWorldState initial, GoodsParticipant buyer, long now,
-            List<ProcurementSelection.Requirement> requirements, List<Alternative> preparedCandidates, String decision) {
+            List<ProcurementSelection.Requirement> requirements, List<Alternative> preparedCandidates,
+            GoodsTripComparisonFacts comparisons, String decision) {
         var candidates = new ArrayList<>(preparedCandidates);
         var reviewsBySeller = new HashMap<GoodsTradeParty, Map<GoodsTradeFulfillment.Mode, Integer>>();
         boolean awaitingNavigation = false;
@@ -125,7 +128,12 @@ final class GoodsTripPlanning {
             if (alternative instanceof Proposal proposal) {
                 var reserved = reserveSelected(initial, buyer, proposal, now, reviewsBySeller);
                 if (reserved.isEmpty()) decision = "CURRENT_RESERVE_STOCK_OR_FUNDS; reserved=0";
-                else candidates.add(reserved.orElseThrow());
+                else {
+                    var value = reserved.orElseThrow(); var measured = comparisons.rank(value.offer(), value.timing());
+                    candidates.add(measured.offer().goods().equals(value.offer().goods())
+                            ? new Candidate(value.draft(), value.reservations(), value.seller(), value.parcels(), value.mode(),
+                                measured.offer(), value.prefixes(), measured.timing()) : value);
+                }
                 continue;
             }
             var candidate = (Candidate) alternative;
@@ -159,12 +167,14 @@ final class GoodsTripPlanning {
                 decision = "DEFERRED_FOR_CONSOLIDATION; exactJourney=SAFE_TO_WAIT; reserved=0";
                 var deferred = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
                         exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.DEFERRED);
+                comparisons.remember(deferred, exactTiming);
                 candidates.add(new Candidate(candidate.draft(), candidate.reservations(), candidate.seller(), candidate.parcels(),
                         candidate.mode(), deferred, candidate.prefixes(), exactTiming));
                 continue;
             }
             var exactOffer = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
                     exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.READY);
+            comparisons.remember(exactOffer, exactTiming);
             var alternatives = new ArrayList<>(candidates.stream().map(Alternative::offer).toList()); alternatives.add(exactOffer);
             var preferred = new ProcurementSelection().select(requirements, alternatives,
                     initial.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(SourcingRules::labourValuePerTick).orElse(0L));

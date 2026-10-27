@@ -7,6 +7,37 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsParticipantReviewAdviceTest {
+    @Test void unchangedProcurementResumeRetainsMeasuredRankingButCannotCarryConsentIntoChangedInputs() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:comparison-continuation"), 126L,
+                FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
+        var buyer = state.companies().goodsTrade().participants().participants().get(state.bootstrap().settlements().getFirst().id());
+        var other = state.companies().goodsTrade().participants().participants().get(state.bootstrap().settlements().get(1).id());
+        var a = new SubjectId("procurement:comparison-a"); var b = new SubjectId("procurement:comparison-b");
+        var goods = Map.of("minecraft:bread", new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Line(64, FixedScalar.ONE));
+        var preliminary = new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Offer(a, goods, FixedScalar.ONE,
+                100, 1, io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Departure.READY);
+        var measured = new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Offer(a, goods, FixedScalar.whole(30),
+                150, 30, io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Departure.READY);
+        var alternative = new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Offer(b, goods, FixedScalar.whole(10),
+                120, 10, io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Departure.READY);
+        var timing = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming(100, 200);
+        var facts = GoodsTripComparisonFacts.forDecision(state, buyer, 4000);
+        facts.remember(measured, new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming(150, 300));
+        var resumed = GoodsTripComparisonFacts.forDecision(state, buyer, 4000);
+        var requirement = List.of(new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Requirement("minecraft:bread", 64, 1000));
+        var selector = new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection();
+        assertEquals(a, selector.select(requirement, List.of(preliminary, alternative)).orElseThrow());
+        assertEquals(b, selector.select(requirement, List.of(resumed.rank(preliminary, timing).offer(), alternative)).orElseThrow(),
+                "resuming after a second route wait cannot make the first, already measured expensive option optimistically cheap again");
+        assertEquals(preliminary, GoodsTripComparisonFacts.forDecision(state, buyer, 4001).rank(preliminary, timing).offer());
+        assertEquals(preliminary, GoodsTripComparisonFacts.forDecision(state, other, 4000).rank(preliminary, timing).offer());
+        var changed = state.withInventory(state.inventory().withEconomics(state.inventory().economics().transfer(
+                buyer.party().id(), other.party().id(), FixedScalar.ONE)));
+        assertEquals(preliminary, GoodsTripComparisonFacts.forDecision(changed, buyer, 4000).rank(preliminary, timing).offer(),
+                "changed immutable funding inputs require a new comparison");
+        assertTrue(state.companies().goodsTrade().contracts().isEmpty());
+        assertTrue(state.shipments().missions().isEmpty(), "a measured comparison never reserves or dispatches a trip");
+    }
     @Test void capturedForecastRejectsChangedOwnerInputsAndExpiryButAllowsDatedExternalObservations() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:advice-proof"), 126L,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
