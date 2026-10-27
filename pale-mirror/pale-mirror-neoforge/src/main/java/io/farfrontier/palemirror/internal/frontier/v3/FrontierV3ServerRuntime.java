@@ -344,23 +344,31 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private Runnable readiness = () -> { };
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
     private Long ordinaryBoundary;
+    private static final int MAX_READY_TRANSACTION_PREFIX = 4;
     /** One allowance per observed host tick, shared by all ready continuations. */
     void beginOrdinaryTurn(WorkBudget budget) { ordinaryTurnBudget = Optional.of(Objects.requireNonNull(budget)); }
     void resumeOrdinaryTurn() {
-        if (ordinaryTurnBudget.isEmpty()) return;
-        var budget = ordinaryTurnBudget.orElseThrow();
-        // Cooperative owner tasks complete one transaction and a small admission
-        // prefix. The original tick allowance is shared, not multiplied by wakes.
-        var quantum = new WorkBudget(1, budget.maxWeight(), Math.min(8, budget.maxClassificationEvaluations()),
-                Math.min(1, budget.maxExecutionEvaluations()), budget.maxActionWeight());
-        long before = instant.ticks();
-        var result = advanceOrdinaryTime(quantum);
-        if (result.isEmpty()) return;
-        var used = result.orElseThrow().consumed();
-        ordinaryTurnBudget = used.remaining(budget);
+        boolean progressed = false;
+        // Keep cheap already-ready transitions in the same persistence turn.
+        // A costly action or an asynchronous boundary yields immediately; every
+        // prefix still spends the one original observed-tick allowance.
+        for (int part = 0; part < MAX_READY_TRANSACTION_PREFIX && ordinaryTurnBudget.isPresent(); part++) {
+            var budget = ordinaryTurnBudget.orElseThrow();
+            var quantum = new WorkBudget(1, budget.maxWeight(), Math.min(8, budget.maxClassificationEvaluations()),
+                    Math.min(1, budget.maxExecutionEvaluations()), budget.maxActionWeight());
+            long before = instant.ticks();
+            var result = advanceOrdinaryTime(quantum);
+            if (result.isEmpty()) break;
+            var used = result.orElseThrow().consumed();
+            ordinaryTurnBudget = used.remaining(budget);
+            boolean advanced = instant.ticks() > before || used.actions() > 0 || used.classifications() > 0 || used.executions() > 0;
+            progressed |= advanced;
+            if (!advanced || used.weight() > 1 || engine.hasPendingCalculation() || engine.hasPendingCommit()
+                    || pendingOrdinaryTicks == 0 && ordinaryBoundary == null) break;
+        }
         if (ordinaryTurnBudget.isPresent() && (pendingOrdinaryTicks > 0 || ordinaryBoundary != null)
                 && !engine.hasPendingCalculation() && !engine.hasPendingCommit()
-                && (instant.ticks() > before || used.actions() > 0 || used.classifications() > 0 || used.executions() > 0))
+                && progressed)
             readiness.run();
     }
 

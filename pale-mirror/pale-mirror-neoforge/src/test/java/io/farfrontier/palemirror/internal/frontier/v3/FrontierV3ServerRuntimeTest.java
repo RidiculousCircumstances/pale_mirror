@@ -88,6 +88,37 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ServerRuntimeTest {
+    @Test void cooperativeReadyPrefixSharesOneWalForceAndRecoversEveryTransition(@TempDir Path directory) {
+        var base = denseConfiguration();
+        var config = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
+                new EngineLimits(32, 100, 32, 32), base.initialSchedules(), base.transactionCommitter());
+        var payloads = PayloadCodecs.merge(codecs(), io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs.scheduleEffects());
+        var writes = new java.util.ArrayDeque<Runnable>();
+        var delayed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var disk = new FrontierFileStore(directory, payloads,
+                task -> { if (delayed.get()) writes.add(task); else task.run(); });
+        var runtime = FrontierV3ServerRuntime.start(config, disk, 100);
+        int committed;
+        try {
+            runtime.observeOrdinaryHostTick(); runtime.beginOrdinaryTurn(new WorkBudget(64, 128));
+            runtime.runPersistenceTurn(runtime::resumeOrdinaryTurn);
+            committed = runtime.decodedState().orElseThrow().value();
+            assertTrue(committed > 1 && committed < base.initialSchedules().size(),
+                    "one cooperative prefix must batch ready progression and still yield to the native host");
+            assertEquals(1, writes.size(), "the complete prefix shares one queued durable group");
+            assertEquals(committed, disk.pressure().bufferedRecords());
+            assertEquals(0, disk.pressure().forcedGroups());
+        } finally {
+            delayed.set(false); while (!writes.isEmpty()) writes.remove().run(); runtime.shutdown();
+        }
+        var recovered = FrontierV3ServerRuntime.start(config, new FrontierFileStore(directory, payloads), 100);
+        try {
+            assertEquals(committed, recovered.decodedState().orElseThrow().value());
+            assertEquals(base.initialSchedules().size() - committed, recovered.executionView().orElseThrow().schedules().size(),
+                    "batching must preserve each individual event and its consumed schedule after recovery");
+        } finally { recovered.shutdown(); }
+    }
     @org.junit.jupiter.params.ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(ints = {1, 17})
     @org.junit.jupiter.api.Timeout(10)
     void readyCalculationAndDurabilityRetainCapturedInstantAcrossElapsedBacklog(int observedTicks, @TempDir Path directory) throws Exception {
