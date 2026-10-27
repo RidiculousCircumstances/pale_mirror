@@ -369,6 +369,11 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     public synchronized int awaitingPublicationCount() { return awaitingPublication.size(); }
     public synchronized int retainedResultCount() { return completed.size(); }
+    public synchronized int protectedResultCount() {
+        return (int) completed.entrySet().stream().filter(entry -> !entry.getValue().result().awaitable()
+                && retainedDemands.contains(PedestrianDemandKey.of(entry.getKey()))).count();
+    }
+
     public synchronized int pendingCount() { return pending.size(); }
     public synchronized int inFlightCount() { return inFlight.size(); }
     public synchronized int deferredCount() { return deferred.size(); }

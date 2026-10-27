@@ -130,6 +130,21 @@ final class FrontierV3PedestrianPlanning {
             admitted++; commands++;
         }
     }
+    private static String continuationSamples() {
+        var samples = new java.util.ArrayList<java.util.Map<String, Object>>();
+        for (var wait : continuations.diagnostics(8)) {
+            var requests = new java.util.ArrayList<java.util.Map<String, Object>>();
+            for (var request : wait.requests().stream().limit(4).toList()) {
+                var result = planner.peek(request.geometry(), request.start(), request.target(), request.extent());
+                requests.add(java.util.Map.of("from", request.start(), "to", request.target(),
+                        "retained", result.map(value -> value.status().name() + ":" + value.reason()).orElse("NONE")));
+            }
+            samples.add(java.util.Map.of("action", wait.action().id().value(), "due", wait.action().dueAt().ticks(),
+                    "parked", wait.parked(), "runnable", wait.runnable(), "ownerHeld", wait.ownerHeld(),
+                    "origin", wait.origin(), "requests", requests));
+        }
+        return new com.google.gson.Gson().toJson(samples);
+    }
     static synchronized java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemands(FrontierV3ServerRuntime<?, ?> runtime) {
         return owner == runtime ? planner.knowledgeDemands() : java.util.Set.of();
     }
@@ -142,7 +157,9 @@ final class FrontierV3PedestrianPlanning {
         return "{\"waiting\":" + (owner == runtime ? continuations.waitingCount() : 0)
                 + ",\"awaitingResultPublication\":" + (owner == runtime ? planner.awaitingPublicationCount() : 0)
                 + ",\"retainedResults\":" + (owner == runtime ? planner.retainedResultCount() : 0)
+                + ",\"protectedResults\":" + (owner == runtime ? planner.protectedResultCount() : 0)
                 + ",\"readyDeferred\":" + (owner == runtime ? deferredReady : 0)
+                + ",\"continuationSamples\":" + (owner == runtime ? continuationSamples() : "[]")
                 + ",\"activeSearches\":" + (owner == runtime ? planner.pendingCount() : 0)
                 + ",\"inFlightSlices\":" + (owner == runtime ? planner.inFlightCount() : 0)
                 + ",\"runningWorkers\":" + (owner == runtime ? workers.getActiveCount() : 0)

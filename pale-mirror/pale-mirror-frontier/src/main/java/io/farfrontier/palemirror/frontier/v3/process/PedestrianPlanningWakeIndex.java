@@ -124,6 +124,15 @@ public final class PedestrianPlanningWakeIndex {
         return ready.stream().map(id -> waits.get(id).action()).toList();
     }
 
+    /** Bounded read-only explanation of retained calculation subscriptions. */
+    public record WaitDiagnostic(ScheduledAction action, List<PedestrianRouteRequest> requests,
+                                 boolean parked, boolean runnable, boolean ownerHeld, String origin) { }
+    public List<WaitDiagnostic> diagnostics(int maximum) {
+        if (maximum < 0 || maximum > 8) throw new IllegalArgumentException("unbounded continuation diagnostics");
+        return waits.values().stream().limit(maximum).map(wait -> new WaitDiagnostic(wait.action(), wait.requests(),
+                parked.contains(wait.action().id()), runnable.contains(wait.action().id()), ownerHeld.contains(wait.action().id()),
+                wait.origin().name())).toList();
+    }
     public int waitingCount() { return waits.size(); }
     boolean tracks(ScheduledAction action) { return waits.containsKey(action.id()); }
     public int readyCount() { return ready.size(); }
