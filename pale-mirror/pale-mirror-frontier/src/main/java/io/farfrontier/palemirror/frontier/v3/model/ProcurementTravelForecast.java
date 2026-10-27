@@ -6,9 +6,9 @@ import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming;
 
 /** Quote cost/timing advice, never arrival coverage or route authority. No asynchronous cache dependency. */
 public final class ProcurementTravelForecast {
-    private record Query(SubjectId source, String item, GoodsParticipant buyer, TransportOrganization.Itinerary itinerary) { }
+    private record Query(SubjectId source, String item, TransportOrganization.Itinerary itinerary) { }
     private record Endpoints(SubjectId source, SubjectId receiver, TransportOrganization.Itinerary itinerary) { }
-    private static final ImmutableInputView<BoundedValueMemo<Query, Optional<Estimate>>> QUOTES = new ImmutableInputView<>();
+    private static final ImmutableInputView<ImmutableResultView<Query, Optional<Estimate>>> QUOTES = new ImmutableInputView<>();
     private static final ImmutableInputView<BoundedValueMemo<Endpoints, Estimate>> JOURNEYS = new ImmutableInputView<>();
     private static final ImmutableInputView<List<TransportMission>> ORDERED = new ImmutableInputView<>();
     public record Estimate(long deliveryTicks, long labourTicks, long journeyTicks) { }
@@ -20,8 +20,8 @@ public final class ProcurementTravelForecast {
     }
     static Optional<Estimate> read(FrontierWorldState state, SubjectId source, String item, GoodsParticipant buyer,
                                    TransportOrganization.Itinerary itinerary) {
-        return QUOTES.get(List.of(state), () -> new BoundedValueMemo<Query, Optional<Estimate>>(256))
-                .get(new Query(source, item, buyer, itinerary), () -> select(state, source, item, buyer, itinerary));
+        return QUOTES.get(List.of(state), () -> new ImmutableResultView<Query, Optional<Estimate>>(256))
+                .get(List.of(buyer), new Query(source, item, itinerary), () -> select(state, source, item, buyer, itinerary));
     }
     private static Optional<Estimate> select(FrontierWorldState state, SubjectId source, String item, GoodsParticipant buyer,
             TransportOrganization.Itinerary itinerary) {

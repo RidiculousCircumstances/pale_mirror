@@ -16,9 +16,9 @@ public final class GoodsProcurementTransport {
         public long perItem() { return Math.ceilDiv(expense, quantity); }
         public long economicPerItem() { return Math.ceilDiv(transport.quote(quantity).economic(), quantity); }
     }
-    private record Query(GoodsParticipant seller, SubjectId source, GoodsParticipant buyer, String item, int requested, long price, long budget, long now, long deadline) { }
+    private record Query(SubjectId source, String item, int requested, long price, long budget, long now, long deadline) { }
     private record Crew(SubjectId home, int count, Optional<TransportAsset> asset, long duration, long now) { }
-    private static final ImmutableInputView<BoundedValueMemo<Query, Optional<Quote>>> QUOTES = new ImmutableInputView<>();
+    private static final ImmutableInputView<ImmutableResultView<Query, Optional<Quote>>> QUOTES = new ImmutableInputView<>();
     private static final ImmutableInputView<BoundedValueMemo<Crew, Boolean>> CREWS = new ImmutableInputView<>();
     private GoodsProcurementTransport() { }
     public static Optional<Quote> best(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
@@ -28,8 +28,8 @@ public final class GoodsProcurementTransport {
     public static Optional<Quote> best(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
             String item, int requested, long price, long budget, long now, long deadline) {
         if (requested < 1 || price < 1 || budget < 0 || now < 0 || deadline < 0) throw new IllegalArgumentException("invalid procurement envelope");
-        return QUOTES.get(List.of(state), () -> new BoundedValueMemo<Query, Optional<Quote>>(512))
-                .get(new Query(seller, source, buyer, item, requested, price, budget, now, deadline),
+        return QUOTES.get(List.of(state), () -> new ImmutableResultView<Query, Optional<Quote>>(512))
+                .get(List.of(seller, buyer), new Query(source, item, requested, price, budget, now, deadline),
                         () -> calculate(state, seller, source, buyer, item, requested, price, budget, now, deadline));
     }
     private static boolean preferred(FrontierWorldState state, Quote candidate, Quote incumbent,

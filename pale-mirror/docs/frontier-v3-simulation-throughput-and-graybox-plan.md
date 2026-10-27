@@ -1196,3 +1196,26 @@ still reinterprets its changed data; no spatial observation, body clearance, sha
 or route authority is invented from a type declaration. Retained terrain, local/
 remote invalidation and geometry-scope negative/recovery checks plus native-runtime/
 diagnostic budget checks and guardrails PASS47s. Clean-ref packaging follows.
+
+
+### Identity-bound participant inputs in sourcing memos (2026-10-28)
+
+Latest recorded allocation deltas (ThreadAllocationStatistics, not sampled weights)
+for455's20s trace: navigation19.48GB/17.06GB, advice13.16GB/12.57GB,
+server4.60GB, exact preparation3.75GB. Sample weights overestimate several producers
+and must not be reported as exact allocation totals. Monitor stalls are sparse;
+no evidence that a broad lock is the primary bottleneck. The existing JFR reader
+was used directly, without exporting huge allocation-stack JSON.
+
+CPU stacks also show GoodsParticipant.hashCode walking the entire known-party list
+inside sourcing/procurement/valuation/options/timing memo lookups. With100parties,
+each quote-cache query hashes99 unrelated neighbour records even on a cache hit.
+These immutable participant objects now enter the existing ImmutableResultView
+identity tuple; only compact scalar quote parameters remain value-hashed. The
+outer exact world-state generation and every participant input remain checked;
+no owner-id-only proof or omitted stock/funding/crew input. Both positive and
+empty quotes retain the existing bounds. Five connected callers migrate together,
+without changing prices, selection, departure authority or canonical schema.
+Existing procurement/unfunded/mixed-trip/sourcing/immutable-input checks PASS19s
+before the final outer sourcing memo used the same representation; exact clean-ref
+check must include that last caller. Native100 throughput remains unclosed.

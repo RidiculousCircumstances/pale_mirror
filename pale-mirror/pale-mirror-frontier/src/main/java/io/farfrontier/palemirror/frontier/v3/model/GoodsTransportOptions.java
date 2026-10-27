@@ -7,8 +7,8 @@ import java.util.*;
 /** Bounded transport offers, not reservations. The logistics owner revalidates
  * exact workers, asset, route and supplies when it admits the selected offer. */
 public final class GoodsTransportOptions {
-    private record Query(GoodsParticipant organizer, long duration, int parcels, int workers, long now) { }
-    private static final ImmutableInputView<BoundedValueMemo<Query, List<Option>>> OPTIONS = new ImmutableInputView<>();
+    private record Query(long duration, int parcels, int workers, long now) { }
+    private static final ImmutableInputView<ImmutableResultView<Query, List<Option>>> OPTIONS = new ImmutableInputView<>();
     public record Option(int workers, Optional<TransportAsset> animal, DeliveryCost cost) {
         public Option {
             Objects.requireNonNull(animal); Objects.requireNonNull(cost);
@@ -24,8 +24,8 @@ public final class GoodsTransportOptions {
         if (duration < 0 || parcels < 1 || parcels > state.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumTripCargoStacks()
                 || availableWorkers < 0) throw new IllegalArgumentException("invalid bounded transport offer");
         if (availableWorkers == 0) return List.of();
-        return OPTIONS.get(List.of(state), () -> new BoundedValueMemo<Query, List<Option>>(256))
-                .get(new Query(organizer, duration, parcels, availableWorkers, now),
+        return OPTIONS.get(List.of(state), () -> new ImmutableResultView<Query, List<Option>>(256))
+                .get(List.of(organizer), new Query(duration, parcels, availableWorkers, now),
                         () -> calculate(state, organizer, duration, parcels, availableWorkers, now));
     }
     private static List<Option> calculate(FrontierWorldState state, GoodsParticipant organizer,

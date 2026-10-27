@@ -7,14 +7,13 @@ import java.util.*;
 /** Replacement advice from declared local capabilities. No recursive market plan,
  * production authorization or claim that the resources are already available. */
 public final class GoodsResourceValuation {
-    private record Query(GoodsParticipant participant, long atTick) { }
-    private static final ImmutableInputView<BoundedValueMemo<Query, Map<String, FixedScalar>>> VALUES = new ImmutableInputView<>();
+    private static final ImmutableInputView<ImmutableResultView<Long, Map<String, FixedScalar>>> VALUES = new ImmutableInputView<>();
     private GoodsResourceValuation() { }
 
     public static FixedScalar replacement(FrontierWorldState state, GoodsParticipant participant, String item, long atTick) {
         if (atTick < 0) throw new IllegalArgumentException("negative valuation instant");
-        return Objects.requireNonNull(VALUES.get(List.of(state), () -> new BoundedValueMemo<Query, Map<String, FixedScalar>>(256))
-                .get(new Query(participant, atTick), () -> assess(state, participant, atTick)).get(item), "undeclared valued resource");
+        return Objects.requireNonNull(VALUES.get(List.of(state), () -> new ImmutableResultView<Long, Map<String, FixedScalar>>(256))
+                .get(List.of(participant), atTick, () -> assess(state, participant, atTick)).get(item), "undeclared valued resource");
     }
     private static Map<String, FixedScalar> assess(FrontierWorldState state, GoodsParticipant participant, long atTick) {
         var rules = state.bootstrap().ruleset().goodsTrade();
