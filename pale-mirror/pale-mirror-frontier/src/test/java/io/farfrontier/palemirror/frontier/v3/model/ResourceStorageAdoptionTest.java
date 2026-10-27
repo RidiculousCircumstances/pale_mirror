@@ -24,25 +24,30 @@ class ResourceStorageAdoptionTest {
             return null;
         });
     }
-    @Test void marketPublishesAlternativeWarehousesWithoutMultiplyingTheParticipantsDemand() {
+    @Test void marketPartitionsOneIntentionAcrossItsEligibleWarehouses() {
         var initial = initial(); var home = initial.bootstrap().settlements().getFirst().id();
         var adoption = event(initial, true); var id = adoption.declaration().container().id();
         var state = adoption.apply(initial, home);
         state = state.withInventory(state.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var buy = new GoodsParticipantPolicy.Intent("minecraft:bread", GoodsTradeOrder.Side.BUY, 64, FixedScalar.whole(1));
-        assertEquals(Set.of(id, FrontierWorldState.depotId(home)), GoodsParticipantStorage.quoteEndpoints(state, participant, buy)
-                .stream().map(ShipmentEndpoint::containerId).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(Set.of(id, FrontierWorldState.depotId(home)), Set.copyOf(GoodsParticipantStorage.containers(state, participant, "minecraft:bread")));
+        var allocations = GoodsParticipantStorage.quoteEndpoints(state, participant, buy);
+        assertEquals(64, allocations.stream().mapToInt(GoodsParticipantStorage.QuoteEndpoint::quantity).sum(),
+                "alternative warehouses partition one intention rather than publishing a copy at each point");
         var sell = new GoodsParticipantPolicy.Intent("minecraft:bread", GoodsTradeOrder.Side.SELL, 3, FixedScalar.whole(1));
-        assertEquals(List.of(id), GoodsParticipantStorage.quoteEndpoints(state, participant, sell).stream().map(ShipmentEndpoint::containerId).toList());
+        assertEquals(List.of(id), GoodsParticipantStorage.quoteEndpoints(state, participant, sell).stream().map(value -> value.endpoint().containerId()).toList());
         var events = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.plan(state,
                 io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(home, 1), new SimInstant(1));
         var orders = events.stream().map(ProposedEvent::payload).filter(GoodsTradeOrderPlaced.class::isInstance)
                 .map(GoodsTradeOrderPlaced.class::cast).map(GoodsTradeOrderPlaced::order)
                 .filter(order -> order.itemKind().equals("minecraft:bread") && order.side() == GoodsTradeOrder.Side.BUY).toList();
-        assertEquals(Set.of(id, FrontierWorldState.depotId(home)), orders.stream().map(GoodsTradeOrder::containerId)
-                .collect(java.util.stream.Collectors.toSet()));
-        assertEquals(1, orders.stream().map(GoodsTradeOrder::quantity).distinct().count(), "alternative points share one demand policy");
+        var intention = GoodsParticipantPolicies.require(participant).decide(GoodsParticipantAssessment.trading(state, participant, 1),
+                state.bootstrap().ruleset().goodsTrade()).stream().filter(value -> value.itemKind().equals("minecraft:bread")
+                        && value.side() == GoodsTradeOrder.Side.BUY).findFirst().orElseThrow();
+        assertEquals(intention.quantity(), orders.stream().mapToInt(GoodsTradeOrder::quantity).sum(),
+                "public quote volume is the participant's one declared demand");
+        assertEquals(orders.size(), orders.stream().map(GoodsTradeOrder::containerId).distinct().count());
         assertTrue(events.stream().noneMatch(event -> event.payload() instanceof GoodsTradeReserved), "quotes are not independent reservations");
         var retired = state.withInventory(state.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.RETIRED));
         assertTrue(GoodsParticipantStorage.quoteEndpoints(retired, participant, sell).isEmpty());

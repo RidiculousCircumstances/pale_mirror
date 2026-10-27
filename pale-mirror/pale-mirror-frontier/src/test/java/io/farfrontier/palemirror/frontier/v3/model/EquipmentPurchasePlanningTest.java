@@ -26,7 +26,7 @@ class EquipmentPurchasePlanningTest {
                 new SubjectId("item:equipment-offer-" + index), seller.party().id(), "minecraft:iron_hoe", 1,
                 new InventoryCustody.ContainerSlot(source, inventory.availableSlots(source).getFirst()), new ItemCondition(250, 0)));
         state = state.withInventory(inventory);
-        var sell = new GoodsTradeOrder(new SubjectId("order:equipment-offer"), seller.party(), buyer.party(),
+        var sell = new GoodsTradeOrder(new SubjectId("order:equipment-offer"), seller.party(),
                 GoodsTradeOrder.Side.SELL, source, "minecraft:iron_hoe", 12, 0, FixedScalar.ONE, 24000);
         state = GoodsTradeStateSupport.place(state, seller.party().id(), sell, 300);
         long dayTicks = state.humanPopulation().schedule(buyer.party().id()).dayTicks();
@@ -36,7 +36,7 @@ class EquipmentPurchasePlanningTest {
         assertTrue(plan.purchases().stream().anyMatch(p -> p.itemKind().equals("minecraft:iron_hoe")), plan + " deficits=" + EquipmentStockProjection.deficits(state, buyer.party().id())
                 + " market=" + EquipmentRecipeValuation.read(state, buyer.party().id(), 300));
         assertTrue(plan.production().isEmpty());
-        var buy = new GoodsTradeOrder(new SubjectId("order:equipment-buy"), buyer.party(), seller.party(),
+        var buy = new GoodsTradeOrder(new SubjectId("order:equipment-buy"), buyer.party(),
                 GoodsTradeOrder.Side.BUY, target, "minecraft:iron_hoe", 1, 0, FixedScalar.ONE, 24000);
         state = GoodsTradeStateSupport.place(state, buyer.party().id(), buy, 300);
         var item = GoodsParticipantStorage.individualStock(state, seller, source, "minecraft:iron_hoe").getFirst();

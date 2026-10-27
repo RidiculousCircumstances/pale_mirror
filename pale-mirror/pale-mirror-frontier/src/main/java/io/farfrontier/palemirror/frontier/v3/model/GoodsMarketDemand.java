@@ -19,7 +19,7 @@ final class GoodsMarketDemand {
             quantity = Math.min(quantity, delivery.orElseThrow().quantity());
             var competitors = new TreeMap<SubjectId, SellerPriceDiscovery.Offer>();
             for (var other : trade.orders().values()) {
-                if (other.side() != GoodsTradeOrder.Side.SELL || !other.counterparty().equals(buyer.party())
+                if (other.side() != GoodsTradeOrder.Side.SELL
                         || other.party().equals(seller.party()) || !other.itemKind().equals(item)
                         || other.expiresAtTick() <= now || other.availableQuantity() == 0) continue;
                 var provider = trade.participants().participants().get(other.party().id());

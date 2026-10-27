@@ -43,9 +43,7 @@ final class GoodsTripPlanning {
                         demand.supplyPlan().map(plan -> plan.require(intent.itemKind()).deadlineTicks()).orElse(Long.MAX_VALUE),
                         GoodsParticipantFunding.fundsRestart(demand, initial.bootstrap().ruleset().goodsTrade(), intent.itemKind()))).toList();
         if (requirements.isEmpty()) return () -> new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
-        for (var peer : reviewer.known()) {
-            var other = initial.companies().goodsTrade().participants().participants().get(peer.party().id());
-            if (other == null || !other.party().equals(peer.party()) || !other.settlementId().equals(peer.settlementId())) continue;
+        for (var other : GoodsOrderMatching.sellers(initial, buyer, now)) {
             var reviewedPairs = new EnumMap<GoodsTradeFulfillment.Mode, Integer>(GoodsTradeFulfillment.Mode.class);
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, other, buyer, now)) {
             // Connectivity is relevant only after current consent, stock,

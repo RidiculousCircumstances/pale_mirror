@@ -181,7 +181,7 @@ class ConditionalProductionQuoteTest {
         var supplier = state.companies().goodsTrade().participants().participants().get(SUPPLIER);
         int quantity = Math.toIntExact(state.companies().goodsTrade().participants().economicState(BUYER).accepted().orElseThrow().domestic().require(ITEM).purchase());
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(new GoodsTradeOrder(
-                new SubjectId("order:conditional-production-input"), buyer.party(), supplier.party(), GoodsTradeOrder.Side.BUY,
+                new SubjectId("order:conditional-production-input"), buyer.party(), GoodsTradeOrder.Side.BUY,
                 FrontierWorldState.depotId(BUYER), ITEM, quantity, 0, new FixedScalar(1_810_000), 10000))));
         var domestic = SettlementEconomicEvaluation.domestic(state, supplier, 5001);
         var prices = GoodsParticipantPricing.review(state, supplier, 5001, domestic);

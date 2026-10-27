@@ -13,6 +13,12 @@ public final class GoodsParticipantWakeup {
         var action = action(party, Math.addExact(now, 1));
         return List.of(new ProposedEvent(party, new ScheduleEffect.ReconsiderationRequested(action)));
     }
+    /** Public quote publication wakes only opposite-side commodity interests. */
+    static List<ProposedEvent> quoted(FrontierWorldState state, List<GoodsTradeOrder> published, long now) {
+        return published.stream().flatMap(order -> GoodsMarketInterest.recipients(state.companies().goodsTrade(), order,
+                        OptionalLong.of(now)).stream()).map(GoodsTradeParty::id).distinct().sorted()
+                .flatMap(recipient -> party(state, recipient, "quote-publication", now).stream()).toList();
+    }
     public static List<ProposedEvent> container(FrontierWorldState state, SubjectId container, String cause, long now) {
         return state.companies().goodsTrade().participants().participants().values().stream()
                 .filter(value -> GoodsParticipantStorage.declared(state, value).contains(container)).sorted(Comparator.comparing(value -> value.party().id()))

@@ -78,9 +78,9 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
             throw new IllegalArgumentException("stale or foreign unmatched-order withdrawal");
         var next = new HashMap<>(orders);
         if (order.committedQuantity() == 0) next.remove(order.id());
-        else next.put(order.id(), new GoodsTradeOrder(order.id(), order.party(), order.counterparty(), order.side(),
+        else next.put(order.id(), new GoodsTradeOrder(order.id(), order.party(), order.side(),
                 order.containerId(), order.itemKind(), order.committedQuantity(), order.committedQuantity(),
-                order.unitPriceLimit(), order.expiresAtTick()));
+                order.unitPriceLimit(), order.expiresAtTick(), order.retiredCommittedQuantity()));
         return new GoodsTradeState(next, contracts, participants, priceHistory, demandHistory);
     }
     public GoodsTradeState accept(GoodsTradeAcceptance receipt, long now) {
@@ -108,24 +108,26 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         return put(contract.partition(partition));
     }
     public GoodsTradeState retire(GoodsTradeRetired retired, long now) {
-        for (SubjectId id : retired.orderIds()) {
-            GoodsTradeOrder order = orders.get(id);
-            if (order == null || now <= order.expiresAtTick()) throw new IllegalArgumentException("goods retirement needs expired orders");
-        }
+        var nextOrders = new HashMap<>(orders); var nextContracts = new HashMap<>(contracts);
         for (SubjectId id : retired.contractIds()) {
-            GoodsTradeContract contract = contracts.get(id);
-            if (contract == null || !contract.terminal() || !retired.orderIds().contains(contract.sellOrderId())
-                    || !retired.orderIds().contains(contract.buyOrderId())) {
-                throw new IllegalArgumentException("goods retirement must close the complete terminal order component");
+            var contract = nextContracts.remove(id);
+            if (contract == null || !contract.terminal())
+                throw new IllegalArgumentException("only a retained terminal contract may retire");
+            for (var orderId : java.util.List.of(contract.sellOrderId(), contract.buyOrderId())) {
+                var order = nextOrders.get(orderId);
+                if (order == null) throw new IllegalArgumentException("terminal contract lost its exact order");
+                nextOrders.put(orderId, order.retireCommitment(contract.quantity()));
             }
         }
-        if (contracts.values().stream().anyMatch(c -> !retired.contractIds().contains(c.id())
-                && (retired.orderIds().contains(c.sellOrderId()) || retired.orderIds().contains(c.buyOrderId())))) {
-            throw new IllegalArgumentException("goods retirement would orphan another retained contract");
+        for (SubjectId id : retired.orderIds()) {
+            var order = nextOrders.get(id);
+            if (order == null || order.availableQuantity() > 0 && now <= order.expiresAtTick())
+                throw new IllegalArgumentException("live unexpired public consent cannot retire");
+            if (nextContracts.values().stream().anyMatch(contract -> contract.sellOrderId().equals(id) || contract.buyOrderId().equals(id)))
+                throw new IllegalArgumentException("order retirement would orphan a retained contract");
+            nextOrders.remove(id);
         }
-        Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders); retired.orderIds().forEach(nextOrders::remove);
-        Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); retired.contractIds().forEach(next::remove);
-        return new GoodsTradeState(nextOrders, next, participants, priceHistory, demandHistory);
+        return new GoodsTradeState(nextOrders, nextContracts, participants, priceHistory, demandHistory);
     }
     private GoodsTradeState put(GoodsTradeContract contract) {
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
@@ -135,7 +137,6 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     static void validateTerms(GoodsTradeContract contract, GoodsTradeOrder sell, GoodsTradeOrder buy) {
         if (sell == null || buy == null || sell.side() != GoodsTradeOrder.Side.SELL || buy.side() != GoodsTradeOrder.Side.BUY
                 || !sell.party().equals(contract.seller()) || !buy.party().equals(contract.buyer())
-                || !sell.counterparty().equals(contract.buyer()) || !buy.counterparty().equals(contract.seller())
                 || !sell.containerId().equals(contract.sourceContainerId()) || !buy.containerId().equals(contract.receiverContainerId())
                 || !sell.itemKind().equals(contract.itemKind()) || !buy.itemKind().equals(contract.itemKind())
                 || !contract.goodsUnitPrice().equals(sell.unitPriceLimit())

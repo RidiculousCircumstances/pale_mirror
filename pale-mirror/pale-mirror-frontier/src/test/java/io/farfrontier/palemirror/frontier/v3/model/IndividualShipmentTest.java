@@ -112,8 +112,8 @@ class IndividualShipmentTest {
         var inventory = state.inventory();
         state = state.withInventory(new ExactInventory(inventory.containers(), items, inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(),
                 inventory.conflicts(), inventory.surfaces(), inventory.economics(), inventory.fungibleResources()));
-        var sell = new GoodsTradeOrder(new SubjectId("order:individual-sell"), seller, buyer, GoodsTradeOrder.Side.SELL, source, item.itemKind(), 1, 0, FixedScalar.ONE, 10_000);
-        var buy = new GoodsTradeOrder(new SubjectId("order:individual-buy"), buyer, seller, GoodsTradeOrder.Side.BUY, destination, item.itemKind(), 1, 0, FixedScalar.ONE, 10_000);
+        var sell = new GoodsTradeOrder(new SubjectId("order:individual-sell"), seller, GoodsTradeOrder.Side.SELL, source, item.itemKind(), 1, 0, FixedScalar.ONE, 10_000);
+        var buy = new GoodsTradeOrder(new SubjectId("order:individual-buy"), buyer, GoodsTradeOrder.Side.BUY, destination, item.itemKind(), 1, 0, FixedScalar.ONE, 10_000);
         var allocation = new IndividualResourceAllocation(claimId, contractId, seller.id(), itemId, item.itemKind(), item.condition());
         var contract = new GoodsTradeContract(contractId, sell.id(), buy.id(), seller, buyer, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, seller),
                 source, destination, item.itemKind(), 1, FixedScalar.ONE, new SubjectId("reservation:individual-sale"), 0, Map.of(claimId, 1), Map.of(), Map.of(),

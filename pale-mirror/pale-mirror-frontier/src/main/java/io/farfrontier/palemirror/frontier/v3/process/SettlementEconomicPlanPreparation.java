@@ -32,7 +32,7 @@ final class SettlementEconomicPlanPreparation {
         var input = registry.economicState(participant.party().id());
         long next = Math.addExact(now, state.bootstrap().ruleset().goodsTrade().reviewInterval());
         for (var order : state.companies().goodsTrade().orders().values()) {
-            if ((order.party().equals(participant.party()) || order.counterparty().equals(participant.party())) && order.expiresAtTick() > now)
+            if (order.party().equals(participant.party()) && order.expiresAtTick() > now)
                 next = Math.min(next, order.expiresAtTick());
         }
         long revision = Math.incrementExact(input.accepted().map(SettlementEconomicPlan::revision).orElse(0L));

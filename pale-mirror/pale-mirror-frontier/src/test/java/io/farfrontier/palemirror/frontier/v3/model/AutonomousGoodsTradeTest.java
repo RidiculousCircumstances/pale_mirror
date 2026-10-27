@@ -162,7 +162,7 @@ class AutonomousGoodsTradeTest {
     @Test void delayedPeriodicAndOpportunityReviewsUseExecutionTimeAtTheOrderExpiryBoundary() {
         var quoted = review(issue(companyFixture(), HOME, "minecraft:wheat", 64, "delayed-public-grain"), HOME, 400);
         var sell = quoted.companies().goodsTrade().orders().values().stream()
-                .filter(order -> order.party().id().equals(HOME) && order.counterparty().id().equals(COMPANY)
+                .filter(order -> order.party().id().equals(HOME)
                         && order.side() == GoodsTradeOrder.Side.SELL && order.itemKind().equals("minecraft:wheat"))
                 .findFirst().orElseThrow();
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(quoted));

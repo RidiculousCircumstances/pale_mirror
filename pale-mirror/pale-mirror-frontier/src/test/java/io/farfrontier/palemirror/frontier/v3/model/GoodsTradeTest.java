@@ -168,7 +168,8 @@ class GoodsTradeTest {
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         for (int boundary = 0; boundary < 20; boundary++) {
             var current = engine.canonicalState().state();
-            if (current.companies().goodsTrade().contracts().get(new SubjectId("contract:development-goods")).fulfilled()
+            if (current.companies().goodsTrade().priceHistory().commodities().getOrDefault("minecraft:bread", List.of())
+                    .stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale::quantity).sum() == 32
                     && engine.checkpoint().schedules().stream().noneMatch(action -> action.subject().equals(ShipmentFixture.ID))) break;
             var next = engine.checkpoint().schedules().stream()
                     .filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action)).sorted().findFirst().orElseThrow();
@@ -178,7 +179,9 @@ class GoodsTradeTest {
         var state = engine.canonicalState().state();
         assertFalse(state.shipments().shipments().containsKey(ShipmentFixture.ID),
                 "an accepted reference-closed delivery is not executable transport history");
-        assertTrue(state.companies().goodsTrade().contracts().get(new SubjectId("contract:development-goods")).fulfilled());
+        assertEquals(32, state.companies().goodsTrade().priceHistory().commodities().getOrDefault("minecraft:bread", List.of())
+                .stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale::quantity).sum());
+        assertTrue(state.inventory().economics().reservations().isEmpty());
         assertFalse(engine.checkpoint().schedules().stream().anyMatch(s -> s.subject().equals(ShipmentFixture.ID)));
     }
     @Test void partialUnloadingRetainsTheCourierAndPaysOnlyTheExactReceivedPortionAcrossRecovery() {
@@ -550,7 +553,7 @@ class GoodsTradeTest {
         assertThrows(IllegalArgumentException.class, () -> fact(offered, SELLER, new GoodsTradeReserved(priced, reservation().allocations())));
         FrontierWorldState held = fact(state, SELLER, reservation());
         assertThrows(IllegalArgumentException.class, () -> fact(held, SELLER, reservation()));
-        var forged = new GoodsTradeOrder(id("order:forged"), new GoodsTradeParty(SELLER, EconomicOwnerKind.COMPANY), BUYER_PARTY,
+        var forged = new GoodsTradeOrder(id("order:forged"), new GoodsTradeParty(SELLER, EconomicOwnerKind.COMPANY),
                 GoodsTradeOrder.Side.SELL, SOURCE, "minecraft:wheat", 10, 0, PRICE, 10_000);
         assertThrows(IllegalArgumentException.class, () -> fact(initial(), SELLER, new GoodsTradeOrderPlaced(forged)));
     }
@@ -561,9 +564,9 @@ class GoodsTradeTest {
         assertEquals(minimum + 60, SettlementFoodPolicy.breadStock(state, SELLER));
         assertEquals(minimum, SettlementFoodPolicy.reserveCoverageBread(state, SELLER));
         assertEquals(minimum, SettlementFoodPolicy.coldUsableBread(state, SELLER));
-        var extraSell = new GoodsTradeOrder(id("order:extra-sell"), SELLER_PARTY, BUYER_PARTY,
+        var extraSell = new GoodsTradeOrder(id("order:extra-sell"), SELLER_PARTY,
                 GoodsTradeOrder.Side.SELL, SOURCE, "minecraft:bread", 1, 0, PRICE, 10_000);
-        var extraBuy = new GoodsTradeOrder(id("order:extra-buy"), BUYER_PARTY, SELLER_PARTY,
+        var extraBuy = new GoodsTradeOrder(id("order:extra-buy"), BUYER_PARTY,
                 GoodsTradeOrder.Side.BUY, RECEIVER, "minecraft:bread", 1, 0, PRICE, 10_000);
         state = fact(fact(state, SELLER, new GoodsTradeOrderPlaced(extraSell)), BUYER, new GoodsTradeOrderPlaced(extraBuy));
         var contractId = id("contract:extra"); var claimId = id("claim:extra");
@@ -660,9 +663,9 @@ class GoodsTradeTest {
         resources = resources.issue(new ResourceLot(bread, SELLER, "minecraft:bread", quantity, "fixture:trade-bread", List.of()),
                 new CustodyAccount(SOURCE_ACCOUNT, new ResourceCustody.Container(SOURCE), Map.of(bread, quantity), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
-        state = fact(state, SELLER, new GoodsTradeOrderPlaced(new GoodsTradeOrder(SELL_ORDER, SELLER_PARTY, BUYER_PARTY,
+        state = fact(state, SELLER, new GoodsTradeOrderPlaced(new GoodsTradeOrder(SELL_ORDER, SELLER_PARTY,
                 GoodsTradeOrder.Side.SELL, SOURCE, "minecraft:bread", 60, 0, PRICE, 10_000)));
-        state = fact(state, BUYER, new GoodsTradeOrderPlaced(new GoodsTradeOrder(BUY_ORDER, BUYER_PARTY, SELLER_PARTY,
+        state = fact(state, BUYER, new GoodsTradeOrderPlaced(new GoodsTradeOrder(BUY_ORDER, BUYER_PARTY,
                 GoodsTradeOrder.Side.BUY, RECEIVER, "minecraft:bread", 60, 0, PRICE, 10_000)));
         var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, SELLER_PARTY),
                 SOURCE, RECEIVER, "minecraft:bread", 60, PRICE, HOLD, 0, Map.of(CLAIM, 60), Map.of());
@@ -709,7 +712,8 @@ class GoodsTradeTest {
         FrontierWorldState closed = state;
         assertThrows(IllegalArgumentException.class, () -> fact(closed, SELLER, cancelled));
         var retired = new GoodsTradeRetired(java.util.Set.of(SELL_ORDER, BUY_ORDER), java.util.Set.of(CONTRACT));
-        assertThrows(IllegalArgumentException.class, () -> fact(closed, GoodsTradeMarketIdentity.OWNER, retired));
+        assertDoesNotThrow(() -> fact(closed, GoodsTradeMarketIdentity.OWNER, retired),
+                "fully committed terminal orders need not retain history until their original expiry");
         assertThrows(IllegalArgumentException.class, () -> fact(partial, GoodsTradeMarketIdentity.OWNER, retired, 10_001));
         FrontierWorldState compacted = fact(closed, GoodsTradeMarketIdentity.OWNER, retired, 10_001);
         assertTrue(compacted.companies().goodsTrade().orders().isEmpty());
@@ -876,11 +880,11 @@ class GoodsTradeTest {
                 .structures().stream().filter(s -> s.kind() == StructureKind.DEPOT).findFirst().orElseThrow().id();
     }
     static GoodsTradeOrder sellOrder() {
-        return new GoodsTradeOrder(SELL_ORDER, SELLER_PARTY, BUYER_PARTY, GoodsTradeOrder.Side.SELL, SOURCE,
+        return new GoodsTradeOrder(SELL_ORDER, SELLER_PARTY, GoodsTradeOrder.Side.SELL, SOURCE,
                 "minecraft:wheat", 60, 0, PRICE, 10_000);
     }
     static GoodsTradeOrder buyOrder() {
-        return new GoodsTradeOrder(BUY_ORDER, BUYER_PARTY, SELLER_PARTY, GoodsTradeOrder.Side.BUY, RECEIVER,
+        return new GoodsTradeOrder(BUY_ORDER, BUYER_PARTY, GoodsTradeOrder.Side.BUY, RECEIVER,
                 "minecraft:wheat", 60, 0, FixedScalar.whole(3), 10_000);
     }
     static GoodsTradeReserved reservation() {

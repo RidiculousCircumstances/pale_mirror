@@ -42,7 +42,7 @@ class GoodsProcurementTransportTest {
         state = state.withCompanies(state.companies().withGoodsTrade(new GoodsTradeState(trade.orders(), trade.contracts(),
                 trade.participants(), history, trade.demandHistory())));
         var seller = trade.participants().participants().get(new SubjectId("settlement:7"));
-        var offer = new GoodsTradeOrder(new SubjectId("order:valuation-live-offer"), seller.party(), owner.party(),
+        var offer = new GoodsTradeOrder(new SubjectId("order:valuation-live-offer"), seller.party(),
                 GoodsTradeOrder.Side.SELL, FrontierWorldState.depotId(seller.settlementId()), "minecraft:bread", 32, 0,
                 FixedScalar.ONE, 10000);
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(offer)));

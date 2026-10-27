@@ -84,14 +84,14 @@ class GoodsMarketPolicyTest {
                 new CustodyAccount(staging, source.custody(), Map.of(lot, 8), Map.of()));
         resources = resources.transfer(staging, source.id(), Map.of(lot, 8), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(resources));
-        var quote = new GoodsTradeOrder(new SubjectId("order:funded-price-feedback"), buyer.party(), seller.party(),
+        var quote = new GoodsTradeOrder(new SubjectId("order:funded-price-feedback"), buyer.party(),
                 GoodsTradeOrder.Side.BUY, new SubjectId("container:1-depot"), "minecraft:coal", 2, 0, FixedScalar.whole(6), 24000);
         state = GoodsTradeStateSupport.place(state, buyer.party().id(), quote, 0);
         state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, buyer.party().id(), 2400);
         var market = GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400);
         assertEquals(FixedScalar.whole(6), market.buyers().getFirst().landedLimit());
         assertEquals(2, market.buyers().getFirst().quantity());
-        var duplicate = new GoodsTradeOrder(new SubjectId("order:duplicate-price-feedback"), buyer.party(), seller.party(),
+        var duplicate = new GoodsTradeOrder(new SubjectId("order:duplicate-price-feedback"), buyer.party(),
                 quote.side(), quote.containerId(), quote.itemKind(), quote.quantity(), 0, quote.unitPriceLimit(), quote.expiresAtTick());
         state = GoodsTradeStateSupport.place(state, buyer.party().id(), duplicate, 0);
         assertEquals(1, GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400).buyers().size(),
@@ -144,7 +144,7 @@ class GoodsMarketPolicyTest {
         var trade = GoodsTradeTest.breadReserved().companies().goodsTrade();
         var contract = trade.contracts().values().iterator().next();
         var sell = trade.orders().get(contract.sellOrderId()); var originalBuy = trade.orders().get(contract.buyOrderId());
-        var buy = new GoodsTradeOrder(originalBuy.id(), originalBuy.party(), originalBuy.counterparty(), originalBuy.side(),
+        var buy = new GoodsTradeOrder(originalBuy.id(), originalBuy.party(), originalBuy.side(),
                 originalBuy.containerId(), originalBuy.itemKind(), originalBuy.quantity(), originalBuy.committedQuantity(),
                 sell.unitPriceLimit().multiply(3), originalBuy.expiresAtTick());
         var midpoint = new GoodsTradeContract(contract.id(), contract.sellOrderId(), contract.buyOrderId(), contract.seller(),
@@ -215,7 +215,7 @@ class GoodsMarketPolicyTest {
         var order = trade.orders().get(contract.sellOrderId());
         // The ordinary fixture may have committed the complete offer. Add a separate
         // uncommitted quote to exercise cancellation without inventing a receipt.
-        var quote = new GoodsTradeOrder(new SubjectId("order:withdrawable"), order.party(), order.counterparty(), order.side(),
+        var quote = new GoodsTradeOrder(new SubjectId("order:withdrawable"), order.party(), order.side(),
                 order.containerId(), order.itemKind(), 20, 0, order.unitPriceLimit(), order.expiresAtTick());
         state = GoodsTradeStateSupport.place(state, quote.party().id(), quote, 0);
         var cancelled = new GoodsTradeOrderWithdrawn(quote.id(), 0);
@@ -224,7 +224,7 @@ class GoodsMarketPolicyTest {
         assertEquals(state.inventory(), changed.inventory());
         assertEquals(trade.contracts(), changed.companies().goodsTrade().contracts());
         var before = state;
-        assertThrows(IllegalArgumentException.class, () -> GoodsTradeTest.factForFamily(before, quote.counterparty().id(), cancelled, 1, "goods-trade"));
+        assertThrows(IllegalArgumentException.class, () -> GoodsTradeTest.factForFamily(before, contract.buyer().id(), cancelled, 1, "goods-trade"));
     }
     @Test void repricingPartialOrderRetainsItsCommittedTermsAcrossRecoveryAndSettlement() {
         var state = GoodsTradeTest.breadReserved();
@@ -232,14 +232,14 @@ class GoodsMarketPolicyTest {
         var contract = trade.contracts().values().iterator().next();
         var sell = trade.orders().get(contract.sellOrderId());
         var orders = new HashMap<>(trade.orders());
-        orders.put(sell.id(), new GoodsTradeOrder(sell.id(), sell.party(), sell.counterparty(), sell.side(),
+        orders.put(sell.id(), new GoodsTradeOrder(sell.id(), sell.party(), sell.side(),
                 sell.containerId(), sell.itemKind(), sell.quantity() + 20, sell.committedQuantity(), sell.unitPriceLimit(), sell.expiresAtTick()));
         trade = new GoodsTradeState(orders, trade.contracts(), trade.participants(), trade.priceHistory(), trade.demandHistory());
         state = state.withCompanies(state.companies().withGoodsTrade(trade));
         var originalInventory = state.inventory();
         state = GoodsTradeTest.factForFamily(state, sell.party().id(),
                 new GoodsTradeOrderWithdrawn(sell.id(), sell.committedQuantity()), 1, "goods-trade");
-        var replacement = new GoodsTradeOrder(new SubjectId("order:repriced-remainder"), sell.party(), sell.counterparty(), sell.side(),
+        var replacement = new GoodsTradeOrder(new SubjectId("order:repriced-remainder"), sell.party(), sell.side(),
                 sell.containerId(), sell.itemKind(), 20, 0, sell.unitPriceLimit().multiply(3), sell.expiresAtTick());
         state = GoodsTradeStateSupport.place(state, sell.party().id(), replacement, 1);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));

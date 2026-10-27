@@ -13,6 +13,11 @@ final class GoodsOrderMatching {
         if (times.size() >= 8 && !times.containsKey(now)) times.clear();
         return times.computeIfAbsent(now, ignored -> new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(orders.values(), now));
     }
+    static List<GoodsParticipant> sellers(FrontierWorldState state, GoodsParticipant buyer, long now) {
+        var participants = state.companies().goodsTrade().participants().participants();
+        return book(state, now).sellers(buyer.party()).stream().map(party -> participants.get(party.id()))
+                .filter(Objects::nonNull).filter(seller -> known(seller, buyer) && known(buyer, seller)).toList();
+    }
     record Endpoints(SubjectId source, SubjectId receiver) { }
     record Match(GoodsTradeContract contract, List<GoodsTradeStockAllocation> allocations) { }
     record Search(Optional<Match> match, String disposition, int checkedPairs) { }

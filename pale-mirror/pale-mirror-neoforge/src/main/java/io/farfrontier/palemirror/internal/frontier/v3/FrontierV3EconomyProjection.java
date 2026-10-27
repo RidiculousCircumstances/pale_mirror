@@ -33,7 +33,7 @@ final class FrontierV3EconomyProjection {
         var stocks=stocks(s); var orders=new ArrayList<Map<String,Object>>(); var contracts=new ArrayList<Map<String,Object>>();
         var trade=s.companies().goodsTrade();
         for (var order:trade.orders().values()) if(order.availableQuantity()>0 && order.expiresAtTick()>tick)
-            orders.add(row("id",order.id(),"town",order.party().id(),"counterparty",order.counterparty().id(),"side",order.side().name(),
+            orders.add(row("id",order.id(),"town",order.party().id(),"scope","KNOWN_MARKET","side",order.side().name(),
                     "item",order.itemKind(),"quantity",order.availableQuantity(),"priceRaw",order.unitPriceLimit().raw(),"expires",order.expiresAtTick()));
         for (var contract:trade.contracts().values()) if(!contract.terminal())
             contracts.add(row("id",contract.id(),"seller",contract.seller().id(),"buyer",contract.buyer().id(),"item",contract.itemKind(),

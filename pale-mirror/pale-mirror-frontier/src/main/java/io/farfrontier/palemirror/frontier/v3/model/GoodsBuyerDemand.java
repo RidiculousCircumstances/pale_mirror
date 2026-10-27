@@ -20,7 +20,7 @@ final class GoodsBuyerDemand {
         var rules = state.bootstrap().ruleset().goodsTrade();
         var buyers = new TreeMap<SubjectId, GoodsTradeOrder>();
         for (var order : trade.orders().values()) {
-            if (order.side() != GoodsTradeOrder.Side.BUY || !order.counterparty().equals(seller.party())
+            if (order.side() != GoodsTradeOrder.Side.BUY
                     || !order.itemKind().equals(item) || order.unitPriceLimit().raw() < minimumUnitPrice || order.expiresAtTick() <= atTick || order.availableQuantity() == 0) continue;
             var buyer = trade.participants().participants().get(order.party().id());
             if (buyer == null || !buyer.party().equals(order.party()) || !mutuallyKnown(seller, buyer)

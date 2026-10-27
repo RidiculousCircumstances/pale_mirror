@@ -32,7 +32,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         var orders = trade.orders().values().stream().filter(value -> value.party().equals(participant.party()))
                 .sorted(java.util.Comparator.comparing(GoodsTradeOrder::id)).map(value ->
                         "{\"id\":" + string(value.id().value()) + ",\"side\":" + string(value.side().name())
-                                + ",\"counterparty\":" + string(value.counterparty().id().value()) + ",\"commodity\":" + string(value.itemKind())
+                                + ",\"scope\":" + string("KNOWN_MARKET") + ",\"commodity\":" + string(value.itemKind())
                                 + ",\"container\":" + string(value.containerId().value())
                                 + ",\"availableQuantity\":" + value.availableQuantity() + ",\"limitRaw\":" + value.unitPriceLimit().raw()
                                 + ",\"expiresAtTick\":" + value.expiresAtTick() + "}").collect(Collectors.joining(","));

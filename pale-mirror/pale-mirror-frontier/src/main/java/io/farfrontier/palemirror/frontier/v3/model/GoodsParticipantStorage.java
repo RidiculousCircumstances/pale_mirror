@@ -51,14 +51,36 @@ public final class GoodsParticipantStorage {
                 .reduce(0, Math::addExact);
     }
     /** Alternative exact quote locations, not independent stock budgets. Matching rechecks the shared intent. */
-    public static List<ShipmentEndpoint> quoteEndpoints(FrontierWorldState state, GoodsParticipant participant,
+    public record QuoteEndpoint(ShipmentEndpoint endpoint, int quantity) {
+        public QuoteEndpoint { Objects.requireNonNull(endpoint); if (quantity < 1) throw new IllegalArgumentException("empty public quote allocation"); }
+    }
+    /** Partition one participant intention over its current eligible warehouses.
+     * Alternative endpoints cannot multiply demand, supply or purchasing power. */
+    public static List<QuoteEndpoint> quoteEndpoints(FrontierWorldState state, GoodsParticipant participant,
             GoodsParticipantPolicy.Intent intent) {
-        return containers(state, participant, intent.itemKind()).stream()
+        var ports = containers(state, participant, intent.itemKind()).stream()
                 .filter(id -> intent.side() == GoodsTradeOrder.Side.SELL
                         ? unclaimed(state, participant, id, intent.itemKind()) > 0
                         : GoodsTradeStateSupport.receivingCapacity(state, id, intent.itemKind(), 1))
                 .sorted(Comparator.<SubjectId>comparingInt(id -> intent.side() == GoodsTradeOrder.Side.SELL
-                        ? unclaimed(state, participant, id, intent.itemKind()) : 0).reversed().thenComparing(Comparator.naturalOrder()))
-                .map(id -> endpoint(state, id)).toList();
+                        ? unclaimed(state, participant, id, intent.itemKind()) : 0).reversed().thenComparing(Comparator.naturalOrder())).toList();
+        var result = new ArrayList<QuoteEndpoint>(); int remaining = intent.quantity();
+        for (var port : ports) {
+            int quantity;
+            if (intent.side() == GoodsTradeOrder.Side.SELL) quantity = Math.min(remaining, unclaimed(state, participant, port, intent.itemKind()));
+            else {
+                int low = 0, high = remaining;
+                while (low < high) {
+                    int mid = low + (high - low + 1) / 2;
+                    if (GoodsTradeStateSupport.receivingCapacity(state, port, intent.itemKind(), mid)) low = mid;
+                    else high = mid - 1;
+                }
+                quantity = low;
+            }
+            if (quantity > 0) { result.add(new QuoteEndpoint(endpoint(state, port), quantity)); remaining -= quantity; }
+            if (remaining == 0) break;
+        }
+        return List.copyOf(result);
     }
+
 }

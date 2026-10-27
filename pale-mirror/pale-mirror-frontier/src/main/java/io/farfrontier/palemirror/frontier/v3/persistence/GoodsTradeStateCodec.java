@@ -30,13 +30,14 @@ final class GoodsTradeStateCodec {
                 MarketDemandHistoryCodec.read(in));
     }
     static void writeOrder(DataOutputStream out, GoodsTradeOrder order) throws IOException {
-        id(out, order.id()); party(out, order.party()); party(out, order.counterparty()); out.writeByte(order.side().wireTag());
+        id(out, order.id()); party(out, order.party()); out.writeByte(order.side().wireTag());
         id(out, order.containerId()); out.writeUTF(order.itemKind()); out.writeInt(order.quantity());
-        out.writeInt(order.committedQuantity()); out.writeLong(order.unitPriceLimit().raw()); out.writeLong(order.expiresAtTick());
+        out.writeInt(order.committedQuantity()); out.writeInt(order.retiredCommittedQuantity()); out.writeLong(order.unitPriceLimit().raw()); out.writeLong(order.expiresAtTick());
     }
     static GoodsTradeOrder readOrder(DataInputStream in) throws IOException {
-        return new GoodsTradeOrder(id(in), party(in), party(in), GoodsTradeOrder.Side.fromWireTag(in.readUnsignedByte()),
-                id(in), in.readUTF(), in.readInt(), in.readInt(), new FixedScalar(in.readLong()), in.readLong());
+        var id = id(in); var party = party(in); var side = GoodsTradeOrder.Side.fromWireTag(in.readUnsignedByte());
+        var container = id(in); var item = in.readUTF(); int quantity = in.readInt(), committed = in.readInt(), retired = in.readInt();
+        return new GoodsTradeOrder(id, party, side, container, item, quantity, committed, new FixedScalar(in.readLong()), in.readLong(), retired);
     }
     static void writeContract(DataOutputStream out, GoodsTradeContract contract) throws IOException {
         out.writeInt(0x47544333); // Explicit separate goods/freight grammar, including WAL payloads.

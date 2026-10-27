@@ -22,7 +22,7 @@ final class GoodsAcquisitionPricing {
         var trade = state.companies().goodsTrade();
         AcquisitionQuote best = null;
         for (var order : trade.orders().values().stream().sorted(Comparator.comparing(GoodsTradeOrder::id)).toList()) {
-            if (order.side() != GoodsTradeOrder.Side.SELL || !order.counterparty().equals(buyer.party())
+            if (order.side() != GoodsTradeOrder.Side.SELL
                     || !order.itemKind().equals(item) || order.expiresAtTick() <= now || order.availableQuantity() == 0
                     || buyer.known().stream().noneMatch(known -> known.party().equals(order.party()))) continue;
             var seller = trade.participants().participants().get(order.party().id());

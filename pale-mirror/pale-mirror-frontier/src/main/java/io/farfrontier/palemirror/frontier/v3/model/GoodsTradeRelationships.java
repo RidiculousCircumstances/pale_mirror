@@ -12,7 +12,6 @@ final class GoodsTradeRelationships {
         for (GoodsTradeOrder order : state.companies().goodsTrade().orders().values()) {
             SubjectEndpoint owner = endpoint(EntityKind.GOODS_ORDER, order.id());
             add(edges, Kind.GOODS_ORDER_PARTY, owner, EntityKind.ECONOMIC_ACCOUNT, order.party().id(), Lifecycle.ACTIVE);
-            add(edges, Kind.GOODS_ORDER_COUNTERPARTY, owner, EntityKind.ECONOMIC_ACCOUNT, order.counterparty().id(), Lifecycle.ACTIVE);
             add(edges, Kind.GOODS_ORDER_CONTAINER, owner, EntityKind.CONTAINER, order.containerId(), Lifecycle.ACTIVE);
         }
         for (GoodsTradeContract contract : state.companies().goodsTrade().contracts().values()) {

@@ -58,6 +58,35 @@ class GoodsParticipantReviewAdviceTest {
         assertTrue(completion.revalidate(state, new SimInstant(4000 + state.bootstrap().ruleset().goodsTrade().reviewInterval())).isEmpty());
         assertTrue(completion.revalidate(state, new SimInstant(3999)).isEmpty());
     }
+    @Test void publicQuoteWakesOpposingCommodityInterestsOnceAndLeavesOtherKnownPeersAlone() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:addressed-market-wake"), 126L,
+                FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
+        var owner = state.bootstrap().settlements().getFirst().id();
+        var recipient = state.bootstrap().settlements().get(1).id();
+        var order = new GoodsTradeOrder(new SubjectId("order:addressed-wake"),
+                new GoodsTradeParty(owner, EconomicOwnerKind.SETTLEMENT_TREASURY),
+                GoodsTradeOrder.Side.SELL, FrontierWorldState.depotId(owner), "minecraft:bread", 64, 0, FixedScalar.whole(1), 5000);
+        var bid = new GoodsTradeOrder(new SubjectId("order:public-bid"),
+                new GoodsTradeParty(recipient, EconomicOwnerKind.SETTLEMENT_TREASURY), GoodsTradeOrder.Side.BUY,
+                FrontierWorldState.depotId(recipient), "minecraft:bread", 64, 0, FixedScalar.whole(2), 5000);
+        state = GoodsTradeStateSupport.place(state, recipient, bid, 4000);
+        var unrelated = state.bootstrap().settlements().get(2).id();
+        state = GoodsTradeStateSupport.place(state, unrelated, new GoodsTradeOrder(new SubjectId("order:unrelated-coal-bid"),
+                new GoodsTradeParty(unrelated, EconomicOwnerKind.SETTLEMENT_TREASURY), GoodsTradeOrder.Side.BUY,
+                FrontierWorldState.depotId(unrelated), "minecraft:coal", 64, 0, FixedScalar.whole(2), 5000), 4000);
+        assertEquals(1, GoodsParticipantProcess.reviewWorkUnits(state, GoodsParticipantWakeup.action(recipient, 4001)),
+                "known peers without public supply are not charged as procurement alternatives");
+        state = GoodsTradeStateSupport.place(state, owner, order, 4000);
+        assertEquals(List.of(owner), GoodsOrderMatching.sellers(state,
+                state.companies().goodsTrade().participants().participants().get(recipient), 4000)
+                .stream().map(value -> value.party().id()).toList());
+        var events = GoodsParticipantWakeup.quoted(state, List.of(order, order), 4000);
+        assertEquals(List.of(recipient), events.stream().map(ProposedEvent::subject).toList(),
+                "public asks notify only opposing commodity interest, not every known settlement");
+        assertEquals(GoodsParticipantWakeup.action(recipient, 4001),
+                ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested) events.getFirst().payload()).action());
+    }
+
     @Test void marketOpportunityUsesPublishedConsentWithoutRenewingTheEconomicForecast() {
         var rules = FrontierRulesets.installed("frontier-v3-simulation-baseline-r31");
         var config = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(

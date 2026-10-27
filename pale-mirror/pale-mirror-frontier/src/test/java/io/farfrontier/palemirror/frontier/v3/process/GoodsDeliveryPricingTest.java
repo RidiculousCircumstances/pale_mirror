@@ -12,9 +12,9 @@ class GoodsDeliveryPricingTest {
         var state = ConsolidatedTradeFixture.initial(new WorldId("frontier:acquisition-cost"), 125L, false);
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var buyer = state.companies().goodsTrade().participants().participants().get(seller.known().getFirst().party().id());
-        var sell = new GoodsTradeOrder(new SubjectId("order:acquisition-sell"), seller.party(), buyer.party(),
+        var sell = new GoodsTradeOrder(new SubjectId("order:acquisition-sell"), seller.party(),
                 GoodsTradeOrder.Side.SELL, FrontierWorldState.depotId(seller.settlementId()), "minecraft:bread", 16, 0, FixedScalar.whole(2), 10000);
-        var buy = new GoodsTradeOrder(new SubjectId("order:acquisition-buy"), buyer.party(), seller.party(),
+        var buy = new GoodsTradeOrder(new SubjectId("order:acquisition-buy"), buyer.party(),
                 GoodsTradeOrder.Side.BUY, FrontierWorldState.depotId(buyer.settlementId()), "minecraft:bread", 16, 0, FixedScalar.whole(3), 10000);
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(sell).place(buy)));
         state = AcceptedEconomyFixture.publish(state, seller.party().id(), 400);

@@ -16,7 +16,8 @@ final class FrontierStateSchema {
     // Explicit tree generations and sparse source losses; old disposable worlds are rejected.
     // Data-declared soil wire identities replace closed observation-specific soil tags.
     // Canonical lifecycle capacity/composition includes the100settlement cohort.
-    static final int VERSION = 310;
+    // Public market orders retain one shared remaining quantity; bilateral schema310 is rejected.
+    static final int VERSION = 311;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

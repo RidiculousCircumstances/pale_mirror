@@ -5,55 +5,62 @@ import io.farfrontier.palemirror.frontier.v3.model.GoodsTradeParty;
 import io.farfrontier.palemirror.frontier.v3.model.GoodsTradeState;
 import java.util.*;
 
-/** Read-only price/time order book. It grants neither stock, money nor carriage authority. */
+/** Public price/time book. It grants neither stock, money nor carriage authority. */
 public final class MarketOfferBook {
     public record Pair(GoodsTradeOrder sell, GoodsTradeOrder buy) {
         public Pair {
             Objects.requireNonNull(sell); Objects.requireNonNull(buy);
             if (sell.side() != GoodsTradeOrder.Side.SELL || buy.side() != GoodsTradeOrder.Side.BUY
-                    || !sell.party().equals(buy.counterparty()) || !buy.party().equals(sell.counterparty())
-                    || !sell.itemKind().equals(buy.itemKind()))
-                throw new IllegalArgumentException("market pair must retain reciprocal commodity consent");
+                    || sell.party().id().equals(buy.party().id()) || !sell.itemKind().equals(buy.itemKind()))
+                throw new IllegalArgumentException("market pair needs distinct owners and opposing commodity consent");
         }
     }
-    private record Key(GoodsTradeParty seller, GoodsTradeParty buyer, String commodity) { }
-    private final Map<GoodsTradeParty, List<GoodsTradeOrder>> sales;
+    private final Map<String, List<GoodsTradeOrder>> sales;
+    private final Map<GoodsTradeParty, List<GoodsTradeOrder>> bids;
     private final Set<GoodsTradeParty> buyers;
-    private final Map<Key, List<GoodsTradeOrder>> bids;
-
     public MarketOfferBook(Collection<GoodsTradeOrder> orders, long now) {
         if (now < 0 || orders.size() > GoodsTradeState.MAX_ORDERS
                 || orders.stream().map(GoodsTradeOrder::id).distinct().count() != orders.size())
             throw new IllegalArgumentException("invalid bounded market order book");
-        var indexed = new HashMap<Key, List<GoodsTradeOrder>>();
-        var current = orders.stream().filter(order -> order.availableQuantity() > 0 && order.expiresAtTick() >= now).toList();
-        for (var order : current) if (order.side() == GoodsTradeOrder.Side.BUY)
-            indexed.computeIfAbsent(new Key(order.counterparty(), order.party(), order.itemKind()), ignored -> new ArrayList<>()).add(order);
-        indexed.replaceAll((key, values) -> values.stream().sorted(Comparator.comparing(GoodsTradeOrder::id)).toList());
-        bids = Map.copyOf(indexed);
-        var ordered = current.stream().filter(order -> order.side() == GoodsTradeOrder.Side.SELL)
-                .sorted(Comparator.comparing(GoodsTradeOrder::itemKind).thenComparing(GoodsTradeOrder::unitPriceLimit)
-                        .thenComparingLong(GoodsTradeOrder::expiresAtTick).thenComparing(GoodsTradeOrder::id)).toList();
-        var byBuyer = new HashMap<GoodsTradeParty, List<GoodsTradeOrder>>();
-        for (var order : ordered) byBuyer.computeIfAbsent(order.counterparty(), ignored -> new ArrayList<>()).add(order);
-        byBuyer.replaceAll((buyer, quotes) -> List.copyOf(quotes));
-        sales = Map.copyOf(byBuyer);
+        var asks = new HashMap<String, List<GoodsTradeOrder>>();
+        var purchases = new HashMap<GoodsTradeParty, List<GoodsTradeOrder>>();
+        for (var order : orders) {
+            if (order.availableQuantity() == 0 || order.expiresAtTick() < now) continue;
+            if (order.side() == GoodsTradeOrder.Side.SELL)
+                asks.computeIfAbsent(order.itemKind(), ignored -> new ArrayList<>()).add(order);
+            else purchases.computeIfAbsent(order.party(), ignored -> new ArrayList<>()).add(order);
+        }
+        asks.replaceAll((item, values) -> values.stream().sorted(Comparator.comparing(GoodsTradeOrder::unitPriceLimit)
+                .thenComparingLong(GoodsTradeOrder::expiresAtTick).thenComparing(GoodsTradeOrder::id)).toList());
+        purchases.replaceAll((party, values) -> values.stream().sorted(Comparator.comparing(GoodsTradeOrder::itemKind)
+                .thenComparing(GoodsTradeOrder::unitPriceLimit, Comparator.reverseOrder())
+                .thenComparingLong(GoodsTradeOrder::expiresAtTick).thenComparing(GoodsTradeOrder::id)).toList());
+        sales = Map.copyOf(asks); bids = Map.copyOf(purchases);
         var purchasers = new TreeSet<GoodsTradeParty>(Comparator.comparing(GoodsTradeParty::id));
-        bids.keySet().forEach(key -> purchasers.add(key.buyer()));
-        buyers = Collections.unmodifiableSet(purchasers);
+        purchasers.addAll(purchases.keySet()); buyers = Collections.unmodifiableSet(purchasers);
     }
-
-    /** One purchaser compares all its known quotes; equal prices keep stable expiry/identity order. */
+    /** Compare the purchaser's public bids to asks; consent/known-party admission stays with trade. */
     public List<Pair> offers(GoodsTradeParty buyer, Optional<GoodsTradeParty> seller, Set<String> excluded) {
-        Objects.requireNonNull(buyer); Objects.requireNonNull(seller); excluded = Set.copyOf(excluded);
-        var omitted = excluded;
-        return sales.getOrDefault(buyer, List.of()).stream().filter(sell -> seller.filter(value -> !value.equals(sell.party())).isEmpty() && !omitted.contains(sell.itemKind()))
-                .flatMap(sell -> bids.getOrDefault(new Key(sell.party(), buyer, sell.itemKind()), List.of()).stream()
-                        .map(buy -> new Pair(sell, buy)))
-                .limit(GoodsTradeState.MAX_ORDERS).toList();
+        Objects.requireNonNull(buyer); Objects.requireNonNull(seller); Objects.requireNonNull(excluded);
+        var result = new ArrayList<Pair>();
+        for (var buy : bids.getOrDefault(buyer, List.of())) {
+            if (excluded.contains(buy.itemKind())) continue;
+            for (var sell : sales.getOrDefault(buy.itemKind(), List.of())) {
+                if (sell.party().id().equals(buyer.id()) || seller.filter(value -> !value.equals(sell.party())).isPresent()) continue;
+                if (result.size() == GoodsTradeState.MAX_ORDERS) return List.copyOf(result);
+                result.add(new Pair(sell, buy));
+            }
+        }
+        return List.copyOf(result);
     }
-
-    public Set<GoodsTradeParty> buyers() {
-        return buyers;
+    /** Only owners with an opposing live commodity offer are procurement alternatives.
+     * This derived selection does not establish mutual knowledge or trade authority. */
+    public Set<GoodsTradeParty> sellers(GoodsTradeParty buyer) {
+        var result = new TreeSet<GoodsTradeParty>(Comparator.comparing(GoodsTradeParty::id));
+        for (var item : bids.getOrDefault(buyer, List.of()).stream().map(GoodsTradeOrder::itemKind).distinct().toList())
+            for (var ask : sales.getOrDefault(item, List.of()))
+                if (!ask.party().id().equals(buyer.id())) result.add(ask.party());
+        return Collections.unmodifiableSet(result);
     }
+    public Set<GoodsTradeParty> buyers() { return buyers; }
 }

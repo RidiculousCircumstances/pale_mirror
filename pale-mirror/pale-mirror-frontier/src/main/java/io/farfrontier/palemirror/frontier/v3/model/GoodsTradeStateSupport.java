@@ -18,7 +18,10 @@ public final class GoodsTradeStateSupport {
         if (!subject.equals(order.party().id()) || order.expiresAtTick() < now) {
             throw new IllegalArgumentException("only the current participant can authorize its goods order");
         }
-        order.party().validate(state.inventory().economics()); order.counterparty().validate(state.inventory().economics());
+        order.party().validate(state.inventory().economics());
+        var participant = state.companies().goodsTrade().participants().participants().get(order.party().id());
+        if (participant == null || !participant.party().equals(order.party()))
+            throw new IllegalArgumentException("public order requires its exact registered participant");
         requireContainer(state, order.containerId());
         return state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(order)));
     }
@@ -34,6 +37,11 @@ public final class GoodsTradeStateSupport {
                 || specification.representation() == GoodsStockSpecification.Representation.INDIVIDUAL && !allocations.isEmpty())
             throw new IllegalArgumentException("goods allocation contradicts its declared commodity representation");
         contract.seller().validate(state.inventory().economics()); contract.buyer().validate(state.inventory().economics());
+        var registry = state.companies().goodsTrade().participants().participants();
+        var declaredSeller = registry.get(contract.seller().id()); var declaredBuyer = registry.get(contract.buyer().id());
+        if (declaredSeller == null || declaredBuyer == null || !declaredSeller.party().equals(contract.seller())
+                || !declaredBuyer.party().equals(contract.buyer()) || !GoodsBuyerDemand.mutuallyKnown(declaredSeller, declaredBuyer))
+            throw new IllegalArgumentException("contract needs two explicitly registered mutually known parties");
         requireContainer(state, contract.sourceContainerId()); requireContainer(state, contract.receiverContainerId());
         int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(), contract.itemKind(), now);
         var seller = state.companies().goodsTrade().participants().participants().get(contract.seller().id());
@@ -125,10 +133,12 @@ public final class GoodsTradeStateSupport {
         }
         Map<SubjectId, Integer> orderTotals = new java.util.HashMap<>();
         for (GoodsTradeOrder order : trade.orders().values()) {
-            if (state.inventory().economics().require(order.party().id()).ownerKind() != order.party().kind()
-                    || state.inventory().economics().require(order.counterparty().id()).ownerKind() != order.counterparty().kind()) {
+            if (state.inventory().economics().require(order.party().id()).ownerKind() != order.party().kind()) {
                 throw new IllegalArgumentException("goods order " + order.id().value() + " has a forged participant kind");
             }
+            var participant = trade.participants().participants().get(order.party().id());
+            if (participant == null || !participant.party().equals(order.party()))
+                throw new IllegalArgumentException("public order lost its exact registered participant");
             requireContainer(state, order.containerId());
         }
         var individualItems = new java.util.HashSet<SubjectId>();
@@ -158,7 +168,7 @@ public final class GoodsTradeStateSupport {
                 }
             }
         }
-        for (GoodsTradeOrder order : trade.orders().values()) if (order.committedQuantity() != orderTotals.getOrDefault(order.id(), 0)) {
+        for (GoodsTradeOrder order : trade.orders().values()) if (order.committedQuantity() != Math.addExact(orderTotals.getOrDefault(order.id(), 0), order.retiredCommittedQuantity())) {
             throw new IllegalArgumentException("goods order commitment is not accounted by retained contracts");
         }
         for (ClaimAllocation claim : state.inventory().fungibleResources().claims().values()) {
@@ -171,17 +181,25 @@ public final class GoodsTradeStateSupport {
     }
 
     static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
-        if (before.companies().goodsTrade() == after.companies().goodsTrade()) return;
-        for (GoodsTradeContract contract : before.companies().goodsTrade().contracts().values()) {
-            if (!contract.terminal() && !after.companies().goodsTrade().contracts().containsKey(contract.id())) {
-                throw new IllegalArgumentException("live commercial obligation cannot be erased: " + contract.id().value());
-            }
+        var old = before.companies().goodsTrade(); var next = after.companies().goodsTrade();
+        if (old == next || old.contracts() == next.contracts() && old.orders() == next.orders()) return;
+        var retired = new java.util.HashMap<SubjectId, Integer>();
+        for (var contract : old.contracts().values()) if (!next.contracts().containsKey(contract.id())) {
+            if (!contract.terminal()) throw new IllegalArgumentException("live commercial obligation cannot be erased: " + contract.id().value());
+            retired.merge(contract.sellOrderId(), contract.quantity(), Math::addExact);
+            retired.merge(contract.buyOrderId(), contract.quantity(), Math::addExact);
+        }
+        for (var order : next.orders().values()) {
+            var prior = old.orders().get(order.id());
+            if (prior != null && order.retiredCommittedQuantity() != Math.addExact(prior.retiredCommittedQuantity(), retired.getOrDefault(order.id(), 0)))
+                throw new IllegalArgumentException("public order history must account exactly for retired terminal contracts");
         }
     }
 
     public static FrontierWorldState retire(FrontierWorldState state, SubjectId subject, GoodsTradeRetired retired, long now) {
         if (!subject.equals(GoodsTradeMarketIdentity.OWNER) || state.physicalIntents().values().stream()
-                .anyMatch(i -> retired.contractIds().contains(i.causeSubjectId()))) {
+                .anyMatch(i -> retired.contractIds().contains(i.causeSubjectId()) || retired.orderIds().contains(i.causeSubjectId())
+                        || i.subjectIds().stream().anyMatch(id -> retired.contractIds().contains(id) || retired.orderIds().contains(id)))) {
             throw new IllegalArgumentException("goods retirement lacks the process owner or retains a physical effect");
         }
         var trade = state.companies().goodsTrade().retire(retired, now);

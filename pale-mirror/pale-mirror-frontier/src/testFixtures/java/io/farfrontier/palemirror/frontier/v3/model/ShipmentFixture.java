@@ -22,9 +22,9 @@ final class ShipmentFixture {
         var buyParty = new GoodsTradeParty(buyer.id(), EconomicOwnerKind.SETTLEMENT_TREASURY);
         var sell = new SubjectId("order:development-goods-sell"); var buy = new SubjectId("order:development-goods-buy");
         var contract = new SubjectId("contract:development-goods"); var claim = new SubjectId("claim:development-goods");
-        state = GoodsTradeStateSupport.place(state, seller.id(), new GoodsTradeOrder(sell, sellParty, buyParty,
+        state = GoodsTradeStateSupport.place(state, seller.id(), new GoodsTradeOrder(sell, sellParty,
                 GoodsTradeOrder.Side.SELL, source, "minecraft:bread", 32, 0, FixedScalar.whole(1), 100_000), 0);
-        state = GoodsTradeStateSupport.place(state, buyer.id(), new GoodsTradeOrder(buy, buyParty, sellParty,
+        state = GoodsTradeStateSupport.place(state, buyer.id(), new GoodsTradeOrder(buy, buyParty,
                 GoodsTradeOrder.Side.BUY, target, "minecraft:bread", 32, 0, FixedScalar.whole(1), 100_000), 0);
         state = GoodsTradeStateSupport.reserve(state, seller.id(), new GoodsTradeContract(contract, sell, buy, sellParty, buyParty, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, sellParty),
                 source, target, "minecraft:bread", 32, FixedScalar.whole(1), new SubjectId("reservation:development-goods"),
