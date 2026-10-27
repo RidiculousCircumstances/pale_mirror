@@ -261,3 +261,20 @@ parks in this recording were natural tick waiting, not blocking future joins.
 These are measured contributors, not a complete additive attribution of the
 backlog; cache eviction rate and exact preparation/commit gate impact remain
 unconfirmed. No COLD/HOT speedup claim follows from the demand/forecast fix.
+
+
+A longer pre-deploy counter delta (about1295wall seconds) recorded23913canonical
+ticks,25896host ticks and106362canonical journal forced groups: about4.45forces
+per simulation tick. Pending ordinary ticks rose3988->5971. Scheduled preparation
+completed19353calculations, with225.76seconds accumulated execution time. Source
+confirms advanceTo yields on an unfinished scheduled calculation and on each
+unpublished WAL predecessor. The server thread remains available, while canonical
+advancement waits for those serial publication boundaries. These counts establish
+frequent serialized work; they do not make the component durations additive or
+identify all time spent waiting. Receipt:`build/wood-demand-and-latency/predeploy-delta.json`.
+
+Correcting full-batch costs also changes economically preferred tool materials.
+The conditional-production quote fixture now explicitly supplies historical high
+iron prices for its stone-input negotiation story. Its no-phantom-stock, cash
+versus own-provisions, price feedback and recovery assertions remain intact;
+production is not changed to preserve the fixture's accidental old preference.

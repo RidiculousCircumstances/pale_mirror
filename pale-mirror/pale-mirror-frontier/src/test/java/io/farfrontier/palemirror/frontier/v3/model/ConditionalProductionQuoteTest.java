@@ -27,7 +27,8 @@ class ConditionalProductionQuoteTest {
         var before = state.inventory();
         var domestic = SettlementEconomicEvaluation.domestic(state, buyer, 5002);
         var prices = GoodsParticipantPricing.review(state, buyer, 5002, domestic);
-        assertTrue(prices.get(ITEM).bid().raw() > 1_810_000, "future priced production must reach the requesting buyer");
+        assertTrue(prices.get(ITEM).bid().raw() > 1_810_000,
+                "future priced production must reach the requesting buyer: " + prices.get(ITEM) + "; offer=" + q);
         assertSame(before, state.inventory());
         var consenting = review(state, BUYER, 5002);
         var producing = review(consenting, SUPPLIER, 5003);
@@ -61,7 +62,9 @@ class ConditionalProductionQuoteTest {
         var priced = new GoodsParticipantView(buyer.withPrices(prices), view.residents(), view.availableMoney(),
                 view.stocks(), view.purchaseLimits(), view.supplyPlan(), view.awaitingReview());
         var budget = GoodsParticipantFunding.purchase(priced, rules, ITEM);
-        assertTrue(budget.raw() >= qualified.goods().raw() && budget.raw() < value.acquisition().raw());
+        assertTrue(budget.raw() >= qualified.goods().raw() && budget.raw() < value.acquisition().raw(),
+                "cash budget=" + budget + "; value=" + value + "; demand="
+                        + assessment.view().supplyPlan().orElseThrow().require(ITEM));
         var intent = GoodsParticipantPolicies.require(priced.participant()).decide(priced, rules).stream()
                 .filter(i -> i.itemKind().equals(ITEM) && i.side() == GoodsTradeOrder.Side.BUY).findFirst().orElseThrow();
         assertEquals(value.acquisition(), intent.limit(), "the published economic price must not be truncated to the separate cash budget");
@@ -140,6 +143,15 @@ class ConditionalProductionQuoteTest {
             state = ResourceSiteProcess.reducePreparationStarted(state, id, (ResourceSitePreparationStarted) events.getFirst().payload());
             state = ResourceSiteProcess.reducePrepared(state, id, (ResourceSitePrepared) events.get(1).payload());
         }
+        // This story negotiates stone inputs, not the choice between stone and iron tools.
+        // Make that market condition explicit rather than relying on unrelated bakery labour costs.
+        var market = state.companies().goodsTrade();
+        for (String kind : List.of("minecraft:raw_iron", "minecraft:iron_ingot"))
+            market = market.recordSale(kind,
+                    new io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale(
+                            new SubjectId("receipt:conditional-fixture-" + kind.replace(':', '-')),
+                            SUPPLIER, BUYER, 4000, 1, FixedScalar.whole(20)));
+        state = state.withCompanies(state.companies().withGoodsTrade(market));
         var inventory = state.inventory();
         for (var item : List.copyOf(inventory.items().values())) if (item.economicOwnerId().equals(BUYER) && item.itemKind().equals("minecraft:stone_hoe"))
             inventory = inventory.changeCondition(item, new ItemCondition(item.condition().maximumDamage(), 120));
