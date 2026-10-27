@@ -22,8 +22,9 @@ record PhysicalIntentLifecycleDeclaration(PhysicalIntentLifecycleOwner owner, in
                                           Set<PhysicalIntentRoleSchema> schemas,
                                           int maxUnresolved, int maxResolvedRetention) {
     static final int VERSION = 1;
-    /** Each registered physical owner receives one bounded 256-intent retained-work share. */
-    static final int MAX_PER_OWNER = 256;
+    /** A canonical retained-work share covers the100town cohort (e.g.300farmers).
+     * It grants no extra HOT scenes, bodies or physical work budget. */
+    static final int MAX_PER_OWNER = io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_LIFECYCLE_WORK_PER_OWNER;
 
     PhysicalIntentLifecycleDeclaration {
         owner = Objects.requireNonNull(owner, "physical lifecycle declaration owner");

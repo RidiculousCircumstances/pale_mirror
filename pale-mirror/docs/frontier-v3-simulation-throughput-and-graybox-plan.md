@@ -276,3 +276,22 @@ protection. Existing cultivation, damaged/unknown ground, extraction extension
 and navigation tests plus local permission-change checks pass45s. The retained
 heap report is scale-live-retained_Leak_Suspects.zip; no simulation snapshot or
 physical ownership protocol changed.
+
+The next7m29 COLD pressure run passed the prior memory failure and reached the
+physical lifecycle retention boundary: the257th concurrent harvest obligation
+exceeded the256per-owner share. The100town profile permits300farmers. Canonical
+lifecycle shares now512 and the matching aggregate intent/observation bound8192;
+composition still rejects overcommitted/mismatched shares and unresolved work
+still cannot compact. HOT scene/body/work budgets are unchanged. Changed
+composition requires fresh schema310; no old-world conversion or compatibility
+inference is added. The existing calibrator now prints bounded6000tick progress
+and the exact failing canonical instant instead of a silent long wait.
+
+A60s actual100town JFR found repeated global resident filtering in labour and
+procurement, plus whole-container station lookup (including a nested machine
+validation scan). HumanPopulation supplies a derived settlement-membership
+index; ProductionStationDirectory indexes explicitly declared station/facility
+identities. Current life, migrations, eligibility, stock, access and machine
+operation checks remain at their existing owners. Migration, replacement, fuel,
+processing, procurement and conditional-supply regressions exercise these paths.
+Separate verification directories avoid mutating the classes of a running audit.

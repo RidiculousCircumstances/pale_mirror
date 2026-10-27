@@ -68,9 +68,8 @@ public final class GoodsProcurementTransport {
             var timing = ProcurementTravelForecast.read(state, source, item, buyer, itinerary);
             if (timing.isEmpty()) continue;
             var forecast = timing.orElseThrow();
-            var people = state.humanPopulation().residents().values().stream()
-                    .filter(r -> r.settlementId().equals(organizer.settlementId())
-                            && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
+            var people = state.humanPopulation().residentsIn(organizer.settlementId()).stream()
+                    .filter(r -> state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
                     .map(ResidentProfile::id).sorted().toList();
             // Undated reserve projections can ask about an older planning instant.
             // This quote uses retained current people, never rewinds their nutrition;

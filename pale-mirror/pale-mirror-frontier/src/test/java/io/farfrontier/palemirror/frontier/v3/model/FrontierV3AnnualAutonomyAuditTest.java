@@ -40,7 +40,7 @@ class FrontierV3AnnualAutonomyAuditTest {
                 FrontierRulesets.marketQuarryGraybox().id()));
         var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:economy-calibration"), seed, ruleset);
         var engine = FrontierEngines.createCanonicalStateAccess(config);
-        long compacted = 0, observed = 0; boolean recovered = false;
+        long compacted = 0, observed = 0, progress = 0; boolean recovered = false;
         var resume = System.getProperty("pale_mirror.frontier_v3.economy.snapshot");
         if (resume != null) {
             var snapshot = io.farfrontier.palemirror.frontier.v3.persistence.FrontierPersistenceCodec.decodeSnapshot(
@@ -49,7 +49,7 @@ class FrontierV3AnnualAutonomyAuditTest {
                     new RecoveryImage(config.worldId(), Optional.of(snapshot), List.of()));
             assertEquals(seed, engine.canonicalState().state().bootstrap().seed());
             assertEquals(ruleset, engine.canonicalState().state().bootstrap().ruleset());
-            observed = snapshot.checkpoint().instant().ticks(); compacted = snapshot.checkpoint().revision().value();
+            observed = snapshot.checkpoint().instant().ticks(); progress = observed; compacted = snapshot.checkpoint().revision().value();
             if (observed >= target) throw new IllegalArgumentException("resume checkpoint already reaches the requested horizon");
             recovered = observed >= 360000;
             System.out.println("PMV3_ECONOMY_RESUMED seed=" + seed + " tick=" + observed);
@@ -57,7 +57,12 @@ class FrontierV3AnnualAutonomyAuditTest {
         while (engine.canonicalState().instant().ticks() < target) {
             var current = engine.canonicalState().instant();
             var result = engine.advanceTo(new SimInstant(nextTarget(engine.nextScheduledInstantAfter(current), target)), new WorkBudget(128, 1024));
-            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), () -> "tick=" + result.instant().ticks()
+                    + " revision=" + result.revision().value() + " " + result.status().failureDetail().orElse("active"));
+            if (result.instant().ticks() - progress >= 6000) {
+                progress = result.instant().ticks();
+                System.out.println("PMV3_ECONOMY_PROGRESS seed=" + seed + " tick=" + progress + " revision=" + result.revision().value());
+            }
             if (result.revision().value() - compacted >= 1024) {
                 engine.compact(result.revision()); compacted = result.revision().value();
             }

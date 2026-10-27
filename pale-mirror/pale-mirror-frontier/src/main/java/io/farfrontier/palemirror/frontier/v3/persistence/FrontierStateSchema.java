@@ -15,7 +15,8 @@ final class FrontierStateSchema {
     // Economic operating envelopes and bounded stock-recovery sale plans are explicit.
     // Explicit tree generations and sparse source losses; old disposable worlds are rejected.
     // Data-declared soil wire identities replace closed observation-specific soil tags.
-    static final int VERSION = 309;
+    // Canonical lifecycle capacity/composition includes the100settlement cohort.
+    static final int VERSION = 310;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

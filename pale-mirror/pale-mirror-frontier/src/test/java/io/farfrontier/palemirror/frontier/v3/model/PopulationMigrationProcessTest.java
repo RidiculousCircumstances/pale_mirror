@@ -64,6 +64,8 @@ class PopulationMigrationProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
 
         ResidentProfile before = state.humanPopulation().resident(started.journey().residentId());
+        var sourceMembers = state.humanPopulation().residentsIn(source.id());
+        assertTrue(sourceMembers.contains(before));
         ScheduledAction progress = scheduled(review, "frontier.population.migration.progress");
         while (!state.humanPopulation().migration(before.id()).arriving()) {
             List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = PopulationMigrationProcess.planProgress(state, progress);
@@ -72,6 +74,7 @@ class PopulationMigrationProcessTest {
             state = HumanPopulationStateSupport.advanceMigration(state, advanced);
             assertEquals(prior.nextColdPosition(), state.actorLocations().get(before.id()).supportingSurface().support());
             assertEquals(before, state.humanPopulation().resident(before.id()), "membership remains with the origin while in transit");
+            assertSame(sourceMembers, state.humanPopulation().residentsIn(source.id()), "movement does not rebuild settlement membership");
             progress = scheduled(events, "frontier.population.migration.progress");
         }
 
@@ -88,6 +91,8 @@ class PopulationMigrationProcessTest {
         assertEquals(null, state.humanPopulation().migration(before.id()));
         assertTrue(state.actorExecutions().actors().get(before.id()).current().isEmpty());
         assertTrue(!state.humanPopulation().residents().values().stream().anyMatch(person -> person.id().equals(before.id()) && person.settlementId().equals(source.id())));
+        assertTrue(state.humanPopulation().residentsIn(source.id()).stream().noneMatch(person -> person.id().equals(before.id())));
+        assertTrue(state.humanPopulation().residentsIn(migration.destinationSettlementId()).contains(state.humanPopulation().resident(before.id())));
     }
 
     @Test

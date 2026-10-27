@@ -77,10 +77,7 @@ public final class ProductionStationEnergy {
         return Optional.empty();
     }
     public static ContainerRecord record(FrontierWorldState state, SubjectId stationId) {
-        return state.inventory().containers().values().stream().filter(record -> record.productionStation()
-                .filter(spec -> spec.id().equals(stationId)).isPresent()).reduce((left, right) -> {
-                    throw new IllegalArgumentException("duplicate installed station identity");
-                }).orElseThrow(() -> new IllegalArgumentException("missing installed station identity"));
+        return ProductionStationDirectory.require(state.inventory(), stationId);
     }
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
         return state.productionStations().machines().values().stream().flatMap(machine -> machine.pendingFuel().stream())

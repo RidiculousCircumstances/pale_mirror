@@ -28,6 +28,19 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     public static final int MAX_MIGRATIONS = 256;
     /** One retained provision owner per inhabited settlement; a settlement necessarily has a household. */
     public static final int MAX_PROVISIONS = MAX_HOUSEHOLDS;
+    private static final ImmutableInputView<Map<SubjectId, java.util.List<ResidentProfile>>> RESIDENTS_BY_SETTLEMENT = new ImmutableInputView<>();
+
+    /** Derived membership only. Life, migration, activity and permission are
+     * still assessed from current state by the selecting owner. */
+    public java.util.List<ResidentProfile> residentsIn(SubjectId settlement) {
+        return RESIDENTS_BY_SETTLEMENT.get(java.util.List.of(residents), () -> {
+            var grouped = new LinkedHashMap<SubjectId, java.util.List<ResidentProfile>>();
+            residents.values().forEach(resident -> grouped.computeIfAbsent(resident.settlementId(),
+                    ignored -> new java.util.ArrayList<>()).add(resident));
+            grouped.replaceAll((home, people) -> java.util.List.copyOf(people));
+            return Map.copyOf(grouped);
+        }).getOrDefault(settlement, java.util.List.of());
+    }
 
     public HumanPopulation {
         households = immutable(households, "households"); residents = immutable(residents, "residents"); birthJobs = immutable(birthJobs, "resident birth jobs");

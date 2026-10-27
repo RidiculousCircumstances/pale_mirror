@@ -7,7 +7,7 @@ import java.util.*;
 public final class ProductionStationSelection {
     public static Optional<ProductionStationSpec> usable(FrontierWorldState state, SubjectId facility, ProductionRecipe.Id recipeId) {
         var recipe = state.bootstrap().ruleset().production().require(recipeId);
-        return state.inventory().containers().values().stream().flatMap(record -> record.productionStation().stream())
+        return ProductionStationDirectory.inFacility(state.inventory(), facility).stream().flatMap(record -> record.productionStation().stream())
                 .filter(station -> station.facilityId().equals(facility) && station.capability() == recipe.capability())
                 .filter(station -> !ReferenceContainerCustody.blocksCanonicalUse(state, station.containerId()))
                 .filter(station -> state.productionStations().machines().containsKey(station.id()))

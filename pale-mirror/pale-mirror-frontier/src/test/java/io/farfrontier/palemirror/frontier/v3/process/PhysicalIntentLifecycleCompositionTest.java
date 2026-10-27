@@ -74,6 +74,10 @@ class PhysicalIntentLifecycleCompositionTest {
         assertTrue(FrontierWorldProcessCatalog.physicalLifecycles().unresolvedAdmissionCapacity()
                         <= FrontierWorldState.MAX_PHYSICAL_INTENTS,
                 "physical-owner quotas must never exceed the aggregate unresolved admission bound");
+        var scale = io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.installed("frontier-v3-simulation-scale-r31");
+        int farmers = scale.labour().entries().get(io.farfrontier.palemirror.frontier.v3.model.ResidentWorkKind.AGRICULTURE).targetWorkers();
+        assertTrue(PhysicalIntentLifecycleDeclaration.MAX_PER_OWNER >= Math.multiplyExact(farmers, scale.worldLayout().settlements().size()),
+                "the declared COLD farming cohort must fit its lifecycle share without depending on first-come ordering");
     }
 
     @Test

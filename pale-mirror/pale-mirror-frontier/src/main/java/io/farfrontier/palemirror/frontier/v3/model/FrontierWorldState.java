@@ -146,8 +146,8 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents,
             actorMovements, actorExecutions, ShipmentState.empty(), io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.empty());
     }
-    private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_PHYSICAL_OBSERVATIONS = 4_096;
-    public static final int MAX_PHYSICAL_INTENTS = 4_096;
+    private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_PHYSICAL_OBSERVATIONS = SimulationCapacity.MAX_PHYSICAL_INTENTS;
+    public static final int MAX_PHYSICAL_INTENTS = SimulationCapacity.MAX_PHYSICAL_INTENTS;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     private static final ThreadLocal<Integer> DEFERRED_FULL_VALIDATION_DEPTH = ThreadLocal.withInitial(() -> 0);
     private static final ImmutableInvariantCheck<Void> BOOTSTRAP_RESIDENTS = new ImmutableInvariantCheck<>();

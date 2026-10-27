@@ -84,8 +84,7 @@ public final class ProductionStationProcessing {
         if (output == null) throw new IllegalArgumentException("station cannot reserve absent output");
         var claim = new ClaimAllocation(operation.outputClaimId(), order.orderId(), output.economicOwnerId(), output.itemKind(),
                 operation.outputQuantity(), java.util.Map.of(output.id(), operation.outputQuantity()), ClaimPurpose.STATION_OUTPUT);
-        var station = inventory.containers().values().stream().flatMap(record -> record.productionStation().stream())
-                .filter(spec -> spec.id().equals(operation.stationId())).findFirst().orElseThrow();
+        var station = ProductionStationDirectory.require(inventory, operation.stationId()).productionStation().orElseThrow();
         var account = FungibleResourceReadIndex.container(ledger, station.containerId(), ContainerSectionId.OUTPUT).orElseThrow();
         return inventory.withFungibleResources(epoch == 0 ? ledger.reserve(claim, account.id())
                 : ledger.reserveBound(claim, account.id(), epoch));

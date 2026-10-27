@@ -95,9 +95,7 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
     public void validate(ExactInventory inventory, ProductionCatalog catalog,
                          io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
         for (var machine : machines.values()) {
-            var station = inventory.containers().values().stream().flatMap(value -> value.productionStation().stream())
-                    .filter(value -> value.id().equals(machine.stationId())).findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("machine runtime lost its installed instance"));
+            var station = ProductionStationDirectory.require(inventory, machine.stationId()).productionStation().orElseThrow();
             var equipment = catalog.requireEquipment(station.equipmentType());
             if (!equipment.capabilities().contains(station.capability()))
                 throw new IllegalArgumentException("installed station capability differs from its declared equipment type");

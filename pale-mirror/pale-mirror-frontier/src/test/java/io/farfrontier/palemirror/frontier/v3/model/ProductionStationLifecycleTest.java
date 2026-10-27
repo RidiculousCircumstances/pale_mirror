@@ -34,7 +34,13 @@ class ProductionStationLifecycleTest {
         assertEquals(terminal, io.farfrontier.palemirror.frontier.v3.process.ProductionStationProgressObligation.describe(
                 retiredCodec.decode(retiredCodec.encode(state)), state.productionStations().require(original.id())));
         state = new ProductionStationRetired(original.id(), 5).apply(state, original.id());
+        var priorInventory = state.inventory();
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationDirectory.require(priorInventory, spec.id()));
         var replaced = install.apply(state, spec.id(), BakeryStationInstallation::installed);
+        assertEquals(record, ProductionStationDirectory.require(replaced.inventory(), spec.id()));
+        assertTrue(ProductionStationDirectory.inFacility(replaced.inventory(), spec.facilityId()).contains(record));
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationDirectory.require(priorInventory, spec.id()),
+                "a derived lookup cannot lend the replacement to a predecessor inventory");
         assertFalse(replaced.productionStations().machines().containsKey(original.id()));
         assertEquals(0, replaced.productionStations().require(spec.id()).burnRemaining(100));
         assertTrue(replaced.productionStations().require(spec.id()).operation().isEmpty());
