@@ -1016,3 +1016,27 @@ forecasts enter while one is blocked, exact preparation remains independent, sta
 results reject, and only the owner authorizes/publishes continuations. Focused
 preparation/runtime checks PASS37s. This does not increase canonical work allowances
 or claim native throughput success; deploy/measure the connected correction together.
+
+### Select quotes before exact reservation (2026-10-28)
+
+Both retained311 worlds verified18bb21759. The100 profile after recovery advances
+4620→4637 over~6minutes while host debt805→7449: FAIL, not throughput acceptance.
+20s independent-forecasts-recovery.jfr has711preparation samples versus78server;
+ExactInventory/GoodsParticipantState construction dominates the preparation lane.
+Both navigation workers are also busy (543/519samples), so navigation remains open.
+The active procurement path constructs full reserved world drafts for every
+supplier/endpoint/mode and only afterwards ranks them. The public book removed
+quote duplication but exposes this expensive alternative fan-out.
+
+Procurement now separates non-binding quoted bundle envelopes from exact
+candidates. Compact per-order remainders prevent duplicate quantities in an
+estimate; they grant no stock, cash, capacity, crew or departure authority. Rank
+these estimates first, then construct exact reservations only for a selected
+proposal. Reduced/rejected or repriced candidates return to the same ranking;
+full current stock/funding/food protection and logistics admission remain mandatory.
+Existing per-supplier/mode review bounds and smaller-load fallback remain.
+The entire disposable calculation, including selected logistics, stays on the
+preparation worker under the common read-only route-demand capture. Only accepted
+owner completion acquires demands and publishes events. No worker acquires native
+navigation, no canonical publication is moved off-thread, no persistence schema
+change, no world reset. Native impact and phase-G closure remain unproved.

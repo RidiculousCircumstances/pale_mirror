@@ -87,6 +87,28 @@ class GoodsParticipantReviewAdviceTest {
                 ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested) events.getFirst().payload()).action());
     }
 
+    @Test void tripQuoteEnvelopeSharesOrderRemaindersWithoutReservingItsUnbackedStock() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:trip-quote-envelope"), 126L,
+                FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
+        var participants = state.companies().goodsTrade().participants().participants();
+        var seller = participants.get(state.bootstrap().settlements().getFirst().id());
+        var buyer = participants.get(state.bootstrap().settlements().get(1).id());
+        var source = FrontierWorldState.depotId(seller.settlementId());
+        var receiver = FrontierWorldState.depotId(buyer.settlementId());
+        state = GoodsTradeStateSupport.place(state, seller.party().id(), new GoodsTradeOrder(new SubjectId("order:quote-envelope-ask"),
+                seller.party(), GoodsTradeOrder.Side.SELL, source, "minecraft:coal", 70, 0, FixedScalar.ONE, 5000), 4000);
+        for (int i = 0; i < 2; i++) state = GoodsTradeStateSupport.place(state, buyer.party().id(), new GoodsTradeOrder(
+                new SubjectId("order:quote-envelope-bid-" + i), buyer.party(), GoodsTradeOrder.Side.BUY, receiver,
+                "minecraft:coal", 60, 0, FixedScalar.whole(2), 5000), 4000);
+        var inventory = state.inventory(); var trade = state.companies().goodsTrade();
+        var lines = GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 4000);
+        assertEquals(70, lines.get("minecraft:coal").quantity(), "two bids cannot duplicate the one public ask");
+        assertSame(inventory, state.inventory()); assertSame(trade, state.companies().goodsTrade());
+        assertTrue(trade.contracts().isEmpty(), "a quote envelope is not backed or admitted commercial authority");
+        assertTrue(GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 5001).isEmpty(),
+                "expired consent cannot remain a preliminary alternative");
+    }
+
     @Test void marketOpportunityUsesPublishedConsentWithoutRenewingTheEconomicForecast() {
         var rules = FrontierRulesets.installed("frontier-v3-simulation-baseline-r31");
         var config = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
