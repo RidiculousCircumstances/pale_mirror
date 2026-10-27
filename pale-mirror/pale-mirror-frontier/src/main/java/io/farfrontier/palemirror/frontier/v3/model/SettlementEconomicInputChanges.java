@@ -6,7 +6,7 @@ import java.util.*;
 /** Closed fact-owner composition; no solver, scheduling or native effects. */
 public final class SettlementEconomicInputChanges {
     private static final List<EconomicInputChangePort> PORTS = List.of(
-            new InventoryEconomicInputChanges(), new MarketEconomicInputChanges(), new ProductionEconomicInputChanges(),
+            new InventoryEconomicInputChanges(), new MarketEconomicInputChanges(), new ProductionEconomicInputChanges(), new FieldEconomicInputChanges(),
             new PopulationEconomicInputChanges(), new LogisticsEconomicInputChanges());
     private static final class Changed {
         final Map<SettlementEconomicPlanningState.Change, Set<String>> affected = new EnumMap<>(SettlementEconomicPlanningState.Change.class);

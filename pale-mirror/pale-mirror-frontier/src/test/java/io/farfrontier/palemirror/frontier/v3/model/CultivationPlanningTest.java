@@ -181,7 +181,8 @@ class CultivationPlanningTest {
     }
 
     @Test void runtimeLandAdmissionExtendsOnlyRealSurveyedTerrainAndRetainsExistingCellIdentities() {
-        var state = prepared(); var home = new SubjectId("settlement:7");
+        var home = new SubjectId("settlement:7");
+        var state = AcceptedEconomyFixture.publish(prepared(), home, 4000);
         var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
         var survey = FieldDevelopmentLand.survey(state, home, fields, 3);
         var land = survey.cells();
@@ -191,6 +192,14 @@ class CultivationPlanningTest {
         assertTrue(outcome.sites().cycles().values().stream().mapToInt(c -> c.layout().cells().size()).sum()
                 > state.resourceSites().cycles().values().stream().mapToInt(c -> c.layout().cells().size()).sum());
         var next = state.withResourceSites(outcome.sites());
+        long ordinary = state.companies().goodsTrade().participants().economicState(home).accepted().orElseThrow().reviewAtTick();
+        assertEquals(List.of(GoodsParticipantProcess.review(home, ordinary)), SettlementEconomicReviewRequests.changed(state, next, 4001),
+                "admitted additional land must not echo into an immediate full economic replan");
+        assertFalse(next.companies().goodsTrade().participants().economicState(home).changes()
+                .contains(SettlementEconomicPlanningState.Change.CAPACITY));
+        var withdrawn = next.withResourceSites(next.resourceSites().planSowing(fields.getFirst().id(), Set.of()));
+        assertEquals(List.of(GoodsParticipantProcess.review(home, 4002)), SettlementEconomicReviewRequests.changed(next, withdrawn, 4001),
+                "removing future sowing remains a real capacity loss");
         new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next));
     }
 

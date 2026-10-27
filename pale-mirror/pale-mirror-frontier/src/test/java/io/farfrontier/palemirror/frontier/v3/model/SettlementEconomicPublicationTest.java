@@ -30,6 +30,31 @@ class SettlementEconomicPublicationTest {
         assertTrue(stepped.companies().goodsTrade().participants().economicState(new SubjectId("settlement:2")).accepted().isEmpty(),
                 "reading one participant cannot recursively plan its neighbour");
     }
+    @Test void budgetedSoilPreparationKeepsThePlanButSoilDamageRequiresImmediateReview() {
+        var state = CultivationPlanningTest.prepared();
+        var site = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(HOME)).findFirst().orElseThrow();
+        var id = site.layout().cells().getFirst().id();
+        for (var soil : List.of(ResourceFieldCycle.Soil.GRASS, ResourceFieldCycle.Soil.DIRT,
+                ResourceFieldCycle.Soil.valueOf("COARSE_DIRT"))) {
+            var bare = state.resourceSites().cycle(site.id()).observedInterference(id,
+                    new ResourceFieldCycle.CellState(soil, ResourceFieldCycle.Crop.ABSENT, 0, false, false));
+            state = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()), bare));
+            state = AcceptedEconomyFixture.publish(state, HOME, 4000);
+            var input = state.companies().goodsTrade().participants().economicState(HOME);
+            var tilled = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()), bare.tilled(id)));
+            assertEquals(input, tilled.companies().goodsTrade().participants().economicState(HOME),
+                    "completing already forecast soil work cannot invalidate its own plan: " + soil);
+            assertTrue(SettlementEconomicReviewRequests.changed(state, tilled, 4001).isEmpty());
+            state = tilled;
+        }
+        var damaged = state.resourceSites().cycle(site.id()).observedInterference(id,
+                new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.OBSTRUCTED, ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false));
+        var changed = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()), damaged));
+        assertEquals(List.of(GoodsParticipantProcess.review(HOME, 4002)), SettlementEconomicReviewRequests.changed(state, changed, 4001));
+        assertTrue(changed.companies().goodsTrade().participants().economicState(HOME).changes()
+                .contains(SettlementEconomicPlanningState.Change.CAPACITY));
+    }
+
     @Test void publicationAndItsReasonsRoundTripWithoutRecalculatingPolicy() {
         var state = AcceptedEconomyFixture.publish(initial(), HOME, 10);
         var plan = state.companies().goodsTrade().participants().economicState(HOME).accepted().orElseThrow();

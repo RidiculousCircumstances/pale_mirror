@@ -1040,3 +1040,29 @@ preparation worker under the common read-only route-demand capture. Only accepte
 owner completion acquires demands and publishes events. No worker acquires native
 navigation, no canonical publication is moved off-thread, no persistence schema
 change, no world reset. Native impact and phase-G closure remain unproved.
+
+### Separate agricultural progress from urgent capacity loss (2026-10-28)
+
+`dbdc6203c` clean release PASS68s (selected pure/adapters, packagedJAR,economy55),
+verified in both retained311 worlds. Native100 interval4641→5478/333s,
+debt108→5934 stillFAIL. New20s profile removes exact-world construction from the
+preparation leaders; navigation and production forecasts remain expensive.
+
+Read-only replay of checksummed snapshot5991/WAL3451transactions through6186
+identifies269economic publications. Exact owner-port attribution gives165urgent
+CAPACITY invalidations from routine soil preparation (87GRASS→FARMLAND,
+44COARSE_DIRT→DIRT,34DIRT→FARMLAND), plus103cultivation capacity changes including
+101layout extensions and102sowing changes. Ordinary crop growth/harvest is not
+being guessed as their cause; the captured transitions establish this feedback.
+
+Agriculture now owns its separate economic input port. Forward preparation along
+the declared soil catalog is work already included in the accepted renewable
+forecast; its completion does not revoke that plan. Explicit append-only land
+admission and additional sowing become committed forecast inputs reviewed at the
+ordinary deadline. Their exact retained predecessor must prove this positive
+extension; arbitrary shape/contact changes, removed land/sowing, soil degradation,
+obstructions and external crop loss keep urgent capacity invalidation. Current
+execution continues to validate actual land, tools, custody and authority.
+No new dirty-reason wire value, no state migration, no notification-only actor
+or geometry change is added. Planned progress and real loss are exercised through
+the existing publication/cultivation composition, not a timing benchmark.
