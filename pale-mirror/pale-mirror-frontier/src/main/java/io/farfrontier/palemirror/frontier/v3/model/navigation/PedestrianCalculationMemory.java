@@ -23,7 +23,7 @@ public final class PedestrianCalculationMemory {
             return geometry.regionalRevision().filter(value -> value.baseline() == baseline).isPresent()
                     && dependencies.matches(geometry);
         }
-        public long retainedUnits() { return 2L + 2L * dependencies.revisions().size(); }
+        public long retainedUnits() { return 2L + dependencies.retainedUnits(); }
     }
     private sealed interface Saved permits Direct, Packed {
         PedestrianRouteResult restore();

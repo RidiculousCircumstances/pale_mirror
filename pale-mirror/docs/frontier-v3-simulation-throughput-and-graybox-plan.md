@@ -1560,3 +1560,30 @@ future-delivery coverage includes an intervening retry which does not read its
 received fact. Overflow has a negative case. Focus15sPASS then29checks+guardrails18sPASS.
 The same snapshot probe now progresses beyond72private reads without restarting the
 first request; terminal/native100 closure still pending. G remainsOPEN.
+
+
+### Compact exact repeated regional dependency facts (2026-10-28)
+
+f70c63a58 focused29checks/guardrails18sPASS, exact193frontier+29runtime/package
+release98sPASS, but deliberately NOT deployed: the actual settlement93source probe
+reaches75reads then exceeds132432weightedunits. Fail-visible exhaustion exposed
+repeated regional metadata which old LRU silently discarded; it is not acceptance.
+
+PedestrianRegionFacts now represents the exact immutable dependency footprint in
+16×16tile pages. Equal tokens share a256bit mask; heterogeneous/small pages retain
+ordinary sparse maps. Holes remain absent. Hash collisions never equate facts.
+Dependency validation checks the original exact token in every addressed tile;
+body/accessscope, bounds and baseline fences remain. No terrain cell is inferred.
+The search worker prepares this compact receipt once; native completion reuses it.
+Calculation memory charges that actual representation against the unchanged131072
+weightedunit ceiling. Worker/result/path bounds are unchanged.
+
+Focused guardrails+navigation lifecycle/invalidation checks PASS20s, including negative
+coordinates, holes, colliding tokens, sparse fallback, immutable input and relevant
+terrain invalidation. On the SAME actual snapshot343049/tick20609, ordinary process/
+continuation/planner source probe now reaches110completed navigation demands, emits
+5events including a buyer-collection transport mission, and releases private memory.
+`compact-dependencies-source-resumption.txt` endsTERMINAL_PREPARATION_NOT_NATIVE.
+This proves preparation terminates against real retained geometry; no WAL/native
+state was written and it does NOT prove a native delivery or ordinary100throughput.
+Exactref release, BOTH retained-world deployments and native100observation follow.

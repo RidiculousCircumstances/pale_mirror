@@ -66,6 +66,7 @@ public final class HierarchicalPedestrianSearch {
     private boolean itineraryPublished;
     private Map<PedestrianRegion.Tile, Object> terminalProof, itineraryProof;
     private PedestrianCalculationMemory.Read preparedRead;
+    private PedestrianRegionDependencies preparedDependencies;
     private boolean destinationChecked;
     private int endpointsChecked;
     private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
@@ -109,6 +110,7 @@ public final class HierarchicalPedestrianSearch {
 
     public synchronized long workUnits() { return work; }
     synchronized PedestrianRegionDependencies dependencies() {
+        if (preparedDependencies != null) return preparedDependencies;
         return new PedestrianRegionDependencies(geometry.bounds(), geometry.regionalRevision()
                 .map(PedestrianGeometryRevision::scope).orElse(geometry), geometry.regionalRevision()
                 .map(PedestrianGeometryRevision::geometryScope).orElse(geometry), resultDependencies());
@@ -144,6 +146,7 @@ public final class HierarchicalPedestrianSearch {
         if (itinerary != null) itineraryDependencies();
         if (terminal != null) {
             resultDependencies();
+            if (preparedDependencies == null) preparedDependencies = dependencies();
             if (preparedRead == null && PedestrianCalculationMemory.capturable(terminal)) {
                 var request = PedestrianRouteRequest.of(geometry, start, target, extent);
                 preparedRead = PedestrianCalculationMemory.Read.regional(request, terminal, dependencies());
