@@ -1094,3 +1094,24 @@ First iteration failed the catalog size guard, corrected by moving the helper;
 next run exposed four old future-preview expectations. Final38-case run had only
 the engineering ready-vs-runnable assertion; its focused correction+guardrails
 PASS11s. Exact clean release must still verify the combined retained selection.
+
+### Immutable declaration extents replace repeated mining bounds scans (2026-10-28)
+
+`feaa45421` exactreleasePASS54s, combined38recovery cases and selected native
+runtime/adapters, packagedJAR/economy55; retained311 main/private verified. Native
+100 ordinary debt still grows; no phase-G closure. Its observer starts late after
+startup and cannot by itself prove exact recovery duration.
+
+The field-progress profile attributes93of697server samples to
+ExtractionLandValidation.require under normal transaction publication. That
+helper's bounded global identity cache misses cause a traversal of source cells,
+fixed blocks and substrate; all these inputs are immutable layout declarations.
+ExtractionLayout now derives one exact HorizontalBlockExtent from its existing
+complete worksite-position index at construction. The shared geometry value checks
+horizontal containment with inclusive source extrema/exclusive world maximum.
+Land validation becomes constant work without a global proof cache; changed bounds,
+new layouts and foreign fixed/substrate coordinates are still checked. Geometry,
+collision, land ownership and actor admission are not inferred from the envelope.
+The extent is derived, not another persisted authority or schema field.
+Existinglandvalidation negative cases extend foreignsubstrate andexclusiveedge
+checks; incrementalgeometry/terraces/developmentreplay+guardrailsPASS33s.

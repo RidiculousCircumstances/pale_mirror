@@ -20,6 +20,7 @@ public final class ExtractionLayout {
     // Derived once from this immutable declaration; not durable state or a history cache.
     private final Map<Long, Cell> cellsById;
     private final Map<Region, Set<BlockPosition>> worksitePositions;
+    private final io.farfrontier.palemirror.frontier.v3.model.geometry.HorizontalBlockExtent horizontalExtent;
     private final Map<BlockPosition, Cell> cellsByPosition;
     private final Set<String> outputKinds;
     private final Map<BlockExtraction.Definition, List<Long>> materialCells;
@@ -135,6 +136,7 @@ public final class ExtractionLayout {
                         regions.computeIfAbsent(Region.at(position), ignored -> new HashSet<>()).add(position));
         regions.replaceAll((region, positions) -> Collections.unmodifiableSet(positions));
         this.worksitePositions = Collections.unmodifiableMap(regions);
+        this.horizontalExtent = io.farfrontier.palemirror.frontier.v3.model.geometry.HorizontalBlockExtent.enclosing(regions.values());
         var grouped = new LinkedHashMap<BlockExtraction.Definition, List<Long>>();
         for (var cell : cells) grouped.computeIfAbsent(cell.definition(), ignored -> new ArrayList<>()).add(cell.id());
         grouped.replaceAll((definition, idsForMaterial) -> List.copyOf(idsForMaterial));
@@ -150,6 +152,7 @@ public final class ExtractionLayout {
     public List<Cell> cells() { return cells; }
     /** Declaration addresses only; current material/revision belongs to the deposit. */
     public Map<Region, Set<BlockPosition>> worksitePositions() { return worksitePositions; }
+    public io.farfrontier.palemirror.frontier.v3.model.geometry.HorizontalBlockExtent horizontalExtent() { return horizontalExtent; }
     public Map<BlockPosition, Cell> cellsByPosition() { return cellsByPosition; }
     /** Read-only products of this exact immutable source declaration, compiled once. */
     public Set<String> outputKinds() { return outputKinds; }

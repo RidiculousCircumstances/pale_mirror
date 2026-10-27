@@ -1,22 +1,13 @@
 package io.farfrontier.palemirror.frontier.v3.model.extraction;
 
 import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
-import java.util.IdentityHashMap;
 
-/** Reuses only a proven immutable layout/bounds check; inventory and work are never cached. */
+/** The immutable layout carries exact extrema of every source/fixed/substrate
+ * block. Bounds checking needs no global cache or repeated voxel traversal. */
 final class ExtractionLandValidation {
-    private static WorldBounds bounds;
-    private static final IdentityHashMap<ExtractionLayout, Boolean> VALIDATED = new IdentityHashMap<>();
     private ExtractionLandValidation() { }
-    static synchronized void require(ExtractionLayout layout, WorldBounds currentBounds) {
-        if (bounds != currentBounds) { VALIDATED.clear(); bounds = currentBounds; }
-        if (VALIDATED.containsKey(layout)) return;
-        if (layout.cells().stream().anyMatch(cell -> !currentBounds.contains(cell.source()))
-                || layout.fixedBlocks().keySet().stream().anyMatch(position -> !currentBounds.contains(position))
-                || layout.terrainSupports().keySet().stream().anyMatch(position -> !currentBounds.contains(position)))
+    static void require(ExtractionLayout layout, WorldBounds bounds) {
+        if (!layout.horizontalExtent().within(bounds))
             throw new IllegalArgumentException("extraction layout leaves declared world bounds");
-        if (VALIDATED.size() >= io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_EXTRACTION_SITES)
-            VALIDATED.remove(VALIDATED.keySet().iterator().next());
-        VALIDATED.put(layout, Boolean.TRUE);
     }
 }

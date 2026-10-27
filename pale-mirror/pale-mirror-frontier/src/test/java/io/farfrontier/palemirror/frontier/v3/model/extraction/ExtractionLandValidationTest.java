@@ -25,5 +25,17 @@ class ExtractionLandValidationTest {
             ExtractionLandValidation.require(foreign, bootstrap.bounds());
         });
         assertDoesNotThrow(() -> ExtractionLandValidation.require(layout, bootstrap.bounds()));
+        var terrain = new HashMap<>(layout.terrainSupports());
+        terrain.put(new BlockPosition(10000, 58, 10000), new BlockExtraction.Block("minecraft:stone", java.util.Map.of()));
+        var foreignTerrain = new ExtractionLayout(layout.cells(), layout.fixedBlocks(), layout.accessSurfaces(),
+                layout.entrance(), layout.container(), layout.storagePort(), layout.infrastructureIds(), terrain);
+        assertThrows(IllegalArgumentException.class, () -> ExtractionLandValidation.require(foreignTerrain, bootstrap.bounds()),
+                "substrate declarations are part of the same exact bounds proof");
+        var extent = layout.horizontalExtent();
+        assertDoesNotThrow(() -> ExtractionLandValidation.require(layout,
+                new WorldBounds(extent.minX(), extent.minZ(), extent.maxX() - extent.minX() + 1, extent.maxZ() - extent.minZ() + 1)));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionLandValidation.require(layout,
+                new WorldBounds(extent.minX(), extent.minZ(), extent.maxX() - extent.minX(), extent.maxZ() - extent.minZ() + 1)),
+                "the maximum world edge is exclusive");
     }
 }
