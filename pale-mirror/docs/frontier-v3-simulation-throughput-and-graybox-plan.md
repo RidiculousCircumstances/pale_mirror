@@ -1142,3 +1142,33 @@ run only for equipment-backed capacity; actual execution/admission remains intac
 Forecast/procurement/publication/cultivation+guardrailsPASS28s, with mining forecast
 added in the connected owner-production-valuation-focus.log PASS28s. Final scoped
 mode-key simplification still needs its exact clean release check.
+
+
+### Resumable navigation retains admission age and guaranteed progress (2026-10-28)
+
+`455cc3644` cleanreleasePASS56s, selected forecasts/procurement/cultivation/mining,
+runtime/package/economy55; both retained311 worlds verified. Native100 final
+interval14274→15232/333s,debt694→6399 remainsFAIL. Latest20s profile: advice933/817,nav776/718,
+server449,preparation315; common procurement/crew reads and regional building remain.
+
+At native14987, an oldest22k-block regional estimate waited19983 planning turns
+but retained only11776 search units (one slice), alongside46 deferred/8 suspended
+requests. Source explains a progress-loss mechanism: preemption appended an old
+search behind all unstarted demands, and later bounded suspension eviction could
+throw away its graph. Reclamation also chose the next ready request without
+protecting the oldest quota of that lane. Repeated short arrivals could therefore
+recycle the entire distant working set. A zero worker-restart counter did not
+capture eviction followed by construction of another task.
+
+The common fairness owner now retains original arrival order through suspension
+and compatible geometry readdressing. Reclaimed slots come from newer borrowed
+calculations; each lane's oldest guaranteed quota continues. Existing bounded
+suspension/window, executor limits, weighted service and actual geometry dependency
+checks remain. No extra workers, memory bound, route authority or schema change.
+The existing long-vs-short regression now includes24 long demands: short route
+finishes, oldest guaranteed searches remain admitted, and yielded work resumes
+ahead of newer unstarted demands. Cancellation, worker order/publication and
+regional invalidation checks remain. FocusPASS24s before diagnostic-only additions.
+Read-only activeRequests exposes at most8 actual search stages/work/restarts,
+separately from oldest capacity waits; existing diagnostic read-only coverage extends.
+Exact clean release and retained-world measurement follow; G staysOPEN.

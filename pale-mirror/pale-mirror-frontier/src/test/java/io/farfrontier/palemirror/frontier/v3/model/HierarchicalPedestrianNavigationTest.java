@@ -112,16 +112,20 @@ class HierarchicalPedestrianNavigationTest {
         var ground = geometry(new WorldBounds(0, 0, 3_200, 32), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
         var start = SurfaceAnchor.at(1, 63, 1); var near = SurfaceAnchor.at(3, 63, 1);
         try (var planner = new CooperativePedestrianPlanner()) {
-            for (int i = 0; i < 8; i++) planner.query(ground, start, SurfaceAnchor.at(2_000 + i, 63, 1));
-            assertEquals(8, planner.pendingCount()); assertEquals(0, planner.deferredCount(), "idle capacity is borrowable");
+            for (int i = 0; i < 24; i++) planner.query(ground, start, SurfaceAnchor.at(2_000 + i, 63, 1));
+            assertEquals(8, planner.pendingCount()); assertEquals(16, planner.deferredCount(), "idle capacity is borrowable, not unbounded");
             assertEquals("PLANNING_QUEUED", planner.query(ground, start, near).reason());
             assertEquals(1, planner.suspendedCount(), "local demand reclaims borrowed capacity without throwing away a long search");
+            assertFalse(planner.waitingDiagnostics(2).stream().anyMatch(CooperativePedestrianPlanner.WaitingDiagnostic::deferred),
+                    "the oldest long calculations keep their guaranteed slots");
             for (int turn = 0; turn < 32 && planner.peek(ground, start, near).orElseThrow().status() == PedestrianRouteResult.Status.PLANNING; turn++) {
                 var admission = new java.util.concurrent.atomic.AtomicInteger();
                 planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2, () -> admission.incrementAndGet() < 200);
             }
             assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(ground, start, near).orElseThrow().status());
-            assertEquals(8, planner.pendingCount() + planner.deferredCount(), "short completion cannot erase far requests");
+            assertEquals(24, planner.pendingCount() + planner.deferredCount(), "short completion cannot erase far requests");
+            assertFalse(planner.waitingDiagnostics(8).stream().anyMatch(CooperativePedestrianPlanner.WaitingDiagnostic::deferred),
+                    "a yielded calculation resumes before newer unstarted work, preserving its bounded saved graph");
             KnownPedestrianNavigation.requireRoute(ground, planner.peek(ground, start, near).orElseThrow().route());
         }
     }
@@ -185,7 +189,13 @@ class HierarchicalPedestrianNavigationTest {
             assertEquals(planner.pendingCount() == 0 && planner.deferredCount() == 0 ? 0 : 1, planner.oldestWaitTurns());
             long work = planner.workUnits();
             var waiting = planner.waitingDiagnostics(12);
-            for (int read = 0; read < 20; read++) assertEquals(waiting, planner.waitingDiagnostics(12));
+            var active = planner.activeDiagnostics();
+            assertEquals(planner.pendingCount(), active.size());
+            assertTrue(active.stream().noneMatch(CooperativePedestrianPlanner.WaitingDiagnostic::deferred));
+            for (int read = 0; read < 20; read++) {
+                assertEquals(waiting, planner.waitingDiagnostics(12));
+                assertEquals(active, planner.activeDiagnostics());
+            }
             assertEquals(work, planner.workUnits(), "diagnostics must not spend search work or refresh wait age");
             for (int turn = 0; turn < 100 && planner.pendingCount() > 0; turn++) {
                 long before = planner.workUnits(); planner.advance(budget);

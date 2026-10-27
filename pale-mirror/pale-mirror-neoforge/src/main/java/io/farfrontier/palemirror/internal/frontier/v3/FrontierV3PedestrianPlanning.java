@@ -192,6 +192,7 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
                 + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)
                 + ",\"oldestRequests\":" + waitingDiagnostic(runtime)
+                + ",\"activeRequests\":" + (owner == runtime ? requestDiagnostic(planner.activeDiagnostics()) : "[]")
                 + ",\"geometryWaits\":" + knowledgeDiagnostic(runtime)
                 + ",\"wakeSafetyMaximum\":" + MAX_WAKE_COMMANDS_PER_TURN
                 + ",\"availableReceipts\":" + capacity.availableReceipts()
@@ -208,7 +209,10 @@ final class FrontierV3PedestrianPlanning {
     }
     private static String waitingDiagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
         if (owner != runtime) return "[]";
-        return planner.waitingDiagnostics(MAX_WAKE_COMMANDS_PER_TURN).stream().map(wait ->
+        return requestDiagnostic(planner.waitingDiagnostics(MAX_WAKE_COMMANDS_PER_TURN));
+    }
+    private static String requestDiagnostic(java.util.List<io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner.WaitingDiagnostic> requests) {
+        return requests.stream().map(wait ->
                 "{\"from\":[" + wait.start().x() + "," + wait.start().y() + "," + wait.start().z()
                 + "],\"to\":[" + wait.target().x() + "," + wait.target().y() + "," + wait.target().z()
                 + "],\"phase\":\"" + (wait.deferred() ? "CAPACITY_WAIT" : "SEARCHING")

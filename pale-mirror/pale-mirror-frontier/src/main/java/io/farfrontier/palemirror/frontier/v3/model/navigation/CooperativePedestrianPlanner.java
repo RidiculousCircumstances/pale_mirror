@@ -445,12 +445,18 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     public synchronized java.util.List<WaitingDiagnostic> waitingDiagnostics(int maximum) {
         if (maximum < 0 || maximum > MAX_PENDING + MAX_RESULTS)
             throw new IllegalArgumentException("waiting diagnostic limit exceeds the bounded queue");
-        return admittedAt.entrySet().stream().sorted(Map.Entry.comparingByValue()).limit(maximum).map(entry -> {
-            var request = entry.getKey(); var search = pending.get(request);
-            return new WaitingDiagnostic(request.start(), request.target(), search == null,
-                    turns - entry.getValue(), search == null ? 0L : search.workUnits(), request.extent(),
-                    search == null ? "CAPACITY_WAIT" : search.stage(), search == null ? 0 : search.restarts());
-        }).toList();
+        return admittedAt.entrySet().stream().sorted(Map.Entry.comparingByValue()).limit(maximum)
+                .map(entry -> waitingDiagnostic(entry.getKey())).toList();
+    }
+    /** The bounded active window, independent of how many older demands await capacity. */
+    public synchronized java.util.List<WaitingDiagnostic> activeDiagnostics() {
+        return pending.keySet().stream().map(this::waitingDiagnostic).toList();
+    }
+    private WaitingDiagnostic waitingDiagnostic(PedestrianRouteRequest request) {
+        var search = pending.get(request);
+        return new WaitingDiagnostic(request.start(), request.target(), search == null,
+                turns - admittedAt.get(request), search == null ? 0L : search.workUnits(), request.extent(),
+                search == null ? "CAPACITY_WAIT" : search.stage(), search == null ? 0 : search.restarts());
     }
     public synchronized long completedCount() { return completedCount; }
     public synchronized long workUnits() { return workUnits; }

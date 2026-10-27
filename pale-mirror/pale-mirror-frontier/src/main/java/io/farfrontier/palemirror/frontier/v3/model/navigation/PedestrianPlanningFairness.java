@@ -8,13 +8,16 @@ final class PedestrianPlanningFairness {
     private static final List<Lane> ROTATION = List.of(Lane.CLEARANCE, Lane.LOCAL, Lane.LOCAL, Lane.DISTANT,
             Lane.CLEARANCE, Lane.LOCAL, Lane.LOCAL, Lane.DISTANT);
     private final Map<PedestrianRouteRequest, Lane> lanes = new HashMap<>();
+    private final Map<PedestrianRouteRequest, Long> arrivalOrder = new HashMap<>();
     private final Map<PedestrianRouteRequest, Long> waitingOrder = new HashMap<>();
     private final EnumMap<Lane, NavigableMap<Long, PedestrianRouteRequest>> waiting = new EnumMap<>(Lane.class);
     private long nextOrder;
     private int cursor;
     PedestrianPlanningFairness() { for (var lane : Lane.values()) waiting.put(lane, new TreeMap<>()); }
-    record Address(Lane lane, Long waitingOrder) { }
-    Address capture(PedestrianRouteRequest request) { return new Address(lane(request), waitingOrder.get(request)); }
+    record Address(Lane lane, Long waitingOrder, long arrivalOrder) { }
+    Address capture(PedestrianRouteRequest request) {
+        return new Address(lane(request), waitingOrder.get(request), Objects.requireNonNull(arrivalOrder.get(request)));
+    }
 
     void requested(PedestrianRouteRequest request, PedestrianPlanningService service) {
         var lane = service == PedestrianPlanningService.PASSAGE_CLEARANCE ? Lane.CLEARANCE
@@ -33,8 +36,11 @@ final class PedestrianPlanningFairness {
     }
     void defer(PedestrianRouteRequest request) {
         if (waitingOrder.containsKey(request)) return;
-        nextOrder = Math.incrementExact(nextOrder);
-        waitingOrder.put(request, nextOrder); waiting.get(lane(request)).put(nextOrder, request);
+        // A yielded calculation is still the original arrival. Putting it behind
+        // unstarted demand discards its progress when the bounded suspension
+        // window fills under a stream of short, higher-priority requests.
+        long order = arrivalOrder.computeIfAbsent(request, ignored -> nextOrder = Math.incrementExact(nextOrder));
+        waitingOrder.put(request, order); waiting.get(lane(request)).put(order, request);
     }
     void admit(PedestrianRouteRequest request) {
         var order = waitingOrder.remove(request);
@@ -56,10 +62,16 @@ final class PedestrianPlanningFairness {
                                      Collection<PedestrianRouteRequest> ready) {
         var wanted = lane(demand);
         if (count(active, wanted) >= quota(wanted)) return null;
-        // Only a slice boundary may yield. Preserve the suspended search, its age and all dependencies.
-        for (var request : ready) if (lane(request) != wanted && count(active, lane(request)) > quota(lane(request)))
-            return request;
-        return null;
+        // Only borrowed slots yield, and only at a slice boundary. Protect each
+        // lane's oldest quota even when its other searches are currently flying;
+        // otherwise repeated reclamation can suspend every long calculation.
+        PedestrianRouteRequest victim = null;
+        for (var request : ready) if (lane(request) != wanted) {
+            long order = arrivalOrder.get(request);
+            long older = active.stream().filter(value -> lane(value) == lane(request) && arrivalOrder.get(value) < order).count();
+            if (older >= quota(lane(request)) && (victim == null || order > arrivalOrder.get(victim))) victim = request;
+        }
+        return victim;
     }
     PedestrianRouteRequest take(Deque<PedestrianRouteRequest> ready) {
         for (int i = 0; i < ROTATION.size(); i++) {
@@ -73,11 +85,12 @@ final class PedestrianPlanningFairness {
     }
     void restore(PedestrianRouteRequest request, Address address) {
         lanes.put(request, Objects.requireNonNull(address.lane()));
+        arrivalOrder.put(request, address.arrivalOrder());
         if (address.waitingOrder() != null) {
             waitingOrder.put(request, address.waitingOrder());
             waiting.get(address.lane()).put(address.waitingOrder(), request);
         }
     }
-    void remove(PedestrianRouteRequest request) { admit(request); lanes.remove(request); }
-    void clear() { lanes.clear(); waitingOrder.clear(); waiting.values().forEach(Map::clear); nextOrder = 0; cursor = 0; }
+    void remove(PedestrianRouteRequest request) { admit(request); lanes.remove(request); arrivalOrder.remove(request); }
+    void clear() { lanes.clear(); arrivalOrder.clear(); waitingOrder.clear(); waiting.values().forEach(Map::clear); nextOrder = 0; cursor = 0; }
 }
