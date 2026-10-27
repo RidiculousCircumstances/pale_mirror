@@ -60,6 +60,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         cancelExactCalculation();
         pendingAdvice.values().forEach(value -> value.calculation().cancel()); pendingAdvice.clear();
     }
+    private void discardAdvice(ScheduledAction action) {
+        var pending = pendingAdvice.remove(action.id());
+        if (pending != null) pending.calculation().cancel();
+    }
     private void cancelExactCalculation() {
         if (pendingCalculation != null) { pendingCalculation.calculation().cancel(); pendingCalculation = null; }
     }
@@ -288,7 +292,11 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION, "due-actions", worldId.value())) {
                 if (pendingCalculation == null) {
                     schedules.refreshReadiness(target, admissionIndex.remainingChecks(),
-                            candidate -> admissionIndex.assess(state, candidate), candidate -> admissionIndex.wakeKeys(state, candidate));
+                            candidate -> {
+                                var decision = admissionIndex.assess(state, candidate);
+                                if (decision == ScheduleAdmissionIndex.Decision.HELD) discardAdvice(candidate);
+                                return decision;
+                            }, candidate -> admissionIndex.wakeKeys(state, candidate));
                     action = schedules.firstReady();
                 } else action = pendingCalculation.action();
             } catch (RuntimeException error) {
@@ -307,7 +315,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 var decision = admissionIndex.recheckSelected(state, action);
                 if (decision == ScheduleAdmissionIndex.Decision.DEFERRED) { blocked = action; break; }
                 if (decision == ScheduleAdmissionIndex.Decision.HELD) {
-                    cancelExactCalculation();
+                    cancelExactCalculation(); discardAdvice(action);
                     schedules.holdSelected(action, admissionIndex.wakeKeys(state, action), target);
                     continue;
                 }
@@ -330,16 +338,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                         var declared = retainedAdvice == null ? scheduledPlanner.advice(state, action, executionAt)
                                 : Optional.<ScheduledAdvisory<S>>empty();
                         if (retainedAdvice != null || declared.isPresent()) {
-                            if (retainedAdvice == null) {
+                            if (retainedAdvice == null && pendingAdvice.size() < MAX_PENDING_ADVICE) {
                                 var started = scheduledPlanner.beginAdvice(declared.orElseThrow());
                                 if (started.isPresent()) {
                                     retainedAdvice = new PendingAdvice<>(action, started.orElseThrow());
-                                    if (pendingAdvice.size() >= MAX_PENDING_ADVICE) {
-                                        // Advice is disposable: an indefinitely held owner may not
-                                        // retain every slot and exclude independent due reviews.
-                                        var oldest = pendingAdvice.values().iterator().next();
-                                        oldest.calculation().cancel(); pendingAdvice.remove(oldest.action().id());
-                                    }
                                     pendingAdvice.put(action.id(), retainedAdvice);
                                 }
                             }

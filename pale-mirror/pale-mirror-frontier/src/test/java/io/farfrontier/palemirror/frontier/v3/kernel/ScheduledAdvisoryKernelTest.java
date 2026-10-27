@@ -69,6 +69,42 @@ class ScheduledAdvisoryKernelTest {
         assertEquals(new Counter(0), engine.canonicalState().state()); assertTrue(engine.transactions().isEmpty());
     }
 
+    @Test void boundedAdviceRetainsCompletedWorkAndReleasesAnOwnerWhichBecomesHeld() {
+        var actions = java.util.stream.IntStream.range(0, 20).mapToObj(i ->
+                scheduled("schedule:advice-" + i, "subject:advice-" + i, 1, 1)).toList();
+        var ready = new AtomicBoolean(); var hold = new AtomicBoolean(); var begun = new AtomicInteger(); var cancelled = new AtomicInteger();
+        var planner = new ScheduledActionPlanner<Counter>() {
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) { throw new AssertionError("advice bypass"); }
+            public boolean held(Counter state, ScheduledAction action) { return hold.get() && action.equals(actions.getFirst()); }
+            public Optional<ScheduledAdvisory<Counter>> advice(Counter state, ScheduledAction action, SimInstant at) {
+                return Optional.of(() -> (current, now) -> Optional.of(() -> () -> List.of(new ProposedEvent(action.subject(), new Delta(1)))));
+            }
+            public Optional<ScheduledAdviceCalculation<Counter>> beginAdvice(ScheduledAdvisory<Counter> advice) {
+                begun.incrementAndGet(); var result = advice.prepare();
+                return Optional.of(new ScheduledAdviceCalculation<>() {
+                    public Optional<ScheduledAdvisory.Completion<Counter>> poll() { return ready.get() ? Optional.of(result) : Optional.empty(); }
+                    public void cancel() { cancelled.incrementAndGet(); }
+                });
+            }
+        };
+        var engine = schedulingEngine(planner, actions); var budget = new WorkBudget(64, 64);
+        engine.advanceTo(new SimInstant(1), budget); int admitted = begun.get();
+        assertTrue(admitted > 0 && admitted < actions.size());
+        engine.advanceTo(new SimInstant(2), budget);
+        assertEquals(admitted, begun.get(), "capacity pressure must not discard existing work and recompute it");
+        assertEquals(0, cancelled.get()); assertTrue(engine.transactions().isEmpty());
+        hold.set(true); engine.advanceTo(new SimInstant(3), budget);
+        assertEquals(1, cancelled.get(), "a newly held owner releases its disposable calculation slot");
+        assertEquals(admitted + 1, begun.get());
+        ready.set(true);
+        for (int i = 4; i < 12 && engine.scheduledActions().size() > 1; i++) engine.advanceTo(new SimInstant(i), budget);
+        assertEquals(new Counter(19), engine.canonicalState().state());
+        assertEquals(List.of(actions.getFirst()), engine.scheduledActions());
+        assertEquals(20, begun.get(), "every independently admissible owner computes once");
+        hold.set(false); engine.advanceTo(new SimInstant(12), budget);
+        assertEquals(new Counter(20), engine.canonicalState().state()); assertTrue(engine.scheduledActions().isEmpty());
+    }
+
     private static final WorldId WORLD = new WorldId("frontier:advice-kernel");
     private static final SubjectId SUBJECT = new SubjectId("subject:advice");
     private record Counter(int value) { }

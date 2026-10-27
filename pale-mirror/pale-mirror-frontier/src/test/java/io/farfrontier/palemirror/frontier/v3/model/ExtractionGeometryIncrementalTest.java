@@ -24,6 +24,11 @@ class ExtractionGeometryIncrementalTest {
         var state = initial(); var original = deposit(state);
         var sites = ExtractionGeometryIndex.declarations(state.extractionSites());
         var index = new ExtractionGeometryIndex(sites);
+        var competing = new HashMap<>(sites);
+        var duplicate = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("extraction:competing-source");
+        competing.put(duplicate, new ExtractionSite(duplicate, original.site().settlementId(), original.site().layout()));
+        assertThrows(IllegalArgumentException.class, () -> new ExtractionGeometryIndex(competing),
+                "sharing local parts must still reject two declarations of the same physical source");
         for (var region : original.site().layout().worksitePositions().keySet()) {
             var chunk = new ExtractionGeometryIndex.Chunk(region.x(), region.z());
             assertTrue(index.worksiteOwners(chunk).contains(original.site().id()));
@@ -130,7 +135,11 @@ class ExtractionGeometryIncrementalTest {
         var afterState = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().extend(original, extended)));
         var ownership = ExtractionGeometryIndex.forDeposits(state.extractionSites().deposits());
         assertFalse(ownership.owns(source));
-        assertTrue(ExtractionGeometryIndex.forDeposits(afterState.extractionSites().deposits()).owns(source));
+        var successorOwnership = ExtractionGeometryIndex.forDeposits(afterState.extractionSites().deposits());
+        assertTrue(successorOwnership.owns(source));
+        for (var region : ownership.regions()) if (!region.siteId().equals(original.site().id()))
+            assertSame(ownership.cells(region), successorOwnership.cells(region),
+                    "a draft extension shares other sites' complete immutable cell lists");
         assertFalse(ownership.owns(source), "an extension cannot mutate the predecessor declaration");
         var after = facts.read(afterState, extended);
         assertEquals(Set.of(Region.at(source)), after.changesFrom(before));

@@ -240,3 +240,18 @@ and WAL, preserving budget, operator-time and recovery assertions. The corrected
 case passes in clock-debt-final.log. Native throughput/late-result pressure remain
 G. Advice diagnostics expose separate completed/accepted/rejected work counts and
 measured CPU duration, never using them to control canonical policy.
+
+The integrated100town stand exposed advice queue starvation: ready results were
+being evicted by new submissions before their owners were polled. Capacity now
+backpressures new advice; held/obsolete exact owners release their slots. This is
+not a relaxed forecast-validation rule. The retained native diagnostic records
+5251completed/9accepted/0rejected/5235cancelled-ready at canonical2. Same-world
+native verification follows the correction.
+
+The longer100town COLD run also exhausted the2GB diagnostic heap while extending
+one quarry: every retained draft rebuilt all declarations' block ownership. The
+geometry directory now shares immutable per-site parts and validates conflicts
+only between parts in the same chunk. Depletion/custody remain outside the
+immutable declaration key. Existing extension/observation/recovery checks plus
+source-conflict and remote-part-sharing assertions cover this boundary. A passing
+focused test alone does not close the long scale run.
