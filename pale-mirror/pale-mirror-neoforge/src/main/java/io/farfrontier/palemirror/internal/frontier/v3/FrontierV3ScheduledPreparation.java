@@ -6,7 +6,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
 
-/** One bounded host worker for explicitly snapshot-only calculations. The kernel owns publication. */
+/** Bounded snapshot workers. Exact-predecessor preparation never queues behind
+ * independent forecasts/checkpoints; the kernel alone owns publication. */
 final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<S>, AutoCloseable {
     private final ScheduledActionPlanner<S> delegate;
     private final java.util.concurrent.atomic.AtomicLong completed = new java.util.concurrent.atomic.AtomicLong();
@@ -21,17 +22,21 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
     private volatile Runnable ready = () -> { };
     void onReady(Runnable listener) { ready = Objects.requireNonNull(listener); }
     String diagnostic(boolean pending) {
-        return "{\"pending\":" + pending + ",\"running\":" + worker.getActiveCount()
-                + ",\"queued\":" + worker.getQueue().size() + ",\"completed\":" + completed.get()
+        return "{\"pending\":" + pending + ",\"running\":" + (worker.getActiveCount() + exactWorker.getActiveCount())
+                + ",\"queued\":" + (worker.getQueue().size() + exactWorker.getQueue().size()) + ",\"completed\":" + completed.get()
                 + ",\"cancelled\":" + cancelled + ",\"cancelledReady\":" + cancelledReady + ",\"totalNanos\":" + totalNanos.get() + ",\"maxNanos\":" + maxNanos.get()
                 + ",\"adviceCompleted\":" + adviceCompleted.get() + ",\"adviceNanos\":" + adviceNanos.get()
                 + ",\"adviceAccepted\":" + adviceAccepted + ",\"adviceRejected\":" + adviceRejected
                 + ",\"adviceRejectionReasons\":" + new com.google.gson.Gson().toJson(adviceRejectionReasons) + "}";
     }
-    private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(2), task -> { // one exact review and one captured checkpoint
-                var thread = new Thread(task, "PMV3-scheduled-preparation"); thread.setDaemon(true); return thread;
-            });
+    private final ThreadPoolExecutor worker = worker("PMV3-scheduled-advice", 2);
+    private final ThreadPoolExecutor exactWorker = worker("PMV3-scheduled-preparation", 1);
+    private static ThreadPoolExecutor worker(String name, int capacity) {
+        return new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(capacity), task -> {
+                    var thread = new Thread(task, name); thread.setDaemon(true); return thread;
+                });
+    }
     FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate) { this.delegate = Objects.requireNonNull(delegate); }
     <T> java.util.Optional<java.util.concurrent.Future<T>> prepareValue(Supplier<T> value) {
         var task = new FutureTask<T>(value::get) {
@@ -60,9 +65,9 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
             @Override protected void done() { if (!isCancelled()) ready.run(); }
         };
         boolean accepted;
-        try { worker.execute(task); accepted = true; }
+        try { exactWorker.execute(task); accepted = true; }
         catch (RejectedExecutionException busy) {
-            if (worker.isShutdown()) throw busy;
+            if (exactWorker.isShutdown()) throw busy;
             accepted = false;
         }
         final boolean initiallySubmitted = accepted;
@@ -70,9 +75,9 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
             private boolean submitted = initiallySubmitted;
             @Override public Optional<List<ProposedEvent>> poll() {
                 if (!submitted) {
-                    try { worker.execute(task); submitted = true; }
+                    try { exactWorker.execute(task); submitted = true; }
                     catch (RejectedExecutionException busy) {
-                        if (worker.isShutdown()) throw busy;
+                        if (exactWorker.isShutdown()) throw busy;
                         return Optional.empty();
                     }
                 }
@@ -87,7 +92,7 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
             @Override public void cancel() {
                 cancelled++;
                 if (task.isDone() && !task.isCancelled()) cancelledReady++;
-                task.cancel(true); worker.remove(task);
+                task.cancel(true); exactWorker.remove(task);
             }
         };
     }
@@ -153,5 +158,5 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
     @Override public List<ScheduledAction> retiredBy(S previous, S next, FrontierEvent event, Supplier<List<ScheduledAction>> pending) {
         return delegate.retiredBy(previous, next, event, pending);
     }
-    @Override public void close() { worker.shutdownNow(); }
+    @Override public void close() { worker.shutdownNow(); exactWorker.shutdownNow(); }
 }

@@ -365,3 +365,22 @@ not consumed by waiting, and capacity busy is not a calculation. The existing
 retained-action/cancellation test now distinguishes initial7-unit admission from
 a1-unit subsequent poll; kernel/advisory and guardrails PASS18s in
 advice-poll-accounting-final.log. Host shared-budget/recovery check follows.
+
+Exact-predecessor preparation shared the forecast/checkpoint worker and queue.
+A blocked independent forecast therefore held the entire canonical predecessor
+when an unrelated exact preparation queued behind it. The host now reserves one
+bounded exact-preparation worker/queue, separate from one bounded independent
+forecast/checkpoint worker. Publication/validation/completion remains on the sole
+server owner; workers only calculate immutable snapshots. Existing ownership test
+now holds a forecast blocked while an independent exact preparation completes;
+focused preparation/runtime and guardrails PASS39s in
+independent-exact-preparation-final.log. No physical or canonical work budget raised.
+
+Next evidenced integration correction: GoodsParticipantWakeup currently aliases
+all quote opportunities to the full economic REVIEW; MARKET is an urgent
+SettlementEconomicReviewRequests cause. Therefore each quote publication can
+trigger whole-economy re-evaluation by every counterparty. Split existing
+OPPORTUNITY kind into current-plan quote/matching work and retain full reviews
+for addressed hard inputs/ordinary review deadline. This is not artificial price
+smoothing or delayed physical work. Current consent, expiry, resources, finances
+and actual contract admission remain authoritative.

@@ -34,6 +34,15 @@ class FrontierV3ScheduledPreparationTest {
             var calculation = host.beginAdvice(host.advice(3, action, new SimInstant(1)).orElseThrow()).orElseThrow();
             entered.await(); assertTrue(calculation.poll().isEmpty()); assertNull(validated.get());
             assertNotSame(owner, computed.get());
+            // The live kernel holds its exact predecessor during this stage. An
+            // unrelated forecast must not keep it queued behind this blocked work.
+            var independentReady = new CountDownLatch(1); host.onReady(independentReady::countDown);
+            var independent = host.beginPreparation(() -> () -> List.of(
+                    new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id()))));
+            independentReady.await();
+            assertEquals(1, independent.poll().orElseThrow().size());
+            assertEquals(1, release.getCount(), "exact preparation completes while the independent forecast is still blocked");
+            host.onReady(ready::countDown);
             release.countDown(); ready.await();
             var completion = calculation.poll().orElseThrow();
             assertTrue(completion.revalidate(4, new SimInstant(2)).isEmpty());
