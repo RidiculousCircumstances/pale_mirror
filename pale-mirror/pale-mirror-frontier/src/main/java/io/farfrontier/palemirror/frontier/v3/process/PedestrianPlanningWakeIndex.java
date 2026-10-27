@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningChange;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteRequest;
@@ -15,6 +16,7 @@ public final class PedestrianPlanningWakeIndex {
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
     private final Set<ScheduleId> parked = new HashSet<>();
     private final Set<ScheduleId> runnable = new HashSet<>();
+    private final Set<ScheduleId> ownerHeld = new HashSet<>();
     private final Set<PedestrianRouteRequest> released = new LinkedHashSet<>();
 
     public void replace(ScheduledAction action, List<PedestrianRouteRequest> requests) {
@@ -27,7 +29,7 @@ public final class PedestrianPlanningWakeIndex {
     public void remove(ScheduleId id) {
         ready.remove(id);
         parked.remove(id);
-        runnable.remove(id);
+        runnable.remove(id); ownerHeld.remove(id);
         var previous = waits.remove(id);
         if (previous == null) return;
         for (var request : previous.requests()) {
@@ -36,8 +38,26 @@ public final class PedestrianPlanningWakeIndex {
         }
     }
     /** Replacements are atomic at the process boundary: a refreshed/shared demand survives. */
+    /** Future recovery previews are optional cache users. Only an actually due,
+     * runnable consumer needs protected result delivery. A business-owner refusal
+     * releases delivery pressure until that owner declares itself ready again. */
+    public List<PedestrianRouteRequest> retainedRequests(SimInstant instant) {
+        var requests = new LinkedHashSet<PedestrianRouteRequest>();
+        for (var entry : waits.entrySet()) if (!ownerHeld.contains(entry.getKey())
+                && (entry.getValue().action().dueAt().compareTo(instant) <= 0 || runnable.contains(entry.getKey())))
+            requests.addAll(entry.getValue().requests());
+        return List.copyOf(requests);
+    }
+    public void ownerHeld(ScheduledAction action, boolean held) {
+        var wait = waits.get(action.id());
+        if (wait == null || !wait.action().equals(action)) return;
+        if (held) ownerHeld.add(action.id()); else ownerHeld.remove(action.id());
+    }
     public void releaseUnused(java.util.function.Consumer<PedestrianRouteRequest> release) {
-        for (var request : released) if (dependents.keySet().stream().noneMatch(request::sameDemand)) release.accept(request);
+        var retained = new HashSet<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey>();
+        dependents.keySet().forEach(request -> retained.add(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey.of(request)));
+        for (var request : released) if (!retained.contains(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey.of(request))) release.accept(request);
         released.clear();
     }
     public void changed(List<PedestrianPlanningChange> changes) {

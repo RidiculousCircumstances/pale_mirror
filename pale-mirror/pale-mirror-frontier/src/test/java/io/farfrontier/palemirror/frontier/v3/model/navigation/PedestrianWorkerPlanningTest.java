@@ -20,6 +20,42 @@ class PedestrianWorkerPlanningTest {
         void drain() { while (!queue.isEmpty()) run(0); }
     }
 
+    @Test void completedRoutesStayWithTheirConsumersAndFullResultCapacityBackpressuresNewWork() {
+        var workers = new ManualWorkers(); var revision = PedestrianGeometryRevision.initial();
+        var geometry = geometry(workers, revision, -1);
+        var requests = java.util.stream.IntStream.range(0, 140).mapToObj(i -> {
+            var start = SurfaceAnchor.at(1 + i / 8 * 3, 63, i % 8 * 2);
+            return PedestrianRouteRequest.of(geometry, start, SurfaceAnchor.at(start.x() + 1, 63, start.z()));
+        }).toList();
+        try (var planner = new CooperativePedestrianPlanner(workers)) {
+            for (var request : requests) planner.query(geometry, request.start(), request.target());
+            planner.retainDemands(requests);
+            for (int turn = 0; turn < 4_096 && planner.completedCount() < 128; turn++) {
+                planner.advance(BUDGET * 8); workers.drain();
+            }
+            assertEquals(128, planner.completedCount());
+            for (int turn = 0; turn < 16; turn++) { planner.advance(BUDGET * 8); workers.drain(); }
+            assertEquals(128, planner.retainedResultCount(), "the result-memory bound remains unchanged");
+            assertTrue(planner.awaitingPublicationCount() > 0 && planner.awaitingPublicationCount() <= 8);
+            assertTrue(planner.pendingCount() <= 8 && workers.queue.size() <= 8, "no extra calculation or executor capacity");
+            var first = requests.getFirst(); var second = requests.get(1);
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.query(geometry, first.start(), first.target()).status(),
+                    "a delayed consumer must receive its already computed route despite unrelated demand");
+            long work = planner.workUnits();
+            planner.retainDemands(requests.subList(1, requests.size()));
+            for (int turn = 0; turn < 32 && planner.completedCount() == 128; turn++) {
+                planner.advance(BUDGET * 8); workers.drain();
+            }
+            assertTrue(planner.completedCount() > 128, "releasing a consumer admits the buffered completion");
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.query(geometry, second.start(), second.target()).status());
+            assertEquals(work, planner.workUnits(), "publishing a buffered result does not recalculate it");
+            var changed = geometry(workers, revision.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))), 1);
+            assertNotEquals(PedestrianRouteResult.Status.FOUND, planner.query(changed, second.start(), second.target()).status(),
+                    "consumer retention never authorizes an obsolete terrain result");
+        }
+        workers.drain();
+    }
+
     @Test void cancellationCannotRecycleAcceptedExecutorSlotsBeforeWorkersActuallyReturn() {
         var workers = new ManualWorkers();
         java.util.concurrent.Executor bounded = work -> {

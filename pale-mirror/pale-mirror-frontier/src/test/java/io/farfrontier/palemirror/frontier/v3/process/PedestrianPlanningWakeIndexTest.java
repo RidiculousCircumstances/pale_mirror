@@ -11,6 +11,18 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void onlyCurrentReadyConsumersRetainResultsAndARefusingOwnerCannotBlockOtherLanes() {
+        var index = new PedestrianPlanningWakeIndex(); var first = action("first-retention", 20);
+        var shared = action("shared-retention", 20); var future = action("future-retention", 6000);
+        var query = request(3); var later = request(20);
+        index.replace(first, List.of(query)); index.replace(shared, List.of(query)); index.replace(future, List.of(later));
+        assertEquals(List.of(query), index.retainedRequests(new SimInstant(20)));
+        index.ownerHeld(first, true);
+        assertEquals(List.of(query), index.retainedRequests(new SimInstant(20)), "another current consumer still owns delivery");
+        index.ownerHeld(shared, true); assertTrue(index.retainedRequests(new SimInstant(20)).isEmpty());
+        index.ownerHeld(first, false); assertEquals(List.of(query), index.retainedRequests(new SimInstant(20)));
+        assertEquals(java.util.Set.of(query, later), java.util.Set.copyOf(index.retainedRequests(new SimInstant(6000))));
+    }
     @Test void detachedRecoveryPublishesOnlyRetainedUnregisteredWaits() throws Exception {
         var index = new PedestrianPlanningWakeIndex();
         var retained = action("retained", 6000); var replaced = action("replaced", 6000);

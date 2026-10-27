@@ -193,11 +193,18 @@ class FrontierV3PedestrianPlanningTest {
      * advancing its clock; it neither invents a route nor runs search inline. */
     private static void finishCalculations(FrontierV3ServerRuntime<?, ?> runtime) {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        long completedBefore = -1;
         do {
             FrontierV3PedestrianPlanning.tick(runtime, 3_000_000L);
             var status = com.google.gson.JsonParser.parseString(FrontierV3PedestrianPlanning.diagnostic(runtime)).getAsJsonObject();
-            if (FrontierV3PedestrianPlanning.recovered(runtime) && status.get("activeSearches").getAsInt() == 0
-                    && status.get("deferredSearches").getAsInt() == 0) return;
+            long completed = status.get("completedSearches").getAsLong();
+            if (completedBefore < 0) completedBefore = completed;
+            // A bounded result buffer must let canonical consumers run before
+            // all later calculations can finish. Draining the whole world here
+            // would manufacture a producer/consumer deadlock in the test method.
+            if (FrontierV3PedestrianPlanning.recovered(runtime)
+                    && (completed > completedBefore || status.get("awaitingResultPublication").getAsInt() > 0
+                        || status.get("activeSearches").getAsInt() == 0 && status.get("deferredSearches").getAsInt() == 0)) return;
             assertTrue(System.nanoTime() < deadline, () -> "navigation workers did not finish: " + status);
             java.util.concurrent.locks.LockSupport.parkNanos(100_000L);
         } while (true);

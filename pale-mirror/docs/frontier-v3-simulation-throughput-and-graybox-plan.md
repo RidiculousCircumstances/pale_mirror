@@ -442,3 +442,33 @@ reuse complete immutable owner inputs with explicit retention bounds; changed
 terrain, structure or meal/obligation maps still invalidate them. Existing narrow/
 wide-body, neighbour-change, service and meal cases passed39seconds in
 immutable-service-geometry-focused.log. G remains open.
+
+The retained100town world established an additional liveness contradiction:
+a checksummed1437-record WAL tail across11ticks contained1437reschedules,833
+meal and400machine reviews, almost no domain work. A saved image had399idle
+machines and over1600meals without travel; direct read-only route probes found
+valid paths. The cooperative navigator evicted ready results at128entries while
+over1000canonical continuations could be waiting. A delayed consumer could
+therefore lose its completed calculation and repeat it. Ready calculations now
+remain protected for due/runnable consumers until they consume or yield. Future
+recovery previews and owner-held work remain optional cache consumers, preventing
+a future or refused activity from blocking current clearance. Full result storage
+applies backpressure to at most8completed searches; compute slots, worker count,
+128result/131072surface/16384region bounds are unchanged. Deferred request addresses
+have a separate65535metadata bound and retain FIFO/service demand instead of
+evicting live requests at the cache's128entry bound. A normalized derived demand
+key preserves exact world/query/profile scope and avoids quadratic release scans.
+No durable identity, movement duration or resource permission is inferred.
+
+Idle attended machines now park on their exact station/container wake rather
+than emit retries while no operation exists. The station owner publishes changed
+machine wake identities even when the initiating event names a job. Its retained
+proof covers bootstrap, exact machine, container declaration and surface. Automatic
+machine policy and running clocks retain their existing execution semantics.
+Focused station operation/recovery checks passed46seconds. Route-buffer overflow,
+late consumer, worker capacity, real geometry invalidation, owner refusal/future
+previews and actual adapter restart/provisioning checks passed18seconds in
+retained-route-results-connected2.log. The adapter fixture's obsolete drain-all-
+world helper now yields on actual completion/backpressure so canonical consumers
+can run; terminal outbound/supplies and6000canonical-tick assertions are unchanged.
+These are correctness checks, not deployed100town throughput acceptance.

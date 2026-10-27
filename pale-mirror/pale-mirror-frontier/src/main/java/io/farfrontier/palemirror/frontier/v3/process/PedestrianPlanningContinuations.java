@@ -43,6 +43,12 @@ public final class PedestrianPlanningContinuations {
             return new Recovery(owner, waits);
         };
     }
+    static boolean held(ScheduledAction action, java.util.function.BooleanSupplier ownerAssessment) {
+        if (waiting(action)) return true;
+        boolean held = ownerAssessment.getAsBoolean();
+        var index = current; if (index != null) index.ownerHeld(action, held);
+        return held;
+    }
     static boolean waiting(ScheduledAction action) {
         var index = current;
         return index != null && index.waiting(action);

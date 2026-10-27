@@ -40,6 +40,7 @@ final class FrontierV3PedestrianPlanning {
         initialize(runtime, parallelism);
         recoverWaits(runtime);
         continuations.releaseUnused(planner::discardUnobserved);
+        planner.retainDemands(continuations.retainedRequests(runtime.canonicalState().orElseThrow().instant()));
         long started = System.nanoTime();
         planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
                 () -> System.nanoTime() - started < allowance);
@@ -131,6 +132,8 @@ final class FrontierV3PedestrianPlanning {
     static synchronized String diagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
         var capacity = runtime.commandAdmissionCapacity().orElseThrow();
         return "{\"waiting\":" + (owner == runtime ? continuations.waitingCount() : 0)
+                + ",\"awaitingResultPublication\":" + (owner == runtime ? planner.awaitingPublicationCount() : 0)
+                + ",\"retainedResults\":" + (owner == runtime ? planner.retainedResultCount() : 0)
                 + ",\"readyDeferred\":" + (owner == runtime ? deferredReady : 0)
                 + ",\"activeSearches\":" + (owner == runtime ? planner.pendingCount() : 0)
                 + ",\"inFlightSlices\":" + (owner == runtime ? planner.inFlightCount() : 0)
