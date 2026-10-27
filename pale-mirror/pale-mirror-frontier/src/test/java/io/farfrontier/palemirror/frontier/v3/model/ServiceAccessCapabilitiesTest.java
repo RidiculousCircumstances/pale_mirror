@@ -8,6 +8,25 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServiceAccessCapabilitiesTest {
+    @Test void destinationClaimsRetainTheirReadImageWhileChangedBodiesInvalidateTheCurrentView() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:service-claim-image"), 91L));
+        var actors = state.bootstrap().settlements().getFirst().residents();
+        var observer = actors.get(0).id(); var occupant = actors.get(1).id();
+        var from = SurfaceAnchor.at(300, 63, 300); var to = SurfaceAnchor.at(302, 63, 300);
+        state = state.withActorBody(occupant, from.standingBody());
+        var retained = ServiceDestinationClaims.excludedFor(state, observer);
+        assertTrue(retained.contains(from)); assertFalse(retained.contains(to));
+        var before = new java.util.HashSet<>(retained);
+        assertEquals(before.size(), retained.size());
+        assertThrows(UnsupportedOperationException.class, () -> retained.remove(from));
+        var next = state.withActorBody(occupant, to.standingBody());
+        var current = ServiceDestinationClaims.excludedFor(next, observer);
+        assertFalse(current.contains(from)); assertTrue(current.contains(to));
+        assertEquals(before, retained, "a published read view cannot follow later canonical input");
+        assertFalse(ServiceDestinationClaims.excludedFor(next, occupant).contains(to),
+                "an actor's own body never reserves its target against itself");
+    }
     @Test void aRemoteRequestCannotBlockAWaitingVisitor() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:service-arrival-order"), 91L));
