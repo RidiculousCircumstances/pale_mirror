@@ -7,7 +7,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsParticipantReviewAdviceTest {
-    @Test void capturedForecastRejectsChangedOwnerInputsPeerTermsAndExpiryButNotUnrelatedMotion() {
+    @Test void capturedForecastRejectsChangedOwnerInputsAndExpiryButAllowsDatedExternalObservations() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:advice-proof"), 126L,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
         var home = state.bootstrap().settlements().get(6).id();
@@ -37,8 +37,12 @@ class GoodsParticipantReviewAdviceTest {
                 io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.retained());
         var repriced = registry.prices(peer.party().id(), new GoodsParticipantPricesReviewed(peer.reviewRevision(), 4000,
                 Map.of("minecraft:bread", price)));
-        assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(repriced))), at).isEmpty(),
-                "changed published terms still invalidate an alternative used by the forecast");
+        assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(repriced))), at).isPresent(),
+                "a peer price observation is not actual consent or a guarantee of current supply");
+        var ownRepriced = registry.prices(home, new GoodsParticipantPricesReviewed(owner.reviewRevision(), 4000,
+                Map.of("minecraft:bread", price)));
+        assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(ownRepriced))), at).isEmpty(),
+                "the owner's current published consent must not be replaced by stale advice");
         assertTrue(completion.revalidate(state, new SimInstant(4000 + state.bootstrap().ruleset().goodsTrade().reviewInterval())).isEmpty());
         assertTrue(completion.revalidate(state, new SimInstant(3999)).isEmpty());
     }

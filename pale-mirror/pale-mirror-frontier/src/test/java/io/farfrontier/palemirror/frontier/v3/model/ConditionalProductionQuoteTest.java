@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import io.farfrontier.palemirror.frontier.v3.process.*;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -72,6 +73,18 @@ class ConditionalProductionQuoteTest {
     }
     @Test void foreignOwnerOrOrganizerFailsBeforePublicationAndTechnicalRenewalDoesNotPingPong() {
         var f = fixture(); var state = f.state(); var q = f.quote();
+        var at = new SimInstant(5003);
+        var advice = FrontierWorldProcessCatalog.adviceScheduled(FrontierWorldRuntimeDefinition.processRegistry(), state,
+                GoodsParticipantProcess.review(SUPPLIER, at.ticks()), at).orElseThrow().prepare();
+        var exact = advice.revalidate(state, at).orElseThrow().prepare().get();
+        assertTrue(exact.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(SettlementEconomicPlanPublished.class::isInstance).map(SettlementEconomicPlanPublished.class::cast)
+                .anyMatch(event -> event.plan().peerVersions().containsKey(BUYER)), "the fixture must actually quote this buyer");
+        var market = state.companies().goodsTrade(); var capturedRegistry = market.participants();
+        var buyerCashChanged = capturedRegistry.withEconomicState(BUYER, capturedRegistry.economicState(BUYER).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of())));
+        assertTrue(advice.revalidate(state.withCompanies(state.companies().withGoodsTrade(market.withParticipants(buyerCashChanged))), at).isEmpty(),
+                "dated market observations must not lend stale funding consent from an actually quoted buyer");
         var renewed = next(state, q, 5003, q.goodsUnitPrice());
         var after = SettlementEconomicPublication.apply(state, SUPPLIER, renewed, 5003);
         var changedBuyer = AcceptedEconomyFixture.publish(state, BUYER, 5002);

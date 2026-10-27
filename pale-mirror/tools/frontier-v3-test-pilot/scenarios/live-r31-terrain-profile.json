@@ -70,9 +70,9 @@
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
-        "x": -370,
-        "y": 77,
-        "z": -15
+        "x": -340,
+        "y": 72,
+        "z": 14
       },
       "settleMs": 0
     },
@@ -108,7 +108,7 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "x": -93,
-        "y": 65,
+        "y": 64,
         "z": 8
       },
       "settleMs": 0
@@ -145,7 +145,7 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "x": -100,
-        "y": 65,
+        "y": 64,
         "z": 140
       },
       "settleMs": 0
@@ -226,7 +226,7 @@
       },
       "offset": {
         "x": -8,
-        "y": 4,
+        "y": 0,
         "z": -8
       },
       "settleMs": 1000

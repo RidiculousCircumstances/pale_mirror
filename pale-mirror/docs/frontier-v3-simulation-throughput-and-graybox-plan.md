@@ -259,9 +259,9 @@ focused test alone does not close the long scale run.
 The same-world queue run then accepted202reviews but rejected1066: every
 known peer publication/input generation invalidated each forecast, including
 unreferenced alternatives. Advice now distinguishes dated market observations
-from exact conditional offers. Own input generation, published peer terms,
-geometry and expiry remain strict; only actual quoted buyer envelopes become
-publication dependencies. Current stock/cash/crew/contract admission is unchanged.
+from exact conditional offers. Own input generation, participant identity/policy, geometry and expiry remain
+strict. Peer prices and stocks are dated observations; only actual quoted buyer
+plan/input envelopes become publication dependencies. Current stock/cash/crew/contract admission is unchanged.
 The targeted market/advice/conditional-offer and architecture checks pass in
 local-advice-dependencies-final.log. This does not yet establish scale throughput.
 
@@ -295,3 +295,13 @@ identities. Current life, migrations, eligibility, stock, access and machine
 operation checks remain at their existing owners. Migration, replacement, fuel,
 processing, procurement and conditional-supply regressions exercise these paths.
 Separate verification directories avoid mutating the classes of a running audit.
+
+Fresh schema310 native pressure still rejected forecasts when any declared peer
+published a price. Price observations now follow the same dated-input boundary
+as stock. Actual conditional quote buyers retain both captured input generation
+and accepted plan version; current matching/admission still checks current terms,
+cash, stock and crew. Focused advice/conditional-quote/participant and guardrails
+checks pass25s (dated-market-observations-final.log). No sustained throughput
+claim follows from this source check. The terrain pilot also uses grounded visit
+anchors: creative mode alone does not suspend gravity, so airborne exact anchors
+were an invalid visit precondition, not a chunk-loading defect.
