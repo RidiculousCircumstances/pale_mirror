@@ -10,14 +10,14 @@ final class PedestrianRegionBuild {
     private final PedestrianRegion.Tile tile;
     private final OptionalInt uniform;
     private final List<SurfaceAnchor> surfaces = new ArrayList<>();
-    private final List<Integer>[] columns, edges;
-    private final int[] parents = new int[MAX_SURFACES];
+    private final List<Integer>[] columns;
+    private List<Integer>[] edges;
+    private int[] parents, components;
     private List<SurfaceAnchor> pending;
     private int column, level, node, direction, neighbour, edgeCount, componentNode;
     private boolean unknown, limited;
     private PedestrianRegion result;
     private final Map<Integer, Integer> componentIds = new LinkedHashMap<>();
-    private final int[] components = new int[MAX_SURFACES];
     @SuppressWarnings("unchecked")
     PedestrianRegionBuild(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
         this.geometry = geometry; this.tile = tile;
@@ -27,8 +27,10 @@ final class PedestrianRegionBuild {
         uniform = area.minX() >= bounds.minX() && area.minZ() >= bounds.minZ()
                 && area.maxXExclusive() <= bounds.maxXExclusive() && area.maxZExclusive() <= bounds.maxZExclusive()
                 ? geometry.uniformSupport(area) : OptionalInt.empty();
-        columns = (List<Integer>[]) new List<?>[PedestrianRegion.CELLS];
-        edges = (List<Integer>[]) new List<?>[MAX_SURFACES];
+        int initial = uniform.isPresent() ? 0 : PedestrianRegion.CELLS;
+        parents = new int[initial]; components = new int[initial];
+        columns = (List<Integer>[]) new List<?>[initial];
+        edges = (List<Integer>[]) new List<?>[initial];
         for (int i = 0; i < columns.length; i++) columns[i] = new ArrayList<>();
     }
     int advance(int budget) {
@@ -38,6 +40,7 @@ final class PedestrianRegionBuild {
         int work = 0;
         while (work < budget && result == null && !limited && mayContinue.getAsBoolean()) {
             work++;
+            if (uniform.isPresent()) { result = PedestrianRegion.certifiedPlane(tile, uniform.orElseThrow()); continue; }
             if (column < PedestrianRegion.CELLS) { survey(); continue; }
             if (node < surfaces.size()) { connect(); continue; }
             if (componentNode < surfaces.size()) {
@@ -59,11 +62,6 @@ final class PedestrianRegionBuild {
         if (x < bounds.minX() || x >= bounds.maxXExclusive() || z < bounds.minZ() || z >= bounds.maxZExclusive()) {
             column++; return;
         }
-        if (uniform.isPresent()) {
-            int index = surfaces.size(); surfaces.add(SurfaceAnchor.at(x, uniform.orElseThrow(), z));
-            columns[column++].add(index); parents[index] = 0; edges[index] = PedestrianRegion.flatOutgoing(index);
-            return;
-        }
         if (pending == null) {
             pending = geometry.surfacesAt(x, z);
             if (pending.size() > MAX_LEVELS) { limited = true; return; }
@@ -79,10 +77,13 @@ final class PedestrianRegionBuild {
         if (surface.x() != x || surface.z() != z) throw new IllegalArgumentException("navigation survey returned a foreign column");
         if (!bounds.contains(surface.support()) || geometry.blocked(surface)) return;
         if (surfaces.size() >= MAX_SURFACES) { limited = true; return; }
+        if (surfaces.size() == parents.length) {
+            int capacity = Math.min(MAX_SURFACES, parents.length * 2);
+            parents = Arrays.copyOf(parents, capacity); components = Arrays.copyOf(components, capacity); edges = Arrays.copyOf(edges, capacity);
+        }
         int index = surfaces.size(); surfaces.add(surface); columns[column].add(index); parents[index] = index; edges[index] = new ArrayList<>();
     }
     private void connect() {
-        if (uniform.isPresent()) { node = surfaces.size(); return; }
         if (direction == 2) { node++; direction = 0; neighbour = 0; return; }
         var from = surfaces.get(node);
         int x = Math.floorMod(from.x(), PedestrianRegion.SIDE), z = Math.floorMod(from.z(), PedestrianRegion.SIDE);

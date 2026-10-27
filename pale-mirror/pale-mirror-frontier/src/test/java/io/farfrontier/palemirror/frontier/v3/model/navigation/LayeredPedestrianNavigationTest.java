@@ -44,7 +44,9 @@ class LayeredPedestrianNavigationTest {
         return new ProfiledPedestrianGeometry(raw, profile, obstacles::contains);
     }
     private static PedestrianRouteResult finish(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
-        var search = new HierarchicalPedestrianSearch(geometry, start, target);
+        return finish(new HierarchicalPedestrianSearch(geometry, start, target));
+    }
+    private static PedestrianRouteResult finish(HierarchicalPedestrianSearch search) {
         PedestrianRouteResult result;
         int turns = 0, budget = HierarchicalPedestrianSearch.MIN_SLICE_WORK;
         do {
@@ -94,6 +96,11 @@ class LayeredPedestrianNavigationTest {
         var high = SurfaceAnchor.at(0, 64, 0); var low = SurfaceAnchor.at(1, 63, 0);
         assertEquals(PedestrianRouteResult.Status.FOUND, finish(map, high, low).status());
         assertEquals(PedestrianRouteResult.Status.NO_PATH, finish(map, low, high).status());
+        assertEquals(PedestrianRouteResult.Status.ESTIMATED, finish(new HierarchicalPedestrianSearch(map, high, low,
+                new PedestrianRegionCache(), null, PedestrianRouteExtent.ESTIMATE)).status());
+        assertEquals(PedestrianRouteResult.Status.NO_PATH, finish(new HierarchicalPedestrianSearch(map, low, high,
+                new PedestrianRegionCache(), null, PedestrianRouteExtent.ESTIMATE)).status(),
+                "regional pruning must retain directed links between distinct mutual components");
     }
     @Test void unavailableHistoricalBirthAllowsClearLocalPlacementButNeverWalking() {
         var map = geometry(new WorldBounds(0, 0, 4, 1), (x, z) -> List.of(SurfaceAnchor.at(x, 63, z)),

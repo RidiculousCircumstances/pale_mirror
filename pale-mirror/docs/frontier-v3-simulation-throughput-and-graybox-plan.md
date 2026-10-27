@@ -1219,3 +1219,38 @@ without changing prices, selection, departure authority or canonical schema.
 Existing procurement/unfunded/mixed-trip/sourcing/immutable-input checks PASS19s
 before the final outer sourcing memo used the same representation; exact clean-ref
 check must include that last caller. Native100 throughput remains unclosed.
+
+
+### Compact certified topology and component-directed expansion (2026-10-28)
+
+`fb22d6695` exactreleasePASS58s, both retained311 deployments verified. Ordinary100
+native interval17627→17923/151s,debt861→3594 remainsFAIL. Region building dominates
+navigation;5ce's20s actual allocation deltas are24.33GB/18.92GB for two navigation
+workers,4.24GBserver,5.16GBpreparation,3.09GB/2.48GBadvice. Across evolving retained
+world phases this is attribution, not an isolated speed multiplier.
+
+The graph owner now distinguishes a provider-certified clear plane from a layered
+graph. A plane retains tile/height and shared adjacency, deriving surfaces/indexes
+arithmetically; it does not allocate256 surface/hash records and4096-node builder
+arrays. Its refinement still emits adjacent walkable cells cooperatively. The
+layered builder grows arrays from256 to the unchanged4096 limit as actual levels
+require. Component/edge/unknown limits and complete layered fallback remain.
+
+Regional expansion also scanned every internal node/edge even when its already
+built topology proved there was only one mutual component. Those scans cannot
+produce an inter-component portal. Single-component expansion/target probing now
+skip only that empty scan; borders still validate geometry, and directed links
+between distinct components still use exhaustive existing logic. A provider's
+initial clear-plane certificate now runs under the per-region worker lock rather
+than shared cache lock; unrelated region preparation can proceed concurrently.
+
+Existing certified graph equivalence checks extend adjacent refinement in both
+directions/same-cell/foreign-height cases. Layered checks explicitly exercise
+regional-estimate one-way descent, alongside bridge/tunnel/body/damaged-step cases.
+133navigation/wake/codec cases initially had one over-specified fixture failure:
+rebase test banned reads from every old immutable region, including an unfinished
+unchanged cache builder. It now forbids the actually changed region and retains
+terminalNO_PATH at the new wall. Focused correction16sPASS; no production geometry
+validation was weakened. Existing concurrent-region test now barriers in provider
+certificate preparation, directly covering the formerly shared-lock seam.
+Clean release must combine the complete133selection and this final worker case.

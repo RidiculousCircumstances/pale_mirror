@@ -33,6 +33,17 @@ class PedestrianCertifiedRegionTest {
             assertEquals(reference.component(reference.surface(index)), fast.component(fast.surface(index)));
             assertEquals(reference.outgoing(index), fast.outgoing(index));
         }
+        assertEquals(-1, fast.component(SurfaceAnchor.at(-17, 63, -1)));
+        assertEquals(-1, fast.component(SurfaceAnchor.at(-1, 62, -1)));
+        for (var endpoints : List.of(List.of(0, 255), List.of(255, 0), List.of(120, 120))) {
+            var from = fast.surface(endpoints.getFirst()); var to = fast.surface(endpoints.getLast());
+            var refinement = fast.refine(from, to);
+            for (int turn = 0; turn < 64 && refinement.result() == null; turn++) assertTrue(refinement.advance(1) <= 1);
+            var route = Objects.requireNonNull(refinement.result());
+            assertEquals(from, route.getFirst()); assertEquals(to, route.getLast());
+            assertEquals(Math.abs(from.x() - to.x()) + Math.abs(from.z() - to.z()) + 1, route.size());
+            KnownPedestrianNavigation.requireRoute(plane(true, reads), route);
+        }
         var opaque = new ProfiledPedestrianGeometry(plane(true, reads), UnitNavigationProfile.VILLAGER, point -> true);
         assertTrue(opaque.uniformSupport(new WorldBounds(0, 0, 16, 16)).isEmpty(), "a separate point predicate supplies no area proof");
         var declared = new ProfiledPedestrianGeometry(plane(true, reads), UnitNavigationProfile.DONKEY, NavigationObstacleView.indexed(Set.of()));

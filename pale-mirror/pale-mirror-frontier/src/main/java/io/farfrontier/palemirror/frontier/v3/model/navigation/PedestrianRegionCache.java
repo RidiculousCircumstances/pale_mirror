@@ -16,18 +16,23 @@ final class PedestrianRegionCache {
     private final Map<Object, Bucket<RegionalKey>> scoped = new LinkedHashMap<>(16, 0.75f, true);
     private static final class Entry {
         private final java.util.concurrent.locks.ReentrantLock builderLock = new java.util.concurrent.locks.ReentrantLock();
+        private PedestrianRouteGeometry initialGeometry;
+        private final PedestrianRegion.Tile tile;
         private PedestrianRegionBuild build;
         private volatile PedestrianRegion region;
         private volatile boolean limited;
         // Accounted only under the cache lock, independently of a worker's private builder.
         private int accountedSize = PedestrianRegionBuild.MAX_SURFACES;
         private boolean accountedBuilding = true;
-        Entry(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) { build = new PedestrianRegionBuild(geometry, tile); }
+        Entry(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) { initialGeometry = geometry; this.tile = tile; }
         Lookup advance(int budget, java.util.function.BooleanSupplier mayContinue) {
             if (region != null || limited) return new Lookup(region, 1, limited);
             if (!builderLock.tryLock()) return new Lookup(null, 1, false);
             try {
                 if (region != null || limited) return new Lookup(region, 1, limited);
+                // The provider's certificate may consult indexed geometry. It
+                // belongs to this worker/region, never the shared cache lock.
+                if (build == null) { build = new PedestrianRegionBuild(initialGeometry, tile); initialGeometry = null; }
                 int work = build.advance(budget, mayContinue); region = build.result(); limited = build.limited();
                 if (region != null || limited) build = null;
                 return new Lookup(region, work, limited);

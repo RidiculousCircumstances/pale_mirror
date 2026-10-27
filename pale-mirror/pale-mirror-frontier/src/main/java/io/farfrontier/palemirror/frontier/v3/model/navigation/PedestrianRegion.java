@@ -24,56 +24,110 @@ final class PedestrianRegion {
         @Override public int compareTo(Tile other) { int order = Integer.compare(x, other.x); return order != 0 ? order : Integer.compare(z, other.z); }
     }
     final Tile tile;
-    private final List<SurfaceAnchor> surfaces;
-    private final Map<SurfaceAnchor, Integer> indices;
-    private final List<Integer>[] columns;
-    private final int[] components;
-    private final List<Integer>[] edges;
+    private sealed interface Topology permits Plane, Layered {
+        int size();
+        SurfaceAnchor surface(int index);
+        int index(SurfaceAnchor surface);
+        int component(int index);
+        int componentCount();
+        List<Integer> outgoing(int index);
+        List<SurfaceAnchor> surfaces(int x, int z);
+    }
+    /** Constructed only from the provider's positive clear-plane certificate. */
+    private record Plane(Tile tile, int y) implements Topology {
+        public int size() { return CELLS; }
+        public SurfaceAnchor surface(int index) {
+            Objects.checkIndex(index, CELLS);
+            return SurfaceAnchor.at(tile.x() * SIDE + index % SIDE, y, tile.z() * SIDE + index / SIDE);
+        }
+        public int index(SurfaceAnchor surface) {
+            int x = surface.x() - tile.x() * SIDE, z = surface.z() - tile.z() * SIDE;
+            return surface.y() == y && x >= 0 && x < SIDE && z >= 0 && z < SIDE ? z * SIDE + x : -1;
+        }
+        public int component(int index) { return 0; }
+        public int componentCount() { return 1; }
+        public List<Integer> outgoing(int index) { return flatOutgoing(index); }
+        public List<SurfaceAnchor> surfaces(int x, int z) { return List.of(surface(z * SIDE + x)); }
+    }
+    private static final class Layered implements Topology {
+        private final List<SurfaceAnchor> surfaces;
+        private final Map<SurfaceAnchor, Integer> indices;
+        private final List<Integer>[] columns, edges;
+        private final int[] components;
+        private final int componentCount;
+        Layered(List<SurfaceAnchor> surfaces, List<Integer>[] columns, List<Integer>[] edges, int[] components) {
+            this.surfaces = List.copyOf(surfaces); this.columns = columns; this.edges = edges; this.components = components;
+            var lookup = new HashMap<SurfaceAnchor, Integer>(); int maximum = -1;
+            for (int i = 0; i < surfaces.size(); i++) { lookup.put(surfaces.get(i), i); maximum = Math.max(maximum, components[i]); }
+            indices = Collections.unmodifiableMap(lookup); componentCount = maximum + 1;
+        }
+        public int size() { return surfaces.size(); }
+        public SurfaceAnchor surface(int index) { return surfaces.get(index); }
+        public int index(SurfaceAnchor surface) { return indices.getOrDefault(surface, -1); }
+        public int component(int index) { return components[index]; }
+        public int componentCount() { return componentCount; }
+        public List<Integer> outgoing(int index) { return edges[index]; }
+        public List<SurfaceAnchor> surfaces(int x, int z) { return columns[z * SIDE + x].stream().map(surfaces::get).toList(); }
+    }
+    private final Topology topology;
     private final boolean unknown;
 
     PedestrianRegion(Tile tile, List<SurfaceAnchor> surfaces, List<Integer>[] columns,
                      List<Integer>[] edges, int[] components, boolean unknown) {
-        this.tile = tile; this.surfaces = List.copyOf(surfaces); this.columns = columns;
-        this.edges = edges; this.components = components; this.unknown = unknown;
-        var lookup = new HashMap<SurfaceAnchor, Integer>();
-        for (int i = 0; i < surfaces.size(); i++) lookup.put(surfaces.get(i), i);
-        indices = Collections.unmodifiableMap(lookup);
+        this(tile, new Layered(surfaces, columns, edges, components), unknown);
+    }
+    private PedestrianRegion(Tile tile, Topology topology, boolean unknown) {
+        this.tile = tile; this.topology = topology; this.unknown = unknown;
+    }
+    static PedestrianRegion certifiedPlane(Tile tile, int y) {
+        return new PedestrianRegion(tile, new Plane(tile, y), false);
     }
     boolean unknown() { return unknown; }
-    int size() { return surfaces.size(); }
-    SurfaceAnchor surface(int index) { return surfaces.get(index); }
-    List<Integer> outgoing(int index) { return edges[index]; }
-    int component(SurfaceAnchor surface) { var index = indices.get(surface); return index == null ? -1 : components[index]; }
-    List<SurfaceAnchor> surfaces(int x, int z) { return columns[z * SIDE + x].stream().map(surfaces::get).toList(); }
+    int size() { return topology.size(); }
+    int componentCount() { return topology.componentCount(); }
+    SurfaceAnchor surface(int index) { return topology.surface(index); }
+    List<Integer> outgoing(int index) { return topology.outgoing(index); }
+    int component(SurfaceAnchor surface) { int index = topology.index(surface); return index < 0 ? -1 : topology.component(index); }
+    List<SurfaceAnchor> surfaces(int x, int z) { return topology.surfaces(x, z); }
     Refinement refine(SurfaceAnchor from, SurfaceAnchor to) { return new Refinement(from, to); }
     final class Refinement {
         private final int origin, target, component;
         private final int[] previous, queue;
         private final List<SurfaceAnchor> reverse = new ArrayList<>();
-        private int read, write = 1, edge, rewind = -1;
+        private int read, write = 1, edge, rewind = -1, planeCursor;
         private List<SurfaceAnchor> result;
         Refinement(SurfaceAnchor from, SurfaceAnchor to) {
             component = component(from);
             if (component < 0 || component(to) != component) throw new IllegalArgumentException("regional refinement lacks connected endpoints");
-            origin = indices.get(from); target = indices.get(to);
-            previous = new int[size()]; Arrays.fill(previous, -1); previous[origin] = origin;
-            queue = new int[size()]; queue[0] = origin;
+            origin = topology.index(from); target = topology.index(to); planeCursor = origin;
+            if (topology instanceof Plane) { previous = new int[0]; queue = previous; }
+            else {
+                previous = new int[size()]; Arrays.fill(previous, -1); previous[origin] = origin;
+                queue = new int[size()]; queue[0] = origin;
+            }
         }
         int advance(int budget) {
             int work = 0;
             while (work < budget && result == null) {
                 work++;
+                if (topology instanceof Plane) {
+                    reverse.add(surface(planeCursor));
+                    if (planeCursor == target) { result = List.copyOf(reverse); break; }
+                    int dx = target % SIDE - planeCursor % SIDE;
+                    planeCursor += dx != 0 ? Integer.signum(dx) : Integer.signum(target / SIDE - planeCursor / SIDE) * SIDE;
+                    continue;
+                }
                 if (rewind >= 0) {
-                    reverse.add(surfaces.get(rewind));
+                    reverse.add(surface(rewind));
                     if (rewind == origin) { result = List.copyOf(reverse.reversed()); break; }
                     rewind = previous[rewind]; continue;
                 }
                 if (previous[target] >= 0) { rewind = target; continue; }
                 if (read == write) throw new IllegalStateException("regional component lost its witnessed connection");
                 int current = queue[read];
-                if (edge == edges[current].size()) { read++; edge = 0; continue; }
-                int next = edges[current].get(edge++);
-                if (previous[next] < 0 && components[next] == component) { previous[next] = current; queue[write++] = next; }
+                if (edge == outgoing(current).size()) { read++; edge = 0; continue; }
+                int next = outgoing(current).get(edge++);
+                if (previous[next] < 0 && topology.component(next) == component) { previous[next] = current; queue[write++] = next; }
             }
             return work;
         }

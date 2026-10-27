@@ -122,14 +122,15 @@ class PedestrianWorkerPlanningTest {
             public Object version() { return revision; }
             public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(revision); }
             public WorldBounds bounds() { return new WorldBounds(0, 0, 32, 16); }
-            public SurfaceAnchor supportAt(int x, int z) {
-                if (firstColumns.add(Math.floorDiv(x, 16))) {
+            public OptionalInt uniformSupport(WorldBounds area) {
+                if (firstColumns.add(Math.floorDiv(area.minX(), 16))) {
                     entered.countDown();
                     try { assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS), "another region must enter while this survey is running"); }
                     catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
                 }
-                return SurfaceAnchor.at(x, 63, z);
+                return OptionalInt.empty();
             }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
             public boolean blocked(SurfaceAnchor surface) { return false; }
         };
         try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {

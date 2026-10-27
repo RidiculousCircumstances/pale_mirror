@@ -167,7 +167,10 @@ class PedestrianRegionalInvalidationTest {
         var revision = PedestrianGeometryRevision.initial(); var bounds = new WorldBounds(0, 0, 512, 16);
         var start = SurfaceAnchor.at(1, 63, 1); var end = SurfaceAnchor.at(480, 63, 1);
         var frozen = new java.util.concurrent.atomic.AtomicBoolean();
-        var old = geometry(revision, bounds, (x, z) -> { assertFalse(frozen.get(), "search cannot survey its obsolete geometry after rebase");
+        var old = geometry(revision, bounds, (x, z) -> {
+            // An unfinished cached builder may still read an unchanged region's
+            // immutable facts. It cannot survey the region whose token changed.
+            assertFalse(frozen.get() && x >= 192 && x < 208, "changed region cannot use its obsolete geometry after rebase");
             return SurfaceAnchor.at(x, 63, z); }, s -> false);
         try (var planner = new CooperativePedestrianPlanner()) {
             planner.query(old, start, end); planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);

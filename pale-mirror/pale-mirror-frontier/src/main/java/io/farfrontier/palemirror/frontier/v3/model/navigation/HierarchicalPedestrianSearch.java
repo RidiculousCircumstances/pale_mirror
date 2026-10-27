@@ -417,7 +417,7 @@ public final class HierarchicalPedestrianSearch {
         }
         if (destinationDirection < 0) {
             work++;
-            if (destinationNode == local.size()) { destinationDirection = 0; return 0; }
+            if (local.componentCount() == 1 || destinationNode == local.size()) { destinationDirection = 0; return 0; }
             if (local.component(local.surface(destinationNode)) == destination.component()
                     || destinationEdge == local.outgoing(destinationNode).size()) {
                 destinationNode++; destinationEdge = 0; return 0;
@@ -475,7 +475,7 @@ public final class HierarchicalPedestrianSearch {
         }
         if (expansionDirection < 0) {
             work++;
-            if (expansionNode == local.size()) { expansionDirection = 0; return; }
+            if (local.componentCount() == 1 || expansionNode == local.size()) { expansionDirection = 0; return; }
             var outgoing = local.outgoing(expansionNode);
             if (local.component(local.surface(expansionNode)) != candidate.node().component() || expansionEdge == outgoing.size()) {
                 expansionNode++; expansionEdge = 0; return;
