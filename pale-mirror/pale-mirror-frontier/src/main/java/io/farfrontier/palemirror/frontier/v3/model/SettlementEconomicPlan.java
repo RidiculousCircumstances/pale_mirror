@@ -5,7 +5,8 @@ import java.util.*;
 
 /** Accepted intentions, not stock, cash or execution authority. Production ceilings
  * use the stock owner's coverage at acceptance, never a new baseline on each read.
- * Peer version zero explicitly records that no plan has yet been published. */
+ * Peer versions fence actual conditional offers, not every observed alternative.
+ * An explicit zero entry records an absent publication, never zero demand. */
 public record SettlementEconomicPlan(long revision, long inputRevision, long atTick, long reviewAtTick,
         SupplyPlanner.Plan domestic, SupplyPlanner.Plan complete, Map<String, Long> productionCeilings,
         Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Long> peerVersions,

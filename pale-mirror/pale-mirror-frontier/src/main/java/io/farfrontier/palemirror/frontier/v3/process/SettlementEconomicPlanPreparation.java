@@ -50,10 +50,10 @@ final class SettlementEconomicPlanPreparation {
                 io.farfrontier.palemirror.frontier.v3.model.supply.ProductionReachability.consumers(
                         domestic.facts().orElseThrow().capacities(), item));
         var buyers = new TreeMap<SubjectId, Long>();
-        for (var peer : participant.known()) {
-            if (!registry.participants().containsKey(peer.party().id())) continue;
-            // Zero names the exact absent-publication boundary, not zero demand.
-            buyers.put(peer.party().id(), registry.economicState(peer.party().id()).accepted()
+        for (var quote : completion.quotes()) {
+            // Only an offered conditional quantity depends on this exact buyer
+            // envelope. Unused alternatives remain dated forecast observations.
+            buyers.put(quote.recipient().id(), registry.economicState(quote.recipient().id()).accepted()
                     .map(SettlementEconomicPlan::revision).orElse(0L));
         }
         return new SettlementEconomicPlan(revision,

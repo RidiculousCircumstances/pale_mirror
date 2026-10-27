@@ -25,7 +25,20 @@ class GoodsParticipantReviewAdviceTest {
         var owner = registry.participants().get(home); var peer = registry.participants().get(owner.known().getFirst().party().id());
         var peerChanged = registry.withEconomicState(peer.party().id(), registry.economicState(peer.party().id()).invalidate(
                 Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread"))));
-        assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(peerChanged))), at).isEmpty());
+        assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(peerChanged))), at).isPresent(),
+                "a peer's dated stock observation is not a promise of current supply");
+        var peerPlan = SettlementEconomicPlanPreparation.prepare(state, peer,
+                SettlementEconomicEvaluation.domestic(state, peer, 4000), 4000);
+        var peerReviewed = SettlementEconomicPublication.apply(state, peer.party().id(), peerPlan, 4000);
+        assertTrue(completion.revalidate(peerReviewed, at).isPresent(),
+                "an unrelated buyer publication must not serialize every settlement's advice");
+        var price = new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
+                FixedScalar.ONE, FixedScalar.ONE, FixedScalar.ONE, 4000, 0, Optional.empty(),
+                io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.retained());
+        var repriced = registry.prices(peer.party().id(), new GoodsParticipantPricesReviewed(peer.reviewRevision(), 4000,
+                Map.of("minecraft:bread", price)));
+        assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(repriced))), at).isEmpty(),
+                "changed published terms still invalidate an alternative used by the forecast");
         assertTrue(completion.revalidate(state, new SimInstant(4000 + state.bootstrap().ruleset().goodsTrade().reviewInterval())).isEmpty());
         assertTrue(completion.revalidate(state, new SimInstant(3999)).isEmpty());
     }

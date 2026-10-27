@@ -224,7 +224,7 @@ through the same existing planning-continuation owner, including final wake bind
 
 Economic advice contains prices and a conditional supply/cultivation forecast,
 not reservations, contracts, worker assignments or resource effects. Its owner
-checks its input generation, participant terms, peer input/publication bases,
+checks its own input generation, participant terms, actually quoted buyer envelopes,
 geometry captures and review expiry before exact current trade planning. Ordinary
 body motion does not invalidate this conditional forecast or award arrival.
 Exact pickup, stock/title/cash/worker admission and physical effects remain with
@@ -255,3 +255,12 @@ only between parts in the same chunk. Depletion/custody remain outside the
 immutable declaration key. Existing extension/observation/recovery checks plus
 source-conflict and remote-part-sharing assertions cover this boundary. A passing
 focused test alone does not close the long scale run.
+
+The same-world queue run then accepted202reviews but rejected1066: every
+known peer publication/input generation invalidated each forecast, including
+unreferenced alternatives. Advice now distinguishes dated market observations
+from exact conditional offers. Own input generation, published peer terms,
+geometry and expiry remain strict; only actual quoted buyer envelopes become
+publication dependencies. Current stock/cash/crew/contract admission is unchanged.
+The targeted market/advice/conditional-offer and architecture checks pass in
+local-advice-dependencies-final.log. This does not yet establish scale throughput.

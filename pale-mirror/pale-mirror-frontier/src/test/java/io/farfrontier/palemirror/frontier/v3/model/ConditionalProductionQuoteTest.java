@@ -74,6 +74,10 @@ class ConditionalProductionQuoteTest {
         var f = fixture(); var state = f.state(); var q = f.quote();
         var renewed = next(state, q, 5003, q.goodsUnitPrice());
         var after = SettlementEconomicPublication.apply(state, SUPPLIER, renewed, 5003);
+        var changedBuyer = AcceptedEconomyFixture.publish(state, BUYER, 5002);
+        assertFalse(SettlementEconomicPublication.peerEnvelopesCurrent(changedBuyer.companies().goodsTrade().participants(), renewed));
+        assertThrows(IllegalArgumentException.class, () -> SettlementEconomicPublication.apply(changedBuyer, SUPPLIER, renewed, 5003),
+                "a real conditional offer retains its exact buyer envelope even though unrelated advice may proceed");
         assertTrue(SettlementEconomicReviewRequests.changed(state, after, 5003).stream().noneMatch(a -> a.subject().equals(BUYER)),
                 "a new source generation/expiry alone is not new economic information");
         var changed = next(state, q, 5003, q.goodsUnitPrice() + 1);
