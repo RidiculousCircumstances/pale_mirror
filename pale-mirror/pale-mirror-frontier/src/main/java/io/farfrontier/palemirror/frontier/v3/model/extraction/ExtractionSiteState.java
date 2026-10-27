@@ -8,7 +8,7 @@ import java.util.*;
 public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Map<SubjectId, ExtractionWork> work, long nextWorkOrdinal,
         io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions geologicalExclusions,
         MineralGeology geology, GeologicalKnowledge knowledge) {
-    public static final int MAX_WORK = 64;
+    public static final int MAX_WORK = io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_EXTRACTION_WORK;
     public ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits) { this(deposits, Map.of(), 1); }
     public ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Map<SubjectId, ExtractionWork> work, long nextWorkOrdinal) {
         this(deposits, work, nextWorkOrdinal, io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions.empty());
@@ -21,7 +21,7 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
         Objects.requireNonNull(geologicalExclusions);
         Objects.requireNonNull(geology); Objects.requireNonNull(knowledge); knowledge.validate(geology);
         deposits = Map.copyOf(deposits); work = Map.copyOf(work);
-        if (deposits.size() > 64 || deposits.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().site().id())))
+        if (deposits.size() > io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_EXTRACTION_SITES || deposits.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().site().id())))
             throw new IllegalArgumentException("invalid extraction site register");
         if (nextWorkOrdinal < 1 || work.size() > MAX_WORK || work.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().id())))
             throw new IllegalArgumentException("invalid bounded extraction work register");

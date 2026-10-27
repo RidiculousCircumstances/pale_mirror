@@ -9,7 +9,7 @@ import java.util.Optional;
 
 /** Sole retained activity-authority register. No body, resource, route or family progress here. */
 public final class ActorExecutionState {
-    public static final int MAX_ACTORS = 4_096;
+    public static final int MAX_ACTORS = io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_ACTORS;
     private final Map<SubjectId, ActorExecution> actors;
     private final Map<ActorActivityKind, Map<SubjectId, ActorExecutionId>> currentByKind;
     private final java.util.List<ActorExecutionId> suspended;

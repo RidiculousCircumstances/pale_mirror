@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 public record GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, SubjectId settlementId,
                                List<Counterparty> known, long reviewRevision, String decision, long reviewedAtTick,
                                Map<String, io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote> prices) {
+    public static final int MAX_KNOWN = 256;
     public GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, SubjectId settlementId,
                              List<Counterparty> known, long reviewRevision, String decision, long reviewedAtTick) {
         this(party, policy, settlementId, known, reviewRevision, decision, reviewedAtTick, Map.of());
@@ -22,7 +23,7 @@ public record GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, Su
         if (prices.values().stream().filter(q -> q.salePlan().kind() ==
                 io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.Kind.OPERATING_RECOVERY).count() > 1)
             throw new IllegalArgumentException("multiple stock recovery envelopes for one operating requirement");
-        if (known.size() > 16 || known.stream().map(value -> value.party().id()).distinct().count() != known.size()
+        if (known.size() > MAX_KNOWN || known.stream().map(value -> value.party().id()).distinct().count() != known.size()
                 || known.stream().anyMatch(value -> value.party().equals(party)) || reviewRevision < 0 || reviewedAtTick < 0
                 || decision == null || decision.isBlank() || decision.length() > 512 || prices.size() > 16)
             throw new IllegalArgumentException("invalid bounded participant knowledge/review");

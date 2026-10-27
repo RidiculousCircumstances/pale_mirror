@@ -15,7 +15,7 @@ final class FieldDevelopmentLand {
             Optional<PedestrianGeometryRevision> regional,
             Set<Region> regions,
             KnownBlockReadWitness<NavigationBlockState> blocks, List<FieldDevelopmentCell> cells) { }
-    private static final int MAX_ENTRIES = 64, MAX_QUERY_READS = 16_384, MAX_RETAINED_READS = 131_072;
+    private static final int MAX_ENTRIES = SimulationCapacity.MAX_SETTLEMENTS * 2, MAX_QUERY_READS = 16_384, MAX_RETAINED_READS = 131_072;
     private static final Map<Query, Facts> LAND = new LinkedHashMap<>(16, .75f, true);
     private static int retainedReads;
     /** Opaque reachability/suitability result tied to one exact immutable world input. */

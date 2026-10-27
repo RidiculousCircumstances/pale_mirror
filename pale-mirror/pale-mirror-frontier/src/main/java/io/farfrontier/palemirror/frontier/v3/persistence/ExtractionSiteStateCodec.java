@@ -61,7 +61,7 @@ final class ExtractionSiteStateCodec {
     static ExtractionSiteState read(DataInputStream in) throws IOException {
         var geological = MineralGeologyCodec.read(in);
         var deposits = new LinkedHashMap<SubjectId, ExtractionDeposit>();
-        for (int i = 0, count = count(in, 64); i < count; i++) {
+        for (int i = 0, count = count(in, io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_EXTRACTION_SITES); i < count; i++) {
             SubjectId id = new SubjectId(in.readUTF()), home = new SubjectId(in.readUTF());
             var minerals = new HashSet<SubjectId>();
             for (int g = 0, n = count(in, io.farfrontier.palemirror.frontier.v3.model.geology.MineralGeology.MAX_DEPOSITS); g < n; g++)

@@ -64,7 +64,7 @@ economic content and cannot establish a precise r30 speed ratio.
   approach/exit, UAE, HOT observation, hunger, death/cancel, source loss and replay.
   Remove the active per-cell movement writer and its obsolete private-mechanic
   tests. Validate stale/foreign owner and no duplicate actor/cargo consequences.
-- [ ] C. Reuse immutable geometry and production facts at their proper boundaries.
+- [x] C. Reuse immutable geometry and production facts at their proper boundaries.
   Eliminate evidenced repeated field/forest work using complete relevant regional
   dependencies and bounded caches/indexes. A block or permission change invalidates
   its dependent facts. The economic owner consumes suitability/capacity facts;
@@ -166,3 +166,15 @@ Unversioned providers retain pointwise validation. New canonical land admission
 still refreshes selected block samples. Land, uncertainty, permissions and recovery
 checks passed in build/simulation-throughput/land-version-focused.log (39seconds).
 This is local query reuse, not permission to publish stale economic decisions.
+
+Phase E source checkpoint introduces r31 baseline and100settlement scale profiles.
+The latter has100k-square bounds, irregular placement,2k–4k initial residents and
+explicit mineral-producer content. Bootstrap/names/agriculture consume declared
+cardinality. Local access roads replace eager expansion of world-spanning roads
+in that profile; shared road point queries now use a chunk index of the same
+segments used by physical compilation. Historical profiles retain their original
+content fingerprints. Canonical capacities/hydration cover residents, authorities,
+work/deposits, actors, peers and strategic records; physical mob/scene limits are
+unchanged. Complete100settlement state and snapshot round-trip passed in
+scale-state3.log (25seconds). Runtime load/throughput and demand-footprint checks
+remain phase G; this is not scale performance acceptance.

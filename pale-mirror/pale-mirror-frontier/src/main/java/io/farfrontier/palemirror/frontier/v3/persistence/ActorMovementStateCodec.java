@@ -100,7 +100,7 @@ final class ActorMovementStateCodec {
 
     static Map<SubjectId, ActorMovement> read(DataInputStream input) throws IOException {
         int count = FrontierWorldStateCodec.readCount(input);
-        if (count > 4_096) throw new IllegalArgumentException("actor movement count exceeds retention bound");
+        if (count > io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_ACTORS) throw new IllegalArgumentException("actor movement count exceeds retention bound");
         Map<SubjectId, ActorMovement> movements = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             MovementOrder order = MovementOrderCodec.read(input);

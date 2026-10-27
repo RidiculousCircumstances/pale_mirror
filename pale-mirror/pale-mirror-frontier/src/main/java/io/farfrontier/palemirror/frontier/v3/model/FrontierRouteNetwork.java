@@ -40,6 +40,8 @@ public final class FrontierRouteNetwork {
                 .orElseThrow(() -> new IllegalArgumentException("settlement lacks its Hall access port")));
         BlockPosition origin = access.routeSurface().support();
         BlockPosition lane = origin.offset(0, 0, 36);
+        if (bootstrap.ruleset().worldLayout().roads() == FrontierWorldLayout.Roads.LOCAL_ACCESS)
+            return List.of(origin, lane, lane.offset(12, 0, 0));
         BlockPosition laneJunction = surveyedGridSurface(bootstrap, junctionX(bootstrap), lane.z());
         BlockPosition publicJunction = surveyedGridSurface(bootstrap, junctionX(bootstrap), bootstrap.bounds().minZ() + 512);
         return List.of(origin, lane, laneJunction, publicJunction);
@@ -128,24 +130,50 @@ public final class FrontierRouteNetwork {
         return footprint;
     }
 
+    private record RoadSegment(BlockPosition from, BlockPosition to) { }
+    private record RoadSegments(List<RoadSegment> segments,
+            Map<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region, List<RoadSegment>> regions) {
+        List<RoadSegment> near(int x, int z) {
+            return regions.getOrDefault(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(
+                    Math.floorDiv(x, 16), Math.floorDiv(z, 16)), List.of());
+        }
+    }
+    private static final ImmutableResultView<String, RoadSegments> SEGMENTS = new ImmutableResultView<>(4);
+    private static RoadSegments roadSegments(FrontierBootstrap bootstrap, RouteTopology topology) {
+        return SEGMENTS.get(List.of(bootstrap, topology.replacementRoutes()), "declared-road-segments", () -> {
+            var segments = new ArrayList<RoadSegment>();
+            for (var settlement : bootstrap.settlements()) {
+                var anchor = settlement.anchor(); int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
+                segments.add(new RoadSegment(surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ)));
+                segments.add(new RoadSegment(surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ)));
+                var route = topology.settlementWaypoints(bootstrap, settlement.id());
+                for (int i = 1; i < route.size(); i++) segments.add(new RoadSegment(route.get(i - 1), route.get(i)));
+            }
+            for (var link : bootstrap.ruleset().worldLayout().roadLinks()) {
+                var from = bootstrap.settlements().get(link.from()).anchor(); var to = bootstrap.settlements().get(link.to()).anchor();
+                segments.add(new RoadSegment(surveyedGridSurface(bootstrap, from.x() + 36, from.z() + 36),
+                        surveyedGridSurface(bootstrap, to.x() + 36, to.z() + 36)));
+            }
+            var regions = new java.util.HashMap<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region, List<RoadSegment>>();
+            for (var segment : segments) {
+                for (int x = Math.floorDiv(Math.min(segment.from().x(), segment.to().x()) - 1, 16);
+                        x <= Math.floorDiv(Math.max(segment.from().x(), segment.to().x()) + 1, 16); x++)
+                    for (int z = Math.floorDiv(Math.min(segment.from().z(), segment.to().z()) - 1, 16);
+                            z <= Math.floorDiv(Math.max(segment.from().z(), segment.to().z()) + 1, 16); z++)
+                        regions.computeIfAbsent(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(x, z),
+                                ignored -> new ArrayList<>()).add(segment);
+            }
+            var frozen = new java.util.HashMap<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region, List<RoadSegment>>();
+            regions.forEach((region, local) -> frozen.put(region, List.copyOf(local)));
+            return new RoadSegments(List.copyOf(segments), Map.copyOf(frozen));
+        });
+    }
+
     private static Set<BlockPosition> compileSurfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology");
         Set<BlockPosition> cells = new LinkedHashSet<>();
-        List<Settlement> settlements = bootstrap.settlements();
-        for (int index = 0; index < settlements.size(); index++) {
-            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
-            int laneZ = anchor.z() + 36; int laneX = anchor.x() + 36;
-            addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ));
-            addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ));
-            if (index % 4 != 3) addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, laneX, laneZ),
-                    surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ));
-            if (index < 8) addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, laneX, laneZ),
-                    surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36));
-        }
-        for (Settlement settlement : settlements) {
-            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < settlementRoute.size(); index++) addCarriagewaySegment(cells, settlementRoute.get(index - 1), settlementRoute.get(index));
-        }
+        for (var segment : roadSegments(bootstrap, topology).segments())
+            addCarriagewaySegment(cells, segment.from(), segment.to());
         // Long parallel roads cluster coordinate hashes in a flat Set.copyOf table.
         // Keep the immutable footprint in the shared spatial representation instead.
         return RegionalBlockSet.copyOf(cells);
@@ -171,21 +199,8 @@ public final class FrontierRouteNetwork {
     /** True when a canonical floor cell is occupied by the one-block visible route surface. */
     public static boolean isSurfaceCell(FrontierBootstrap bootstrap, RouteTopology topology, BlockPosition position) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(position, "route position");
-        List<Settlement> settlements = bootstrap.settlements();
-        for (int index = 0; index < settlements.size(); index++) {
-            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
-            int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
-            if (onCarriagewaySegment(position, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ))
-                    || onCarriagewaySegment(position, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ))
-                    || index % 4 != 3 && onCarriagewaySegment(position, surveyedGridSurface(bootstrap, laneX, laneZ),
-                    surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ))
-                    || index < 8 && onCarriagewaySegment(position, surveyedGridSurface(bootstrap, laneX, laneZ),
-                    surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36))) return true;
-        }
-        for (Settlement settlement : settlements) {
-            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < settlementRoute.size(); index++) if (onCarriagewaySegment(position, settlementRoute.get(index - 1), settlementRoute.get(index))) return true;
-        }
+        for (var segment : roadSegments(bootstrap, topology).near(position.x(), position.z()))
+            if (onCarriagewaySegment(position, segment.from(), segment.to())) return true;
         return false;
     }
 
@@ -200,23 +215,8 @@ public final class FrontierRouteNetwork {
     public static java.util.Optional<BlockPosition> surfaceAt(FrontierBootstrap bootstrap, RouteTopology topology, int x, int z) {
         Objects.requireNonNull(bootstrap, "route bootstrap"); Objects.requireNonNull(topology, "route topology");
         int highest = Integer.MIN_VALUE;
-        List<Settlement> settlements = bootstrap.settlements();
-        for (int index = 0; index < settlements.size(); index++) {
-            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
-            int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
-            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ)));
-            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ)));
-            if (index % 4 != 3) highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z,
-                    surveyedGridSurface(bootstrap, laneX, laneZ), surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ)));
-            if (index < 8) highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z,
-                    surveyedGridSurface(bootstrap, laneX, laneZ), surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36)));
-        }
-        for (Settlement settlement : settlements) {
-            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < settlementRoute.size(); index++) {
-                highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, settlementRoute.get(index - 1), settlementRoute.get(index)));
-            }
-        }
+        for (var segment : roadSegments(bootstrap, topology).near(x, z))
+            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, segment.from(), segment.to()));
         return highest == Integer.MIN_VALUE ? java.util.Optional.empty() : java.util.Optional.of(new BlockPosition(x, highest, z));
     }
 

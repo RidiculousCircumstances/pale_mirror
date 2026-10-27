@@ -14,7 +14,7 @@ final class ActorMovementStateSupport {
                          HumanPopulation people, ExactInventory inventory, ActorExecutionState executions,
                          ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
                          io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest, Map<SubjectId, ProductionJob> productionJobs) {
-        if (movements.size() > 4_096) throw new IllegalArgumentException("actor movement retention bound exceeded");
+        if (movements.size() > SimulationCapacity.MAX_ACTORS) throw new IllegalArgumentException("actor movement retention bound exceeded");
         var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans, forest, productionJobs);
         for (var id : executions.current(ActorActivityKind.SERVICE_EXIT).values()) {
             var movement = movements.get(id.actorId());

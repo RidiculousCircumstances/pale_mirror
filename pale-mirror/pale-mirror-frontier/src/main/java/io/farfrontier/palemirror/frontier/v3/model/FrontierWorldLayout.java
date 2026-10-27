@@ -4,10 +4,34 @@ import java.util.*;
 
 /** Explicit immutable genesis placement. All geometry, recovery and worldgen
  * consumers receive the same ruleset value; coordinates are not inferred from IDs. */
-public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements) {
+public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements,
+        List<String> settlementNames, Roads roads, Optional<Set<Integer>> extractionProducers) {
+    public enum Roads { HISTORICAL_GRID, LOCAL_ACCESS }
+    public record RoadLink(int from, int to) { }
+    private static final List<String> HISTORICAL_NAMES = List.of("Northwatch", "Stonefield", "Dawnbridge", "Redwillow",
+            "Ashcross", "Hearthvale", "Clearwater", "Ironmeadow", "Southgate", "Mossbrook", "Westhaven", "Sunreach");
+    public FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements, List<String> names, Roads roads) {
+        this(bounds, settlements, names, roads, Optional.empty());
+    }
+    public FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements) {
+        this(bounds, settlements, names(settlements.size()), settlements.size() == 12 ? Roads.HISTORICAL_GRID : Roads.LOCAL_ACCESS);
+    }
+    private static List<String> names(int count) {
+        var result = new ArrayList<String>();
+        for (int i = 0; i < count; i++) result.add(i < HISTORICAL_NAMES.size() ? HISTORICAL_NAMES.get(i) : "Frontier " + (i + 1));
+        return List.copyOf(result);
+    }
     public FrontierWorldLayout {
         Objects.requireNonNull(bounds); settlements = List.copyOf(settlements);
-        if (settlements.size() != 12 || settlements.stream().distinct().count() != settlements.size()
+        settlementNames = List.copyOf(settlementNames); Objects.requireNonNull(roads);
+        extractionProducers = Objects.requireNonNull(extractionProducers).map(Set::copyOf);
+        int count = settlements.size();
+        if (extractionProducers.stream().flatMap(Set::stream).anyMatch(i -> i < 0 || i >= count))
+            throw new IllegalArgumentException("mineral content names an absent settlement placement");
+        if (settlements.isEmpty() || settlements.size() > SimulationCapacity.MAX_SETTLEMENTS
+                || settlementNames.size() != settlements.size() || settlementNames.stream().anyMatch(String::isBlank)
+                || settlementNames.stream().distinct().count() != settlementNames.size()
+                || roads == Roads.HISTORICAL_GRID && settlements.size() != 12 || settlements.stream().distinct().count() != settlements.size()
                 || settlements.stream().anyMatch(p -> p.y() != 0 || !bounds.contains(p)))
             throw new IllegalArgumentException("invalid graybox settlement layout");
     }
@@ -23,8 +47,36 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
                 {-1480,0},{-600,0},{440,0},{1600,0},
                 {-1480,1480},{-600,1480},{440,1480},{1600,1480}}));
     }
+    /** Sparse local pads; long-distance walking consumes regional terrain, not a pre-expanded world road grid. */
+    public static FrontierWorldLayout scale() {
+        var positions = new ArrayList<BlockPosition>();
+        for (int row = 0; row < 10; row++) for (int col = 0; col < 10; col++) {
+            int jitterX = Math.floorMod(row * 317 + col * 173, 1_201) - 600;
+            int jitterZ = Math.floorMod(row * 211 + col * 397, 1_401) - 700;
+            positions.add(new BlockPosition(-21_000 + col * 4_500 + jitterX, 0, -21_000 + row * 4_500 + jitterZ));
+        }
+        var producers = new HashSet<Integer>();
+        // Authored content repeats the twelve environmental sectors, independently of ID ordering.
+        for (int i = 0; i < positions.size(); i++) if (Set.of(0, 1, 3, 5, 7, 10).contains(i % 12)) producers.add(i);
+        return new FrontierWorldLayout(new WorldBounds(-50_000, -50_000, 100_000, 100_000), positions, names(100),
+                Roads.LOCAL_ACCESS, Optional.of(producers));
+    }
+    public List<RoadLink> roadLinks() {
+        if (roads == Roads.LOCAL_ACCESS) return List.of();
+        var result = new ArrayList<RoadLink>();
+        for (int i = 0; i < 12; i++) {
+            if (i % 4 != 3) result.add(new RoadLink(i, i + 1));
+            if (i < 8) result.add(new RoadLink(i, i + 4));
+        }
+        return List.copyOf(result);
+    }
     private static List<BlockPosition> positions(int[][] coordinates) {
         return Arrays.stream(coordinates).map(p -> new BlockPosition(p[0], 0, p[1])).toList();
     }
-    String canonicalText() { return bounds + ":" + settlements; }
+    String canonicalText() {
+        String base = bounds + ":" + settlements;
+        return roads == Roads.HISTORICAL_GRID && settlementNames.equals(HISTORICAL_NAMES) && extractionProducers.isEmpty() ? base
+                : base + ":names=" + settlementNames + ":roads=" + roads + ":extraction="
+                    + extractionProducers.map(values -> values.stream().sorted().toList().toString()).orElse("historical-stride");
+    }
 }

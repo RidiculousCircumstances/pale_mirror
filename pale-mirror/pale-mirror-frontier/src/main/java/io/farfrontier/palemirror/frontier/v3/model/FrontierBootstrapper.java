@@ -11,11 +11,6 @@ import java.util.Locale;
 
 /** Deterministic generator for the single supported fresh-world Frontier v3 profile. */
 public final class FrontierBootstrapper {
-    private static final String[] NAMES = {
-            "Northwatch", "Stonefield", "Dawnbridge", "Redwillow",
-            "Ashcross", "Hearthvale", "Clearwater", "Ironmeadow",
-            "Southgate", "Mossbrook", "Westhaven", "Sunreach"
-    };
     private FrontierBootstrapper() { }
 
     public static FrontierBootstrap create(WorldId worldId, long seed) {
@@ -31,8 +26,8 @@ public final class FrontierBootstrapper {
     public static FrontierBootstrap create(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
         java.util.Objects.requireNonNull(ruleset, "ruleset");
         java.util.Objects.requireNonNull(terrain, "terrain surface plan");
-        List<Settlement> settlements = new ArrayList<>(12);
-        for (int index = 0; index < NAMES.length; index++) settlements.add(settlement(seed, index, ruleset, terrain));
+        List<Settlement> settlements = new ArrayList<>(ruleset.worldLayout().settlements().size());
+        for (int index = 0; index < ruleset.worldLayout().settlements().size(); index++) settlements.add(settlement(seed, index, ruleset, terrain));
         SubjectId hiveId = new SubjectId("hive:frontier");
         List<HiveNest> provisionalNests = List.of(
                 new HiveNest(new SubjectId("nest:seed-west"), hiveId, new BlockPosition(-420, 0, 420)),
@@ -138,6 +133,6 @@ public final class FrontierBootstrapper {
             people.add(new Resident(new SubjectId("resident:" + (index + 1) + "-" + (ordinal + 1)), settlementId,
                     ResidentRole.values()[ordinal % ResidentRole.values().length], placements.get(ordinal)));
         }
-        return new Settlement(settlementId, NAMES[index], anchor, people, structures);
+        return new Settlement(settlementId, ruleset.worldLayout().settlementNames().get(index), anchor, people, structures);
     }
 }

@@ -24,7 +24,7 @@ final class GoodsParticipantStateCodec {
         for (int i = 0; i < count; i++) {
             var party = party(in); var policy = GoodsPolicyKind.fromWireTag(in.readUnsignedByte()); var home = new SubjectId(in.readUTF());
             var peers = new ArrayList<GoodsParticipant.Counterparty>();
-            for (int n = bounded(in, 16); n > 0; n--) peers.add(new GoodsParticipant.Counterparty(party(in), new SubjectId(in.readUTF())));
+            for (int n = bounded(in, GoodsParticipant.MAX_KNOWN); n > 0; n--) peers.add(new GoodsParticipant.Counterparty(party(in), new SubjectId(in.readUTF())));
             var participant = new GoodsParticipant(party, policy, home, peers, in.readLong(), in.readUTF(), in.readLong(), ParticipantPriceCodec.read(in));
             if (result.put(party.id(), participant) != null) throw new IllegalArgumentException("duplicate saved participant");
         }

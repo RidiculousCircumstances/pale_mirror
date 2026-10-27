@@ -16,9 +16,9 @@ public final class StrategicPlanState {
     private static ObjectiveSlot slot(StrategicObjective objective) {
         return new ObjectiveSlot(objective.ownerId(), objective.lane(), objective.resourceSiteTarget());
     }
-    static final int MAX_OBJECTIVES = 128;
+    public static final int MAX_OBJECTIVES = SimulationCapacity.MAX_SETTLEMENTS * 16;
     private static final ImmutableInvariantCheck<Void> VALIDATION = new ImmutableInvariantCheck<>();
-    static final int MAX_TASKS = 512;
+    public static final int MAX_TASKS = SimulationCapacity.MAX_SETTLEMENTS * 64;
     static final int MAX_ROUTE_PATROLS = 128;
     static final int MAX_SETTLEMENT_ASSAULTS = 32;
     private final Map<SubjectId, StrategicObjective> objectives;

@@ -191,7 +191,7 @@ public final class KnownPedestrianRouteKnowledge {
         KnownPedestrianRouteKnowledge result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
                 accessSurvey(state, KnownPedestrianGround.forFrontier(state, sites), passageClearance(settlement, passages)),
                 key, java.util.Map.of(), raisedDepartureSupports(state));
-        if (VIEWS.size() >= 64) VIEWS.clear();
+        if (VIEWS.size() >= SimulationCapacity.MAX_SETTLEMENTS * 4) VIEWS.remove(VIEWS.keySet().iterator().next());
         VIEWS.put(key, result);
         return result;
     }

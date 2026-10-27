@@ -41,7 +41,8 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         }
         if (bounds.width() != ruleset.worldLayout().bounds().width() || bounds.depth() != ruleset.worldLayout().bounds().depth())
             throw new IllegalArgumentException("bootstrap bounds disagree with declared world layout");
-        if (settlements.size() != 12) throw new IllegalArgumentException("Frontier v3 bootstrap requires exactly 12 settlements");
+        if (settlements.size() != ruleset.worldLayout().settlements().size())
+            throw new IllegalArgumentException("bootstrap cardinality differs from its declared world layout");
         Set<SubjectId> ids = new HashSet<>();
         for (Settlement settlement : settlements) {
             if (!bounds.contains(settlement.anchor())) throw new IllegalArgumentException("settlement anchor is outside frontier bounds");

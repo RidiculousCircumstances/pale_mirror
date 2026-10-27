@@ -34,7 +34,7 @@ public final class GrayboxAgriculture {
         if (layout.equals(compact)) return RULES;
         var regions = new java.util.ArrayList<Region>();
         for (int i = 0; i < layout.settlements().size(); i++) {
-            var previous = compact.settlements().get(i); var current = layout.settlements().get(i);
+            var previous = compact.settlements().get(i % compact.settlements().size()); var current = layout.settlements().get(i);
             regions.add(new Region(current.x() - 320, current.z() - 320, current.x() + 320, current.z() + 320,
                     RULES.biomeAt(previous.x(), previous.z())));
         }

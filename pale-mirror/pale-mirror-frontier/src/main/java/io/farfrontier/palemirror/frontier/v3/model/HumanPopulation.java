@@ -22,8 +22,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                               Map<SubjectId, SettlementDailySchedule> schedules,
                               Map<SubjectId, ResidentMeal> meals,
                               Map<SubjectId, ResidentMealResourceObligation> mealResourceObligations) {
-    public static final int MAX_HOUSEHOLDS = 1_024;
-    public static final int MAX_RESIDENTS = 4_096;
+    public static final int MAX_HOUSEHOLDS = SimulationCapacity.MAX_HOUSEHOLDS;
+    public static final int MAX_RESIDENTS = SimulationCapacity.MAX_RESIDENTS;
     public static final int MAX_BIRTH_JOBS = 1_024;
     public static final int MAX_MIGRATIONS = 256;
     /** One retained provision owner per inhabited settlement; a settlement necessarily has a household. */

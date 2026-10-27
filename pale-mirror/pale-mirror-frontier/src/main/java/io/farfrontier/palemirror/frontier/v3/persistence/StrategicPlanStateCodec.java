@@ -279,6 +279,6 @@ public final class StrategicPlanStateCodec {
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeSubject(DataOutputStream output, SubjectId id) throws IOException { FrontierWorldStateCodec.writeString(output, id.value()); }
     private static SubjectId readSubject(DataInputStream input) throws IOException { return new SubjectId(FrontierWorldStateCodec.readString(input)); }
-    private static void writeCount(DataOutputStream output, int count) throws IOException { if (count > 512) throw new IllegalArgumentException("too many strategic plan entries"); output.writeShort(count); }
-    private static int readCount(DataInputStream input) throws IOException { int count = input.readUnsignedShort(); if (count > 512) throw new IllegalArgumentException("too many strategic plan entries"); return count; }
+    private static void writeCount(DataOutputStream output, int count) throws IOException { if (count > StrategicPlanState.MAX_TASKS) throw new IllegalArgumentException("too many strategic plan entries"); output.writeShort(count); }
+    private static int readCount(DataInputStream input) throws IOException { int count = input.readUnsignedShort(); if (count > StrategicPlanState.MAX_TASKS) throw new IllegalArgumentException("too many strategic plan entries"); return count; }
 }

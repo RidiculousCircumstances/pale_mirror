@@ -8,7 +8,7 @@ import java.util.Objects;
 
 /** Bounded owner registry for settlement and whole-Hivemind decision scopes. */
 public final class DecisionAuthorityState {
-    private static final int MAX_AUTHORITIES = 13;
+    private static final int MAX_AUTHORITIES = SimulationCapacity.MAX_SETTLEMENTS + 1;
     private record InitialImage(FrontierBootstrap bootstrap, DecisionAuthorityState state) { }
     // The full-state audit needs the same immutable declared owner/policy roster. Rebuilding
     // every settlement's initial staffing per transaction supplies no new validation evidence.

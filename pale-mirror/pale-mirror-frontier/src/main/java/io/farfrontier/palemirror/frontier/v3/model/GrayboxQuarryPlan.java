@@ -11,6 +11,9 @@ public final class GrayboxQuarryPlan {
     private GrayboxQuarryPlan() { }
     public static List<Settlement> producerSettlements(FrontierBootstrap bootstrap) {
         if (!bootstrap.ruleset().extraction().enabled()) return List.of();
+        var declared = bootstrap.ruleset().worldLayout().extractionProducers();
+        if (declared.isPresent()) return declared.orElseThrow().stream().sorted()
+                .map(index -> bootstrap.settlements().get(index)).toList();
         var settlements = bootstrap.settlements().stream().sorted(Comparator.comparing(Settlement::id)).toList();
         var producers = new ArrayList<Settlement>();
         for (int index = 0; index < settlements.size(); index += bootstrap.ruleset().extraction().producerStride())
