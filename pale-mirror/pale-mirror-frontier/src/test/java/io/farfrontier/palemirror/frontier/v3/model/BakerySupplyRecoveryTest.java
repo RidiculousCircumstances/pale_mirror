@@ -9,6 +9,35 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakerySupplyRecoveryTest {
+    @Test void forecastChargesTheSameFullBatchWorkAsTheStationClock() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:bread-capacity-units"), 126,
+                FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30")));
+        var home = state.bootstrap().settlements().getFirst().id(); var recipe = BakeryRecipes.bread(state);
+        var station = AutomaticStationProduction.stations(state, home, recipe).getFirst().productionStation().orElseThrow();
+        int batches = ProductionBatchSizing.maximumRecipeBatches(recipe);
+        int inputs = Math.multiplyExact(batches, recipe.inputUnitsPerBatch());
+        var order = new SubjectId("work:batch-clock-fixture");
+        var operation = new ProductionOperation(new ProductionOperation.Id(order), station.id(), order, recipe.id(),
+                new ProductionOperation.FungibleInput(new SubjectId("custody:batch-clock-fixture"),
+                        Map.of(new SubjectId("lot:batch-clock-fixture"), inputs), Map.of()),
+                new SubjectId("lot:batch-clock-output"), inputs, recipe.outputForInput(inputs), Optional.empty(), false,
+                new ProductionOperation.SettlementInitiator(home), Optional.empty());
+        var rules = state.bootstrap().ruleset();
+        var clock = ProductionStationClock.next(rules.production(), rules.workCatalog(), operation, 0,
+                Optional.of(new ProductionStationClock.Attendance(1000, 100000)), Long.MAX_VALUE);
+        var definition = rules.workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
+        int speed = SupplyLabourCapacity.potential(state, home, ResidentWorkKind.PRODUCTION, definition.capability()).stream()
+                .mapToInt(worker -> ResidentWorkStatistics.speedPermille(worker, definition, rules.workCatalog())).min().orElseThrow();
+        assertEquals(Math.ceilDiv(clock.requiredMilliWork(), speed), BakeryProcessingForecast.valuation(state, home).orElseThrow().labourTicks(),
+                "one-operation capacity must pay for all recipes in that operation, not one loaf");
+        long availableLabour = BakeryProcessingForecast.capacity(state, home, new SupplyPlanningWindow(24000))
+                .orElseThrow().labourTicks();
+        assertTrue(state.humanPopulation().residents().values().stream()
+                .filter(worker -> worker.settlementId().equals(home) && worker.capability(definition.capability()) > 0)
+                .mapToInt(worker -> ResidentWorkStatistics.speedPermille(worker, definition, rules.workCatalog()))
+                .anyMatch(workerSpeed -> Math.ceilDiv(clock.requiredMilliWork(), workerSpeed) == availableLabour),
+                "available capacity must match a real worker's full operation; eligibility may change the selected speed");
+    }
     @Test void batchSizingDoesNotRequirePrepaidFuelAndNeverConsumesOrBorrowsIt() {
         var state = BakeryPartialBatchTest.fixture(63, FrontierRulesets.marketQuarryGraybox());
         var home = state.bootstrap().settlements().getFirst();

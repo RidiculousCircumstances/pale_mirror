@@ -53,8 +53,7 @@ public final class AutomaticStationProduction {
         var account = candidate.account(); var machine = state.productionStations().require(stationId);
         var ledger = state.inventory().fungibleResources();
         long missing = ProductionStockDemand.read(state, record.ownerId(), recipe.product().itemKind(), tick).missing();
-        if (missing < recipe.product().quantity()) return Optional.empty();
-        int maximum = (int) Math.min(ProductionBatchSizing.maximumRecipeBatches(recipe), Math.min(policy.maximumBatches(), missing / recipe.product().quantity()));
+        int maximum = ProductionBatchSizing.batchesForDemand(recipe, missing, policy.maximumBatches());
         for (int batches = maximum; batches > 0; batches--) {
             var selected = ProductionMaterialSupply.atAccount(ledger, account, record.ownerId(), recipe, batches);
             if (selected.isEmpty() || selected.orElseThrow().sources().stream().anyMatch(source -> !FungibleResourceCustodySupport.canReserve(state, source.selection()))) continue;

@@ -93,6 +93,23 @@ class ForestryFoundationTest {
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         assertTrue(ForestryStockDemand.requested(state, home, kind, Optional.empty()));
     }
+    @Test void demandDrivenWoodKeepsRecipesButDoesNotCreateAnUnrequestedStockpile() {
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:demand-driven-wood"), 126,
+                FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30"));
+        var state = FrontierWorldState.initial(bootstrap); var home = new SubjectId("settlement:7");
+        assertEquals(0, bootstrap.ruleset().forestry().reserveItems());
+        assertEquals(0, bootstrap.ruleset().forestry().resumeBelowItems());
+        assertEquals(0, ForestryStockDemand.target(state, home, "minecraft:oak_log"));
+        assertFalse(ForestryStockDemand.requested(state, home, "minecraft:oak_log", Optional.empty()));
+        assertEquals(2, bootstrap.ruleset().production().stockPolicies().size(), "recipe authority and capacity must remain installed");
+        assertTrue(bootstrap.ruleset().production().stockPolicies().stream().allMatch(policy -> policy.outputReserve() == 0));
+        var facts = new AttendedStockReserveSupply().read(state, home);
+        assertEquals(2, facts.flows().size(), "downstream demand still expands into real raw material");
+        assertTrue(facts.needs().values().stream().allMatch(need -> need.immediate() == 0
+                && need.consumption().equals(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.Rate.ZERO)));
+        assertTrue(AttendedStockProduction.ready(state, home, 0).isEmpty());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
     @Test void axeUsesExistingIndividualManufactureRepairAndExplicitChopCapability() {
         var rules = BOOTSTRAP.ruleset(); var axe = rules.tools().require("minecraft:iron_axe");
         assertTrue(axe.supports(new ToolRequirement(ToolAbilities.CHOP, 1, 1)));

@@ -167,7 +167,7 @@ class FrontierV3FixtureCatalogTest {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
             assertTrue(profile.provider().length() > 0);
             assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front",
-                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22", "tool-graybox", "forestry-r28", "wood-production-r29").contains(profile.rulesetId()));
+                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22", "tool-graybox", "forestry-r28", "wood-production-r29", "wood-demand-r30").contains(profile.rulesetId()));
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
             String world = "frontier:catalog-" + profile.id();
@@ -184,6 +184,7 @@ class FrontierV3FixtureCatalogTest {
                 case "market-quarry" -> FrontierRulesets.marketQuarryGraybox();
                 case "quarry-r22" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r22");
                 case "wood-production-r29" -> FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29");
+                case "wood-demand-r30" -> FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30");
                 case "forestry-r28" -> FrontierRulesets.installed("frontier-v3-forestry-graybox-r28");
                 default -> throw new AssertionError("undeclared fixture ruleset " + profile.rulesetId());
             };

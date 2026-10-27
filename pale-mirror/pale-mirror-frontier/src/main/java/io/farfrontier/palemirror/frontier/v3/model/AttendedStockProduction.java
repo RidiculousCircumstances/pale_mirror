@@ -11,7 +11,7 @@ public final class AttendedStockProduction {
         for (var policy : catalog.stockPolicies().stream().sorted(Comparator.comparing(value -> value.recipeId().value())).toList()) {
             var recipe = catalog.require(policy.recipeId());
             long missing = ProductionStockDemand.read(state, home, recipe.product().itemKind(), tick).missing();
-            int maximum = (int) Math.min(policy.maximumBatches(), Math.min(ProductionBatchSizing.maximumRecipeBatches(recipe), missing / recipe.product().quantity()));
+            int maximum = ProductionBatchSizing.batchesForDemand(recipe, missing, policy.maximumBatches());
             for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
                 var station = record.productionStation().orElseThrow();
                 if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, station.facilityId())

@@ -6,6 +6,16 @@ import java.util.*;
 
 /** Authored vanilla-compatible content. Recipe execution never branches on these material names. */
 final class GrayboxWoodProduction {
+    static FrontierRuleset demandDriven(FrontierRuleset base) {
+        var prior = base.production();
+        var production = new ProductionCatalog(prior.recipes(), prior.fuels(), prior.equipment(), prior.automaticPolicies(),
+                prior.stockPolicies().stream().map(policy -> new ProductionCatalog.StockPolicy(
+                        policy.recipeId(), 0, policy.maximumBatches())).toList());
+        return new FrontierRuleset("frontier-v3-wood-demand-graybox-r30", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(),
+                base.execution(), production, base.fields(), base.tools(), base.worldLayout(), base.forestry().withReserve(0, 0));
+    }
     static FrontierRuleset extend(FrontierRuleset base) {
         var recipes = new ArrayList<ProductionRecipe>();
         for (var recipe : base.production().recipes()) {

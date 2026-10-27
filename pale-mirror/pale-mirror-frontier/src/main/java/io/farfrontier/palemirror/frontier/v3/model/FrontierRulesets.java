@@ -61,6 +61,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset DISTANT_TOOL_GRAYBOX = operatingPrices(PREVIOUS_DISTANT_TOOL_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_FORESTRY_GRAYBOX = GrayboxForestryProduction.extend(DISTANT_TOOL_GRAYBOX);
     private static final FrontierRuleset FORESTRY_GRAYBOX = GrayboxWoodProduction.extend(PREVIOUS_FORESTRY_GRAYBOX);
+    private static final FrontierRuleset DEMAND_DRIVEN_WOOD_GRAYBOX = GrayboxWoodProduction.demandDriven(FORESTRY_GRAYBOX);
     /** New-world startup references match current recipes; historical profiles stay immutable. */
     private static FrontierRuleset operatingPrices(FrontierRuleset base) {
         var trade = base.goodsTrade().withPriceSeeds(GoodsPolicyKind.PUBLIC_SETTLEMENT,
@@ -93,6 +94,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(DEMAND_DRIVEN_WOOD_GRAYBOX.id(), DEMAND_DRIVEN_WOOD_GRAYBOX),
             Map.entry(FORESTRY_GRAYBOX.id(), FORESTRY_GRAYBOX),
             Map.entry(PREVIOUS_FORESTRY_GRAYBOX.id(), PREVIOUS_FORESTRY_GRAYBOX),
             Map.entry(TOOL_GRAYBOX.id(), TOOL_GRAYBOX),

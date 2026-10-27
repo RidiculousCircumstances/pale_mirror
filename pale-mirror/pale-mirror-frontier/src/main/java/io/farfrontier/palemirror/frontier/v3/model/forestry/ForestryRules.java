@@ -20,6 +20,10 @@ public record ForestryRules(List<Patch> patches, int reserveItems, int resumeBel
         return new ForestryRules(patches, reserveItems, resumeBelowItems, workersPerSettlement, cargoItems, reviewTicks, tool, harvests,
                 Optional.of(new StarterEquipment(kind, quantity)));
     }
+    public ForestryRules withReserve(int target, int resumeBelow) {
+        return new ForestryRules(patches, target, resumeBelow, workersPerSettlement, cargoItems, reviewTicks,
+                tool, harvests, starterEquipment);
+    }
     public record Patch(String id, SubjectId knownBy, int innerRadius, int outerRadius,
                         int spacing, int densityPermille, long salt) {
         public Patch {
@@ -35,7 +39,8 @@ public record ForestryRules(List<Patch> patches, int reserveItems, int resumeBel
     public ForestryRules {
         patches = List.copyOf(patches); starterEquipment = Objects.requireNonNull(starterEquipment); Objects.requireNonNull(tool); harvests = List.copyOf(harvests);
         if (patches.size() > 32 || patches.stream().map(Patch::id).distinct().count() != patches.size()
-                || reserveItems < 1 || reserveItems > 65536 || resumeBelowItems < 1 || resumeBelowItems > reserveItems
+                || reserveItems < 0 || reserveItems > 65536 || resumeBelowItems < 0 || resumeBelowItems > reserveItems
+                || reserveItems > 0 && resumeBelowItems == 0
                 || workersPerSettlement < 1 || workersPerSettlement > 8 || cargoItems < 1 || cargoItems > 64
                 || reviewTicks < 1 || harvests.isEmpty() || harvests.size() > 32
                 || harvests.stream().map(TreeHarvestProfile::id).distinct().count() != harvests.size()

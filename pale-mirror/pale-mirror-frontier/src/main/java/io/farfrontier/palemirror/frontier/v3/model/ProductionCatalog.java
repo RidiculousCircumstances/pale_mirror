@@ -8,11 +8,11 @@ import java.util.Set;
 /** Ruleset-pinned recipe and fuel properties. No inventories, jobs or machine state. */
 public record ProductionCatalog(List<ProductionRecipe> recipes, List<Fuel> fuels, List<ProductionEquipment> equipment,
                                 List<AutomaticPolicy> automaticPolicies, List<StockPolicy> stockPolicies) {
-    /** Institution demand for an attended stock recipe; the existing worker owns fulfillment. */
+    /** Institution authorizes a recipe; zero reserve means only actual planned demand. */
     public record StockPolicy(ProductionRecipe.Id recipeId, int outputReserve, int maximumBatches) {
         public StockPolicy {
             Objects.requireNonNull(recipeId);
-            if (outputReserve < 1 || outputReserve > 4096 || maximumBatches < 1 || maximumBatches > 64)
+            if (outputReserve < 0 || outputReserve > 4096 || maximumBatches < 1 || maximumBatches > 64)
                 throw new IllegalArgumentException("invalid attended stock policy");
         }
     }

@@ -43,6 +43,7 @@ public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
     private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(Map.entry("wood-production-r29", FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
+            Map.entry("wood-demand-r30", FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30")),
             Map.entry("production", FrontierRulesets.production()),
             Map.entry("tool-graybox", FrontierRulesets.toolGraybox()),
             Map.entry("expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2")),
@@ -57,7 +58,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("equipmentRepair", (world, seed) -> equipmentWorkConfiguration(world, seed, true)),
             Map.entry("equipmentManufacture", (world, seed) -> equipmentWorkConfiguration(world, seed, false)),
-            Map.entry("woodProductionWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("wood-production-r29"))),
+            Map.entry("woodProductionWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("wood-demand-r30"))),
             Map.entry("forestryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("forestry-r28"))),
             Map.entry("forestryEquipped", ForestryFixture::configuration),
             Map.entry("forestryReserve", ForestryFixture::reserveConfiguration),

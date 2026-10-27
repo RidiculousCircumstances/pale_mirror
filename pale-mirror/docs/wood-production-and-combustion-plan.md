@@ -220,3 +220,44 @@ this live run does not claim a second server restart or formal human M3.
 Actual forestry jobs were observed with their distinct starter axes; a complete
 autonomous NPC wood-stock loop was not observed in this short acceptance run.
 The three broad-native-smoke failures above remain openly recorded.
+
+
+## Demand-driven follow-up (2026-10-27)
+
+The new explicit `frontier-v3-wood-demand-graybox-r30` profile removes the fixed
+256-log, 64-plank and 64-stick buffers. It retains recipe authorizations, batch
+bounds and complete upstream dependency flows: accepted economic production
+ceilings, actual tool/material needs and selected fuel demand decide what is
+produced. Zero stock policy is authorization without an unconditional stockpile.
+Historical r29 content stays immutable; r30 requires a fresh disposable world.
+
+A positive demand smaller than a recipe output still admits one whole recipe.
+For example, two needed sticks require one four-stick recipe; floor division
+previously admitted zero batches. Both attended and automatic stock admission
+use the common bounded batch-sizing rule. The small recipe surplus is real
+inventory, not a manufactured reserve target.
+
+The audit also found a unit contradiction in bakery supply forecasts: capacity
+counted up to21 recipes per operation but charged work for only one recipe.
+Valuation, capacity and reserve timing now charge the same full-operation work
+as ProductionStationClock. Worker capability/schedule still determine elapsed
+processing; no fabricated delivery timeout is added. Movement and service delay
+remain separate and are not claimed to be covered by this processing estimate.
+
+Retained pre-change runtime evidence is under
+`build/wood-demand-and-latency/` and `build/server-economy-r275b-check/`.
+Minecraft maintained20TPS while canonical simulation advanced about17.21ticks/s
+and its pending ordinary ticks rose2100->2824 over260seconds. Long bakery pickup/
+load/delivery phases were observed despite available grain/fuel. Source confirms
+StationWork COLD movement advances one cell with a20-tick work wake, rather than
+using the shared timed ActorMovement execution. It uses shared path geometry;
+this is a temporal execution discrepancy, not proof of a separate pathfinder.
+A coherent movement-owner migration remains a separate structural correction.
+
+A45-second same-JVM JFR found costly economic reviews surveying retained field/
+forest terrain, many canonical commits/validation samples, and5.34seconds in
+recorded journal FileForce events. Navigation workers were mostly parked. Server
+parks in this recording were natural tick waiting, not blocking future joins.
+These are measured contributors, not a complete additive attribution of the
+backlog; cache eviction rate and exact preparation/commit gate impact remain
+unconfirmed. No COLD/HOT speedup claim follows from the demand/forecast fix.

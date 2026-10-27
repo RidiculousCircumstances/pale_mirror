@@ -49,4 +49,14 @@ class ProductionMaterialAllocationTest {
         assertThrows(IllegalArgumentException.class, () -> recipe.withNativeCraftingRecipes(List.of()));
         assertThrows(IllegalArgumentException.class, () -> recipe.withNativeCraftingRecipes(List.of(original, original)));
     }
+    @Test void aSmallHandleNeedAdmitsOneWholeRecipeWithoutAStockReserve() {
+        var recipe = new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:small-stick-demand"),
+                ProductionStationSpec.Capability.WOODWORKING, new ProductionRecipe.Ingredient(Set.of("minecraft:oak_planks"), 2),
+                new ProductionRecipe.Product("minecraft:stick", 4), false, ProductionRecipe.ProcessingMode.ATTENDED);
+        assertEquals(1, ProductionBatchSizing.batchesForDemand(recipe, 2, 16),
+                "the two handles needed for one tool must not wait for a four-item stock target");
+        assertEquals(0, ProductionBatchSizing.batchesForDemand(recipe, 0, 16));
+        assertEquals(2, ProductionBatchSizing.batchesForDemand(recipe, 5, 16));
+        assertEquals(16, ProductionBatchSizing.batchesForDemand(recipe, Long.MAX_VALUE, 16));
+    }
 }
