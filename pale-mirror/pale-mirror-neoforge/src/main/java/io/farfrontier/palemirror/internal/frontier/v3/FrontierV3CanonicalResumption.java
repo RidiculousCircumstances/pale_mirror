@@ -26,7 +26,7 @@ final class FrontierV3CanonicalResumption {
         if (TURNS.containsKey(server)) throw new IllegalStateException("canonical resumption already bound");
         var turn = new FrontierV3ReadyTurn(task -> server.tell(new TickTask(server.getTickCount(), task)),
                 () -> resume(server, runtime, admitted, physicalContinuation, checkFailure));
-        TURNS.put(server, turn); runtime.onReady(turn::signal);
+        TURNS.put(server, turn); runtime.onReady(turn::signal, turn::diagnostic);
     }
     /** No native-tick reentry, invented time, physical replay or renewed allowance. */
     private static void resume(MinecraftServer server, FrontierV3ServerRuntime<?, ?> runtime,

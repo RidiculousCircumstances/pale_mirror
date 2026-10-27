@@ -337,16 +337,20 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         String base = preparations.diagnostic(engine != null && engine.hasPendingCalculation());
         return base.substring(0, base.length() - 1) + ",\"commandInvalidations\":" + commandPreparationInvalidations
                 + ",\"lastInvalidatingPayload\":" + new com.google.gson.Gson().toJson(lastPreparationInvalidator)
+                + ",\"readyDelivery\":" + readyDeliveryDiagnostic.get()
                 + ",\"ordinaryBudgetExhaustions\":" + new com.google.gson.Gson().toJson(ordinaryBudgetExhaustions)
                 + ",\"environmentalSamples\":" + environmentalSamples + ",\"yieldedEnvironmentalSamples\":" + yieldedEnvironmentalSamples + "}";
     }
 
-    void onReady(Runnable listener) {
+    void onReady(Runnable listener) { onReady(listener, () -> "null"); }
+    void onReady(Runnable listener, java.util.function.Supplier<String> deliveryDiagnostic) {
+        readyDeliveryDiagnostic = Objects.requireNonNull(deliveryDiagnostic);
         readiness = Objects.requireNonNull(listener);
         preparations.onReady(listener);
         if (store instanceof FrontierFileStore files) files.onReady(listener);
     }
     private Runnable readiness = () -> { };
+    private java.util.function.Supplier<String> readyDeliveryDiagnostic = () -> "null";
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
     private final java.util.Map<String, Long> ordinaryBudgetExhaustions = new java.util.TreeMap<>();
     private Long ordinaryBoundary;
