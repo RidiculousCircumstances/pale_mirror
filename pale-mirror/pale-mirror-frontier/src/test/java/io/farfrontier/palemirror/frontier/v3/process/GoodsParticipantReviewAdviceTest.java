@@ -12,9 +12,8 @@ class GoodsParticipantReviewAdviceTest {
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
         var home = state.bootstrap().settlements().get(6).id();
         var action = GoodsParticipantProcess.review(home, 4000); var at = new SimInstant(4000);
-        var completion = FrontierWorldProcessCatalog.adviceScheduled(
-                io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry(),
-                state, action, at).orElseThrow().prepare();
+        var completion = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(state.bootstrap())
+                .scheduledPlanner().advice(state, action, at).orElseThrow().prepare();
         assertTrue(completion.revalidate(state, new SimInstant(4001)).isPresent());
         var resident = state.humanPopulation().residents().values().iterator().next();
         var body = state.actorLocations().get(resident.id()).body();

@@ -10,6 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap;
@@ -72,14 +74,19 @@ final class FrontierWorldConfigurationFactory {
                 return FrontierWorldProcessCatalog.adviceScheduled(registry, state, action, instant).map(advice -> () -> {
                     var completion = FrontierWorldState.duringUnpublishedTransition(() ->
                             io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(advice::prepare));
-                    return (current, at) -> FrontierWorldState.duringUnpublishedTransition(() ->
-                            io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(() -> completion.revalidate(current, at)))
-                            .map(preparation -> () -> {
-                                var exact = FrontierWorldState.duringUnpublishedTransition(() ->
-                                        io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(preparation::prepare));
-                                return () -> FrontierWorldState.duringUnpublishedTransition(() ->
-                                        io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(exact));
-                            });
+                    return new ScheduledAdvisory.Completion<FrontierWorldState>() {
+                        @Override public String rejectionReason() { return completion.rejectionReason(); }
+                        @Override public Optional<ScheduledPreparation> revalidate(FrontierWorldState current, SimInstant at) {
+                            return FrontierWorldState.duringUnpublishedTransition(() ->
+                                    io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(() -> completion.revalidate(current, at)))
+                                    .map(preparation -> () -> {
+                                        var exact = FrontierWorldState.duringUnpublishedTransition(() ->
+                                                io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(preparation::prepare));
+                                        return () -> FrontierWorldState.duringUnpublishedTransition(() ->
+                                                io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(exact));
+                                    });
+                        }
+                    };
                 });
             }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
