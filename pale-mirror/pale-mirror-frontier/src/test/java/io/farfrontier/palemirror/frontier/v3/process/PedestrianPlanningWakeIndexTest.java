@@ -11,6 +11,23 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void recoveryCannotPreviewFutureBusinessOrAdvanceItsExecutionInstant() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var action = action("future-recovery", 6000);
+        var planner = ScheduledPlanningRecovery.withPlanningRecovery(new FrontierScheduledPlanner() {
+            @Override public List<ProposedEvent> plan(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, ScheduledAction due) {
+                fail("recovery must retain the explicit execution instant"); return List.of();
+            }
+            @Override public List<ProposedEvent> plan(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, ScheduledAction due, SimInstant at) {
+                assertSame(action, due); assertEquals(new SimInstant(6000), at); calls.incrementAndGet(); return List.of();
+            }
+        });
+        assertTrue(planner.recoveryPlan(null, action, new SimInstant(20)).isEmpty());
+        assertEquals(0, calls.get(), "future economic/route work must not be executed during recovery");
+        planner.recoveryPlan(null, action, action.dueAt()).orElseThrow().get();
+        assertEquals(1, calls.get(), "the same due action retains ordinary recovery");
+    }
+
     @Test void calculationOnlyWaitKeepsItsDueGenerationButBusinessTransitionRetainsItsDeadline() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("calculation-only", 20);
         var future = action("calculation-only", 220); var query = request(3);

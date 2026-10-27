@@ -560,16 +560,7 @@ public final class FrontierWorldProcessCatalog {
     public static java.util.function.Supplier<PedestrianPlanningContinuations.Recovery> preparePlanningWaits(
             DeterministicProcessRegistry registry, FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView view) {
-        return PedestrianPlanningContinuations.prepareRestore(() -> {
-            var candidates = new java.util.ArrayList<PedestrianPlanningContinuations.RecoveryCandidate>();
-            for (var action : view.schedules()) {
-                registry.requireScheduledOwner(action.kind());
-                var planner = java.util.Objects.requireNonNull(SCHEDULED_PLANNERS.get(action.kind()), "recovery planner");
-                if (!planner.held(state, action)) planner.recoveryPlan(state, action, view.instant())
-                        .ifPresent(plan -> candidates.add(new PedestrianPlanningContinuations.RecoveryCandidate(action, plan)));
-            }
-            return java.util.List.copyOf(candidates);
-        });
+        return ScheduledPlanningRecovery.prepareWaits(registry, state, view, SCHEDULED_PLANNERS);
     }
     public static void restorePlanningWaits(DeterministicProcessRegistry registry, FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView view) {

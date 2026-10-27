@@ -188,12 +188,16 @@ class EngineeringSpatialContinuationTest {
                 var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
                 FrontierWorldProcessCatalog.restorePlanningWaits(registry, recovered,
                         new FrontierExecutionView(state.bootstrap().worldId(), Revision.ZERO, root.dueAt(), List.of(successor)));
-                assertEquals(1, index.waitingCount(), "hydration restores the producer's exact calculation dependency");
+                assertEquals(0, index.waitingCount(), "future assembly is not previewed during hydration");
+                FrontierWorldProcessCatalog.restorePlanningWaits(registry, recovered,
+                        new FrontierExecutionView(state.bootstrap().worldId(), Revision.ZERO, successor.dueAt(), List.of(successor)));
+                assertEquals(1, index.waitingCount(), "due assembly restores the producer's exact calculation dependency");
                 for (int turn = 0; turn < 1_024 && planner.pendingCount() > 0; turn++)
                     planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
                 assertEquals(0, planner.pendingCount());
                 index.changed(planner.drainChanges());
-                assertEquals(List.of(successor), index.ready(root.dueAt(), successor::equals));
+                assertTrue(index.ready(successor.dueAt(), successor::equals).isEmpty(), "a due runnable action needs no future-deadline wake");
+                assertFalse(index.waiting(successor), "the completed due dependency must permit ordinary execution");
                 var ready = FrontierWorldProcessCatalog.planScheduled(registry, recovered, successor);
                 var selected = ready.stream().map(ProposedEvent::payload).filter(payload -> payload instanceof RouteConstructionAssemblyApproachPlanned
                         || payload instanceof RouteMaintenanceAssemblyApproachPlanned).findFirst().orElseThrow();

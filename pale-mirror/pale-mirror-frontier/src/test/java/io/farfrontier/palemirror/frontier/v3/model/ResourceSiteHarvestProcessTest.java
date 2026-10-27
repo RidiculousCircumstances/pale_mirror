@@ -175,7 +175,11 @@ class ResourceSiteHarvestProcessTest {
                 FrontierWorldProcessCatalog.restorePlanningWaits(registry, pendingPredecessor,
                         new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(pendingPredecessor.bootstrap().worldId(),
                                 Revision.ZERO, new SimInstant(27_084L), List.of(action)));
-                assertEquals(1, index.waitingCount(), "restart reconstructs the exact field admission calculation wait");
+                assertEquals(0, index.waitingCount(), "restart must not execute next tick's field admission early");
+                FrontierWorldProcessCatalog.restorePlanningWaits(registry, pendingPredecessor,
+                        new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(pendingPredecessor.bootstrap().worldId(),
+                                Revision.ZERO, action.dueAt(), List.of(action)));
+                assertEquals(1, index.waitingCount(), "due admission still reconstructs its exact calculation wait");
             }
         }
         var events = ResourceSiteHarvestProcess.plan(state, action);

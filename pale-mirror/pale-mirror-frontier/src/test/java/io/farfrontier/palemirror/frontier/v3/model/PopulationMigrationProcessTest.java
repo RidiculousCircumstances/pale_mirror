@@ -169,7 +169,11 @@ class PopulationMigrationProcessTest {
                     FrontierWorldProcessCatalog.restorePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(),
                             codec.decode(codec.encode(unloaded)), new FrontierExecutionView(unloaded.bootstrap().worldId(),
                                     new Revision(0), due.dueAt(), List.of(retry.action())));
-                    assertEquals(1, waits.waitingCount(), "restart restores this transit's pending calculation");
+                    assertEquals(0, waits.waitingCount(), "a future migration timer cannot run at restart");
+                    FrontierWorldProcessCatalog.restorePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(),
+                            codec.decode(codec.encode(unloaded)), new FrontierExecutionView(unloaded.bootstrap().worldId(),
+                                    new Revision(0), retry.action().dueAt(), List.of(retry.action())));
+                    assertEquals(1, waits.waitingCount(), "due migration still restores its pending calculation");
                 }
             }
         }

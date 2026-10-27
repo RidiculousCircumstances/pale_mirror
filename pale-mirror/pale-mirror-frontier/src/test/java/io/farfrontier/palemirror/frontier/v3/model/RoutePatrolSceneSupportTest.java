@@ -121,7 +121,12 @@ class RoutePatrolSceneSupportTest {
                                     FrontierWorldRuntimeDefinition.processRegistry(), recovered,
                                     new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(recovered.bootstrap().worldId(),
                                             new io.farfrontier.palemirror.frontier.v3.api.Revision(0), progress.dueAt(), List.of(retry.action())));
-                            assertEquals(1, waits.waitingCount(), "patrol recovery must restore the exact calculation dependency");
+                            assertEquals(0, waits.waitingCount(), "a future patrol is not previewed during recovery");
+                            io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.restorePlanningWaits(
+                                    FrontierWorldRuntimeDefinition.processRegistry(), recovered,
+                                    new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(recovered.bootstrap().worldId(),
+                                            new io.farfrontier.palemirror.frontier.v3.api.Revision(0), retry.action().dueAt(), List.of(retry.action())));
+                            assertEquals(1, waits.waitingCount(), "due patrol restores its exact calculation dependency");
                         }
                     }
                 }

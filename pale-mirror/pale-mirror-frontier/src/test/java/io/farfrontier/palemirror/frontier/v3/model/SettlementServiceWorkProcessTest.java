@@ -65,6 +65,11 @@ class SettlementServiceWorkProcessTest {
                             FrontierWorldRuntimeDefinition.processRegistry(), codec.decode(codec.encode(state)),
                             new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(bootstrap.worldId(),
                                     new io.farfrontier.palemirror.frontier.v3.api.Revision(0), action.dueAt(), List.of(retry.action())));
+                    assertEquals(0, waits.waitingCount(), "future service admission keeps its real deadline");
+                    io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.restorePlanningWaits(
+                            FrontierWorldRuntimeDefinition.processRegistry(), codec.decode(codec.encode(state)),
+                            new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(bootstrap.worldId(),
+                                    new io.farfrontier.palemirror.frontier.v3.api.Revision(0), retry.action().dueAt(), List.of(retry.action())));
                     assertEquals(1, waits.waitingCount());
                 }
             }

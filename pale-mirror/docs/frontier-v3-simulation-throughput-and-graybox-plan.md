@@ -1066,3 +1066,31 @@ execution continues to validate actual land, tools, custody and authority.
 No new dirty-reason wire value, no state migration, no notification-only actor
 or geometry change is added. Planned progress and real loss are exercised through
 the existing publication/cultivation composition, not a timing benchmark.
+
+### Recovery previews retain canonical deadlines (2026-10-28)
+
+Field-progress clean release PASS53s with economy55 and affected publication,
+cultivation and native-runtime checks; verifiedfc5f4efd9 in retained311 worlds.
+100ordinary interval7200→8332/333s,debt114→5645 remainsFAIL. Its20s profile has
+server697,nav590/580,preparation246,advice119/113samples; remaining full-state/
+geometry work is visible. No isolated speed multiplier is inferred across phases.
+
+Recovery has a separate concrete cost: preparePlanningWaits previewed EVERY future
+navigation-capable timer, and ScheduledPlanningRecovery raised execution time to
+max(now,due). Thus future economic reviews were fully solved before ordinary
+canonical time could resume. Both retained100 starts spent about45s on this.
+Recovery now considers only actions due at the captured canonical instant; future
+commands retain ordinary deadline admission, with no invented future route demand.
+Due/overdue dependency reconstruction and single-owner acquisition/publication
+remain intact. The helper moved into the existing recovery capability owner to
+keep the catalog within its1000-line guardrail; no second recovery mechanism.
+
+Existing recovery cases cover extraction, meals, clearance, fields, station work,
+migration, services, engineering and patrol. Five cases now explicitly check that
+future work is not restored early, then restore at its real deadline and retain
+positive continuation. Engineering's due action becomes directly runnable rather
+than needing a future-deadline wake; the body/approach terminal assertions remain.
+First iteration failed the catalog size guard, corrected by moving the helper;
+next run exposed four old future-preview expectations. Final38-case run had only
+the engineering ready-vs-runnable assertion; its focused correction+guardrails
+PASS11s. Exact clean release must still verify the combined retained selection.
