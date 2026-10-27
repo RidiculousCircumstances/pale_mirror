@@ -79,7 +79,7 @@ public final class StationWorkNavigation {
     }
 
     /** Bakery declares its destinations and access rights, never a private chain of traversable cells. */
-    private static KnownPedestrianRouteKnowledge journeyKnowledge(FrontierWorldState state, ProductionJob job) {
+    public static KnownPedestrianRouteKnowledge journeyKnowledge(FrontierWorldState state, ProductionJob job) {
         var home = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         var facility = home.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElseThrow();
         var passages = new ArrayList<>(ShipmentEndpointComposition.passages(state, StationWorkStorage.access(state, job).endpoint()));

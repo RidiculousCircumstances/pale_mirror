@@ -126,7 +126,8 @@ public final class ProductionProcess {
             return List.of(reschedule(action, complete(job, Math.addExact(Math.max(currentTick, action.dueAt().ticks()), 20L))));
         if (!state.actorExecutions().owns(job.workerId(),
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())
-                || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), Math.max(currentTick, action.dueAt().ticks())))
+                || job.stationWork().filter(work -> work.phase() == StationWorkState.Phase.DELIVERED).isEmpty()
+                    && !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), Math.max(currentTick, action.dueAt().ticks())))
             return List.of(reschedule(action, complete(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
                     state, job.workerId(), Math.max(currentTick, action.dueAt().ticks())))));
         if (job.stationWork().isPresent()) return StationWorkCompletionPlanning.plan(state, job, action, currentTick);
@@ -855,7 +856,8 @@ public final class ProductionProcess {
     }
     public static boolean completionHeld(FrontierWorldState state, ScheduledAction action) {
         ProductionJob job = state.productionJobs().get(action.subject());
-        return job != null && action.equals(complete(job, action.dueAt().ticks())) && hasOpenWorkScene(state, job.id());
+        return job != null && action.equals(complete(job, action.dueAt().ticks())) && (hasOpenWorkScene(state, job.id()) || state.actorMovements().containsKey(job.workerId())
+                && (job.stationWork().isEmpty() || StationWorkMovementPlanning.held(state, job, action.dueAt().ticks())));
     }
 
     private static boolean hasOpenWorkScene(FrontierWorldState state, SubjectId jobId) {

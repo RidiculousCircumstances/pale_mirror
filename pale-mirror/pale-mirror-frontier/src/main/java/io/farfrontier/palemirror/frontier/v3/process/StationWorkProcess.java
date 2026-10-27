@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** The bakery job owns each COLD movement, custody and station-work transition. */
+/** Station fulfillment owns custody and work; common movement owns travel. */
 public final class StationWorkProcess {
     private StationWorkProcess() { }
 
@@ -217,16 +217,8 @@ public final class StationWorkProcess {
             if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
             if (StationWorkGoal.deliveryAccessCleared(state, job, worker.body()))
                 return Optional.of(coldStep(state, job, BakeryColdStep.Action.FINALIZE,
-                        worker.supportingSurface(), List.of()));
-            // Finalization changes job ownership, not pose. Every movement, including
-            // post-delivery clearance, still excludes retained physical authority.
-            if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())) return Optional.empty();
-            try {
-                List<SurfaceAnchor> clearingRoute = StationWorkNavigation.plannedPath(state, job);
-                if (clearingRoute.size() > 1) return Optional.of(coldStep(state, job,
-                        BakeryColdStep.Action.MOVE, clearingRoute.get(1), clearingRoute));
-                return Optional.empty();
-            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
+                        worker.supportingSurface()));
+            return Optional.empty(); // Common movement owns access clearance.
         }
         if (coldBlocker(state, job, checkOutputCapacity).isPresent()) {
             if (StationWorkLabour.attended(state, job) && (StationWorkLabour.progress(state, job).filter(WorkProgress::running).isPresent() || StationWorkLabour.holdsAttendance(state, job))
@@ -237,13 +229,9 @@ public final class StationWorkProcess {
                 return StationWorkLabour.updateNeeded(state, job, tick, false) ? Optional.of(labourStep(state, job, tick, false)) : Optional.empty();
             return Optional.empty();
         }
-        List<SurfaceAnchor> route;
-        try { route = StationWorkNavigation.plannedPath(state, job); }
-        catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
-        if (route.size() > 1) {
-            if (!ProductionServiceAccess.mayAdvance(state, job, route.get(1))) return Optional.empty();
-            return Optional.of(coldStep(state, job, BakeryColdStep.Action.MOVE, route.get(1), route));
-        }
+        if (state.actorMovements().containsKey(job.workerId())
+                || !state.actorLocations().get(job.workerId()).supportingSurface()
+                    .equals(StationWorkGoal.current(state, job).station())) return Optional.empty();
         SurfaceAnchor current = state.actorLocations().get(job.workerId()).supportingSurface();
         var action = StationWorkColdStepAdmission.stationAction(state, job);
         if (action == BakeryColdStep.Action.LABOUR) {
@@ -254,7 +242,7 @@ public final class StationWorkProcess {
             boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();
             return StationWorkLabour.updateNeeded(state, job, tick, run) ? Optional.of(labourStep(state, job, tick, run)) : Optional.empty();
         }
-        return Optional.of(coldStep(state, job, action, current, List.of()));
+        return Optional.of(coldStep(state, job, action, current));
     }
 
     private static BakeryColdStep labourStep(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
@@ -262,17 +250,15 @@ public final class StationWorkProcess {
         var execution = state.actorExecutions().current(
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
         return new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.LABOUR,
-                state.actorLocations().get(job.workerId()).supportingSurface(), execution, Optional.empty(),
+                state.actorLocations().get(job.workerId()).supportingSurface(), execution,
                 Optional.of(StationWorkLabour.propose(state, job, tick, run)));
     }
 
     private static BakeryColdStep coldStep(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action,
-            SurfaceAnchor surface, List<SurfaceAnchor> route) {
+            SurfaceAnchor surface) {
         var execution = state.actorExecutions().current(
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
-        return new BakeryColdStep(job.id(), job.stationWork().orElseThrow().phase(), action, surface, execution,
-                route.isEmpty() ? Optional.empty() : Optional.of(
-                        new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route)));
+        return new BakeryColdStep(job.id(), job.stationWork().orElseThrow().phase(), action, surface, execution, Optional.empty());
     }
 
     static FrontierWorldState reduceColdStep(FrontierWorldState state, SubjectId subject, BakeryColdStep step) {
@@ -295,11 +281,6 @@ public final class StationWorkProcess {
             state = FrontierProductionWorkSceneSupport.replaceJob(state, job);
         }
         if (step.action() == BakeryColdStep.Action.FINALIZE) return finish(state, job, state.inventory());
-        if (step.action() == BakeryColdStep.Action.MOVE) {
-            Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-            actors.put(job.workerId(), actors.get(job.workerId()).withBody(BodyPosition.above(step.nextSurface())));
-            return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
-        }
         if (step.action() == BakeryColdStep.Action.LABOUR) {
             var change = step.labourChange().orElseThrow();
             StationWorkLabour.require(state, job, change);

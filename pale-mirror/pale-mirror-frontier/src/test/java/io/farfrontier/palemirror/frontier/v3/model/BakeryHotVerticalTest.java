@@ -246,14 +246,7 @@ class BakeryHotVerticalTest {
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         ProductionJob job = started.job();
-        for (int index = 0; index < 100; index++) {
-            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 300L + index * 20L)).stream()
-                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-            if (step.action() == BakeryColdStep.Action.PICKUP) break;
-            assertEquals(BakeryColdStep.Action.MOVE, step.action());
-            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
-        }
+        state = BakeryTestClock.arrive(state, job, 300L);
         StationWorkState work = job.stationWork().orElseThrow();
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
@@ -623,8 +616,8 @@ class BakeryHotVerticalTest {
         assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 900L)).stream()
                 .noneMatch(event -> event.payload() instanceof BakeryColdStep),
                 "closing presentation cannot grant COLD movement over a retained physical body");
-        assertTrue(FrontierProductionWorkSceneSupport.candidate(state, state.productionJobs().get(job.id())).isPresent(),
-                "an inside delivered worker can reopen its exact scene to clear service access");
+        assertTrue(FrontierProductionWorkSceneSupport.candidate(state, state.productionJobs().get(job.id())).isEmpty(),
+                "a delivered worker clears access through common movement, not a second station scene");
         var recoveredClearance = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertTrue(ProductionProcess.planCompletion(recoveredClearance, ProductionProcess.complete(job, 900L)).stream()
                 .noneMatch(event -> event.payload() instanceof BakeryColdStep));
@@ -634,6 +627,7 @@ class BakeryHotVerticalTest {
         var actualBodies = state.actorLocations();
         BakeryColdStep finalization = null;
         for (int step = 0; state.productionJobs().containsKey(job.id()) && step < 300; step++) {
+            state = BakeryTestClock.arrive(state, job, 901L + step * 20L);
             BakeryColdStep clearing = ProductionProcess.planCompletion(state,
                             ProductionProcess.complete(job, 900L + 20L * step)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)

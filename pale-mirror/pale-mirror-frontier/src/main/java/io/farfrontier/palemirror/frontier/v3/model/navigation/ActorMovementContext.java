@@ -9,14 +9,36 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
 public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
-        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY }
+        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg {
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK }
     Provider provider();
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
     /** Explicit caller-owned goal delegation; the registered provider validates its retained relationship. */
     java.util.Optional<SubjectId> delegatedGoalOwner();
     default java.util.Optional<SubjectId> clearancePoint() { return java.util.Optional.empty(); }
+    /** The production owner declares the exact retained phase; movement owns only travel. */
+    record StationWorkLeg(SubjectId jobId, StationWorkState.Phase phase, long tripOrdinal, SubjectId pointId) implements ActorMovementContext {
+        public StationWorkLeg {
+            Objects.requireNonNull(jobId); Objects.requireNonNull(phase); Objects.requireNonNull(pointId);
+            if (tripOrdinal < 0) throw new IllegalArgumentException("invalid station material trip");
+        }
+        @Override public Provider provider() { return Provider.STATION_WORK; }
+        @Override public java.util.Optional<SubjectId> clearancePoint() {
+            return phase == StationWorkState.Phase.DELIVERED ? java.util.Optional.of(pointId) : java.util.Optional.empty();
+        }
+        @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            var job = refs.productionJobs().get(jobId);
+            var work = job == null ? null : job.stationWork().orElse(null);
+            if (work == null || work.phase() != phase || work.materials().tripOrdinal() != tripOrdinal
+                    || work.pendingPhysicalStep().isPresent() || !job.workerId().equals(movement.order().actorId())
+                    || !jobId.equals(movement.executionId().activityOwnerId())
+                    || movement.executionId().activityKind() != ActorActivityKind.PRODUCTION
+                    || movement.order().goalOrdinal() != work.goalOrdinal() || movement.order().goalRevision() != 1L)
+                throw new IllegalArgumentException("station movement lost its exact job, material trip or phase");
+        }
+    }
     record ForestryLeg(SubjectId jobId, long jobRevision) implements ActorMovementContext {
         public ForestryLeg { Objects.requireNonNull(jobId);
             if (jobRevision < 1) throw new IllegalArgumentException("invalid forestry movement revision"); }

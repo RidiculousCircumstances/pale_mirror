@@ -65,6 +65,8 @@ public final class FrontierProductionWorkSceneSupport {
             return Optional.empty();
         if (job.stationWork().isPresent()) {
             SurfaceAnchor retained = worker.supportingSurface();
+            if (job.stationWork().orElseThrow().phase() == StationWorkState.Phase.DELIVERED
+                    || !retained.equals(StationWorkGoal.current(state, job).station())) return Optional.empty();
             BlockPosition demand = StationWorkGoal.current(state, job).station().support();
             return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), demand,
                     retained.support(), Map.of(job.workerId(), retained.support())));

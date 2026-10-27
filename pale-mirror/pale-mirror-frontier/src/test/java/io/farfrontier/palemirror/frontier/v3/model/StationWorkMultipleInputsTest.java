@@ -17,6 +17,7 @@ class StationWorkMultipleInputsTest {
             var burn = ProductionStationEnergy.next(state, station.id(), tick);
             if (burn.isPresent()) state = ProductionStationEnergy.apply(state, station.id(), new ProductionStationFuelChanged(
                     ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn.orElseThrow(), List.of(), tick));
+            state = BakeryTestClock.arrive(state, current, tick);
             var proposed = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, tick));
             var step = proposed.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst();
             if (step.isEmpty()) continue;
@@ -57,6 +58,7 @@ class StationWorkMultipleInputsTest {
             var burn = ProductionStationEnergy.next(state, station.id(), tick);
             if (burn.isPresent()) state = ProductionStationEnergy.apply(state, station.id(), new ProductionStationFuelChanged(
                     ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn.orElseThrow(), List.of(), tick));
+            state = BakeryTestClock.arrive(state, current, tick);
             var proposed = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, tick));
             for (var event : proposed) {
                 if (event.payload() instanceof BakeryInputReallocated replacement) {
@@ -111,6 +113,7 @@ class StationWorkMultipleInputsTest {
         var fixture = started(); var state = fixture.state(); var job = fixture.job(); long tick = 300;
         for (int step = 0; step < 800 && state.productionJobs().get(job.id()).stationWork().orElseThrow().phase() != StationWorkState.Phase.PROCESSING; step++) {
             var current = state.productionJobs().get(job.id()); tick = BakeryTestClock.due(state, current, tick + 20);
+            state = BakeryTestClock.arrive(state, current, tick);
             var planned = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, tick));
             for (var event : planned) if (event.payload() instanceof BakeryColdStep next)
                 state = ProductionProcess.reduceBakeryColdStep(state, job.settlementId(), next);

@@ -126,6 +126,8 @@ final class ProductionJobStateSupport {
     static FrontierWorldState cancel(FrontierWorldState state, SubjectId jobId) {
         ProductionJob job = state.productionJobs().get(Objects.requireNonNull(jobId, "production job id"));
         if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
+        if (state.actorMovements().containsKey(job.workerId()))
+            throw new IllegalArgumentException("production cancellation requires its movement owner's settled checkpoint");
         // Once a bakery batch has left the depot, cancelling the job would orphan its
         // actor/station custody (and a completed batch would lose its payment receipt).
         // Keep the job as the durable owner until delivery or an explicit compensation

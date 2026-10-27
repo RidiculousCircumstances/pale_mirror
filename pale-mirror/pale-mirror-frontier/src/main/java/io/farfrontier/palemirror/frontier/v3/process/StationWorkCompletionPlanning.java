@@ -16,6 +16,14 @@ final class StationWorkCompletionPlanning {
         long now = Math.max(currentTick, action.dueAt().ticks());
         StrategicTask retainedTask = state.strategicPlans().tasks().get(job.taskId());
         if (retainedTask != null && retainedTask.status() == StrategicTaskStatus.BLOCKED) return List.of();
+        if (state.actorMovements().containsKey(job.workerId())) {
+            if (!StationWorkMovementPlanning.needsReview(state, job)) return List.of();
+            if (!(StationWorkMovementPlanning.handoff(state, job, now) instanceof ActivityInterruptionPlanner.Ready ready))
+                return List.of();
+            var events = new java.util.ArrayList<ProposedEvent>(ready.events());
+            events.add(ProductionContinuation.wake(job, now));
+            return List.copyOf(events);
+        }
         var step = StationWorkProcess.planColdStep(state, job, now);
         if (step.isPresent() && step.orElseThrow().action() == BakeryColdStep.Action.FINALIZE)
             return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()));
@@ -33,6 +41,12 @@ final class StationWorkCompletionPlanning {
         if (storageReplacement.isPresent()) return List.of(new ProposedEvent(job.settlementId(), storageReplacement.orElseThrow()),
                 reschedule(action, complete(job, Math.addExact(now, 1L))));
         if (step.isEmpty()) {
+            try {
+                var movement = StationWorkMovementPlanning.start(state, job, now);
+                if (!movement.isEmpty()) return movement;
+            } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+                // Retain a genuine clearance wait; no physical mutation has been authorized.
+            }
             long interval = job.stationWork().orElseThrow().phase() != StationWorkState.Phase.DELIVERED
                     && ProductionOutputCapacity.depotDeliveryUnavailable(state, job)
                     ? state.bootstrap().ruleset().cadence().strategicReviewInterval() : 20L;

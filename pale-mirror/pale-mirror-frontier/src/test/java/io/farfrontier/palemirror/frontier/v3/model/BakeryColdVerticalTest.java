@@ -20,63 +20,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
-    @Test void workshopKnowledgeWaitSurvivesRecoveryAndResumesWithoutInventedIngress() throws Exception {
-        var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
-                FrontierBootstrapper.create(new WorldId("frontier:bakery-workshop-fence"), 41L)), StrategicTaskStatus.PENDING);
-        var task = state.strategicPlans().tasks().values().iterator().next();
-        var started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
-                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
-                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
-        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
-                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
-        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
-        for (long due = 300; due < 10_000 && state.productionJobs().get(started.job().id())
-                .stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_PICKUP; due += 20) {
-            var job = state.productionJobs().get(started.job().id());
-            var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
-                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
-        }
-        var job = state.productionJobs().get(started.job().id());
-        assertEquals(StationWorkState.Phase.STATION_LOAD, job.stationWork().orElseThrow().phase());
-        var station = state.inventory().containers().values().stream().flatMap(c -> c.productionStation().stream())
-                .filter(value -> value.id().equals(job.stationWork().orElseThrow().stationId())).findFirst().orElseThrow();
-        var machine = station.socketSurface().support().offset(0, 1, 0);
-        var fence = io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.unavailable(
-                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.Kind.WRITE_PENDING);
-        state = observeNavigation(state, machine, fence);
-        var codec = new FrontierWorldStateCodec();
-        var recovered = codec.decode(codec.encode(state));
-        var waiting = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
-                () -> ProductionProcess.planCompletion(recovered, ProductionProcess.complete(job, 12_000)));
-        assertTrue(waiting.result().stream().noneMatch(event -> event.payload() instanceof BakeryColdStep),
-                "a workshop knowledge fence must defer before producing a movement receipt");
-        assertFalse(waiting.requests().isEmpty(), "interior uncertainty must retain a geometry/planning wake");
-        assertEquals(state.inventory(), recovered.inventory(), "waiting preserves the wheat in the baker's hands");
-        var confirmed = observeNavigation(recovered, machine,
-                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
-                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
-        var step = ProductionProcess.planCompletion(confirmed, ProductionProcess.complete(job, 12_001)).stream()
-                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-        assertEquals(BakeryColdStep.Action.MOVE, step.action());
-        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((g, from, to) -> {
-            fail("accepted workshop movement replays without searching again"); return null;
-        })) {
-            var advanced = ProductionProcess.reduceBakeryColdStep(codec.decode(codec.encode(confirmed)), job.settlementId(), step);
-            assertEquals(step.nextSurface(), advanced.actorLocations().get(job.workerId()).supportingSurface());
-            assertEquals(confirmed.inventory(), advanced.inventory());
-        }
-        var obstructed = observeNavigation(confirmed, station.workerStation().support().offset(0, 1, 0),
-                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
-                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
-        assertTrue(ProductionProcess.planCompletion(obstructed, ProductionProcess.complete(job, 12_002)).stream()
-                .noneMatch(event -> event.payload() instanceof BakeryColdStep), "known obstruction cannot become an authored passage");
-        assertThrows(IllegalArgumentException.class,
-                () -> ProductionProcess.reduceBakeryColdStep(obstructed, job.settlementId(), step),
-                "replay validation must still reject a stale route");
-    }
+
 
     private static FrontierWorldState observeNavigation(FrontierWorldState state, BlockPosition position,
             io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation observation) {
@@ -143,71 +87,7 @@ class BakeryColdVerticalTest {
             assertEquals(admitted, codec.decode(codec.encode(admitted)));
         }
     }
-    @Test void routeWaitsAndRecoveryNeverRediscoverACommittedBakeryMove() throws Exception {
-        var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
-                FrontierBootstrapper.create(new WorldId("frontier:bakery-cooperative-replay"), 41L)), StrategicTaskStatus.PENDING);
-        var task = state.strategicPlans().tasks().values().iterator().next();
-        var started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
-                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
-                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
-        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
-                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
-        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
-        var predecessor = state;
-        var job = started.job();
-        var action = ProductionProcess.complete(job, 300L);
-        var accepted = ProductionProcess.planCompletion(state, action).stream().map(ProposedEvent::payload)
-                .filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-        assertEquals(BakeryColdStep.Action.MOVE, accepted.action());
-        var codecs = io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
-        assertEquals(accepted, codecs.decode(accepted.type(), codecs.encode(accepted)));
-        var calls = new java.util.concurrent.atomic.AtomicInteger();
-        var waiting = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
-                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
-                List.of(), 0, 0, "bounded search in progress");
-        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, target) -> {
-            calls.incrementAndGet(); return waiting;
-        })) {
-            assertTrue(StationWorkProcess.coldRouteBlocker(predecessor, job).orElseThrow().contains("ROUTE_NOT_CALCULATED"));
-            assertEquals(0, calls.get(), "a diagnostic must not enqueue or run a search");
-            var observation = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
-                    () -> ProductionProcess.planCompletion(predecessor, action));
-            assertTrue(calls.get() > 0);
-            assertFalse(observation.requests().isEmpty(), "pending calculation retains an addressed wake dependency");
-            assertTrue(observation.result().stream().noneMatch(event -> event.payload() instanceof BakeryColdStep),
-                    "PLANNING cannot award movement, transfer or manufacture NO_PATH");
-            var index = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
-            var registry = new io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry(
-                    io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.descriptors(), codecs);
-            try (var continuations = io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations.bind(index)) {
-                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.restorePlanningWaits(registry, predecessor,
-                        new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(predecessor.bootstrap().worldId(),
-                                io.farfrontier.palemirror.frontier.v3.api.Revision.ZERO, new SimInstant(299), List.of(action)));
-                assertEquals(1, index.waitingCount(), "restart reconstructs the exact bakery calculation wait");
-            }
-        }
-        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, target) -> {
-            fail("committed bakery replay cannot invoke route planning"); return waiting;
-        })) {
-            var codec = new FrontierWorldStateCodec();
-            var recovered = codec.decode(codec.encode(predecessor));
-            var advanced = ProductionProcess.reduceBakeryColdStep(recovered, job.settlementId(), accepted);
-            assertEquals(accepted.nextSurface(), advanced.actorLocations().get(job.workerId()).supportingSurface());
-            assertEquals(recovered.inventory(), advanced.inventory(), "route acceptance never consumes or produces stock");
-            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(advanced, job.settlementId(), accepted));
-            var old = accepted.executionId();
-            var stale = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
-                    old.actorId(), old.activityKind(), old.activityOwnerId(), old.generation() + 1);
-            var forged = new BakeryColdStep(accepted.jobId(), accepted.expectedPhase(), accepted.action(),
-                    accepted.nextSurface(), stale, accepted.plannedRoute());
-            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(recovered, job.settlementId(), forged));
-            var incompleteRoute = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(
-                    accepted.plannedRoute().orElseThrow().route().subList(0, 2));
-            var truncated = new BakeryColdStep(accepted.jobId(), accepted.expectedPhase(), accepted.action(),
-                    accepted.nextSurface(), old, Optional.of(incompleteRoute));
-            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(recovered, job.settlementId(), truncated));
-        }
-    }
+
 
     private static void assertWorkOutputIsNotPersonalFood(FrontierWorldState state, ProductionJob job) {
         var hungry = state.withHumanPopulation(state.humanPopulation().accrueHunger(job.workerId(), 27_000));
@@ -242,6 +122,7 @@ class BakeryColdVerticalTest {
         for (long due = 300L; state.productionJobs().get(started.job().id()).stationWork().orElseThrow().phase()
                 == StationWorkState.Phase.DEPOT_PICKUP && due < 10_000L; due += 20L) {
             var job = state.productionJobs().get(started.job().id());
+            state = BakeryTestClock.arrive(state, job, due);
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -262,13 +143,14 @@ class BakeryColdVerticalTest {
                 assertTrue(StationWorkProcess.coldRouteBlocker(blocked, blockedJob).orElseThrow().startsWith("NOT_EVALUATED:"));
                 continue;
             }
-            assertTrue(step.isPresent());
-            assertTrue(blocked.productionJobs().get(job.id()).stationWork().orElseThrow().block().isPresent(),
-                    "planning does not mutate retained evidence");
-            var resumed = ProductionProcess.reduceBakeryColdStep(blocked, job.settlementId(), step.orElseThrow());
-            assertTrue(resumed.productionJobs().get(job.id()).stationWork().orElseThrow().block().isEmpty());
-            assertEquals(blocked.inventory().fungibleResources(), resumed.inventory().fungibleResources(),
-                    "route recovery awards movement, not a recipe or resource transfer");
+            var movement = planned.stream().map(ProposedEvent::payload)
+                    .filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::isInstance)
+                    .map(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::cast).findFirst().orElseThrow();
+            var resumed = ActorMovementProcess.reduceStarted(blocked, job.workerId(), movement);
+            resumed = BakeryTestClock.arrive(resumed, blockedJob, 12_000L);
+            assertEquals(blocked.inventory(), resumed.inventory(), "travel cannot award a recipe or transfer");
+            assertTrue(resumed.productionJobs().get(job.id()).stationWork().orElseThrow().block().isPresent(),
+                    "route completion cannot clear an effect owner's block");
             var body = blocked.actorLocations().get(job.workerId()).body();
             var hot = blocked.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(job.workerId(),
                     new AmbientActorLease(job.workerId(), body, SimInstant.ZERO, 1L, AmbientLeaseStatus.HOT,
@@ -399,6 +281,7 @@ class BakeryColdVerticalTest {
                         io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
                                 new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:baker-selected-resume")), resumed));
         assertTrue(ProductionServiceAccess.available(state, job));
+        state = BakeryTestClock.arrive(state, job, 27_300L);
         assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 27_300L))
                 .stream().anyMatch(event -> event.payload() instanceof BakeryColdStep));
     }
@@ -422,6 +305,7 @@ class BakeryColdVerticalTest {
             if (current.stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_DELIVERY) break;
             assertFalse(SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, job.facilityId()),
                     "the protected station stays reserved until confirmed output removal");
+            state = BakeryTestClock.arrive(state, current, due);
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -445,11 +329,6 @@ class BakeryColdVerticalTest {
         assertWorkOutputIsNotPersonalFood(restoredStationRelease, job);
         assertAnotherBakerCanStartAfterOutputRemoval(restoredStationRelease, task, job, due);
         assertTrue(StationWorkNavigation.path(state, state.productionJobs().get(job.id())).size() > 1);
-        BakeryColdStep historicalMove = ProductionProcess.planCompletion(state,
-                ProductionProcess.complete(state.productionJobs().get(job.id()), due)).stream()
-                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-        assertEquals(BakeryColdStep.Action.MOVE, historicalMove.action());
         SubjectId depot = FrontierWorldState.depotId(task.ownerId());
         ExactInventory inventory = state.inventory();
         // External placement can consume a promised space; simulate that actual intervention,
@@ -473,8 +352,6 @@ class BakeryColdVerticalTest {
         assertEquals(full.productionJobs(), atFullDepot.productionJobs());
         assertEquals(full.inventory(), atFullDepot.inventory(), "releasing access must retain exact output custody");
         assertEquals(Optional.of("DEPOT_STORAGE_FULL"), StationWorkProcess.coldBlocker(full, full.productionJobs().get(job.id())));
-        // A MOVE already committed to the old WAL remains replayable after this planner change.
-        full = ProductionProcess.reduceBakeryColdStep(full, task.ownerId(), historicalMove);
         var action = ProductionProcess.complete(job, due + 20L);
         List<ProposedEvent> deferred = ProductionProcess.planCompletion(full, action);
         var retry = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
@@ -489,13 +366,7 @@ class BakeryColdVerticalTest {
         FrontierWorldState withSpace = recovered.withInventory(recovered.inventory().consumeOne(freed));
         assertFalse(new ProductionServiceAccess().demands(withSpace, depot).isEmpty(),
                 "fresh capacity re-enables the same retained delivery without recreating its job");
-        while (StationWorkNavigation.path(withSpace, withSpace.productionJobs().get(job.id())).size() > 1) {
-            BakeryColdStep move = ProductionProcess.planCompletion(withSpace, retry).stream()
-                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-            assertEquals(BakeryColdStep.Action.MOVE, move.action());
-            withSpace = ProductionProcess.reduceBakeryColdStep(withSpace, task.ownerId(), move);
-        }
+        withSpace = BakeryTestClock.arrive(withSpace, withSpace.productionJobs().get(job.id()), retry.dueAt().ticks());
         BakeryColdStep deliver = ProductionProcess.planCompletion(withSpace, retry).stream()
                 .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                 .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -507,52 +378,41 @@ class BakeryColdVerticalTest {
                 .filter(settlement -> settlement.id().equals(job.settlementId())).findFirst().orElseThrow()
                 .residents().stream().map(Resident::id).filter(id -> !id.equals(job.workerId()))
                 .findFirst().orElseThrow();
-        boolean releasedBeforeFinalization = false;
-        boolean breadEatenBeforeFinalization = false;
-        for (int step = 0; completed.productionJobs().containsKey(job.id()) && step < 300; step++) {
-            BakeryColdStep clearing = ProductionProcess.planCompletion(completed,
-                            ProductionProcess.complete(job, retry.dueAt().ticks() + 20L * (step + 1)))
-                    .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-            completed = ProductionProcess.reduceBakeryColdStep(completed, task.ownerId(), clearing);
-            if (completed.productionJobs().containsKey(job.id())) {
-                boolean released = ResidentMealServiceAccess.available(completed,
-                        FrontierWorldState.depotId(job.settlementId()), waitingResident);
-                releasedBeforeFinalization |= released;
-                if (released && !breadEatenBeforeFinalization) {
-                    completed = completed.withHumanPopulation(completed.humanPopulation()
-                            .accrueHunger(waitingResident, 27_000L));
-                    ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(completed,
-                            waitingResident, 27_000L).orElseThrow();
-                    assertEquals(java.util.Map.of(job.outputItemId(), 1), meal.meal().portion().lotQuantities());
-                    completed = ResidentMealProcess.reduceStarted(completed, waitingResident, meal);
-                    long mealTick = 27_001L;
-                    for (int mealStep = 0; mealStep < 24
-                            && completed.humanPopulation().meals().containsKey(waitingResident); mealStep++) {
-                        var currentMeal = completed.humanPopulation().meals().get(waitingResident);
-                        if (currentMeal.coldTravel().isPresent())
-                            mealTick = Math.max(mealTick, currentMeal.coldTravel().orElseThrow().arrivalTick());
-                        Optional<ResidentMealColdStep> planned = ResidentMealProcess.planColdStep(completed,
-                                waitingResident, mealTick);
-                        assertTrue(planned.isPresent(), "meal cannot advance in "
-                                + completed.humanPopulation().meals().get(waitingResident).phase()
-                                + " at step " + mealStep);
-                        ResidentMealColdStep progress = planned.orElseThrow();
-                        completed = ResidentMealProcess.reduceColdStep(completed, waitingResident, progress);
-                        mealTick++;
-                    }
-                    assertFalse(completed.humanPopulation().meals().containsKey(waitingResident));
-                    // Consumption completes the activity even if its eating position already clears the port.
-                    assertEquals(63, completed.inventory().fungibleResources()
-                            .totalQuantity(job.settlementId(), "minecraft:bread"));
-                    assertEquals(StationWorkState.Phase.DELIVERED,
-                            completed.productionJobs().get(job.id()).stationWork().orElseThrow().phase());
-                    breadEatenBeforeFinalization = true;
-                }
-            }
+        completed = BakeryTestClock.arrive(completed, job, retry.dueAt().ticks() + 1L);
+        assertTrue(completed.productionJobs().containsKey(job.id()), "common clearance cannot finalize production");
+        assertTrue(ResidentMealServiceAccess.available(completed, depot, waitingResident),
+                "clearing access releases the next visitor before production finalization");
+        completed = completed.withHumanPopulation(completed.humanPopulation()
+                .accrueHunger(waitingResident, 27_000L));
+        ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(completed,
+                waitingResident, 27_000L).orElseThrow();
+        assertEquals(java.util.Map.of(job.outputItemId(), 1), meal.meal().portion().lotQuantities());
+        completed = ResidentMealProcess.reduceStarted(completed, waitingResident, meal);
+        long mealTick = 27_001L;
+        for (int mealStep = 0; mealStep < 24
+                && completed.humanPopulation().meals().containsKey(waitingResident); mealStep++) {
+            var currentMeal = completed.humanPopulation().meals().get(waitingResident);
+            if (currentMeal.coldTravel().isPresent())
+                mealTick = Math.max(mealTick, currentMeal.coldTravel().orElseThrow().arrivalTick());
+            Optional<ResidentMealColdStep> planned = ResidentMealProcess.planColdStep(completed,
+                    waitingResident, mealTick);
+            assertTrue(planned.isPresent(), "meal cannot advance in "
+                    + completed.humanPopulation().meals().get(waitingResident).phase()
+                    + " at step " + mealStep);
+            ResidentMealColdStep progress = planned.orElseThrow();
+            completed = ResidentMealProcess.reduceColdStep(completed, waitingResident, progress);
+            mealTick++;
         }
-        assertTrue(releasedBeforeFinalization, "a delivered baker may continue to the workshop without monopolizing an empty depot");
-        assertTrue(breadEatenBeforeFinalization, "delivered bread must become available while the baker returns");
+        assertFalse(completed.humanPopulation().meals().containsKey(waitingResident));
+        // Consumption completes the activity even if its eating position already clears the port.
+        assertEquals(63, completed.inventory().fungibleResources()
+                .totalQuantity(job.settlementId(), "minecraft:bread"));
+        assertEquals(StationWorkState.Phase.DELIVERED,
+                completed.productionJobs().get(job.id()).stationWork().orElseThrow().phase());
+        var finalize = ProductionProcess.planCompletion(completed, ProductionProcess.complete(job, 28_000L)).stream()
+                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+        assertEquals(BakeryColdStep.Action.FINALIZE, finalize.action());
+        completed = ProductionProcess.reduceBakeryColdStep(completed, task.ownerId(), finalize);
         assertFalse(completed.productionJobs().containsKey(job.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().get(task.id()).status());
         assertEquals(completed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed)));
@@ -608,6 +468,7 @@ class BakeryColdVerticalTest {
             for (var id : List.of(originalJob.id(), started.job().id())) {
                 var current = restored.productionJobs().get(id);
                 if (current == null) continue;
+                restored = BakeryTestClock.arrive(restored, current, due + turn * 20L);
                 var step = ProductionProcess.planCompletion(restored, ProductionProcess.complete(current, due + turn * 20L))
                         .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                         .map(BakeryColdStep.class::cast).findFirst();
@@ -633,6 +494,7 @@ class BakeryColdVerticalTest {
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         for (int turn = 0; turn < 100; turn++) {
+            state = BakeryTestClock.arrive(state, started.job(), 300L + turn * 20L);
             BakeryColdStep step = ProductionProcess.planCompletion(state,
                     ProductionProcess.complete(started.job(), 300L + turn * 20L)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
@@ -661,6 +523,7 @@ class BakeryColdVerticalTest {
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         ProductionJob job = started.job();
         for (int turn = 0; turn < 100; turn++) {
+            state = BakeryTestClock.arrive(state, job, 300L + turn * 20L);
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 300L + turn * 20L))
                     .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -671,6 +534,7 @@ class BakeryColdVerticalTest {
         assertEquals(StationWorkState.Phase.STATION_LOAD, work.phase());
         assertTrue(state.inventory().fungibleResources().bindings().values().stream()
                 .noneMatch(binding -> binding.accountId().equals(work.actorAccountId())));
+        state = BakeryTestClock.arrive(state, job, 799L);
         ActorLocation actor = state.actorLocations().get(job.workerId());
         SceneLeaseId leaseId = new SceneLeaseId("lease:bakery-cold-hand-projection");
         SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(),
@@ -746,6 +610,7 @@ class BakeryColdVerticalTest {
         int count = 0;
         for (long due = 300L; state.productionJobs().containsKey(job.id()) && count < 700; due += 20L, count++) {
             due = BakeryTestClock.due(state, job, due);
+            state = BakeryTestClock.arrive(state, job, due);
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -790,6 +655,7 @@ class BakeryColdVerticalTest {
         int pickups = 0, loads = 0, recipes = 0, unloads = 0, deliveries = 0;
         for (long due = 300L, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20L, steps++) {
             due = BakeryTestClock.due(state, job, due);
+            state = BakeryTestClock.arrive(state, job, due);
             List<ProposedEvent> planned = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due));
             BakeryColdStep step = planned.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow(() -> new AssertionError("bakery COLD step stalled: " + planned));

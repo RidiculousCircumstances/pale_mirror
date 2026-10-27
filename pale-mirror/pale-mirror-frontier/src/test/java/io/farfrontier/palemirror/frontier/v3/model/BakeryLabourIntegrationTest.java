@@ -26,6 +26,7 @@ class BakeryLabourIntegrationTest {
             var job = state.productionJobs().get(started.job().id());
             if (job.stationWork().orElseThrow().phase() == StationWorkState.Phase.PROCESSING)
                 return new Fixture(state, job, tick);
+            state = BakeryTestClock.arrive(state, job, tick);
             var step = step(state, job, tick);
             state = ProductionProcess.reduceBakeryColdStep(state, job.settlementId(), step);
         }
@@ -130,7 +131,7 @@ class BakeryLabourIntegrationTest {
                 f.state(), f.job().settlementId(), early));
         var next = start.labourChange().orElseThrow().next();
         var forged = new BakeryColdStep(start.jobId(), start.expectedPhase(), start.action(), start.nextSurface(),
-                start.executionId(), Optional.empty(), Optional.of(new BakeryLabourChange(Optional.empty(), Optional.empty(),
+                start.executionId(), Optional.of(new BakeryLabourChange(Optional.empty(), Optional.empty(),
                 new WorkProgress(next.requiredMilliWork(), 1_000, next.evaluatedAtTick(), next.ratePermille(), next.activeUntilTick()), start.labourChange().orElseThrow().attendance())));
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(
                 f.state(), f.job().settlementId(), forged));

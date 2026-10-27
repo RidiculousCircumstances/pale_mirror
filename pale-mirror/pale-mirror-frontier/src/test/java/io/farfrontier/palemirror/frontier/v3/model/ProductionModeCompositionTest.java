@@ -50,15 +50,15 @@ class ProductionModeCompositionTest {
         long due = 300L;
         for (int turn = 0; state.productionJobs().containsKey(job.id()) && turn < 700; turn++, due += 20) {
             due = BakeryTestClock.due(state, job, due);
+            state = BakeryTestClock.arrive(state, job, due);
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due))
                     .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
             state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
             // Recovery must preserve each custody/recipe boundary, not repeatedly
             // serialize the whole 1024² world for every navigation or labor tick.
-            if (step.action() != BakeryColdStep.Action.MOVE)
                 state = codec.decode(codec.encode(state));
-            if (step.action() != BakeryColdStep.Action.MOVE) actions.add(step.action());
+            actions.add(step.action());
             if (step.action() == BakeryColdStep.Action.RECIPE) {
                 ProductionStationSpec station = state.inventory().containers().values().stream()
                         .flatMap(container -> container.productionStation().stream())

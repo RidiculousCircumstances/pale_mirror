@@ -56,11 +56,17 @@ class ServiceApproachProgressTest {
                 new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.PRODUCTION, new SubjectId("job:foreign"),
                         job.workerId(), meal.depotId()), checkpoint));
         var approaching = state.withActorBody(job.workerId(), departure);
-        var bakerStep = ProductionProcess.planCompletion(approaching, ProductionProcess.complete(job, 27_001L))
-                .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
-                .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
-        assertEquals(BakeryColdStep.Action.MOVE, bakerStep.action());
-        assertTrue(port.accessBoundary().cleared(bakerStep.nextSurface().standingBody()));
+        var bakerMove = ProductionProcess.planCompletion(approaching, ProductionProcess.complete(job, 27_001L))
+                .stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::cast).findFirst().orElseThrow();
+        approaching = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.reduceStarted(approaching, job.workerId(), bakerMove);
+        var bakerStep = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.plan(approaching,
+                io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.progress(bakerMove.movement(), 27_002L), 27_002L)
+                .stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced.class::cast).findFirst().orElseThrow();
+        assertTrue(port.accessBoundary().cleared(bakerStep.plannedRoute().orElseThrow().route().getLast().standingBody()));
         var arrival = ResidentMealProcess.planColdStep(state, visitor, travel.arrivalTick()).orElseThrow();
         assertEquals(port.serviceSurface(), arrival.nextSurface().orElseThrow());
         var occupied = state.withActorBody(job.workerId(), port.serviceSurface().standingBody());

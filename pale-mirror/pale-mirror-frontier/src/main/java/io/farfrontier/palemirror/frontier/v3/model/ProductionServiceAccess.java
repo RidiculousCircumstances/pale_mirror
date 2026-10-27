@@ -81,6 +81,8 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
                     || !(point(state, job).equals(pointId) || StationWorkStorage.source(job).equals(pointId) || StationWorkStorage.destination(job).equals(pointId))
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
+                        && !(state.actorMovements().get(job.workerId()).context()
+                            instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.StationWorkLeg)
                     || !operationEligible(state, job)) continue;
             var phase = job.stationWork().orElseThrow().phase();
             boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, job.workerId());
@@ -91,7 +93,7 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
         return List.copyOf(result);
     }
 
-    private static ServiceAccessDemand.Identity identity(ProductionJob job, SubjectId pointId) {
+    public static ServiceAccessDemand.Identity identity(ProductionJob job, SubjectId pointId) {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.PRODUCTION, job.id(), job.workerId(), pointId);
     }
 

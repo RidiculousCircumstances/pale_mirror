@@ -12,12 +12,14 @@ final class StationWorkColdStepAdmission {
         if (!step.executionId().actorId().equals(job.workerId()) || actor == null
                 || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("bakery step lost its exact living worker");
+        if (state.actorMovements().containsKey(job.workerId()))
+            throw new IllegalArgumentException("station action cannot race its retained movement");
         var work = job.stationWork().orElseThrow();
         if (work.phase() == StationWorkState.Phase.DELIVERED) {
             boolean scene = state.sceneLeases().values().stream().anyMatch(lease ->
                     lease.status() != SceneLeaseStatus.CLOSED && FrontierSceneBehaviors.isProductionWork(lease)
                     && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()));
-            if (scene || step.action() != BakeryColdStep.Action.MOVE && step.action() != BakeryColdStep.Action.FINALIZE)
+            if (scene || step.action() != BakeryColdStep.Action.FINALIZE)
                 throw new IllegalArgumentException("delivered bakery step still has a scene or a foreign action");
             if (step.action() == BakeryColdStep.Action.FINALIZE) {
                 if (!step.nextSurface().equals(actor.supportingSurface())
@@ -37,18 +39,10 @@ final class StationWorkColdStepAdmission {
             if (!pause && StationWorkProcess.coldBlocker(state, job, false).isPresent())
                 throw new IllegalArgumentException("bakery step is held by current custody or service access");
             boolean atGoal = actor.supportingSurface().equals(StationWorkGoal.current(state, job).station());
-            if (!pause && (step.action() == BakeryColdStep.Action.MOVE) == atGoal)
+            if (!pause && !atGoal)
                 throw new IllegalArgumentException("bakery movement/work is not at its phase boundary");
-            if (step.action() != BakeryColdStep.Action.MOVE
-                    && (step.action() != stationAction(state, job) || !step.nextSurface().equals(actor.supportingSurface())))
+            if (step.action() != stationAction(state, job) || !step.nextSurface().equals(actor.supportingSurface()))
                 throw new IllegalArgumentException("bakery station step has a foreign phase or body");
-        }
-        if (step.action() == BakeryColdStep.Action.MOVE) {
-            var receipt = step.plannedRoute().orElseThrow();
-            StationWorkNavigation.requireAcceptedRoute(state, job, receipt);
-            if ((work.phase().sourcePickup() || work.phase() == StationWorkState.Phase.DEPOT_DELIVERY)
-                    && !ProductionServiceAccess.mayAdvance(state, job, step.nextSurface()))
-                throw new IllegalArgumentException("bakery route cannot enter reserved service access");
         }
     }
 

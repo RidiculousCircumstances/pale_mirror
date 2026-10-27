@@ -117,13 +117,10 @@ final class FrontierV3StationWorkExecutor {
             return;
         }
         if (goal.phase() == StationWorkState.Phase.DELIVERED) {
-            var movement = FrontierV3ServiceClearanceNavigation.pursue(level, worker, state, job.settlementId(),
-                    StationWorkStorage.current(job), job.id(), job.workerId(), goal.ordinal(),
-                    1L, actuation);
-            if (movement.status() == FrontierV3GoalNavigation.Status.BLOCKED)
-                FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "delivered-clearance:" + movement.reason());
-            else FrontierV3PhysicalWaitTrace.clear(worker);
-            return; // Access completion is witnessed above, never arrival at one preferred cell.
+            FrontierV3GoalNavigation.stop(worker, actuation);
+            FrontierV3CommandSubmission.submit(runtime, "station-travel-draining", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
         }
         if ((goal.phase().sourcePickup()
                 || goal.phase() == StationWorkState.Phase.DEPOT_DELIVERY
@@ -134,11 +131,9 @@ final class FrontierV3StationWorkExecutor {
                 // only a new transfer can yield to a later service contender.
                 && job.stationWork().orElseThrow().pendingPhysicalStep().isEmpty()
                 && !ProductionServiceAccess.available(state, job)) {
-            var point = ProductionServiceAccess.point(state, job);
-            var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
-                    job.settlementId(), point, job.id(), job.workerId(), goal.ordinal(), 1L, actuation);
-            FrontierV3PhysicalWaitTrace.bakery(worker, state, job,
-                    "service-access:" + waiting.reason());
+            FrontierV3GoalNavigation.stop(worker, actuation);
+            FrontierV3CommandSubmission.submit(runtime, "station-access-draining", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
         FrontierV3ServiceApproachNavigation.forget(worker);
@@ -178,42 +173,11 @@ final class FrontierV3StationWorkExecutor {
                 FrontierV3StationWorkPhysicalEffect.tick(level, runtime, state, lease, job, baker);
             return;
         }
-        List<SurfaceAnchor> known;
-        try {
-            known = StationWorkNavigation.pathFrom(state, job, lease.memberBody(state.actorLocations(), job.workerId()).supportingSurface());
-        } catch (IllegalArgumentException unavailable) {
-            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "known-route:" + unavailable.getMessage());
-            return; // The job remains retained; an unsupported path is not a fabricated arrival.
-        }
-        MovementOrder order = new MovementOrder(job.id(), job.workerId(), goal.ordinal(),
-                1L, List.of(goal.station()), TraversalCapability.PEDESTRIAN,
-                MovementOrder.ArrivalPolicy.EXACT_STATION);
-        FrontierV3GoalNavigation.Result movement = FrontierV3GoalNavigation.pursue(level, worker,
-                FrontierV3GoalNavigation.Goal.routed(order, known, state.bootstrap().bounds()), actuation);
-        StationWorkState work = job.stationWork().orElseThrow();
-        FrontierV3PhysicalWaitTrace.clear(worker);
-        switch (navigationBlockChange(work.phase(), work.block(), movement)) {
-        case BLOCK -> {
-            FrontierV3StationWorkPhysicalEffect.block(level, runtime, lease, job,
-                    new BakeryWorkBlock(BakeryWorkBlock.Reason.ROUTE_BLOCKED,
-                            job.facilityId(), -1, "minecraft:air", 0));
-        }
-        case CLEAR -> FrontierV3StationWorkPhysicalEffect.clearBlock(level, runtime, lease, job);
-        case NONE -> { }
-        }
-    }
-
-    enum NavigationBlockChange { NONE, BLOCK, CLEAR }
-
-    /** Bakery-owned interpretation; navigation itself does not decide production outcomes. */
-    static NavigationBlockChange navigationBlockChange(StationWorkState.Phase phase,
-            Optional<BakeryWorkBlock> current, FrontierV3GoalNavigation.Result movement) {
-        if (phase == StationWorkState.Phase.DELIVERED) return NavigationBlockChange.NONE;
-        if (movement.status() == FrontierV3GoalNavigation.Status.BLOCKED) {
-            return movement.blockReason().orElseThrow() == FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED
-                    ? NavigationBlockChange.NONE : NavigationBlockChange.BLOCK;
-        }
-        return current.filter(block -> block.reason() == BakeryWorkBlock.Reason.ROUTE_BLOCKED).isPresent()
-                ? NavigationBlockChange.CLEAR : NavigationBlockChange.NONE;
+        // The effect scene never pursues the next station. Release the same body;
+        // the production owner will issue its common ActorMovement leg after closure.
+        if (job.stationWork().orElseThrow().pendingPhysicalStep().isPresent()) return;
+        FrontierV3GoalNavigation.stop(worker, actuation);
+        FrontierV3CommandSubmission.submit(runtime, "station-next-leg-draining", lease.id().value(),
+                new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
     }
 }

@@ -7,7 +7,14 @@ import java.util.Optional;
 final class ProductionActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.PRODUCTION; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
-    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ProductionJourneyKnowledge::acknowledge; }
+    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+        return request -> job(request.expectedState(), request.execution()).stationWork().isPresent()
+                ? new ActorMovementBodyCheckpoint().acknowledge(request) : ProductionJourneyKnowledge.acknowledge(request);
+    }
+    @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuationAfterResume(
+            FrontierWorldState state, ActorExecutionId execution, long tick) {
+        return java.util.List.of(ProductionContinuation.wake(job(state, execution), tick));
+    }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     @Override public ActorActivityResumption resumptionReference() { return ActorActivityResumption.noRetainedExecutionReference(); }
     @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
@@ -15,7 +22,14 @@ final class ProductionActivityCapability implements ActorActivityCapability {
             job(state, execution);
             // Production's post-death planner refunds only proven pre-effect jobs.
             // A possibly applied transform retains the exact job/input/effect for settlement.
-            return new ActorActivityDeath.Acknowledgement(state, execution, FrontierWorldStateUpdate.begin(),
+            var changes = FrontierWorldStateUpdate.begin();
+            var movement = state.actorMovements().get(execution.actorId());
+            if (movement != null) {
+                if (!movement.executionId().equals(execution)) throw new IllegalArgumentException("production death cannot retire foreign movement");
+                var movements = new java.util.LinkedHashMap<>(state.actorMovements()); movements.remove(execution.actorId());
+                changes.actorMovements(movements);
+            }
+            return new ActorActivityDeath.Acknowledgement(state, execution, changes,
                     ActorActivityDeath.Disposition.RETAIN_CAUSAL_OWNER);
         });
     }
@@ -48,12 +62,24 @@ final class ProductionActivityCapability implements ActorActivityCapability {
                 ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, job.id()));
         else if (status == ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT) waiting = Optional.of(
                 new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, job.id()));
+        else if (state.actorMovements().containsKey(execution.actorId())) waiting = Optional.of(new ActorActivityCheckpoint.Wait(
+                ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, job.id()));
         else if (status == ResidentWorkYield.Status.READY) waiting = Optional.empty();
         else throw new IllegalArgumentException("production checkpoint has no declared UAE translation");
         return new ActorActivityCheckpoint(state, execution, waiting);
     }
+    @Override public ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {
+        var job = job(state, execution);
+        var status = checkpointStatus(state, job);
+        return new ActorActivityCheckpoint(state, execution, status == ResidentWorkYield.Status.READY ? Optional.empty()
+                : Optional.of(new ActorActivityCheckpoint.Wait(status == ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT
+                    ? ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION : ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, job.id())));
+    }
     @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
-        return false; // Production goals are issued by the exact production-scene consumer.
+        validateReference(state, execution);
+        var movement = state.actorMovements().get(execution.actorId());
+        return lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT && movement != null && movement.executionId().equals(execution)
+                && movement.order().legalStations().contains(lease.goalBody().supportingSurface());
     }
     static ResidentWorkYield.Status checkpointStatus(FrontierWorldState state, ProductionJob job) {
         if (job.stationWork().isEmpty()) return ResidentWorkYield.Status.OWNER_SAFETY_HOLD;

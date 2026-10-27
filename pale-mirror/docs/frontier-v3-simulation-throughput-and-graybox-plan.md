@@ -149,3 +149,11 @@ Current unmodified r276 baseline over187seconds advanced4,475canonical ticks
 versus3,741host ticks; debt decreased4,084->3,350. It still forced19,238groups
 (~4.3per canonical tick). The debt is workload-dependent, not permanently
 increasing at every instant. See`build/simulation-throughput/r276-baseline-*.json`.
+
+Phase B source now delegates station-work travel to a typed common movement provider,
+retains an exact phase/material-trip/selected-service relationship in schema309,
+and parks completion until arrival or a safe owner transition. Station scenes no
+longer actuate journeys; delivery cleanup can settle outside work hours. The old
+per-cell bakery MOVE and its private HOT result translator are deleted. Coherent
+production/food/multi-input/recovery and process-catalog checks passed (47seconds); no native or deployed
+performance claim is made from this source checkpoint.

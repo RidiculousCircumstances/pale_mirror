@@ -874,6 +874,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.actor_movement_cold_route_started",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(
+                    "frontier.actor_movement_started", "frontier.actor_movement_interrupted",
                     "kernel.reconsideration_requested", "frontier.reference_mutation_closed",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
