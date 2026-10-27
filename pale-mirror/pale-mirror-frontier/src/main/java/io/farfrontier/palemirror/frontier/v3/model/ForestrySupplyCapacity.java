@@ -22,9 +22,7 @@ final class ForestrySupplyCapacity implements SupplyCapacityPort {
         var result = new ArrayList<SupplyPlanner.Process>();
         for (var profile : rules.harvests()) {
             if (!stocks.containsKey(profile.outputItem())) continue;
-            long logs = ForestKnowledge.knownBy(state, home).stream().map(header -> ForestKnowledge.require(state, header.tree()))
-                    .filter(tree -> tree.declaration().species().equals(profile.species()))
-                    .mapToLong(ForestTree::remaining).sum();
+            long logs = ForestKnowledge.remaining(state, home, profile.species());
             if (backed) {
                 var available = EquipmentProductiveCapacity.items(state, home, workers.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet()),
                         io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentRequirements.allOf(Set.of(rules.tool())));

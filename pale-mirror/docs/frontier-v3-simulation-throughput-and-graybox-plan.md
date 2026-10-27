@@ -962,3 +962,24 @@ batch flushes before changing any barrier: add read-only append-durability count
 bounded requiring-event counts and explicit PERSISTENCE_WAIT yield telemetry.
 No publication, force, retention, scheduling or recovery semantics changed.
 Existing store prefix/replay and runtime/performance checks+guardrails PASS36s.
+
+### Public market integration and next measured limiter (2026-10-27)
+
+`eccdda977` implements the accepted public commodity book under schema311. Clean
+release gate passed58s, including selected adapter/store/runtime checks, packaged
+JAR, economy55 and route-patrol4. Mainr279/private311 same-seed profiles deployed
+and verified; former310 worlds retained. Full-pack terrain check passed27actions;
+six exact frames inspected, client/private display exited. This is terrain access,
+not terminal production/trade acceptance.
+
+Native100 ordinary interval1→2269 in333s, debt362→4755: phaseG remains failed.
+Snapshotat1805 has321orders for100parties, one actual intention per endpoint,
+instead of2048 peer copies. Zero retained contracts does not establish no history.
+20s public-market-warm.jfr attributes major advice/preparation cost to procurement
+provision valuation collecting production capacity; forestry repeatedly resolved
+whole regional tree descriptors to obtain quantity. Compact explicit-species
+headers and a common forest-source quantity view now reuse bootstrap+forest-region
+facts across unrelated market/inventory drafts. Sparse losses/generation checks,
+predecessor reads and actual extraction authority remain unchanged. Existing
+forestry withdrawal/recovery and procurement/pricing checks plus guardrails pass37s.
+Native effect remains to be measured in the retained311 world, without another reset.

@@ -9,13 +9,15 @@ import java.util.*;
 public final class ForestKnowledge {
     private static final ImmutableKeyedInputView<ForestRegion, List<ForestTree>> REGIONS = new ImmutableKeyedInputView<>(256);
     private static final ImmutableKeyedInputView<SubjectId, List<GrayboxForestPlan.Header>> KNOWN = new ImmutableKeyedInputView<>(32);
+    private record Stock(SubjectId home, String species) { }
+    private static final ImmutableResultView<Stock, Long> STOCKS = new ImmutableResultView<>(256);
     public record Log(TreeReference tree, long revision, int index) { }
     private ForestKnowledge() { }
     /** Cheap source availability only; routes and economic decisions have different owners. */
     public static boolean harvestable(FrontierWorldState state, SubjectId home) {
         int capacity = state.bootstrap().ruleset().forestry().cargoItems();
         return knownBy(state, home).stream().anyMatch(header -> {
-            int remaining = state.forest().find(header.tree()).map(ForestTree::remaining).orElse(header.logs());
+            int remaining = remaining(state, header);
             return remaining > 0 && remaining <= capacity;
         });
     }
@@ -42,10 +44,22 @@ public final class ForestKnowledge {
                 long distance = dx*dx+dz*dz;
                 if (patches.stream().anyMatch(patch -> distance >= (long)patch.innerRadius()*patch.innerRadius()
                         && distance <= (long)patch.outerRadius()*patch.outerRadius()))
-                    result.putIfAbsent(declaration.id(), new GrayboxForestPlan.Header(TreeReference.declaredBy(declaration), declaration.origin(), declaration.logs().size()));
+                    result.putIfAbsent(declaration.id(), new GrayboxForestPlan.Header(TreeReference.declaredBy(declaration), declaration.origin(), declaration.logs().size(), declaration.species()));
             }
             return List.copyOf(result.values());
         });
+    }
+    /** Compact source accounting: pristine authored quantity needs no block/tree expansion.
+     * Current sparse source changes retain their exact generation/address checks. */
+    public static int remaining(FrontierWorldState state, GrayboxForestPlan.Header header) {
+        return state.forest().find(header.tree()).map(ForestTree::remaining).orElse(header.logs());
+    }
+    /** Source quantity depends on forest generations/losses and declared knowledge,
+     * not on another market draft's inventory, price or provisional reservation. */
+    public static long remaining(FrontierWorldState state, SubjectId home, String species) {
+        return STOCKS.get(List.of(state.bootstrap(), state.forest().regions()), new Stock(home, species), () ->
+                knownBy(state, home).stream().filter(header -> header.species().equals(species))
+                        .mapToLong(header -> remaining(state, header)).sum());
     }
     public static Optional<Log> at(FrontierWorldState state, BlockPosition position) {
         Log found = null;

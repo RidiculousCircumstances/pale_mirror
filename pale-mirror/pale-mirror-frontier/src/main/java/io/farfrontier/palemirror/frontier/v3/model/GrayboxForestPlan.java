@@ -16,7 +16,7 @@ public final class GrayboxForestPlan {
         @Override public int hashCode() { return System.identityHashCode(bootstrap); }
     }
     private record Patch(ForestryRules.Patch rule, BlockPosition centre) { }
-    public record Header(TreeReference tree, BlockPosition origin, int logs) { }
+    public record Header(TreeReference tree, BlockPosition origin, int logs, String species) { }
     private final FrontierBootstrap bootstrap;
     private final List<Patch> patches;
     private final Set<TerrainColumn> protectedColumns;
@@ -102,7 +102,7 @@ public final class GrayboxForestPlan {
     }
     public TreeDescriptor describe(Header header) {
         int[] logs = new int[header.logs()]; for (int y = 0; y < logs.length; y++) logs[y] = TreeBlocks.encode(0, y, 0, 0);
-        return new TreeDescriptor(header.tree().id(), header.tree().generation(), PROVIDER, "minecraft:oak", header.origin(),
+        return new TreeDescriptor(header.tree().id(), header.tree().generation(), PROVIDER, header.species(), header.origin(),
                 new TreeBlocks(List.of(LOG), logs));
     }
     private Header header(Patch patch, int x, int z) {
@@ -114,7 +114,7 @@ public final class GrayboxForestPlan {
         var origin = new BlockPosition(x, bootstrap.terrain().supportYAt(x, z) + 1, z);
         var identity = UUID.nameUUIDFromBytes((bootstrap.worldId().value() + "|" + bootstrap.seed() + "|"
                 + PROVIDER + "|" + rule.id() + "|" + x + "|" + z).getBytes(StandardCharsets.UTF_8));
-        return new Header(new TreeReference(new TreeId(identity), 1, ForestRegion.containing(origin)), origin, height);
+        return new Header(new TreeReference(new TreeId(identity), 1, ForestRegion.containing(origin)), origin, height, "minecraft:oak");
     }
     private boolean clear(int x, int z) {
         for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++)

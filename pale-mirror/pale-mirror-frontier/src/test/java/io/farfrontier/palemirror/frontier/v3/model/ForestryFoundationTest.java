@@ -67,6 +67,15 @@ class ForestryFoundationTest {
     @Test void playerWithdrawalPersistsThroughUnrelatedUpdateAndRecoveryWithoutIssuingWood() {
         var initial = FrontierWorldState.initial(BOOTSTRAP); var tree = firstTree();
         var referenceBefore = TreeReference.declaredBy(tree);
+        var header = ForestKnowledge.knownBy(initial, BOOTSTRAP.ruleset().forestry().patches().getFirst().knownBy())
+                .stream().filter(value -> value.tree().equals(referenceBefore)).findFirst().orElseThrow();
+        assertEquals(tree.species(), header.species());
+        assertEquals(tree.logs().size(), ForestKnowledge.remaining(initial, header));
+        var home = BOOTSTRAP.ruleset().forestry().patches().getFirst().knownBy();
+        long total = ForestKnowledge.remaining(initial, home, tree.species());
+        assertEquals(ForestKnowledge.knownBy(initial, home).stream().filter(value -> value.species().equals(tree.species()))
+                .mapToLong(GrayboxForestPlan.Header::logs).sum(), total);
+        assertEquals(0, ForestKnowledge.remaining(initial, home, "minecraft:birch"));
         var preparing = ForestrySourceCustody.apply(initial, ForestrySourceCustody.object(referenceBefore),
                 new ForestrySourceBoundary(referenceBefore, ForestrySourceBoundary.Operation.PREPARE, 0, 0,
                         ForestrySourceCustody.fingerprint(ForestTree.initial(tree))), 1);
@@ -82,6 +91,13 @@ class ForestryFoundationTest {
         var codec = new FrontierWorldStateCodec(); var restored = codec.decode(codec.encode(unrelated));
         assertEquals(changed.forest(), restored.forest());
         assertFalse(restored.forest().require(reference).present(0));
+        assertEquals(tree.logs().size() - 1, ForestKnowledge.remaining(restored, header));
+        assertEquals(total - 1, ForestKnowledge.remaining(restored, home, tree.species()));
+        assertEquals(total, ForestKnowledge.remaining(FrontierWorldState.initial(BOOTSTRAP), home, tree.species()),
+                "reading changed source facts must preserve the predecessor image");
+        var stale = new GrayboxForestPlan.Header(new TreeReference(reference.id(), reference.generation() + 1, reference.region()),
+                header.origin(), header.logs(), header.species());
+        assertThrows(IllegalArgumentException.class, () -> ForestKnowledge.remaining(restored, stale));
         assertThrows(IllegalArgumentException.class, () -> ForestObservation.apply(restored, observation, 3));
         assertThrows(IllegalArgumentException.class, () -> restored.forest().require(new TreeReference(reference.id(),
                 reference.generation() + 1, reference.region())));
