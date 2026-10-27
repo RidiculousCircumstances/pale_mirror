@@ -10,6 +10,29 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianCertifiedRegionTest {
+    @Test void certifiedTrafficCannotDiscardAnUnfinishedLayeredSurvey() {
+        var revision = PedestrianGeometryRevision.initial(); var firstColumn = new AtomicInteger();
+        PedestrianRouteGeometry geometry = new PedestrianRouteGeometry() {
+            public Object version() { return revision; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(revision); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 40_000, 16); }
+            public OptionalInt uniformSupport(WorldBounds area) { return area.minX() == 0 ? OptionalInt.empty() : OptionalInt.of(63); }
+            public SurfaceAnchor supportAt(int x, int z) {
+                if (x == 0 && z == 0) firstColumn.incrementAndGet();
+                return SurfaceAnchor.at(x, 63, z);
+            }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+        };
+        var cache = new PedestrianRegionCache(); var first = new PedestrianRegion.Tile(0, 0);
+        assertNull(cache.region(geometry, first, 1).region());
+        for (int x = 1; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 1).region());
+        assertTrue(cache.diagnostic().evictions() > 0, "the ordinary graph retention bound must still apply");
+        var completed = cache.region(geometry, first, 100_000).region(); assertNotNull(completed);
+        assertEquals(1, firstColumn.get(), "unrelated ready graphs cannot restart the admitted survey");
+        var route = completed.refine(SurfaceAnchor.at(0, 63, 0), SurfaceAnchor.at(15, 63, 15));
+        for (int turn = 0; turn < 100 && route.result() == null; turn++) route.advance(32);
+        KnownPedestrianNavigation.requireRoute(geometry, Objects.requireNonNull(route.result()));
+    }
     private static PedestrianRouteGeometry plane(boolean certified, AtomicInteger reads) {
         return new PedestrianRouteGeometry() {
             public WorldBounds bounds() { return new WorldBounds(-32, -32, 128, 128); }

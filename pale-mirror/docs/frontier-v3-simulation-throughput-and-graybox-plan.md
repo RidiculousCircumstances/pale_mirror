@@ -1287,3 +1287,26 @@ The immediate diagnostic consumer receives constant-size regional cache counters
 cannot survey, admit, wake or repair a route. These discriminate remaining cache
 churn versus genuinely detailed topology without increasing workers/cache limits.
 No standalone runtime observer or second planning owner is introduced.
+
+
+### Keep unfinished regional work separate from completed-cache eviction (2026-10-28)
+
+`21516e09a` exact141navigation/shape/runtime/package/economy55releasePASS64s;
+both retained311 worlds verified. Native100 interval19247→19313/151s,debt414→3376 remainsFAIL.
+Live counters show113168lookups/40284builds/38317evictions initially, later
+440594/240528/238595. Both planes(192422) and layeredgraphs(47848) complete; it is
+incorrect to call all those evictions unfinished work. Counters identify churn;
+source independently proves that graph-retention eviction can discard unfinished
+surveys before their next cooperative slice. Repeated cheap region traffic can
+therefore erase the same complex continuation indefinitely.
+
+Normal graph/surface pressure now evicts only completed entries. The separate
+64-builder ceiling still evicts oldest unfinished work when that ceiling itself
+is exceeded. Worst-case builders64×4096 fit below both2048region and524288surface
+ceilings, so ordinary overflow always has a completed victim. Neither capacity
+nor concurrency increases. Existing certified-region coverage now starts a
+partial survey, passes2200unrelated clear regions through the real retention
+limit, resumes the original survey without re-reading its first column, and
+validates its terminal adjacent route. Worker/region-invalidation coverage and
+guardrails PASS19s. This is bounded continuation progress, not a timing benchmark.
+The change does not establish that this was the sole remaining native bottleneck.

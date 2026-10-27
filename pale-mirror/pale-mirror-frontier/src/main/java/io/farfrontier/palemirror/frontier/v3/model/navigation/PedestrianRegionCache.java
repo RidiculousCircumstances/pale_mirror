@@ -65,7 +65,7 @@ final class PedestrianRegionCache {
             var iterator = entries.entrySet().iterator();
             while (iterator.hasNext()) {
                 var entry = iterator.next().getValue();
-                if (building && !entry.accountedBuilding) continue;
+                if (entry.accountedBuilding != building) continue;
                 slots -= entry.accountedSize; if (entry.accountedBuilding) builders--;
                 iterator.remove(); return;
             }
@@ -126,7 +126,11 @@ final class PedestrianRegionCache {
         for (var bucket : buckets) { count += bucket.entries.size(); size += bucket.slots; builders += bucket.builders; }
         while (count > MAX_REGIONS || size > MAX_SURFACES || builders > MAX_BUILDERS) {
             boolean building = builders > MAX_BUILDERS;
-            var victim = buckets.stream().filter(bucket -> building ? bucket.builders > 0 : !bucket.entries.isEmpty()).findFirst().orElseThrow();
+            // Graph capacity evicts completed derived data, never an unfinished
+            // worker continuation. Builders have their own smaller bound; their
+            // worst-case reserved size alone fits below both graph ceilings.
+            var victim = buckets.stream().filter(bucket -> building ? bucket.builders > 0
+                    : bucket.entries.size() > bucket.builders).findFirst().orElseThrow();
             int oldSize = victim.slots, oldBuilders = victim.builders;
             victim.evict(building); evictions++; count--; size += victim.slots - oldSize; builders += victim.builders - oldBuilders;
         }
