@@ -225,9 +225,9 @@
         }
       },
       "offset": {
-        "x": -8,
-        "y": 0,
-        "z": -8
+        "x": 8,
+        "y": 8,
+        "z": -10
       },
       "settleMs": 1000
     },
@@ -247,19 +247,23 @@
         "diagnostic": {
           "view": "site",
           "id": "site:7-wheat-field",
-          "field": "firstCrop"
+          "field": "boardPosition"
         }
       }
     },
     {
-      "type": "assert_visible_block",
+      "type": "assert_visible_board",
+      "text": "WHEAT FIELD",
       "position": {
         "diagnostic": {
           "view": "site",
           "id": "site:7-wheat-field",
-          "field": "firstCrop"
+          "field": "boardPosition"
         }
       },
+      "radius": 3,
+      "maxDistance": 64,
+      "maxAngleDeg": 50,
       "timeoutMs": 30000
     },
     {
