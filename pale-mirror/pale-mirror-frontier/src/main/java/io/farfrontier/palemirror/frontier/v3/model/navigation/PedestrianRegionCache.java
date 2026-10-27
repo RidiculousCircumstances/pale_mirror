@@ -6,6 +6,7 @@ import java.util.*;
 final class PedestrianRegionCache {
     private static final int MAX_REGIONS = 2_048, MAX_SURFACES = MAX_REGIONS * PedestrianRegion.CELLS;
     private static final int MAX_BUILDERS = 64;
+    private long lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs;
     private final Map<PedestrianRouteGeometry, Bucket<PedestrianRegion.Tile>> views = new WeakHashMap<>();
     private record RegionalKey(PedestrianRegion.Tile tile, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) { }
     // These are reconstructible value keys (terrain epoch + body profile), not
@@ -24,6 +25,7 @@ final class PedestrianRegionCache {
         // Accounted only under the cache lock, independently of a worker's private builder.
         private int accountedSize = PedestrianRegionBuild.MAX_SURFACES;
         private boolean accountedBuilding = true;
+        private boolean countedCompletion;
         Entry(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) { initialGeometry = geometry; this.tile = tile; }
         Lookup advance(int budget, java.util.function.BooleanSupplier mayContinue) {
             if (region != null || limited) return new Lookup(region, 1, limited);
@@ -81,7 +83,9 @@ final class PedestrianRegionCache {
             var revision = geometry.regionalRevision().orElseThrow();
             Bucket<RegionalKey> regions;
             synchronized (this) {
-                if (scoped.size() >= 64 && !scoped.containsKey(revision.geometryScope())) scoped.remove(scoped.keySet().iterator().next());
+                if (scoped.size() >= 64 && !scoped.containsKey(revision.geometryScope())) {
+                    evictions += scoped.remove(scoped.keySet().iterator().next()).entries.size();
+                }
                 regions = scoped.computeIfAbsent(revision.geometryScope(), ignored -> new Bucket<>());
             }
             var key = new RegionalKey(tile, revision.at(tile.x(), tile.z()), geometry.bounds());
@@ -89,7 +93,9 @@ final class PedestrianRegionCache {
         } else {
             Bucket<PedestrianRegion.Tile> regions;
             synchronized (this) {
-                if (views.size() >= 64 && !views.containsKey(geometry)) views.clear();
+                if (views.size() >= 64 && !views.containsKey(geometry)) {
+                    evictions += views.values().stream().mapToInt(value -> value.entries.size()).sum(); views.clear();
+                }
                 regions = views.computeIfAbsent(geometry, ignored -> new Bucket<>());
             }
             return advance(regions, tile, geometry, tile, budget, mayContinue);
@@ -98,11 +104,20 @@ final class PedestrianRegionCache {
     private <K> Lookup advance(Bucket<K> bucket, K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile,
                                 int budget, java.util.function.BooleanSupplier mayContinue) {
         Entry entry;
-        synchronized (this) { entry = bucket.acquire(key, geometry, tile); trim(); }
+        synchronized (this) {
+            lookups++; if (!bucket.entries.containsKey(key)) buildsStarted++;
+            entry = bucket.acquire(key, geometry, tile); trim();
+        }
         // Different regions build concurrently; the same region has one builder.
         // Neither a second worker nor the host blocks behind its survey.
         var result = entry.advance(budget, mayContinue);
-        synchronized (this) { bucket.reconcile(key, entry); trim(); }
+        synchronized (this) {
+            if (result.region() != null && !entry.countedCompletion) {
+                if (result.region().certifiedPlane()) certifiedPlanes++; else layeredGraphs++;
+                entry.countedCompletion = true;
+            }
+            bucket.reconcile(key, entry); trim();
+        }
         return result;
     }
     private void trim() {
@@ -113,8 +128,11 @@ final class PedestrianRegionCache {
             boolean building = builders > MAX_BUILDERS;
             var victim = buckets.stream().filter(bucket -> building ? bucket.builders > 0 : !bucket.entries.isEmpty()).findFirst().orElseThrow();
             int oldSize = victim.slots, oldBuilders = victim.builders;
-            victim.evict(building); count--; size += victim.slots - oldSize; builders += victim.builders - oldBuilders;
+            victim.evict(building); evictions++; count--; size += victim.slots - oldSize; builders += victim.builders - oldBuilders;
         }
     }
-    synchronized void clear() { views.clear(); scoped.clear(); }
+    synchronized PedestrianRegionCacheDiagnostic diagnostic() {
+        return new PedestrianRegionCacheDiagnostic(lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs);
+    }
+    synchronized void clear() { views.clear(); scoped.clear(); lookups = buildsStarted = evictions = certifiedPlanes = layeredGraphs = 0; }
 }

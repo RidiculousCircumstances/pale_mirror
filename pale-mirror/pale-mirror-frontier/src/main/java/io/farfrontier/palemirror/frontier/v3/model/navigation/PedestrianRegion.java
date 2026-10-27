@@ -85,6 +85,7 @@ final class PedestrianRegion {
     boolean unknown() { return unknown; }
     int size() { return topology.size(); }
     int componentCount() { return topology.componentCount(); }
+    boolean certifiedPlane() { return topology instanceof Plane; }
     SurfaceAnchor surface(int index) { return topology.surface(index); }
     List<Integer> outgoing(int index) { return topology.outgoing(index); }
     int component(SurfaceAnchor surface) { int index = topology.index(surface); return index < 0 ? -1 : topology.component(index); }

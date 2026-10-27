@@ -461,6 +461,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     public synchronized long completedCount() { return completedCount; }
     public synchronized long workUnits() { return workUnits; }
     public synchronized long corridorCandidates() { return corridors.hits(); }
+    public synchronized PedestrianRegionCacheDiagnostic regionCacheDiagnostic() { return regions.diagnostic(); }
     private static PedestrianRouteResult waiting(String reason) {
         return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, java.util.List.of(), 0L, 0, reason);
     }

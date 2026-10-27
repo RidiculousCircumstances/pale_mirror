@@ -78,9 +78,11 @@ public final class NavigationBodyGeometry {
         // A horizontal swept body at the upper contact plus vertical ascent/descent.
         // Boxes give exact continuous collision checks, not sparse samples that can miss a thin wall.
         double top = Math.max(from.feetY(), to.feetY());
-        return sweep(view, profile, from.x(), from.feetY(), from.z(), from.x(), top, from.z())
+        // A zero-height endpoint sweep is contained in the horizontal swept box,
+        // including its complete query halo. Do not read that same volume twice.
+        return (from.feetY() == top || sweep(view, profile, from.x(), from.feetY(), from.z(), from.x(), top, from.z()))
                 && sweep(view, profile, from.x(), top, from.z(), to.x(), top, to.z())
-                && sweep(view, profile, to.x(), top, to.z(), to.x(), to.feetY(), to.z());
+                && (to.feetY() == top || sweep(view, profile, to.x(), top, to.z(), to.x(), to.feetY(), to.z()));
     }
     /** Vertical gravity continuation from a spatial pose, without inventing a source contact. */
     public static boolean canDescend(NavigationCollisionView view, UnitNavigationProfile profile,

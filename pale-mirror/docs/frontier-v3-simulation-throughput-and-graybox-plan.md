@@ -1254,3 +1254,36 @@ terminalNO_PATH at the new wall. Focused correction16sPASS; no production geomet
 validation was weakened. Existing concurrent-region test now barriers in provider
 certificate preparation, directly covering the formerly shared-lock seam.
 Clean release must combine the complete133selection and this final worker case.
+
+
+### Reuse immutable collision facts and eliminate contained endpoint sweeps (2026-10-28)
+
+`3f93bbd85` cleanreleasePASS64s, full133navigationselection, native-runtime,
+packagedJAR/economy55; both retained311worlds verified. Native100 ordinary interval
+18241→18507/151s,debt289→3053 remainsFAIL. Latest20s profile still attributes
+most navigation samples to detailed body sweep/region construction. Actual allocation
+deltas19.04GB/32.64GB across the two navigation threads do not show a reduction in
+this evolving retained workload. The temporary full economic-review snapshot probe
+was too broad for a certificate question and stopped (read-only, no native mutation).
+No unproved certificate/cache-size hypothesis is treated as the remaining cause.
+
+NavigationBodyGeometry checked each flat transition's horizontal swept box and
+both zero-height endpoint swept boxes. The latter are wholly contained in the
+horizontal box, including their one-cell query halos. The common collision owner
+now omits only those contained zero-height sweeps. Actual ascent/descent, all
+horizontal swept volume, fluid/unknown/thin-wall/overhang checks remain exact.
+This changes neither allowed body profiles nor known-vs-unknown interpretation.
+
+KnownPedestrianNavigation's explicit immutable regional geometry now retains a
+bounded8192-cell memo inside each captured collision view. Region/body/pose checks
+reuse both known and missing facts from that exact view; a successor receives its
+own cache. Conservative nonregional producers retain direct reads. The existing
+shape integration case now exercises explicit revisions and proves that new unknown
+geometry cannot reuse cached old clearance or poison a captured predecessor.
+Existing navigation/body/layered/withdrawal/recovery selection PASS24s.
+
+The immediate diagnostic consumer receives constant-size regional cache counters
+(lookups, buildsStarted, explicit evictions, certifiedPlanes, layeredGraphs). They
+cannot survey, admit, wake or repair a route. These discriminate remaining cache
+churn versus genuinely detailed topology without increasing workers/cache limits.
+No standalone runtime observer or second planning owner is introduced.

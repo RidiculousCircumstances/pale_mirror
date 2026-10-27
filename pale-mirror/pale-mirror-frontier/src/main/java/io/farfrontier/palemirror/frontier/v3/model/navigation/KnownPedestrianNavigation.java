@@ -51,7 +51,16 @@ public final class KnownPedestrianNavigation {
         var hard = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(occupied);
         Objects.requireNonNull(regionalRevision);
         var collisions = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView() {
+            // This geometry captures immutable survey/obstacle inputs. Repeated
+            // body/edge queries share facts only within that captured revision;
+            // a new view cannot inherit a known cell or a missing-fact verdict.
+            private final io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<BlockPosition,
+                    java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell>> cells =
+                    new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(8_192);
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> cell(BlockPosition position) {
+                return regionalRevision.isPresent() ? cells.get(position, () -> read(position)) : read(position);
+            }
+            private java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> read(BlockPosition position) {
                 if (!bootstrap.bounds().contains(position) || !surveyed.blockKnown(position)) return java.util.Optional.empty();
                 var observed = surveyed.collisionAt(position);
                 if (observed.isPresent()) return observed;

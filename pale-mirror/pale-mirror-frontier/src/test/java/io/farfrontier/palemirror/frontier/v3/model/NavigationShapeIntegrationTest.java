@@ -125,13 +125,16 @@ class NavigationShapeIntegrationTest {
         var observations = NavigationGeometryState.empty().observe(0, Map.of(from.support(), NavigationObservation.known(SLAB)));
         var base = (BoundedPedestrianApproach.SurveyedSurface) (x, z) -> SurfaceAnchor.at(x, 64, z);
         var overlay = RetainedNavigationGeometry.overlay(base, observations, Map.of());
-        var geometry = new ProfiledPedestrianGeometry(KnownPedestrianNavigation.geometry(bootstrap, Set.of(), overlay),
+        var revision = PedestrianGeometryRevision.initial();
+        var geometry = new ProfiledPedestrianGeometry(KnownPedestrianNavigation.geometry(bootstrap, Set.of(), overlay, revision, Optional.of(revision)),
                 UnitNavigationProfile.VILLAGER, ignored -> false);
         assertTrue(geometry.canTraverse(from, to));
         var missing = observations.observe(1, Map.of(from.support().offset(0, 1, 0), NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING)));
+        var changed = revision.changed(Set.of(new PedestrianGeometryRevision.Region(1, 1)));
         var unknown = new ProfiledPedestrianGeometry(KnownPedestrianNavigation.geometry(bootstrap, Set.of(),
-                RetainedNavigationGeometry.overlay(base, missing, Map.of())), UnitNavigationProfile.VILLAGER, ignored -> false);
+                RetainedNavigationGeometry.overlay(base, missing, Map.of()), changed, Optional.of(changed)), UnitNavigationProfile.VILLAGER, ignored -> false);
         assertFalse(unknown.clearanceKnown(from));
+        assertTrue(geometry.canTraverse(from, to), "reading a newer unknown revision cannot poison the captured predecessor's facts");
         var failure = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> KnownPedestrianNavigation.plannedBetween(unknown, from, to));
         assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, failure.status());
     }

@@ -194,6 +194,7 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"searchWorkUnits\":" + (owner == runtime ? planner.workUnits() : 0)
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
                 + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)
+                + ",\"regionCache\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.regionCacheDiagnostic()) : "null")
                 + (details ? ",\"oldestRequests\":" + waitingDiagnostic(runtime)
                     + ",\"activeRequests\":" + (owner == runtime ? requestDiagnostic(planner.activeDiagnostics()) : "[]")
                     + ",\"geometryWaits\":" + knowledgeDiagnostic(runtime) : "")
