@@ -60,6 +60,37 @@ class InMemoryFrontierReadinessTest {
         assertEquals(1, engine.transactions().size());
     }
 
+    @Test void queueOnlyCommitsDoNotRestartUnaddressedPollingButChangedOwnerInputsDo() {
+        var actions = new ArrayList<ScheduledAction>();
+        for (int i = 0; i < 13; i++) actions.add(scheduled("schedule:held-" + i, "resident:held-" + i, 1, 1));
+        for (int i = 0; i < 10; i++) actions.add(scheduled("schedule:ready-" + i, "resident:ready-" + i, 2, 1));
+        var heldChecks = new AtomicInteger();
+        ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
+            public boolean held(Counter state, ScheduledAction action) {
+                if (action.dueAt().ticks() != 1) return false;
+                heldChecks.incrementAndGet(); return state.value() == 0;
+            }
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
+            }
+        };
+        var engine = new InMemoryFrontierEngine<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (Counter state, FrontierCommand command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> new Counter(state.value() + ((Delta) event.payload()).value()),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(64, 100L, 64), actions);
+        var budget = new WorkBudget(1, 4, 8, 1, 4);
+        for (int turn = 0; turn < 32; turn++) engine.advanceTo(new SimInstant(2), budget);
+        assertEquals(10, engine.transactions().size());
+        assertEquals(13, heldChecks.get(), "unchanged owner inputs must be polled once across queue-only revisions");
+        var id = new CommandId("test:changed-readiness-inputs");
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION,
+                id, WORLD, engine.checkpoint().revision(), new SimInstant(2), SUBJECT, CauseChain.root(id), new Delta(1))));
+        for (int turn = 0; turn < 32 && !engine.scheduledActions().isEmpty(); turn++) engine.advanceTo(new SimInstant(2), budget);
+        assertTrue(engine.scheduledActions().isEmpty(), "a changed business input must still recheck and release the waiters");
+        assertEquals(1, engine.canonicalState().state().value());
+    }
     private static ScheduledAction scheduled(String id, String subject, long due, int weight) {
         return new ScheduledAction(new ScheduleId(id), new SimInstant(due), 0, new SubjectId(subject), "process.test", weight);
     }

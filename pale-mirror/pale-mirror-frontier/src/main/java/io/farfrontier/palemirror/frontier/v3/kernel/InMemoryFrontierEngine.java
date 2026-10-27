@@ -283,7 +283,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             if (!schedules.containsExact(value.action())) { value.calculation().cancel(); iterator.remove(); }
         }
         admissionIndex.begin(budget);
-        schedules.beginExecutionPass(target, budget.maxClassificationEvaluations(), revision);
+        schedules.beginExecutionPass(target, budget.maxClassificationEvaluations(), state);
         List<TransactionId> completed = new ArrayList<>();
         int weight = 0, adviceAttempts = 0;
         ScheduledAction blocked = null;

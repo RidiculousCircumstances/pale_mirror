@@ -21,6 +21,8 @@ public final class PedestrianPlanningWakeIndex {
     private final Set<ScheduleId> runnable = new HashSet<>();
     private final Set<ScheduleId> ownerHeld = new HashSet<>();
     private final Set<PedestrianRouteRequest> released = new LinkedHashSet<>();
+    private record Retention(long from, long until, List<PedestrianRouteRequest> requests, Set<PedestrianDemandKey> keys) { }
+    private Retention retention;
 
     public void replace(ScheduledAction action, List<PedestrianRouteRequest> requests) {
         replace(action, requests, Origin.LIVE_CONTINUATION, Optional.empty());
@@ -42,7 +44,7 @@ public final class PedestrianPlanningWakeIndex {
         var demands = new LinkedHashMap<PedestrianDemandKey, PedestrianRouteRequest>();
         requests.forEach(request -> demands.put(PedestrianDemandKey.of(request), request));
         var distinct = List.copyOf(demands.values());
-        waits.put(action.id(), new Wait(action, distinct, origin, predecessor));
+        waits.put(action.id(), new Wait(action, distinct, origin, predecessor)); retention = null;
         for (var request : distinct) dependents.computeIfAbsent(PedestrianDemandKey.of(request), ignored -> new LinkedHashSet<>()).add(action.id());
     }
     public void remove(ScheduleId id) {
@@ -51,6 +53,7 @@ public final class PedestrianPlanningWakeIndex {
         runnable.remove(id); ownerHeld.remove(id);
         var previous = waits.remove(id);
         if (previous == null) return;
+        retention = null;
         for (var request : previous.requests()) {
             var key = PedestrianDemandKey.of(request);
             var owners = dependents.get(key); owners.remove(id);
@@ -60,18 +63,26 @@ public final class PedestrianPlanningWakeIndex {
     /** Live continuations retain delivery even across a future retry deadline.
      * Detached future previews are optional cache users until due/runnable.
      * An explicit business-owner refusal releases delivery pressure. */
-    public List<PedestrianRouteRequest> retainedRequests(SimInstant instant) {
-        var requests = new LinkedHashSet<PedestrianRouteRequest>();
-        for (var entry : waits.entrySet()) if (!ownerHeld.contains(entry.getKey())
-                && (entry.getValue().origin() == Origin.LIVE_CONTINUATION
-                    || entry.getValue().action().dueAt().compareTo(instant) <= 0 || runnable.contains(entry.getKey())))
-            requests.addAll(entry.getValue().requests());
-        return List.copyOf(requests);
+    public List<PedestrianRouteRequest> retainedRequests(SimInstant instant) { return retention(instant).requests(); }
+    public Set<PedestrianDemandKey> retainedDemandKeys(SimInstant instant) { return retention(instant).keys(); }
+    private Retention retention(SimInstant instant) {
+        long now = instant.ticks();
+        if (retention != null && now >= retention.from() && now < retention.until()) return retention;
+        var requests = new LinkedHashMap<PedestrianDemandKey, PedestrianRouteRequest>();
+        long until = Long.MAX_VALUE;
+        for (var entry : waits.entrySet()) if (!ownerHeld.contains(entry.getKey())) {
+            var wait = entry.getValue();
+            if (wait.origin() == Origin.LIVE_CONTINUATION || wait.action().dueAt().ticks() <= now || runnable.contains(entry.getKey()))
+                wait.requests().forEach(request -> requests.put(PedestrianDemandKey.of(request), request));
+            else until = Math.min(until, wait.action().dueAt().ticks());
+        }
+        retention = new Retention(now, until, List.copyOf(requests.values()), Set.copyOf(requests.keySet()));
+        return retention;
     }
     public void ownerHeld(ScheduledAction action, boolean held) {
         var wait = waits.get(action.id());
         if (wait == null || !wait.action().equals(action)) return;
-        if (held) ownerHeld.add(action.id()); else ownerHeld.remove(action.id());
+        if (held ? ownerHeld.add(action.id()) : ownerHeld.remove(action.id())) retention = null;
     }
     public void releaseUnused(java.util.function.Consumer<PedestrianRouteRequest> release) {
         var retired = new HashSet<PedestrianDemandKey>();
@@ -94,11 +105,11 @@ public final class PedestrianPlanningWakeIndex {
                 || !expected.kind().equals(replacement.kind()) || expected.priority() != replacement.priority()
                 || expected.weight() != replacement.weight())
             throw new IllegalArgumentException("planning resume lost its exact continuation");
-        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION, Optional.empty()));
+        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION, Optional.empty())); retention = null;
         makeRunnable(expected.id());
     }
     private void makeRunnable(ScheduleId id) {
-        ready.remove(id); parked.remove(id); runnable.add(id);
+        ready.remove(id); parked.remove(id); if (runnable.add(id)) retention = null;
     }
     public boolean waiting(ScheduledAction action) {
         var wait = waits.get(action.id());

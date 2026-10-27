@@ -553,3 +553,27 @@ was an invalid fixed-crop assertion, then an airborne visit unsupported by the
 ordinary player's gravity. The checked scenario now targets the actual board and
 uses a grounded east-side camera. Earlier failed receipts are retained explicitly;
 no full graphical or station-terminal acceptance is claimed from them.
+
+
+The next connected scheduler audit replaces revision-based unaddressed polling
+with exact immutable owner inputs plus canonical time. A queue-only commit cannot
+change held(state,action), so it must not restart an entire captured polling round.
+The kernel regression drains10queue-only commits while13unchanged refusals are
+checked once, then changes actual owner state and requires every waiter to resume.
+Actual addressedsignals remain independent. NativeJFR also measured whole-demand
+hasCalculation/discard scans and rebuilding retention snapshots. The planner now
+indexes exact normalized calculation addresses; the continuation owner reuses its
+immutable retention request/key snapshot until declared membership/hold/readiness
+changes or a future recovery preview becomes due. Boundaries/cancellation/profile/
+terrain/recovery checks pass21s(derived-scheduling-indexes-focused.log); no route,
+worker or result capacity was raised. Added read-only counters identify which
+ordinary deterministic budget is exhausted, instead of guessing from an idle tick.
+
+The corrected9116full-pack terrain scenario completed27actions/6frames. Landmark
+geometry is present; final field/board is visible but dark rainy framing is not
+readableM3 or a terminalworkstory. Clients/private displays exited. Native100town
+snapshot67152 had1810hungry (previous~3000) and72movements; actual meals progressed,
+but9116ten-minute ordinary debt reached10013. G remains open; do not hide this behind
+component greens. A WALsample2335records/71ticks had126command receipts (~5percent),
+so optional planning commands alone were NOT established as the dominant cost.
+No speculative deadline-model replacement is authorized by that sample.

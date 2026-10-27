@@ -35,6 +35,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private long completedCount;
     private java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemandCache;
     private final Map<PedestrianRouteRequest, Long> admittedAt = new LinkedHashMap<>();
+    private final Map<PedestrianDemandKey, java.util.Set<PedestrianRouteRequest>> calculationAddresses = new java.util.HashMap<>();
     private final Map<Object, PedestrianRouteGeometry> synchronizedScopes = new LinkedHashMap<>();
 
     public CooperativePedestrianPlanner() { executor = null; }
@@ -75,7 +76,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         Completed result = completed.get(request);
         if (result != null) return result.result();
         fairness.requested(request, service);
-        admittedAt.putIfAbsent(request, turns);
+        rememberAddress(request, turns);
         if (!pending.containsKey(request)) {
             if (deferred.size() >= MAX_DEFERRED_DEMANDS && !deferred.containsKey(request)) {
                 invalidated(request);
@@ -169,7 +170,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             var oldest = reusable.orElseThrow(); removeCompleted(oldest); invalidated(oldest);
         }
         awaitingPublication.remove(search); pending.remove(request);
-        admittedAt.remove(request); fairness.remove(request); completedCount++;
+        forgetAddress(request); completedCount++;
         corridors.remember(request.geometry(), result, dependency);
         completed.put(request, new Completed(result, dependency)); retainedSurfaces += result.route().size();
         knowledgeDemandCache = null;
@@ -204,7 +205,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var retained = suspended.remove(request); if (retained != null) retained.cancel();
     }
     @Override public synchronized void discardUnobserved(PedestrianRouteRequest request) {
-        for (var retained : java.util.List.copyOf(admittedAt.keySet())) if (request.sameDemand(retained)) discardExact(retained);
+        for (var retained : java.util.List.copyOf(calculationAddresses.getOrDefault(PedestrianDemandKey.of(request), java.util.Set.of())))
+            discardExact(retained);
     }
     private void discardExact(PedestrianRouteRequest request) {
         var search = pending.remove(request);
@@ -231,13 +233,21 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     @Override public synchronized boolean hasCalculation(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
                                                          PedestrianRouteExtent extent) {
-        return admittedAt.keySet().stream().anyMatch(request -> request.start().equals(start) && request.target().equals(target)
-                && request.extent().equals(extent) && (request.geometry() == geometry
-                    || geometry.regionalRevision().isPresent() && sameScope(request, geometry)));
+        return calculationAddresses.containsKey(PedestrianDemandKey.of(PedestrianRouteRequest.of(geometry, start, target, extent)));
     }
     /** Diagnostic counter only. Addressed changes, not this global counter, wake continuations. */
     public synchronized long progressRevision() { return progressRevision; }
-    private void forgetAddress(PedestrianRouteRequest request) { admittedAt.remove(request); fairness.remove(request); }
+    private void rememberAddress(PedestrianRouteRequest request, long since) {
+        if (admittedAt.putIfAbsent(request, since) == null)
+            calculationAddresses.computeIfAbsent(PedestrianDemandKey.of(request), ignored -> new java.util.LinkedHashSet<>()).add(request);
+    }
+    private void forgetAddress(PedestrianRouteRequest request) {
+        if (admittedAt.remove(request) != null) {
+            var key = PedestrianDemandKey.of(request); var addresses = calculationAddresses.get(key);
+            addresses.remove(request); if (addresses.isEmpty()) calculationAddresses.remove(key);
+        }
+        fairness.remove(request);
+    }
     private void invalidated(PedestrianRouteRequest request) { forgetAddress(request); changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED); }
     /** A compatible immutable view is neither a result nor a lost dependency.
      * Consumers subscribe by complete demand scope and still revalidate current geometry. */
@@ -272,7 +282,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 var rotation = new ArrayDeque<PedestrianRouteRequest>();
                 for (var queued : ready) rotation.addLast(queued.equals(request) ? replacement : queued);
                 ready.clear(); ready.addAll(rotation);
-                admittedAt.put(replacement, since);
+                rememberAddress(replacement, since);
             } else { invalidated(request); fairness.remove(replacement); search.cancel(); ready.remove(request); }
             progressRevision++;
         }
@@ -299,7 +309,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 if (retained.rebase(replacement)) suspended.put(replacement, retained);
                 else retained.cancel();
             }
-            rebasedDeferred.put(replacement, entry.getValue()); admittedAt.put(replacement, since); progressRevision++;
+            rebasedDeferred.put(replacement, entry.getValue()); rememberAddress(replacement, since); progressRevision++;
         }
         // A refreshed view is the same demand, not a new arrival at the end of the queue.
         deferred.clear(); deferred.putAll(rebasedDeferred);
@@ -365,6 +375,11 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         if (requests.size() > MAX_DEFERRED_DEMANDS) throw new IllegalArgumentException("retained route demands exceed their metadata bound");
         var keys = new java.util.HashSet<PedestrianDemandKey>();
         requests.forEach(request -> keys.add(PedestrianDemandKey.of(request)));
+        retainDemandKeys(keys);
+    }
+    /** Immutable derived subscription snapshot supplied by the continuation owner. */
+    public synchronized void retainDemandKeys(java.util.Set<PedestrianDemandKey> keys) {
+        if (keys.size() > MAX_DEFERRED_DEMANDS) throw new IllegalArgumentException("retained demands exceed metadata bound");
         retainedDemands = java.util.Set.copyOf(keys);
     }
     public synchronized int awaitingPublicationCount() { return awaitingPublication.size(); }
@@ -419,7 +434,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         closed = true; pending.values().forEach(PedestrianSearchTask::cancel);
         inFlight.forEach(PedestrianSearchTask::cancel);
         suspended.values().forEach(PedestrianSearchTask::cancel); suspended.clear(); fairness.clear();
-        pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); changes.clear();
+        pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); calculationAddresses.clear(); changes.clear();
         awaitingPublication.clear(); retainedDemands = java.util.Set.of();
         regions.clear(); corridors.clear(); itineraries.clear(); retainedSurfaces = 0; retainedRegions = 0;
         synchronizedScopes.clear();

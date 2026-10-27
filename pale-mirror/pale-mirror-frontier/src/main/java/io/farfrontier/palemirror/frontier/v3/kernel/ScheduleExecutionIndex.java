@@ -20,7 +20,7 @@ final class ScheduleExecutionIndex {
     private final Set<ScheduleId> auditCandidates = new HashSet<>();
     private final Map<ScheduleId, Long> readySince = new HashMap<>();
     private long missedWakes;
-    private Optional<io.farfrontier.palemirror.frontier.v3.api.Revision> pollRevision = Optional.empty();
+    private Object pollInputs;
     private SimInstant pollInstant;
     private int pollRemaining;
 
@@ -33,9 +33,9 @@ final class ScheduleExecutionIndex {
     }
 
     /** Metadata promotion is bounded separately from owner business assessment. */
-    void begin(SimInstant now, int limit, Optional<io.farfrontier.palemirror.frontier.v3.api.Revision> revision) {
-        if (revision.isEmpty() || !revision.equals(pollRevision) || !now.equals(pollInstant)) {
-            pollRevision = revision; pollInstant = now; pollRemaining = polled.size();
+    void begin(SimInstant now, int limit, Optional<Object> inputs) {
+        if (inputs.isEmpty() || inputs.orElseThrow() != pollInputs || !now.equals(pollInstant)) {
+            pollInputs = inputs.orElse(null); pollInstant = now; pollRemaining = polled.size();
         }
         promoteDue(now, limit);
         for (int count = 0; count < limit && !audits.isEmpty() && audits.firstKey() <= now.ticks(); count++) {
@@ -45,7 +45,8 @@ final class ScheduleExecutionIndex {
         }
         // No wake address was declared: inspect fairly, never invent a dependency
         // or let an unchanged refusal stand in front of independently READY work.
-        // A cooperative continuation drains the captured polling round. Refilled
+        // A cooperative continuation drains the captured polling round. Queue-only
+        // revisions do not change the immutable owner inputs or restart that round. Refilled
         // refusals cannot renew the round indefinitely at the same state/time.
         int count = Math.min(limit, Math.min(pollRemaining, polled.size()));
         pollRemaining -= count;

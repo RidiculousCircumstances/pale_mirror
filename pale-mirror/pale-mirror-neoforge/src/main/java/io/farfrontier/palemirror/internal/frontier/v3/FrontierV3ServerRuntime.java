@@ -337,6 +337,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         String base = preparations.diagnostic(engine != null && engine.hasPendingCalculation());
         return base.substring(0, base.length() - 1) + ",\"commandInvalidations\":" + commandPreparationInvalidations
                 + ",\"lastInvalidatingPayload\":" + new com.google.gson.Gson().toJson(lastPreparationInvalidator)
+                + ",\"ordinaryBudgetExhaustions\":" + new com.google.gson.Gson().toJson(ordinaryBudgetExhaustions)
                 + ",\"environmentalSamples\":" + environmentalSamples + ",\"yieldedEnvironmentalSamples\":" + yieldedEnvironmentalSamples + "}";
     }
 
@@ -347,6 +348,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
     private Runnable readiness = () -> { };
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
+    private final java.util.Map<String, Long> ordinaryBudgetExhaustions = new java.util.TreeMap<>();
     private Long ordinaryBoundary;
     private static final long MAX_READY_PREFIX_NANOS = 2_000_000L;
     /** One allowance per observed host tick, shared by all ready continuations. */
@@ -368,6 +370,12 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             if (result.isEmpty()) break;
             var used = result.orElseThrow().consumed();
             ordinaryTurnBudget = used.remaining(budget);
+            if (ordinaryTurnBudget.isEmpty()) {
+                if (used.actions() == budget.maxActions()) ordinaryBudgetExhaustions.merge("ACTIONS", 1L, Long::sum);
+                if (used.weight() == budget.maxWeight()) ordinaryBudgetExhaustions.merge("WEIGHT", 1L, Long::sum);
+                if (used.classifications() == budget.maxClassificationEvaluations()) ordinaryBudgetExhaustions.merge("CLASSIFICATIONS", 1L, Long::sum);
+                if (used.executions() == budget.maxExecutionEvaluations()) ordinaryBudgetExhaustions.merge("EXECUTIONS", 1L, Long::sum);
+            }
             boolean advanced = instant.ticks() > before || used.actions() > 0 || used.classifications() > 0 || used.executions() > 0;
             progressed |= advanced;
             if (!advanced || used.weight() > 1 || engine.hasPendingCalculation() || engine.hasPendingCommit()

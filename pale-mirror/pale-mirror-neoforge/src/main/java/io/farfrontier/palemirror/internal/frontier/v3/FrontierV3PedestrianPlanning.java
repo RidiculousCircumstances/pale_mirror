@@ -40,7 +40,7 @@ final class FrontierV3PedestrianPlanning {
         initialize(runtime, parallelism);
         recoverWaits(runtime);
         continuations.releaseUnused(planner::discardUnobserved);
-        planner.retainDemands(continuations.retainedRequests(runtime.canonicalState().orElseThrow().instant()));
+        planner.retainDemandKeys(continuations.retainedDemandKeys(runtime.canonicalState().orElseThrow().instant()));
         long started = System.nanoTime();
         planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
                 () -> System.nanoTime() - started < allowance);
