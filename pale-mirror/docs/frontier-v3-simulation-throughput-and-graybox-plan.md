@@ -983,3 +983,26 @@ facts across unrelated market/inventory drafts. Sparse losses/generation checks,
 predecessor reads and actual extraction authority remain unchanged. Existing
 forestry withdrawal/recovery and procurement/pricing checks plus guardrails pass37s.
 Native effect remains to be measured in the retained311 world, without another reset.
+
+### Scoped owner reads after the public-book integration (2026-10-28)
+
+Retained311 `6f810a6e1` ordinary100 interval3431→4436/333s, debt986→6643
+stillFAIL; a restart creates a new volatile host-debt epoch and proves no catch-up.
+Post-change20s JFR: advice951samples, server673, preparation101, navigation1.
+Forest enumeration no longer dominates; remaining valuation work includes field
+queries collecting actual tools even when the explicit unbacked branch discards
+them. Cargo/crew reads also repeatedly scanned every field to resolve one exact job.
+
+The connected read-path correction reuses ResourceSiteState's exact typed job
+directory, separates cargo identity validation from unused interruption-status
+computation, filters field ownership from its nominal declaration before building
+geometry, and skips ignored tool collection only for unbacked valuation. Real
+execution/equipment checks remain unchanged. Bootstrap settlement/structure/home
+lookups share one bounded immutable declaration index. Harvest service demand
+selects the nominal destination before access-geometry compilation, and generic
+storage slot selection indexes already validated/backed claims by container.
+Missing/foreign identities and changed claim backing retain their strict checks.
+Focused owner/cargo/equipment/sourcing/validation checks+guardrails PASS34s;
+changed service/storage/equipment/procurement composition+guardrails PASS42s.
+Clean-ref release/deployment and native throughput measurement remain required;
+this is not phase-G closure or a measured speed ratio.

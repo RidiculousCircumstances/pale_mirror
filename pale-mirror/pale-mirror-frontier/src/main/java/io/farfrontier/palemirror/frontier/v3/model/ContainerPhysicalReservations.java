@@ -7,6 +7,7 @@ import java.util.function.Function;
 final class ContainerPhysicalReservations {
     private static final ImmutableInputView<List<ContainerSlotClaim>> CLAIMS = new ImmutableInputView<>();
     private static final ImmutableInputView<List<ContainerSlotClaim>> BACKED = new ImmutableInputView<>();
+    private static final ImmutableInputView<Map<SubjectId, List<ContainerSlotClaim>>> BY_CONTAINER = new ImmutableInputView<>();
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
     private record DemandKey(SubjectId owner, SubjectId container, ContainerSectionId section, String kind, ContainerInboundCapacity.Representation representation) { }
     private record Owners(ResourceSiteState sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
@@ -65,16 +66,26 @@ final class ContainerPhysicalReservations {
                     + claim.slot() + " owners=" + prior + "," + claim.owner());
         }
     }
+    /** Select only this exact storage's already validated/backed claims. The list
+     * identity includes all current owner and inventory backing dependencies. */
+    private static List<ContainerSlotClaim> atContainer(FrontierWorldState state, SubjectId container) {
+        var claims = claims(state);
+        return BY_CONTAINER.get(List.of(claims), () -> {
+            var result = new HashMap<SubjectId, List<ContainerSlotClaim>>();
+            for (var claim : claims) result.computeIfAbsent(claim.slot().containerId(), ignored -> new ArrayList<>()).add(claim);
+            result.replaceAll((id, values) -> List.copyOf(values));
+            return Collections.unmodifiableMap(result);
+        }).getOrDefault(container, List.of());
+    }
     static Set<Integer> slots(FrontierWorldState state, SubjectId container) {
         return slots(state, container, Optional.empty());
     }
     static Set<Integer> slots(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
-        return claims(state).stream().filter(claim -> claim.slot().containerId().equals(container)
-                && completing.filter(claim.owner().id()::equals).isEmpty())
+        return atContainer(state, container).stream().filter(claim -> completing.filter(claim.owner().id()::equals).isEmpty())
                 .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     static Set<Integer> slotsExceptClaim(FrontierWorldState state, SubjectId container, ContainerSlotClaim.Owner current) {
-        return claims(state).stream().filter(claim -> claim.slot().containerId().equals(container) && !claim.owner().equals(current))
+        return atContainer(state, container).stream().filter(claim -> !claim.owner().equals(current))
                 .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     static List<ContainerInboundCapacity.Demand> uncoveredDemands(FrontierWorldState state) {

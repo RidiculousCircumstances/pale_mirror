@@ -118,6 +118,11 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
         return access;
     }
 
+    /** Nominal destination selection needs no access geometry or slot-capacity compilation. */
+    static SubjectId serviceContainer(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return FieldEquipment.transferring(job) ? FieldEquipment.endpoint(state, job).containerId() : job.outputSlot().containerId();
+    }
+
     public static ResourceStorageAccess servicePort(FrontierWorldState state, ResourceSiteHarvestJob job) {
         return FieldEquipment.transferring(job)
                 ? ResourceStorageAccess.at(state, FieldEquipment.endpoint(state, job).containerId()) : depotPort(state, job);

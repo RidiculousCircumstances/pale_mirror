@@ -262,6 +262,14 @@ class ActorExecutionLifecycleTest {
         var state = field.state();
         var current = state.actorExecutions().actors().get(field.job().workerId()).current().orElseThrow();
         var checkpoint = new HarvestActivityCapability().checkpoint(state, current);
+        var assignment = HumanAssignmentProjection.compile(state).assignment(current.actorId());
+        assertEquals(FrontierResourceSiteHarvestSceneSupport.executionCheckpoint(state, assignment).status() == ResidentWorkYield.Status.READY, checkpoint.ready());
+        var foreignWorker = state.humanPopulation().residents().keySet().stream()
+                .filter(id -> !id.equals(current.actorId())).findFirst().orElseThrow();
+        assertThrows(IllegalArgumentException.class, () -> FrontierResourceSiteHarvestSceneSupport.carriedResources(state,
+                new HumanAssignment(foreignWorker, HumanAssignmentKind.FIELD_HARVEST, assignment.ownerId())));
+        assertThrows(IllegalArgumentException.class, () -> FrontierResourceSiteHarvestSceneSupport.carriedResources(state,
+                new HumanAssignment(current.actorId(), HumanAssignmentKind.FIELD_HARVEST, java.util.Optional.of(new SubjectId("job:unknown-cargo-owner")))));
         assertEquals(checkpoint.ready() && field.job().progress().work().filter(WorkProgress::running).isEmpty(),
                 ActorSpatialCourtesy.assess(state, current).ready(),
                 "spatial displacement cannot accrue field labour while away from its cell");

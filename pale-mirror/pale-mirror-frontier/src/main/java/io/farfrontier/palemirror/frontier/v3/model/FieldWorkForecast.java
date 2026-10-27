@@ -76,13 +76,14 @@ final class FieldWorkForecast {
         int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition, catalog))
                 .min().orElse(catalog.minSpeedPermille());
         if (requirement != null && !workers.isEmpty()) {
-            var equipment = EquipmentProductiveCapacity.items(state, workers.getFirst().settlementId(), workers.stream().map(ResidentProfile::id)
-                    .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
             final int workerSpeed = speed;
-            speed = equipmentBacked ? equipment.stream().mapToInt(item -> io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
-                    workerSpeed, state.bootstrap().ruleset().tools(), item, requirement)).min().orElse(speed)
-                    : state.bootstrap().ruleset().tools().definitions().values().stream().filter(tool -> tool.supports(requirement))
-                        .mapToInt(tool -> Math.toIntExact(Math.max(1, (long) workerSpeed * tool.speedPermille() / 1000))).min().orElse(speed);
+            if (equipmentBacked) {
+                var equipment = EquipmentProductiveCapacity.items(state, workers.getFirst().settlementId(), workers.stream().map(ResidentProfile::id)
+                        .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+                speed = equipment.stream().mapToInt(item -> io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
+                        workerSpeed, state.bootstrap().ruleset().tools(), item, requirement)).min().orElse(speed);
+            } else speed = state.bootstrap().ruleset().tools().definitions().values().stream().filter(tool -> tool.supports(requirement))
+                    .mapToInt(tool -> Math.toIntExact(Math.max(1, (long) workerSpeed * tool.speedPermille() / 1000))).min().orElse(speed);
         }
         return Math.ceilDiv(Math.multiplyExact(Math.ceilDiv(Math.multiplyExact(definition.workUnits(), effortPermille), 1000), 1000L), speed);
     }

@@ -17,6 +17,27 @@ import java.util.Set;
 /** Pure invariant helpers shared by the canonical frontier world state. */
 public final class FrontierWorldStateSupport {
     private FrontierWorldStateSupport() { }
+    private record Declarations(Map<SubjectId, Settlement> settlements, Map<SubjectId, SettlementStructure> structures,
+                                Map<SubjectId, SubjectId> structureHomes) { }
+    private static final ImmutableResultView<String, Declarations> DECLARATIONS = new ImmutableResultView<>(4);
+    private static Declarations declarations(FrontierBootstrap bootstrap) {
+        return DECLARATIONS.get(List.of(bootstrap), "bootstrap-declarations", () -> {
+            var settlements = new java.util.HashMap<SubjectId, Settlement>();
+            var structures = new java.util.HashMap<SubjectId, SettlementStructure>();
+            var homes = new java.util.HashMap<SubjectId, SubjectId>();
+            for (var settlement : bootstrap.settlements()) {
+                if (settlements.putIfAbsent(settlement.id(), settlement) != null)
+                    throw new IllegalArgumentException("duplicate bootstrap settlement declaration");
+                for (var structure : settlement.structures()) {
+                    if (structures.putIfAbsent(structure.id(), structure) != null)
+                        throw new IllegalArgumentException("duplicate bootstrap structure declaration");
+                    homes.put(structure.id(), settlement.id());
+                }
+            }
+            return new Declarations(ImmutableLookupMap.copyOf(settlements), ImmutableLookupMap.copyOf(structures), ImmutableLookupMap.copyOf(homes));
+        });
+    }
+
 
     static Set<SubjectId> bioformIds(FrontierBootstrap bootstrap) {
         Set<SubjectId> ids = new HashSet<>();
@@ -36,8 +57,9 @@ public final class FrontierWorldStateSupport {
     }
 
     public static Settlement settlement(FrontierBootstrap bootstrap, SubjectId settlementId) {
-        return bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("unknown production settlement: " + settlementId.value()));
+        var settlement = declarations(bootstrap).settlements().get(settlementId);
+        if (settlement == null) throw new IllegalArgumentException("unknown production settlement: " + settlementId.value());
+        return settlement;
     }
 
     static SettlementStructure structure(Settlement settlement, SubjectId structureId) {
@@ -46,15 +68,15 @@ public final class FrontierWorldStateSupport {
     }
 
     static SettlementStructure structureById(FrontierBootstrap bootstrap, SubjectId structureId) {
-        return bootstrap.settlements().stream().flatMap(settlement -> settlement.structures().stream())
-                .filter(structure -> structure.id().equals(structureId)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("unknown structure: " + structureId.value()));
+        var structure = declarations(bootstrap).structures().get(structureId);
+        if (structure == null) throw new IllegalArgumentException("unknown structure: " + structureId.value());
+        return structure;
     }
 
     public static SubjectId structureSettlement(FrontierBootstrap bootstrap, SubjectId structureId) {
-        return bootstrap.settlements().stream().filter(settlement -> settlement.structures().stream()
-                        .anyMatch(structure -> structure.id().equals(structureId))).map(Settlement::id).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("unknown settlement structure: " + structureId.value()));
+        var home = declarations(bootstrap).structureHomes().get(structureId);
+        if (home == null) throw new IllegalArgumentException("unknown settlement structure: " + structureId.value());
+        return home;
     }
 
     public static boolean isHiveOrgan(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {

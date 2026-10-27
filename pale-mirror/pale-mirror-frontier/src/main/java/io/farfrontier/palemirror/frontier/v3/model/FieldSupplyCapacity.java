@@ -24,7 +24,7 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
     private static List<Cell> cells(FrontierWorldState state, SubjectId home) {
         var cells = new ArrayList<Cell>();
         for (var site : state.resourceSites().sites().values()) {
-            if (!state.resourceSite(site.siteId()).settlementId().equals(home)
+            if (!state.resourceSites().declarations().get(site.siteId()).settlementId().equals(home)
                     || site.phase() == ResourceSitePhase.DESTROYED || site.phase() == ResourceSitePhase.CONFLICT) continue;
             var cycle = state.resourceSites().cycle(site.siteId());
             for (var cell : cycle.layout().cells()) {
@@ -67,12 +67,15 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
                 Math.multiplyExact(workWindow, workers.size())));
         var forecast = io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.assess(sources, workers.size(),
                 schedule.dayTicks(), workWindow, window.ticks());
-        var equipment = EquipmentProductiveCapacity.items(state, home, workers.stream().map(ResidentProfile::id)
-                .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
-        long operations = EquipmentProductiveCapacity.remainingOperations(state, equipment, FieldHarvestExtraction.DEFINITION.toolRequirement());
-        long tilling = cells.stream().filter(cell -> cell.renew() && cell.condition().soil().untilled()).count();
-        long yieldPerUse = cells.stream().mapToLong(cell -> FieldAgronomy.yield(state.bootstrap(), cell.crop())).min().orElse(1);
-        long equipmentOutput = Math.multiplyExact(Math.max(0, operations - tilling), yieldPerUse);
+        long equipmentOutput = Long.MAX_VALUE;
+        if (equipmentBacked) {
+            var equipment = EquipmentProductiveCapacity.items(state, home, workers.stream().map(ResidentProfile::id)
+                    .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+            long operations = EquipmentProductiveCapacity.remainingOperations(state, equipment, FieldHarvestExtraction.DEFINITION.toolRequirement());
+            long tilling = cells.stream().filter(cell -> cell.renew() && cell.condition().soil().untilled()).count();
+            long yieldPerUse = cells.stream().mapToLong(cell -> FieldAgronomy.yield(state.bootstrap(), cell.crop())).min().orElse(1);
+            equipmentOutput = Math.multiplyExact(Math.max(0, operations - tilling), yieldPerUse);
+        }
         var releases = new ArrayList<SupplyPlanner.OutputRelease>();
         long promised = stocks.get(FieldHarvestExtraction.ITEM).promisedProduction();
         for (var release : forecast) {

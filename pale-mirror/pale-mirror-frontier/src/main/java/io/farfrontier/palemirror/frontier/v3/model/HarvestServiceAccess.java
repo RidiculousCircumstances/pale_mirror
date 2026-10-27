@@ -23,7 +23,7 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
             for (var job : site.harvestJobs().values()) {
                 if (state.humanPopulation().meals().containsKey(job.workerId())
                         || state.actorMovements().containsKey(job.workerId())
-                        || !ResourceSiteHarvestGoal.servicePort(state, job).containerId().equals(pointId)) continue;
+                        || !ResourceSiteHarvestGoal.serviceContainer(state, job).equals(pointId)) continue;
                 boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, job.workerId());
                 if (ResourceSiteHarvestGoal.current(state, job).kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL || occupied)
                     result.add(new ServiceAccessDemand(identity(job, pointId), priority(), occupied

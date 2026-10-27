@@ -11,19 +11,13 @@ import java.util.Set;
 /** Exact candidate and validation boundary for one actor-owned field-work scene. */
 public final class FrontierResourceSiteHarvestSceneSupport {
     static boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
-        executionCheckpoint(state, assignment);
-        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        ResourceSiteHarvestJob job = assignmentJob(state, assignment);
         return !FieldEquipment.waitingForStorage(state, job)
                 && (!job.deliveryDue() || ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job));
     }
     private FrontierResourceSiteHarvestSceneSupport() { }
     static Set<SubjectId> resumeWakeKeys(FrontierWorldState state, HumanAssignment assignment) {
-        executionCheckpoint(state, assignment);
-        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        ResourceSiteHarvestJob job = assignmentJob(state, assignment);
         var keys = new java.util.HashSet<SubjectId>();
         keys.add(job.id()); keys.add(job.siteId()); keys.add(job.outputSlot().containerId());
         keys.add(job.equipment().itemId()); keys.add(job.equipment().source().containerId());
@@ -33,33 +27,31 @@ public final class FrontierResourceSiteHarvestSceneSupport {
 
     /** Holding cargo does not entitle a capacity-blocked worker to monopolize the depot. */
     static boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) {
-        executionCheckpoint(state, assignment);
-        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        ResourceSiteHarvestJob job = assignmentJob(state, assignment);
         return (FieldEquipment.waitingForStorage(state, job)
                 || job.deliveryDue() && !ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job))
                 && ServiceAccessCoordinator.turnoverPoint(state, assignment.residentId()).isPresent();
     }
 
-    /** Field owner proves its own safe stop; generic execution never reads crop stages. */
-    static ActivityExecutionCheckpoint executionCheckpoint(FrontierWorldState state, HumanAssignment assignment) {
+    /** Declared assignment identity is independent of interruption readiness or cargo volume. */
+    private static ResourceSiteHarvestJob assignmentJob(FrontierWorldState state, HumanAssignment assignment) {
         if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST)
             throw new IllegalArgumentException("field checkpoint requires a declared field assignment");
-        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow(
-                        () -> new IllegalArgumentException("field checkpoint lost its exact job"));
+        var job = state.resourceSites().harvestJob(assignment.ownerId().orElseThrow()).orElseThrow(
+                () -> new IllegalArgumentException("field checkpoint lost its exact job"));
         if (!job.workerId().equals(assignment.residentId()))
             throw new IllegalArgumentException("field checkpoint names a foreign worker");
+        return job;
+    }
+    /** Field owner proves its own safe stop; generic execution never reads crop stages. */
+    static ActivityExecutionCheckpoint executionCheckpoint(FrontierWorldState state, HumanAssignment assignment) {
+        var job = assignmentJob(state, assignment);
         return new ActivityExecutionCheckpoint(state, assignment, HarvestActivityCapability.checkpointStatus(state, job));
     }
 
     static Optional<ActorCarriedResources.Presentation> carriedResources(FrontierWorldState state, HumanAssignment assignment) {
-        executionCheckpoint(state, assignment); // owner validates the exact worker/job relation
-        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        // Cargo accounting validates ownership; it does not decide whether work can yield.
+        var job = assignmentJob(state, assignment);
         if (!state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())) return Optional.empty();
         var carried = new ActorCarriedResources.Presentation(job.workerId(), job.actorAccountId(),
                 new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.OFF));
