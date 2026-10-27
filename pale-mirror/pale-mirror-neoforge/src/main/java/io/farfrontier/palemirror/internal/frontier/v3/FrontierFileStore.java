@@ -56,6 +56,17 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private java.util.concurrent.CompletableFuture<FlushReceipt> pendingFlush;
     private int flushingRecords;
     private long flushingBytes, flushGroups, lastFlushNanos, maxFlushNanos, pendingSinceNanos;
+    private long batchableAppends, durableBeforeEffectAppends;
+    private final Map<String, Long> effectBarrierKinds = new java.util.LinkedHashMap<>();
+    private void observeAppend(TransactionRecord transaction, Durability durability) {
+        if (durability == Durability.BATCHABLE) { batchableAppends++; return; }
+        durableBeforeEffectAppends++;
+        transaction.events().stream().map(event -> event.payload()).filter(payload -> payload.requiresDurableBeforeEffect())
+                .map(payload -> payload.type()).distinct().forEach(kind -> {
+                    String bounded = effectBarrierKinds.containsKey(kind) || effectBarrierKinds.size() < 15 ? kind : "other";
+                    effectBarrierKinds.merge(bounded, 1L, Long::sum);
+                });
+    }
     private RuntimeException ioFailure;
     private boolean closed;
     private volatile Runnable ready = () -> { };
@@ -215,7 +226,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         } else if (turnDepth == 0 || pendingRecords.size() >= MAX_BATCHABLE_WAL_RECORDS) {
             flushPendingBlocking();
         }
-        image.appended(transaction);
+        image.appended(transaction); observeAppend(transaction, durability);
         return new AppendReceipt(transaction.id(), transaction.revision(), durability, sequence);
     }
 
@@ -247,7 +258,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
                         pendingRecords.add(new PendingRecord(transaction.worldId(), sequence, encoded));
                         pendingBytes = Math.addExact(pendingBytes, encoded.length);
                         durableHeads.put(transaction.worldId(), head.appended(sequence, transaction.revision()));
-                        image.appended(transaction);
+                        image.appended(transaction); observeAppend(transaction, durability);
                     }
                     if (durability == Durability.DURABLE_BEFORE_EFFECT && head(transaction.worldId()).flushedSequence() < sequence) {
                         startPendingFlush(false);
@@ -404,11 +415,13 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     }
 
     record Pressure(int bufferedRecords, long bufferedBytes, boolean awaitingDurability,
-                    long pendingNanos, long forcedGroups, long lastFlushNanos, long maxFlushNanos) { }
+                    long pendingNanos, long forcedGroups, long lastFlushNanos, long maxFlushNanos,
+                    long batchableAppends, long durableBeforeEffectAppends, Map<String, Long> effectBarrierKinds) { }
     synchronized Pressure pressure() {
         return new Pressure(pendingRecords.size() + flushingRecords, pendingBytes + flushingBytes,
                 pendingFlush != null || !pendingRecords.isEmpty(), pendingSinceNanos == 0L ? 0L
-                    : Math.max(0L, System.nanoTime() - pendingSinceNanos), flushGroups, lastFlushNanos, maxFlushNanos);
+                    : Math.max(0L, System.nanoTime() - pendingSinceNanos), flushGroups, lastFlushNanos, maxFlushNanos, batchableAppends, durableBeforeEffectAppends,
+                Map.copyOf(effectBarrierKinds));
     }
     private void checkHealthy() {
         if (closed) throw new IllegalStateException("Frontier store is closed");

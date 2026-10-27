@@ -462,7 +462,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     void runPersistenceTurn(Runnable turn) {
         Objects.requireNonNull(turn, "persistence turn");
         if (store instanceof FrontierFileStore fileStore) {
-            if (!fileStore.tryContinueTurn()) return;
+            if (!fileStore.tryContinueTurn()) { ordinaryYields.merge("PERSISTENCE_WAIT", 1L, Long::sum); return; }
             try {
                 if (!publishDurability()) {
                     engine.failureCause().ifPresent(this::quarantine); return;

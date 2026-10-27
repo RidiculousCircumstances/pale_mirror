@@ -70,6 +70,8 @@ class FrontierFileStoreTest {
             store.yieldTurnAsync(); assertEquals(1, writes.size());
             writes.remove().run();
             assertTrue(required.poll().isPresent()); assertEquals(3, store.flushedSequence(WORLD));
+            assertEquals(2, store.pressure().batchableAppends());
+            assertEquals(1, store.pressure().durableBeforeEffectAppends(), "receipt polling cannot count a second append");
             } finally { paused.set(false); while (!writes.isEmpty()) writes.remove().run(); }
         }
         try (var recovered = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {

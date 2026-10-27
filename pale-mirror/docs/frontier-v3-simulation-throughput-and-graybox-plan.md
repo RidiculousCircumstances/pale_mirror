@@ -950,3 +950,15 @@ in shortcut-slice-probe-before.txt. Extended existing 40k shortcut case proves t
 shared-cache boundary and complete ESTIMATED result; worker/refund/full-regional
 negative cases and guardrails PASS17s. No limit increase or exception suppression.
 Main retained-world recovery and native scale effect remain pending.
+
+
+b20ead035 exact gate PASS50s, packaged/economy55/route-patrol4. Both retained
+worlds verified deployed (SHA5129c662c6cfd9213bc54835a94ed714e4f701084288a75edee1537ba25008bc062b2a23d941955e39d139d12500f6fa7124bb92940bd6047d5b4e876d83a01d3e1).
+Main recovered normally, current465204/debt1/recent3msmean7.2msmax. 100ordinary
+clock debt still grows; do not close G. Warm profile keeps publication/validation
+and exact preparation as material costs; lazy scene demand removes COLD scene
+candidate computation. Need distinguish required physical durability from finite
+batch flushes before changing any barrier: add read-only append-durability counts,
+bounded requiring-event counts and explicit PERSISTENCE_WAIT yield telemetry.
+No publication, force, retention, scheduling or recovery semantics changed.
+Existing store prefix/replay and runtime/performance checks+guardrails PASS36s.
