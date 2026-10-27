@@ -32,6 +32,18 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
         private final FrontierBootstrap bootstrap;
         private final ForestState forest;
         private final GrayboxForestPlan plan;
+        private final BoundedValueMemo<Region, Optional<Object>> tokens = new BoundedValueMemo<>(128);
+        @Override public Set<Region> regions() {
+            return forest.geometryRegions().stream().map(value -> new Region(value.x(), value.z()))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
+        @Override public Optional<Object> token(Region region) {
+            return tokens.get(region, () -> {
+                var trees = forest.touching(new ForestRegion(region.x(), region.z()));
+                return trees.isEmpty() ? Optional.empty()
+                        : Optional.of(new RegionalReadVersion(new ArrayList<Object>(trees), Map.of()));
+            });
+        }
         private final BoundedValueMemo<ForestRegion, Image> images = new BoundedValueMemo<>(128);
         Snapshot(FrontierBootstrap bootstrap, ForestState forest) { this.bootstrap = bootstrap; this.forest = forest;
             this.plan = GrayboxForestPlan.compile(bootstrap); }

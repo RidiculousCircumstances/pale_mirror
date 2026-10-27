@@ -50,6 +50,20 @@ class PedestrianCertifiedRegionTest {
         var obstruction = new BlockPosition(x + 8, y + 1, z + 8);
         var changed = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.UNKNOWN_SCAR,
                 Optional.empty(), Optional.empty(), "isolated-player-change"));
+        var original = KnownPedestrianRouteKnowledge.forFrontier(state).forProfile(UnitNavigationProfile.VILLAGER).geometry();
+        var oldRevision = original.regionalRevision().orElseThrow();
+        var changedGeometry = KnownPedestrianRouteKnowledge.forFrontier(changed).forProfile(UnitNavigationProfile.VILLAGER).geometry();
+        assertTrue(changedGeometry.uniformSupport(area).isEmpty());
+        var revisited = KnownPedestrianRouteKnowledge.forFrontier(state).forProfile(UnitNavigationProfile.VILLAGER).geometry();
+        assertEquals(oldRevision, revisited.regionalRevision().orElseThrow(),
+                "reading a predecessor after a successor cannot invent a third physical knowledge version");
+        for (int index = 0; index < 12; index++) {
+            var successor = state.recordPhysicalDelta(new PhysicalDelta(obstruction.offset(index + 1, 0, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                    Optional.empty(), Optional.empty(), "distinct-successor-" + index));
+            KnownPedestrianRouteKnowledge.forFrontier(successor).forProfile(UnitNavigationProfile.VILLAGER).geometry();
+        }
+        assertEquals(oldRevision, KnownPedestrianRouteKnowledge.forFrontier(state).forProfile(UnitNavigationProfile.VILLAGER)
+                .geometry().regionalRevision().orElseThrow(), "evicting completed snapshots cannot change knowledge identity");
         var codec = new FrontierWorldStateCodec();
         for (var current : List.of(changed, codec.decode(codec.encode(changed)))) {
             var geometry = KnownPedestrianRouteKnowledge.forFrontier(current).forProfile(UnitNavigationProfile.VILLAGER).geometry();

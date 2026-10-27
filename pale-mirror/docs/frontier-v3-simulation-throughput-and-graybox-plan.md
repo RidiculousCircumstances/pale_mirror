@@ -778,3 +778,27 @@ existing graph bounds. A complete wall stays NO_PATH. An edit inside an unexpand
 shortcut invalidates its dependency proof; a remote irrelevant edit preserves it.
 Focused changed-region/body/worker/negative tests and guardrails pass21s; extended
 proof case passes11s. Native throughput effect remains to be measured.
+
+
+996 selected release/packaged/economy55/route-patrol4 gate passes61s; both retained
+worlds verified SHA512db2325f8fdb80d664f39ed1d5ab7d84a1de1f9a8778a61de30c55e8c0ad292ec0e12277daa86b8824ab0b46a7f5ccfca1757495fe3553a80ae88b910b8e0230a.
+Native100town95512 has only LOCAL oldest requests (35planningturns), rather than
+distant850+turn searches. Distant service improved, but ordinary100debt still
+grows881->6590 while clock95231->96182 over333s. G remains OPEN.
+
+The next source-proven contradiction was anonymous geometry epochs minted by
+read order. Detached preparation can read an immutable predecessor after the
+owner reads its successor: A->B->A produced a third terrain revision even without
+another physical edit. A completed-snapshot cache alone did not fix reconstruction.
+The ground version owner now derives exact immutable local fact tokens, including
+projected contextual collision halos and explicitly provided dynamic natural facts.
+It incrementally updates changed regional partitions and shares four completed
+images; eviction or predecessor reads cannot change their semantic identity.
+Pristine terrain is fenced by bootstrap identity; actual unknown/known, support,
+obstacle, player scar, forest and shape changes remain part of the proof. The
+query-specific overlay owner remains separate and removes obsolete empty tokens.
+The old anonymous refresh/shape/natural mutation APIs are retired; existing negative
+shape-boundary and resolution tests exercise the new owner. A real provider test
+covers A->B->A and twelve distinct successors exceeding cache capacity, plus
+UNKNOWN_GEOMETRY after codec recovery. Focused checks pass17s. Native aggregate
+throughput effect is not yet measured; this is not100town acceptance.

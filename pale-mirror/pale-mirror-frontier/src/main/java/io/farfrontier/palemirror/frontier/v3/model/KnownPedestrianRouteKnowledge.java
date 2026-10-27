@@ -48,6 +48,9 @@ public final class KnownPedestrianRouteKnowledge {
     private static final ImmutableResultView<String, Set<BlockPosition>> FIELD_OBSTRUCTIONS = new ImmutableResultView<>(64);
     private static final java.util.Map<SubjectId, FieldView> FIELDS = new java.util.LinkedHashMap<>();
     private static KnownNaturalGeometry.Composite viewNatural;
+    private static final KnownPedestrianGroundVersions GROUND_VERSIONS = new KnownPedestrianGroundVersions();
+    private static io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision selectedGround;
+
     private final FrontierBootstrap bootstrap;
     private final RegionalBlockSet hard;
     private final Set<BlockPosition> raisedDepartureSupports;
@@ -120,7 +123,7 @@ public final class KnownPedestrianRouteKnowledge {
     private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
             BoundedPedestrianApproach.SurveyedSurface surveyed, Object scopeKey,
             java.util.Map<TerrainColumn, List<SurfaceAnchor>> overlay, Set<BlockPosition> raisedDepartureSupports) {
-        this(bootstrap, hard, surveyed, scopeKey, overlay, raisedDepartureSupports, KnownPedestrianGeometryScopes.groundRevision());
+        this(bootstrap, hard, surveyed, scopeKey, overlay, raisedDepartureSupports, Objects.requireNonNull(selectedGround));
     }
     private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
             BoundedPedestrianApproach.SurveyedSurface surveyed, Object scopeKey,
@@ -244,10 +247,9 @@ public final class KnownPedestrianRouteKnowledge {
             });
             groundSupports.replace(GroundSource.ROADS, RegionalSurfaceMap.copyOf(roads));
             var supports = groundSupports.replace(GroundSource.SITES, RegionalSurfaceMap.copyOf(sites.supports()));
-            KnownPedestrianGeometryScopes.refresh(state.bootstrap(), obstacleIndex.groundChanges(), supports,
-                    sites.withdrawnSupports(), sites.unknown(), state.physicalDeltas().keySet());
-            KnownPedestrianGeometryScopes.observeShapes(viewNavigation, state.navigationGeometry(), sites.retainedBlocks());
-            KnownPedestrianGeometryScopes.observeNatural(viewBootstrap == state.bootstrap() ? natural.changesFrom(viewNatural) : Set.of());
+            selectedGround = GROUND_VERSIONS.capture(state.bootstrap(), obstacleIndex.groundChanges(), supports,
+                    sites.withdrawnSupports(), sites.unknown(), state.physicalDeltas().keySet(),
+                    RetainedNavigationGeometry.facts(state.navigationGeometry(), sites.retainedBlocks()), natural);
             viewNatural = natural;
             viewNavigation = state.navigationGeometry();
             JOURNEYS.clear();

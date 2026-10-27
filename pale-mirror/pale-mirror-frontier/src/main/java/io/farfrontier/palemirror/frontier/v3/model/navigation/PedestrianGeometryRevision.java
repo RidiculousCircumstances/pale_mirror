@@ -25,7 +25,7 @@ public final class PedestrianGeometryRevision {
         if (revisions.size() > MAX_REGIONS) throw new IllegalArgumentException("regional knowledge exceeds its safety bound");
         // Hash immutable facts once, not for every queue/map lookup of a route request.
         // Equality still checks the complete facts: a hash is never route authority.
-        this.hash = Objects.hash(scope, geometryScope, baseline, this.revisions);
+        this.hash = Objects.hash(scope, geometryScope, System.identityHashCode(baseline), this.revisions);
     }
     /** The immutable terrain owner shares its body-envelope revision. This is a
      * bounded rebuildable projection; neither live positions nor access enter it. */
@@ -58,7 +58,7 @@ public final class PedestrianGeometryRevision {
     @Override public boolean equals(Object other) {
         return this == other || other instanceof PedestrianGeometryRevision value && hash == value.hash
                 && scope.equals(value.scope) && geometryScope.equals(value.geometryScope)
-                && baseline.equals(value.baseline) && revisions.equals(value.revisions);
+                && baseline == value.baseline && revisions.equals(value.revisions);
     }
     /** Conservative providers share only inside their exact query scope. A producer
      * may explicitly declare a wider geometry scope when its regional tokens include

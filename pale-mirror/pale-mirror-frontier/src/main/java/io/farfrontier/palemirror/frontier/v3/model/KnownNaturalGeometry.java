@@ -16,6 +16,9 @@ final class KnownNaturalGeometry {
     interface Snapshot {
         BoundedPedestrianApproach.SurveyedSurface overlay(BoundedPedestrianApproach.SurveyedSurface base);
         Set<Region> changesFrom(Snapshot previous);
+        /** Dynamic facts only; pristine procedural terrain belongs to the bootstrap epoch. */
+        Set<Region> regions();
+        Optional<Object> token(Region region);
     }
     private static final List<Provider> PROVIDERS = List.of(new GrayboxTerrainKnownGeometry(), new ForestryKnownGeometry());
     private static final ImmutableResultView<String, Composite> VIEWS = new ImmutableResultView<>(4);
@@ -29,6 +32,14 @@ final class KnownNaturalGeometry {
         Composite { parts = List.copyOf(parts); }
         BoundedPedestrianApproach.SurveyedSurface overlay(BoundedPedestrianApproach.SurveyedSurface base) {
             for (var part : parts) base = part.overlay(base); return base;
+        }
+        Set<Region> regions() {
+            var result = new HashSet<Region>(); parts.forEach(part -> result.addAll(part.regions()));
+            return Set.copyOf(result);
+        }
+        Optional<Object> token(Region region) {
+            var values = parts.stream().map(part -> part.token(region)).toList();
+            return values.stream().allMatch(Optional::isEmpty) ? Optional.empty() : Optional.of(values);
         }
         Set<Region> changesFrom(Composite previous) {
             if (this == previous || previous == null) return Set.of();

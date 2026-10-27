@@ -14,6 +14,11 @@ final class RetainedNavigationGeometry {
     private static Projection projected = new Projection(RegionalBlockMap.copyOf(Map.of()), Map.of());
     private static final Set<Region> contextualRegions = new HashSet<>();
     private RetainedNavigationGeometry() { }
+    /** Exact collision facts used by both the geometry reader and its version proof. */
+    static RegionalBlockMap<Optional<NavigationCell>> facts(NavigationGeometryState observations,
+                                                           Map<BlockPosition, NavigationBlockState> sourceBlocks) {
+        return project(observations, RegionalBlockMap.copyOf(sourceBlocks)).cells();
+    }
     static BoundedPedestrianApproach.SurveyedSurface overlay(BoundedPedestrianApproach.SurveyedSurface base,
                                                            NavigationGeometryState observations,
                                                            Map<BlockPosition, NavigationBlockState> sourceBlocks) {

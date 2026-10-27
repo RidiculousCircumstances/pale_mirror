@@ -126,6 +126,9 @@ public final class ForestState {
         return find(reference).orElseThrow(() -> new IllegalArgumentException("tree continuation lost its exact source"));
     }
     /** Includes cross-boundary captured trees and retained extraction aftermath. */
+    public Set<ForestRegion> geometryRegions() {
+        var result = new HashSet<>(regions.keySet()); result.addAll(links.keySet()); return Set.copyOf(result);
+    }
     public boolean touches(ForestRegion region) { return regions.containsKey(region) || links.containsKey(region); }
     public List<ForestTree> touching(ForestRegion region) {
         var result = new ArrayList<>(regions.getOrDefault(region, Map.of()).values());
