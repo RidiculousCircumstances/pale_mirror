@@ -21,8 +21,12 @@ public final class PedestrianGeometryRevision {
     }
     public PedestrianGeometryRevision(Object scope, Object geometryScope, Object baseline, Map<Region, Object> revisions) {
         this.scope = Objects.requireNonNull(scope); this.geometryScope = Objects.requireNonNull(geometryScope);
-        this.baseline = Objects.requireNonNull(baseline); this.revisions = Map.copyOf(revisions);
+        this.baseline = Objects.requireNonNull(baseline);
         if (revisions.size() > MAX_REGIONS) throw new IllegalArgumentException("regional knowledge exceeds its safety bound");
+        // Region coordinates cluster in compact linear-probe tables. Preserve
+        // exact immutable facts without rebuilding a long MapN probe chain for
+        // every captured view/profile on the sequential preparation lane.
+        this.revisions = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.copyOf(revisions);
         // Hash immutable facts once, not for every queue/map lookup of a route request.
         // Equality still checks the complete facts: a hash is never route authority.
         this.hash = Objects.hash(scope, geometryScope, baseline, this.revisions);

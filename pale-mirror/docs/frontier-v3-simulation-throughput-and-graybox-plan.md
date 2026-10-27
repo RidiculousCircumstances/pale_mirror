@@ -1310,3 +1310,26 @@ limit, resumes the original survey without re-reading its first column, and
 validates its terminal adjacent route. Worker/region-invalidation coverage and
 guardrails PASS19s. This is bounded continuation progress, not a timing benchmark.
 The change does not establish that this was the sole remaining native bottleneck.
+
+
+### Hash-based immutable regional revision lookup (2026-10-28)
+
+4479e1302 exactcleanreleasePASS43s (142navigation/shape/worker/codec +runtime,
+packagedJAR); economy55unchanged from215 reused, no new physical effect primitive.
+It is not deployed separately; next verified artifact includes both connected
+geometry corrections, avoiding an intermediate restart without useful evidence.
+
+215's20sJFR shows221samples under PedestrianGeometryRevision construction;
+leafstacks include81MapN.probe,67record-equality method handles,22Map.copyOf and
+31Objects.hashCode. A sampled real caller is GoodsTripAssembly.declaration →
+ShipmentEndpointComposition.knowledge → forJourneyPrepared → revision → Map.copyOf.
+This is preparation of the selected trip, not speculative unrelated work. The
+compact linear-probe representation clusters regional coordinate hashes and
+reconstructs a long collision chain for each new immutable query/profile view.
+The existing ImmutableLookupMap replaces that representation in the revision
+constructor, preserving complete facts, defensive immutability, value equality,
+full cached hash, bounds and scope/profile fencing. No new collection or hash-only
+proof, lossy version key or world-store migration. Existingscope/regionalinvalidate/
+certified builder/guardrail coverage PASS28s. Constructor checks the existing
+region bound before copying. Native impact still requires the same retained100
+ordinary measurement after exactref packaging/deployment.
