@@ -605,3 +605,36 @@ their own deadlines; legacy retained future generations still use the exact-boun
 wake command. This repairs that observed repeated-boundary path, not a claim that
 it alone explains all100town debt. G stays open until ordinary native liveness and
 remaining terminal/HOT/capacity stories are demonstrated.
+
+
+The first cd26052ba private100town run is NOT accepted:72203->73174 in575s,
+debt378->10912. Early samples overlap the deliberately bounded baseline native
+run and are not a clean speed comparison. A later WAL slice showed582records over
+only2canonical ticks, dominated by exact past-due self replacements. Retaining the
+due generation exposed another connected kernel contradiction: those no-change
+results still created WAL records and ran downstream reconsideration. The kernel
+now keeps a single exact self replacement as a bounded derived hold, charging the
+same preparation/action/weight allowance, preserving canonical membership, and
+letting independent work proceed. Actual business events, changed deadlines,
+foreign subjects and cancellation still use the normal commit path. A historical
+WAL-order test now emits an actual business Delta along with its continuation;
+no-work retries no longer serve as timestamp evidence. The new kernel case
+requires independent completion, no duplicate WAL while held, and exact addressed
+resumption of the retained action.
+
+A separate source-proven readiness error re-signalled an already retained
+UNKNOWN_GEOMETRY-with-missing-facts result from Prepared.acquire. It now remains
+awaitable until actual search/geometry change. The real cooperative planner test
+requires20stable acquisitions without notifications and a wake on physical
+knowledge ingress. Native geometryWaits was empty in the inspected cd sample;
+this corner is NOT established as the observed main cause.
+
+Supplementary broad native scene check on cd:131/135passed; failures:execution
+plan test still requires retired aggregate id "scenes" although each behavior now
+has its own scene-* stage; ambient first-body fixture; occupied patrol admission;
+inactive hive assault. Exact previous3b baseline reproduced the diagnostic,
+ambient and hive failures (132/135). Candidate-only patrol admission remains to
+be discriminated by the existing focused route-patrol slice. These supplementary
+failures remain recorded, not an unfiltered green claim. Economy55/55passed and
+production-effect5/5passed on cd. New kernel/wait changes require their affected
+selected native gate before the next deployment. Main stillfec4, privatecd; Gopen.

@@ -400,7 +400,8 @@ class InMemoryFrontierEngineTest {
         InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
                 WORLD, new Counter(0), SimInstant.ZERO,
                 (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
-                (state, due) -> List.of(new ProposedEvent(due.subject(), new ScheduleEffect.Rescheduled(due.id(), due))),
+                (state, due) -> List.of(new ProposedEvent(due.subject(), new Delta(1)),
+                        new ProposedEvent(due.subject(), new ScheduleEffect.Rescheduled(due.id(), due))),
                 (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
                 (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
                 new EngineLimits(8, 100L, 8), List.of(held));

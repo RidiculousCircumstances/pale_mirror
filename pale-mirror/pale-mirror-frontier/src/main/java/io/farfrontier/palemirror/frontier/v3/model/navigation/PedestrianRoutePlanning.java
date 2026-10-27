@@ -82,7 +82,10 @@ public final class PedestrianRoutePlanning {
             for (var request : observation.requests()) {
                 var result = withService(demands.getOrDefault(request, PedestrianPlanningService.ORDINARY),
                         () -> query(request.geometry(), request.start(), request.target(), request.extent()));
-                if (result.status() != PedestrianRouteResult.Status.PLANNING)
+                // Re-reading a retained knowledge gap does not complete its wait.
+                // Actual search completion/geometry invalidation already signals
+                // the subscribed demand through the planner's change stream.
+                if (!result.awaitable())
                     ready.add(new PedestrianPlanningChange(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE));
             }
             return java.util.List.copyOf(ready);

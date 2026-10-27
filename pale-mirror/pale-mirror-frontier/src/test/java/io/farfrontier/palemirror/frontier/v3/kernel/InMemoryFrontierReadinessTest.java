@@ -10,6 +10,41 @@ import static org.junit.jupiter.api.Assertions.*;
 class InMemoryFrontierReadinessTest {
     private static final WorldId WORLD = new WorldId("frontier:readiness-test");
     private static final SubjectId SUBJECT = new SubjectId("resident:readiness-test");
+    @Test void exactSelfReplacementParksWithoutPublishingAndIndependentDueWorkStillRuns() {
+        var waiting = scheduled("schedule:calculation", "resident:waiting", 5, 1);
+        var other = scheduled("schedule:other", "resident:other", 5, 2);
+        var preparing = new java.util.concurrent.atomic.AtomicBoolean();
+        var ready = new java.util.concurrent.atomic.AtomicBoolean();
+        ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
+            public boolean held(Counter state, ScheduledAction action) {
+                return action.equals(waiting) && preparing.get() && !ready.get();
+            }
+            public Set<SubjectId> holdWakeKeys(Counter state, ScheduledAction action) { return Set.of(action.subject()); }
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                if (action.equals(waiting) && !ready.get()) {
+                    preparing.set(true);
+                    return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), action)));
+                }
+                return List.of(new ProposedEvent(action.subject(), new Delta(1)));
+            }
+        };
+        var engine = new InMemoryFrontierEngine<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (Counter state, FrontierCommand command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> new Counter(state.value() + ((Delta) event.payload()).value()),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(waiting, other));
+        engine.advanceTo(new SimInstant(10), new WorkBudget(4, 4));
+        assertEquals(1, engine.transactions().size(), "only independent business work is a transaction");
+        assertEquals(List.of(waiting), engine.scheduledActions());
+        assertEquals(1, engine.canonicalState().state().value());
+        engine.advanceTo(new SimInstant(20), new WorkBudget(4, 4));
+        assertEquals(1, engine.transactions().size());
+        ready.set(true); assertTrue(engine.signalScheduledReadiness(waiting));
+        engine.advanceTo(new SimInstant(20), new WorkBudget(4, 4));
+        assertEquals(2, engine.canonicalState().state().value()); assertTrue(engine.scheduledActions().isEmpty());
+        assertEquals(2, engine.transactions().size());
+    }
     @Test
     void addressedReadinessRechecksOnlyAnExactDueGenerationWithoutCanonicalMutation() throws Exception {
         var held = scheduled("schedule:external-ready", "resident:waiting", 5L, 1);

@@ -7,6 +7,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningDemandTest {
+    @Test void retainedUnknownGeometryDoesNotRepeatedlyCompleteAnAcceptedAdviceWait() throws Exception {
+        var geometry = new PedestrianRouteGeometry() {
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 128, 4); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+            public boolean clearanceKnown(SurfaceAnchor surface) { return false; }
+        };
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(3, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner)) {
+            planner.query(geometry, start, goal);
+            for (int n = 0; n < 100 && planner.pendingCount() > 0; n++) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            var result = planner.peek(geometry, start, goal).orElseThrow();
+            assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, result.status());
+            assertFalse(result.missingGeometry().isEmpty()); planner.drainChanges();
+            var prepared = PedestrianRoutePlanning.prepare(PedestrianRoutePlanning.readView(), () -> {
+                var current = PedestrianRoutePlanning.query(geometry, start, goal);
+                PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, goal)); return current;
+            });
+            for (int n = 0; n < 20; n++) assertTrue(prepared.acquire().isEmpty(), "stable missing facts are not a new calculation result");
+            assertTrue(planner.drainChanges().isEmpty());
+            planner.geometryObserved(result.missingGeometry());
+            assertTrue(planner.drainChanges().stream().anyMatch(change -> change.kind() == PedestrianPlanningChange.Kind.INVALIDATED),
+                    "actual physical knowledge ingress still reopens the exact calculation");
+        }
+    }
     @Test void retiringLastConsumerCancelsItsRebasedWorkerWithoutPublishingAnArrival() {
         var tasks = new ArrayList<Runnable>(); var revision = PedestrianGeometryRevision.initial();
         var old = ground(revision); var next = ground(revision.changed(Set.of(new PedestrianGeometryRevision.Region(7, 0))));
