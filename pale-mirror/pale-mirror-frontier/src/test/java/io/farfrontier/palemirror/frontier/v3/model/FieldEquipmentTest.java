@@ -21,6 +21,10 @@ class FieldEquipmentTest {
                 item, (InventoryCustody.ContainerSlot) item.custody(), 1L);
         var prepared = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(job.siteId())
                 .withHarvestEquipment(job, job.equipment().prepare(step))));
+        assertFalse(ContainerPhysicalAuthorityComposition.pending(state, step.slot().containerId()));
+        assertTrue(ContainerPhysicalAuthorityComposition.pending(prepared, step.slot().containerId()));
+        assertFalse(ContainerPhysicalAuthorityComposition.pending(state, step.slot().containerId()), "an immutable predecessor cannot inherit a candidate fence");
+        assertTrue(ContainerPhysicalAuthorityComposition.pending(prepared, step.slot().containerId()));
         assertTrue(ActorInventoryInteractionFences.pending(prepared, job.workerId()));
         assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.released(prepared, body));
         var abort = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
@@ -31,6 +35,7 @@ class FieldEquipmentTest {
         var after = FieldEquipmentProcess.reduce(restored, job.siteId(), abort, 22_100);
         assertEquals(prepared.inventory(), after.inventory(), "an unused effect cannot award or discard an item");
         var next = after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        assertFalse(ContainerPhysicalAuthorityComposition.pending(after, step.slot().containerId()));
         assertTrue(next.equipment().pending().isEmpty()); assertEquals(job.storageRevision() + 1, next.storageRevision());
         assertFalse(ActorInventoryInteractionFences.pending(after, job.workerId()));
         assertThrows(IllegalArgumentException.class, () -> FieldEquipmentProcess.reduce(after, job.siteId(), abort, 22_100));

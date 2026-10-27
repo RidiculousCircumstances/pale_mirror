@@ -5,6 +5,7 @@ import java.util.*;
 
 /** Agriculture declares the operation's tool requirement; shared equipment owns eligibility and transfers. */
 public final class FieldEquipment {
+    private static final ImmutableInputView<java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId>> PENDING_CONTAINERS = new ImmutableInputView<>();
     public static EquipmentRequirements requirements() {
         var requirements = new HashSet<ToolRequirement>(); requirements.add(FieldHarvestExtraction.DEFINITION.toolRequirement());
         ResourceFieldCycle.Soil.catalog().soils().stream().filter(ResourceFieldCycle.Soil::untilled)
@@ -23,8 +24,12 @@ public final class FieldEquipment {
                 .map(ResourceSiteHarvestJob::id).findFirst());
     }
     public static boolean pendingForContainer(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId container) {
-        return state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
-                .anyMatch(job -> job.equipment().pending().filter(step -> step.slot().containerId().equals(container)).isPresent());
+        return PENDING_CONTAINERS.get(List.of(state.resourceSites().sites()), () -> {
+            var containers = new HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
+            state.resourceSites().sites().values().forEach(site -> site.harvestJobs().values().forEach(job ->
+                    job.equipment().pending().ifPresent(step -> containers.add(step.slot().containerId()))));
+            return Set.copyOf(containers);
+        }).contains(container);
     }
     public static boolean transferAvailable(FrontierWorldState state, ResourceSiteHarvestJob job) {
         var endpoint = endpoint(state, job);

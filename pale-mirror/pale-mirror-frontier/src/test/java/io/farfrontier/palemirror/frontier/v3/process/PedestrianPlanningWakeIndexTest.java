@@ -11,6 +11,30 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void calculationOnlyWaitKeepsItsDueGenerationButBusinessTransitionRetainsItsDeadline() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("calculation-only", 20);
+        var future = action("calculation-only", 220); var query = request(3);
+        try (var binding = PedestrianPlanningContinuations.bind(index)) {
+            var result = PedestrianPlanningContinuations.plan(owner, () -> {
+                PedestrianRoutePlanning.await(query);
+                return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), future)));
+            });
+            assertEquals(List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), owner))), result);
+            assertTrue(index.waiting(owner));
+            PedestrianPlanningContinuations.markParked(owner);
+            index.changed(List.of(new PedestrianPlanningChange(query, PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+            assertEquals(List.of(owner), index.ready(view(20, owner)), "ready result needs no future deadline acceleration");
+            index.resumed(owner, owner); assertFalse(index.waiting(owner));
+            var business = List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Consumed(new ScheduleId("other:owned"))),
+                    new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), future)));
+            assertEquals(business, PedestrianPlanningContinuations.plan(owner, () -> {
+                PedestrianRoutePlanning.await(query); return business;
+            }), "an actual transition keeps its own timing even when it consulted a pending route");
+            index.remove(owner.id());
+            var timed = List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), future)));
+            assertEquals(timed, PedestrianPlanningContinuations.plan(owner, () -> timed), "a timer without a route wait stays a timer");
+        }
+    }
     @Test void onlyCurrentReadyConsumersRetainResultsAndARefusingOwnerCannotBlockOtherLanes() {
         var index = new PedestrianPlanningWakeIndex(); var first = action("first-retention", 20);
         var shared = action("shared-retention", 20); var future = action("future-retention", 6000);
@@ -276,13 +300,16 @@ class PedestrianPlanningWakeIndexTest {
                 PedestrianRoutePlanning.await(request(3));
                 return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), successor)));
             });
+            assertTrue(index.waiting(owner));
+            PedestrianPlanningContinuations.markParked(owner);
             var read = PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.peek(GROUND, request(3).start(), request(3).target()));
             assertTrue(read.requests().isEmpty());
             while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             index.changed(planner.drainChanges());
-            assertEquals(List.of(successor), index.ready(view(20, successor)));
+            assertEquals(List.of(owner), index.ready(view(20, owner)));
+            index.resumed(owner, owner);
             // A later successful owner review retires the old wait instead of repeatedly consuming receipts.
-            PedestrianPlanningContinuations.plan(successor, () -> {
+            PedestrianPlanningContinuations.plan(owner, () -> {
                 assertEquals(PedestrianRouteResult.Status.FOUND,
                         PedestrianRoutePlanning.query(GROUND, request(3).start(), request(3).target()).status());
                 return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), action("a", 8000))));

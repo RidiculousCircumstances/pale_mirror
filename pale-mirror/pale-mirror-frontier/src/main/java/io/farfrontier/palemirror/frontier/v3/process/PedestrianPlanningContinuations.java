@@ -124,8 +124,20 @@ public final class PedestrianPlanningContinuations {
     }
     private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
             PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation) {
+        // A calculation-only wait changes no business state and has no elapsed-time
+        // deadline. Retain the exact due generation instead of inventing a future
+        // retry which later needs a second durable command to become runnable.
+        // A real transition owns its successor timing and is never rewritten here.
+        var result = observation.result();
+        if (!observation.requests().isEmpty() && result.size() == 1
+                && result.getFirst().payload() instanceof ScheduleEffect.Rescheduled replacement
+                && replacement.scheduleId().equals(action.id())
+                && result.getFirst().subject().equals(action.subject())
+                && replacement.replacement().equals(new ScheduledAction(action.id(), replacement.replacement().dueAt(),
+                        action.priority(), action.subject(), action.kind(), action.weight())))
+            result = List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), action)));
         ScheduledAction successor = null;
-        for (var event : observation.result()) {
+        for (var event : result) {
             if (event.payload() instanceof ScheduleEffect.Rescheduled replacement && replacement.scheduleId().equals(action.id()))
                 successor = replacement.replacement();
             else if (event.payload() instanceof ScheduleEffect.Created created && created.action().id().equals(action.id()))
@@ -135,6 +147,6 @@ public final class PedestrianPlanningContinuations {
         }
         if (successor == null) index.remove(action.id());
         else index.stage(action, successor, observation.requests());
-        return observation.result();
+        return result;
     }
 }

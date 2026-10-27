@@ -5,6 +5,7 @@ import java.util.*;
 
 /** Machine energy owner. Catalog supplies properties; the existing ledger consumes real stock. */
 public final class ProductionStationEnergy {
+    private static final ImmutableInputView<java.util.Set<SubjectId>> PENDING_CONTAINERS = new ImmutableInputView<>();
     /** Supply forecast only: stored fuel and admitted deliveries do not authorize recipe execution. */
     public static long unlitFuelTicks(FrontierWorldState state, SubjectId stationId) {
         var record = record(state, stationId);
@@ -80,8 +81,12 @@ public final class ProductionStationEnergy {
         return ProductionStationDirectory.require(state.inventory(), stationId);
     }
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
-        return state.productionStations().machines().values().stream().flatMap(machine -> machine.pendingFuel().stream())
-                .anyMatch(burn -> burn.containerId().equals(container));
+        return PENDING_CONTAINERS.get(List.of(state.productionStations().machines()), () -> {
+            var containers = new HashSet<SubjectId>();
+            state.productionStations().machines().values().forEach(machine ->
+                    machine.pendingFuel().ifPresent(burn -> containers.add(burn.containerId())));
+            return Set.copyOf(containers);
+        }).contains(container);
     }
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ProductionStationFuelChanged event) {
         var burn = event.burn(); var machine = state.productionStations().require(subject);

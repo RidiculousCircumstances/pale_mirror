@@ -577,3 +577,31 @@ but9116ten-minute ordinary debt reached10013. G remains open; do not hide this b
 component greens. A WALsample2335records/71ticks had126command receipts (~5percent),
 so optional planning commands alone were NOT established as the dominant cost.
 No speculative deadline-model replacement is authorized by that sample.
+
+
+Follow-up native discrimination on3b924f5c8 did not establish the Minecraft task
+queue as the main wait:5657deliveries, latest3.7microseconds, maximum96milliseconds
+in the retained sample. The100town ordinary debt still grew. CPU profiles are
+ready-delivery-native.jfr and ready-delivery-hash-cost.jfr; inspect with full stack
+depth (jfr print defaults to only5frames). The earlier shallow record-hash lead was
+not established as a dominant defect. Deep stacks attribute146/285server samples
+to physical executor passes, including62container-effect-fence samples: fuel,
+recipe and field equipment repeatedly scan all owners for each queried container.
+Those owners now derive pending-container sets from their complete immutable
+inputs; station work uses the same owner-local view and the existing station
+lookup. Immutable facility socket specifications share a bounded identity-based
+result view. No fence or recovery check is removed; changed/predecessor/recovered
+branches must retain their distinct answers.
+
+A newer retained WAL interval had1951records over23canonical ticks,1483schedule
+reschedules and518executor commands. Source tracing confirms calculation-only
+continuations emit a future retry even though no business transition occurred;
+ready delivery then spends another durable command to accelerate that deadline.
+The shared continuation publisher now retains the exact due generation only for
+one same-owner schedule replacement with actual unresolved calculation demands.
+The kernel parks that action on addressed readiness; completion rechecks it through
+the existing due-action path. Mixed business transitions and genuine timers retain
+their own deadlines; legacy retained future generations still use the exact-bound
+wake command. This repairs that observed repeated-boundary path, not a claim that
+it alone explains all100town debt. G stays open until ordinary native liveness and
+remaining terminal/HOT/capacity stories are demonstrated.

@@ -5,6 +5,8 @@ import java.util.*;
 
 /** Graybox composition of declared facility capabilities, machine sockets and optional local storage. */
 public final class ProductionFacilityLayout {
+    private static final ImmutableResultView<String, ProductionStationSpec> STATIONS =
+            new ImmutableResultView<>(SimulationCapacity.MAX_SETTLEMENTS * 4);
     private record Definition(ProductionEquipment.Id equipment, ProductionStationSpec.Capability capability, OptionalInt maintenanceSlot) { }
     private static final Map<StructureKind, Definition> DEFINITIONS = Map.of(
             StructureKind.WORKSHOP, new Definition(ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING, OptionalInt.empty()),
@@ -13,6 +15,9 @@ public final class ProductionFacilityLayout {
             StructureKind.WOODSHOP, new Definition(ProductionEquipment.WOODWORKING, ProductionStationSpec.Capability.WOODWORKING, OptionalInt.empty()));
     public static boolean supports(StructureKind kind) { return DEFINITIONS.containsKey(kind); }
     public static ProductionStationSpec station(SettlementStructure facility) {
+        return STATIONS.get(List.of(facility), "station", () -> createStation(facility));
+    }
+    private static ProductionStationSpec createStation(SettlementStructure facility) {
         var definition = Optional.ofNullable(DEFINITIONS.get(facility.kind())).orElseThrow(
                 () -> new IllegalArgumentException("facility has no declared production capability"));
         if (facility.kind() == StructureKind.WORKSHOP) return ProductionStationSpec.grayboxBakery(facility);

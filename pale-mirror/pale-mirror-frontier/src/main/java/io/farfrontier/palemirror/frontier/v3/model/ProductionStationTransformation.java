@@ -5,6 +5,7 @@ import java.util.*;
 
 /** Machine-owned recipe boundary. The completion port is injected by composition, not inferred from an order. */
 public final class ProductionStationTransformation {
+    private static final ImmutableInputView<java.util.Set<SubjectId>> PENDING_CONTAINERS = new ImmutableInputView<>();
     public static Optional<ProductionStationRecipeBoundary> next(FrontierWorldState state, SubjectId stationId) {
         var machine = state.productionStations().require(stationId);
         var record = ProductionStationEnergy.record(state, stationId); var spec = record.productionStation().orElseThrow();
@@ -39,8 +40,12 @@ public final class ProductionStationTransformation {
                 before, after, operation.inputCustody().maintenanceTarget(), exact));
     }
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
-        return state.productionStations().machines().values().stream().flatMap(machine -> machine.pendingRecipe().stream())
-                .anyMatch(boundary -> boundary.containerId().equals(container));
+        return PENDING_CONTAINERS.get(List.of(state.productionStations().machines()), () -> {
+            var containers = new HashSet<SubjectId>();
+            state.productionStations().machines().values().forEach(machine ->
+                    machine.pendingRecipe().ifPresent(boundary -> containers.add(boundary.containerId())));
+            return Set.copyOf(containers);
+        }).contains(container);
     }
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ProductionStationRecipeChanged event,
                                           ProductionOperationCompletionPort completion) {

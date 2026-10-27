@@ -114,14 +114,20 @@ class ProductionStationOperatorTest {
         var boundary = ProductionStationTransformation.next(state, station.id()).orElseThrow();
         var prepared = new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_PREPARED, boundary, List.of());
         var wal = FrontierWorldPayloadCodecs.create(); assertEquals(prepared, wal.decode(prepared.type(), wal.encode(prepared)));
+        var beforePreparation = state;
+        assertFalse(ProductionStationTransformation.pendingForContainer(state, station.containerId()));
         state = ProductionStationTransformation.apply(state, station.id(), prepared, ProductionOperationCompletionComposition::completed);
+        assertTrue(ProductionStationTransformation.pendingForContainer(state, station.containerId()));
+        assertFalse(ProductionStationTransformation.pendingForContainer(beforePreparation, station.containerId()));
         state = codec.decode(codec.encode(state)); var pending = state;
+        assertTrue(ProductionStationTransformation.pendingForContainer(pending, station.containerId()));
         assertTrue(pending.inventory().fungibleResources().lots().containsKey(WHEAT));
         assertThrows(IllegalArgumentException.class, () -> ProductionStationTransformation.apply(pending, station.id(),
                 new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_COMPLETED, boundary, boundary.before()), ProductionOperationCompletionComposition::completed));
         var completed = new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_COMPLETED, boundary, boundary.after());
         var finished = ProductionStationTransformation.apply(state, station.id(), completed, ProductionOperationCompletionComposition::completed);
         assertTrue(finished.productionStations().require(station.id()).operation().isEmpty());
+        assertFalse(ProductionStationTransformation.pendingForContainer(finished, station.containerId()));
         assertEquals(1, finished.inventory().fungibleResources().lots().get(WHEAT).quantity());
         assertEquals(2, finished.inventory().fungibleResources().lots().get(COAL).quantity());
         assertEquals(21, finished.inventory().fungibleResources().lots().get(operation.outputId()).quantity());
