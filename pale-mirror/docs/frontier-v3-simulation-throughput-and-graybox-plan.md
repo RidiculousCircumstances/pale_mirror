@@ -1645,3 +1645,61 @@ the selected declaration; canonical event replay invokes the same owner again.
 Exact stock, cash, crew, custody and provisioning validations remain. Existing
 consolidated trade/acceptance/autonomy/expedition checksPASS83s. Source reviewed;
 combined exactref release and retained-world native impact still pending.
+
+
+### Complete the advisory/exact boundary for actual trade matching (next connected repair)
+
+The e9combinedreleasePASS102s220frontier/38classes+29runtime/package; bothretained311
+servers VERIFIED. Native has meaningful decisions/work now, but still accumulates
+clock debt. Named pendingScheduledCalculation explicitly identifies
+frontier.goods.participant.opportunity/settlement93 (due20633, later20654), not a guessed
+navigation family. Its query buffer is unblocked. Kernel PendingCalculation retains
+one exact world predecessor; native GoodsParticipantProcess exposes advisory capability
+only for REVIEW, while OPPORTUNITY invokes full GoodsTripPlanning under that exact
+barrier. Accepted review advice also hands full matching back to exact preparation.
+Thus all quote/candidate comparison/provisioning waits can pin unrelated canonical time.
+This is the remaining connected contradiction in accepted phaseD, not a request for
+another worker pool, larger allowance or a second scheduler.
+
+Repair: the economic owner computes full alternative choice as disposable advisory
+work on the existing bounded pool. Its output is an explicitly typed conditional
+choice (counterparty, endpoints and delivery mode), pending, or no purchase; never a
+reserved contract, actor assignment, mutable draft, wallet or cargo. Existing review
+advice can carry the same choice alongside its conditional policy result. OPPORTUNITY
+gets its own registered advisory capability. The current exact phase rebuilds quotes,
+funding/custody/crew/provisions and admission only for the chosen alternative; it must
+never restart a search over all alternatives under the global predecessor barrier.
+Known route facts still come from common navigation/continuations, and the existing
+WAL/admission owners alone publish. Changed/withdrawn endpoints, prices, stock, funding,
+roles, geometry or owner identity cannot spend or dispatch stale advice. Pending advice
+parks only its exact owner while independent canonical work continues. No priority,
+per-tick budget, shared-cache/worker ceiling or business clock is increased.
+
+Keep direct deterministic planning on the same selection/admission implementation;
+no active compatibility path. Validate unchanged-input choice equivalence, stale/foreign
+negative admission and genuine independent work/clock progress while a market choice
+awaits calculation, then exactref build, retained-world deploy and ordinary100 evidence.
+This entry is a scoped implementation decision under acceptedD; not completion.
+
+
+Independent trade-choice source now wired: GoodsParticipantOpportunityAdvice is
+registered through the ordinary process/advisory composition. Existing periodic
+review advice carries the same conditional choice. GoodsTripPlanning explicitly
+produces Selection(seller/buyer full parties, declared typed endpoints, delivery
+mode), AWAITING_NAVIGATION or NO_PURCHASE. No prepared transaction/world/crew escapes
+as the advisory result. The current exact phase refreshes normal quotes/commitments
+and filters preparation to the selected party/endpoints/mode, or records the pending
+owner wait/no purchase. It cannot start a new all-alternative comparison. Existing
+single admission/WAL owners still validate fresh money, goods, consent and execution.
+
+New affected coverage proves stable-data event equivalence to direct planning,
+no dispatch/reservation after buyer funds leave or seller orders are withdrawn,
+and no further route calls during the exact completion of pending choice. Existing
+real registered-opportunity test now executes its advisory capability and still
+proves it does not invoke/republish the economic forecast; the old assertion that
+OPPORTUNITY has no advisory capability was an obsolete implementation detail.
+Fixture initially lacked the buyer's accepted domestic policy and therefore had
+no purchase opportunity; corrected by the existing real policy producer/publication,
+not fabricated orders or success. Focus40checksPASS18s; final withdrawal-negative
++guardrailsPASS18s. Generic advisory-kernel independence coverage remains included.
+Exactrelease and actual100clock evidence still pending. G remainsOPEN.

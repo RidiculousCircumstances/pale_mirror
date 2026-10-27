@@ -160,8 +160,8 @@ class GoodsParticipantReviewAdviceTest {
                 GoodsParticipantWakeup.party(market, home, "new-quote", 4001).getFirst().payload()).action();
         assertEquals(GoodsParticipantWakeup.OPPORTUNITY, wake.kind());
         assertNotEquals(reviews.getFirst().id(), wake.id());
-        assertTrue(config.scheduledPlanner().advice(market, wake, new SimInstant(4002)).isEmpty());
-        var events = config.scheduledPlanner().plan(market, wake, new SimInstant(4002));
+        var choice = config.scheduledPlanner().advice(market, wake, new SimInstant(4002)).orElseThrow().prepare();
+        var events = choice.revalidate(market, new SimInstant(4002)).orElseThrow().prepare().get();
         assertFalse(events.isEmpty());
         assertTrue(events.stream().noneMatch(event -> event.payload() instanceof SettlementEconomicPlanPublished
                 || event.payload() instanceof GoodsParticipantPricesReviewed || event.payload() instanceof GoodsParticipantReviewed),

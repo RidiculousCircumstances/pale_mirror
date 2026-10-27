@@ -19,6 +19,7 @@ final class GoodsParticipantReviewAdvice {
         var navigation = state.navigationGeometry(); var physical = state.physicalDeltas();
         return () -> {
             var prepared = SettlementEconomicPlanPreparation.review(state, action, at);
+            var choice = GoodsParticipantProcess.prepareDecision(state, action, at, prepared, Optional.empty()).choice();
             return new ScheduledAdvisory.Completion<FrontierWorldState>() {
                 private String rejection = "NONE";
                 @Override public String rejectionReason() { return rejection; }
@@ -48,7 +49,7 @@ final class GoodsParticipantReviewAdvice {
                     rejection = "NONE";
                     var refreshed = inputShift == 0 ? prepared : new SettlementEconomicPlanPreparation.Review(prepared.atTick(),
                             prepared.prices(), prepared.publication().map(plan -> plan.withInputRevision(Math.addExact(plan.inputRevision(), inputShift))));
-                    return Optional.of(() -> GoodsParticipantProcess.prepare(current, action, executionAt, refreshed));
+                    return Optional.of(() -> GoodsParticipantProcess.prepareDecision(current, action, executionAt, refreshed, Optional.of(choice)).completion());
                 }
             };
         };

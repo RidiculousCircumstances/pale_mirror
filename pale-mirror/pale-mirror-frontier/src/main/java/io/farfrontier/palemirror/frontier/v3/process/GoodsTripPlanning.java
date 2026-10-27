@@ -9,8 +9,22 @@ import java.util.*;
 
 /** One transaction publishes sales only after exact logistics admission has succeeded on an immutable draft. */
 final class GoodsTripPlanning {
-    record Result(FrontierWorldState state, List<ProposedEvent> events, String decision, boolean awaitingNavigation) {
+    sealed interface Choice permits Selection, Disposition { }
+    enum Disposition implements Choice { AWAITING_NAVIGATION, NO_PURCHASE }
+    /** Conditional choice only. No contract, reservation, crew or cargo authority. */
+    record Selection(GoodsTradeParty seller, GoodsTradeParty buyer, ShipmentEndpoint source,
+                     ShipmentEndpoint receiver, GoodsTradeFulfillment.Mode mode) implements Choice {
+        Selection { Objects.requireNonNull(seller); Objects.requireNonNull(buyer); Objects.requireNonNull(source);
+            Objects.requireNonNull(receiver); Objects.requireNonNull(mode); }
+    }
+    record Result(FrontierWorldState state, List<ProposedEvent> events, String decision, boolean awaitingNavigation,
+                  Optional<Selection> selection) {
+        Result(FrontierWorldState state, List<ProposedEvent> events, String decision, boolean awaitingNavigation) {
+            this(state, events, decision, awaitingNavigation, Optional.empty());
+        }
         Result(FrontierWorldState state, List<ProposedEvent> events, String decision) { this(state, events, decision, false); }
+        Choice choice() { return selection.<Choice>map(value -> value).orElse(awaitingNavigation
+                ? Disposition.AWAITING_NAVIGATION : Disposition.NO_PURCHASE); }
     }
     private sealed interface Alternative permits Proposal, Candidate {
         ProcurementSelection.Offer offer();
@@ -25,16 +39,30 @@ final class GoodsTripPlanning {
     }
     /** Snapshot-only alternatives; only the selected candidate requests navigation evidence. */
     static java.util.function.Supplier<Result> prepare(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
+        return prepare(initial, reviewer, now, Optional.empty());
+    }
+    static java.util.function.Supplier<Result> prepare(FrontierWorldState initial, GoodsParticipant reviewer, long now,
+            Optional<Choice> choice) {
         var retirement = ShipmentRetention.collect(initial, ShipmentRetention.MAX_RETIREMENTS, now);
         // Finish the disposable plan on the preparation worker as well. The
         // enclosing planning read view records route demands; its owner alone
         // acquires them and publishes the revalidated transaction.
-        var planned = prepareInScope(retirement.state(), reviewer, now);
+        var planned = prepareInScope(retirement.state(), reviewer, now, choice);
         var events = new ArrayList<>(retirement.events()); events.addAll(planned.events());
-        var result = new Result(planned.state(), List.copyOf(events), planned.decision(), planned.awaitingNavigation());
+        var result = new Result(planned.state(), List.copyOf(events), planned.decision(), planned.awaitingNavigation(), planned.selection());
         return () -> result;
     }
-    private static Result prepareInScope(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
+    private static Result prepareInScope(FrontierWorldState initial, GoodsParticipant reviewer, long now, Optional<Choice> choice) {
+        if (choice.filter(Disposition.AWAITING_NAVIGATION::equals).isPresent())
+            return new Result(initial, List.of(), "AWAITING_TRADE_CHOICE_NAVIGATION", true);
+        if (choice.filter(Disposition.NO_PURCHASE::equals).isPresent())
+            return new Result(initial, List.of(), "NO_ADVISED_PURCHASE");
+        var selected = choice.flatMap(value -> switch (value) {
+            case Selection selection -> Optional.of(selection);
+            case Disposition ignored -> Optional.<Selection>empty();
+        });
+        if (selected.filter(value -> !value.buyer().equals(reviewer.party())).isPresent())
+            throw new IllegalArgumentException("trade choice has a foreign buyer");
         if (initial.unitGroups().groups().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().missions().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().shipments().size() >= ShipmentState.MAX_SHIPMENTS)
@@ -50,10 +78,14 @@ final class GoodsTripPlanning {
         if (requirements.isEmpty()) return new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
         var comparisons = GoodsTripComparisonFacts.forDecision(initial, buyer, now);
         for (var seller : GoodsOrderMatching.sellers(initial, buyer, now)) {
+            if (selected.filter(value -> !value.seller().equals(seller.party())).isPresent()) continue;
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, seller, buyer, now)) {
+                if (selected.filter(value -> !value.source().equals(GoodsParticipantStorage.endpoint(initial, endpoints.source()))
+                        || !value.receiver().equals(GoodsParticipantStorage.endpoint(initial, endpoints.receiver()))).isPresent()) continue;
                 var lines = GoodsTripQuotes.lines(initial, seller, buyer, endpoints, now);
                 if (lines.isEmpty()) continue;
                 for (var mode : GoodsTradeFulfillment.Mode.values()) {
+                    if (selected.filter(value -> value.mode() != mode).isPresent()) continue;
                     var forecast = ProcurementTravelForecast.between(initial, endpoints.source(), endpoints.receiver(), itinerary(mode));
                     var timing = new ExpeditionTiming(forecast.deliveryTicks(), forecast.journeyTicks());
                     var organizer = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller : buyer;
@@ -196,7 +228,10 @@ final class GoodsTripPlanning {
                     + "; parcels=" + candidate.parcels().size() + "; items=" + candidate.parcels().stream().mapToInt(p -> p.quantity()).sum()
                     + "; delivery=" + quotation.parcels().stream().mapToLong(p -> p.contract().deliveryUnitPrice().multiply(p.quantity()).raw()).sum()
                     + "; workerTicks=" + cost.workerTicks()
-                    + "; members=" + declaration.group().members().size() + "; mission=" + declaration.mission().id().value());
+                    + "; members=" + declaration.group().members().size() + "; mission=" + declaration.mission().id().value(), false,
+                    Optional.of(new Selection(candidate.seller().party(), buyer.party(),
+                            GoodsParticipantStorage.endpoint(initial, declaration.mission().sender().containerId()),
+                            GoodsParticipantStorage.endpoint(initial, declaration.mission().receiver().containerId()), candidate.mode())));
         }
         return new Result(initial, List.of(), decision, awaitingNavigation);
     }

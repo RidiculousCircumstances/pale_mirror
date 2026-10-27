@@ -15,7 +15,8 @@ public final class GoodsParticipantProcess {
             @Override public Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<FrontierWorldState>> advice(
                     FrontierWorldState state, ScheduledAction action, SimInstant instant) {
                 return action.kind().equals(REVIEW) ? Optional.of(GoodsParticipantReviewAdvice.capture(state, action, instant))
-                        : Optional.empty();
+                        : action.kind().equals(GoodsParticipantWakeup.OPPORTUNITY)
+                            ? Optional.of(GoodsParticipantOpportunityAdvice.capture(state, action, instant)) : Optional.empty();
             }
             @Override public Optional<ScheduledPreparation> preparation(FrontierWorldState state, ScheduledAction action, SimInstant instant) {
                 return action.kind().equals(GoodsParticipantWakeup.OPPORTUNITY)
@@ -61,6 +62,11 @@ public final class GoodsParticipantProcess {
     }
     static java.util.function.Supplier<List<ProposedEvent>> prepare(FrontierWorldState state, ScheduledAction action,
             SimInstant executionInstant, SettlementEconomicPlanPreparation.Review advice) {
+        return prepareDecision(state, action, executionInstant, advice, Optional.empty()).completion();
+    }
+    record PreparedDecision(java.util.function.Supplier<List<ProposedEvent>> completion, GoodsTripPlanning.Choice choice) { }
+    static PreparedDecision prepareDecision(FrontierWorldState state, ScheduledAction action,
+            SimInstant executionInstant, SettlementEconomicPlanPreparation.Review advice, Optional<GoodsTripPlanning.Choice> choice) {
         Objects.requireNonNull(executionInstant, "goods review execution instant");
         if (executionInstant.compareTo(action.dueAt()) < 0)
             throw new IllegalArgumentException("goods participant review cannot execute before its due time");
@@ -155,10 +161,11 @@ public final class GoodsParticipantProcess {
             events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order)));
             pendingQuotes.add(key); published++;
         }
-        var trip = rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.prepare(state, participant, now))
+        var trip = rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.prepare(state, participant, now, choice))
                 : Optional.<java.util.function.Supplier<GoodsTripPlanning.Result>>empty();
         var preparedState = state; int preparedPublished = published;
-        return () -> finish(preparedState, action, participant, now, events, commitments, preparedPublished, trip);
+        return new PreparedDecision(() -> finish(preparedState, action, participant, now, events, commitments, preparedPublished, trip),
+                trip.map(value -> value.get().choice()).orElse(GoodsTripPlanning.Disposition.NO_PURCHASE));
     }
     private static List<ProposedEvent> finish(FrontierWorldState state, ScheduledAction action, GoodsParticipant participant,
             long now, List<ProposedEvent> preparedEvents, GoodsCommitmentReview.Result commitments, int published,
