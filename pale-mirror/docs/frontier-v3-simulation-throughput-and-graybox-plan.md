@@ -417,3 +417,14 @@ final recovered output once. No partial recovered state is exposed on any
 validation/encoding failure. Existing kernel corrupt-history, scheduled recovery
 and economic recovery checks PASS13s (replay-negative-final.log), together with
 the actual economic publication/WAL fixture in the31s connected slice.
+
+Cooperative callback boundaries now share a bounded host WAL group across
+continuations (50ms operational deadline, original64record/64MiB bounds). The
+delayed wake only notifies the canonical owner; disk receipts and publication
+still belong to that owner. DURABLE_BEFORE_EFFECT immediately forces its entire
+prefix. Save/close still force remaining facts, and failed/backpressured writes
+cannot acknowledge memory. Obsolete test-only turn methods were removed; focused
+store/runtime/durability recovery and guardrails passed in45seconds
+(`cooperative-wal-groups-final.log`). This closes the source contradiction where
+every cooperative yield forced a tiny group; deployed throughput remains to be
+measured and G stays open.

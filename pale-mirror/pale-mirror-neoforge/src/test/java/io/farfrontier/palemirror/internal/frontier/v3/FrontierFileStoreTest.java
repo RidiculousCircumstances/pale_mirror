@@ -50,6 +50,33 @@ class FrontierFileStoreTest {
     private static final WorldId WORLD = new WorldId("frontier:file-store");
     private static final SubjectId SUBJECT = new SubjectId("settlement:file-store");
 
+    @Test void cooperativeYieldsShareAGroupButRequiredEffectForcesTheCompletePrefix(@TempDir Path directory) {
+        var writes = new java.util.ArrayDeque<Runnable>(); var wakes = new java.util.ArrayDeque<Runnable>();
+        var clock = new java.util.concurrent.atomic.AtomicLong();
+        var paused = new java.util.concurrent.atomic.AtomicBoolean(true);
+        try (var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects(),
+                task -> { if (paused.get()) writes.add(task); else task.run(); }, clock::get, (delay, wake) -> wakes.add(wake))) {
+            try {
+            for (int revision = 1; revision <= 2; revision++) {
+                assertTrue(store.tryContinueTurn());
+                assertTrue(store.prepareAppend(transaction(revision), Durability.BATCHABLE).poll().isPresent());
+                store.yieldTurnAsync();
+                assertTrue(writes.isEmpty(), "independent cooperative callbacks can join the same finite group");
+            }
+            assertEquals(1, wakes.size()); assertEquals(0, store.flushedSequence(WORLD));
+            assertTrue(store.tryContinueTurn());
+            var required = store.prepareAppend(transaction(3), Durability.DURABLE_BEFORE_EFFECT);
+            assertTrue(required.poll().isEmpty(), "an external effect cannot use an unforced memory prefix");
+            store.yieldTurnAsync(); assertEquals(1, writes.size());
+            writes.remove().run();
+            assertTrue(required.poll().isPresent()); assertEquals(3, store.flushedSequence(WORLD));
+            } finally { paused.set(false); while (!writes.isEmpty()) writes.remove().run(); }
+        }
+        try (var recovered = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {
+            assertEquals(List.of(transaction(1), transaction(2), transaction(3)), recovered.recover(WORLD).walTail());
+        }
+    }
+
     @Test void asyncSnapshotPreservesAppendsAfterItsCapturedPrefix(@TempDir Path directory) {
         var work = new java.util.ArrayDeque<Runnable>(); var paused = new java.util.concurrent.atomic.AtomicBoolean();
         java.util.concurrent.Executor writer = task -> { if (paused.get()) work.add(task); else task.run(); };
@@ -59,9 +86,9 @@ class FrontierFileStoreTest {
                     new byte[]{7}, List.of(), List.of()), 1);
             var pending = store.prepareSnapshot(snapshot); paused.set(true);
             assertTrue(pending.poll().isEmpty());
-            assertTrue(store.tryBeginTurn());
+            assertTrue(store.tryContinueTurn());
             assertTrue(store.prepareAppend(transaction(2), Durability.BATCHABLE).poll().isPresent());
-            store.endTurnAsync();
+            store.yieldTurnAsync();
             assertTrue(pending.poll().isEmpty(), "submission cannot release history before durability");
             while (!work.isEmpty()) work.remove().run();
             assertEquals(new Revision(1), pending.poll().orElseThrow().revision());
@@ -80,7 +107,7 @@ class FrontierFileStoreTest {
 
     @Test void ownedTailReadsRemainImmutableWhileAppendChecksOnlyTheNewBoundary(@TempDir Path directory) {
         try (var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {
-            store.beginTurn();
+            assertTrue(store.tryContinueTurn());
             store.append(transaction(1), Durability.BATCHABLE);
             var first = store.recoverOwned(WORLD);
             store.append(transaction(2), Durability.BATCHABLE);
@@ -95,7 +122,7 @@ class FrontierFileStoreTest {
             assertEquals(second, store.recoverOwned(WORLD), "invalid append must fail before writing or advancing the head");
             store.append(valid, Durability.DURABLE_BEFORE_EFFECT);
             assertEquals(3, store.flushedSequence(WORLD));
-            store.endTurn();
+            store.yieldTurnAsync(); store.finishRequiredWrites();
         }
         try (var recovered = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {
             assertEquals(List.of(transaction(1), transaction(2), transaction(3)), recovered.recover(WORLD).walTail());
@@ -105,14 +132,14 @@ class FrontierFileStoreTest {
     @Test
     void groupsOneTurnButFlushesTheWholePrefixBeforePhysicalEffects(@TempDir Path directory) throws IOException {
         FrontierFileStore store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
-        store.beginTurn();
+        assertTrue(store.tryContinueTurn());
         store.append(transaction(1), Durability.BATCHABLE);
         store.append(transaction(2), Durability.BATCHABLE);
         assertEquals(0, store.flushedSequence(WORLD));
         store.append(transaction(3), Durability.DURABLE_BEFORE_EFFECT);
         assertEquals(3, store.flushedSequence(WORLD));
         store.append(transaction(4), Durability.BATCHABLE);
-        store.endTurn();
+        store.yieldTurnAsync(); store.finishRequiredWrites();
         assertEquals(4, store.flushedSequence(WORLD));
         try (var paths = Files.list(directory.resolve("frontier-v3/frontier_file-store"))) {
             assertEquals(1, paths.filter(path -> path.getFileName().toString().startsWith("wal-segment-")).count());
@@ -232,10 +259,10 @@ class FrontierFileStoreTest {
 
     @Test void rotatesSegmentsAndRejectsTheOldStorageFormat(@TempDir Path directory) throws IOException {
         var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
-        store.beginTurn();
+        assertTrue(store.tryContinueTurn());
         for (int index = 1; index <= FrontierWalSegment.MAX_RECORDS + 1; index++)
             store.append(transaction(index), Durability.BATCHABLE);
-        store.endTurn();
+        store.yieldTurnAsync(); store.finishRequiredWrites();
         assertEquals(FrontierWalSegment.MAX_RECORDS + 1, store.recover(WORLD).walTail().size());
         try (var paths = Files.list(directory.resolve("frontier-v3/frontier_file-store"))) {
             assertEquals(2, paths.filter(path -> path.getFileName().toString().startsWith("wal-segment-")).count());

@@ -15,17 +15,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierWalDurabilityGateTest {
     @Test void ordinaryCriticalSubmissionYieldsUntilItsExactPrefixIsForced(@TempDir Path dir) throws Exception {
         try (var lane = new StepWriter(); var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane)) {
-            assertTrue(store.tryBeginTurn());
+            assertTrue(store.tryContinueTurn());
             store.prepareAppend(transaction(1), Durability.BATCHABLE).poll().orElseThrow();
             var critical = store.prepareAppend(transaction(2), Durability.DURABLE_BEFORE_EFFECT);
             assertTrue(critical.poll().isEmpty()); assertEquals(1, lane.pending.size());
             assertTrue(critical.poll().isEmpty()); assertEquals(0, store.flushedSequence(WORLD));
-            store.endTurnAsync(); assertFalse(store.tryBeginTurn());
-            lane.release(); assertTrue(store.tryBeginTurn());
+            store.yieldTurnAsync(); assertFalse(store.tryContinueTurn());
+            lane.release(); assertTrue(store.tryContinueTurn());
             assertEquals(2, critical.poll().orElseThrow().walSequence());
             assertEquals(2, store.flushedSequence(WORLD));
             assertEquals(2, critical.poll().orElseThrow().walSequence(), "polling cannot append twice");
-            store.endTurnAsync();
+            store.yieldTurnAsync();
         }
         try (var recovered = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects())) {
             assertEquals(List.of(transaction(1), transaction(2)), recovered.recover(WORLD).walTail());
@@ -52,23 +52,26 @@ class FrontierWalDurabilityGateTest {
         @Override public void close() throws Exception { release(); worker.shutdown(); assertTrue(worker.awaitTermination(10, TimeUnit.SECONDS)); }
     }
     @Test void nextTurnCannotOvertakeQueuedPrefixAndPhysicalEffectFlushesItsPredecessors(@TempDir Path dir) throws Exception {
-        try (var lane = new StepWriter(); var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane)) {
-            assertTrue(store.tryBeginTurn());
+        var clock = new java.util.concurrent.atomic.AtomicLong();
+        try (var lane = new StepWriter(); var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane,
+                clock::get, (delay, wake) -> { })) {
+            assertTrue(store.tryContinueTurn());
             store.append(transaction(1), Durability.BATCHABLE);
-            store.endTurnAsync();
+            store.yieldTurnAsync(); clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(50));
+            assertFalse(store.tryContinueTurn());
             assertEquals(1, lane.pending.size(), "one group, not a job per record");
             assertEquals(0, store.flushedSequence(WORLD));
             assertEquals(1, store.pressure().bufferedRecords());
-            assertFalse(store.tryBeginTurn(), "enqueue is not a durable acknowledgement");
+            assertFalse(store.tryContinueTurn(), "enqueue is not a durable acknowledgement");
             assertThrows(IllegalStateException.class, () -> store.recover(WORLD), "read-only recovery cannot force or adopt queued bytes");
             assertEquals(List.of(transaction(1)), store.recoverOwned(WORLD).walTail());
             lane.release();
-            assertTrue(store.tryBeginTurn());
+            assertTrue(store.tryContinueTurn());
             assertEquals(1, store.flushedSequence(WORLD));
             store.append(transaction(2), Durability.BATCHABLE);
             store.append(transaction(3), Durability.DURABLE_BEFORE_EFFECT);
             assertEquals(3, store.flushedSequence(WORLD), "effect permission covers the complete causal prefix");
-            store.endTurnAsync();
+            store.yieldTurnAsync();
             assertEquals(0, store.pressure().bufferedRecords());
             assertFalse(store.pressure().awaitingDurability());
         }
@@ -79,24 +82,28 @@ class FrontierWalDurabilityGateTest {
     @Test void boundedLaneBackpressureRetainsBytesAndRetriesWithoutAcknowledgingThem(@TempDir Path dir) {
         var rejecting = new java.util.concurrent.atomic.AtomicBoolean(true);
         Executor lane = task -> { if (rejecting.get()) throw new RejectedExecutionException("bounded lane full"); task.run(); };
-        try (var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane)) {
-            assertTrue(store.tryBeginTurn()); store.append(transaction(1), Durability.BATCHABLE); store.endTurnAsync();
-            assertFalse(store.tryBeginTurn());
+        var clock = new java.util.concurrent.atomic.AtomicLong();
+        try (var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane, clock::get, (delay, wake) -> { })) {
+            assertTrue(store.tryContinueTurn()); store.append(transaction(1), Durability.BATCHABLE); store.yieldTurnAsync();
+            clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(50));
+            assertFalse(store.tryContinueTurn());
             assertEquals(1, store.pressure().bufferedRecords()); assertEquals(0, store.flushedSequence(WORLD));
             rejecting.set(false);
-            assertTrue(store.tryBeginTurn()); assertEquals(1, store.flushedSequence(WORLD)); store.endTurnAsync();
+            assertTrue(store.tryContinueTurn()); assertEquals(1, store.flushedSequence(WORLD)); store.yieldTurnAsync();
             assertEquals(1, store.pressure().forcedGroups());
         }
     }
     @Test void failedWriterIsFatalBeforeNextTurnAndNeverAcknowledgesItsSequence(@TempDir Path dir) throws Exception {
         try (var lane = new StepWriter()) {
-            var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane);
-            assertTrue(store.tryBeginTurn()); store.append(transaction(1), Durability.BATCHABLE); store.endTurnAsync();
+            var clock = new java.util.concurrent.atomic.AtomicLong();
+            var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane, clock::get, (delay, wake) -> { });
+            assertTrue(store.tryContinueTurn()); store.append(transaction(1), Durability.BATCHABLE); store.yieldTurnAsync();
+            clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(50)); assertFalse(store.tryContinueTurn());
             // An invalid exact store-format target creates a real I/O failure in the queued job.
             var world = dir.resolve("frontier-v3/frontier_wal-gate"); Files.createDirectories(world);
             Files.createDirectory(world.resolve("store-format.bin"));
             lane.release();
-            assertThrows(IllegalStateException.class, store::tryBeginTurn);
+            assertThrows(IllegalStateException.class, store::tryContinueTurn);
             assertEquals(0, store.flushedSequence(WORLD));
             assertThrows(IllegalStateException.class, store::close);
             assertThrows(IllegalStateException.class, () -> store.append(transaction(2), Durability.BATCHABLE));

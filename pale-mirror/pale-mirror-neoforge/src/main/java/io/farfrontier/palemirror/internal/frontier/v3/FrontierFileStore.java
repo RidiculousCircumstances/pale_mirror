@@ -37,6 +37,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private static final int MAX_BATCHABLE_WAL_RECORDS = 64;
     private static final long MAX_BUFFERED_WAL_BYTES = 64L * 1024 * 1024;
     private static final long REQUIRED_IO_SAFETY_SECONDS = 30;
+    private static final long MAX_COOPERATIVE_BATCH_NANOS = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(50);
     private static final byte[] FORMAT = "PM-FRONTIER-STORE-2".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
     private final Map<WorldId, FrontierWalSegment> activeSegments = new HashMap<>();
     private final java.util.Set<Path> formattedDirectories = new java.util.HashSet<>();
@@ -44,6 +45,10 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private final Path baseDirectory;
     private final PayloadCodecs payloadCodecs;
     private final java.util.concurrent.Executor writer;
+    private final java.util.function.LongSupplier cooperativeClock;
+    private final java.util.function.BiConsumer<Long, Runnable> cooperativeWake;
+    private long cooperativeBatchStarted;
+    private boolean cooperativeBatchOpen, cooperativeWakeScheduled;
     private record PendingRecord(WorldId world, long sequence, byte[] bytes) { }
     private record FlushReceipt(Map<WorldId, Long> sequences, long elapsedNanos) { }
     private final java.util.ArrayList<PendingRecord> pendingRecords = new java.util.ArrayList<>();
@@ -105,9 +110,17 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         this(baseDirectory, payloadCodecs, FrontierPersistenceIo.writer());
     }
     FrontierFileStore(Path baseDirectory, PayloadCodecs payloadCodecs, java.util.concurrent.Executor writer) {
+        this(baseDirectory, payloadCodecs, writer, System::nanoTime,
+                (delay, wake) -> java.util.concurrent.CompletableFuture.delayedExecutor(delay,
+                        java.util.concurrent.TimeUnit.NANOSECONDS).execute(wake));
+    }
+    FrontierFileStore(Path baseDirectory, PayloadCodecs payloadCodecs, java.util.concurrent.Executor writer,
+            java.util.function.LongSupplier cooperativeClock, java.util.function.BiConsumer<Long, Runnable> cooperativeWake) {
         this.baseDirectory = Objects.requireNonNull(baseDirectory, "base directory");
         this.payloadCodecs = Objects.requireNonNull(payloadCodecs, "payload codecs");
         this.writer = Objects.requireNonNull(writer, "ordered persistence writer");
+        this.cooperativeClock = Objects.requireNonNull(cooperativeClock);
+        this.cooperativeWake = Objects.requireNonNull(cooperativeWake);
     }
 
     /** Package seam for the bounded server-turn durability contract. */
@@ -358,27 +371,36 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
 
     private Path worldDirectory(WorldId worldId) { return baseDirectory.resolve("frontier-v3").resolve(worldId.value().replace(':', '_')); }
     private static String fileName(String prefix, long sequence) { return "%s-%020d.bin".formatted(prefix, sequence); }
-    /** A logical turn is settled only by its prefix receipt, not by submission. */
-    synchronized void beginTurn() { flushPendingBlocking(); turnDepth = Math.addExact(turnDepth, 1); }
     synchronized boolean inTurn() { return turnDepth > 0; }
     synchronized void finishRequiredWrites() { flushPendingBlocking(); }
-    synchronized boolean tryBeginTurn() {
+
+    /** A cooperative callback yield is not a logical durability boundary. Only
+     * BATCHABLE facts share this finite group; a required effect always forces
+     * its complete prefix through prepareAppend before acknowledgement. */
+    synchronized boolean tryContinueTurn() {
         checkHealthy();
         if (!finishPendingFlush(false)) return false;
-        if (!pendingRecords.isEmpty()) {
+        if (!pendingRecords.isEmpty() && (!cooperativeBatchOpen || cooperativeBatchDue())) {
             startPendingFlush(false);
             if (!finishPendingFlush(false) || !pendingRecords.isEmpty()) return false;
         }
         turnDepth = Math.addExact(turnDepth, 1); return true;
     }
-    synchronized void endTurn() {
+    synchronized void yieldTurnAsync() {
         if (turnDepth < 1) throw new IllegalStateException("unbalanced persistence turn");
-        if (--turnDepth != 0) return;
-        flushPendingBlocking();
+        if (--turnDepth != 0 || pendingFlush != null || pendingRecords.isEmpty()) return;
+        if (!cooperativeBatchOpen) { cooperativeBatchStarted = cooperativeClock.getAsLong(); cooperativeBatchOpen = true; }
+        if (cooperativeBatchDue() || pendingRecords.size() >= MAX_BATCHABLE_WAL_RECORDS
+                || pendingBytes >= MAX_BUFFERED_WAL_BYTES) { startPendingFlush(false); return; }
+        if (!cooperativeWakeScheduled) {
+            cooperativeWakeScheduled = true;
+            long remaining = Math.max(0L, MAX_COOPERATIVE_BATCH_NANOS - (cooperativeClock.getAsLong() - cooperativeBatchStarted));
+            // Timer signals the owner only. It cannot append, force or publish state.
+            cooperativeWake.accept(remaining, () -> ready.run());
+        }
     }
-    synchronized void endTurnAsync() {
-        if (turnDepth < 1) throw new IllegalStateException("unbalanced persistence turn");
-        if (--turnDepth == 0 && pendingFlush == null) startPendingFlush(false);
+    private boolean cooperativeBatchDue() {
+        return cooperativeClock.getAsLong() - cooperativeBatchStarted >= MAX_COOPERATIVE_BATCH_NANOS;
     }
 
     record Pressure(int bufferedRecords, long bufferedBytes, boolean awaitingDurability,
@@ -443,6 +465,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         }
         pendingFlush = future; flushingRecords = records.size(); flushingBytes = pendingBytes;
         pendingRecords.clear(); pendingBytes = 0;
+        cooperativeBatchOpen = false; cooperativeWakeScheduled = false;
         if (pendingSinceNanos == 0L) pendingSinceNanos = System.nanoTime();
         future.whenComplete((ignored, failure) -> ready.run());
     }

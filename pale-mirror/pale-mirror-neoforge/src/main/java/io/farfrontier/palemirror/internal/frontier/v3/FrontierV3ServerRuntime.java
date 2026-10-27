@@ -439,7 +439,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     void runPersistenceTurn(Runnable turn) {
         Objects.requireNonNull(turn, "persistence turn");
         if (store instanceof FrontierFileStore fileStore) {
-            if (!fileStore.tryBeginTurn()) return;
+            if (!fileStore.tryContinueTurn()) return;
             try {
                 if (!publishDurability()) {
                     engine.failureCause().ifPresent(this::quarantine); return;
@@ -448,7 +448,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 cachedCheckpoint = null;
                 turn.run();
             }
-            finally { fileStore.endTurnAsync(); }
+            finally { fileStore.yieldTurnAsync(); }
         } else turn.run();
     }
     Optional<FrontierFileStore.Pressure> persistencePressure() {

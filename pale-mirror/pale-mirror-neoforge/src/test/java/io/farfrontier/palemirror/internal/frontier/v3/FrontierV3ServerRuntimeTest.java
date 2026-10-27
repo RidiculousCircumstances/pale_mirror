@@ -102,8 +102,11 @@ class FrontierV3ServerRuntimeTest {
         var payloads = PayloadCodecs.merge(codecs(), io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs.scheduleEffects());
         var writes = new java.util.ArrayDeque<Runnable>();
         var delayed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var batchClock = new java.util.concurrent.atomic.AtomicLong(1L);
+        var batchWakes = new java.util.ArrayDeque<Runnable>();
         var disk = new FrontierFileStore(directory, payloads,
-                task -> { if (delayed.get()) writes.add(task); else task.run(); });
+                task -> { if (delayed.get()) writes.add(task); else task.run(); }, batchClock::get,
+                (delay, wake) -> batchWakes.add(wake));
         var runtime = FrontierV3ServerRuntime.start(config, disk, 100);
         int committed;
         try {
@@ -113,6 +116,10 @@ class FrontierV3ServerRuntimeTest {
             committed = runtime.decodedState().orElseThrow().value();
             assertTrue(committed > 1 && committed < base.initialSchedules().size(),
                     "one cooperative prefix must batch ready progression and still yield to the native host");
+            assertTrue(writes.isEmpty(), "a cooperative yield keeps batchable facts in its bounded group");
+            batchClock.addAndGet(java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(50));
+            batchWakes.remove().run();
+            runtime.runPersistenceTurn(() -> { throw new AssertionError("expired unconfirmed prefix must hold new work"); });
             assertEquals(1, writes.size(), "the complete prefix shares one queued durable group");
             assertEquals(committed, disk.pressure().bufferedRecords());
             assertEquals(0, disk.pressure().forcedGroups());
