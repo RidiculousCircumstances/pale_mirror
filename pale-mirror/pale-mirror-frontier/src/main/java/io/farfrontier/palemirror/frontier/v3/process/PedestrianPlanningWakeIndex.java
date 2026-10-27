@@ -10,7 +10,8 @@ import java.util.*;
 
 /** Derived runtime index. One wake per exact retained continuation, irrespective of repeated calculation signals. */
 public final class PedestrianPlanningWakeIndex {
-    private record Wait(ScheduledAction action, List<PedestrianRouteRequest> requests) { }
+    private enum Origin { LIVE_CONTINUATION, RECOVERY_PREVIEW }
+    private record Wait(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin) { }
     private final Map<ScheduleId, Wait> waits = new LinkedHashMap<>();
     private final Map<PedestrianRouteRequest, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
@@ -20,10 +21,16 @@ public final class PedestrianPlanningWakeIndex {
     private final Set<PedestrianRouteRequest> released = new LinkedHashSet<>();
 
     public void replace(ScheduledAction action, List<PedestrianRouteRequest> requests) {
+        replace(action, requests, Origin.LIVE_CONTINUATION);
+    }
+    void restore(ScheduledAction action, List<PedestrianRouteRequest> requests) {
+        replace(action, requests, Origin.RECOVERY_PREVIEW);
+    }
+    private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin) {
         remove(action.id());
         if (requests.isEmpty()) return;
         var distinct = List.copyOf(new LinkedHashSet<>(requests));
-        waits.put(action.id(), new Wait(action, distinct));
+        waits.put(action.id(), new Wait(action, distinct, origin));
         for (var request : distinct) dependents.computeIfAbsent(request, ignored -> new LinkedHashSet<>()).add(action.id());
     }
     public void remove(ScheduleId id) {
@@ -37,14 +44,14 @@ public final class PedestrianPlanningWakeIndex {
             if (owners.isEmpty()) { dependents.remove(request); released.add(request); }
         }
     }
-    /** Replacements are atomic at the process boundary: a refreshed/shared demand survives. */
-    /** Future recovery previews are optional cache users. Only an actually due,
-     * runnable consumer needs protected result delivery. A business-owner refusal
-     * releases delivery pressure until that owner declares itself ready again. */
+    /** Live continuations retain delivery even across a future retry deadline.
+     * Detached future previews are optional cache users until due/runnable.
+     * An explicit business-owner refusal releases delivery pressure. */
     public List<PedestrianRouteRequest> retainedRequests(SimInstant instant) {
         var requests = new LinkedHashSet<PedestrianRouteRequest>();
         for (var entry : waits.entrySet()) if (!ownerHeld.contains(entry.getKey())
-                && (entry.getValue().action().dueAt().compareTo(instant) <= 0 || runnable.contains(entry.getKey())))
+                && (entry.getValue().origin() == Origin.LIVE_CONTINUATION
+                    || entry.getValue().action().dueAt().compareTo(instant) <= 0 || runnable.contains(entry.getKey())))
             requests.addAll(entry.getValue().requests());
         return List.copyOf(requests);
     }
@@ -73,7 +80,7 @@ public final class PedestrianPlanningWakeIndex {
                 || !expected.kind().equals(replacement.kind()) || expected.priority() != replacement.priority()
                 || expected.weight() != replacement.weight())
             throw new IllegalArgumentException("planning resume lost its exact continuation");
-        waits.put(expected.id(), new Wait(replacement, wait.requests()));
+        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION));
         makeRunnable(expected.id());
     }
     private void makeRunnable(ScheduleId id) {

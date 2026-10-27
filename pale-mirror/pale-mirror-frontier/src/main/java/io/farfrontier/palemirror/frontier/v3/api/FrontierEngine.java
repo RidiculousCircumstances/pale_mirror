@@ -33,6 +33,11 @@ public interface FrontierEngine<P extends FrontierProjection> {
     /** Exact read-only continuation fence, without materializing the whole schedule queue. */
     boolean retainsScheduledAction(io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction action);
 
+    /** Rechecks an exact already-due continuation after external readiness changed.
+     * No deadline, membership, receipt, revision or canonical state is changed.
+     * The ordinary owner admission and execution budgets still apply. */
+    boolean signalScheduledReadiness(io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction expected);
+
     /** Read-only current retention capacity; expired receipts count exactly as at command admission. */
     CommandAdmissionCapacity commandAdmissionCapacity();
 

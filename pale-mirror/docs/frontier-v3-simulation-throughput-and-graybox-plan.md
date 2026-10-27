@@ -450,7 +450,8 @@ machines and over1600meals without travel; direct read-only route probes found
 valid paths. The cooperative navigator evicted ready results at128entries while
 over1000canonical continuations could be waiting. A delayed consumer could
 therefore lose its completed calculation and repeat it. Ready calculations now
-remain protected for due/runnable consumers until they consume or yield. Future
+remain protected for live continuations, including their future retry deadline,
+and due/runnable consumers until they consume or yield. Future
 recovery previews and owner-held work remain optional cache consumers, preventing
 a future or refused activity from blocking current clearance. Full result storage
 applies backpressure to at most8completed searches; compute slots, worker count,
@@ -472,3 +473,23 @@ retained-route-results-connected2.log. The adapter fixture's obsolete drain-all-
 world helper now yields on actual completion/backpressure so canonical consumers
 can run; terminal outbound/supplies and6000canonical-tick assertions are unchanged.
 These are correctness checks, not deployed100town throughput acceptance.
+
+
+A subsequent ordinary100town sample isolated a second route-delivery bottleneck:
+2100 computed continuations remained deferred while receipt capacity sat exactly
+at its reserved quarter (1024/4096), leaving zero optional notification allowance.
+The former adapter represented even an already-due external-readiness signal as
+a durable deadline-rescheduling command. The kernel now accepts an exact
+already-due derived readiness signal, invalidates only that admission proof and
+rechecks the owning process under normal budgets. It changes no canonical state,
+deadline, membership, revision, receipt or WAL fact. Future deadline acceleration
+still requires the existing bound durable command, and its capacity/predecessor
+wait cannot block ready already-due actions. Unpublished canonical predecessors
+are preserved. Live retry demand and detached recovery previews now carry explicit
+producer-supplied origins; future live retries retain calculated results rather
+than losing them before their next deadline. Owner refusal still yields capacity.
+Focused actual adapter full-receipt and graceful recovery, kernel exact/future/
+stale/off-thread/owner-refusal, and planner consumer checks pass23seconds in
+addressed-route-readiness-focused2.log. The preceding e950 full scoped check/build/
+packaged and55scene+2production native gate passed7m44 in retained-route-results-
+release.log. Updated native100town measurement and G acceptance remain open.

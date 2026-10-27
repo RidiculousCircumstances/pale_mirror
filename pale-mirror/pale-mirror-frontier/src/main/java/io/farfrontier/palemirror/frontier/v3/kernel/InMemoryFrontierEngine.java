@@ -457,6 +457,13 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return schedules.containsExact(action);
     }
 
+    @Override public boolean signalScheduledReadiness(ScheduledAction expected) {
+        requireOwnerThread();
+        if (status.kind() != EngineStatus.Kind.ACTIVE || !schedules.signalReadiness(expected, instant)) return false;
+        admissionIndex.reconsider(expected);
+        return true;
+    }
+
     @Override public void pinCommandReceipt(CommandId id) {
         requireOwnerThread(); receipts.pin(id, limits.maxReceipts());
     }

@@ -180,6 +180,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && engine.retainsScheduledAction(action);
     }
 
+    boolean signalScheduledReadiness(io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction expected) {
+        return status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && engine.signalScheduledReadiness(expected);
+    }
+
     /** Host-owned bounded executor; callers capture immutable inputs before submission. */
     <T> Optional<java.util.concurrent.Future<T>> prepareReadOnly(java.util.function.Supplier<T> calculation) {
         return preparations.prepareValue(calculation);

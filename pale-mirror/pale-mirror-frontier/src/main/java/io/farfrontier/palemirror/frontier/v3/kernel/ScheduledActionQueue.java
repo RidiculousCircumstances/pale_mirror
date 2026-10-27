@@ -92,6 +92,13 @@ public final class ScheduledActionQueue {
         return action.equals(byId.get(action.id()));
     }
 
+    /** Derived readiness only; exact canonical membership/deadline are preserved. */
+    boolean signalReadiness(ScheduledAction expected, SimInstant now) {
+        if (!containsExact(expected) || expected.dueAt().compareTo(now) > 0) return false;
+        execution.signalReadiness(expected, now.ticks());
+        return true;
+    }
+
     /**
      * Prepares one atomic schedule transition without cloning the whole future-work index.
      * The caller may commit the transition only after the matching canonical transaction is

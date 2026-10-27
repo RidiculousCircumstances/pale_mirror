@@ -1,0 +1,71 @@
+package io.farfrontier.palemirror.frontier.v3.kernel;
+
+import io.farfrontier.palemirror.frontier.v3.api.*;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+class InMemoryFrontierReadinessTest {
+    private static final WorldId WORLD = new WorldId("frontier:readiness-test");
+    private static final SubjectId SUBJECT = new SubjectId("resident:readiness-test");
+    @Test
+    void addressedReadinessRechecksOnlyAnExactDueGenerationWithoutCanonicalMutation() throws Exception {
+        var held = scheduled("schedule:external-ready", "resident:waiting", 5L, 1);
+        var future = scheduled("schedule:future-ready", "resident:future", 50L, 1);
+        var available = new java.util.concurrent.atomic.AtomicBoolean();
+        var checks = new AtomicInteger();
+        ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
+            public boolean held(Counter state, ScheduledAction action) { checks.incrementAndGet(); return !available.get(); }
+            public Set<SubjectId> holdWakeKeys(Counter state, ScheduledAction action) { return Set.of(action.subject()); }
+            public Optional<ScheduledHold<Counter>> holdProof(Counter state, ScheduledAction action) {
+                return Optional.of(new ScheduledHold<>(action, Set.of(action.subject()), ignored -> !available.get()));
+            }
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                return List.of(new ProposedEvent(action.subject(), new Delta(1)));
+            }
+        };
+        var engine = new InMemoryFrontierEngine<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (Counter state, FrontierCommand command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> new Counter(state.value() + ((Delta) event.payload()).value()),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(held, future));
+        engine.advanceTo(new SimInstant(10), new WorkBudget(4, 4));
+        var before = engine.checkpoint();
+        org.junit.jupiter.api.Assertions.assertFalse(engine.signalScheduledReadiness(future));
+        org.junit.jupiter.api.Assertions.assertFalse(engine.signalScheduledReadiness(
+                scheduled(held.id().value(), held.subject().value(), 6, 1)));
+        assertTrue(engine.signalScheduledReadiness(held));
+        assertTrue(engine.signalScheduledReadiness(held));
+        assertEquals(before, engine.checkpoint());
+        assertTrue(engine.transactions().isEmpty());
+        int previousChecks = checks.get();
+        engine.advanceTo(new SimInstant(10), new WorkBudget(4, 4));
+        assertTrue(checks.get() > previousChecks, "readiness must recheck the owner rather than granting execution");
+        assertEquals(before, engine.checkpoint(), "a still-held owner cannot mutate merely because it was signalled");
+        available.set(true);
+        engine.advanceTo(new SimInstant(10), new WorkBudget(4, 4));
+        assertEquals(before, engine.checkpoint(), "an external change alone does not poll a parked action");
+        try (var worker = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            assertInstanceOf(IllegalStateException.class, assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> worker.submit(() -> engine.signalScheduledReadiness(held)).get()).getCause());
+        }
+        assertTrue(engine.signalScheduledReadiness(held));
+        engine.advanceTo(new SimInstant(10), new WorkBudget(4, 4));
+        assertEquals(1, engine.canonicalState().state().value());
+        assertEquals(List.of(future), engine.scheduledActions());
+        org.junit.jupiter.api.Assertions.assertFalse(engine.signalScheduledReadiness(held));
+        assertEquals(1, engine.transactions().size());
+    }
+
+    private static ScheduledAction scheduled(String id, String subject, long due, int weight) {
+        return new ScheduledAction(new ScheduleId(id), new SimInstant(due), 0, new SubjectId(subject), "process.test", weight);
+    }
+    private record Counter(int value) { }
+    private record Delta(int value) implements FrontierPayload {
+        public String type() { return "test.delta"; }
+    }
+    private record CounterProjection(WorldId worldId, Revision revision, SimInstant instant, int value) implements FrontierProjection { }
+}

@@ -26,7 +26,7 @@ public final class PedestrianPlanningContinuations {
             if (current != owner) throw new IllegalStateException("planning recovery lost its runtime owner");
             for (var wait : waits) if (retained.test(wait.action()) && !owner.tracks(wait.action())) {
                 var ready = wait.advice().acquire();
-                owner.replace(wait.action(), wait.advice().observation().requests());
+                owner.restore(wait.action(), wait.advice().observation().requests());
                 owner.changed(ready);
             }
         }

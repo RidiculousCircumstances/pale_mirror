@@ -15,8 +15,11 @@ class PedestrianPlanningWakeIndexTest {
         var index = new PedestrianPlanningWakeIndex(); var first = action("first-retention", 20);
         var shared = action("shared-retention", 20); var future = action("future-retention", 6000);
         var query = request(3); var later = request(20);
-        index.replace(first, List.of(query)); index.replace(shared, List.of(query)); index.replace(future, List.of(later));
+        index.replace(first, List.of(query)); index.replace(shared, List.of(query)); index.restore(future, List.of(later));
         assertEquals(List.of(query), index.retainedRequests(new SimInstant(20)));
+        var retry = action("live-retry", 40); index.replace(retry, List.of(later));
+        assertEquals(java.util.Set.of(query, later), java.util.Set.copyOf(index.retainedRequests(new SimInstant(20))));
+        index.remove(retry.id());
         index.ownerHeld(first, true);
         assertEquals(List.of(query), index.retainedRequests(new SimInstant(20)), "another current consumer still owns delivery");
         index.ownerHeld(shared, true); assertTrue(index.retainedRequests(new SimInstant(20)).isEmpty());

@@ -64,6 +64,9 @@ final class ScheduleAdmissionIndex<S> {
         return Decision.HELD;
     }
     java.util.Optional<ScheduledAction> deferredAction() { return java.util.Optional.ofNullable(deferred); }
+    void reconsider(ScheduledAction action) {
+        holds.remove(action.id()); passHolds.remove(action.id());
+    }
     void forget(ScheduleEffect effect) {
         var id = switch (effect) {
             case ScheduleEffect.Cancelled cancelled -> cancelled.scheduleId();

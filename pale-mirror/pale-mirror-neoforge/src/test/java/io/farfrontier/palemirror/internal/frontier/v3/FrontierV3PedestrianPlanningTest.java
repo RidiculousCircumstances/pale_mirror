@@ -75,6 +75,51 @@ class FrontierV3PedestrianPlanningTest {
             delayDisk.set(false); while (!tasks.isEmpty()) tasks.remove().run(); runtime.shutdown();
         }
     }
+    @Test void dueParkedReadinessDoesNotConsumeReservedReceiptsOrGrantOwnerExecution(@TempDir Path directory) {
+        var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:due-planner-pressure"), 41);
+        var heldPlanner = new ScheduledActionPlanner<FrontierWorldState>() {
+            public boolean held(FrontierWorldState state, ScheduledAction action) { return true; }
+            public java.util.Set<SubjectId> holdWakeKeys(FrontierWorldState state, ScheduledAction action) {
+                return java.util.Set.of(action.subject());
+            }
+            public java.util.List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+                fail("calculation readiness cannot override the business owner's refusal"); return java.util.List.of();
+            }
+        };
+        var configuration = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),
+                base.commandPlanner(), heldPlanner, base.reducer(), base.stateCodec(), base.projectionMapper(),
+                new EngineLimits(4, 2, 4096, 4096), base.initialSchedules(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
+        var runtime = FrontierV3ServerRuntime.start(configuration,
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 1000);
+        try {
+            var future = runtime.executionView().orElseThrow().schedules().stream().filter(a -> a.dueAt().ticks() > 3).sorted().toList();
+            for (var action : future.subList(0, 4)) FrontierV3CommandSubmission.submitBound(runtime, "pressure-fixture",
+                    action.subject().value(), new PedestrianPlanningReady(action), action);
+            runtime.tick(new WorkBudget(128, 1024));
+            assertEquals(0, runtime.commandAdmissionCapacity().orElseThrow().optionalCommands(8));
+            var now = runtime.canonicalState().orElseThrow().instant();
+            var action = runtime.executionView().orElseThrow().schedules().stream().filter(a -> a.dueAt().compareTo(now) <= 0)
+                    .findFirst().orElseThrow();
+            var index = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+            PedestrianRouteGeometry ground = new PedestrianRouteGeometry() {
+                public WorldBounds bounds() { return new WorldBounds(0, 0, 32, 32); }
+                public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+                public boolean blocked(SurfaceAnchor surface) { return false; }
+            };
+            var request = PedestrianRouteRequest.of(ground, SurfaceAnchor.at(1, 63, 1), SurfaceAnchor.at(3, 63, 1));
+            index.replace(action, java.util.List.of(request)); index.markParked(action);
+            index.changed(java.util.List.of(new PedestrianPlanningChange(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+            var before = runtime.checkpointImage().orElseThrow();
+            FrontierV3PedestrianPlanning.admitReady(runtime, index);
+            assertEquals(0, index.readyCount());
+            assertEquals(before, runtime.checkpointImage().orElseThrow());
+            assertTrue(runtime.retainsScheduledAction(action));
+            runtime.tick(new WorkBudget(128, 1024));
+            assertTrue(runtime.retainsScheduledAction(action));
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+        } finally { runtime.shutdown(); }
+    }
     @Test void fullRecoveredReceiptsDeferRatherThanLoseWakeOrQuarantine(@TempDir Path directory) {
         var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:planner-pressure"), 41);
         var configuration = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),

@@ -110,6 +110,11 @@ final class ScheduleExecutionIndex {
         var actions = new TreeSet<ScheduledAction>(); waiting.values().forEach(wait -> actions.add(wait.action()));
         for (var action : actions) reconsider(action, atTick);
     }
+    void signalReadiness(ScheduledAction action, long atTick) {
+        if (ready.contains(action) || checking.containsKey(action.id())) return;
+        future.remove(action);
+        reconsider(action, atTick);
+    }
     private void reconsider(ScheduledAction action, long atTick) {
         removeWait(action.id()); checking.put(action.id(), action);
         auditCandidates.remove(action.id()); readySince.put(action.id(), Math.max(action.dueAt().ticks(), atTick));

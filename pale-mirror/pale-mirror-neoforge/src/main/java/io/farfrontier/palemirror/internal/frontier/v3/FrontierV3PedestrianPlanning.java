@@ -94,13 +94,22 @@ final class FrontierV3PedestrianPlanning {
         return owner == runtime && recoveryPlan == null && recovery == null;
     }
     static void admitReady(FrontierV3ServerRuntime<?, ?> runtime, PedestrianPlanningWakeIndex index) {
-        if (index.waitingCount() == 0 || runtime.awaitingCanonicalPredecessor()) return;
+        if (index.waitingCount() == 0) return;
         var ready = index.ready(runtime.canonicalState().orElseThrow().instant(), runtime::retainsScheduledAction);
         if (ready.isEmpty()) return;
         int budget = runtime.commandAdmissionCapacity().orElseThrow().optionalCommands(MAX_WAKE_COMMANDS_PER_TURN);
         int admitted = 0;
+        int commands = 0;
         for (var action : ready) {
-            if (admitted == budget) break;
+            if (admitted == MAX_WAKE_COMMANDS_PER_TURN) break;
+            if (runtime.signalScheduledReadiness(action)) {
+                index.resumed(action, action);
+                admitted++;
+                continue;
+            }
+            // Only advancing a future canonical deadline requires a durable command.
+            // Capacity/predecessor pressure here cannot block another already-due waiter.
+            if (commands == budget || runtime.awaitingCanonicalPredecessor()) continue;
             var wake = new PedestrianPlanningReady(action);
             var continuation = wake.continuationAt(runtime.canonicalState().orElseThrow().instant());
             var result = FrontierV3CommandSubmission.submitResultBound(runtime, "pedestrian-planning-ready", action.subject().value(),
@@ -108,18 +117,17 @@ final class FrontierV3PedestrianPlanning {
             if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected rejected) {
                 var code = rejected.rejection().code();
                 if (code == io.farfrontier.palemirror.frontier.v3.api.RejectionCode.RECEIPT_CAPACITY_EXHAUSTED
-                        || code == io.farfrontier.palemirror.frontier.v3.api.RejectionCode.TRANSACTION_CAPACITY_EXHAUSTED) break;
+                        || code == io.farfrontier.palemirror.frontier.v3.api.RejectionCode.TRANSACTION_CAPACITY_EXHAUSTED) { commands = budget; continue; }
                 throw new IllegalStateException("addressed planning wake rejected: " + result);
             }
             if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending
-                    && pending.reason() == io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending.Reason.PREDECESSOR) break;
+                    && pending.reason() == io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending.Reason.PREDECESSOR) continue;
             runtime.afterCommand(result, () -> {
                 if (!runtime.retainsScheduledAction(continuation))
                     throw new IllegalStateException("accepted planning wake lost its exact runnable generation");
                 index.resumed(action, continuation);
             });
-            admitted++;
-            if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending) break;
+            admitted++; commands++;
         }
     }
     static synchronized java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemands(FrontierV3ServerRuntime<?, ?> runtime) {
