@@ -144,7 +144,10 @@ final class FrontierV3PerformanceDiagnostic {
                 "{\"bufferedRecords\":" + persistence.bufferedRecords() + ",\"bufferedBytes\":" + persistence.bufferedBytes()
                     + ",\"awaitingDurability\":" + persistence.awaitingDurability() + ",\"pendingNanos\":" + persistence.pendingNanos()
                     + ",\"forcedGroups\":" + persistence.forcedGroups() + ",\"lastFlushNanos\":" + persistence.lastFlushNanos()
-                    + ",\"maxFlushNanos\":" + persistence.maxFlushNanos() + "}"));
+                    + ",\"maxFlushNanos\":" + persistence.maxFlushNanos()
+                    + ",\"batchableAppends\":" + persistence.batchableAppends()
+                    + ",\"durableBeforeEffectAppends\":" + persistence.durableBeforeEffectAppends()
+                    + ",\"effectBarrierKinds\":" + new com.google.gson.Gson().toJson(persistence.effectBarrierKinds()) + "}"));
         if (state != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("frontier", frontier(state, checkpoint)));
         if (planningPressure != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("pedestrianPlanning", planningPressure));
         if (departurePressure != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("ambientDepartureQueue", departurePressure));

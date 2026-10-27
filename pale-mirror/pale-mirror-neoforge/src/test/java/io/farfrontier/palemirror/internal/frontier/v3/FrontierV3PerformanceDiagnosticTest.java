@@ -22,7 +22,12 @@ class FrontierV3PerformanceDiagnosticTest {
         assertTrue(metrics.snapshot().stages().stream().noneMatch(value -> value.stage() == FrontierExecutionMetrics.Stage.PHYSICAL));
         var checkpoint = new CheckpointImage(new WorldId("frontier:pressure-freshness"),
                 new io.farfrontier.palemirror.frontier.v3.api.Revision(1), new SimInstant(103), new byte[]{1}, List.of(), List.of());
-        var json = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot());
+        var persistence = new FrontierFileStore.Pressure(0, 0, false, 0, 1, 10, 10, 2, 1,
+                java.util.Map.of("frontier.resource_site_harvest_crop_prepared", 1L));
+        var json = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot(), null, 0, null, null,
+                null, null, List.of(), null, null, null, persistence);
+        assertTrue(json.contains("\"batchableAppends\":2"));
+        assertTrue(json.contains("\"effectBarrierKinds\":{\"frontier.resource_site_harvest_crop_prepared\":1}"));
         assertTrue(json.contains("\"currentLagTicks\":null"), "historical owner lag must not masquerade as current pressure");
         assertTrue(json.contains("\"lastObservedLagTicks\":99"));
         assertTrue(json.contains("\"ready\":0,\"held\":2,\"future\":11"), json);
