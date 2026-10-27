@@ -11,6 +11,7 @@ public final class PedestrianRoutePlanning {
     private static PedestrianRoutePlanner current = DIRECT;
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> observations = new ThreadLocal<>();
     private static final ThreadLocal<PedestrianRoutePlanner> readBinding = new ThreadLocal<>();
+    private static final ThreadLocal<PedestrianCalculationMemory.Builder> successfulReads = new ThreadLocal<>();
     private static final ThreadLocal<Inspection> inspection = new ThreadLocal<>();
     private static final ThreadLocal<PedestrianPlanningService> service = new ThreadLocal<>();
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> acquired = new ThreadLocal<>();
@@ -47,6 +48,11 @@ public final class PedestrianRoutePlanning {
         boolean created = acquisition != null && !planner.hasCalculation(geometry, start, target, extent);
         var result = planner.query(geometry, start, target, extent,
                 service.get() == null ? PedestrianPlanningService.ORDINARY : service.get());
+        var reads = successfulReads.get();
+        if (reads != null && PedestrianCalculationMemory.successful(result)) {
+            var request = PedestrianRouteRequest.of(geometry, start, target, extent);
+            reads.add(planner.readFact(request).orElseGet(() -> PedestrianCalculationMemory.Read.conservative(request, result)));
+        }
         if (created && result.status() == PedestrianRouteResult.Status.PLANNING)
             acquisition.add(PedestrianRouteRequest.of(geometry, start, target, extent));
         return result;
@@ -55,6 +61,10 @@ public final class PedestrianRoutePlanning {
     /** Capture on the owner thread; run advice without acquiring live route work. */
     public static synchronized PedestrianRoutePlanner readView() { return current.readView(); }
     public static <T> Prepared<T> prepare(PedestrianRoutePlanner view, java.util.function.Supplier<T> calculation) {
+        return prepare(view, PedestrianCalculationMemory.empty(), calculation);
+    }
+    public static <T> Prepared<T> prepare(PedestrianRoutePlanner view, PedestrianCalculationMemory memory,
+            java.util.function.Supplier<T> calculation) {
         var demands = new LinkedHashMap<PedestrianRouteRequest, PedestrianPlanningService>();
         var previous = readBinding.get();
         readBinding.set(new PedestrianRoutePlanner() {
@@ -63,12 +73,19 @@ public final class PedestrianRoutePlanning {
             }
             @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
                     PedestrianRouteExtent extent, PedestrianPlanningService requirement) {
-                demands.put(PedestrianRouteRequest.of(geometry, start, target, extent), requirement);
+                var request = PedestrianRouteRequest.of(geometry, start, target, extent);
+                demands.put(request, requirement);
+                var prior = memory.find(request);
+                if (prior.isPresent()) return prior.orElseThrow().result();
                 return view.query(geometry, start, target, extent);
+            }
+            @Override public java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
+                return memory.find(request).or(() -> view.readFact(request));
             }
             @Override public java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry,
                     SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
-                return view.peek(geometry, start, target, extent);
+                return memory.find(PedestrianRouteRequest.of(geometry, start, target, extent)).map(PedestrianCalculationMemory.Read::result)
+                        .or(() -> view.peek(geometry, start, target, extent));
             }
         });
         try { return new Prepared<>(observe(calculation), Map.copyOf(demands)); }
@@ -76,6 +93,7 @@ public final class PedestrianRoutePlanning {
     }
     public record Prepared<T>(Observation<T> observation, Map<PedestrianRouteRequest, PedestrianPlanningService> demands) {
         public Prepared { Objects.requireNonNull(observation); demands = Map.copyOf(demands); }
+        public PedestrianCalculationMemory reads() { return observation.reads(); }
         /** Accepted advice alone may request retained dependencies. Cancelled advice has no effects. */
         public java.util.List<PedestrianPlanningChange> acquire() {
             var ready = new java.util.ArrayList<PedestrianPlanningChange>();
@@ -126,15 +144,52 @@ public final class PedestrianRoutePlanning {
         }
     }
 
+    /** Resume one caller's positive reads while fresh queries still use the live
+     * capability. Missing facts cannot be supplied by calculation memory. */
+    public static <T> Observation<T> observe(PedestrianCalculationMemory memory, java.util.function.Supplier<T> calculation) {
+        var previous = readBinding.get(); PedestrianRoutePlanner delegate;
+        synchronized (PedestrianRoutePlanning.class) { delegate = previous == null ? current : previous; }
+        readBinding.set(new Remembering(delegate, memory));
+        try { return observe(calculation); }
+        finally { if (previous == null) readBinding.remove(); else readBinding.set(previous); }
+    }
+    private record Remembering(PedestrianRoutePlanner delegate, PedestrianCalculationMemory memory) implements PedestrianRoutePlanner {
+        public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+            return query(geometry, start, target, PedestrianRouteExtent.COMPLETE, PedestrianPlanningService.ORDINARY);
+        }
+        public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                PedestrianRouteExtent extent, PedestrianPlanningService service) {
+            return memory.find(PedestrianRouteRequest.of(geometry, start, target, extent)).map(PedestrianCalculationMemory.Read::result)
+                    .orElseGet(() -> delegate.query(geometry, start, target, extent, service));
+        }
+        public java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                PedestrianRouteExtent extent) {
+            return memory.find(PedestrianRouteRequest.of(geometry, start, target, extent)).map(PedestrianCalculationMemory.Read::result)
+                    .or(() -> delegate.peek(geometry, start, target, extent));
+        }
+        public java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
+            return memory.find(request).or(() -> delegate.readFact(request));
+        }
+        public boolean hasCalculation(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
+            return memory.find(PedestrianRouteRequest.of(geometry, start, target, extent)).isPresent()
+                    || delegate.hasCalculation(geometry, start, target, extent);
+        }
+        public void discardUnobserved(PedestrianRouteRequest request) { delegate.discardUnobserved(request); }
+    }
+
     /** Captures declared pending dependencies of this caller, not diagnostics or unused alternatives. */
     public static <T> Observation<T> observe(java.util.function.Supplier<T> calculation) {
         var previous = observations.get();
         var previousAcquired = acquired.get();
+        var previousReads = successfulReads.get();
+        var reads = new PedestrianCalculationMemory.Builder(); successfulReads.set(reads);
         var created = new java.util.LinkedHashSet<PedestrianRouteRequest>(); acquired.set(created);
         var requests = new java.util.LinkedHashSet<PedestrianRouteRequest>();
         observations.set(requests);
-        try { return new Observation<>(calculation.get(), java.util.List.copyOf(requests)); }
+        try { var result = calculation.get(); return new Observation<>(result, java.util.List.copyOf(requests), reads.snapshot()); }
         finally {
+            if (previousReads == null) successfulReads.remove();
+            else { previousReads.addAll(reads.snapshot()); successfulReads.set(previousReads); }
             PedestrianRoutePlanner planner;
             synchronized (PedestrianRoutePlanning.class) { planner = readBinding.get() == null ? current : readBinding.get(); }
             // A newly launched alternative which the selector did not retain
@@ -146,8 +201,9 @@ public final class PedestrianRoutePlanning {
             else { previous.addAll(requests); observations.set(previous); }
         }
     }
-    public record Observation<T>(T result, java.util.List<PedestrianRouteRequest> requests) {
-        public Observation { requests = java.util.List.copyOf(requests); }
+    public record Observation<T>(T result, java.util.List<PedestrianRouteRequest> requests, PedestrianCalculationMemory reads) {
+        public Observation(T result, java.util.List<PedestrianRouteRequest> requests) { this(result, requests, PedestrianCalculationMemory.empty()); }
+        public Observation { requests = java.util.List.copyOf(requests); Objects.requireNonNull(reads); }
     }
 
     /** Read retained evidence without starting a search. */

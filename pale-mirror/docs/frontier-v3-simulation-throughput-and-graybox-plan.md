@@ -1465,3 +1465,40 @@ At most128paths and the existing regional dependency bound, no authoritative
 receipt fabrication or persistence change. Capture happens outside the shared
 cache lock. Existing validation coverage proves remote reuse and actual local/
 foreign invalidation. G and the full per-edge proof scalability limit remain open.
+
+
+### Unfinished calculations own consumed positive route reads (2026-10-28)
+
+3736d08f4 exact183navigation/expedition+runtime/package release PASS123s; both
+retained311 deployments VERIFIED. Native10020501→20539/272.5s,debt769→6182
+remains FAIL. The concrete4096 admission conflation is repaired, but not sufficient.
+
+The next connected source counterexample is a two-stage preparation: consume
+routeA, await routeB; the wake index retains only unresolved requests, so routeA
+becomes ordinary evictable shared-cache data. Under >128result traffic or the
+shared coordinate/dependency budget it disappears beforeB completes. Re-running
+the owner from its start then requestsA again. More successful worker completions
+do not establish progress of that unfinished caller. Economic comparison memory
+only helps after complete logistics preparation and cannot replace this missing
+common calculation lifecycle.
+
+The existing planning boundary now captures used successful reads into bounded
+immutable PedestrianCalculationMemory. The exact waiting ScheduledAction owns its
+private read set across synchronous, detached and advisory preparation phases;
+shared-cache delivery and result retention remain independent. Each read binds
+query/profile/accessscope, extent and current exact regional dependencies/baseline;
+conservative providers keep exact immutable versions. Only successful facts enter;
+pending/unknown geometry cannot be manufactured by memory. No live geometry reader,
+parent preparation, actor, world writer or reservation is retained. Existing RLE
+losslessly stores distant route geometry rather than every block coordinate.
+
+At most32reads/131072represented coordinates per unfinished calculation. Current
+queries validate facts again; actual transitions, cancellation, retirement and a
+new generation release the private read set. Shared-worker/result bounds do not
+increase, no process family or depot policy enters common navigation.
+Existing wake coverage now floods the real result cache between two route stages,
+proves onlyB restarts and then reaches terminal cancellation, and proves a later
+calculation cannot inherit the released read set. Added demand coverage proves
+remote regional reuse but rejection after local change, foreignscope or newbaseline.
+Navigation/worker/wake/guardrails focus PASS24s; final addressed-wake and negative
+regional cases PASS15s. Exactref release/native impact still pending; G remainsOPEN.

@@ -11,6 +11,48 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void unfinishedPreparationKeepsItsFirstLegWhenSharedResultsAreEvictedBeforeTheSecondLeg() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("two-leg-preparation", 20);
+        var first = request(3); var end = SurfaceAnchor.at(6, 63, 1);
+        java.util.function.Supplier<List<ProposedEvent>> prepare = () -> {
+            try {
+                KnownPedestrianNavigation.plannedBetween(GROUND, first.start(), first.target());
+                KnownPedestrianNavigation.plannedBetween(GROUND, first.target(), end);
+                return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Cancelled(owner.id())));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                assertEquals(PedestrianRouteResult.Status.PLANNING, unavailable.status());
+                return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), action("two-leg-preparation", 21))));
+            }
+        };
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index)) {
+            planner.query(GROUND, first.start(), first.target());
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            PedestrianPlanningContinuations.prepare(owner, prepare).prepare().get();
+            assertTrue(index.waiting(owner));
+            // Exercise real shared-result capacity, not a test-only invalidation.
+            for (int i = 0; i < 140; i++) {
+                var point = SurfaceAnchor.at(i % 28 + 1, 63, i / 28 + 3);
+                planner.query(GROUND, point, SurfaceAnchor.at(point.x() + 1, 63, point.z()));
+                while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            }
+            assertTrue(planner.peek(GROUND, first.start(), first.target()).isEmpty());
+            assertTrue(planner.peek(GROUND, first.target(), end).isEmpty());
+            index.changed(planner.drainChanges()); index.ready(view(20, owner));
+            PedestrianPlanningContinuations.prepare(owner, prepare).prepare().get();
+            assertEquals(1, planner.pendingCount());
+            assertEquals(first.target(), planner.activeDiagnostics().getFirst().start(),
+                    "resume must request only the second leg, rather than restarting its consumed first proof");
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges()); index.ready(view(20, owner));
+            var terminal = PedestrianPlanningContinuations.prepare(owner, prepare).prepare().get();
+            assertInstanceOf(ScheduleEffect.Cancelled.class, terminal.getFirst().payload());
+            assertEquals(0, index.waitingCount(), "terminal completion releases the calculation's private reads");
+            PedestrianPlanningContinuations.prepare(owner, prepare).prepare().get();
+            assertEquals(first.start(), planner.activeDiagnostics().getFirst().start(),
+                    "a later calculation cannot inherit the completed continuation's private memory");
+        }
+    }
     @Test void recoveryCannotPreviewFutureBusinessOrAdvanceItsExecutionInstant() {
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         var action = action("future-recovery", 6000);

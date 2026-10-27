@@ -7,13 +7,14 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningChange;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteRequest;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianCalculationMemory;
 import java.util.*;
 
 /** Derived runtime index. One wake per exact retained continuation, irrespective of repeated calculation signals. */
 public final class PedestrianPlanningWakeIndex {
     private enum Origin { LIVE_CONTINUATION, RECOVERY_PREVIEW }
     private record Wait(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
-                        Optional<ScheduledAction> predecessor) { }
+                        Optional<ScheduledAction> predecessor, PedestrianCalculationMemory reads) { }
     private final Map<ScheduleId, Wait> waits = new LinkedHashMap<>();
     private final Map<PedestrianDemandKey, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
@@ -35,16 +36,29 @@ public final class PedestrianPlanningWakeIndex {
      * expose that unpublished generation as runnable work. */
     void stage(ScheduledAction predecessor, ScheduledAction successor, List<PedestrianRouteRequest> requests) {
         if (!predecessor.id().equals(successor.id())) throw new IllegalArgumentException("planning successor changed its schedule identity");
-        replace(successor, requests, Origin.LIVE_CONTINUATION, Optional.of(predecessor));
+        stage(predecessor, successor, requests, PedestrianCalculationMemory.empty());
+    }
+    void stage(ScheduledAction predecessor, ScheduledAction successor, List<PedestrianRouteRequest> requests,
+               PedestrianCalculationMemory reads) {
+        if (!predecessor.id().equals(successor.id())) throw new IllegalArgumentException("planning successor changed its schedule identity");
+        replace(successor, requests, Origin.LIVE_CONTINUATION, Optional.of(predecessor), reads);
+    }
+    PedestrianCalculationMemory reads(ScheduledAction action) {
+        var wait = waits.get(action.id());
+        return wait != null && wait.action().equals(action) ? wait.reads() : PedestrianCalculationMemory.empty();
     }
     private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
                          Optional<ScheduledAction> predecessor) {
+        replace(action, requests, origin, predecessor, PedestrianCalculationMemory.empty());
+    }
+    private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
+                         Optional<ScheduledAction> predecessor, PedestrianCalculationMemory reads) {
         remove(action.id());
         if (requests.isEmpty()) return;
         var demands = new LinkedHashMap<PedestrianDemandKey, PedestrianRouteRequest>();
         requests.forEach(request -> demands.put(PedestrianDemandKey.of(request), request));
         var distinct = List.copyOf(demands.values());
-        waits.put(action.id(), new Wait(action, distinct, origin, predecessor)); retention = null;
+        waits.put(action.id(), new Wait(action, distinct, origin, predecessor, reads)); retention = null;
         for (var request : distinct) dependents.computeIfAbsent(PedestrianDemandKey.of(request), ignored -> new LinkedHashSet<>()).add(action.id());
     }
     public void remove(ScheduleId id) {
@@ -105,7 +119,7 @@ public final class PedestrianPlanningWakeIndex {
                 || !expected.kind().equals(replacement.kind()) || expected.priority() != replacement.priority()
                 || expected.weight() != replacement.weight())
             throw new IllegalArgumentException("planning resume lost its exact continuation");
-        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION, Optional.empty())); retention = null;
+        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION, Optional.empty(), wait.reads())); retention = null;
         makeRunnable(expected.id());
     }
     private void makeRunnable(ScheduleId id) {

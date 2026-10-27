@@ -379,6 +379,14 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                     PedestrianRouteExtent extent) {
                 return peek(geometry, start, target, extent).orElseGet(() -> waiting("PLANNING_NOT_REQUESTED"));
             }
+            @Override public java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
+                for (var entry : retained) if (entry.getKey().sameDemand(request)
+                        && entry.getValue().dependencies().matches(request.geometry())
+                        && PedestrianCalculationMemory.successful(entry.getValue().result()))
+                    return java.util.Optional.of(PedestrianCalculationMemory.Read.regional(entry.getKey(),
+                            entry.getValue().result(), entry.getValue().dependencies()));
+                return PedestrianRoutePlanner.super.readFact(request);
+            }
             @Override public java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry,
                     SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
                 var request = PedestrianRouteRequest.of(geometry, start, target, extent);

@@ -7,6 +7,33 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningDemandTest {
+    @Test void privateSuccessfulReadsValidateRegionalChangesAndCannotSurviveAForeignBaseline() throws Exception {
+        var revision = PedestrianGeometryRevision.initial(); var geometry = ground(revision);
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(5, 63, 1);
+        PedestrianCalculationMemory memory;
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner)) {
+            planner.query(geometry, start, goal);
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            memory = PedestrianRoutePlanning.prepare(planner.readView(), () ->
+                    PedestrianRoutePlanning.query(geometry, start, goal)).reads();
+        }
+        var freshReads = new java.util.concurrent.atomic.AtomicInteger();
+        PedestrianRoutePlanner emptyView = (g, from, to) -> {
+            freshReads.incrementAndGet();
+            return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "EMPTY_READ_VIEW");
+        };
+        var distant = ground(revision.changed(Set.of(new PedestrianGeometryRevision.Region(7, 0))));
+        assertEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.prepare(emptyView, memory, () ->
+                PedestrianRoutePlanning.query(distant, start, goal)).observation().result().status());
+        assertEquals(0, freshReads.get(), "a remote edit does not discard this caller's consumed positive proof");
+        for (var changed : List.of(ground(revision.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)))),
+                ground(PedestrianGeometryRevision.initial()), ground(PedestrianGeometryRevision.initial(revision.scope())))) {
+            assertEquals(PedestrianRouteResult.Status.PLANNING, PedestrianRoutePlanning.prepare(emptyView, memory, () ->
+                    PedestrianRoutePlanning.query(changed, start, goal)).observation().result().status(),
+                    "local facts, foreign scope and a new baseline all require fresh calculation");
+        }
+        assertEquals(3, freshReads.get());
+    }
     @Test void retainedUnknownGeometryDoesNotRepeatedlyCompleteAnAcceptedAdviceWait() throws Exception {
         var geometry = new PedestrianRouteGeometry() {
             public WorldBounds bounds() { return new WorldBounds(0, 0, 128, 4); }

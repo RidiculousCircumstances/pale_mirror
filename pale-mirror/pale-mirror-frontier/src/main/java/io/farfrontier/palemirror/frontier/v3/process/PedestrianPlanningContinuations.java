@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianCalculationMemory;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -68,21 +69,22 @@ public final class PedestrianPlanningContinuations {
     static List<ProposedEvent> plan(ScheduledAction action, Supplier<List<ProposedEvent>> planning) {
         var index = current;
         if (index == null) return planning.get();
-        var observation = PedestrianRoutePlanning.observe(planning);
-        return publish(index, action, observation);
+        var observation = PedestrianRoutePlanning.observe(index.reads(action), planning);
+        return publish(index, action, observation, observation.reads());
     }
     /** Detached advice captures route evidence; only accepted owner completion publishes dependencies. */
     static io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation prepare(
             ScheduledAction action, Supplier<List<ProposedEvent>> planning) {
         var index = current;
         var view = PedestrianRoutePlanning.readView();
+        var reads = index == null ? PedestrianCalculationMemory.empty() : index.reads(action);
         return () -> {
-            var prepared = PedestrianRoutePlanning.prepare(view, planning);
+            var prepared = PedestrianRoutePlanning.prepare(view, reads, planning);
             return () -> {
                 if (current != index) throw new IllegalStateException("prepared planning lost its runtime owner");
                 var ready = prepared.acquire();
                 if (index == null) return prepared.observation().result();
-                var result = publish(index, action, prepared.observation());
+                var result = publish(index, action, prepared.observation(), prepared.reads());
                 index.changed(ready);
                 return result;
             };
@@ -94,8 +96,9 @@ public final class PedestrianPlanningContinuations {
             ScheduledAction action,
             io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState> advice) {
         var index = current; var view = PedestrianRoutePlanning.readView();
+        var reads = index == null ? PedestrianCalculationMemory.empty() : index.reads(action);
         return () -> {
-            var prepared = PedestrianRoutePlanning.prepare(view, advice::prepare);
+            var prepared = PedestrianRoutePlanning.prepare(view, reads, advice::prepare);
             return new ScheduledAdvisory.Completion<FrontierWorldState>() {
                 @Override public String rejectionReason() { return prepared.observation().result().rejectionReason(); }
                 @Override public java.util.Optional<ScheduledPreparation> revalidate(FrontierWorldState state, SimInstant at) {
@@ -105,15 +108,15 @@ public final class PedestrianPlanningContinuations {
                         if (index != null) index.changed(ready);
                         var exactView = PedestrianRoutePlanning.readView();
                         return () -> {
-                            var exact = PedestrianRoutePlanning.prepare(exactView, preparation::prepare);
+                            var exact = PedestrianRoutePlanning.prepare(exactView, prepared.reads(), preparation::prepare);
                             return () -> {
                                 if (current != index) throw new IllegalStateException("advice continuation lost its planning owner");
                                 var changes = exact.acquire();
-                                var completion = PedestrianRoutePlanning.observe(exact.observation().result());
+                                var completion = PedestrianRoutePlanning.observe(exact.reads(), exact.observation().result());
                                 if (index == null) return completion.result();
                                 var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
                                 requests.addAll(exact.observation().requests()); requests.addAll(completion.requests());
-                                var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)));
+                                var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)), exact.reads().merge(completion.reads()));
                                 index.changed(changes); return result;
                             };
                         };
@@ -123,19 +126,19 @@ public final class PedestrianPlanningContinuations {
         };
     }
     private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
-            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation) {
+            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation, PedestrianCalculationMemory reads) {
         // A calculation-only wait changes no business state and has no elapsed-time
         // deadline. Retain the exact due generation instead of inventing a future
         // retry which later needs a second durable command to become runnable.
         // A real transition owns its successor timing and is never rewritten here.
         var result = observation.result();
-        if (!observation.requests().isEmpty() && result.size() == 1
+        boolean calculationOnly = !observation.requests().isEmpty() && result.size() == 1
                 && result.getFirst().payload() instanceof ScheduleEffect.Rescheduled replacement
                 && replacement.scheduleId().equals(action.id())
                 && result.getFirst().subject().equals(action.subject())
                 && replacement.replacement().equals(new ScheduledAction(action.id(), replacement.replacement().dueAt(),
-                        action.priority(), action.subject(), action.kind(), action.weight())))
-            result = List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), action)));
+                        action.priority(), action.subject(), action.kind(), action.weight()));
+        if (calculationOnly) result = List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), action)));
         ScheduledAction successor = null;
         for (var event : result) {
             if (event.payload() instanceof ScheduleEffect.Rescheduled replacement && replacement.scheduleId().equals(action.id()))
@@ -146,7 +149,7 @@ public final class PedestrianPlanningContinuations {
                 successor = null;
         }
         if (successor == null) index.remove(action.id());
-        else index.stage(action, successor, observation.requests());
+        else index.stage(action, successor, observation.requests(), calculationOnly ? reads : PedestrianCalculationMemory.empty());
         return result;
     }
 }
