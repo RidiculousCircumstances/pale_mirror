@@ -34,7 +34,7 @@ public final class ForestryWorkSelection {
                 try {
                     var approach = receipt(knowledge.plannedBetween(origin, station));
                     var destination = WorkStorageSelection.select(state, new WorkStorageSelection.Portion(job.home(), job.outputKind(),
-                            carried + tree.remaining(), false), station, Optional.empty());
+                            carried + tree.remaining(), false), station, state.actorLocations().get(job.execution().actorId()).navigationProfile(), Optional.empty());
                     if (destination.isPresent()) return Optional.of(new ForestryWorkAdvanced.TreeSelection(tree.declaration(),
                             new ForestryWork.Target(tree.reference(), tree.revision(), station, tree.remaining()), approach,
                             destination.orElseThrow().endpoint(), destination.orElseThrow().route()));
@@ -65,7 +65,7 @@ public final class ForestryWorkSelection {
         if (!route.getFirst().equals(origin) || !route.getLast().equals(target.station())) throw new IllegalArgumentException("forestry approach changed its endpoints");
         knowledge.requireRoute(route);
         WorkStorageSelection.require(state, new WorkStorageSelection.Portion(job.home(), job.outputKind(),
-                ForestryWorkAuthority.carried(state, job) + tree.remaining(), false), target.station(),
+                ForestryWorkAuthority.carried(state, job) + tree.remaining(), false), target.station(), state.actorLocations().get(job.execution().actorId()).navigationProfile(),
                 new WorkStorageSelection.Selected(selected.storage(), selected.delivery()));
     }
     public static boolean serviceable(FrontierWorldState state, ForestryWork job, ForestTree tree) {

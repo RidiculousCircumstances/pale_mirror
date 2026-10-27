@@ -35,7 +35,7 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
             if (!ForestryStockDemand.requested(state, resident.settlementId(), output, Optional.empty())) continue;
             var requirement = new ToolRequirement(rules.tool().ability(), rules.tool().minimumGrade(), Math.multiplyExact(rules.tool().wear(), tree.remaining()));
             Optional<WorkEquipmentSelection.Selection> tool;
-            try { tool = WorkEquipmentSelection.select(state, resident.settlementId(), origin,
+            try { tool = WorkEquipmentSelection.select(state, resident.settlementId(), origin, state.actorLocations().get(resident.id()).navigationProfile(),
                     EquipmentRequirements.allOf(Set.of(requirement)), WorkEquipmentClaimComposition.reserved(state)); }
             catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = pending; continue; }
             if (tool.isEmpty()) continue;
@@ -56,7 +56,7 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
                 for (var store : stores) try {
                     var target = new ForestryWork.Target(tree.reference(), tree.revision(), station, tree.remaining());
                     var event = declaration(state, resident, selected, tree.declaration(), target, output, store, sourceRoute,
-                            receipt(ResourceStorageNavigation.plannedPath(state, station, store)));
+                            receipt(ResourceStorageNavigation.plannedPath(state, station, state.actorLocations().get(resident.id()).navigationProfile(), store)));
                     return Optional.of(new ResidentWorkOffer<>(kind(), resident.id(), event,
                             List.of(new WorkReservationClaim.ExactResource(selected.item().id(), 1))));
                 } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
@@ -109,11 +109,11 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
         if (!knowledge.interactionStations(lowest(source), BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN).contains(target.station())
                 || !ResourceStorageSelection.receivingCandidates(state, job.home(), job.outputKind(), source.remaining(), target.station(), STORAGE, Optional.empty()).contains(job.storageTarget()))
             throw new IllegalArgumentException("forestry admission lacks actual reachable work/storage capacity");
-        ResourceStorageNavigation.requireAcceptedDestination(state, state.actorLocations().get(resident.id()).supportingSurface(), job.toolSource(), start.toolRoute());
+        ResourceStorageNavigation.requireAcceptedDestination(state, state.actorLocations().get(resident.id()).supportingSurface(), state.actorLocations().get(resident.id()).navigationProfile(), job.toolSource(), start.toolRoute());
         var route = start.sourceRoute().map(PedestrianRouteReceipt::route).orElseGet(() -> List.of(job.toolSource().station()));
         if (!route.getFirst().equals(job.toolSource().station()) || !route.getLast().equals(target.station()))
             throw new IllegalArgumentException("forestry source route endpoints changed");
-        knowledge.requireRoute(route); ResourceStorageNavigation.requireAcceptedDestination(state, target.station(), job.storageTarget(), start.storageRoute());
+        knowledge.requireRoute(route); ResourceStorageNavigation.requireAcceptedDestination(state, target.station(), state.actorLocations().get(resident.id()).navigationProfile(), job.storageTarget(), start.storageRoute());
         var forest = state.forest().find(target.tree()).isEmpty() ? state.forest().admit(source.declaration()) : state.forest();
         return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, job.execution()).commit(state,
                 FrontierWorldStateUpdate.begin().forest(forest.admitWork(job, start.expectedOrdinal())));

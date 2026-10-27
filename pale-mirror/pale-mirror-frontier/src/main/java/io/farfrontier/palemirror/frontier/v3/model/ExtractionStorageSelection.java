@@ -21,7 +21,7 @@ public final class ExtractionStorageSelection {
                     if (job.phase() == ExtractionWork.Phase.RETURN_TOOL
                             && ContainerStorageAdmission.first(state, endpoint.containerId(), Optional.empty(), slot -> false).isEmpty()) continue;
             try {
-                var route = ResourceStorageNavigation.plannedPath(state, origin, endpoint);
+                var route = ResourceStorageNavigation.plannedPath(state, origin, state.actorLocations().get(job.execution().actorId()).navigationProfile(), endpoint);
                 return Optional.of(new ExtractionWorkDecision.Storage(job.execution(), origin, endpoint,
                         route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
@@ -41,7 +41,7 @@ public final class ExtractionStorageSelection {
                     Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER), Optional.empty())
                 || !retainedAvailable(state, job.retargetStorage(selected.destination())))
             throw new IllegalArgumentException("replacement mining storage has stale authority, departure or capacity");
-        ResourceStorageNavigation.requireAcceptedDestination(state, selected.origin(), selected.destination(), selected.route());
+        ResourceStorageNavigation.requireAcceptedDestination(state, selected.origin(), state.actorLocations().get(job.execution().actorId()).navigationProfile(), selected.destination(), selected.route());
     }
     public static boolean retainedAvailable(FrontierWorldState state, ExtractionWork job) {
         var destination = job.storageTarget();

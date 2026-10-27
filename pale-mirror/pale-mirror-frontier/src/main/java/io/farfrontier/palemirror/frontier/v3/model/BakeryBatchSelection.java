@@ -71,7 +71,7 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
         if (ProductionInputAccess.eligible(state, station.containerId(), home.id(), workshop.id(), BakeryRecipes.BREAD)) {
             var retained = selectAt(state, rights, station.containerId(), capacity, station.id());
             if (retained.isPresent()) {
-                if (requireAccess) ResourceStorageNavigation.plannedPath(state, origin, ProductionInputAccess.at(state, station.containerId()).endpoint());
+                if (requireAccess) ResourceStorageNavigation.plannedPath(state, origin, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER, ProductionInputAccess.at(state, station.containerId()).endpoint());
                 return retained;
             }
         }
@@ -80,7 +80,7 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
             var choice = selectAt(state, rights, storage.containerId(), capacity, station.id());
             if (choice.isEmpty()) continue;
             if (requireAccess) {
-                try { ResourceStorageNavigation.plannedPath(state, origin, storage); }
+                try { ResourceStorageNavigation.plannedPath(state, origin, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER, storage); }
                 catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                     if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH) throw unavailable;
                     continue;

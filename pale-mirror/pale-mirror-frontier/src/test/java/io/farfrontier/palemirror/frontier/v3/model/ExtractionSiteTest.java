@@ -16,7 +16,7 @@ class ExtractionSiteTest {
         var initial = engine.canonicalState().state();
         var site = initial.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow().site();
         var storage = initial.inventory().containers().get(QuarryStorageFixture.container(initial, site)).storage().orElseThrow().endpoint();
-        assertFalse(ResourceStorageNavigation.plannedPath(initial, site.layout().entrance(), storage).isEmpty(),
+        assertFalse(ResourceStorageNavigation.plannedPath(initial, site.layout().entrance(), io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER, storage).isEmpty(),
                 "the operational fixture needs a known tool approach before advancing the whole world");
         boolean deliveredHome = false;
         io.farfrontier.palemirror.frontier.v3.api.SubjectId firstJob = null, firstTool = null;

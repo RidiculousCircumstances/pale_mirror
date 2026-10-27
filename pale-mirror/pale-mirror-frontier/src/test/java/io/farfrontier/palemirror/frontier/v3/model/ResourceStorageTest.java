@@ -72,11 +72,11 @@ class ResourceStorageTest {
         var state = initial(); var site = state.extractionSites().deposits().values().iterator().next().site();
         var target = ResourceStorageSelection.candidates(state, site.settlementId(), "minecraft:cobblestone",
                 site.layout().storagePort(), Set.of(ResourceStorageRole.WAREHOUSE)).getFirst();
-        assertEquals(List.of(target.station()), ResourceStorageNavigation.plannedPath(state, target.station(), target));
+        assertEquals(List.of(target.station()), ResourceStorageNavigation.plannedPath(state, target.station(), io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER, target));
         var blocked = state.recordPhysicalDelta(new PhysicalDelta(target.station().support().offset(0, 1, 0),
                 PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:blocked-storage-access"));
         var refusal = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
-                () -> ResourceStorageNavigation.plannedPath(blocked, target.station(), target));
+                () -> ResourceStorageNavigation.plannedPath(blocked, target.station(), io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER, target));
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, refusal.status(),
                 "an unclassified physical change requires observation; it is not a proved impassable block");
         assertEquals(state.actorExecutions(), blocked.actorExecutions());

@@ -33,7 +33,7 @@ public final class ExtractionWorkRelocation {
                     for (var destination : ResourceStorageSelection.receivingCandidates(state, home, output.itemKind(), output.quantity(),
                             cell.workstation(), STORAGE, Optional.empty())) {
                         try {
-                            var route = ResourceStorageNavigation.plannedPath(state, cell.workstation(), destination);
+                            var route = ResourceStorageNavigation.plannedPath(state, cell.workstation(), state.actorLocations().get(job.execution().actorId()).navigationProfile(), destination);
                             return Optional.of(new ExtractionWorkDecision.Relocate(source, destination,
                                     route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));
                         } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
@@ -63,7 +63,7 @@ public final class ExtractionWorkRelocation {
         ExtractionWorkTargets.requireSelection(state, next, selected.source(), atTick);
         if (!ResourceStorageSelection.receivesAt(state, selected.destination(), home, output.itemKind(), output.quantity(), STORAGE, Optional.empty()))
             throw new IllegalArgumentException("mining relocation lacks current receiving capacity");
-        ResourceStorageNavigation.requireAcceptedDestination(state, cell.workstation(), selected.destination(), selected.storageRoute());
+        ResourceStorageNavigation.requireAcceptedDestination(state, cell.workstation(), state.actorLocations().get(job.execution().actorId()).navigationProfile(), selected.destination(), selected.storageRoute());
         return next;
     }
 }

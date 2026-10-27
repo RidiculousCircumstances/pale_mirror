@@ -166,7 +166,7 @@ final class ResourceSiteHarvestPlanning {
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
         java.util.Optional<WorkEquipmentSelection.Selection> equipment;
-        try { equipment = WorkEquipmentSelection.select(state, farmer.settlementId(), worker.supportingSurface(),
+        try { equipment = WorkEquipmentSelection.select(state, farmer.settlementId(), worker.supportingSurface(), worker.navigationProfile(),
                 FieldEquipment.requirements(), WorkEquipmentClaimComposition.reserved(state)); }
         catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable waiting) {
             return java.util.Optional.empty();
@@ -177,7 +177,7 @@ final class ResourceSiteHarvestPlanning {
         for (var candidate : ResourceStorageSelection.newStackCandidates(state, site.settlementId(), "minecraft:wheat", 64,
                 worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             try {
-                var route = ResourceStorageNavigation.plannedPath(state, worker.supportingSurface(), candidate);
+                var route = ResourceStorageNavigation.plannedPath(state, worker.supportingSurface(), worker.navigationProfile(), candidate);
                 storage = candidate;
                 storageRoute = route.size() < 2 ? java.util.Optional.empty() : java.util.Optional.of(
                         new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route));
@@ -630,7 +630,7 @@ final class ResourceSiteHarvestPlanning {
         if (outcome == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED || outcome == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
             if (started.fieldRoute().isPresent()) throw new IllegalArgumentException("excluded field start cannot declare a work route");
         } else ResourceSiteHarvestKnownNavigation.requireAcceptedDestination(projected, job, started.fieldRoute());
-        ResourceStorageNavigation.requireAcceptedDestination(state, state.actorLocations().get(job.workerId()).supportingSurface(),
+        ResourceStorageNavigation.requireAcceptedDestination(state, state.actorLocations().get(job.workerId()).supportingSurface(), state.actorLocations().get(job.workerId()).navigationProfile(),
                 ResourceStorageAccess.at(state, job.outputSlot().containerId()).endpoint(), started.storageRoute());
         ResourceSite descriptor = state.resourceSite(job.siteId());
         SettlementCommitmentComposition.ADMISSION.requireParticipants(state, new SettlementCommitmentAdmission.Request(

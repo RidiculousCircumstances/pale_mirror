@@ -28,7 +28,7 @@ public final class ForestryColdWork {
                 var portion = ForestryWorkSelection.portion(state, job);
                 if (WorkStorageSelection.available(state, portion, job.storageTarget()))
                     throw new IllegalArgumentException("available forestry storage cannot be silently replaced");
-                WorkStorageSelection.require(state, portion, state.actorLocations().get(job.execution().actorId()).supportingSurface(),
+                WorkStorageSelection.require(state, portion, state.actorLocations().get(job.execution().actorId()).supportingSurface(), state.actorLocations().get(job.execution().actorId()).navigationProfile(),
                         new WorkStorageSelection.Selected(selected.storage(), selected.approach()));
                 return state.withChanges(update.forest(state.forest().replaceWork(job, job.retargetStorage(selected.storage()))));
             }

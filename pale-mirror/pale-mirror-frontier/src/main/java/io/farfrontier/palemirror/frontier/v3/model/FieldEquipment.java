@@ -82,7 +82,7 @@ public final class FieldEquipment {
     }
     public static Optional<FieldEquipmentChanged> selectReturn(FrontierWorldState state, ResourceSiteHarvestJob job) {
         if (!needsReturnStorage(state, job) || job.progress().hasPendingPhysicalWork()) return Optional.empty();
-        return WorkEquipmentStorage.select(state, held(state, job), state.actorLocations().get(job.workerId()).supportingSurface())
+        return WorkEquipmentStorage.select(state, held(state, job), state.actorLocations().get(job.workerId()).supportingSurface(), state.actorLocations().get(job.workerId()).navigationProfile())
                 .map(target -> new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
                         FieldEquipmentChanged.Action.SELECT_RETURN, Optional.empty(), Optional.of(target)));
     }

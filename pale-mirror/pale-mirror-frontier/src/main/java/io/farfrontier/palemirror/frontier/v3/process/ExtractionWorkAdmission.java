@@ -34,7 +34,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         var tool = selectedTool.orElseThrow();
         var slot = (InventoryCustody.ContainerSlot) tool.item().custody();
         var source = state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint();
-        var knowledge = sourceKnowledge(state, source);
+        var knowledge = sourceKnowledge(state, source, resident.id());
         while (!cells.isEmpty()) {
             var candidate = ExtractionWorkTargets.spatialSelection(state, deposit, resident.id(), cells,
                     AreaWorkSelection.SpatialPolicy.SPREAD_STARTS, priorities);
@@ -51,7 +51,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
                 for (var endpoint : candidates) {
                     try {
                         return Optional.of(new Opportunity(tool, cell, endpoint, sourceRoute,
-                                receipt(ResourceStorageNavigation.plannedPath(state, cell.workstation(), endpoint))));
+                                receipt(ResourceStorageNavigation.plannedPath(state, cell.workstation(), state.actorLocations().get(resident.id()).navigationProfile(), endpoint))));
                     } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                         if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
                     }
@@ -118,18 +118,18 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
                 || !ResourceStorageSelection.receivingCandidates(state, resident.settlementId(), job.outputKind(),
                     cell.definition().coldOutput().getFirst().quantity(), cell.workstation(), STORAGE, Optional.empty()).contains(job.storageTarget()))
             throw new IllegalArgumentException("mining start has a foreign output or unavailable declared storage");
-        ResourceStorageNavigation.requireAcceptedDestination(state, state.actorLocations().get(resident.id()).supportingSurface(),
+        ResourceStorageNavigation.requireAcceptedDestination(state, state.actorLocations().get(resident.id()).supportingSurface(), state.actorLocations().get(resident.id()).navigationProfile(),
                 job.toolSource(), event.toolRoute());
         var route = event.sourceRoute().map(PedestrianRouteReceipt::route).orElseGet(() -> List.of(job.toolSource().station()));
         if (!route.getFirst().equals(job.toolSource().station()) || !route.getLast().equals(cell.workstation()))
             throw new IllegalArgumentException("mining start has foreign source-route endpoints");
-        sourceKnowledge(state, job.toolSource()).requireRoute(route);
-        ResourceStorageNavigation.requireAcceptedDestination(state, cell.workstation(), job.storageTarget(), event.storageRoute());
+        sourceKnowledge(state, job.toolSource(), resident.id()).requireRoute(route);
+        ResourceStorageNavigation.requireAcceptedDestination(state, cell.workstation(), state.actorLocations().get(resident.id()).navigationProfile(), job.storageTarget(), event.storageRoute());
         return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, job.execution()).commit(state,
                 FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().admit(job, event.expectedOrdinal())));
     }
-    private static KnownPedestrianRouteKnowledge sourceKnowledge(FrontierWorldState state, ShipmentEndpoint source) {
-        return ResourceStorageNavigation.forEndpoint(state, source);
+    private static KnownPedestrianRouteKnowledge sourceKnowledge(FrontierWorldState state, ShipmentEndpoint source, SubjectId actor) {
+        return ResourceStorageNavigation.forEndpoint(state, source).forActor(state, actor);
     }
     private static Optional<PedestrianRouteReceipt> receipt(List<SurfaceAnchor> route) {
         return route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty();

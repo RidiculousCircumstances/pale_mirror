@@ -19,13 +19,13 @@ public final class WorkStorageSelection {
                 || ReferenceContainerCustody.blocksCanonicalUse(state, endpoint.containerId())) return false;
         return !portion.exact() || ContainerStorageAdmission.first(state, endpoint.containerId(), Optional.empty(), slot -> false).isPresent();
     }
-    public static Optional<Selected> select(FrontierWorldState state, Portion portion, SurfaceAnchor origin,
+    public static Optional<Selected> select(FrontierWorldState state, Portion portion, SurfaceAnchor origin, UnitNavigationProfile profile,
                                            Optional<ShipmentEndpoint> excluding) {
         KnownPedestrianNavigation.RouteUnavailable waiting = null;
         for (var endpoint : ResourceStorageSelection.receivingCandidates(state, portion.home(), portion.kind(), portion.quantity(), origin, ROLES, Optional.empty())) {
             if (excluding.filter(endpoint::equals).isPresent() || !available(state, portion, endpoint)) continue;
             try {
-                var route = ResourceStorageNavigation.plannedPath(state, origin, endpoint);
+                var route = ResourceStorageNavigation.plannedPath(state, origin, profile, endpoint);
                 return Optional.of(new Selected(endpoint, route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));
             } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
                 if (pending.status() != PedestrianRouteResult.Status.NO_PATH) waiting = pending;
@@ -34,8 +34,8 @@ public final class WorkStorageSelection {
         if (waiting != null) throw waiting;
         return Optional.empty();
     }
-    public static void require(FrontierWorldState state, Portion portion, SurfaceAnchor origin, Selected selected) {
+    public static void require(FrontierWorldState state, Portion portion, SurfaceAnchor origin, UnitNavigationProfile profile, Selected selected) {
         if (!available(state, portion, selected.endpoint())) throw new IllegalArgumentException("selected work storage no longer accepts its portion");
-        ResourceStorageNavigation.requireAcceptedDestination(state, origin, selected.endpoint(), selected.route());
+        ResourceStorageNavigation.requireAcceptedDestination(state, origin, profile, selected.endpoint(), selected.route());
     }
 }

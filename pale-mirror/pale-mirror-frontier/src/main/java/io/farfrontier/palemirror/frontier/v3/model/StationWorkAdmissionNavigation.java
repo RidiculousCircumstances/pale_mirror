@@ -22,7 +22,7 @@ public final class StationWorkAdmissionNavigation {
         var endpoints = new ArrayList<ShipmentEndpoint>(List.of(source, destination));
         job.stationWork().orElseThrow().maintenanceTarget().ifPresent(target ->
                 endpoints.add(ResourceStorageAccess.at(state, target.sourceContainerId()).endpoint()));
-        return new Access(origin, ResourceStorageNavigation.forJourney(state, job.settlementId(), endpoints),
+        return new Access(origin, ResourceStorageNavigation.forJourney(state, job.settlementId(), endpoints).forActor(state, job.workerId()),
                 endpoints.stream().map(ShipmentEndpoint::station).collect(java.util.stream.Collectors.toSet()));
     }
     public static PedestrianAccessReceipt propose(FrontierWorldState state, ProductionJob job) {

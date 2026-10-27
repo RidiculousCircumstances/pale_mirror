@@ -16,7 +16,7 @@ public final class WorkEquipmentSelection {
                 .anyMatch(item -> available(state, owner, item, requirements, unavailable));
     }
 
-    public static Optional<Selection> select(FrontierWorldState state, SubjectId owner, SurfaceAnchor origin,
+    public static Optional<Selection> select(FrontierWorldState state, SubjectId owner, SurfaceAnchor origin, UnitNavigationProfile profile,
             EquipmentRequirements requirements, Set<SubjectId> unavailable) {
         var triedStores = new HashSet<SubjectId>();
         KnownPedestrianNavigation.RouteUnavailable waiting = null;
@@ -27,7 +27,7 @@ public final class WorkEquipmentSelection {
             var source = endpoint(state, item);
             if (!triedStores.add(source.containerId())) continue;
             try {
-                var route = ResourceStorageNavigation.plannedPath(state, origin, source);
+                var route = ResourceStorageNavigation.plannedPath(state, origin, profile, source);
                 return Optional.of(new Selection(item, source, route.size() > 1
                         ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailableRoute) {

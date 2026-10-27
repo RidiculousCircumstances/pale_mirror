@@ -74,7 +74,7 @@ final class ForestryWorkProcess {
                 && !WorkStorageSelection.available(state, ForestryWorkSelection.portion(state, job), job.storageTarget())) {
             Optional<WorkStorageSelection.Selected> storage;
             try { storage = WorkStorageSelection.select(state, ForestryWorkSelection.portion(state, job),
-                    state.actorLocations().get(job.execution().actorId()).supportingSurface(), Optional.of(job.storageTarget())); }
+                    state.actorLocations().get(job.execution().actorId()).supportingSurface(), state.actorLocations().get(job.execution().actorId()).navigationProfile(), Optional.of(job.storageTarget())); }
             catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
             if (storage.isEmpty()) return retry(state, job, now);
             var selected = storage.orElseThrow();

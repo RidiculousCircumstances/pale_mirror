@@ -664,3 +664,19 @@ spends the existing classification allowance; exhausted allowance defers the
 original action instead of performing an uncharged evaluation. Added read-only
 readyDelivery.totalDelayNanos and ordinaryYields distinguish callback delay and
 runtime gates; latest-delay samples alone were not sufficient attribution.
+
+The830 native100town stand still accumulates ordinary debt:78221->80230 in575s,
+462->9958 debt. Feeding reaches zero hungry in the checked79009 snapshot, but
+G remains open. A retained forestry SELECT_TREE owner repeats two local route
+legs with mismatched geometry scopes: actual actor profile on the approach,
+unprofiled storage return. Shared storage/equipment admission APIs now require
+an explicit navigation profile and validate receipts with that same envelope.
+Assigned actors supply their retained profile; preassignment bakery opportunity
+queries explicitly declare VILLAGER. Mining and production admission approaches
+also bind the actual actor. A generic bounded reverse-local-proof reuse path
+checks every current support, clearance and directed edge, rejects changed/unknown
+blocks and foreign body/world scope, and acquires no movement or access authority.
+This avoids calculating a compatible local round trip twice; unsafe candidates
+fall back to the existing search. Focused common-navigation, storage, forestry
+and mining tests pass46s (profiled-route-focused.log). Native effect unmeasured;
+not a debt-closure claim.

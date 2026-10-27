@@ -12,12 +12,12 @@ public final class WorkEquipmentStorage {
                     item.itemKind(), Set.of(ResourceStorageRole.WAREHOUSE))
                 && ContainerStorageAdmission.first(state, endpoint.containerId(), Optional.empty(), slot -> false).isPresent();
     }
-    public static Optional<ShipmentEndpoint> select(FrontierWorldState state, ExactItemStack item, SurfaceAnchor origin) {
+    public static Optional<ShipmentEndpoint> select(FrontierWorldState state, ExactItemStack item, SurfaceAnchor origin, UnitNavigationProfile profile) {
         KnownPedestrianNavigation.RouteUnavailable waiting = null;
         for (var endpoint : ResourceStorageSelection.candidates(state, item.economicOwnerId(), item.itemKind(), origin,
                 Set.of(ResourceStorageRole.WAREHOUSE))) {
             if (!available(state, item, endpoint)) continue;
-            try { ResourceStorageNavigation.plannedPath(state, origin, endpoint); return Optional.of(endpoint); }
+            try { ResourceStorageNavigation.plannedPath(state, origin, profile, endpoint); return Optional.of(endpoint); }
             catch (KnownPedestrianNavigation.RouteUnavailable pending) {
                 if (pending.status() != PedestrianRouteResult.Status.NO_PATH) waiting = pending;
             }

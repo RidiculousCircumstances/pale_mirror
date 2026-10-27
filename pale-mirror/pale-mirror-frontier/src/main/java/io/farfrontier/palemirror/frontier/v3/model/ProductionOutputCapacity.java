@@ -24,7 +24,7 @@ public final class ProductionOutputCapacity {
         for (var endpoint : ResourceStorageSelection.candidates(state, home, "minecraft:bread", departure, java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             var candidate = new ProductionRights(rights.mode(), rights.resourceOwner(), endpoint.containerId(), rights.employer());
             if (!canAdmitBatch(state, candidate, quantity, source)) continue;
-            if (requireAccess) try { ResourceStorageNavigation.plannedPath(state, departure, endpoint); }
+            if (requireAccess) try { ResourceStorageNavigation.plannedPath(state, departure, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER, endpoint); }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH) throw unavailable;
                 continue;

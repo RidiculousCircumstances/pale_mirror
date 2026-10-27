@@ -14,7 +14,7 @@ final class ExtractionToolSelection {
     }
     static Optional<WorkEquipmentSelection.Selection> select(FrontierWorldState state, ResidentProfile resident,
             Set<ToolRequirement> requirements) {
-        return WorkEquipmentSelection.select(state, resident.settlementId(), state.actorLocations().get(resident.id()).supportingSurface(),
+        return WorkEquipmentSelection.select(state, resident.settlementId(), state.actorLocations().get(resident.id()).supportingSurface(), state.actorLocations().get(resident.id()).navigationProfile(),
                 EquipmentRequirements.anyOf(requirements), reserved(state));
     }
     static boolean eligible(FrontierWorldState state, ResidentProfile resident, ExactItemStack item) {

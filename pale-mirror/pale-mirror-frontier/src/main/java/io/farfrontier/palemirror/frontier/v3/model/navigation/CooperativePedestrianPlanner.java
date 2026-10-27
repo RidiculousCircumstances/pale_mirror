@@ -75,6 +75,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var request = PedestrianRouteRequest.of(geometry, start, target, extent);
         Completed result = completed.get(request);
         if (result != null) return result.result();
+        var reversed = reverseResult(completed.entrySet(), geometry, start, target, extent);
+        if (reversed.isPresent()) return reversed.orElseThrow();
         fairness.requested(request, service);
         rememberAddress(request, turns);
         if (!pending.containsKey(request)) {
@@ -331,6 +333,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var request = PedestrianRouteRequest.of(geometry, start, target, extent);
         var result = completed.get(request);
         if (result != null) return java.util.Optional.of(result.result());
+        var reversed = reverseResult(completed.entrySet(), geometry, start, target, extent);
+        if (reversed.isPresent()) return reversed;
         if (pending.containsKey(request)) return java.util.Optional.of(waiting("PLANNING_QUEUED"));
         var waiting = deferred.get(request);
         if (waiting != null) return java.util.Optional.of(waiting);
@@ -364,9 +368,18 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 for (var entry : retained) if (entry.getKey().equals(request)
                         || entry.getKey().sameDemand(request) && entry.getValue().dependencies().matches(geometry))
                     return java.util.Optional.of(entry.getValue().result());
-                return java.util.Optional.empty();
+                return reverseResult(retained, geometry, start, target, extent);
             }
         };
+    }
+    private static java.util.Optional<PedestrianRouteResult> reverseResult(
+            java.util.Collection<Map.Entry<PedestrianRouteRequest, Completed>> retained, PedestrianRouteGeometry geometry,
+            SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
+        for (var entry : retained) {
+            var result = PedestrianLocalRouteReuse.reverse(entry.getKey(), entry.getValue().result(), geometry, start, target, extent);
+            if (result.isPresent()) return result;
+        }
+        return java.util.Optional.empty();
     }
 
     /** The continuation owner supplies live demand. This retains results through
