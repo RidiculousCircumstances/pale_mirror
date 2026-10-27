@@ -294,8 +294,8 @@ public final class FrontierWorldProcessCatalog {
             })),
             Map.entry(GoodsTradeReceiptProcess.REVIEW, atExecutionTime(GoodsTradeReceiptProcess::plan)),
             Map.entry(InternalShipmentReceipts.RECEIVE, atExecutionTime(InternalShipmentReceipts::receive)),
-            Map.entry(GoodsParticipantProcess.REVIEW, coalescedReview(withPlanningRecovery(GoodsParticipantProcess.planner()), GoodsParticipantProcess::reviewWorkUnits)),
-            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, coalescedReview(withPlanningRecovery(GoodsParticipantProcess.planner()), GoodsParticipantProcess::reviewWorkUnits)),
+            Map.entry(GoodsParticipantProcess.REVIEW, coalescedReview(withPlanningRecovery(GoodsParticipantProcess.planner()))),
+            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, ScheduledReviewAdmission.coalescedContinuation(withPlanningRecovery(GoodsParticipantProcess.planner()))),
             Map.entry(ShipmentProcess.PROGRESS, withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ShipmentProcess.plan(state, action, action.dueAt().ticks());

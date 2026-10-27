@@ -35,17 +35,6 @@ public final class GoodsParticipantProcess {
         return new ScheduledAction(new ScheduleId("schedule:goods-participant/" + party.value().replace(':', '-')),
                 new SimInstant(due), 0, party, REVIEW, 1);
     }
-    /** Structural workload, not measured host time or a trade permission.
-     * Full forecasting reads known peers; matching-only work visits actual opposing sellers. */
-    static int reviewWorkUnits(FrontierWorldState state, ScheduledAction action) {
-        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
-        if (participant == null) throw new IllegalArgumentException("goods review lost its declared participant");
-        int modes = state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
-                ? GoodsTradeFulfillment.Mode.values().length : 1;
-        int peers = action.kind().equals(GoodsParticipantWakeup.OPPORTUNITY)
-                ? GoodsOrderMatching.sellers(state, participant, action.dueAt().ticks()).size() : participant.known().size();
-        return Math.addExact(1, Math.multiplyExact(peers, modes));
-    }
     /** Due time orders the queue; only the supplied execution instant authorizes current trades. */
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
         return ImmutablePlanningScope.within(() -> prepare(state, action, executionInstant).get());

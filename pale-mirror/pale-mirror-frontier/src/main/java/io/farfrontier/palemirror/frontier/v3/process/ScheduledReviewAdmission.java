@@ -18,6 +18,11 @@ final class ScheduledReviewAdmission {
     static FrontierScheduledPlanner coalescedReview(FrontierScheduledPlanner delegate) {
         return coalescedReview(delegate, (state, action) -> 1);
     }
+    /** One current completion, with expensive alternative calculation owned by
+     * its bounded advisory capability rather than charged to every exact poll. */
+    static FrontierScheduledPlanner coalescedContinuation(FrontierScheduledPlanner delegate) {
+        return decorate(delegate, true, delegate::admissionWeight);
+    }
     static FrontierScheduledPlanner policyReview(FrontierScheduledPlanner delegate,
             ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
         return decorate(delegate, false, reviewWeight(delegate, workUnits));

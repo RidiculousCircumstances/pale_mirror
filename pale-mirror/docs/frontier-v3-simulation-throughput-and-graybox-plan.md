@@ -1703,3 +1703,28 @@ no purchase opportunity; corrected by the existing real policy producer/publicat
 not fabricated orders or success. Focus40checksPASS18s; final withdrawal-negative
 +guardrailsPASS18s. Generic advisory-kernel independence coverage remains included.
 Exactrelease and actual100clock evidence still pending. G remainsOPEN.
+
+
+### Charge the current completion phase, not its removed comparison loop
+
+44f31e76d225frontier+29runtime/guardrails/packagePASS102s; bothretained311deployments
+VERIFIED. Ordinary10020986→21169/272.6s,debt1321→6591FAIL. Named planning no longer
+shows a permanently pinned all-alternative exact calculation; real decisions/physical
+work advance. This still does not meet ordinaryclock closure. Native counters include
+7196WEIGHTED_ACTION yields versus8472preparations. Registered GoodsParticipant weights
+still multiply peer count/modes even for a pending/no-purchase exact completion which
+the connected regression proves performs ZERO route queries. The old full-comparison
+cost was charged again at canonical admission after that work moved to the advisory pool.
+
+Registration now declares OPPORTUNITY as a coalesced ordinary continuation; its current
+exact work is one selected candidate, not all market peers. REVIEW retains the existing
+base policy-publication weight. The selected path looks up its explicit full seller
+party directly instead of enumerating all sellers; current mutual consent is still
+checked by GoodsOrderMatching.first before reservation. Removed now-unused peer-count
+helper and its obsolete implementation-formula assertion; public opposing-interest wake
+coverage remains. Common coalescing, budgets, priorities, pool/concurrency/result limits
+are unchanged. The bounded advisory pool owns comparison computation; no full comparison
+can fall back into native exact execution when advice slots are busy. This is phase-cost
+correction after an ownership move, not a larger global execution allowance.
+Wake/advice/kernel/negative focus40checks+guardrailsPASS24s; the final direct seller lookup
+was source-reviewed against current matching/consent and awaits exactref gates/runtime.

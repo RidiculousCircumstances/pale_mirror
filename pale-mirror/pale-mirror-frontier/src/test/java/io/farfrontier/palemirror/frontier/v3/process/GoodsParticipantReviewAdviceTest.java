@@ -105,8 +105,6 @@ class GoodsParticipantReviewAdviceTest {
         state = GoodsTradeStateSupport.place(state, unrelated, new GoodsTradeOrder(new SubjectId("order:unrelated-coal-bid"),
                 new GoodsTradeParty(unrelated, EconomicOwnerKind.SETTLEMENT_TREASURY), GoodsTradeOrder.Side.BUY,
                 FrontierWorldState.depotId(unrelated), "minecraft:coal", 64, 0, FixedScalar.whole(2), 5000), 4000);
-        assertEquals(1, GoodsParticipantProcess.reviewWorkUnits(state, GoodsParticipantWakeup.action(recipient, 4001)),
-                "known peers without public supply are not charged as procurement alternatives");
         state = GoodsTradeStateSupport.place(state, owner, order, 4000);
         assertEquals(List.of(owner), GoodsOrderMatching.sellers(state,
                 state.companies().goodsTrade().participants().participants().get(recipient), 4000)

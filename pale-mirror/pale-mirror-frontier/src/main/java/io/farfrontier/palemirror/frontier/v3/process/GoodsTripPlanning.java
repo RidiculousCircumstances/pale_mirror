@@ -77,8 +77,11 @@ final class GoodsTripPlanning {
                         GoodsParticipantFunding.fundsRestart(demand, initial.bootstrap().ruleset().goodsTrade(), intent.itemKind()))).toList();
         if (requirements.isEmpty()) return new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
         var comparisons = GoodsTripComparisonFacts.forDecision(initial, buyer, now);
-        for (var seller : GoodsOrderMatching.sellers(initial, buyer, now)) {
-            if (selected.filter(value -> !value.seller().equals(seller.party())).isPresent()) continue;
+        var sellers = selected.map(value -> {
+            var seller = initial.companies().goodsTrade().participants().participants().get(value.seller().id());
+            return seller != null && seller.party().equals(value.seller()) ? List.of(seller) : List.<GoodsParticipant>of();
+        }).orElseGet(() -> GoodsOrderMatching.sellers(initial, buyer, now));
+        for (var seller : sellers) {
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, seller, buyer, now)) {
                 if (selected.filter(value -> !value.source().equals(GoodsParticipantStorage.endpoint(initial, endpoints.source()))
                         || !value.receiver().equals(GoodsParticipantStorage.endpoint(initial, endpoints.receiver()))).isPresent()) continue;
