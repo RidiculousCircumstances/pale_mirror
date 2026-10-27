@@ -93,7 +93,41 @@ class PedestrianPlanningWakeIndexTest {
         index.remove(b.id()); index.releaseUnused(released::add); assertEquals(List.of(query), released);
         index.releaseUnused(released::add); assertEquals(1, released.size());
     }
-    @Test void regionalRebaseWakesOnlyTheExactOldAddressThenTheSelectedSuccessorWithoutLosingWork() {
+    @Test void compatibleGeometryRefreshKeepsTheWaitAndTerminalDeliveryAddressesItsOriginalConsumer() {
+        var revision = PedestrianGeometryRevision.initial();
+        java.util.function.Supplier<PedestrianRouteGeometry> geometry = () -> new PedestrianRouteGeometry() {
+            public Object version() { return revision; }
+            public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return java.util.Optional.of(revision); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 512, 16); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+        };
+        var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(480, 63, 1);
+        var initial = geometry.get(); var index = new PedestrianPlanningWakeIndex(); var owner = action("compatible", 6000);
+        var first = PedestrianRouteRequest.of(initial, start, target);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(initial, start, target); index.replace(owner, List.of(first));
+            for (int view = 0; view < 200; view++) {
+                planner.query(geometry.get(), start, target);
+                index.changed(planner.drainChanges());
+                assertTrue(index.ready(view(20, owner)).isEmpty(), "unchanged facts are not calculation readiness");
+                assertTrue(index.waiting(owner));
+            }
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges());
+            assertEquals(List.of(owner), index.ready(view(20, owner)), "completion survives the immutable address refresh");
+            long work = planner.workUnits();
+            var refreshed = geometry.get();
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.query(refreshed, start, target).status());
+            assertTrue(planner.drainChanges().isEmpty()); assertEquals(work, planner.workUnits());
+            // Advice may see both old and current immutable addresses in one continuation.
+            // One consumer still releases one normalized demand, without orphaning aliases.
+            index.replace(owner, List.of(first, PedestrianRouteRequest.of(refreshed, start, target)));
+            index.remove(owner.id()); var released = new java.util.ArrayList<PedestrianRouteRequest>();
+            index.releaseUnused(released::add); assertEquals(1, released.size());
+        }
+    }
+    @Test void regionalRebaseKeepsUnresolvedWorkAndDeliversChangedTerrainOutcomeToItsConsumer() {
         var revision = PedestrianGeometryRevision.initial(); var next = revision.changed(java.util.Set.of(new PedestrianGeometryRevision.Region(12, 0)));
         java.util.function.Function<PedestrianGeometryRevision, PedestrianRouteGeometry> geometry = current -> new PedestrianRouteGeometry() {
             public Object version() { return current; }
@@ -110,7 +144,8 @@ class PedestrianPlanningWakeIndexTest {
             planner.query(old, start, target); planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             index.replace(owner, List.of(oldAddress)); index.replace(other, List.of(request(3)));
             assertEquals(PedestrianRouteResult.Status.PLANNING, planner.query(current, start, target).status());
-            index.changed(planner.drainChanges()); assertEquals(List.of(owner), index.ready(view(20, owner, other)));
+            index.changed(planner.drainChanges()); assertTrue(index.ready(view(20, owner, other)).isEmpty(),
+                    "an unresolved search can inspect changed terrain without waking the domain early");
             index.replace(owner, List.of(newAddress)); assertTrue(index.ready(view(20, owner, other)).isEmpty());
             for (int turn = 0; turn < 1_024 && planner.pendingCount() > 0; turn++)
                 planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);

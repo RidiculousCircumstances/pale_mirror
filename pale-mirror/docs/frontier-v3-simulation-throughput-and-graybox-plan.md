@@ -493,3 +493,24 @@ stale/off-thread/owner-refusal, and planner consumer checks pass23seconds in
 addressed-route-readiness-focused2.log. The preceding e950 full scoped check/build/
 packaged and55scene+2production native gate passed7m44 in retained-route-results-
 release.log. Updated native100town measurement and G acceptance remain open.
+
+
+The next connected source audit found false readiness from compatible geometry
+refresh: synchronizeScope emitted INVALIDATED for pending/queued calculations,
+and INVALIDATED+RESULT_AVAILABLE for a completed route, merely because the view
+object changed. With100towns a32entry clear-all journey cache continually rebuilt
+those views. This created domain retries without new route evidence. The common
+wake index now keys calculation subscriptions by the complete normalized world/
+query/profile/bounds/endpoints scope, preserving exact canonical continuation
+ownership separately. Compatible refresh readdresses computation without waking
+its consumer; true dependency loss still invalidates, and actual completion reaches
+the original subscriber. Repeated immutable aliases within advice are one demand,
+and only the last consumer releases it once. Journey views use the existing
+bounded local-view capacity and LRU eviction of one entry rather than clearing all.
+Existing terrain damage, world/profile/bounds invalidation and worker cases plus
+an unchanged200view-refresh/original-consumer terminal regression and actual
+adapter restart pass27seconds in compatible-route-refresh-focused2.log. Three old
+assertions requiring spurious refresh notifications were replaced with no-wake
+assertions; changed-terrain NO_PATH and final result delivery remain required.
+No domain outcome, physical timing or cache-validity requirement was relaxed.
+G remains open pending current-code native throughput and lifecycle evidence.

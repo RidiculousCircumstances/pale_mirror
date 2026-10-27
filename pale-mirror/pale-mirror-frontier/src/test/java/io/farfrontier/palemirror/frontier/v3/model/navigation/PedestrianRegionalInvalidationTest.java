@@ -151,8 +151,7 @@ class PedestrianRegionalInvalidationTest {
             assertEquals(found, planner.query(current, start, end));
             assertEquals(work, planner.workUnits()); assertEquals(0, reads.get());
             var changes = planner.drainChanges();
-            assertTrue(changes.contains(new PedestrianPlanningChange(PedestrianRouteRequest.of(old, start, end), PedestrianPlanningChange.Kind.INVALIDATED)));
-            assertTrue(changes.contains(new PedestrianPlanningChange(PedestrianRouteRequest.of(current, start, end), PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+            assertTrue(changes.isEmpty(), "reuse of unchanged consulted facts is not a new result or invalidation");
             var adjacent = SurfaceAnchor.at(81, 63, 1);
             assertEquals(PedestrianRouteResult.Status.FOUND, finish(planner, current, start, adjacent).status());
             assertEquals(0, reads.get(), "an unchanged region component is shared across different local routes");
@@ -227,7 +226,7 @@ class PedestrianRegionalInvalidationTest {
             assertEquals("PLANNING_QUEUE_CAPACITY", planner.query(old, start, end).reason());
             var current = flat(revision.changed(Set.of(new PedestrianGeometryRevision.Region(12, 0))), bounds, s -> s.x() == 192);
             assertEquals("PLANNING_QUEUE_CAPACITY", planner.query(current, start, end).reason());
-            assertTrue(planner.drainChanges().contains(new PedestrianPlanningChange(PedestrianRouteRequest.of(old, start, end), PedestrianPlanningChange.Kind.INVALIDATED)));
+            assertTrue(planner.drainChanges().isEmpty(), "a queued unresolved calculation stays queued across a compatible refresh");
             assertEquals(PedestrianRouteResult.Status.FOUND, finish(planner, current, start, end).status());
         }
     }

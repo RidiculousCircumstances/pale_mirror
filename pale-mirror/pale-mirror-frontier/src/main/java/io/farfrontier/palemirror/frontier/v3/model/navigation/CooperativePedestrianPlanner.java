@@ -237,7 +237,14 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     /** Diagnostic counter only. Addressed changes, not this global counter, wake continuations. */
     public synchronized long progressRevision() { return progressRevision; }
-    private void invalidated(PedestrianRouteRequest request) { admittedAt.remove(request); fairness.remove(request); changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED); }
+    private void forgetAddress(PedestrianRouteRequest request) { admittedAt.remove(request); fairness.remove(request); }
+    private void invalidated(PedestrianRouteRequest request) { forgetAddress(request); changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED); }
+    /** A compatible immutable view is neither a result nor a lost dependency.
+     * Consumers subscribe by complete demand scope and still revalidate current geometry. */
+    private void readdress(PedestrianRouteRequest request, PedestrianRouteRequest replacement) {
+        forgetAddress(request);
+        if (!request.sameDemand(replacement)) changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED);
+    }
     private void removeCompleted(PedestrianRouteRequest request) {
         knowledgeDemandCache = null;
         var removed = completed.remove(request);
@@ -255,7 +262,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             long since = admittedAt.get(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
             var lane = fairness.lane(request);
-            var search = pending.remove(request); invalidated(request);
+            var search = pending.remove(request); readdress(request, replacement);
             if (search.rebase(replacement)) {
                 fairness.restore(replacement, lane);
                 pending.put(replacement, search);
@@ -266,17 +273,16 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 for (var queued : ready) rotation.addLast(queued.equals(request) ? replacement : queued);
                 ready.clear(); ready.addAll(rotation);
                 admittedAt.put(replacement, since);
-            } else { fairness.remove(replacement); search.cancel(); ready.remove(request); }
+            } else { invalidated(request); fairness.remove(replacement); search.cancel(); ready.remove(request); }
             progressRevision++;
         }
         for (var request : java.util.List.copyOf(completed.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
-            var result = completed.get(request); removeCompleted(request); invalidated(request);
+            var result = completed.get(request); removeCompleted(request); forgetAddress(request);
             if (result.dependencies().matches(geometry)) {
                 var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
                 completed.put(replacement, result); retainedSurfaces += result.result().route().size();
                 retainedRegions += result.dependencies().revisions().size();
-                changes.put(replacement, PedestrianPlanningChange.Kind.RESULT_AVAILABLE);
-            }
+            } else invalidated(request);
             progressRevision++;
         }
         var rebasedDeferred = new LinkedHashMap<PedestrianRouteRequest, PedestrianRouteResult>();
@@ -287,7 +293,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             }
             long since = admittedAt.get(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
-            var lane = fairness.lane(request); invalidated(request); fairness.restore(replacement, lane);
+            var lane = fairness.lane(request); readdress(request, replacement); fairness.restore(replacement, lane);
             var retained = suspended.remove(request);
             if (retained != null) {
                 if (retained.rebase(replacement)) suspended.put(replacement, retained);

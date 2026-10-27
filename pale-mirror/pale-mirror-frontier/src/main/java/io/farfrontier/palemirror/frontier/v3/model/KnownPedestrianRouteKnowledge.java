@@ -61,7 +61,7 @@ public final class KnownPedestrianRouteKnowledge {
     private final java.util.Map<UnitNavigationProfile, KnownPedestrianRouteKnowledge> profiles = new java.util.LinkedHashMap<>();
     private final java.util.Map<SurfaceAnchor, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry> departures = new java.util.LinkedHashMap<>();
     private record JourneyKey(List<SettlementPassage> passages) { }
-    private static final java.util.Map<JourneyKey, KnownPedestrianRouteKnowledge> JOURNEYS = new java.util.LinkedHashMap<>();
+    private static final java.util.Map<JourneyKey, KnownPedestrianRouteKnowledge> JOURNEYS = new java.util.LinkedHashMap<>(16, .75f, true);
 
     /** A task declares a real facility passage, never an arbitrary list of cells to clear. */
     public record Passage(SettlementStructure facility, Reach reach) {
@@ -113,7 +113,7 @@ public final class KnownPedestrianRouteKnowledge {
         var result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
                 accessSurvey(state, KnownPedestrianGround.forFrontier(state, sites), cleared), key,
                 java.util.Map.of(), raisedDepartureSupports(state));
-        if (JOURNEYS.size() >= 32) JOURNEYS.clear();
+        if (JOURNEYS.size() >= MAX_LOCAL_VIEWS) JOURNEYS.remove(JOURNEYS.keySet().iterator().next());
         JOURNEYS.put(key, result); return result;
     }
 

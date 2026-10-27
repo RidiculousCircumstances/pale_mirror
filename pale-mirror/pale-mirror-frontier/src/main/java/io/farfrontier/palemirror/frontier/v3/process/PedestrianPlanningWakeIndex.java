@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningChange;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteRequest;
 import java.util.*;
 
@@ -13,7 +14,7 @@ public final class PedestrianPlanningWakeIndex {
     private enum Origin { LIVE_CONTINUATION, RECOVERY_PREVIEW }
     private record Wait(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin) { }
     private final Map<ScheduleId, Wait> waits = new LinkedHashMap<>();
-    private final Map<PedestrianRouteRequest, Set<ScheduleId>> dependents = new LinkedHashMap<>();
+    private final Map<PedestrianDemandKey, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
     private final Set<ScheduleId> parked = new HashSet<>();
     private final Set<ScheduleId> runnable = new HashSet<>();
@@ -29,9 +30,11 @@ public final class PedestrianPlanningWakeIndex {
     private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin) {
         remove(action.id());
         if (requests.isEmpty()) return;
-        var distinct = List.copyOf(new LinkedHashSet<>(requests));
+        var demands = new LinkedHashMap<PedestrianDemandKey, PedestrianRouteRequest>();
+        requests.forEach(request -> demands.put(PedestrianDemandKey.of(request), request));
+        var distinct = List.copyOf(demands.values());
         waits.put(action.id(), new Wait(action, distinct, origin));
-        for (var request : distinct) dependents.computeIfAbsent(request, ignored -> new LinkedHashSet<>()).add(action.id());
+        for (var request : distinct) dependents.computeIfAbsent(PedestrianDemandKey.of(request), ignored -> new LinkedHashSet<>()).add(action.id());
     }
     public void remove(ScheduleId id) {
         ready.remove(id);
@@ -40,8 +43,9 @@ public final class PedestrianPlanningWakeIndex {
         var previous = waits.remove(id);
         if (previous == null) return;
         for (var request : previous.requests()) {
-            var owners = dependents.get(request); owners.remove(id);
-            if (owners.isEmpty()) { dependents.remove(request); released.add(request); }
+            var key = PedestrianDemandKey.of(request);
+            var owners = dependents.get(key); owners.remove(id);
+            if (owners.isEmpty()) { dependents.remove(key); released.add(request); }
         }
     }
     /** Live continuations retain delivery even across a future retry deadline.
@@ -61,14 +65,15 @@ public final class PedestrianPlanningWakeIndex {
         if (held) ownerHeld.add(action.id()); else ownerHeld.remove(action.id());
     }
     public void releaseUnused(java.util.function.Consumer<PedestrianRouteRequest> release) {
-        var retained = new HashSet<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey>();
-        dependents.keySet().forEach(request -> retained.add(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey.of(request)));
-        for (var request : released) if (!retained.contains(
-                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey.of(request))) release.accept(request);
+        var retired = new HashSet<PedestrianDemandKey>();
+        for (var request : released) {
+            var key = PedestrianDemandKey.of(request);
+            if (!dependents.containsKey(key) && retired.add(key)) release.accept(request);
+        }
         released.clear();
     }
     public void changed(List<PedestrianPlanningChange> changes) {
-        for (var change : changes) for (var id : dependents.getOrDefault(change.request(), Set.of()))
+        for (var change : changes) for (var id : dependents.getOrDefault(PedestrianDemandKey.of(change.request()), Set.of()))
             if (!runnable.contains(id)) ready.add(id);
     }
     /** An accepted wake transfers demand to the exact runnable generation. It does
