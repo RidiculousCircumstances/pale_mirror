@@ -7,7 +7,9 @@ import java.util.*;
 /** Type declarations, not spatial knowledge. A definition permits interpreting a known
  * block; it never proves that block exists at an unobserved position. */
 final class ExtractionNavigationPalette {
-    private final ImmutableResultView<String, Set<NavigationBlockState>> parts = new ImmutableResultView<>(128);
+    private final ImmutableResultView<String, Set<NavigationBlockState>> parts = new ImmutableResultView<>(4);
+    private final ImmutableKeyedInputView<io.farfrontier.palemirror.frontier.v3.api.SubjectId,
+            ImmutableResultView<String, Set<NavigationBlockState>>> sites = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_EXTRACTION_SITES);
 
     Set<NavigationBlockState> read(FrontierWorldState state) {
         return parts.get(List.of(state.bootstrap(), state.extractionSites().deposits(), state.extractionSites().geology()),
@@ -24,19 +26,21 @@ final class ExtractionNavigationPalette {
             return Set.copyOf(blocks);
         }));
         for (var deposit : state.extractionSites().deposits().values()) {
+            var site = sites.get(state.bootstrap(), deposit.site().id(), List.of(state.bootstrap()),
+                    () -> new ImmutableResultView<String, Set<NavigationBlockState>>(4));
             var layout = deposit.site().layout();
-            result.addAll(parts.get(List.of(layout), "layout", () -> {
+            result.addAll(site.get(List.of(layout), "layout", () -> {
                 var blocks = new HashSet<NavigationBlockState>();
                 layout.fixedBlocks().values().forEach(block -> add(blocks, block));
                 layout.terrainSupports().values().forEach(block -> add(blocks, block));
                 return Set.copyOf(blocks);
             }));
-            result.addAll(parts.get(List.of(deposit.cells()), "cells", () -> {
+            result.addAll(site.get(List.of(deposit.cells()), "cells", () -> {
                 var blocks = new HashSet<NavigationBlockState>();
                 deposit.cells().values().forEach(cell -> add(blocks, cell.knownBlock()));
                 return Set.copyOf(blocks);
             }));
-            result.addAll(parts.get(List.of(deposit.geometry()), "observations", () -> {
+            result.addAll(site.get(List.of(deposit.geometry()), "observations", () -> {
                 var blocks = new HashSet<NavigationBlockState>();
                 deposit.geometry().values().forEach(observation -> add(blocks, observation.block()));
                 return Set.copyOf(blocks);

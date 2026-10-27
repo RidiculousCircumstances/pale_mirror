@@ -170,13 +170,16 @@ final class FrontierV3PedestrianPlanning {
         if (owner == runtime) planner.geometryObserved(positions);
     }
     static synchronized String diagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
+        return diagnostic(runtime, false);
+    }
+    static synchronized String diagnostic(FrontierV3ServerRuntime<?, ?> runtime, boolean details) {
         var capacity = runtime.commandAdmissionCapacity().orElseThrow();
         return "{\"waiting\":" + (owner == runtime ? continuations.waitingCount() : 0)
                 + ",\"awaitingResultPublication\":" + (owner == runtime ? planner.awaitingPublicationCount() : 0)
                 + ",\"retainedResults\":" + (owner == runtime ? planner.retainedResultCount() : 0)
                 + ",\"protectedResults\":" + (owner == runtime ? planner.protectedResultCount() : 0)
                 + ",\"readyDeferred\":" + (owner == runtime ? deferredReady : 0)
-                + ",\"continuationSamples\":" + (owner == runtime ? continuationSamples() : "[]")
+                + (details ? ",\"continuationSamples\":" + (owner == runtime ? continuationSamples() : "[]") : "")
                 + ",\"activeSearches\":" + (owner == runtime ? planner.pendingCount() : 0)
                 + ",\"inFlightSlices\":" + (owner == runtime ? planner.inFlightCount() : 0)
                 + ",\"runningWorkers\":" + (owner == runtime ? workers.getActiveCount() : 0)
@@ -191,9 +194,9 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"searchWorkUnits\":" + (owner == runtime ? planner.workUnits() : 0)
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
                 + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)
-                + ",\"oldestRequests\":" + waitingDiagnostic(runtime)
-                + ",\"activeRequests\":" + (owner == runtime ? requestDiagnostic(planner.activeDiagnostics()) : "[]")
-                + ",\"geometryWaits\":" + knowledgeDiagnostic(runtime)
+                + (details ? ",\"oldestRequests\":" + waitingDiagnostic(runtime)
+                    + ",\"activeRequests\":" + (owner == runtime ? requestDiagnostic(planner.activeDiagnostics()) : "[]")
+                    + ",\"geometryWaits\":" + knowledgeDiagnostic(runtime) : "")
                 + ",\"wakeSafetyMaximum\":" + MAX_WAKE_COMMANDS_PER_TURN
                 + ",\"availableReceipts\":" + capacity.availableReceipts()
                 + ",\"maximumReceipts\":" + capacity.maximumReceipts()
@@ -209,7 +212,7 @@ final class FrontierV3PedestrianPlanning {
     }
     private static String waitingDiagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
         if (owner != runtime) return "[]";
-        return requestDiagnostic(planner.waitingDiagnostics(MAX_WAKE_COMMANDS_PER_TURN));
+        return requestDiagnostic(planner.waitingDiagnostics(MAX_WAKE_COMMANDS_PER_TURN / 2));
     }
     private static String requestDiagnostic(java.util.List<io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner.WaitingDiagnostic> requests) {
         return requests.stream().map(wait ->

@@ -1172,3 +1172,27 @@ regional invalidation checks remain. FocusPASS24s before diagnostic-only additio
 Read-only activeRequests exposes at most8 actual search stages/work/restarts,
 separately from oldest capacity waits; existing diagnostic read-only coverage extends.
 Exact clean release and retained-world measurement follow; G staysOPEN.
+
+
+### Site-owned palette reuse and separate planning diagnostic (2026-10-28)
+
+Navigation-resumption exactreleasePASS62s, both retained311 deployments verified
+`dfe001307`. Its active-search details made the optional pedestrianPlanning section
+exceed the existing8192-byte performance response envelope; the budget correctly
+reported omission, but the old observer assumed presence and failed twice. These
+are method/diagnostic faults, not proof of missing navigation. The restarted
+counter-only observer explicitly retains null for omitted navigation, no zero fill.
+Aggregate performance now keeps compact counters; `pale_mirror v3 inspect planning`
+uses the existing closed read-only diagnostic vocabulary for bounded detailed
+continuations, oldest4 requests and all8 active searches. No limit is raised.
+
+The20s455 profile includes34server samples rebuilding extraction block-type
+palettes. Each deposit contributed three immutable parts to one global128-entry
+memo; more than42 sites can evict each other's unchanged layouts/cells/observations
+on every aggregate refresh. The palette owner now retains four complete immutable
+part inputs per explicit site, bounded by the existing256-site register, scoped by
+bootstrap. Global terrain/mineral/aggregate parts remain separate. A changed site
+still reinterprets its changed data; no spatial observation, body clearance, shape
+or route authority is invented from a type declaration. Retained terrain, local/
+remote invalidation and geometry-scope negative/recovery checks plus native-runtime/
+diagnostic budget checks and guardrails PASS47s. Clean-ref packaging follows.
