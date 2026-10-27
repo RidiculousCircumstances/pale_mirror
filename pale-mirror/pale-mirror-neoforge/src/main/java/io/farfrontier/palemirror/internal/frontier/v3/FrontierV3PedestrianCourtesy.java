@@ -177,7 +177,7 @@ final class FrontierV3PedestrianCourtesy {
             }
             if (destination.isEmpty()) {
                 FrontierV3PhysicalWaitTrace.actor(body, state, actor, "courtesy:no-safe-clearance-position;servicePoints="
-                        + clearance.points().size() + ";nativeProbes=" + search.probes()
+                        + clearance.evaluatedPointCount() + ";nativeProbes=" + search.probes()
                         + ";rejectedNativeDestinations=" + search.rejectedCount());
                 SEARCHES.remove(body); // A completed pass can reconsider occupants that have since moved.
                 return false; // No invented route and no recursive displacement chain.

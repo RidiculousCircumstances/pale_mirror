@@ -56,7 +56,7 @@ public final class FrontierV3EconomicCapacityDiagnostic {
             for (var commodity : state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy()))
                 quotes.add("{\"item\":" + string(commodity.itemKind()) + ",\"ask\":" + GoodsParticipantPricing.ask(participant, commodity).raw()
                         + ",\"bid\":" + GoodsParticipantPricing.bid(participant, commodity).raw() + "}");
-            var plan = view.supplyPlan().flatMap(SupplyPlanner.Plan::economy).orElseThrow();
+            var plan = view.supplyPlan().flatMap(SupplyPlanner.Plan::economy);
             var incoming = new TreeMap<String, Integer>();
             view.stocks().forEach((item, stock) -> incoming.put(item, stock.expectedIncoming()));
             var financial = FinancialAccountReport.read(state.inventory().economics(), home);
@@ -70,9 +70,9 @@ public final class FrontierV3EconomicCapacityDiagnostic {
                     + ",\"starving\":" + nutrition.stream().filter(n -> n.status() == ResidentNutritionStatus.STARVING).count()
                     + ",\"stocks\":" + quantities(inventory) + ",\"incoming\":" + quantities(incoming)
                     + ",\"consumption\":" + quantities(consumption)
-                    + ",\"purchaseBudgets\":" + quantities(plan.purchaseBudgets())
-                    + ",\"saleableStock\":" + quantities(plan.saleableStock())
-                    + ",\"additionalProduction\":" + quantities(plan.additionalProduction())
+                    + ",\"purchaseBudgets\":" + plan.map(value -> quantities(value.purchaseBudgets())).orElse("null")
+                    + ",\"saleableStock\":" + plan.map(value -> quantities(value.saleableStock())).orElse("null")
+                    + ",\"additionalProduction\":" + plan.map(value -> quantities(value.additionalProduction())).orElse("null")
                     + ",\"processes\":[" + String.join(",", processes) + "],\"quotes\":[" + String.join(",", quotes)
                     + "],\"known\":[" + participant.known().stream().map(k -> string(k.party().id().value())).sorted().collect(Collectors.joining(",")) + "]}");
         }

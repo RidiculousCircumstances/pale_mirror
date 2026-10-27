@@ -30,7 +30,9 @@ class ServiceAreaDestinationPlanningTest {
         assertFalse(port.accessBoundary().allowsWaitingRoute(route), "old generic entry prohibition traps the inner-threshold occupant");
         assertTrue(clearance.allows(route));
         assertEquals(1, probes.get(), "route permission is resolved before spending a native feasibility probe");
-        assertTrue(clearance.points().stream().noneMatch(p -> ServiceAreaDestinations.temporary(p, target)));
+        assertFalse(clearance.temporary(target));
+        assertTrue(clearance.evaluatedPointCount() < ServiceBoundaryComposition.operationalDeclarations(state).size(),
+                "one local departure must not instantiate every settlement's service geometry");
         assertSame(beforeInventory, state.inventory()); assertEquals(beforeAccess, ServiceAccessCapabilities.current(state, depotId));
         assertFalse(clearance.allows(List.of(start, port.serviceSurface())), "clearing cannot end at service");
         var reentry = new java.util.ArrayList<>(route);

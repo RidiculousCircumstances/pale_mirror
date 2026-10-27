@@ -66,41 +66,14 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
         }
         @Override public BoundedPedestrianApproach.SurveyedSurface overlay(BoundedPedestrianApproach.SurveyedSurface base) {
             if (!bootstrap.ruleset().forestry().enabled()) return base;
-            return new BoundedPedestrianApproach.SurveyedSurface() {
-                private Cell cell(BlockPosition position) { return image(ForestRegion.containing(position)).cells().get(position); }
-                private Optional<NavigationCell> current(BlockPosition position, Cell fact) {
-                    if (fact == null) return base.collisionAt(position);
-                    return fact.aftermath() ? Optional.of(fact.value()) : base.collisionAt(position).or(() -> Optional.of(fact.value()));
-                }
-                @Override public SurfaceAnchor at(int x, int z) { var values = surfacesAt(x, z); return values.isEmpty() ? null : values.getLast(); }
-                @Override public List<SurfaceAnchor> surfacesAt(int x, int z) {
-                    var image = image(new ForestRegion(x >> 4, z >> 4));
-                    var positions = image.columns().get(new TerrainColumn(x, z));
-                    if (positions == null) return base.surfacesAt(x, z);
-                    var values = new TreeSet<SurfaceAnchor>(Comparator.comparingInt(SurfaceAnchor::y)); values.addAll(base.surfacesAt(x, z));
-                    for (var position : positions) {
-                        var surface = new SurfaceAnchor(position); values.remove(surface);
-                        var cell = current(position, image.cells().get(position));
-                        if (cell.filter(value -> value.dry() && !value.shape().boxes().isEmpty()).isPresent()) values.add(surface);
-                    }
-                    return List.copyOf(values);
-                }
-                @Override public boolean excluded(SurfaceAnchor surface) {
-                    var fact = cell(surface.support()); if (fact == null) return base.excluded(surface);
-                    var current = current(surface.support(), fact);
-                    return current.isPresent() && (!current.orElseThrow().dry() || current.orElseThrow().shape().boxes().isEmpty());
-                }
-                @Override public boolean blockKnown(BlockPosition position) { return base.blockKnown(position); }
-                @Override public boolean clearanceKnown(SurfaceAnchor surface) {
-                    for (int y = 0; y <= 2; y++) if (!blockKnown(surface.support().offset(0, y, 0))) return false;
-                    return base.clearanceKnown(surface);
-                }
-                @Override public Optional<NavigationCell> collisionAt(BlockPosition position) { return current(position, cell(position)); }
-                @Override public boolean detailedCollisionAt(int x, int z) {
-                    return image(new ForestRegion(x >> 4, z >> 4)).columns().containsKey(new TerrainColumn(x, z)) || base.detailedCollisionAt(x, z);
-                }
-            };
+            return KnownBlockSurfaceOverlay.apply(base, position -> {
+                var value = image(ForestRegion.containing(position)).cells().get(position);
+                return value == null ? Optional.empty() : Optional.of(new KnownBlockSurfaceOverlay.Cell(value.value(),
+                        value.aftermath() ? KnownBlockSurfaceOverlay.Precedence.DECLARATION_FIRST
+                                : KnownBlockSurfaceOverlay.Precedence.OBSERVATION_FIRST));
+            }, column -> image(new ForestRegion(column.x() >> 4, column.z() >> 4)).columns().getOrDefault(column, List.of()));
         }
+
         @Override public Set<Region> changesFrom(KnownNaturalGeometry.Snapshot previous) {
             if (!(previous instanceof Snapshot old) || old.bootstrap != bootstrap)
                 throw new IllegalArgumentException("natural geometry comparison requires one captured world lineage");

@@ -44,6 +44,12 @@ public final class ExtractionTerrainFacts {
     }
     public static Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> at(FrontierBootstrap bootstrap, BlockPosition position) {
         if (!bootstrap.bounds().contains(position)) return Optional.empty();
+        var declared = GrayboxTerrainPlan.forLayout(bootstrap.ruleset().worldLayout(), bootstrap.terrain().baselineSupportY()).at(position);
+        if (declared.isPresent()) {
+            var block = declared.orElseThrow();
+            return Optional.of(new KnownBlockGeometry.Sample<>(new BlockExtraction.Block(block.kind(), block.properties()),
+                    1L, KnownBlockGeometry.Sample.Permission.PUBLIC));
+        }
         var rules = bootstrap.ruleset().extraction();
         var view = TERRAIN.get();
         if (view == null || view.bootstrap().get() != bootstrap) {

@@ -13,7 +13,10 @@ final class AgriculturalSurface {
         return at(GrayboxAgriculture.rules(), x, z);
     }
     static BlockState at(io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture agriculture, int x, int z) {
-        return STATES.computeIfAbsent(agriculture.surfaceAt(x, z).orElseThrow(), fact -> {
+        return resolve(agriculture.surfaceAt(x, z).orElseThrow());
+    }
+    static BlockState resolve(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState block) {
+        return STATES.computeIfAbsent(block, fact -> {
             var tag = new CompoundTag(); tag.putString("Name", fact.kind());
             var properties = new CompoundTag(); fact.properties().forEach(properties::putString);
             tag.put("Properties", properties);

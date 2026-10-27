@@ -44,7 +44,11 @@ public final class FrontierPersistenceCodec {
     // Version 86 retains the bounded field segment and successor-slot reservation in harvest starts.
     // Fresh-world cutover: bakery station declarations change the canonical snapshot grammar.
     private static final int VERSION = 106;
-    private static final int MAX_STATE_BYTES = 16 * 1024 * 1024;
+    // A complete 100-settlement image is larger than one WAL transaction.
+    // Keep transaction admission bounded independently of total-world hydration.
+    private static final int MAX_STATE_BYTES = 128 * 1024 * 1024;
+    private static final int MAX_SNAPSHOT_BODY_BYTES = 256 * 1024 * 1024;
+    private static final int MAX_TRANSACTION_BYTES = 16 * 1024 * 1024;
     private static final int MAX_ENTRIES = 65_535;
 
     private FrontierPersistenceCodec() {}
@@ -89,11 +93,11 @@ public final class FrontierPersistenceCodec {
     }
 
     public static byte[] encodeWal(TransactionRecord transaction, PayloadCodecs codecs) {
-        return envelope(WAL_MAGIC, output -> writeBytes(output, KernelCodec.encodeTransaction(transaction, codecs), MAX_STATE_BYTES));
+        return envelope(WAL_MAGIC, output -> writeBytes(output, KernelCodec.encodeTransaction(transaction, codecs), MAX_TRANSACTION_BYTES));
     }
 
     public static TransactionRecord decodeWal(byte[] encoded, PayloadCodecs codecs) {
-        return decode(encoded, WAL_MAGIC, input -> KernelCodec.decodeTransaction(readBytes(input, MAX_STATE_BYTES), codecs));
+        return decode(encoded, WAL_MAGIC, input -> KernelCodec.decodeTransaction(readBytes(input, MAX_TRANSACTION_BYTES), codecs));
     }
 
     private static void writeActions(DataOutputStream output, List<ScheduledAction> actions) throws IOException {
@@ -114,6 +118,7 @@ public final class FrontierPersistenceCodec {
             ByteArrayOutputStream body = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(body)) { writer.write(output); }
             byte[] bytes = body.toByteArray();
+            if (bytes.length > maximumBody(magic)) throw new IllegalArgumentException("persistence envelope exceeds its bounded body capacity");
             ByteArrayOutputStream result = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(result)) {
                 output.writeInt(magic); output.writeByte(VERSION); output.writeInt(bytes.length); output.write(bytes); output.write(digest(bytes));
@@ -126,13 +131,17 @@ public final class FrontierPersistenceCodec {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != magic) throw new IllegalArgumentException("unknown persistence magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("Frontier v3 persistence envelope is incompatible; fresh current-schema world required");
-            byte[] body = readBytes(input, MAX_STATE_BYTES);
+            byte[] body = readBytes(input, maximumBody(magic));
             byte[] checksum = input.readNBytes(32);
             if (checksum.length != 32 || !MessageDigest.isEqual(checksum, digest(body)) || input.available() != 0) {
                 throw new IllegalArgumentException("invalid persistence checksum or trailing bytes");
             }
             return reader.read(new DataInputStream(new ByteArrayInputStream(body)));
         } catch (IOException error) { throw new IllegalArgumentException("truncated persistence record", error); }
+    }
+
+    private static int maximumBody(int magic) {
+        return magic == SNAPSHOT_MAGIC ? MAX_SNAPSHOT_BODY_BYTES : MAX_TRANSACTION_BYTES + Integer.BYTES;
     }
 
     private static void writeBytes(DataOutputStream output, byte[] bytes, int maximum) throws IOException {

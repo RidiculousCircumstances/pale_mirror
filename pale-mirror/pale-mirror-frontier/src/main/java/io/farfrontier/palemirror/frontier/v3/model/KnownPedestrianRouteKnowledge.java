@@ -24,6 +24,7 @@ public final class KnownPedestrianRouteKnowledge {
     private static RegionalBlockSet cachedStaticOccupancy = RegionalBlockSet.copyOf(Set.of());
     private static KnownPedestrianObstacleIndex obstacleIndex = new KnownPedestrianObstacleIndex();
     private static Object accessBootstrap, accessStorage;
+    private static RegionalBlockSet accessBase = RegionalBlockSet.copyOf(Set.of());
     private static final java.util.Map<Set<BlockPosition>, RegionalBlockSet> ACCESS_EXCLUSIONS =
             new java.util.LinkedHashMap<>(16, .75f, true);
     private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
@@ -34,6 +35,7 @@ public final class KnownPedestrianRouteKnowledge {
     private record RefinedScope(Object view, SurfaceAnchor departure) { }
     private record TaskExclusionScope(Object view, Set<SurfaceAnchor> excluded) { }
     private record WitnessedScope(Object view, SurfaceAnchor departure) { }
+    static final int MAX_LOCAL_VIEWS = SimulationCapacity.MAX_SETTLEMENTS * 4;
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
     private static final ImmutableResultView<String, java.util.Map<TerrainColumn, List<SurfaceAnchor>>> ROAD_SUPPORTS = new ImmutableResultView<>(4);
@@ -191,7 +193,7 @@ public final class KnownPedestrianRouteKnowledge {
         KnownPedestrianRouteKnowledge result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
                 accessSurvey(state, KnownPedestrianGround.forFrontier(state, sites), passageClearance(settlement, passages)),
                 key, java.util.Map.of(), raisedDepartureSupports(state));
-        if (VIEWS.size() >= SimulationCapacity.MAX_SETTLEMENTS * 4) VIEWS.remove(VIEWS.keySet().iterator().next());
+        if (VIEWS.size() >= MAX_LOCAL_VIEWS) VIEWS.remove(VIEWS.keySet().iterator().next());
         VIEWS.put(key, result);
         return result;
     }
@@ -505,11 +507,14 @@ public final class KnownPedestrianRouteKnowledge {
         // newly observed navigation shapes. Reuse that immutable overlay, not the terrain view.
         if (accessBootstrap != state.bootstrap() || accessStorage != storage) {
             ACCESS_EXCLUSIONS.clear(); accessBootstrap = state.bootstrap(); accessStorage = storage;
+            accessBase = RegionalBlockSet.copyOf(retainedStaticOccupancy(state.bootstrap())).overlay(Set.of(), storage);
         }
         var denied = ACCESS_EXCLUSIONS.get(cleared);
         if (denied == null) {
-            denied = RegionalBlockSet.copyOf(retainedStaticOccupancy(state.bootstrap())).overlay(cleared, storage);
-            if (ACCESS_EXCLUSIONS.size() >= 64) ACCESS_EXCLUSIONS.remove(ACCESS_EXCLUSIONS.keySet().iterator().next());
+            var protectedClearance = new HashSet<BlockPosition>();
+            for (var position : cleared) if (storage.contains(position)) protectedClearance.add(position);
+            denied = accessBase.overlay(cleared, protectedClearance);
+            if (ACCESS_EXCLUSIONS.size() >= MAX_LOCAL_VIEWS) ACCESS_EXCLUSIONS.remove(ACCESS_EXCLUSIONS.keySet().iterator().next());
             ACCESS_EXCLUSIONS.put(Set.copyOf(cleared), denied);
         }
         return BoundedPedestrianApproach.excluding(ground, denied);
@@ -556,7 +561,7 @@ public final class KnownPedestrianRouteKnowledge {
                         raisedDepartureSupports(state));
                 cached = new FieldView(site, port, cycle, obstructions, knowledge, new java.util.LinkedHashMap<>());
             }
-            if (FIELDS.size() >= 64 && !FIELDS.containsKey(site.id())) FIELDS.clear();
+            if (FIELDS.size() >= SimulationCapacity.MAX_SETTLEMENTS * 2 && !FIELDS.containsKey(site.id())) FIELDS.remove(FIELDS.keySet().iterator().next());
             FIELDS.put(site.id(), cached);
         }
         var knowledge = cached.knowledge();

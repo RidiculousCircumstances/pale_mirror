@@ -15,7 +15,8 @@ final class ExtractionLandValidation {
                 || layout.fixedBlocks().keySet().stream().anyMatch(position -> !currentBounds.contains(position))
                 || layout.terrainSupports().keySet().stream().anyMatch(position -> !currentBounds.contains(position)))
             throw new IllegalArgumentException("extraction layout leaves declared world bounds");
-        if (VALIDATED.size() == 64) VALIDATED.clear();
+        if (VALIDATED.size() >= io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_EXTRACTION_SITES)
+            VALIDATED.remove(VALIDATED.keySet().iterator().next());
         VALIDATED.put(layout, Boolean.TRUE);
     }
 }

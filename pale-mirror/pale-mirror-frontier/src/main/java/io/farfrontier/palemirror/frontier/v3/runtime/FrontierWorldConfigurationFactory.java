@@ -92,9 +92,14 @@ final class FrontierWorldConfigurationFactory {
                 return FrontierWorldRuntimeDefinition.retiredSchedules(previous, next, event, pending);
             }
         };
+        var initialSchedules = FrontierWorldProcessCatalog.initialSchedule(bootstrap);
+        // Retain four declared initial cohorts (needs, work, movement and wakes),
+        // without increasing per-host-turn classification or execution budgets.
+        int scheduleCapacity = Math.min(io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_SCHEDULES,
+                Math.max(4_096, Math.multiplyExact(initialSchedules.size(), 4)));
         return new FrontierEngineConfiguration<>(bootstrap.worldId(), initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 scheduler, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap),
+                new EngineLimits(4_096, 1_200L, 4_096, scheduleCapacity), initialSchedules,
                 TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE)
                 .withKernelQuarantineReporter((state, world, causes, instant, boundary, failure) -> Optional.of(new ProposedEvent(
                         new SubjectId(world.value()), new KernelQuarantineObserved(new SubjectId(world.value()),

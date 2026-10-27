@@ -33,7 +33,14 @@ class SimulationScaleProfileTest {
         assertTrue(state.extractionSites().deposits().size() > 64, "the former registry bound cannot serve this content");
         assertEquals(100, state.companies().goodsTrade().participants().participants().size());
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
-        assertEquals(state, codec.decode(codec.encode(state)));
+        var bytes = codec.encode(state);
+        var image = new io.farfrontier.palemirror.frontier.v3.api.CheckpointImage(bootstrap.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(0), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(0),
+                bytes, java.util.List.of(), java.util.List.of());
+        var saved = io.farfrontier.palemirror.frontier.v3.persistence.FrontierPersistenceCodec.encodeSnapshot(
+                new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(image, 0));
+        var restored = io.farfrontier.palemirror.frontier.v3.persistence.FrontierPersistenceCodec.decodeSnapshot(saved);
+        assertEquals(state, codec.decode(restored.checkpoint().canonicalState()));
     }
     @Test void baselineRetainsCurrentTwelveSettlementContentAndPhysicalRoadAgreement() {
         var rules = FrontierRulesets.installed("frontier-v3-simulation-baseline-r31");

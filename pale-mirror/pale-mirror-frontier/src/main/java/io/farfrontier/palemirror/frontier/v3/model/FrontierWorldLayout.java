@@ -5,11 +5,14 @@ import java.util.*;
 /** Explicit immutable genesis placement. All geometry, recovery and worldgen
  * consumers receive the same ruleset value; coordinates are not inferred from IDs. */
 public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements,
-        List<String> settlementNames, Roads roads, Optional<Set<Integer>> extractionProducers) {
+        List<String> settlementNames, Roads roads, Optional<Set<Integer>> extractionProducers, Terrain terrain) {
+    public enum Terrain { FLAT, RELIEF }
     public enum Roads { HISTORICAL_GRID, LOCAL_ACCESS }
     public record RoadLink(int from, int to) { }
     private static final List<String> HISTORICAL_NAMES = List.of("Northwatch", "Stonefield", "Dawnbridge", "Redwillow",
             "Ashcross", "Hearthvale", "Clearwater", "Ironmeadow", "Southgate", "Mossbrook", "Westhaven", "Sunreach");
+    public FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements, List<String> names, Roads roads,
+            Optional<Set<Integer>> producers) { this(bounds, settlements, names, roads, producers, Terrain.FLAT); }
     public FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements, List<String> names, Roads roads) {
         this(bounds, settlements, names, roads, Optional.empty());
     }
@@ -23,7 +26,7 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
     }
     public FrontierWorldLayout {
         Objects.requireNonNull(bounds); settlements = List.copyOf(settlements);
-        settlementNames = List.copyOf(settlementNames); Objects.requireNonNull(roads);
+        settlementNames = List.copyOf(settlementNames); Objects.requireNonNull(roads); Objects.requireNonNull(terrain);
         extractionProducers = Objects.requireNonNull(extractionProducers).map(Set::copyOf);
         int count = settlements.size();
         if (extractionProducers.stream().flatMap(Set::stream).anyMatch(i -> i < 0 || i >= count))
@@ -75,8 +78,8 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
     }
     String canonicalText() {
         String base = bounds + ":" + settlements;
-        return roads == Roads.HISTORICAL_GRID && settlementNames.equals(HISTORICAL_NAMES) && extractionProducers.isEmpty() ? base
+        return roads == Roads.HISTORICAL_GRID && settlementNames.equals(HISTORICAL_NAMES) && extractionProducers.isEmpty() && terrain == Terrain.FLAT ? base
                 : base + ":names=" + settlementNames + ":roads=" + roads + ":extraction="
-                    + extractionProducers.map(values -> values.stream().sorted().toList().toString()).orElse("historical-stride");
+                    + extractionProducers.map(values -> values.stream().sorted().toList().toString()).orElse("historical-stride") + ":terrain=" + terrain;
     }
 }

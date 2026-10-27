@@ -36,8 +36,9 @@ class FrontierV3AnnualAutonomyAuditTest {
         long seed = Long.getLong("pale_mirror.frontier_v3.economy.seed", 20260918065L);
         long target = Long.getLong("pale_mirror.frontier_v3.economy.ticks", 24000L);
         if (target < 1 || target > 720000) throw new IllegalArgumentException("bounded economic diagnostic horizon");
-        var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:economy-calibration"), seed,
-                FrontierRulesets.marketQuarryGraybox());
+        var ruleset = FrontierRulesets.installed(System.getProperty("pale_mirror.frontier_v3.economy.ruleset",
+                FrontierRulesets.marketQuarryGraybox().id()));
+        var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:economy-calibration"), seed, ruleset);
         var engine = FrontierEngines.createCanonicalStateAccess(config);
         long compacted = 0, observed = 0; boolean recovered = false;
         var resume = System.getProperty("pale_mirror.frontier_v3.economy.snapshot");
@@ -47,7 +48,7 @@ class FrontierV3AnnualAutonomyAuditTest {
             engine = FrontierEngines.recoverCanonicalStateAccess(config,
                     new RecoveryImage(config.worldId(), Optional.of(snapshot), List.of()));
             assertEquals(seed, engine.canonicalState().state().bootstrap().seed());
-            assertEquals(FrontierRulesets.marketQuarryGraybox(), engine.canonicalState().state().bootstrap().ruleset());
+            assertEquals(ruleset, engine.canonicalState().state().bootstrap().ruleset());
             observed = snapshot.checkpoint().instant().ticks(); compacted = snapshot.checkpoint().revision().value();
             if (observed >= target) throw new IllegalArgumentException("resume checkpoint already reaches the requested horizon");
             recovered = observed >= 360000;

@@ -21,6 +21,9 @@ public final class AgriculturalBiomeSource extends BiomeSource {
     private final Map<String, Holder<Biome>> biomes;
     private final String ruleset;
     private final io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture agriculture;
+    public io.farfrontier.palemirror.frontier.v3.model.FrontierWorldLayout worldLayout() {
+        return io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.installed(ruleset).worldLayout();
+    }
     public io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture agriculture() { return agriculture; }
     public AgriculturalBiomeSource(Holder<Biome> fertile, Holder<Biome> ordinary, Holder<Biome> rocky) {
         this(fertile, ordinary, rocky, "frontier-v3-quarry-graybox-r25");

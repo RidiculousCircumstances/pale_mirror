@@ -38,6 +38,10 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
     public io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture agriculture() {
         return ((AgriculturalBiomeSource) biomeSource).agriculture();
     }
+    private io.farfrontier.palemirror.frontier.v3.model.GrayboxTerrainPlan terrain(LevelHeightAccessor height) {
+        return io.farfrontier.palemirror.frontier.v3.model.GrayboxTerrainPlan.forLayout(
+                ((AgriculturalBiomeSource) biomeSource).worldLayout(), surfaceY(height));
+    }
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return CODEC; }
     @Override public ChunkGeneratorStructureState createState(HolderLookup<StructureSet> lookup, RandomState random, long seed) {
         return ChunkGeneratorStructureState.createForFlat(random, seed, biomeSource, java.util.stream.Stream.empty());
@@ -53,6 +57,15 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
                 filled.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR_WG).update(x, y, z, surface);
                 filled.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG).update(x, y, z, surface);
             }
+            var content = terrain(filled);
+            var region = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(filled.getPos().x, filled.getPos().z);
+            // Bottom-up writes make both additions and excavations update vanilla heightmaps correctly.
+            for (var entry : content.in(region).entrySet().stream().sorted(java.util.Comparator.comparingInt(value -> value.getKey().y())).toList()) {
+                var p = entry.getKey(); var block = AgriculturalSurface.resolve(entry.getValue());
+                filled.setBlockState(cursor.set(p.x(), p.y(), p.z()), block, false);
+                filled.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR_WG).update(p.x() & 15, p.y(), p.z() & 15, block);
+                filled.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG).update(p.x() & 15, p.y(), p.z() & 15, block);
+            }
             return filled;
         });
     }
@@ -66,12 +79,26 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
     @Override public void spawnOriginalMobs(WorldGenRegion region) { flat.spawnOriginalMobs(region); }
     @Override public int getSpawnHeight(LevelHeightAccessor height) { return flat.getSpawnHeight(height); }
     @Override public int getBaseHeight(int x, int z, Heightmap.Types type, LevelHeightAccessor height, RandomState random) {
-        return flat.getBaseHeight(x, z, type, height, random);
+        var positions = terrain(height).column(x, z);
+        if (positions.isEmpty()) return flat.getBaseHeight(x, z, type, height, random);
+        var column = getBaseColumn(x, z, height, random);
+        for (int y = Math.min(height.getMaxBuildHeight() - 1, Math.max(surfaceY(height), positions.getLast().y()));
+                y >= height.getMinBuildHeight(); y--)
+            if (type.isOpaque().test(column.getBlock(y))) return y + 1;
+        return height.getMinBuildHeight();
     }
     @Override public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor height, RandomState random) {
         var column = flat.getBaseColumn(x, z, height, random);
         column.setBlock(surfaceY(height), AgriculturalSurface.at(agriculture(), x, z));
-        return column;
+        var plan = terrain(height); var positions = plan.column(x, z);
+        if (positions.isEmpty()) return column;
+        // Vanilla's flat NoiseColumn ends at its initial top layer; hills require
+        // a full-height column, rather than writing above that array's boundary.
+        var blocks = new net.minecraft.world.level.block.state.BlockState[height.getHeight()];
+        for (int i = 0; i < blocks.length; i++) blocks[i] = column.getBlock(height.getMinBuildHeight() + i);
+        var result = new NoiseColumn(height.getMinBuildHeight(), blocks);
+        for (var position : positions) result.setBlock(position.y(), AgriculturalSurface.resolve(plan.at(position).orElseThrow()));
+        return result;
     }
     private int surfaceY(LevelHeightAccessor height) {
         return height.getMinBuildHeight() + Math.min(height.getHeight(), flat.settings().getLayers().size()) - 1;

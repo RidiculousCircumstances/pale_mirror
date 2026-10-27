@@ -7,7 +7,7 @@ import java.util.*;
 /** Closed read-only natural geometry composition. Providers publish immutable lazy regional
  * facts; common movement never discovers a task/owner from the terrain being queried. */
 final class KnownNaturalGeometry {
-    enum Key { FOREST }
+    enum Key { GRAYBOX_TERRAIN, FOREST }
     interface Provider {
         Key key();
         Snapshot snapshot(FrontierWorldState state);
@@ -17,7 +17,7 @@ final class KnownNaturalGeometry {
         BoundedPedestrianApproach.SurveyedSurface overlay(BoundedPedestrianApproach.SurveyedSurface base);
         Set<Region> changesFrom(Snapshot previous);
     }
-    private static final List<Provider> PROVIDERS = List.of(new ForestryKnownGeometry());
+    private static final List<Provider> PROVIDERS = List.of(new GrayboxTerrainKnownGeometry(), new ForestryKnownGeometry());
     private static final ImmutableResultView<String, Composite> VIEWS = new ImmutableResultView<>(4);
     private static final ImmutableResultView<String, Set<NavigationBlockState>> PALETTES = new ImmutableResultView<>(4);
     static {

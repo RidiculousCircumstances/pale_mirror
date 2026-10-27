@@ -57,11 +57,10 @@ class ServiceAccessCapabilitiesTest {
         var stationary = state.withActorBody(actor, exit.standingBody());
         assertTrue(ServiceDestinationClaims.forImmediateExit(stationary, job.workerId(), pointId).contains(exit),
                 "unassigned stationary occupants are not incoming service transit");
-        var lease = SceneLease.forCause(new SceneLeaseId("lease:incoming-physical-body"), state.bootstrap().worldId(),
-                new ProductionWorkSceneCause(job.id()), exit.support(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(300L),
-                1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
-                        SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), java.util.Optional.empty());
-        var physical = state.prepareSceneLease(lease);
+        var body = state.actorLocations().get(job.workerId()).body();
+        var physical = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(job.workerId(),
+                new AmbientActorLease(job.workerId(), body, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(300L),
+                        1L, AmbientLeaseStatus.PREPARED, AmbientGoalKind.WORK, body))));
         assertFalse(ActorExecutionCoordinator.coldAvailable(physical, job.workerId()));
         assertTrue(ServiceDestinationClaims.forImmediateExit(physical, actor, pointId).contains(exit),
                 "physical or unresolved authority cannot be bypassed by abstract COLD clearance");

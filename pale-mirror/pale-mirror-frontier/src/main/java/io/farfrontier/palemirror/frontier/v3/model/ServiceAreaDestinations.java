@@ -20,7 +20,7 @@ public final class ServiceAreaDestinations {
             java.util.function.Predicate<SurfaceAnchor> reachable) {
         return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.withService(
                 io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningService.PASSAGE_CLEARANCE,
-                () -> selectClearance(clearance.points(), actorId, start, clearance.knowledge(), excluded,
+                () -> selectClearance(clearance::temporary, actorId, start, clearance.knowledge(), excluded,
                         surface -> clearance.publicDestination(surface) && available.test(surface),
                         clearance::allows, reachable));
     }
@@ -40,11 +40,11 @@ public final class ServiceAreaDestinations {
             java.util.function.Predicate<SurfaceAnchor> available) {
         return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.withService(
                 io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningService.PASSAGE_CLEARANCE,
-                () -> selectClearance(points, actorId, start, knowledge, excluded, available,
+                () -> selectClearance(surface -> points.stream().anyMatch(point -> temporary(point, surface)), actorId, start, knowledge, excluded, available,
                         route -> points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)), surface -> true));
     }
 
-    private static Optional<SurfaceAnchor> selectClearance(List<ServiceAccessPoint> points, SubjectId actorId,
+    private static Optional<SurfaceAnchor> selectClearance(java.util.function.Predicate<SurfaceAnchor> temporary, SubjectId actorId,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
             java.util.function.Predicate<SurfaceAnchor> available,
             java.util.function.Predicate<List<SurfaceAnchor>> routeAllowed,
@@ -58,7 +58,7 @@ public final class ServiceAreaDestinations {
                                 + Math.abs((long) candidate.z() - start.z()))
                         .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
         for (var candidate : nearby)
-            if (hasStandingClearance(candidate, excluded) && points.stream().noneMatch(point -> temporary(point, candidate))
+            if (hasStandingClearance(candidate, excluded) && !temporary.test(candidate)
                     && available.test(candidate) && routeAllowed.test(local.get(candidate))
                     && reachable.test(candidate)) return Optional.of(candidate);
         var candidates = new java.util.PriorityQueue<Candidate>(java.util.Comparator.comparingLong(Candidate::distance)
@@ -79,7 +79,7 @@ public final class ServiceAreaDestinations {
             while (!candidates.isEmpty() && candidates.peek().distance() <= distance) {
                 var candidate = candidates.remove().surface();
                 if (local.containsKey(candidate) || !hasStandingClearance(candidate, excluded)
-                        || points.stream().anyMatch(point -> temporary(point, candidate)) || !available.test(candidate)) continue;
+                        || temporary.test(candidate) || !available.test(candidate)) continue;
                 MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                         TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                 try {

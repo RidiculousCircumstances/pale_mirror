@@ -76,7 +76,7 @@ economic content and cannot establish a precise r30 speed ratio.
   advice cannot create stock, spending, access or physical execution. Preserve
   actual due-event ordering and deadlines. Reuse existing preparation/navigation
   workers; introduce neither thread-per-settlement nor independent state writers.
-- [ ] E. Generalize graybox content and bounded population to declared cardinality.
+- [x] E. Generalize graybox content and bounded population to declared cardinality.
   The layout/content profile owns explicit placement, names, population and
   resource/territory distribution. Bootstrap, agriculture, storage, codecs,
   workforce, peer discovery and diagnostics consume it consistently. Retain
@@ -84,7 +84,7 @@ economic content and cannot establish a precise r30 speed ratio.
   Supply a controlled flat baseline and a100settlement/2,000–4,000resident scale
   profile with irregular distances and world bounds100,000square. Reuse production
   owners; do not precompute all pairwise detailed routes or generate the full map.
-- [ ] F. Add the main terrain profile through one deterministic geometry definition
+- [x] F. Add the main terrain profile through one deterministic geometry definition
   used by native generation and COLD facts. Include hills with legal ascents,
   river/ravine crossings, bridge/tunnel multi-level contacts, narrow pedestrian
   passages with pack-animal bypasses, dead ends/low ceilings, passing places and
@@ -178,3 +178,29 @@ work/deposits, actors, peers and strategic records; physical mob/scene limits ar
 unchanged. Complete100settlement state and snapshot round-trip passed in
 scale-state3.log (25seconds). Runtime load/throughput and demand-footprint checks
 remain phase G; this is not scale performance acceptance.
+
+Phase F source uses one bounded immutable natural voxel declaration for native
+chunk generation/base columns/heightmaps and COLD multi-level collision. Fixtures
+include a terraced hill/tunnel, river/ravine/bridge, pedestrian-width passage with
+an animal bypass, and a low-ceiling recess. The shared block-surface overlay also
+serves forest knowledge; observations and unknown-state fences retain precedence.
+The new terrain profile is frontier-v3-simulation-terrain-r31. Native ingress,
+visual evidence and deployed throughput remain G, not established by source tests.
+
+The first100settlement runtime found and repaired an initial schedule-capacity
+mismatch and an OOM caused by full-world service geometry and repeated global
+container overlays. Clearance now uses the common local declaration index and
+validates boundaries touched by the actual route. Static container exclusions
+are shared before local permission overlays. Immutable extraction-layout validation
+retains the declared maximum cohort instead of repeatedly clearing a64entry cache.
+No live occupancy or resource admission is cached as geometry.
+
+The ordinary canonical engine then reached1000ticks with100settlements/3029people
+under the existing2GB test heap. A complete saved image is23,113,049bytes. Snapshot
+bounds now accommodate a complete100settlement state independently of the unchanged
+16MB transaction payload bound; both envelope directions enforce their matching
+bounded capacities. Diagnostic absent plans are represented as null. This early
+horizon precedes the first economic reviews: it does not establish market balance,
+long-run memory, host throughput, five-player performance or HOT acceptance.
+Evidence: build/simulation-throughput/{local-service-geometry-final.log,
+scale-runtime-1000e.log,terrain-scale-final.log,scale-runtime-1000c.jfr}.

@@ -41,7 +41,7 @@ tasks.register('frontierV3AnnualAudit', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform { includeTags 'annual-audit' }
     include '**/FrontierV3AnnualAutonomyAuditTest.class'
-    ['seed', 'ticks', 'snapshot'].each { key ->
+    ['seed', 'ticks', 'snapshot', 'ruleset'].each { key ->
         def value = providers.systemProperty("pale_mirror.frontier_v3.economy.${key}").orNull
         if (value != null) systemProperty "pale_mirror.frontier_v3.economy.${key}", value
     }

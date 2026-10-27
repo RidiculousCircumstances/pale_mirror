@@ -44,7 +44,7 @@ class CultivationPlanningTest {
         assertTrue(passages.size() >= 7);
         // Exercise real bounded view/scope eviction without changing terrain,
         // permissions of the original query, or any canonical world state.
-        for (int i = 0; i < 300; i++) KnownPedestrianRouteKnowledge.forSettlement(state, home,
+        for (int i = 0; i <= KnownPedestrianRouteKnowledge.MAX_LOCAL_VIEWS; i++) KnownPedestrianRouteKnowledge.forSettlement(state, home,
                 List.of(passages.get(i % passages.size()), passages.get(i / passages.size() % passages.size()),
                         passages.get(i / (passages.size() * passages.size()) % passages.size())));
         var after = KnownPedestrianRouteKnowledge.forSettlement(state, home, List.of()).geometry();

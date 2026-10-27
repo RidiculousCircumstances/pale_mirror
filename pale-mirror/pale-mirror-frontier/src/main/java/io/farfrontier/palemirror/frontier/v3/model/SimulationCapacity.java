@@ -7,6 +7,7 @@ public final class SimulationCapacity {
     public static final int MAX_HOUSEHOLDS = 2_048;
     public static final int MAX_EXTRACTION_SITES = 256;
     public static final int MAX_EXTRACTION_WORK = MAX_SETTLEMENTS * 8;
+    public static final int MAX_SCHEDULES = 65_535;
     public static final int MAX_ACTORS = 16_384;
     private SimulationCapacity() { }
 }

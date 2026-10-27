@@ -8,20 +8,27 @@ public final class ServiceClearanceRoutes {
     private final SurfaceAnchor origin;
     private final KnownPedestrianRouteKnowledge departure;
     private final KnownPedestrianRouteKnowledge publicGeometry;
-    private final List<ServiceAccessPoint> points;
+    private final FrontierWorldState state;
+    private final java.util.Map<SubjectId, ServiceAccessPoint> evaluated = new java.util.HashMap<>();
 
     private ServiceClearanceRoutes(FrontierWorldState state, SubjectId actor, SurfaceAnchor origin) {
-        this.origin = origin;
+        this.origin = origin; this.state = state;
         departure = PedestrianLocalDeparture.departure(state, origin).forActor(state, actor);
         publicGeometry = KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, actor);
-        points = ServiceBoundaryComposition.geometries(state);
     }
 
     public static ServiceClearanceRoutes from(FrontierWorldState state, SubjectId actor, SurfaceAnchor actual) {
         return new ServiceClearanceRoutes(state, actor, actual);
     }
     public KnownPedestrianRouteKnowledge knowledge() { return departure; }
-    public List<ServiceAccessPoint> points() { return points; }
+    public int evaluatedPointCount() { return evaluated.size(); }
+    /** Exact indexed candidates only. Distant service geometry cannot affect this contact. */
+    public boolean temporary(SurfaceAnchor surface) {
+        return ServiceBoundaryComposition.nearbyDeclarations(state, new TerrainColumn(surface.x(), surface.z())).stream()
+                .map(declaration -> evaluated.computeIfAbsent(declaration.pointId(),
+                        ignored -> ServiceBoundaryComposition.geometry(state, declaration.identity())))
+                .anyMatch(point -> ServiceAreaDestinations.temporary(point, surface));
+    }
     public boolean publicDestination(SurfaceAnchor surface) { return publicGeometry.traversable(List.of(surface)); }
 
     public boolean allows(List<SurfaceAnchor> route) {
@@ -32,7 +39,10 @@ public final class ServiceClearanceRoutes {
         // Only the declared, geometrically valid private exit may precede public service space.
         if (firstPublic > 0 && !departure.traversable(route.subList(0, firstPublic + 1))) return false;
         var continuation = route.subList(firstPublic, route.size());
-        for (var point : points) {
+        var touched = new java.util.TreeMap<SubjectId, ServiceBoundaryProvider.Declaration>();
+        for (var surface : route) for (var declaration : ServiceBoundaryComposition.nearbyDeclarations(state,
+                new TerrainColumn(surface.x(), surface.z()))) touched.put(declaration.pointId(), declaration);
+        for (var point : touched.values()) {
             var boundary = point.boundary();
             if (boundary.allowsWaitingRoute(route)) continue;
             // The first public contact may be inside its service throat. This is outward

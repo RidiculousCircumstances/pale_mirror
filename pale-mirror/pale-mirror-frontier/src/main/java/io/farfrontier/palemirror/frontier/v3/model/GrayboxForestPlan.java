@@ -22,7 +22,7 @@ public final class GrayboxForestPlan {
     private final Set<TerrainColumn> protectedColumns;
     private final Set<ForestRegion> coverage;
     private final BoundedValueMemo<ForestRegion, List<TreeDescriptor>> regions = new BoundedValueMemo<>(128);
-    private final BoundedValueMemo<io.farfrontier.palemirror.frontier.v3.api.SubjectId, List<Header>> headers = new BoundedValueMemo<>(12);
+    private final BoundedValueMemo<io.farfrontier.palemirror.frontier.v3.api.SubjectId, List<Header>> headers = new BoundedValueMemo<>(SimulationCapacity.MAX_SETTLEMENTS);
 
     private GrayboxForestPlan(FrontierBootstrap bootstrap) {
         this.bootstrap = bootstrap;
