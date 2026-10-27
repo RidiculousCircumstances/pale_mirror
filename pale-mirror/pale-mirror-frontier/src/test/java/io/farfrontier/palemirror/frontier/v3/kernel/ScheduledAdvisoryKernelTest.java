@@ -46,7 +46,7 @@ class ScheduledAdvisoryKernelTest {
     }
 
     @Test void pendingAdviceChargesTheOriginalAllowanceAndCanBeCancelledWithoutLosingItsAction() {
-        var action = scheduled("schedule:bounded-advice", SUBJECT.value(), 1, 1);
+        var action = scheduled("schedule:bounded-advice", SUBJECT.value(), 1, 7);
         var cancelled = new AtomicInteger();
         var planner = new ScheduledActionPlanner<Counter>() {
             public List<ProposedEvent> plan(Counter state, ScheduledAction ignored) { throw new AssertionError("advice bypass"); }
@@ -60,10 +60,14 @@ class ScheduledAdvisoryKernelTest {
                 });
             }
         };
-        var engine = schedulingEngine(planner, List.of(action)); var budget = new WorkBudget(1, 1);
+        var engine = schedulingEngine(planner, List.of(action)); var budget = new WorkBudget(1, 7);
         var waiting = engine.advanceTo(new SimInstant(1), budget);
-        assertEquals(1, waiting.consumed().actions()); assertEquals(1, waiting.consumed().weight());
+        assertEquals(1, waiting.consumed().actions()); assertEquals(7, waiting.consumed().weight());
         assertTrue(waiting.consumed().remaining(budget).isEmpty());
+        var polled = engine.advanceTo(new SimInstant(2), budget);
+        assertEquals(1, polled.consumed().actions()); assertEquals(1, polled.consumed().weight(),
+                "polling the same retained calculation must not pay its full computation cost again");
+        assertTrue(polled.consumed().remaining(budget).isEmpty(), "waiting still respects the original action allowance");
         engine.cancelPendingCalculation();
         assertEquals(1, cancelled.get()); assertEquals(List.of(action), engine.checkpoint().schedules());
         assertEquals(new Counter(0), engine.canonicalState().state()); assertTrue(engine.transactions().isEmpty());

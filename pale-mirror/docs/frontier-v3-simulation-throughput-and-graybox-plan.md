@@ -354,3 +354,14 @@ stock and commitments remain rejected. A real conditional-offer fixture now prov
 that a buyer's unrelated incoming quote is not funding withdrawal and CASH still
 is. Diagnostic reasons split BUYER_PLAN from BUYER_INPUT. Focused actual advice/
 conditional-offer plus guardrails PASS21s (dated-buyer-market-input-final.log).
+
+A separate generic accounting contradiction was found in the actual pending-advice
+branch: every readiness poll recharged the owner's full computation weight
+(e.g.301units for100known peers). Fresh asynchronous admission still pays that
+full weight; retained/busy polling now pays one bounded unit plus the unchanged
+action/classification/execution allowance. Final accepted exact work still pays
+its full declared execution cost. No scheduling budget is raised, due action is
+not consumed by waiting, and capacity busy is not a calculation. The existing
+retained-action/cancellation test now distinguishes initial7-unit admission from
+a1-unit subsequent poll; kernel/advisory and guardrails PASS18s in
+advice-poll-accounting-final.log. Host shared-budget/recovery check follows.

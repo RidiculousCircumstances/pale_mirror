@@ -338,11 +338,12 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                         var declared = retainedAdvice == null ? scheduledPlanner.advice(state, action, executionAt)
                                 : Optional.<ScheduledAdvisory<S>>empty();
                         if (retainedAdvice != null || declared.isPresent()) {
+                            boolean admittedAdvice = false;
                             if (retainedAdvice == null && pendingAdvice.size() < MAX_PENDING_ADVICE) {
                                 var started = scheduledPlanner.beginAdvice(declared.orElseThrow());
                                 if (started.isPresent()) {
                                     retainedAdvice = new PendingAdvice<>(action, started.orElseThrow());
-                                    pendingAdvice.put(action.id(), retainedAdvice);
+                                    pendingAdvice.put(action.id(), retainedAdvice); admittedAdvice = true;
                                 }
                             }
                             var calculated = retainedAdvice == null ? Optional.<ScheduledAdvisory.Completion<S>>empty()
@@ -355,7 +356,11 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                                 // Fair volatile polling preserves the exact original due generation.
                                 // No no-op retry transaction or global pending predecessor is created.
                                 schedules.holdSelected(action, Set.of(), executionAt);
-                                adviceAttempts++; weight = Math.addExact(weight, cost); continue;
+                                // A retained/busy poll does not execute the expensive
+                                // owner calculation again. Fresh admission pays its full
+                                // declared cost; every wait still spends an action,
+                                // admission checks and one bounded polling unit.
+                                adviceAttempts++; weight = Math.addExact(weight, admittedAdvice ? cost : 1); continue;
                             }
                         }
                     }
