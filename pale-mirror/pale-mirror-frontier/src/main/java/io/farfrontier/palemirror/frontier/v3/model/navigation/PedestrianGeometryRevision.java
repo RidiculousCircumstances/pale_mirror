@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model.navigation;
 
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.ImmutableRegionMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -8,8 +9,10 @@ import java.util.Set;
 /** Immutable derived regional knowledge, never task/arrival/custody authority. */
 public final class PedestrianGeometryRevision {
     private final Object scope, geometryScope, baseline;
-    private final Map<Region, Object> revisions;
+    private final ImmutableRegionMap<Object> revisions;
     private final int hash;
+    private record ProfileSeed(ImmutableRegionMap<Object> terrain, ImmutableRegionMap<Object> envelope) { }
+    private final Map<UnitNavigationProfile, ProfileSeed> profileSeeds;
     private record ProfileScope(Object terrain, UnitNavigationProfile profile) { }
     private static final int MAX_PROFILE_VIEWS = 8;
     private final Map<UnitNavigationProfile, PedestrianGeometryRevision> profileViews = new java.util.LinkedHashMap<>(8, .75f, true);
@@ -20,13 +23,17 @@ public final class PedestrianGeometryRevision {
         }
     }
     public PedestrianGeometryRevision(Object scope, Object geometryScope, Object baseline, Map<Region, Object> revisions) {
+        this(scope, geometryScope, baseline, revisions, Map.of());
+    }
+    private PedestrianGeometryRevision(Object scope, Object geometryScope, Object baseline,
+            Map<Region, Object> revisions, Map<UnitNavigationProfile, ProfileSeed> profileSeeds) {
+        this.profileSeeds = profileSeeds;
         this.scope = Objects.requireNonNull(scope); this.geometryScope = Objects.requireNonNull(geometryScope);
         this.baseline = Objects.requireNonNull(baseline);
         if (revisions.size() > MAX_REGIONS) throw new IllegalArgumentException("regional knowledge exceeds its safety bound");
-        // Region coordinates cluster in compact linear-probe tables. Preserve
-        // exact immutable facts without rebuilding a long MapN probe chain for
-        // every captured view/profile on the sequential preparation lane.
-        this.revisions = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.copyOf(revisions);
+        // Reuse immutable spatial pages and their exact hashes between captured
+        // views; only changed pages rebuild facts on the preparation lane.
+        this.revisions = ImmutableRegionMap.copyOf(revisions);
         // Hash immutable facts once, not for every queue/map lookup of a route request.
         // Equality still checks the complete facts: a hash is never route authority.
         this.hash = Objects.hash(scope, geometryScope, baseline, this.revisions);
@@ -36,22 +43,47 @@ public final class PedestrianGeometryRevision {
     public PedestrianGeometryRevision profiled(UnitNavigationProfile profile) {
         Objects.requireNonNull(profile);
         synchronized (profileViews) { var prior = profileViews.get(profile); if (prior != null) return prior; }
-        var expanded = new java.util.LinkedHashMap<Region, Object>();
+        ProfileSeed seed;
+        synchronized (profileViews) { seed = profileSeeds.get(profile); }
         int margin = profile.footprintRadius() == 0 ? 0 : 1;
-        revisions.entrySet().stream().sorted(java.util.Comparator
-                .comparingInt((Map.Entry<Region, Object> entry) -> entry.getKey().x())
-                .thenComparingInt(entry -> entry.getKey().z())).forEach(entry -> {
-            var region = entry.getKey(); var token = entry.getValue();
-            for (int x = -margin; x <= margin; x++) for (int z = -margin; z <= margin; z++)
-                expanded.merge(new Region(region.x() + x, region.z() + z), token,
-                        (left, right) -> java.util.List.of(left, right));
-        });
+        ImmutableRegionMap<Object> expanded;
+        if (margin == 0) expanded = revisions;
+        else {
+            var affected = new java.util.HashSet<Region>();
+            var changed = seed == null ? revisions.keySet() : revisions.changesFrom(seed.terrain());
+            for (var region : changed) for (int x = -margin; x <= margin; x++) for (int z = -margin; z <= margin; z++)
+                affected.add(new Region(region.x() + x, region.z() + z));
+            var updates = new java.util.HashMap<Region, java.util.Optional<Object>>();
+            for (var target : affected) {
+                Object token = null;
+                // Match the full projection's lexicographic source order exactly.
+                for (int x = -margin; x <= margin; x++) for (int z = -margin; z <= margin; z++) {
+                    var source = revisions.get(new Region(target.x() + x, target.z() + z));
+                    if (source != null) token = token == null ? source : java.util.List.of(token, source);
+                }
+                updates.put(target, java.util.Optional.ofNullable(token));
+            }
+            expanded = (seed == null ? ImmutableRegionMap.<Object>copyOf(Map.of()) : seed.envelope()).with(updates);
+        }
         var result = new PedestrianGeometryRevision(new ProfileScope(scope, profile),
                 new ProfileScope(geometryScope, profile), baseline, expanded);
         synchronized (profileViews) {
             var prior = profileViews.get(profile); if (prior != null) return prior;
             if (profileViews.size() >= MAX_PROFILE_VIEWS) profileViews.remove(profileViews.keySet().iterator().next());
             profileViews.put(profile, result); return result;
+        }
+    }
+    /** Successor facts share unchanged pages and bounded profile seeds, never a chain
+     * of predecessor revisions or their task/cache state. Scope ownership is unchanged. */
+    public PedestrianGeometryRevision withRevisions(Map<Region, Object> facts) {
+        var next = ImmutableRegionMap.copyOf(facts);
+        if (revisions.equals(next)) return this;
+        synchronized (profileViews) {
+            var seeds = new java.util.LinkedHashMap<>(profileSeeds);
+            profileViews.forEach((profile, view) -> seeds.put(profile, new ProfileSeed(revisions, view.revisions)));
+            while (seeds.size() > MAX_PROFILE_VIEWS) seeds.remove(seeds.keySet().iterator().next());
+            return new PedestrianGeometryRevision(scope, geometryScope, baseline, next,
+                    java.util.Collections.unmodifiableMap(seeds));
         }
     }
     public Object scope() { return scope; }
@@ -85,15 +117,15 @@ public final class PedestrianGeometryRevision {
     }
     public PedestrianGeometryRevision changed(Set<Region> regions) {
         if (regions.isEmpty()) return this;
-        var next = new java.util.LinkedHashMap<>(revisions);
-        Object revision = new Object(); regions.forEach(region -> next.put(region, revision));
-        return new PedestrianGeometryRevision(scope, geometryScope, baseline, next);
+        var changes = new java.util.HashMap<Region, java.util.Optional<Object>>();
+        Object revision = new Object(); regions.forEach(region -> changes.put(region, java.util.Optional.of(revision)));
+        return withRevisions(revisions.with(changes));
     }
     public Set<Region> changesSince(PedestrianGeometryRevision prior) {
         if (this == prior) return Set.of();
         if (!scope.equals(prior.scope) || !geometryScope.equals(prior.geometryScope) || baseline != prior.baseline)
             throw new IllegalArgumentException("regional comparison needs the same declared knowledge scope");
-        var regions = new java.util.HashSet<>(revisions.keySet()); regions.addAll(prior.revisions.keySet());
+        var regions = new java.util.HashSet<>(revisions.changesFrom(prior.revisions));
         // Profile envelopes combine several immutable terrain tokens. Rebuilding
         // an equal tuple is not a changed region; plain Object epochs still use
         // their identity equality. This is calculation evidence, not actor custody.

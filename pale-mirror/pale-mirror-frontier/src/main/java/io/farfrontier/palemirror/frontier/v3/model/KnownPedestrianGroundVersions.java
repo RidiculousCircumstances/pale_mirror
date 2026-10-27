@@ -45,18 +45,18 @@ final class KnownPedestrianGroundVersions {
             changed.addAll(next.withdrawn().regions()); changed.addAll(next.unknown().regions()); changed.addAll(next.scars().regions());
             halo(changed, next.shapes().regions()); halo(changed, next.natural().regions());
         }
-        Map<Region, Object> tokens = sameWorld ? working.revisions() : Map.of();
-        Map<Region, Object> updates = null;
+        var tokens = ImmutableRegionMap.copyOf(sameWorld ? working.revisions() : Map.<Region, Object>of());
+        var updates = new HashMap<Region, Optional<Object>>();
         for (var region : changed) {
             var value = facts(next, region);
             if (Objects.equals(tokens.get(region), value)) continue;
-            if (updates == null) updates = new HashMap<>(tokens);
-            if (value == null) updates.remove(region); else updates.put(region, value);
+            updates.put(region, Optional.ofNullable(value));
         }
-        if (!sameWorld || updates != null) {
+        if (!sameWorld || !updates.isEmpty()) {
             // A world epoch is the immutable bootstrap identity, never cache residency.
             var scope = new RegionalReadVersion(List.of(next.bootstrap()), Map.of());
-            working = new PedestrianGeometryRevision(scope, Pristine.TERRAIN, updates == null ? tokens : updates);
+            working = sameWorld ? working.withRevisions(tokens.with(updates))
+                    : new PedestrianGeometryRevision(scope, Pristine.TERRAIN, tokens.with(updates));
         }
         basis = next;
         return working;

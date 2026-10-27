@@ -1333,3 +1333,30 @@ proof, lossy version key or world-store migration. Existingscope/regionalinvalid
 certified builder/guardrail coverage PASS28s. Constructor checks the existing
 region bound before copying. Native impact still requires the same retained100
 ordinary measurement after exactref packaging/deployment.
+
+
+### Incremental regional facts and body envelopes (2026-10-28)
+
+b0d003a3b exact142navigation/runtime/package release PASS43s; both retained311
+worlds deployed VERIFIED. Six ordinary100 observations ended19627/debt3322 FAIL.
+20s JFR confirms the MapN constructor hotspot disappeared, but preparation still
+spends samples on Facts.hash (36), ImmutableLookupMap.get (30), RegionFacts.hash
+(13); real revision capture copies/hashes complete world metadata per local change.
+Actual nav allocation19.44/19.35GB and preparation7.36GB remain excessive; these
+are ThreadAllocationStatistics deltas, not sampled allocation weights.
+
+The derived geometry owner now uses immutable spatial pages (16×16regions), each
+with its exact cached Map hash. Ground and task-view successors replace/remove
+explicit changed regions; unchanged pages survive directly. Equality still compares
+full facts even for equal hashes. No canonical schema or world mutation changes.
+A no-halo resident profile shares its regional map directly. Wider body profiles
+retain bounded source/envelope seeds and rebuild only the changed region halo,
+folding source facts in the same lexicographic order as the full projection. Seeds
+contain immutable maps, never predecessor revision chains or mutable world readers.
+
+Existing scope coverage adds hash collision, removal, predecessor/entry immutability,
+remote-fact no-rehash, and local body-envelope equivalence to a fresh full rebuild,
+including complete withdrawal. Existing unknown/foreign-world/shape invalidation,
+worker and terminal-route coverage retained. Focused guardrails/navigation PASS37s;
+final immutable seed and zero-halo selection PASS44s. Native impact remains open
+until exactref packaging, retained-world deployment and ordinary100 observation.

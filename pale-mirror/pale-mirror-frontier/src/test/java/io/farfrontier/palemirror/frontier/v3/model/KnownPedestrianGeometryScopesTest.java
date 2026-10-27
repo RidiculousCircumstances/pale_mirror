@@ -9,6 +9,57 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KnownPedestrianGeometryScopesTest {
+    private record CollidingFact(String value) { @Override public int hashCode() { return 7; } }
+    @Test void regionalPagesPreserveExactCollisionsRemovalAndImmutablePredecessors() {
+        var a = new PedestrianGeometryRevision.Region(-1, -1);
+        var remote = new PedestrianGeometryRevision.Region(1000, 1000);
+        var before = ImmutableRegionMap.copyOf(Map.of(a, new CollidingFact("before"), remote, new CollidingFact("remote")));
+        var after = before.with(Map.of(a, java.util.Optional.of(new CollidingFact("after"))));
+        assertEquals(before.hashCode(), after.hashCode(), "collision does not establish equality");
+        assertNotEquals(before, after); assertEquals(Set.of(a), after.changesFrom(before));
+        assertEquals(new CollidingFact("before"), before.get(a));
+        assertEquals(Map.of(a, new CollidingFact("after"), remote, new CollidingFact("remote")), after);
+        assertEquals(after, Map.of(a, new CollidingFact("after"), remote, new CollidingFact("remote")));
+        var removed = after.with(Map.of(a, java.util.Optional.empty()));
+        assertEquals(Set.of(a), removed.changesFrom(after)); assertFalse(removed.containsKey(a));
+        assertEquals(Map.of(remote, new CollidingFact("remote")), removed);
+        assertThrows(UnsupportedOperationException.class, () -> before.entrySet().iterator().next().setValue(new CollidingFact("forged")));
+        assertThrows(UnsupportedOperationException.class, () -> before.remove(a));
+    }
+    @Test void localSuccessorReusesRemoteFactHashesAndMatchesFreshProfileAfterRemoval() {
+        var scope = new Object(); var baseline = new Object(); var noHash = new java.util.concurrent.atomic.AtomicBoolean();
+        Object remoteFact = new Object() {
+            @Override public int hashCode() { if (noHash.get()) throw new AssertionError("unchanged remote facts rehashed"); return 17; }
+        };
+        var facts = new java.util.HashMap<PedestrianGeometryRevision.Region, Object>();
+        facts.put(new PedestrianGeometryRevision.Region(-1, -1), "removed");
+        facts.put(new PedestrianGeometryRevision.Region(0, 0), "changed");
+        facts.put(new PedestrianGeometryRevision.Region(1, 0), "neighbour");
+        facts.put(new PedestrianGeometryRevision.Region(1000, 1000), remoteFact);
+        var before = new PedestrianGeometryRevision(scope, baseline, facts);
+        assertSame(before.revisions(), before.profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER).revisions());
+        var oldProfile = before.profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY);
+        assertEquals(List.of(List.of("removed", "changed"), "neighbour"), oldProfile.at(0, 0));
+        facts.remove(new PedestrianGeometryRevision.Region(-1, -1));
+        facts.put(new PedestrianGeometryRevision.Region(0, 0), "replacement");
+        var expected = new PedestrianGeometryRevision(scope, baseline, facts)
+                .profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY);
+        noHash.set(true);
+        var pages = ImmutableRegionMap.copyOf(before.revisions()).with(Map.of(
+                new PedestrianGeometryRevision.Region(-1, -1), java.util.Optional.empty(),
+                new PedestrianGeometryRevision.Region(0, 0), java.util.Optional.of("replacement")));
+        var actual = before.withRevisions(pages)
+                .profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY);
+        assertEquals(List.of("replacement", "neighbour"), actual.at(0, 0));
+        assertTrue(before.withRevisions(Map.of()).profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY).revisions().isEmpty());
+        assertEquals(expected, actual); assertEquals(expected.hashCode(), actual.hashCode());
+        assertEquals("removed", before.at(-1, -1));
+        assertNotEquals(actual.at(0, 0), oldProfile.at(0, 0));
+        assertSame(oldProfile.at(1000, 1000), actual.at(1000, 1000));
+        assertEquals(expected.changesSince(oldProfile), actual.changesSince(oldProfile));
+        assertFalse(actual.matches(oldProfile, Set.of(new PedestrianGeometryRevision.Region(0, 0))));
+        assertTrue(actual.matches(oldProfile, Set.of(new PedestrianGeometryRevision.Region(1000, 1000))));
+    }
     @Test void interiorShapeChangeDoesNotInvalidateUnchangedRegionBoundary() {
         var versions = new KnownPedestrianGroundVersions(); var bootstrap = new Object();
         var interior = new BlockPosition(8, 64, 8);
