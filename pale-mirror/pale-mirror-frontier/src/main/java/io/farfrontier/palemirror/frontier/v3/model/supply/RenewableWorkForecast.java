@@ -16,14 +16,24 @@ public final class RenewableWorkForecast {
     private record Input(List<Source> sources, int workers, long day, long dailyWork, long horizon) {
         Input { sources = List.copyOf(sources); }
     }
-    private static final io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<Input,
-            List<SupplyPlanner.OutputRelease>> FORECASTS = new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(32);
+    /** One owner can retain its changing planning windows without evicting every
+     * other owner's independent sources. Complete value inputs still fence hits. */
+    public static final class Memo {
+        private final io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<Input,
+                List<SupplyPlanner.OutputRelease>> forecasts;
+        public Memo(int capacity) { forecasts = new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(capacity); }
+        public List<SupplyPlanner.OutputRelease> assess(List<Source> sources, int workers, long day,
+                long workPerDay, long horizon) {
+            if (sources.size() > 4096 || workers < 1 || workers > 256 || day < 1 || workPerDay < 1
+                    || workPerDay > day || horizon < 1) throw new IllegalArgumentException("invalid renewable work calendar");
+            var input = new Input(sources, workers, day, workPerDay, horizon);
+            return forecasts.get(input, () -> calculate(input.sources(), workers, day, workPerDay, horizon));
+        }
+    }
+    private static final Memo FORECASTS = new Memo(32);
     public static List<SupplyPlanner.OutputRelease> assess(List<Source> sources, int workers, long day,
             long workPerDay, long horizon) {
-        if (sources.size() > 4096 || workers < 1 || workers > 256 || day < 1 || workPerDay < 1
-                || workPerDay > day || horizon < 1) throw new IllegalArgumentException("invalid renewable work calendar");
-        var input = new Input(sources, workers, day, workPerDay, horizon);
-        return FORECASTS.get(input, () -> calculate(input.sources(), workers, day, workPerDay, horizon));
+        return FORECASTS.assess(sources, workers, day, workPerDay, horizon);
     }
     private static List<SupplyPlanner.OutputRelease> calculate(List<Source> sources, int workers, long day,
             long workPerDay, long horizon) {

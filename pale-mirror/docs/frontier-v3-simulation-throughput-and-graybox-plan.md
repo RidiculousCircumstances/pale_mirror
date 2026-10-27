@@ -1115,3 +1115,30 @@ collision, land ownership and actor admission are not inferred from the envelope
 The extent is derived, not another persisted authority or schema field.
 Existinglandvalidation negative cases extend foreignsubstrate andexclusiveedge
 checks; incrementalgeometry/terraces/developmentreplay+guardrailsPASS33s.
+
+### Owner-scoped renewable forecasts and valuation reads (2026-10-28)
+
+`c9a18821d` cleanreleasePASS58s, targeted mining/geometry/recovery plus selected
+runtime, packagedJAR/economy55; both retained311 worlds verified. Native100
+11761→12721/333s,debt2011→7714 remainsFAIL. Afterchange20s JFR:nav642/620,
+preparation487,server465,advice127/109samples. Repeated mining-bounds traversal is
+absent from the leading frames; expensive renewable forecasts remain in all
+three calculation lanes. These are attribution observations, not isolated ratios.
+
+Every supplier valuation reaches the same pure renewable-source scheduler. A
+single global32-input memo competes across100owners, executable/valuation views
+and cultivation alternatives; unrelated market states force those reads again.
+The field owner now retains bounded memo instances per explicit home and declared
+equipment-backed mode. Each retains four complete immutable value input tuples
+(sources, workers, day, daily work and horizon); hypothetical executable options
+cannot evict another settlement's installed valuation forecast. The generic
+scheduler's default API/algorithm remains unchanged; no capacity, output or worker
+reservation is cached by an incomplete owner identity. Changed biology/calendar/
+worker/horizon inputs retain their own strict comparison and invalid-input checks.
+
+The connected extraction valuation path also computed actual assignments and
+owned equipment before discarding both on its unbacked branch. Those reads now
+run only for equipment-backed capacity; actual execution/admission remains intact.
+Forecast/procurement/publication/cultivation+guardrailsPASS28s, with mining forecast
+added in the connected owner-production-valuation-focus.log PASS28s. Final scoped
+mode-key simplification still needs its exact clean release check.

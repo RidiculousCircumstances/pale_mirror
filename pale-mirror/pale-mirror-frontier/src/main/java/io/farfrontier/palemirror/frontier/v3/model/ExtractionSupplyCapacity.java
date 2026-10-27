@@ -22,7 +22,6 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
         var materials = new HashSet<BlockExtraction.Definition>();
         for (var deposit : state.extractionSites().deposits().values()) if (deposit.site().settlementId().equals(home))
             materials.addAll(deposit.presentMaterials());
-        var assignments = HumanAssignmentProjection.compile(state);
         var schedule = state.humanPopulation().schedule(home);
         long daily = schedule.segments().stream().filter(s -> s.window() == SettlementDailySchedule.Window.WORK)
                 .mapToLong(s -> s.endExclusive() - s.startInclusive()).sum();
@@ -35,15 +34,10 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
             var product = material.coldOutput().getFirst();
             if (!stocks.containsKey(product.itemKind())) continue;
             var definition = state.bootstrap().ruleset().workCatalog().require(material.before().kind(), WorkOperation.EXTRACT);
-            var candidates = equipmentBacked ? SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.EXTRACTION, definition.capability(),
-                            r -> assignments.assignment(r.id()).kind() == HumanAssignmentKind.EXTRACTION).stream()
-                    .filter(r -> !assignments.assignment(r.id()).active()
-                            || assignments.assignment(r.id()).kind() == HumanAssignmentKind.EXTRACTION)
-                    .sorted(Comparator.comparing(ResidentProfile::id)).toList()
-                    : SupplyLabourCapacity.potential(state, home, ResidentWorkKind.EXTRACTION, definition.capability());
-            var ids = candidates.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet());
-            var equipment = EquipmentProductiveCapacity.items(state, home, ids,
-                    io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentRequirements.allOf(Set.of(material.toolRequirement())));
+            var candidates = candidates(state, home, definition.capability(), equipmentBacked);
+            List<ExactItemStack> equipment = equipmentBacked ? EquipmentProductiveCapacity.items(state, home,
+                    candidates.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet()),
+                    io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentRequirements.allOf(Set.of(material.toolRequirement()))) : List.of();
             var workers = equipmentBacked ? candidates.stream().limit(equipment.size()).toList() : candidates;
             if (workers.isEmpty()) continue;
             var forecasts = state.extractionSites().deposits().values().stream().filter(d -> d.site().settlementId().equals(home))
@@ -63,6 +57,16 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
                     SupplyLabourCapacity.over(state, home, workers.stream().map(ResidentProfile::id).toList(), window)));
         }
         return List.copyOf(result);
+    }
+    private static List<ResidentProfile> candidates(FrontierWorldState state, SubjectId home,
+            HumanCapability capability, boolean equipmentBacked) {
+        if (!equipmentBacked) return SupplyLabourCapacity.potential(state, home, ResidentWorkKind.EXTRACTION, capability);
+        var assignments = HumanAssignmentProjection.compile(state);
+        return SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.EXTRACTION, capability,
+                resident -> assignments.assignment(resident.id()).kind() == HumanAssignmentKind.EXTRACTION).stream()
+                .filter(resident -> !assignments.assignment(resident.id()).active()
+                        || assignments.assignment(resident.id()).kind() == HumanAssignmentKind.EXTRACTION)
+                .sorted(Comparator.comparing(ResidentProfile::id)).toList();
     }
     @Override public List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home,
             Map<String, SupplyPlanner.Stock> stocks) { return List.of(); }

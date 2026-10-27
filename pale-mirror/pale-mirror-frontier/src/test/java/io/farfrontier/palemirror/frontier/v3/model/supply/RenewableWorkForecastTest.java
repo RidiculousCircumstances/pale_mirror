@@ -7,6 +7,19 @@ import static org.junit.jupiter.api.Assertions.*;
 class RenewableWorkForecastTest {
     private static final RenewableWorkForecast.Source RIPE = new RenewableWorkForecast.Source(1, 0, 10, 0, 100, 5, true, false);
     private static final RenewableWorkForecast.Source BARE = new RenewableWorkForecast.Source(1, 15, 10, 100, 100, 5, false, true);
+    @Test void retainedOwnerForecastsStillRecheckEveryChangedBiologyAndWorkInput() {
+        var memo = new RenewableWorkForecast.Memo(4);
+        var sources = List.of(BARE, BARE);
+        var original = memo.assess(sources, 1, 1000, 1000, 260);
+        assertEquals(RenewableWorkForecast.assess(sources, 1, 1000, 1000, 260), original);
+        assertEquals(RenewableWorkForecast.assess(List.of(RIPE, BARE), 1, 1000, 1000, 260),
+                memo.assess(List.of(RIPE, BARE), 1, 1000, 1000, 260));
+        assertEquals(RenewableWorkForecast.assess(sources, 2, 1000, 1000, 260), memo.assess(sources, 2, 1000, 1000, 260));
+        assertEquals(RenewableWorkForecast.assess(sources, 1, 1000, 500, 500), memo.assess(sources, 1, 1000, 500, 500));
+        assertEquals(original, memo.assess(sources, 1, 1000, 1000, 260));
+        assertThrows(IllegalArgumentException.class, () -> memo.assess(sources, 0, 1000, 1000, 260));
+    }
+
     @Test void addedBareLandDoesNotDelayFirstRipeYieldAndSharedWorkersAreNotMultiplied() {
         var sources = new ArrayList<RenewableWorkForecast.Source>(); sources.add(RIPE);
         sources.addAll(Collections.nCopies(100, BARE));

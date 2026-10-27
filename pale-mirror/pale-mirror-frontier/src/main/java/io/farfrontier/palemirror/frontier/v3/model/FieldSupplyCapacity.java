@@ -6,6 +6,9 @@ import java.util.*;
 
 /** Field owner supplies finite biological capacity and labour separately; never starts work or routes. */
 final class FieldSupplyCapacity implements SupplyCapacityPort {
+    private record ForecastScope(SubjectId home, boolean equipmentBacked) { }
+    private static final ImmutableKeyedInputView<ForecastScope, io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Memo>
+            FORECASTS = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS * 2);
     /** A considered cultivation option is not admitted land, incoming stock or a production commitment. */
     record Cell(BlockPosition crop, ResourceFieldCycle.CellState condition, boolean renew) {
         Cell { Objects.requireNonNull(crop); Objects.requireNonNull(condition); }
@@ -65,8 +68,9 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
                 Math.max(source.preparation(), source.renew() ? source.repeatPreparation() : 0)), source.yield())).max().orElseThrow();
         long period = Math.max(1, Math.ceilDiv(Math.multiplyExact(labour, schedule.dayTicks()),
                 Math.multiplyExact(workWindow, workers.size())));
-        var forecast = io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.assess(sources, workers.size(),
-                schedule.dayTicks(), workWindow, window.ticks());
+        var memo = FORECASTS.get(state.bootstrap(), new ForecastScope(home, equipmentBacked), List.of(state.bootstrap()),
+                () -> new io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Memo(4));
+        var forecast = memo.assess(sources, workers.size(), schedule.dayTicks(), workWindow, window.ticks());
         long equipmentOutput = Long.MAX_VALUE;
         if (equipmentBacked) {
             var equipment = EquipmentProductiveCapacity.items(state, home, workers.stream().map(ResidentProfile::id)
