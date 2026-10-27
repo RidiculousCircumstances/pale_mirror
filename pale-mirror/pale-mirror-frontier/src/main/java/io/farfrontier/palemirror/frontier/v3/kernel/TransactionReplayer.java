@@ -48,12 +48,15 @@ public final class TransactionReplayer {
             else if (!nextSchedules.retainedChanges().isEmpty()) {
                 stateValidator.validateScheduleChanges(state, nextSchedules.retainedChanges());
             }
-            if (stateCodec.encode(next) == null) throw new IllegalStateException("state codec returned null");
             state = next;
             nextSchedules.commit();
             revision = transaction.revision();
             instant = transaction.instant();
         }
+        // Every transaction is validated above. Snapshot encoding is an output
+        // boundary, not a second full-world traversal for each retained WAL item.
+        // No partially replayed state escapes when validation or final encoding fails.
+        if (!transactions.isEmpty() && stateCodec.encode(state) == null) throw new IllegalStateException("state codec returned null");
         return new ReplayResult<>(state, revision, instant, schedules.snapshot());
     }
 

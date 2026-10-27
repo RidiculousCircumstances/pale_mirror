@@ -408,3 +408,12 @@ The obsolete2c100town diagnostic was intentionally stopped after62m36 with last
 reported18000/rev145685, no memory/capacity quarantine;30000 was not proved. It
 still ran the superseded immediate full-review market cascade. Its JFR/logs are
 retained. A fresh current-code run, not further waiting on old classes, follows.
+
+Recovery profile additionally found TransactionReplayer encoding the full world
+after every WAL transaction (actual publication-recovery stack in
+current-plan-test-thread.txt). Every transaction, event envelope, schedule effect
+and transition is still validated in order; snapshot encoding now checks the
+final recovered output once. No partial recovered state is exposed on any
+validation/encoding failure. Existing kernel corrupt-history, scheduled recovery
+and economic recovery checks PASS13s (replay-negative-final.log), together with
+the actual economic publication/WAL fixture in the31s connected slice.
