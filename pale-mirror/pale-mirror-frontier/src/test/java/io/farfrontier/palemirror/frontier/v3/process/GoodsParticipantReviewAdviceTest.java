@@ -24,6 +24,16 @@ class GoodsParticipantReviewAdviceTest {
                 Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of())));
         assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(invalidated))), at).isEmpty());
         assertEquals("OWNER_INPUT", completion.rejectionReason(), "registered decorators must retain the owner's diagnosis");
+        var marketOnly = registry.withEconomicState(home, registry.economicState(home).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.MARKET, Set.of("minecraft:bread"))));
+        var marketState = state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(marketOnly)));
+        var refreshed = completion.revalidate(marketState, at).orElseThrow().prepare().get();
+        assertTrue(refreshed.stream().anyMatch(event -> event.payload() instanceof SettlementEconomicPlanPublished),
+                "an incoming quote may use the dated forecast but must still publish a valid current input envelope");
+        var hardAfterMarket = marketOnly.withEconomicState(home, marketOnly.economicState(home).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of())));
+        assertTrue(completion.revalidate(state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(hardAfterMarket))), at).isEmpty(),
+                "a market notification must not conceal changed actual funding");
         var owner = registry.participants().get(home); var peer = registry.participants().get(owner.known().getFirst().party().id());
         var peerChanged = registry.withEconomicState(peer.party().id(), registry.economicState(peer.party().id()).invalidate(
                 Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread"))));

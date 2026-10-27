@@ -38,4 +38,16 @@ public record SettlementEconomicPlan(long revision, long inputRevision, long atT
                     || declaredPeers.getOrDefault(quote.recipient().id(), 0L) < 1))
             throw new IllegalArgumentException("invalid accepted economic plan");
     }
+    /** Rebind only the publication generation after the owner proves that intervening
+     * inputs were dated market notifications. Assessment/expiry and all terms stay dated. */
+    public SettlementEconomicPlan withInputRevision(long next) {
+        if (next < inputRevision) throw new IllegalArgumentException("economic input generation cannot move backwards");
+        if (next == inputRevision) return this;
+        var quotes = conditionalQuotes.stream().map(q -> new ConditionalProductionQuote(q.supplier(), q.recipient(), q.itemKind(),
+                q.quantity(), q.goodsUnitPrice(), q.resourceFreight(), q.cashFreight(), q.fulfillment(), q.capacityWindowTicks(),
+                q.deliveryTicks(), next, q.sourcePlanRevision(), q.assessedAtTick(), q.expiresAtTick())).toList();
+        return new SettlementEconomicPlan(revision, next, atTick, reviewAtTick, domestic, complete, productionCeilings,
+                peerVersions, affectedProducts, cultivation, needs, quotes);
+    }
+
 }

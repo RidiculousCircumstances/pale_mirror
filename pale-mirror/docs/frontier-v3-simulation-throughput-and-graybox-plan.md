@@ -335,3 +335,15 @@ never canonical elapsed time or domain permissions. The existing grouped-WAL/
 recovery test uses a controlled host clock instead of assuming the real machine
 can always execute multiple transactions in2ms. Runtime/file-store/ready-turn
 and guardrails PASS43s; advisory/preparation diagnostics PASS28s.
+
+Actual dec0 main telemetry identifies119owner-input and65buyer-consent rejects in
+the first retained sample, with zero geometry rejects. MarketEconomicInputChanges
+marks incoming quotes as MARKET, but the previous forecast fence treated those
+notifications exactly like lost stock/cash. The owner now accepts a shifted input
+generation only when the same accepted plan is retained and the accumulated dirty
+causes contain MARKET alone. Hard causes are never cleared by that proof. It
+rebinds publication and conditional-quote source generations together, preserving
+assessment/expiry, exact buyer envelopes and all current admission checks. Existing
+actual runtime-composition fixture checks valid refreshed publication and rejects
+CASH after MARKET; conditional offers/autonomous trading/input tests and guardrails
+PASS45s (dated-own-market-input-final.log). No persistence schema change.

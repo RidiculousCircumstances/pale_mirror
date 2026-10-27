@@ -72,6 +72,12 @@ public record SettlementEconomicPlanningState(long inputRevision, Optional<Settl
         }));
         return new SettlementEconomicPlanningState(Math.incrementExact(inputRevision), accepted, next);
     }
+    /** Market notifications are dated observations. Retained dirty causes prove
+     * that no stock/cash/capacity/need/commitment changed since this same accepted plan. */
+    public boolean onlyMarketChangesSince(SettlementEconomicPlanningState captured) {
+        return inputRevision > captured.inputRevision && accepted.equals(captured.accepted)
+                && affected.keySet().equals(Set.of(Change.MARKET));
+    }
     public SettlementEconomicPlanningState accept(SettlementEconomicPlan plan) {
         long next = Math.incrementExact(accepted.map(SettlementEconomicPlan::revision).orElse(0L));
         if (plan.inputRevision() != inputRevision || plan.revision() != next

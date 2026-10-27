@@ -15,7 +15,7 @@ final class GoodsParticipantReviewAdvice {
         var basis = peers(state, participant); var bootstrap = state.bootstrap();
         var peerInputs = new HashMap<SubjectId, Long>();
         basis.keySet().forEach(id -> peerInputs.put(id, state.companies().goodsTrade().participants().economicState(id).inputRevision()));
-        long ownerInput = state.companies().goodsTrade().participants().economicState(action.subject()).inputRevision();
+        var ownerInput = state.companies().goodsTrade().participants().economicState(action.subject());
         var navigation = state.navigationGeometry(); var physical = state.physicalDeltas();
         return () -> {
             var prepared = SettlementEconomicPlanPreparation.review(state, action, at);
@@ -27,8 +27,9 @@ final class GoodsParticipantReviewAdvice {
                     if (current.bootstrap() != bootstrap) return reject("BOOTSTRAP");
                     if (!participant.equals(current.companies().goodsTrade().participants().participants().get(action.subject())))
                         return reject("OWNER_TERMS");
-                    if (current.companies().goodsTrade().participants().economicState(action.subject()).inputRevision() != ownerInput)
-                        return reject("OWNER_INPUT");
+                    var currentInput = current.companies().goodsTrade().participants().economicState(action.subject());
+                    long inputShift = Math.subtractExact(currentInput.inputRevision(), ownerInput.inputRevision());
+                    if (inputShift != 0 && !currentInput.onlyMarketChangesSince(ownerInput)) return reject("OWNER_INPUT");
                     if (current.navigationGeometry() != navigation || current.physicalDeltas() != physical)
                         return reject("GEOMETRY");
                     if (!basis.equals(peers(current, participant))) return reject("PEER_IDENTITY");
@@ -42,7 +43,9 @@ final class GoodsParticipantReviewAdvice {
                             .orElse(Math.addExact(at.ticks(), bootstrap.ruleset().goodsTrade().reviewInterval())))
                         return reject("EXPIRED");
                     rejection = "NONE";
-                    return Optional.of(() -> GoodsParticipantProcess.prepare(current, action, executionAt, prepared));
+                    var refreshed = inputShift == 0 ? prepared : new SettlementEconomicPlanPreparation.Review(prepared.atTick(),
+                            prepared.prices(), prepared.publication().map(plan -> plan.withInputRevision(Math.addExact(plan.inputRevision(), inputShift))));
+                    return Optional.of(() -> GoodsParticipantProcess.prepare(current, action, executionAt, refreshed));
                 }
             };
         };
