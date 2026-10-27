@@ -87,7 +87,8 @@ public final class PedestrianPlanningWakeIndex {
         for (var entry : waits.entrySet()) if (!ownerHeld.contains(entry.getKey())) {
             var wait = entry.getValue();
             if (wait.origin() == Origin.LIVE_CONTINUATION || wait.action().dueAt().ticks() <= now || runnable.contains(entry.getKey()))
-                wait.requests().forEach(request -> requests.put(PedestrianDemandKey.of(request), request));
+                wait.requests().stream().filter(request -> !wait.reads().holdsReadFor(request))
+                        .forEach(request -> requests.put(PedestrianDemandKey.of(request), request));
             else until = Math.min(until, wait.action().dueAt().ticks());
         }
         retention = new Retention(now, until, List.copyOf(requests.values()), Set.copyOf(requests.keySet()));
@@ -106,9 +107,22 @@ public final class PedestrianPlanningWakeIndex {
         }
         released.clear();
     }
-    public void changed(List<PedestrianPlanningChange> changes) {
-        for (var change : changes) for (var id : dependents.getOrDefault(PedestrianDemandKey.of(change.request()), Set.of()))
-            if (!runnable.contains(id)) ready.add(id);
+    public void changed(List<PedestrianPlanningChange> changes) { changed(changes, ignored -> Optional.empty()); }
+    /** Acknowledge data delivery without running or accelerating the waiting business action. */
+    public void changed(List<PedestrianPlanningChange> changes,
+            java.util.function.Function<PedestrianRouteRequest, Optional<PedestrianCalculationMemory.Read>> completedRead) {
+        for (var change : changes) {
+            var read = change.kind() == PedestrianPlanningChange.Kind.RESULT_AVAILABLE ? completedRead.apply(change.request())
+                    : Optional.<PedestrianCalculationMemory.Read>empty();
+            for (var id : dependents.getOrDefault(PedestrianDemandKey.of(change.request()), Set.of())) {
+                if (read.isPresent()) {
+                    var wait = waits.get(id);
+                    waits.put(id, new Wait(wait.action(), wait.requests(), wait.origin(), wait.predecessor(), wait.reads().including(read.orElseThrow())));
+                    retention = null;
+                }
+                if (!runnable.contains(id)) ready.add(id);
+            }
+        }
     }
     /** An accepted wake transfers demand to the exact runnable generation. It does
      * not retire sibling calculations before the owner actually resumes. */

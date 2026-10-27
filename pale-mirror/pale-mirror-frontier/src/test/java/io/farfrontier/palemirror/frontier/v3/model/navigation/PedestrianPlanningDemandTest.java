@@ -7,6 +7,40 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningDemandTest {
+    @Test void deliveredNegativeEvidenceIsRetainedButReopensWhenItsTerrainChanges() {
+        var revision = PedestrianGeometryRevision.initial();
+        java.util.function.Function<PedestrianGeometryRevision, PedestrianRouteGeometry> geometry = current -> new PedestrianRouteGeometry() {
+            public Object version() { return current; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(current); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 16, 4); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return surface.x() == 2; }
+        };
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(3, 63, 1);
+        var original = geometry.apply(revision);
+        PedestrianCalculationMemory memory;
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(original, start, goal);
+            for (int n = 0; n < 100 && planner.pendingCount() > 0; n++) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(0, planner.pendingCount());
+            var request = PedestrianRouteRequest.of(original, start, goal);
+            var delivered = planner.readFact(request).orElseThrow();
+            assertEquals(PedestrianRouteResult.Status.NO_PATH, delivered.result().status());
+            memory = PedestrianCalculationMemory.empty().including(delivered);
+        }
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        PedestrianRoutePlanner unavailable = (g, from, to) -> {
+            calls.incrementAndGet(); return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "NOT_COMPUTED");
+        };
+        var remote = geometry.apply(revision.changed(Set.of(new PedestrianGeometryRevision.Region(7, 0))));
+        assertEquals(PedestrianRouteResult.Status.NO_PATH, PedestrianRoutePlanning.prepare(unavailable, memory, () ->
+                PedestrianRoutePlanning.query(remote, start, goal)).observation().result().status());
+        assertEquals(0, calls.get());
+        var changed = geometry.apply(revision.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))));
+        assertEquals(PedestrianRouteResult.Status.PLANNING, PedestrianRoutePlanning.prepare(unavailable, memory, () ->
+                PedestrianRoutePlanning.query(changed, start, goal)).observation().result().status());
+        assertEquals(1, calls.get(), "negative data cannot hide a later relevant terrain change");
+    }
     @Test void privateSuccessfulReadsValidateRegionalChangesAndCannotSurviveAForeignBaseline() throws Exception {
         var revision = PedestrianGeometryRevision.initial(); var geometry = ground(revision);
         var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(5, 63, 1);

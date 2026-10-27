@@ -7,10 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 public interface PedestrianRoutePlanner {
     /** Detached read capability. Live queues override this with an immutable retained-result view. */
     default PedestrianRoutePlanner readView() { return this; }
-    /** Detached successful evidence for an unfinished caller, never a route acquisition. */
+    /** Detached completed evidence for an unfinished caller, never a route acquisition. */
     default java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
         return peek(request.geometry(), request.start(), request.target(), request.extent())
-                .filter(PedestrianCalculationMemory::successful)
+                .filter(PedestrianCalculationMemory::capturable)
                 .map(result -> PedestrianCalculationMemory.Read.conservative(request, result));
     }
     /** Retire only a calculation acquired and abandoned by its current selection scope. */

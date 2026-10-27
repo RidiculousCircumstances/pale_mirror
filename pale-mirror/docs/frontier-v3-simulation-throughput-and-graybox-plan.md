@@ -1502,3 +1502,31 @@ calculation cannot inherit the released read set. Added demand coverage proves
 remote regional reuse but rejection after local change, foreignscope or newbaseline.
 Navigation/worker/wake/guardrails focus PASS24s; final addressed-wake and negative
 regional cases PASS15s. Exactref release/native impact still pending; G remainsOPEN.
+
+
+### Deliver completed calculation data independently of business execution (2026-10-28)
+
+ea4f82b2e exact release PASS109s (190 frontier checks/34classes, runtime/package),
+both retained311 deployments VERIFIED. Native queue reduced, but ordinary100 still
+fails: latest instant20609/debt6425. Named planning evidence
+`calculation-read-memory-second-planning.txt` shows24retained/24protected results,
+8awaiting publication and all8active searches already terminal (CONNECTED_KNOWN_ROUTE
+or CONNECTED_REGIONAL_ESTIMATE). This is shared completed-data backpressure, not
+8unfinished searches. Protecting completed data until its exact business owner can
+run permits a future/owner-held consumer to block publication required by earlier work.
+
+The common wake index now acknowledges completed data into each exact waiting
+continuation's immutable private read memory on RESULT_AVAILABLE. An acknowledged
+request no longer protects a shared result slot. Neither the schedule generation,
+deadline, canonical state nor business admission is changed by data delivery.
+Lossless route packing is prepared once on the search worker; server notification
+merges bounded references. Known terminal negatives are also deliverable, with the
+full surveyed dependency fence. Pending/missing knowledge is never cached as a
+completed answer. Use still checks current geometry, body/access scope and baseline;
+retirement discards private delivery. Existing capacity limits remain unchanged.
+
+Regression exercises140actual short searches for future live continuations through
+the real128result capacity, without executing any owner. It proves completion,
+shared eviction, private reuse and release on retirement. Negative-route coverage
+checks remote reuse and relevant-terrain reopening. Focus19sPASS before the final
+negative case; exact release and native throughput impact pending. G remainsOPEN.

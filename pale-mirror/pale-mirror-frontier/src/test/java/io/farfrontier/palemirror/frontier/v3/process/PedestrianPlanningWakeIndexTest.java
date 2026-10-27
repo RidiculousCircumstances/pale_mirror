@@ -11,6 +11,42 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void completedDataReleasesSharedCapacityBeforeFutureOwnersExecute() throws Exception {
+        var index = new PedestrianPlanningWakeIndex();
+        var owners = new java.util.ArrayList<ScheduledAction>();
+        var requests = new java.util.ArrayList<PedestrianRouteRequest>();
+        try (var planner = new CooperativePedestrianPlanner()) {
+            for (int i = 0; i < 140; i++) {
+                var point = SurfaceAnchor.at(i % 28 + 1, 63, i / 28 + 3);
+                var request = PedestrianRouteRequest.of(GROUND, point, SurfaceAnchor.at(point.x() + 1, 63, point.z()));
+                var owner = action("future-mailbox-" + i, 6000);
+                owners.add(owner); requests.add(request); index.replace(owner, List.of(request));
+                planner.query(GROUND, request.start(), request.target());
+            }
+            planner.retainDemandKeys(index.retainedDemandKeys(new SimInstant(20)));
+            for (int slice = 0; slice < 1024 && planner.pendingCount() > 0; slice++) {
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+                index.changed(planner.drainChanges(), planner::readFact);
+                planner.retainDemandKeys(index.retainedDemandKeys(new SimInstant(20)));
+            }
+            assertEquals(0, planner.pendingCount(), "future business deadlines must not pin the completed-result buffer");
+            assertEquals(140, planner.completedCount());
+            assertTrue(index.retainedDemandKeys(new SimInstant(20)).isEmpty(), "every subscribed owner acknowledged its own data");
+            assertEquals(140, index.waitingCount(), "data delivery neither executes nor retires business work");
+            assertTrue(owners.stream().allMatch(owner -> owner.dueAt().ticks() == 6000));
+            var first = requests.getFirst();
+            assertTrue(planner.peek(GROUND, first.start(), first.target()).isEmpty(), "real shared capacity evicted the oldest result");
+            var resumed = PedestrianRoutePlanning.prepare(planner.readView(), index.reads(owners.getFirst()), () ->
+                    PedestrianRoutePlanning.query(GROUND, first.start(), first.target()));
+            assertEquals(PedestrianRouteResult.Status.FOUND, resumed.observation().result().status());
+            assertEquals(0, planner.pendingCount(), "the waiting owner already has the evicted data");
+            assertTrue(resumed.observation().requests().isEmpty());
+            index.remove(owners.getFirst().id());
+            assertEquals(PedestrianRouteResult.Status.PLANNING, PedestrianRoutePlanning.prepare(planner.readView(),
+                    index.reads(owners.getFirst()), () -> PedestrianRoutePlanning.query(GROUND, first.start(), first.target()))
+                    .observation().result().status(), "retiring the owner releases its private delivery");
+        }
+    }
     @Test void unfinishedPreparationKeepsItsFirstLegWhenSharedResultsAreEvictedBeforeTheSecondLeg() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("two-leg-preparation", 20);
         var first = request(3); var end = SurfaceAnchor.at(6, 63, 1);

@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model.navigation;
 
 import java.util.*;
 
-/** Successful reads owned by one unfinished calculation, independent of the shared
+/** Completed reads owned by one unfinished calculation, independent of the shared
  * result cache. Immutable facts only: no reader, parent session, actor or world writer. */
 public final class PedestrianCalculationMemory {
     private static final int MAX_READS = 32, MAX_COORDINATES = 131_072;
@@ -35,7 +35,7 @@ public final class PedestrianCalculationMemory {
         private final Saved saved;
         private final Fence fence;
         private Read(PedestrianRouteRequest request, PedestrianRouteResult result, Fence fence) {
-            if (!successful(result)) throw new IllegalArgumentException("calculation memory needs successful evidence");
+            if (!capturable(result)) throw new IllegalArgumentException("calculation memory needs completed evidence");
             this.key = PedestrianDemandKey.of(request); this.fence = fence;
             this.saved = result.route().isEmpty() ? new Direct(result) : new Packed(result.status(),
                     PedestrianPathProof.from(result.route()), result.workUnits(), result.regions(), result.reason());
@@ -49,18 +49,22 @@ public final class PedestrianCalculationMemory {
                     new Regional(dependencies, revision.baseline()))).orElseGet(() -> conservative(request, result));
         }
         public PedestrianRouteResult result() { return saved.restore(); }
-        private boolean matches(PedestrianRouteRequest request) {
+        boolean matches(PedestrianRouteRequest request) {
             return key.equals(PedestrianDemandKey.of(request)) && fence.matches(request.geometry());
         }
     }
-    static boolean successful(PedestrianRouteResult result) {
-        return result.status() == PedestrianRouteResult.Status.FOUND || result.status() == PedestrianRouteResult.Status.SEGMENT_READY
-                || result.status() == PedestrianRouteResult.Status.ESTIMATED;
-    }
+    static boolean capturable(PedestrianRouteResult result) { return result.status() != PedestrianRouteResult.Status.PLANNING && !result.awaitable(); }
     private final List<Read> reads;
     private PedestrianCalculationMemory(List<Read> reads) { this.reads = List.copyOf(reads); }
     public static PedestrianCalculationMemory empty() { return EMPTY; }
     Optional<Read> find(PedestrianRouteRequest request) { return reads.stream().filter(read -> read.matches(request)).findFirst(); }
+    /** Delivery acknowledgment is independent of later geometry validity or business time. */
+    public boolean holdsReadFor(PedestrianRouteRequest request) {
+        var key = PedestrianDemandKey.of(request); return reads.stream().anyMatch(read -> read.key.equals(key));
+    }
+    public PedestrianCalculationMemory including(Read read) {
+        var builder = new Builder(); builder.addAll(this); builder.add(Objects.requireNonNull(read)); return builder.snapshot();
+    }
     static final class Builder {
         private final Map<PedestrianDemandKey, Read> reads = new LinkedHashMap<>();
         void add(Read read) { reads.put(read.key, read); }

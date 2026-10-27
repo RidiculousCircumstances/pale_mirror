@@ -58,7 +58,7 @@ final class FrontierV3PedestrianPlanning {
             continuations.releaseUnused(planner::discardUnobserved);
             planner.retainDemandKeys(continuations.retainedDemandKeys(runtime.canonicalState().orElseThrow().instant()));
             planner.advance(workTurn, () -> System.nanoTime() - started < remainingHostNanos);
-            continuations.changed(planner.drainChanges());
+            continuations.changed(planner.drainChanges(), planner::readFact);
             admitReady(runtime, continuations);
             deferredReady = continuations.readyCount();
         } finally { remainingHostNanos = Math.max(0L, remainingHostNanos - (System.nanoTime() - started)); }

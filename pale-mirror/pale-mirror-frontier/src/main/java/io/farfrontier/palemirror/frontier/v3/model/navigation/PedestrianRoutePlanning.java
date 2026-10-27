@@ -11,7 +11,7 @@ public final class PedestrianRoutePlanning {
     private static PedestrianRoutePlanner current = DIRECT;
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> observations = new ThreadLocal<>();
     private static final ThreadLocal<PedestrianRoutePlanner> readBinding = new ThreadLocal<>();
-    private static final ThreadLocal<PedestrianCalculationMemory.Builder> successfulReads = new ThreadLocal<>();
+    private static final ThreadLocal<PedestrianCalculationMemory.Builder> completedReads = new ThreadLocal<>();
     private static final ThreadLocal<Inspection> inspection = new ThreadLocal<>();
     private static final ThreadLocal<PedestrianPlanningService> service = new ThreadLocal<>();
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> acquired = new ThreadLocal<>();
@@ -48,8 +48,8 @@ public final class PedestrianRoutePlanning {
         boolean created = acquisition != null && !planner.hasCalculation(geometry, start, target, extent);
         var result = planner.query(geometry, start, target, extent,
                 service.get() == null ? PedestrianPlanningService.ORDINARY : service.get());
-        var reads = successfulReads.get();
-        if (reads != null && PedestrianCalculationMemory.successful(result)) {
+        var reads = completedReads.get();
+        if (reads != null && PedestrianCalculationMemory.capturable(result)) {
             var request = PedestrianRouteRequest.of(geometry, start, target, extent);
             reads.add(planner.readFact(request).orElseGet(() -> PedestrianCalculationMemory.Read.conservative(request, result)));
         }
@@ -58,6 +58,12 @@ public final class PedestrianRoutePlanning {
         return result;
     }
 
+    /** Current completed evidence only, for acknowledged delivery to an exact waiting caller. */
+    public static java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
+        PedestrianRoutePlanner planner;
+        synchronized (PedestrianRoutePlanning.class) { planner = readBinding.get() == null ? current : readBinding.get(); }
+        return planner.readFact(request);
+    }
     /** Capture on the owner thread; run advice without acquiring live route work. */
     public static synchronized PedestrianRoutePlanner readView() { return current.readView(); }
     public static <T> Prepared<T> prepare(PedestrianRoutePlanner view, java.util.function.Supplier<T> calculation) {
@@ -144,7 +150,7 @@ public final class PedestrianRoutePlanning {
         }
     }
 
-    /** Resume one caller's positive reads while fresh queries still use the live
+    /** Resume one caller's completed reads while fresh queries still use the live
      * capability. Missing facts cannot be supplied by calculation memory. */
     public static <T> Observation<T> observe(PedestrianCalculationMemory memory, java.util.function.Supplier<T> calculation) {
         var previous = readBinding.get(); PedestrianRoutePlanner delegate;
@@ -181,15 +187,15 @@ public final class PedestrianRoutePlanning {
     public static <T> Observation<T> observe(java.util.function.Supplier<T> calculation) {
         var previous = observations.get();
         var previousAcquired = acquired.get();
-        var previousReads = successfulReads.get();
-        var reads = new PedestrianCalculationMemory.Builder(); successfulReads.set(reads);
+        var previousReads = completedReads.get();
+        var reads = new PedestrianCalculationMemory.Builder(); completedReads.set(reads);
         var created = new java.util.LinkedHashSet<PedestrianRouteRequest>(); acquired.set(created);
         var requests = new java.util.LinkedHashSet<PedestrianRouteRequest>();
         observations.set(requests);
         try { var result = calculation.get(); return new Observation<>(result, java.util.List.copyOf(requests), reads.snapshot()); }
         finally {
-            if (previousReads == null) successfulReads.remove();
-            else { previousReads.addAll(reads.snapshot()); successfulReads.set(previousReads); }
+            if (previousReads == null) completedReads.remove();
+            else { previousReads.addAll(reads.snapshot()); completedReads.set(previousReads); }
             PedestrianRoutePlanner planner;
             synchronized (PedestrianRoutePlanning.class) { planner = readBinding.get() == null ? current : readBinding.get(); }
             // A newly launched alternative which the selector did not retain

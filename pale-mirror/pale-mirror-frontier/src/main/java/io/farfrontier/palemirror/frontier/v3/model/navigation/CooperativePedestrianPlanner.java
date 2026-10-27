@@ -9,7 +9,8 @@ import java.util.Map;
 public final class CooperativePedestrianPlanner implements PedestrianRoutePlanner, AutoCloseable {
     private static final int MAX_DEFERRED_DEMANDS = 65_535;
     private static final int MAX_PENDING = 8, MAX_RESULTS = 128, MAX_RETAINED_SURFACES = 131_072, MAX_RETAINED_REGIONS = 16_384;
-    private record Completed(PedestrianRouteResult result, PedestrianRegionDependencies dependencies) { }
+    private record Completed(PedestrianRouteResult result, PedestrianRegionDependencies dependencies,
+                             java.util.Optional<PedestrianCalculationMemory.Read> read) { }
     private final Map<PedestrianRouteRequest, PedestrianSearchTask> pending = new LinkedHashMap<>();
     private final Map<PedestrianRouteRequest, PedestrianSearchTask> suspended = new LinkedHashMap<>();
     private final PedestrianPlanningFairness fairness = new PedestrianPlanningFairness();
@@ -192,7 +193,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         forgetAddress(request); completedCount++;
         completedOutcomes.merge(result.status(), 1L, Math::addExact);
         corridors.remember(request.geometry(), result, dependency);
-        completed.put(request, new Completed(result, dependency)); retainedSurfaces += result.route().size();
+        completed.put(request, new Completed(result, dependency, search.preparedRead())); retainedSurfaces += result.route().size();
         knowledgeDemandCache = null;
         retainedRegions += dependency.revisions().size();
         changes.put(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE);
@@ -367,6 +368,10 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         }
         return java.util.Optional.empty();
     }
+    @Override public synchronized java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
+        return completed.values().stream().map(Completed::read).flatMap(java.util.Optional::stream)
+                .filter(read -> read.matches(request)).findFirst();
+    }
     /** Snapshot publication does not expose or mutate the live calculation queue. */
     @Override public synchronized PedestrianRoutePlanner readView() {
         var retained = java.util.List.copyOf(completed.entrySet().stream()
@@ -380,11 +385,9 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 return peek(geometry, start, target, extent).orElseGet(() -> waiting("PLANNING_NOT_REQUESTED"));
             }
             @Override public java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
-                for (var entry : retained) if (entry.getKey().sameDemand(request)
-                        && entry.getValue().dependencies().matches(request.geometry())
-                        && PedestrianCalculationMemory.successful(entry.getValue().result()))
-                    return java.util.Optional.of(PedestrianCalculationMemory.Read.regional(entry.getKey(),
-                            entry.getValue().result(), entry.getValue().dependencies()));
+                var read = retained.stream().map(entry -> entry.getValue().read()).flatMap(java.util.Optional::stream)
+                        .filter(value -> value.matches(request)).findFirst();
+                if (read.isPresent()) return read;
                 return PedestrianRoutePlanner.super.readFact(request);
             }
             @Override public java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry,

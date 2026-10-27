@@ -28,7 +28,7 @@ public final class PedestrianPlanningContinuations {
             for (var wait : waits) if (retained.test(wait.action()) && !owner.tracks(wait.action())) {
                 var ready = wait.advice().acquire();
                 owner.restore(wait.action(), wait.advice().observation().requests());
-                owner.changed(ready);
+                owner.changed(ready, PedestrianRoutePlanning::readFact);
             }
         }
     }
@@ -85,7 +85,7 @@ public final class PedestrianPlanningContinuations {
                 var ready = prepared.acquire();
                 if (index == null) return prepared.observation().result();
                 var result = publish(index, action, prepared.observation(), prepared.reads());
-                index.changed(ready);
+                index.changed(ready, PedestrianRoutePlanning::readFact);
                 return result;
             };
         };
@@ -105,7 +105,7 @@ public final class PedestrianPlanningContinuations {
                     if (current != index) throw new IllegalStateException("advice lost its planning runtime owner");
                     return prepared.observation().result().revalidate(state, at).map(preparation -> {
                         var ready = prepared.acquire();
-                        if (index != null) index.changed(ready);
+                        if (index != null) index.changed(ready, PedestrianRoutePlanning::readFact);
                         var exactView = PedestrianRoutePlanning.readView();
                         return () -> {
                             var exact = PedestrianRoutePlanning.prepare(exactView, prepared.reads(), preparation::prepare);
@@ -117,7 +117,7 @@ public final class PedestrianPlanningContinuations {
                                 var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
                                 requests.addAll(exact.observation().requests()); requests.addAll(completion.requests());
                                 var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)), exact.reads().merge(completion.reads()));
-                                index.changed(changes); return result;
+                                index.changed(changes, PedestrianRoutePlanning::readFact); return result;
                             };
                         };
                     });

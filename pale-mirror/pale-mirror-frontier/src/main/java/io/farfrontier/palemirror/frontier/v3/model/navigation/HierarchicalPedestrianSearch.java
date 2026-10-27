@@ -65,6 +65,7 @@ public final class HierarchicalPedestrianSearch {
     private boolean reusePrepared;
     private boolean itineraryPublished;
     private Map<PedestrianRegion.Tile, Object> terminalProof, itineraryProof;
+    private PedestrianCalculationMemory.Read preparedRead;
     private boolean destinationChecked;
     private int endpointsChecked;
     private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
@@ -141,8 +142,15 @@ public final class HierarchicalPedestrianSearch {
      */
     synchronized void preparePublication() {
         if (itinerary != null) itineraryDependencies();
-        if (terminal != null) resultDependencies();
+        if (terminal != null) {
+            resultDependencies();
+            if (preparedRead == null && PedestrianCalculationMemory.capturable(terminal)) {
+                var request = PedestrianRouteRequest.of(geometry, start, target, extent);
+                preparedRead = PedestrianCalculationMemory.Read.regional(request, terminal, dependencies());
+            }
+        }
     }
+    synchronized java.util.Optional<PedestrianCalculationMemory.Read> preparedRead() { return java.util.Optional.ofNullable(preparedRead); }
     private Map<PedestrianRegion.Tile, Object> proofDependencies(List<SurfaceAnchor> surfaces) {
         var proof = new LinkedHashMap<PedestrianRegion.Tile, Object>();
         for (var surface : surfaces) {

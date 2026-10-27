@@ -67,6 +67,7 @@ final class PedestrianSearchTask {
         }
         search.publishReuse(); return step;
     }
+    java.util.Optional<PedestrianCalculationMemory.Read> preparedRead() { return search.preparedRead(); }
     void cancel() { cancelled = true; }
     private void reset() { search = factory.apply(request); searchGeometry = request.geometry(); }
     private static Step calculate(HierarchicalPedestrianSearch search, int budget, BooleanSupplier mayContinue) {
