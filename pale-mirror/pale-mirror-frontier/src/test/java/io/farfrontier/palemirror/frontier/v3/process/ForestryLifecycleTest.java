@@ -99,6 +99,14 @@ class ForestryLifecycleTest {
         assertEquals(249, state.inventory().items().get(job.toolId()).condition().remaining());
         assertTrue(job.target().isEmpty()); assertTrue(job.felling().isEmpty());
         assertEquals(ForestryWork.Phase.SELECT_TREE, job.phase());
+        var pendingState = state; var pendingJob = job;
+        PedestrianRoutePlanner waiting = (geometry, origin, destination) -> new PedestrianRouteResult(
+                PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "PENDING_SOURCE_ROUTE");
+        var prepared = PedestrianRoutePlanning.prepare(waiting, () -> assertThrows(
+                KnownPedestrianNavigation.RouteUnavailable.class, () -> ForestryWorkSelection.next(pendingState, pendingJob)));
+        assertEquals(PedestrianRouteResult.Status.PLANNING, prepared.observation().result().status());
+        assertEquals(1, prepared.demands().size(), "one unresolved source cannot fan out into every tree and work station");
+        assertEquals(1, prepared.observation().requests().size());
     }
     @Test void equipmentReturnCannotBePreparedAtThePreviousCargoWarehouseWhenItsFilterRefusesTheTool() {
         var f = fixture(); var state = ForestryWorkAdmission.start(f.state(), f.start(), f.tick());

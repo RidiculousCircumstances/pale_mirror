@@ -22,7 +22,6 @@ public final class ForestryWorkSelection {
                 .filter(header -> state.forest().find(header.tree()).map(tree -> tree.remaining() > 0).orElse(true))
                 .sorted(Comparator.comparingLong((GrayboxForestPlan.Header header) -> distance(origin.support(), header.origin()))
                         .thenComparing(header -> header.tree().id())).limit(MAX_SOURCE_TRIALS).toList();
-        KnownPedestrianNavigation.RouteUnavailable waiting = null;
         for (var header : headers) {
             var tree = state.forest().find(header.tree()).orElseGet(() -> ForestTree.initial(plan.describe(header)));
             if (tree.remaining() + carried > rules.cargoItems() || !serviceable(state, job, tree)) continue;
@@ -39,11 +38,12 @@ public final class ForestryWorkSelection {
                             new ForestryWork.Target(tree.reference(), tree.revision(), station, tree.remaining()), approach,
                             destination.orElseThrow().endpoint(), destination.orElseThrow().route()));
                 } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
-                    if (pending.status() != PedestrianRouteResult.Status.NO_PATH) waiting = pending;
+                    // Unknown calculation is not a rejected candidate. Retain its
+                    // exact wait instead of enqueueing every other tree station.
+                    if (pending.status() != PedestrianRouteResult.Status.NO_PATH) throw pending;
                 }
             }
         }
-        if (waiting != null) throw waiting;
         return Optional.empty();
     }
     public static void require(FrontierWorldState state, ForestryWork job, ForestryWorkAdvanced.TreeSelection selected) {

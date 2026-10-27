@@ -703,3 +703,26 @@ StationWorkValidation uses the existing duplicate-rejecting installation directo
 instead of scanning every container per job. Focused changed/negative/recovery
 validation, forest, population, nutrition and station tests plus guardrails pass34s
 (shared-forest-and-invariant-focused.log). Native speed effect still unmeasured.
+
+354 exact release/packaged/economy55 gate passes39s; both retained worlds verified
+SHA51268c5273f0868f13c3f493a6e1e5ca48250139fc8183e36d91c1de7b8ebddef5b5632ec13ab4042c6ccb5926c23f9079e9549f3fb0db54516ac6f1e57e6ae3ad9.
+Native observer86844->87960/333s,debt710->6257 stillFAILS throughput. The new bounded
+20sJFR(shared-forest-facts-native.jfr/full-stack CPUJSON) changes the attribution:
+route-view construction31/207preparation samples vs97/335before, but main-thread
+fairness/admitDeferred now273/516server samples. nextAdmission re-scanned every
+deferred request, including empty priority lanes, at every repeated query. It now
+indexes waiting heads by declared service and stable queue sequence. Promotion,
+suspension, cancellation and immutable geometry readdress preserve the exact
+service/order story; active quota/rotation and bounded worker capacity are unchanged.
+No domain priority, resource or actor authority enters this derived index.
+
+A connected source-selection error kept trying all trees/stations after an
+unresolved first route, producing hundreds of speculative demands for one worker.
+Forestry admission/selection now waits on that candidate; only proven NO_PATH
+tries the next one. The existing external-tree-loss regression now also checks
+one retained route dependency on the real resumed SELECT_TREE path. Existing
+real-cooperative worker cases exercise FIFO across geometry refresh, promotion,
+lending/reclaim, late cancellation, result retention/backpressure and eventual
+local/distant completion. Queue/negative tests+guardrails pass17s; combined
+forestry/queue pass29s; augmented external-loss lifecycle passes25s. No timing
+assertion or capacity increase. Native effect remains to be measured.

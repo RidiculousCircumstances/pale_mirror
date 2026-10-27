@@ -84,7 +84,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 invalidated(request);
                 return waiting("PLANNING_DEMAND_CAPACITY");
             }
-            deferred.putIfAbsent(request, waiting("PLANNING_QUEUE_CAPACITY"));
+            if (deferred.putIfAbsent(request, waiting("PLANNING_QUEUE_CAPACITY")) == null) fairness.defer(request);
         }
         admitDeferred();
         return waiting(pending.containsKey(request) ? "PLANNING_QUEUED" : "PLANNING_QUEUE_CAPACITY");
@@ -186,7 +186,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         // Also used after invalidation frees capacity, before a new caller can overtake retained waiters.
         int visits = MAX_PENDING;
         while (!deferred.isEmpty() && visits-- > 0) {
-            var admitted = fairness.nextAdmission(deferred.keySet(), pending.keySet());
+            var admitted = fairness.nextAdmission(pending.keySet());
             if (pending.size() == MAX_PENDING) {
                 var victim = fairness.yieldFor(admitted, pending.keySet(), ready);
                 if (victim == null) break;
@@ -194,9 +194,9 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 // active-window worth; evicting derived work grants no outcome.
                 if (suspended.size() == MAX_PENDING) discardSuspended(suspended.keySet().iterator().next());
                 suspended.put(victim, pending.remove(victim)); ready.remove(victim);
-                deferred.put(victim, waiting("PLANNING_SERVICE_YIELD"));
+                deferred.put(victim, waiting("PLANNING_SERVICE_YIELD")); fairness.defer(victim);
             }
-            deferred.remove(admitted);
+            deferred.remove(admitted); fairness.admit(admitted);
             var retained = suspended.remove(admitted);
             pending.put(admitted, retained == null ? task(admitted) : retained);
             ready.addLast(admitted);
@@ -254,7 +254,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     /** A compatible immutable view is neither a result nor a lost dependency.
      * Consumers subscribe by complete demand scope and still revalidate current geometry. */
     private void readdress(PedestrianRouteRequest request, PedestrianRouteRequest replacement) {
-        forgetAddress(request);
+        var address = fairness.capture(request);
+        forgetAddress(request); fairness.restore(replacement, address);
         if (!request.sameDemand(replacement)) changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED);
     }
     private void removeCompleted(PedestrianRouteRequest request) {
@@ -273,10 +274,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         for (var request : java.util.List.copyOf(pending.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
             long since = admittedAt.get(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
-            var lane = fairness.lane(request);
             var search = pending.remove(request); readdress(request, replacement);
             if (search.rebase(replacement)) {
-                fairness.restore(replacement, lane);
                 pending.put(replacement, search);
                 // Replacing an immutable view is not a new calculation turn.
                 // Preserve round-robin position: rebuilding views every tick
@@ -305,7 +304,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             }
             long since = admittedAt.get(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
-            var lane = fairness.lane(request); readdress(request, replacement); fairness.restore(replacement, lane);
+            readdress(request, replacement);
             var retained = suspended.remove(request);
             if (retained != null) {
                 if (retained.rebase(replacement)) suspended.put(replacement, retained);

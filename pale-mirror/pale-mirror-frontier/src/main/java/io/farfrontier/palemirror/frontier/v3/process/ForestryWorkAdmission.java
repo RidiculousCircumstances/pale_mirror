@@ -27,17 +27,15 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
                 .filter(header -> state.forest().find(header.tree()).map(tree -> tree.remaining() > 0).orElse(true))
                 .sorted(Comparator.comparingLong((GrayboxForestPlan.Header header) -> distance(origin.support(), header.origin()))
                         .thenComparing(header -> header.tree().id())).limit(MAX_SOURCE_TRIALS).toList();
-        KnownPedestrianNavigation.RouteUnavailable waiting = null;
         for (var header : headers) {
             var tree = state.forest().find(header.tree()).orElseGet(() -> ForestTree.initial(plan.describe(header)));
             if (tree.remaining() > rules.cargoItems()) continue;
             String output = rules.requireHarvest(tree.declaration().species(), tree.declaration().logs().block(0).kind()).outputItem();
             if (!ForestryStockDemand.requested(state, resident.settlementId(), output, Optional.empty())) continue;
             var requirement = new ToolRequirement(rules.tool().ability(), rules.tool().minimumGrade(), Math.multiplyExact(rules.tool().wear(), tree.remaining()));
-            Optional<WorkEquipmentSelection.Selection> tool;
-            try { tool = WorkEquipmentSelection.select(state, resident.settlementId(), origin, state.actorLocations().get(resident.id()).navigationProfile(),
-                    EquipmentRequirements.allOf(Set.of(requirement)), WorkEquipmentClaimComposition.reserved(state)); }
-            catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = pending; continue; }
+            var tool = WorkEquipmentSelection.select(state, resident.settlementId(), origin,
+                    state.actorLocations().get(resident.id()).navigationProfile(),
+                    EquipmentRequirements.allOf(Set.of(requirement)), WorkEquipmentClaimComposition.reserved(state));
             if (tool.isEmpty()) continue;
             var selected = tool.orElseThrow(); var knowledge = ResourceStorageNavigation.forEndpoint(state, selected.source()).forActor(state, resident.id());
             var contact = lowest(tree);
@@ -50,7 +48,7 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
                 Optional<PedestrianRouteReceipt> sourceRoute;
                 try { sourceRoute = receipt(knowledge.plannedBetween(selected.source().station(), station)); }
                 catch (KnownPedestrianNavigation.RouteUnavailable pending) {
-                    if (pending.status() != PedestrianRouteResult.Status.NO_PATH) { waiting = pending; break; }
+                    if (pending.status() != PedestrianRouteResult.Status.NO_PATH) throw pending;
                     continue;
                 }
                 for (var store : stores) try {
@@ -60,11 +58,10 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
                     return Optional.of(new ResidentWorkOffer<>(kind(), resident.id(), event,
                             List.of(new WorkReservationClaim.ExactResource(selected.item().id(), 1))));
                 } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
-                    if (pending.status() != PedestrianRouteResult.Status.NO_PATH) waiting = pending;
+                    if (pending.status() != PedestrianRouteResult.Status.NO_PATH) throw pending;
                 }
             }
         }
-        if (waiting != null) throw waiting;
         return Optional.empty();
     }
     private static ForestryWorkStarted declaration(FrontierWorldState state, ResidentProfile resident,
