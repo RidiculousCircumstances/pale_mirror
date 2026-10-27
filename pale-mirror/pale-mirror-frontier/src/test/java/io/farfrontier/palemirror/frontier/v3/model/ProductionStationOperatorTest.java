@@ -36,6 +36,21 @@ class ProductionStationOperatorTest {
                 state.productionStations().require(station.id()).revision(), PLAYER, BakeryRecipes.BREAD, stage, tick));
         return stage == ProductionStationOperatorChanged.Stage.PAUSE ? next : ProductionCombustionFixtures.igniteHotIfNeeded(next, station.id(), tick);
     }
+    @Test void idleAttendedMachineSleepsUntilItsOperationOwnerChangesAndRecoveryKeepsTheWait() {
+        var fixture = fixture(); var station = fixture.station(); var before = fixture.state();
+        var action = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
+                .configuration(before.bootstrap()).initialSchedules().stream()
+                .filter(value -> value.subject().equals(station.id()) && value.kind().equals("frontier.production_station.review"))
+                .findFirst().orElseThrow();
+        assertTrue(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.scheduledHeld(before, action));
+        var proof = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.holdProof(before, action).orElseThrow();
+        assertTrue(proof.stillHeld().test(before)); assertTrue(proof.wakeKeys().contains(station.id()));
+        var codec = new FrontierWorldStateCodec();
+        assertTrue(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.scheduledHeld(codec.decode(codec.encode(before)), action));
+        var active = observe(before, station, ProductionStationOperatorChanged.Stage.START, 200);
+        assertFalse(proof.stillHeld().test(active));
+        assertFalse(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.scheduledHeld(active, action));
+    }
     @Test void automaticClockDoesNotDependOnPlayerOrResidentAttendance() {
         var fixture = fixture(); var state = observe(fixture.state(), fixture.station(), ProductionStationOperatorChanged.Stage.START, 200);
         var manual = state.bootstrap().ruleset().production().require(BakeryRecipes.BREAD);

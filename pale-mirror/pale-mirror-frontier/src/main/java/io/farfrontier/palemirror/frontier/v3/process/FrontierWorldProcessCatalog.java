@@ -623,6 +623,7 @@ public final class FrontierWorldProcessCatalog {
         var resident = next.humanPopulation().resident(event.subject());
         if (resident == null) resident = previous.humanPopulation().resident(event.subject());
         if (resident != null) keys.add(resident.id());
+        keys.addAll(ProductionStationProcessModule.wakeKeys(previous, next));
 
         // Geometry affects clearance independently of stock/access. This bounded settlement
         // dependency also covers observed player edits whose event subject is the executor.
