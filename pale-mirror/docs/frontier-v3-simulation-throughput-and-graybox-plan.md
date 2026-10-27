@@ -891,3 +891,19 @@ resource or cell is reserved by waiting, and a later current-state review still
 validates all real admission facts. Existing labour regression distinguishes pending
 from NO_PATH, alongside actual harvest/forestry/extraction replay/bakery cases.
 Focused changed families+guardrails PASS38s; exact final ref/native effect pending.
+
+
+2fd66c9d4 exactselectedrelease/packaged/economy55/route-patrol4 PASS64s; notdeployed
+separately. Completing the connected harvest path before the next native comparison:
+new jobs explicitly start ACQUIRING, whose semantic first goal is the tool endpoint.
+Admission nevertheless cloned the strategic/site state and recalculated that same
+trip under a field-scoped geometry; even earlier equipment waits cloned task ACTIVE.
+The selected tool already carries its accepted shared-storage route. Admission now
+reuses it, activating the projected task only after a real offer. Equipment/depot
+navigation uses the same generic storage knowledge as other jobs; only WORK_CELL
+uses the typed field overlay. Actual field travel is planned by the retained job
+from its post-tool position. Current-job ownership, route endpoint/body/profile
+checks, service permission, reservation and reducer validation stay intact.
+The pending-farmer existence inquiry also uses existing residentsIn(home), not a
+whole-world resident scan. No new lookup owner or canonical schema. Changed field,
+equipment, labour and navigation negative coverage +guardrails PASS28s.

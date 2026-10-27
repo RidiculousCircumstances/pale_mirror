@@ -74,8 +74,7 @@ final class ResourceSiteHarvestPlanning {
         if (candidates.isEmpty()) return List.of();
         var events = new java.util.ArrayList<ProposedEvent>();
         boolean activate = task.status() == StrategicTaskStatus.PENDING;
-        FrontierWorldState projected = activate ? state.withStrategicPlans(
-                state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE)) : state;
+        FrontierWorldState projected = state;
         ResidentWorkProvider<ResourceSiteHarvestStarted> provider = provider(task, site);
         boolean sharedFields = state.resourceSiteDescriptors().values().stream()
                 .filter(field -> field.settlementId().equals(settlement.id()))
@@ -89,7 +88,10 @@ final class ResourceSiteHarvestPlanning {
             ResourceSiteHarvestStarted started = offered.orElseThrow().execution();
             ResourceSiteHarvestJob job = started.job();
             PhysicalIntent intent = intent(site, job);
-            if (events.isEmpty() && activate) events.add(transition(task, StrategicTaskStatus.ACTIVE));
+            if (events.isEmpty() && activate) {
+                events.add(transition(task, StrategicTaskStatus.ACTIVE));
+                projected = projected.withStrategicPlans(projected.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+            }
             events.add(new ProposedEvent(site.id(), started));
             events.add(new ProposedEvent(site.id(), new PhysicalIntentPrepared(intent)));
             long due = Math.addExact(atTick, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
@@ -209,35 +211,17 @@ final class ResourceSiteHarvestPlanning {
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> fieldRoute = java.util.Optional.empty();
         if (outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED
                 && outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
-            var plans = state.strategicPlans();
-            if (plans.tasks().get(task.id()).status() == StrategicTaskStatus.PENDING)
-                plans = plans.transitionTask(task.id(), StrategicTaskStatus.ACTIVE);
-            FrontierWorldState admitted = state.withChanges(FrontierWorldStateUpdate.begin()
-                    .strategicPlans(plans).resourceSites(state.resourceSites().replace(lifecycle.harvesting(job))));
-            try {
-                var route = ResourceSiteHarvestKnownNavigation.plannedPath(admitted, job);
-                fieldRoute = route.size() < 2 ? java.util.Optional.empty() : java.util.Optional.of(
-                        new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route));
-            } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
-                if (unavailable.planning()) return java.util.Optional.empty();
-                java.util.Optional<ResourceSiteHarvestRetargeting.Selection> alternate;
-                try { alternate = ResourceSiteHarvestRetargeting.coldAlternative(admitted, job); }
-                catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable pending) {
-                    if (!pending.planning()) throw pending;
-                    return java.util.Optional.empty();
-                }
-                if (alternate.isEmpty()) return java.util.Optional.empty();
-                job = job.withProgress(job.progress().withSelectedCropSlot(alternate.orElseThrow().slot())).bindTarget(field);
-                fieldRoute = alternate.orElseThrow().plannedRoute();
-            }
+            // ACQUIRING names the tool endpoint, not a crop. Reuse the already
+            // accepted shared-storage route; the live job plans its field leg
+            // after tool pickup from the actor's then-current supported position.
+            fieldRoute = equipment.orElseThrow().route();
         }
         return java.util.Optional.of(new ResourceSiteHarvestStarted(job, fieldRoute, storageRoute));
     }
 
     private static boolean livingFarmerExists(FrontierWorldState state, SubjectId settlementId) {
-        return state.humanPopulation().residents().values().stream()
-                .anyMatch(resident -> resident.settlementId().equals(settlementId)
-                        && SettlementWorkPolicy.permissions(state, settlementId).permits(ResidentWorkKind.AGRICULTURE, resident.id())
+        return state.humanPopulation().residentsIn(settlementId).stream()
+                .anyMatch(resident -> SettlementWorkPolicy.permissions(state, settlementId).permits(ResidentWorkKind.AGRICULTURE, resident.id())
                         && state.actorLocations().containsKey(resident.id())
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE);
     }
