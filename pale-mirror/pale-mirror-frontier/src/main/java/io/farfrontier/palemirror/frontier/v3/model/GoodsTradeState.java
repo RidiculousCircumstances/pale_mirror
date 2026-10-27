@@ -25,11 +25,11 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     public static final int MAX_CONTRACTS = 1_024;
     public static final int MAX_ORDERS = 2_048;
     public GoodsTradeState {
-        orders = Map.copyOf(orders);
+        orders = ImmutableLookupMap.copyOf(orders);
         java.util.Objects.requireNonNull(participants);
         java.util.Objects.requireNonNull(priceHistory);
         java.util.Objects.requireNonNull(demandHistory);
-        contracts = Map.copyOf(contracts);
+        contracts = ImmutableLookupMap.copyOf(contracts);
         if (orders.size() > MAX_ORDERS || orders.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))
                 || contracts.size() > MAX_CONTRACTS || contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))) {
             throw new IllegalArgumentException("invalid bounded goods-trade registry");

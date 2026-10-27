@@ -323,8 +323,17 @@ public final class ScheduledActionQueue {
             requireOpen();
             if (removed.isEmpty() && created.isEmpty()) return base.snapshot();
             List<ScheduledAction> values = new java.util.ArrayList<>(base.ordered.size() - removed.size() + created.size());
-            for (ScheduledAction action : base.ordered) if (!removed.contains(action.id())) values.add(action);
-            values.addAll(created.values()); values.sort(ScheduledAction::compareTo);
+            // The unchanged queue is already ordered. Sort only the small transaction
+            // overlay, then merge; re-sorting every future action repeats global work.
+            var additions = new ArrayList<>(created.values()); additions.sort(ScheduledAction::compareTo);
+            int added = 0;
+            for (ScheduledAction action : base.ordered) {
+                if (removed.contains(action.id())) continue;
+                while (added < additions.size() && additions.get(added).compareTo(action) < 0)
+                    values.add(additions.get(added++));
+                values.add(action);
+            }
+            while (added < additions.size()) values.add(additions.get(added++));
             return List.copyOf(values);
         }
 

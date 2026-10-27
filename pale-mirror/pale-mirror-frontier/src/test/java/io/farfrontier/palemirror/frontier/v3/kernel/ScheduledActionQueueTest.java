@@ -56,6 +56,25 @@ class ScheduledActionQueueTest {
         var remove = queue.beginMutation(); remove.cancel(second.id()); remove.commit();
         assertEquals(List.of(first), queue.beginMutation().snapshot());
     }
+    @Test void transactionSnapshotMergesReplacementsAndEqualDeadlinesInCanonicalOrder() {
+        var queue = new ScheduledActionQueue();
+        var early = action("schedule:early-merge", 1, 0, "resident:a", 1);
+        var removed = action("schedule:replaced-merge", 10, 0, "resident:b", 1);
+        var retained = action("schedule:retained-merge", 10, 0, "resident:c", 1);
+        var late = action("schedule:late-merge", 20, 0, "resident:d", 1);
+        for (var value : List.of(late, retained, removed, early)) queue.schedule(value);
+        var previous = queue.snapshot(); var edit = queue.beginMutation();
+        edit.cancel(removed.id()); edit.cancel(early.id());
+        var replacement = action(removed.id().value(), 10, 1, "resident:b", 1);
+        var before = action("schedule:before-merge", 2, 0, "resident:e", 1);
+        var after = action("schedule:after-merge", 30, 0, "resident:f", 1);
+        edit.schedule(after); edit.schedule(replacement); edit.schedule(before);
+        var pending = edit.snapshot();
+        assertEquals(List.of(before, replacement, retained, late, after), pending);
+        assertEquals(List.of(early, removed, retained, late), previous);
+        edit.commit(); assertEquals(pending, queue.snapshot());
+        assertEquals(List.of(early, removed, retained, late), previous);
+    }
     @Test void aKnownReadyActionIsNotFencedByNewUncheckedOrUnaddressedWaiters() {
         var queue = new ScheduledActionQueue();
         var ready = action("schedule:known-ready", 2, 0, "resident:ready", 1);
