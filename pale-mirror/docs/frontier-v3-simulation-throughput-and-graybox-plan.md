@@ -1612,3 +1612,36 @@ Focused wake/demand/economic-advice checks plusguardrailsPASS23s. Pending calcul
 identity is also exposed through the existing named read-only planning diagnostic,
 so an evolving native hold can be tied to its exact action rather than a guessed
 family. Scheduled calculation/recovery identity and NeoForgecompile checks pending.
+
+
+### Active container capacity facts and selected-only draft admission (2026-10-28)
+
+be052bf58 exactrelease104sPASS200frontier/36classes+29runtime/guardrails/package;
+not separately deployed while this connected preparation-cost correction was built.
+f8345 native10020611→20611/272.5s,debt346→5797FAIL; revision343076→343080,
+waiting108→104. Some preparation dispositions complete, but ordinary time remains
+blocked. JFR compact-route-dependencies-warm.jfr actual allocation deltas over20s:
+preparation23.73GB,navigation9.99GB,server0.56GB; no sampled-weight interpretation.
+This is phase attribution, not a precise isolated speed comparison.
+
+Source/native stack ties preparation to complete discarded transport admission,
+ExactInventory capacity scans and container account indexing. ContainerStockIndex
+also held only256per-container ImmutableInputViews for a larger active registry.
+A full scan cycles the LRU and creates a new ThreadLocal per dropped view; actual
+captured worker stack includes ThreadLocal.expungeStaleEntry beneath this path.
+
+Capacity facts now belong to a thread-local active-container/lot-metadata epoch.
+Plain entries retain exact receiver stock/physical-slot inputs; registry membership
+bounds them. No per-container ThreadLocal or undersized global LRU, no shared
+capacity lock, no historical lot map per entry. Slot identity reuse is thread-local.
+Existing stock/claim/equipment invalidation coverage plus300active-container scan
+regression verifies unchanged facts survive their own registry scan. Focus56sPASS
+(after correcting a compile-only ThreadLocal return-type mistake).
+
+GoodsTripAssembly no longer constructs a fully admitted disposable world for
+every candidate merely to discard it after cost comparison. Both actual selecting
+callers still invoke the sole TransportMissionProcess.admit owner before publishing
+the selected declaration; canonical event replay invokes the same owner again.
+Exact stock, cash, crew, custody and provisioning validations remain. Existing
+consolidated trade/acceptance/autonomy/expedition checksPASS83s. Source reviewed;
+combined exactref release and retained-world native impact still pending.

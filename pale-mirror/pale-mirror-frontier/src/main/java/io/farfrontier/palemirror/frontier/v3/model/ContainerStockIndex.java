@@ -5,19 +5,29 @@ import java.util.*;
 
 /** Derived physical capacity. Claims affect availability, never the space occupied by the same goods. */
 final class ContainerStockIndex {
-    private static final int MAX_CONTAINER_VIEWS = 256;
     private record Slots(Set<Integer> occupied, Set<Integer> bound) { }
     private static final Slots EMPTY_SLOTS = new Slots(Set.of(), Set.of());
     private static final ImmutableInputView<Map<SubjectId, Slots>> SLOT_VIEW = new ImmutableInputView<>();
-    private static final Map<SubjectId, ImmutableInputView<ContainerSlotBudget>> VIEWS = new LinkedHashMap<>();
-    private static Map<SubjectId, ResourceLot> currentLots;
-    private static Map<SubjectId, Slots> previousSlots = Map.of();
+    private static final ImmutableInputView<Map<SubjectId, BudgetView>> VIEWS = new ImmutableInputView<>();
+    private static final ThreadLocal<Map<SubjectId, Slots>> previousSlots = ThreadLocal.withInitial(Map::of);
+    /** Plain entries inside one thread-local epoch, never one ThreadLocal per container. */
+    private static final class BudgetView {
+        private List<Object> inputs = List.of();
+        private ContainerSlotBudget value;
+        ContainerSlotBudget get(List<Object> next, java.util.function.Supplier<ContainerSlotBudget> compute) {
+            if (value == null || !ImmutablePlanningScope.same(inputs, next)) {
+                value = compute.get(); inputs = List.copyOf(next);
+            }
+            return value;
+        }
+    }
     private ContainerStockIndex() { }
 
-    static synchronized ContainerSlotBudget budget(ExactInventory inventory, SubjectId container) {
+    static ContainerSlotBudget budget(ExactInventory inventory, SubjectId container) {
         var ledger = inventory.fungibleResources();
         // Retain one metadata epoch, not a whole historical lot map per container.
-        if (currentLots != ledger.lots()) { VIEWS.clear(); currentLots = ledger.lots(); }
+        if (!inventory.containers().containsKey(container)) throw new IllegalArgumentException("unknown capacity container");
+        var views = VIEWS.get(List.of(inventory.containers(), ledger.lots()), HashMap::new);
         var slots = SLOT_VIEW.get(List.of(inventory.occupiedSlots(), ledger.bindings()), () -> slots(inventory))
                 .getOrDefault(container, EMPTY_SLOTS);
         // A draft can replace claims/accounts without changing physical stock. Only
@@ -26,8 +36,9 @@ final class ContainerStockIndex {
         var inputs = new ArrayList<Object>();
         inputs.add(slots.occupied()); inputs.add(slots.bound()); inputs.add(ledger.lots());
         for (var account : accounts) { inputs.add(account.id()); inputs.add(account.lotQuantities()); }
-        if (VIEWS.size() >= MAX_CONTAINER_VIEWS && !VIEWS.containsKey(container)) VIEWS.remove(VIEWS.keySet().iterator().next());
-        return VIEWS.computeIfAbsent(container, ignored -> new ImmutableInputView<>()).get(inputs, () -> {
+        // Bounded by this exact canonical container registry. A full registry
+        // scan cannot cycle an undersized LRU and manufacture thousands of locals.
+        return views.computeIfAbsent(container, ignored -> new BudgetView()).get(inputs, () -> {
             var stock = new HashMap<String, Long>();
             for (var account : accounts) account.lotQuantities().forEach((lot, quantity) ->
                     stock.merge(ledger.lots().get(lot).itemKind(), quantity.longValue(), Math::addExact));
@@ -49,10 +60,10 @@ final class ContainerStockIndex {
         for (var container : containers) {
             var next = new Slots(Set.copyOf(occupied.getOrDefault(container, Set.of())),
                     Set.copyOf(bound.getOrDefault(container, Set.of())));
-            var old = previousSlots.get(container);
+            var old = previousSlots.get().get(container);
             result.put(container, next.equals(old) ? old : next);
         }
-        previousSlots = Map.copyOf(result);
-        return previousSlots;
+        previousSlots.set(Map.copyOf(result));
+        return previousSlots.get();
     }
 }

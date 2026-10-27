@@ -131,9 +131,11 @@ final class GoodsTripAssembly {
             var load = ExpeditionSupplyPlanning.load(state, mission, group, now);
             if (load.isEmpty()) return Optional.empty();
             mission = ExpeditionFundingAuthority.declare(state, mission.withSupplies(load.orElseThrow()));
-            var event = new TransportMissionStarted(seller.party().id(), seller.party().kind(), mission, group, shipments);
-            TransportMissionProcess.admit(state, mission.id(), event, now);
-            return Optional.of(event);
+            // Comparing alternatives needs a declaration and its exact logistics
+            // cost, not a fully admitted world which is immediately discarded.
+            // The selecting caller invokes the sole admission owner before
+            // publishing this declaration; canonical replay validates it again.
+            return Optional.of(new TransportMissionStarted(seller.party().id(), seller.party().kind(), mission, group, shipments));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             // Incomplete evidence must keep the selected candidate pending, not
             // launch the next crew/animal/quote as if this one were infeasible.

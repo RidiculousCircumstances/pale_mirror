@@ -6,6 +6,21 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContainerStockIndexTest {
+    @Test void completeActiveRegistryDoesNotEvictItsOwnCapacityFactsDuringAScan() {
+        var owner = new SubjectId("settlement:large-capacity-registry");
+        var containers = new LinkedHashMap<SubjectId, ContainerRecord>();
+        var surfaces = new HashMap<SubjectId, ContainerSurface>();
+        for (int i = 0; i < 300; i++) {
+            var id = new SubjectId("container:capacity-" + i);
+            containers.put(id, new ContainerRecord(id, owner, 27));
+            surfaces.put(id, new ContainerSurface(id, new BlockPosition(i, 64, 0), ContainerSurfaceStatus.UNMATERIALIZED));
+        }
+        var inventory = new ExactInventory(containers, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), surfaces);
+        var first = containers.keySet().iterator().next(); var fact = ContainerStockIndex.budget(inventory, first);
+        for (var id : containers.keySet()) assertEquals(0, ContainerStockIndex.budget(inventory, id).requiredSlots());
+        assertSame(fact, ContainerStockIndex.budget(inventory, first),
+                "visiting other active containers cannot destroy unchanged physical capacity facts");
+    }
     @Test void stockChangesAndExactSlotChangesInvalidateWithoutASecondLedgerOrHistoricalCache() {
         var container = new SubjectId("container:index"); var owner = new SubjectId("settlement:index");
         var item = new SubjectId("item:tool"); var lot = new SubjectId("lot:wheat"); var account = new SubjectId("custody:index");

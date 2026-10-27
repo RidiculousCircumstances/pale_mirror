@@ -54,7 +54,11 @@ final class GoodsShipmentPlanning {
                 var parcel = parcel(state, contract, claim);
                 if (parcel.isEmpty()) continue;
                 var declaration = GoodsTripAssembly.prepare(state, seller, buyer, List.of(parcel.orElseThrow()), contract.fulfillment().mode(), now);
-                if (declaration.isPresent()) return GoodsTripAssembly.events(declaration.orElseThrow(), now);
+                if (declaration.isPresent()) {
+                    var selected = declaration.orElseThrow();
+                    TransportMissionProcess.admit(state, selected.mission().id(), selected, now);
+                    return GoodsTripAssembly.events(selected, now);
+                }
             }
         }
         return List.of();
