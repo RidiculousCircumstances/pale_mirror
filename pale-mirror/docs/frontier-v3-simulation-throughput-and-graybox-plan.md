@@ -938,3 +938,15 @@ through the unchanged scheduler. Existing physical-demand native test checks a l
 the lazy boundary; the no-nearby-player physical-effect negative remains. An added
 assertion that the entire shared test level had no players was invalid: the parallel
 test creates a mock observer. Removed that assertion, not production demand checks.
+
+
+Native main c21 stopped22:56:43 after a navigation slice spent11777/11776; all
+dimensions saved. A certified shortcut may select a region not yet present in the
+search's local map. Fetching its shared cached graph can spend the last unit;
+expandStep then spent another unit without rechecking the grant. Keep that exact
+selected candidate for the next slice when graph lookup exhausts the budget.
+Private old-binary probe with a warm regional cache reproduces12182/12181; retained
+in shortcut-slice-probe-before.txt. Extended existing 40k shortcut case proves the
+shared-cache boundary and complete ESTIMATED result; worker/refund/full-regional
+negative cases and guardrails PASS17s. No limit increase or exception suppression.
+Main retained-world recovery and native scale effect remain pending.

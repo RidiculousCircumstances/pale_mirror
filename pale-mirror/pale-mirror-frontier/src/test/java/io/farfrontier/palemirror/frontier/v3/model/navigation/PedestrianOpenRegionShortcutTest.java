@@ -24,7 +24,10 @@ class PedestrianOpenRegionShortcutTest {
     private static PedestrianRouteResult finish(HierarchicalPedestrianSearch search) {
         PedestrianRouteResult result = null;
         for (int turn = 0; turn < 2_048; turn++) {
-            result = search.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            long before = search.workUnits();
+            result = search.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK);
+            assertTrue(result.workUnits() - before <= HierarchicalPedestrianSearch.MIN_SLICE_WORK,
+                    "building a shortcut endpoint must leave expansion for the next slice: " + (result.workUnits() - before));
             if (result.status() != PedestrianRouteResult.Status.PLANNING) return result;
         }
         fail("bounded regional search did not terminate: " + result); return null;
@@ -32,10 +35,17 @@ class PedestrianOpenRegionShortcutTest {
     @Test void fortyThousandBlockJourneyUsesCertifiedRegionalLinksAndReturnsOnlyAnAdjacentMovementPrefix() {
         var revision = PedestrianGeometryRevision.initial();
         var geometry = geometry(50_000, -1, revision); var origin = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(40_001, 63, 1);
-        var search = new HierarchicalPedestrianSearch(geometry, origin, target, new PedestrianRegionCache(), null, PedestrianRouteExtent.ESTIMATE);
+        var regions = new PedestrianRegionCache();
+        var search = new HierarchicalPedestrianSearch(geometry, origin, target, regions, null, PedestrianRouteExtent.ESTIMATE);
         var estimate = finish(search);
         assertEquals(PedestrianRouteResult.Status.ESTIMATED, estimate.status(), estimate.reason());
         assertTrue(estimate.estimate().orElseThrow().estimatedEdges() >= 40_000);
+        // A second search uses already-built shortcut endpoints. Lookup itself
+        // spends the final unit of this real worker grant; expansion must yield.
+        var reused = new HierarchicalPedestrianSearch(geometry, origin, target, regions, null, PedestrianRouteExtent.ESTIMATE);
+        var boundary = reused.advance(12_181);
+        assertTrue(boundary.workUnits() <= 12_181, "cached endpoint lookup cannot overdraw its worker grant");
+        assertEquals(PedestrianRouteResult.Status.ESTIMATED, finish(reused).status());
         assertFalse(search.dependencies().matches(geometry(50_000, 200,
                 revision.changed(Set.of(new PedestrianGeometryRevision.Region(12, 0))))),
                 "an edit inside a shortcut invalidates its proof, including regions not expanded into cell graphs");

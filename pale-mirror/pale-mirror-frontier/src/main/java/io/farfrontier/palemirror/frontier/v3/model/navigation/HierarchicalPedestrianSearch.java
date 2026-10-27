@@ -458,7 +458,9 @@ public final class HierarchicalPedestrianSearch {
     private void expandStep() {
         var candidate = expanding;
         var local = region(candidate.node().tile());
-        if (local == null || terminal != null) return;
+        // A certified long edge can select an as-yet unbuilt region. Its
+        // builder may spend the final unit; keep expansion pending in that case.
+        if (local == null || terminal != null || work >= turnLimit) return;
         if (macroDirection < 4) {
             work++;
             var shortcut = candidate.node().component() == 0
