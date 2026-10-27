@@ -1530,3 +1530,33 @@ the real128result capacity, without executing any owner. It proves completion,
 shared eviction, private reuse and release on retirement. Negative-route coverage
 checks remote reuse and relevant-terrain reopening. Focus19sPASS before the final
 negative case; exact release and native throughput impact pending. G remainsOPEN.
+
+
+### Preserve the complete unfinished calculation, not an LRU prefix (2026-10-28)
+
+13f43ecd3 exact release101sPASS192frontier/34classes+29runtime+guardrails/package;
+both retained-world deployments VERIFIED. Native10020610→20610/272.4s,
+debt396→5845FAIL. Named observations prove shared-data publication is no longer
+blocked (protectedResults0), yet preparation continues at an unchanged revision.
+
+Read-only SnapshotPreparationResume on actual checksummed snapshot343049/tick20609,
+earliest due opportunity settlement93, executes the ordinary process/continuation
+boundary against real snapshot geometry without WAL/native writes. Before repair,
+48completed searches lead back to the first request and private memory drops32→0.
+This is a concrete caller cycle, not merely a theoretical cache-capacity concern.
+A root-resumed calculation needs more than32small answers. The previous arbitrary
+read-count eviction discarded acknowledged facts, while a partial retry also
+replaced memory with only the subset reread before its next wait.
+
+The common calculation memory now retains untouched acknowledged facts across
+partial synchronous/detached retries. Its bound charges metadata, regional tokens
+and packed coordinates against131072weightedunits instead of equating every scalar
+answer with a full route. It never silently evicts an unfinished calculation's
+prefix. Actual quota exhaustion fails explicitly with the retained amount; business
+completion/cancellation still releases memory. Shared cache, worker and route limits
+are unchanged. This is a calculation-lifetime repair, not permanent world history.
+The existing actual eviction/resumption regression now includes40prefix routes;
+future-delivery coverage includes an intervening retry which does not read its
+received fact. Overflow has a negative case. Focus15sPASS then29checks+guardrails18sPASS.
+The same snapshot probe now progresses beyond72private reads without restarting the
+first request; terminal/native100 closure still pending. G remainsOPEN.

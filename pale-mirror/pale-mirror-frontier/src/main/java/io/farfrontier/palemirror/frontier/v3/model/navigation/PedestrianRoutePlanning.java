@@ -94,7 +94,10 @@ public final class PedestrianRoutePlanning {
                         .or(() -> view.peek(geometry, start, target, extent));
             }
         });
-        try { return new Prepared<>(observe(calculation), Map.copyOf(demands)); }
+        try {
+            var observed = observe(calculation);
+            return new Prepared<>(new Observation<>(observed.result(), observed.requests(), memory.merge(observed.reads())), Map.copyOf(demands));
+        }
         finally { if (previous == null) readBinding.remove(); else readBinding.set(previous); }
     }
     public record Prepared<T>(Observation<T> observation, Map<PedestrianRouteRequest, PedestrianPlanningService> demands) {
@@ -156,7 +159,10 @@ public final class PedestrianRoutePlanning {
         var previous = readBinding.get(); PedestrianRoutePlanner delegate;
         synchronized (PedestrianRoutePlanning.class) { delegate = previous == null ? current : previous; }
         readBinding.set(new Remembering(delegate, memory));
-        try { return observe(calculation); }
+        try {
+            var observed = observe(calculation);
+            return new Observation<>(observed.result(), observed.requests(), memory.merge(observed.reads()));
+        }
         finally { if (previous == null) readBinding.remove(); else readBinding.set(previous); }
     }
     private record Remembering(PedestrianRoutePlanner delegate, PedestrianCalculationMemory memory) implements PedestrianRoutePlanner {

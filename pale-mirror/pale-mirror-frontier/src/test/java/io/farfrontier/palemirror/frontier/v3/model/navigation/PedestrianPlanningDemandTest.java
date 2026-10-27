@@ -7,6 +7,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningDemandTest {
+    @Test void calculationFactBudgetRejectsOverflowInsteadOfSilentlyDroppingAcknowledgedData() {
+        var surfaces = java.util.stream.IntStream.range(0, 65_535).mapToObj(i ->
+                SurfaceAnchor.at(i / 2, 63, (i + 1) / 2)).toList();
+        var geometry = ground(PedestrianGeometryRevision.initial());
+        var request = PedestrianRouteRequest.of(geometry, surfaces.getFirst(), surfaces.getLast());
+        var result = new PedestrianRouteResult(PedestrianRouteResult.Status.FOUND, surfaces, 0, 0, "PACKED_ZIGZAG");
+        var read = PedestrianCalculationMemory.Read.conservative(request, result);
+        assertThrows(IllegalStateException.class, () -> PedestrianCalculationMemory.empty().including(read),
+                "resource exhaustion is explicit, rather than an invisible infinite re-preparation loop");
+    }
     @Test void deliveredNegativeEvidenceIsRetainedButReopensWhenItsTerrainChanges() {
         var revision = PedestrianGeometryRevision.initial();
         java.util.function.Function<PedestrianGeometryRevision, PedestrianRouteGeometry> geometry = current -> new PedestrianRouteGeometry() {

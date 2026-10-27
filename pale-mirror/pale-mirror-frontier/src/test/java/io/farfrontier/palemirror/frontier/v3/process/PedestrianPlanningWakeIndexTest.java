@@ -36,7 +36,10 @@ class PedestrianPlanningWakeIndexTest {
             assertTrue(owners.stream().allMatch(owner -> owner.dueAt().ticks() == 6000));
             var first = requests.getFirst();
             assertTrue(planner.peek(GROUND, first.start(), first.target()).isEmpty(), "real shared capacity evicted the oldest result");
-            var resumed = PedestrianRoutePlanning.prepare(planner.readView(), index.reads(owners.getFirst()), () ->
+            var intermediate = PedestrianRoutePlanning.prepare(planner.readView(), index.reads(owners.getFirst()), () ->
+                    PedestrianRoutePlanning.query(GROUND, SurfaceAnchor.at(1, 63, 1), SurfaceAnchor.at(20, 63, 20)));
+            assertEquals(PedestrianRouteResult.Status.PLANNING, intermediate.observation().result().status());
+            var resumed = PedestrianRoutePlanning.prepare(planner.readView(), intermediate.reads(), () ->
                     PedestrianRoutePlanning.query(GROUND, first.start(), first.target()));
             assertEquals(PedestrianRouteResult.Status.FOUND, resumed.observation().result().status());
             assertEquals(0, planner.pendingCount(), "the waiting owner already has the evicted data");
@@ -50,8 +53,11 @@ class PedestrianPlanningWakeIndexTest {
     @Test void unfinishedPreparationKeepsItsFirstLegWhenSharedResultsAreEvictedBeforeTheSecondLeg() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("two-leg-preparation", 20);
         var first = request(3); var end = SurfaceAnchor.at(6, 63, 1);
+        var prefix = java.util.stream.IntStream.range(0, 40).mapToObj(i ->
+                SurfaceAnchor.at(i % 20 + 2, 63, i / 20 + 3)).toList();
         java.util.function.Supplier<List<ProposedEvent>> prepare = () -> {
             try {
+                for (var point : prefix) KnownPedestrianNavigation.plannedBetween(GROUND, first.start(), point);
                 KnownPedestrianNavigation.plannedBetween(GROUND, first.start(), first.target());
                 KnownPedestrianNavigation.plannedBetween(GROUND, first.target(), end);
                 return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Cancelled(owner.id())));
@@ -62,6 +68,10 @@ class PedestrianPlanningWakeIndexTest {
         };
         try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
                 var waits = PedestrianPlanningContinuations.bind(index)) {
+            for (var point : prefix) {
+                planner.query(GROUND, first.start(), point);
+                while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            }
             planner.query(GROUND, first.start(), first.target());
             while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             PedestrianPlanningContinuations.prepare(owner, prepare).prepare().get();

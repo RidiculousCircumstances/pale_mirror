@@ -5,17 +5,25 @@ import java.util.*;
 /** Completed reads owned by one unfinished calculation, independent of the shared
  * result cache. Immutable facts only: no reader, parent session, actor or world writer. */
 public final class PedestrianCalculationMemory {
-    private static final int MAX_READS = 32, MAX_COORDINATES = 131_072;
+    // Charge metadata, dependency tokens and packed coordinates. A scalar answer
+    // is not a full journey. A caller's acknowledged reads are not an LRU cache:
+    // evicting its prefix can make a root-resumed calculation repeat forever.
+    private static final long MAX_RETAINED_UNITS = 131_072;
     private static final PedestrianCalculationMemory EMPTY = new PedestrianCalculationMemory(List.of());
-    private sealed interface Fence permits Exact, Regional { boolean matches(PedestrianRouteGeometry geometry); }
+    private sealed interface Fence permits Exact, Regional {
+        boolean matches(PedestrianRouteGeometry geometry);
+        long retainedUnits();
+    }
     private record Exact(Object version) implements Fence {
         public boolean matches(PedestrianRouteGeometry geometry) { return version.equals(geometry.version()); }
+        public long retainedUnits() { return 1; }
     }
     private record Regional(PedestrianRegionDependencies dependencies, Object baseline) implements Fence {
         public boolean matches(PedestrianRouteGeometry geometry) {
             return geometry.regionalRevision().filter(value -> value.baseline() == baseline).isPresent()
                     && dependencies.matches(geometry);
         }
+        public long retainedUnits() { return 2L + 2L * dependencies.revisions().size(); }
     }
     private sealed interface Saved permits Direct, Packed {
         PedestrianRouteResult restore();
@@ -49,6 +57,7 @@ public final class PedestrianCalculationMemory {
                     new Regional(dependencies, revision.baseline()))).orElseGet(() -> conservative(request, result));
         }
         public PedestrianRouteResult result() { return saved.restore(); }
+        private long retainedUnits() { return 32L + fence.retainedUnits() + saved.coordinates(); }
         boolean matches(PedestrianRouteRequest request) {
             return key.equals(PedestrianDemandKey.of(request)) && fence.matches(request.geometry());
         }
@@ -71,11 +80,10 @@ public final class PedestrianCalculationMemory {
         void addAll(PedestrianCalculationMemory memory) { memory.reads.forEach(this::add); }
         PedestrianCalculationMemory snapshot() {
             var values = new ArrayList<>(reads.values());
-            long coordinates = values.stream().mapToLong(read -> read.saved.coordinates()).sum();
-            int first = 0;
-            while (values.size() - first > MAX_READS || coordinates > MAX_COORDINATES)
-                coordinates -= values.get(first++).saved.coordinates();
-            return values.isEmpty() ? EMPTY : new PedestrianCalculationMemory(values.subList(first, values.size()));
+            long units = values.stream().mapToLong(Read::retainedUnits).sum();
+            if (units > MAX_RETAINED_UNITS)
+                throw new IllegalStateException("unfinished pedestrian calculation exceeds retained fact budget: " + units);
+            return values.isEmpty() ? EMPTY : new PedestrianCalculationMemory(values);
         }
     }
     public PedestrianCalculationMemory merge(PedestrianCalculationMemory other) {
