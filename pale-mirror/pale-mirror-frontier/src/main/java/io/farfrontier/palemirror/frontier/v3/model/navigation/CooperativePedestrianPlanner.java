@@ -39,6 +39,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private long progressRevision;
     private long turns;
     private long completedCount;
+    private final Map<PedestrianRouteResult.Status, Long> completedOutcomes = new java.util.EnumMap<>(PedestrianRouteResult.Status.class);
     private java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemandCache;
     private final Map<PedestrianRouteRequest, Long> admittedAt = new LinkedHashMap<>();
     private final Map<PedestrianDemandKey, java.util.Set<PedestrianRouteRequest>> calculationAddresses = new java.util.HashMap<>();
@@ -189,6 +190,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         }
         awaitingPublication.remove(search); pending.remove(request);
         forgetAddress(request); completedCount++;
+        completedOutcomes.merge(result.status(), 1L, Math::addExact);
         corridors.remember(request.geometry(), result, dependency);
         completed.put(request, new Completed(result, dependency)); retainedSurfaces += result.route().size();
         knowledgeDemandCache = null;
@@ -459,6 +461,9 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 search == null ? "CAPACITY_WAIT" : search.stage(), search == null ? 0 : search.restarts());
     }
     public synchronized long completedCount() { return completedCount; }
+    /** Fixed-size counters only; reading cannot run or retain another calculation. */
+    public synchronized Map<PedestrianRouteResult.Status, Long> completedOutcomes() { return Map.copyOf(completedOutcomes); }
+    public synchronized Map<String, Long> regionRetentionDiagnostic() { return regions.retentionDiagnostic(); }
     public synchronized long workUnits() { return workUnits; }
     public synchronized long corridorCandidates() { return corridors.hits(); }
     public synchronized PedestrianRegionCacheDiagnostic regionCacheDiagnostic() { return regions.diagnostic(); }

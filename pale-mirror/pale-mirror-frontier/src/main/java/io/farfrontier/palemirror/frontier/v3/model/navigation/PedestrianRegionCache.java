@@ -148,5 +148,18 @@ final class PedestrianRegionCache {
     synchronized PedestrianRegionCacheDiagnostic diagnostic() {
         return new PedestrianRegionCacheDiagnostic(lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs);
     }
+    /** Detailed named inspection only: bounded by the retained cache, not a tick-path scan. */
+    synchronized Map<String, Long> retentionDiagnostic() {
+        long entries = 0, distinct = 0, slots = 0, builders = 0;
+        for (var bucket : scoped.values()) {
+            entries += bucket.entries.size(); slots += bucket.slots; builders += bucket.builders;
+            distinct += bucket.entries.keySet().stream().map(RegionalKey::tile).distinct().count();
+        }
+        for (var bucket : views.values()) {
+            entries += bucket.entries.size(); distinct += bucket.entries.size(); slots += bucket.slots; builders += bucket.builders;
+        }
+        return Map.of("scopes", (long) scoped.size() + views.size(), "entries", entries,
+                "distinctScopedTiles", distinct, "reservedSurfaceSlots", slots, "builders", builders);
+    }
     synchronized void clear() { views.clear(); scoped.clear(); lookups = buildsStarted = evictions = certifiedPlanes = layeredGraphs = 0; }
 }

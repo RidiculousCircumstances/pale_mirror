@@ -195,7 +195,9 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
                 + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)
                 + ",\"regionCache\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.regionCacheDiagnostic()) : "null")
-                + (details ? ",\"oldestRequests\":" + waitingDiagnostic(runtime)
+                + (details ? ",\"completedOutcomes\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.completedOutcomes()) : "{}")
+                    + ",\"regionRetention\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.regionRetentionDiagnostic()) : "{}")
+                    + ",\"oldestRequests\":" + waitingDiagnostic(runtime)
                     + ",\"activeRequests\":" + (owner == runtime ? requestDiagnostic(planner.activeDiagnostics()) : "[]")
                     + ",\"geometryWaits\":" + knowledgeDiagnostic(runtime) : "")
                 + ",\"wakeSafetyMaximum\":" + MAX_WAKE_COMMANDS_PER_TURN
