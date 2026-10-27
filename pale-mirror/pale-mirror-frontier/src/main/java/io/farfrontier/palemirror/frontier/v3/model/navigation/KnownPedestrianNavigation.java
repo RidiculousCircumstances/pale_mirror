@@ -150,6 +150,16 @@ public final class KnownPedestrianNavigation {
         return result.route();
     }
 
+    /** Whole-journey geometry for provisioning. It is not one TimedKnownRoute leg;
+     * the movement owner still refines and executes bounded segments. */
+    public static PedestrianPathProof plannedItinerary(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        var result = completeBetween(geometry, start, target);
+        if (result.awaitable()) PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target));
+        if (result.status() != PedestrianRouteResult.Status.FOUND)
+            throw new RouteUnavailable(result.status(), result.reason());
+        return PedestrianPathProof.from(result.route());
+    }
+
     /** Regional connectivity for alternative ranking. Never exposes cells to a movement executor. */
     public static PedestrianRouteEstimate estimateBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         var result = PedestrianRoutePlanning.query(geometry, start, target, PedestrianRouteExtent.ESTIMATE);
@@ -164,11 +174,16 @@ public final class KnownPedestrianNavigation {
     }
 
     /** Calculation result only. An alternatives owner decides which unresolved requests actually block its result. */
-    public static PedestrianRouteResult queryBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+    private static PedestrianRouteResult completeBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         var result = PedestrianRoutePlanning.query(geometry, start, target);
         if (result.status() == PedestrianRouteResult.Status.FOUND && (result.route().isEmpty()
                 || !result.route().getFirst().equals(start) || !result.route().getLast().equals(target)))
             throw new IllegalArgumentException("planner returned a route with foreign endpoints");
+        return result;
+    }
+
+    public static PedestrianRouteResult queryBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        var result = completeBetween(geometry, start, target);
         if (result.status() == PedestrianRouteResult.Status.FOUND && result.route().size() > TimedKnownRoute.MAX_SURFACES)
             return new PedestrianRouteResult(PedestrianRouteResult.Status.SAFETY_LIMIT, List.of(), result.workUnits(), result.regions(),
                     "ADMISSION_ROUTE_EXCEEDS_BOUNDED_LEG: surfaces=" + result.route().size() + " start=" + start + " target=" + target);

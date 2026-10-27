@@ -8,6 +8,30 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void wholeItineraryProofDoesNotInheritTheBoundedMovementLegLimit() throws Exception {
+        var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(5001, 63, 1);
+        PedestrianRouteGeometry ground = new PedestrianRouteGeometry() {
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 5024, 16); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+            public java.util.OptionalInt uniformSupport(WorldBounds area) { return java.util.OptionalInt.of(63); }
+        };
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner)) {
+            var complete = finishQuery(planner, ground, start, target, PedestrianRouteExtent.COMPLETE);
+            assertEquals(PedestrianRouteResult.Status.FOUND, complete.status());
+            assertEquals(PedestrianRouteResult.Status.SAFETY_LIMIT, KnownPedestrianNavigation.queryBetween(ground, start, target).status(),
+                    "one physical timed leg remains bounded");
+            var proof = KnownPedestrianNavigation.plannedItinerary(ground, start, target);
+            assertEquals(start, proof.origin()); assertEquals(target, proof.destination()); assertEquals(complete.route().size() - 1, proof.edges());
+            assertTrue(proof.edges() >= 5000, "hierarchical portals need not choose the globally shortest route");
+            KnownPedestrianNavigation.requireRoute(ground, proof.surfaces());
+        }
+        PedestrianRoutePlanner forged = (g, from, to) -> new PedestrianRouteResult(PedestrianRouteResult.Status.FOUND,
+                List.of(start, SurfaceAnchor.at(2, 63, 1)), 0, 1, "FORGED_ENDPOINTS");
+        try (var binding = PedestrianRoutePlanning.bind(forged)) {
+            assertThrows(IllegalArgumentException.class, () -> KnownPedestrianNavigation.plannedItinerary(ground, start, target));
+        }
+    }
     @Test void regionalEstimateSkipsCellRefinementAndCannotSatisfyAMovementRequest() {
         var ground = geometry(new WorldBounds(0, 0, 256, 32), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
         var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(250, 63, 20);

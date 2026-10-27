@@ -29,8 +29,8 @@ public record ExpeditionJourneyProof(PedestrianPathProof outward, PedestrianPath
                 throw new IllegalArgumentException("retained expedition changed its rendezvous");
             if (knowledge.supportsPath(prior.outward()) && knowledge.supportsPath(prior.returning())) return prior;
         }
-        return new ExpeditionJourneyProof(knowledge.plannedBetween(mission.homeRendezvous(), mission.destinationRendezvous()),
-                knowledge.plannedBetween(mission.destinationRendezvous(), mission.homeRendezvous()));
+        return new ExpeditionJourneyProof(knowledge.plannedItinerary(mission.homeRendezvous(), mission.destinationRendezvous()),
+                knowledge.plannedItinerary(mission.destinationRendezvous(), mission.homeRendezvous()));
     }
     public void require(FrontierWorldState state, TransportMission mission) {
         require(state, mission, java.util.Objects.requireNonNull(state.unitGroups().groups().get(mission.groupId()), "expedition roster"));

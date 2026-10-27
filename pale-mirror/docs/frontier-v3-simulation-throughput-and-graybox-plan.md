@@ -1415,3 +1415,53 @@ remains available; neither a top-k cutoff nor a gameplay price/availability chan
 is introduced. Existing quote/recovery coverage adds an expensive-first-option/
 second-wait ranking case and changed funding/participant/time fences. Verification
 and native impact pending; no throughput acceptance claimed.
+
+
+### Separate a provisioning itinerary from one executable movement leg (2026-10-28)
+
+cf511f739 exact release137trade/worker checks+runtime/package+55native economy
+PASS102s; both retained311 worlds VERIFIED. Ordinary10020433→20442/272.5s,
+debt737→6179 still FAIL. A read-only same-state OPPORTUNITY probe(snapshot339590,
+tick20432,settlement21) confirms both callback preparations reuse the identical
+canonical state as comparison input; the new memo is wired, not silently fenced
+by a fresh draft on that specific captured path. This is not native completion.
+
+Further whole-path source review establishes a separate concrete rejection:
+ExpeditionJourneyProof.select calls plannedBetween for each full round-trip leg.
+That API delegates to queryBetween, which converts an otherwise FOUND route to
+SAFETY_LIMIT after4096surfaces, the TimedKnownRoute movement-leg bound. Scale-r31
+settlement journeys commonly exceed that bound. Planner completion counters still
+show FOUND because the later API performs this conversion, explaining why success
+counts alone did not establish expedition admission.
+
+Common navigation now exposes typed plannedItinerary -> PedestrianPathProof for
+whole-journey provisioning, retaining exact endpoints, awaitable unknown/planning
+behavior and the existing path-proof safety bounds. Expedition consumes that
+explicit API. Ordinary bounded movement/queryBetween retains4096; actual group
+motion continues to refine bounded segments through its existing navigator. Same
+path-proof codec/schema and geometry validation; no scalar estimate is promoted
+to a provisioning proof. Existing navigation coverage adds a real5000edge route
+that remains too long for one physical leg but yields a valid full itinerary, plus
+foreign-endpoint rejection. This fixes the concrete conflated bound; complete
+per-edge provisioning refinement and the65534-edge proof ceiling remain scale
+design debt, not a completed regional-journey architecture or G acceptance.
+
+The same read-only snapshot endpoint18→48 case reproduces the complete issue:
+FOUND14390surfaces, old bounded-leg API SAFETY_LIMIT, new itinerary proof14389edges
+compressed to21runs. This remains exploratory source-side evidence. The first new
+model fixture incorrectly required a globally shortest5000edge path; hierarchical
+portals legitimately produce5014. It now compares proof length with the actual
+returned route and still requires >4096 and exact endpoints; no production policy
+was loosened for that invalid test assumption. The focused corrected navigation/
+path-validation selection PASS17s; prior181other selected checks passed.
+
+Whole-journey validation also no longer rescans every edge for unrelated remote
+geometry changes. After one full exact validation, the common validator retains
+only the consulted regional tokens, explicit body/access scope, bounds and pristine
+regional dependencies. RLE runs enumerate crossed regions without expanding every
+coordinate again. A touched/pristine local change or foreign scope forces real
+validation; nonregional/oversized footprints retain full-version validation.
+At most128paths and the existing regional dependency bound, no authoritative
+receipt fabrication or persistence change. Capture happens outside the shared
+cache lock. Existing validation coverage proves remote reuse and actual local/
+foreign invalidation. G and the full per-edge proof scalability limit remain open.
