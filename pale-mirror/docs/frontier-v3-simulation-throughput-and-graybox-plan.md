@@ -910,7 +910,7 @@ equipment, labour and navigation negative coverage +guardrails PASS28s.
 
 
 54d0f0bcd exact release PASS66s and verified same-world deployment on both hosts.
-Native100 sample109132->110237 over333s, clock debt482->5996: stillFAIL.
+Native100 sample109061->110237 over333s, clock debt509->5996: stillFAIL.
 Latest20s field-immediate-goal-native.jfr attributes833server samples versus75
 exact-preparation samples;526visit transaction validation,429full owned-state
 validation.133MapN/77SetN samples expose clustered immutable compact-table probes;
@@ -925,3 +925,14 @@ images. Full bootstrap/recovery audits bypass proof reuse. No schema, authority,
 scheduling allowance, durability or cache-size increase. Existing focused
 resource-site, inventory, fungible-production, actor-identity and incremental
 negative/recovery checks and guardrails PASS; runtime effect not yet measured.
+
+
+c21c747f3 verified/deployed both retained worlds (SHA51294615f70bc7c2753ce7d36a6c4785f4941f97e914c3bc0a88424a3058abdceb94e12d3441e17831c3dd0cdc0bdfa1081b1be2c39fb7e0ff29a7456e9f181ff80).
+The next20sJFR shows183server samples versus833; validation27 versus429.
+This is sampled attribution, not an isolated speed ratio. Ordinary100debt still
+grows.52server samples now collect/filter field-scene candidates before asking
+whether any observer exists. All six common scene-admission callers now supply
+lazy read-only candidate inventories to the shared demand gate. No ordinary
+observer means no candidate calculation; retained scenes still execute/drain
+through the unchanged scheduler. Existing physical-demand native test now rejects
+any observer-free supplier evaluation and checks a later observed candidate.

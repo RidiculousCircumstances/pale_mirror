@@ -35,7 +35,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
 
     private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
-                level, runtime, SceneCauseKind.PRODUCTION_WORK, FrontierProductionWorkSceneSupport.candidates(state).stream()
+                level, runtime, SceneCauseKind.PRODUCTION_WORK, () -> FrontierProductionWorkSceneSupport.candidates(state).stream()
                 .filter(value -> !ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, value.workerId(),
                         runtime.canonicalState().orElseThrow().instant().ticks()))
                 // Container custody prevents a competing inventory writer, but cannot create

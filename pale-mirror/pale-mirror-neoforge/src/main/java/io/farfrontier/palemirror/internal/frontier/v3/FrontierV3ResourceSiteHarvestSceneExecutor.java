@@ -68,7 +68,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // natural arrival.  Its field is still non-interactable until the projection owner has
         // made that exact mature/partial crop state current in the loaded world.
         Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
-                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.RESOURCE_SITE_HARVEST, () -> FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
                         .filter(value -> !ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, value.workerId(),
                                 runtime.canonicalState().orElseThrow().instant().ticks()))
                         .filter(value -> !FrontierV3HarvestSceneStandingAdmission.obstructedBodyFreeColumn(level,

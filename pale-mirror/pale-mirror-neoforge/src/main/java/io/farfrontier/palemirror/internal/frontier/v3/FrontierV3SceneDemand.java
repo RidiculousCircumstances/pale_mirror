@@ -74,10 +74,20 @@ final class FrontierV3SceneDemand {
         }).toList();
     }
 
+    /** Build read-only candidate facts only when some ordinary observer can demand
+     * a new scene. Existing leases run/drain through the scheduler independently. */
+    static <Candidate> List<Candidate> demandedCandidates(ServerLevel level,
+            java.util.function.Supplier<List<Candidate>> candidates, Function<Candidate, BlockPosition> demandAnchor) {
+        Objects.requireNonNull(level, "scene demand level"); Objects.requireNonNull(candidates, "scene candidates");
+        Objects.requireNonNull(demandAnchor, "scene demand anchor");
+        if (level.players().stream().noneMatch(player -> !player.isSpectator())) return List.of();
+        return demandedCandidates(level, candidates.get(), demandAnchor);
+    }
+
     /** Demand filters eligibility before the shared admission cursor spends its bounded turn. */
     static <Candidate> java.util.Optional<Candidate> nextDemandedCandidate(
             ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
-            io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind kind, List<Candidate> candidates,
+            io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind kind, java.util.function.Supplier<List<Candidate>> candidates,
             Function<Candidate, BlockPosition> demandAnchor,
             Function<Candidate, io.farfrontier.palemirror.frontier.v3.api.SubjectId> identity) {
         return FrontierV3SceneTurnScheduler.candidate(runtime, kind, demandedCandidates(level, candidates, demandAnchor), identity);
