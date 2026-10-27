@@ -8,6 +8,9 @@ import java.util.*;
 /** Rebuildable immutable regional proofs. Reading old inputs cannot advance a terrain
  * epoch: equality is determined by complete local facts, including collision halos. */
 final class KnownPedestrianGroundVersions {
+    /** World isolation lives in the explicit identity-fenced scope. The pristine
+     * regional value must never hash or retain a complete bootstrap as a fact. */
+    private enum Pristine { TERRAIN }
     private record Inputs(Object bootstrap, RegionalBlockSet obstacles, RegionalSurfaceMap supports,
                           RegionalBlockSet withdrawn, RegionalBlockSet unknown, RegionalBlockSet scars,
                           RegionalBlockMap<Optional<NavigationCell>> shapes, KnownNaturalGeometry.Composite natural) { }
@@ -53,7 +56,7 @@ final class KnownPedestrianGroundVersions {
         if (!sameWorld || updates != null) {
             // A world epoch is the immutable bootstrap identity, never cache residency.
             var scope = new RegionalReadVersion(List.of(next.bootstrap()), Map.of());
-            working = new PedestrianGeometryRevision(scope, next.bootstrap(), updates == null ? tokens : updates);
+            working = new PedestrianGeometryRevision(scope, Pristine.TERRAIN, updates == null ? tokens : updates);
         }
         basis = next;
         return working;

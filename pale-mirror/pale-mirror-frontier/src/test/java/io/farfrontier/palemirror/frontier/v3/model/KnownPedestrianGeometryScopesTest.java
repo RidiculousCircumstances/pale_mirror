@@ -97,6 +97,11 @@ class KnownPedestrianGeometryScopesTest {
         var removedWall = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), changedSupports, changedGround);
         assertEquals(Set.of(new PedestrianGeometryRevision.Region(0, 0)), removedWall.changesSince(changed));
         var foreign = ground(versions, new Object(), Set.of(), Map.of(), Set.of());
+        assertFalse(foreign.matches(initial, Set.of(new PedestrianGeometryRevision.Region(30, 30))),
+                "even pristine regions from different worlds cannot share a route proof");
+        for (int index = 0; index < 12; index++) ground(versions, new Object(), Set.of(), Map.of(), Set.of());
+        assertEquals(initial, ground(versions, bootstrap, Set.of(wall), supports, Set.of()),
+                "world switching and cache eviction cannot alter an immutable world's regional facts");
         assertNotEquals(before.scope(), KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), Map.of(), foreign).scope());
         assertNotEquals(before.geometryScope(), KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), Map.of(), foreign).geometryScope());
     }

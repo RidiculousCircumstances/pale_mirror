@@ -802,3 +802,15 @@ shape-boundary and resolution tests exercise the new owner. A real provider test
 covers A->B->A and twelve distinct successors exceeding cache capacity, plus
 UNKNOWN_GEOMETRY after codec recovery. Focused checks pass17s. Native aggregate
 throughput effect is not yet measured; this is not100town acceptance.
+
+
+E2c77fa70 exact selected release/packaged/economy55/route-patrol4 gate passes65s;
+both retained worlds verified SHA51227946e1c5353f70704c89754354f4f401d1a5d9a79015e09631ab8eec29a2c4918bf1c762a842f05bc37bfedd2d4cb93066ee3aad2a64c93d4b3ba5ff81c3529.
+Native20sJFR stable-ground-versions-native.jfr exposes a regression in this change:
+using the bootstrap itself as the pristine regional token makes scoped RegionFacts
+hash the complete world (94/350server-thread samples). The existing identity-fenced
+world scope already supplies isolation. Pristine regional facts now use one compact
+enum token; no global identity registry or mutable world epoch is introduced.
+The existing regression also exercises foreign pristine-world rejection and return
+after twelve other worlds evict the completed-image cache. Ordinary100debt is still
+OPEN; do not interpret source correctness as throughput acceptance.
