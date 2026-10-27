@@ -350,7 +350,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         preparations.onReady(listener);
         if (store instanceof FrontierFileStore files) files.onReady(listener);
     }
-    private Runnable readiness = () -> { };
+    /** Worker notification only; the listener queues and rechecks the owner. */
+    void signalCalculationReady() { readiness.run(); }
+    private volatile Runnable readiness = () -> { };
     private java.util.function.Supplier<String> readyDeliveryDiagnostic = () -> "null";
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
     private final java.util.Map<String, Long> ordinaryBudgetExhaustions = new java.util.TreeMap<>();

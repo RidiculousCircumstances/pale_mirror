@@ -20,6 +20,38 @@ class PedestrianWorkerPlanningTest {
         void drain() { while (!queue.isEmpty()) run(0); }
     }
 
+    @Test void completionSignalsOwnerAndReturnsUnusedWorkOnlyToItsOriginalOpenTurn() {
+        var workers = new ManualWorkers(); var notices = new java.util.concurrent.atomic.AtomicInteger();
+        var geometry = geometry(workers, PedestrianGeometryRevision.initial(), -1);
+        try (var planner = new CooperativePedestrianPlanner(workers);
+             var turn = new PedestrianPlanningAllowance(BUDGET)) {
+            planner.onReady(notices::incrementAndGet);
+            for (int i = 0; i < 24; i++) {
+                var start = SurfaceAnchor.at(1 + i % 8 * 3, 63, i / 8 * 4);
+                planner.query(geometry, start, SurfaceAnchor.at(start.x() + 1, 63, start.z()));
+            }
+            planner.advance(turn, () -> true); workers.drain();
+            assertEquals(0, planner.completedCount(), "worker notification cannot publish a route");
+            assertTrue(notices.get() > 24, "accepted demand and returned slices wake their owner");
+            for (int callback = 0; callback < 128 && planner.completedCount() < 24; callback++) {
+                planner.advance(turn, () -> true); workers.drain();
+                assertTrue(planner.inFlightCount() <= 8 && workers.queue.size() <= 8);
+            }
+            assertEquals(24, planner.completedCount(), "short queries share the original allowance without another host tick");
+            assertTrue(planner.workUnits() <= BUDGET, "refunds return unused work, never consumed work");
+            for (int i = 0; i < 3; i++) planner.query(geometry, SurfaceAnchor.at(30, 63, i * 4), SurfaceAnchor.at(32, 63, i * 4));
+            var expired = new PedestrianPlanningAllowance(HierarchicalPedestrianSearch.MIN_SLICE_WORK);
+            planner.advance(expired, () -> true); assertEquals(1, workers.queue.size()); expired.close();
+            try (var next = new PedestrianPlanningAllowance(HierarchicalPedestrianSearch.MIN_SLICE_WORK)) {
+                workers.drain(); planner.advance(next, () -> true);
+                assertEquals(1, workers.queue.size(), "a late prior-turn completion cannot increase the next turn's allowance");
+                workers.drain(); planner.advance(next, () -> true);
+                assertTrue(workers.queue.isEmpty(), "consumed work cannot be refunded a second time");
+            }
+        }
+        workers.drain();
+    }
+
     @Test void completedRoutesStayWithTheirConsumersAndFullResultCapacityBackpressuresNewWork() {
         var workers = new ManualWorkers(); var revision = PedestrianGeometryRevision.initial();
         var geometry = geometry(workers, revision, -1);

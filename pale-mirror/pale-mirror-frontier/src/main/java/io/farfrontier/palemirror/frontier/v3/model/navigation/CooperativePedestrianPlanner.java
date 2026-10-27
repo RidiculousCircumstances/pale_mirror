@@ -15,6 +15,12 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private final PedestrianPlanningFairness fairness = new PedestrianPlanningFairness();
     private final java.util.concurrent.Executor executor;
     private final ArrayDeque<PedestrianSearchTask> inFlight = new ArrayDeque<>();
+    private record Reservation(PedestrianPlanningAllowance turn, int work) { }
+    private final Map<PedestrianSearchTask, Reservation> reservations = new java.util.IdentityHashMap<>();
+    private volatile Runnable readiness = () -> { };
+    /** Listener queues the owner; it must never execute world/planner work inline. */
+    public void onReady(Runnable listener) { readiness = java.util.Objects.requireNonNull(listener); }
+    private void signalReady() { readiness.run(); }
     private final Map<PedestrianRouteRequest, Completed> completed = new LinkedHashMap<>();
     private final Map<PedestrianRouteRequest, PedestrianRouteResult> deferred = new LinkedHashMap<>();
     private final Map<PedestrianRouteRequest, PedestrianPlanningChange.Kind> changes = new LinkedHashMap<>();
@@ -79,25 +85,30 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         if (reversed.isPresent()) return reversed.orElseThrow();
         fairness.requested(request, service);
         rememberAddress(request, turns);
+        boolean newDemand = false;
         if (!pending.containsKey(request)) {
             if (deferred.size() >= MAX_DEFERRED_DEMANDS && !deferred.containsKey(request)) {
                 invalidated(request);
                 return waiting("PLANNING_DEMAND_CAPACITY");
             }
-            if (deferred.putIfAbsent(request, waiting("PLANNING_QUEUE_CAPACITY")) == null) fairness.defer(request);
+            if (deferred.putIfAbsent(request, waiting("PLANNING_QUEUE_CAPACITY")) == null) { fairness.defer(request); newDemand = true; }
         }
         admitDeferred();
+        if (newDemand) signalReady();
         return waiting(pending.containsKey(request) ? "PLANNING_QUEUED" : "PLANNING_QUEUE_CAPACITY");
     }
 
     public synchronized void advance(int workBudget) {
         advance(workBudget, () -> true);
     }
-    /** Optional host admission fence; fair queue and exact searches survive yielding. */
+    /** Standalone callers open one finite turn. Native readiness may explicitly
+     * retain the same allowance across callbacks without renewing it. */
     public synchronized void advance(int workBudget, java.util.function.BooleanSupplier mayContinue) {
-        java.util.Objects.requireNonNull(mayContinue);
+        try (var allowance = new PedestrianPlanningAllowance(workBudget)) { advance(allowance, mayContinue); }
+    }
+    public synchronized void advance(PedestrianPlanningAllowance allowance, java.util.function.BooleanSupplier mayContinue) {
+        java.util.Objects.requireNonNull(mayContinue); java.util.Objects.requireNonNull(allowance);
         if (closed) throw new IllegalStateException("pedestrian planner is closed");
-        if (workBudget < HierarchicalPedestrianSearch.MIN_SLICE_WORK) throw new IllegalArgumentException("planning budget is too small");
         turns++;
         for (var entry : java.util.List.copyOf(awaitingPublication.entrySet())) {
             if (!mayContinue.getAsBoolean()) break;
@@ -106,8 +117,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             else complete(task.request(), task, entry.getValue());
         }
         admitDeferred();
-        if (executor != null) { advanceWorkers(workBudget, mayContinue); return; }
-        int remaining = workBudget;
+        if (executor != null) { advanceWorkers(allowance, mayContinue); return; }
+        int remaining = allowance.available();
         // A bounded number of visits per turn also bounds zero-cost terminals.
         // A long search rotates behind its peers; a short completion gives its
         // unused budget to the next peer, including a newly admitted deferred one.
@@ -119,13 +130,13 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             int slice = Math.min(remaining, HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             var step = search.advance(slice, mayContinue);
             PedestrianRouteResult result = step.result(); int spent = step.spent();
-            workUnits += spent; remaining -= spent;
+            workUnits += spent; remaining -= spent; allowance.reserve(spent);
             if (spent > 0) progressRevision++;
             if (result.status() == PedestrianRouteResult.Status.PLANNING) { ready.addLast(request); continue; }
             complete(request, search, result);
         }
     }
-    private void advanceWorkers(int budget, java.util.function.BooleanSupplier mayContinue) {
+    private void advanceWorkers(PedestrianPlanningAllowance allowance, java.util.function.BooleanSupplier mayContinue) {
         // Independent lanes do not fence each other. Within each lane retain
         // submission order; publication is server-owned, never a worker callback.
         int publications = MAX_PENDING;
@@ -138,24 +149,29 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 // Keep it occupied until that exact slice has actually returned;
                 // otherwise rapid invalidations can overfill the bounded pool.
                 var retired = task.poll();
-                if (retired != null) { inFlight.remove(task); workUnits += retired.spent(); }
+                if (retired != null) { inFlight.remove(task); settle(task, retired.spent()); workUnits += retired.spent(); }
                 continue;
             }
             var lane = fairness.lane(request);
             if (blocked.contains(lane)) continue;
             var step = task.poll();
             if (step == null) { blocked.add(lane); continue; }
-            inFlight.remove(task); workUnits += step.spent();
+            inFlight.remove(task); settle(task, step.spent()); workUnits += step.spent();
             if (step.spent() > 0) progressRevision++;
             if (step.result().status() == PedestrianRouteResult.Status.PLANNING) ready.addLast(request);
             else complete(request, task, step.result());
         }
         admitDeferred();
         int slice = HierarchicalPedestrianSearch.MIN_SLICE_WORK;
-        while (budget >= slice && !ready.isEmpty() && inFlight.size() < MAX_PENDING && mayContinue.getAsBoolean()) {
+        while (allowance.available() >= slice && !ready.isEmpty() && inFlight.size() < MAX_PENDING && mayContinue.getAsBoolean()) {
             var request = fairness.take(ready); var task = pending.get(request);
-            task.submit(executor, slice); inFlight.addLast(task); budget -= slice;
+            allowance.reserve(slice); reservations.put(task, new Reservation(allowance, slice));
+            task.submit(executor, slice, this::signalReady); inFlight.addLast(task);
         }
+    }
+    private void settle(PedestrianSearchTask task, int spent) {
+        var reservation = java.util.Objects.requireNonNull(reservations.remove(task), "worker slice lost its allowance");
+        reservation.turn().settle(reservation.work(), spent);
     }
     private void complete(PedestrianRouteRequest request, PedestrianSearchTask search, PedestrianRouteResult result) {
         var dependency = search.dependencies();
@@ -443,7 +459,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, java.util.List.of(), 0L, 0, reason);
     }
     @Override public synchronized void close() {
-        closed = true; pending.values().forEach(PedestrianSearchTask::cancel);
+        closed = true; readiness = () -> { }; reservations.clear(); pending.values().forEach(PedestrianSearchTask::cancel);
         inFlight.forEach(PedestrianSearchTask::cancel);
         suspended.values().forEach(PedestrianSearchTask::cancel); suspended.clear(); fairness.clear();
         pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); calculationAddresses.clear(); changes.clear();

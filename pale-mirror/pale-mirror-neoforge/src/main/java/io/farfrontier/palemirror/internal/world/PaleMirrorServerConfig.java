@@ -50,7 +50,7 @@ public final class PaleMirrorServerConfig {
                 .defineInRange("runtime.weightBudget", 256, 16, 4096);
         NAVIGATION_WORKERS = builder.comment("Bounded immutable route-search workers; restart required. Never access live Minecraft state.")
                 .defineInRange("runtime.navigationWorkers", 2, 1, 4);
-        NAVIGATION_SLICES_PER_TURN = builder.comment("Maximum new background navigation slices per host turn; total in-flight ceiling remains eight.")
+        NAVIGATION_SLICES_PER_TURN = builder.comment("Background navigation work quanta per observed host turn; short slices return unused work to that same turn. Total in-flight ceiling remains eight.")
                 .defineInRange("runtime.navigationSlicesPerTurn", 8, 1, 8);
         DH_CACHE_ONLY_CONTROL = builder.comment(
                         "Pin server-side Distant Horizons to PRE_EXISTING_ONLY. Ready LOD cache and sync remain enabled, "

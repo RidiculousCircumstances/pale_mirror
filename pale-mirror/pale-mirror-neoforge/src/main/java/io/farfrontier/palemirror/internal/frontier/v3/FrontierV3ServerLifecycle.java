@@ -223,7 +223,7 @@ public final class FrontierV3ServerLifecycle {
         RUNTIMES.put(server, runtime);
         var readyRuntime = runtime;
         FrontierV3CanonicalResumption.bind(server, runtime,
-                () -> !stopping(server) && RUNTIMES.get(server) == readyRuntime && ordinaryTime(server),
+                () -> !stopping(server) && RUNTIMES.get(server) == readyRuntime, () -> ordinaryTime(server),
                 () -> FrontierV3PhysicalExecutors.registry().resume(FrontierV3PhysicalWorld.require(server), readyRuntime),
                 () -> stopQuarantined(server, readyRuntime));
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && Boolean.getBoolean(PILOT_INITIAL_CANONICAL_HOLD_PROPERTY)) {
@@ -390,12 +390,12 @@ public final class FrontierV3ServerLifecycle {
                 if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
                     runtime.beginOrdinaryTurn(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
             }
-            // Planning and validation share bounded views; changed inputs invalidate them.
+            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
+                FrontierV3PedestrianPlanning.beginTurn(runtime);
             runtime.runPersistenceTurn(() -> io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(() -> {
                 boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
-                if (active) FrontierV3PedestrianPlanning.tick(runtime);
-                // Recovery establishes disposable route waits before producers can
-                // consume them. Host time remains queued while native ticks continue.
+                if (active) FrontierV3PedestrianPlanning.resume(runtime);
+                // Restore route waits before producers; native time remains queued.
                 if (active && !FrontierV3PedestrianPlanning.recovered(runtime)) return null;
                 boolean initialHold = INITIAL_CANONICAL_HOLDS.containsKey(server);
                 boolean absoluteTargetPresent = FAST_FORWARD_TARGETS.containsKey(server);

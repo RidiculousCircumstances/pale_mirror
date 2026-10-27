@@ -23,30 +23,45 @@ final class FrontierV3PedestrianPlanning {
     private static java.util.function.Supplier<PedestrianPlanningContinuations.Recovery> recoveryPlan;
     private static java.util.concurrent.Future<PedestrianPlanningContinuations.Recovery> recovery;
     private static int deferredReady;
+    private static io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningAllowance workTurn;
+    private static long remainingHostNanos;
+    private static final java.util.concurrent.atomic.AtomicBoolean calculationReady = new java.util.concurrent.atomic.AtomicBoolean();
     private FrontierV3PedestrianPlanning() { }
 
-    static synchronized void tick(FrontierV3ServerRuntime<?, ?> runtime) {
-        tick(runtime, (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000L),
+    /** Renewed exactly once by the observed host tick, even while persistence yields. */
+    static synchronized void beginTurn(FrontierV3ServerRuntime<?, ?> runtime) {
+        openTurn(runtime, (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000L),
                 io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_WORKERS.get(),
                 io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_SLICES_PER_TURN.get());
     }
-    /** Host budget is operational input, independent of simulation time and test config bootstrapping. */
+    /** Explicit host-turn budget, independent of simulation time/config bootstrapping. */
     static synchronized void tick(FrontierV3ServerRuntime<?, ?> runtime, long allowance) {
-        tick(runtime, allowance, io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_WORKERS.getDefault(),
+        openTurn(runtime, allowance, io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_WORKERS.getDefault(),
                 io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_SLICES_PER_TURN.getDefault());
+        resume(runtime);
     }
-    private static void tick(FrontierV3ServerRuntime<?, ?> runtime, long allowance, int parallelism, int slices) {
+    private static void openTurn(FrontierV3ServerRuntime<?, ?> runtime, long allowance, int parallelism, int slices) {
         if (allowance <= 0) throw new IllegalArgumentException("navigation host budget must be positive");
         initialize(runtime, parallelism);
-        recoverWaits(runtime);
-        continuations.releaseUnused(planner::discardUnobserved);
-        planner.retainDemandKeys(continuations.retainedDemandKeys(runtime.canonicalState().orElseThrow().instant()));
+        if (workTurn != null) workTurn.close();
+        workTurn = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningAllowance(
+                HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices);
+        remainingHostNanos = allowance; calculationReady.set(true);
+    }
+    /** Worker readiness reuses the original deterministic allowance and remaining owner
+     * CPU budget. It neither advances time nor renews physical/canonical admission. */
+    static synchronized void resume(FrontierV3ServerRuntime<?, ?> runtime) {
+        if (owner != runtime || workTurn == null || remainingHostNanos <= 0 || !calculationReady.compareAndSet(true, false)) return;
         long started = System.nanoTime();
-        planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
-                () -> System.nanoTime() - started < allowance);
-        continuations.changed(planner.drainChanges());
-        admitReady(runtime, continuations);
-        deferredReady = continuations.readyCount();
+        try {
+            recoverWaits(runtime);
+            continuations.releaseUnused(planner::discardUnobserved);
+            planner.retainDemandKeys(continuations.retainedDemandKeys(runtime.canonicalState().orElseThrow().instant()));
+            planner.advance(workTurn, () -> System.nanoTime() - started < remainingHostNanos);
+            continuations.changed(planner.drainChanges());
+            admitReady(runtime, continuations);
+            deferredReady = continuations.readyCount();
+        } finally { remainingHostNanos = Math.max(0L, remainingHostNanos - (System.nanoTime() - started)); }
     }
     /** Bind the service during startup, not by class-loading its implementation
      * in the first ordinary world tick. Detached recovery still waits asynchronously.
@@ -65,6 +80,7 @@ final class FrontierV3PedestrianPlanning {
                     new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
             var next = new CooperativePedestrianPlanner(nextWorkers);
             var nextBinding = PedestrianRoutePlanning.bind(next);
+            next.onReady(() -> { calculationReady.set(true); runtime.signalCalculationReady(); });
             owner = runtime; planner = next; workers = nextWorkers; binding = nextBinding;
             continuations = new PedestrianPlanningWakeIndex();
             continuationBinding = PedestrianPlanningContinuations.bind(continuations);
@@ -222,6 +238,7 @@ final class FrontierV3PedestrianPlanning {
         if (owner != runtime) return;
         if (recovery != null) recovery.cancel(true);
         recovery = null; recoveryPlan = null;
+        if (workTurn != null) workTurn.close(); workTurn = null; remainingHostNanos = 0; calculationReady.set(false);
         try { continuationBinding.close(); binding.close(); }
         catch (Exception error) { throw new IllegalStateException("cannot release pedestrian planner", error); }
         finally { planner.close(); workers.shutdownNow(); workers = null; binding = null; continuationBinding = null; continuations = null; planner = null; owner = null; deferredReady = 0; }

@@ -832,3 +832,35 @@ ordering or retirement permission changes. Existing kernel/replay and reference
 negative tests retain rejected retirement and valid atomic cancellation; the
 ordinary terrain-change case rejects any unnecessary complete-queue read.
 Affected checks pass25s; strengthened real changed-state case passes14s.
+
+
+6242 exact selected release/packaged/economy55/route-patrol4 gate passes65s; both
+retained worlds verified SHA512f749311e2e02d5d7b3790ccf4b63560ffc5e6d7e57eafc75d59ba99fc0e6a8b4b01af88d2078197613f2c1a52bc2c89d8cae0d0f4fc28ca11ac1b145ffdfff0e.
+Ordinary100 observer completes12samples:102534->105934/333s, debt1044->4305.
+Approx10canonicalticks/s stillFAILS. Different retained lifecycle intervals are not
+an isolated speed ratio. Fullqueuecopies are source-eliminated, not goal closure.
+
+The wait profile provides a stronger next discriminator: in20s of b745 runtime,
+navworkers parked18.7s each, exact-preparation13.3s, owner9.5s, withhundreds of LOCAL
+queries queued. ActualModernFix5.27.2 bytecode keeps normal LockSupport wake semantics;
+no engine/mixin patch is justified. The common async planner did not notify its
+owner when a worker slice completed, and charged the entire large minimum slice
+reservation even when a tiny local route used only a fraction. Unlike synchronous
+search, it never returned unused work. Thus new work/result publication waited for
+another native50ms poll while bounded workers were idle.
+
+One PedestrianPlanningAllowance now retains the original host work quanta. Each
+in-flight slice reserves credit; owner publication settles actual work and refunds
+only that original still-open turn. A native turn closes the old allowance even
+when persistence yields. Late/cancelled generations keep their executor slots until
+return and never fund the next turn. Worker/new-demand notifications queue the
+existing owner resumption; a coalesced pending flag avoids scanning navigation on
+every unrelated calculation callback. Navigation shares the original remaining
+owner-CPU budget across resumptions. Eight in-flight slots, worker count, work
+quanta, fairness, result/graph limits and canonical action allowances stay bounded.
+Fast-forward/holds permit this calculation-only resumption without ordinary clock
+or physical replay. Unknown geometry, current-dependency checks and single-owner
+publication remain unchanged. The existing worker suite now covers24short queries
+within one original allowance, no worker publication, foreign-turn refund denial,
+no double credit and cancellation/capacity. Focused worker/queue/invalidation/adapter/
+ready-turn plus guardrails PASS16s. Native throughput effect is still unmeasured.

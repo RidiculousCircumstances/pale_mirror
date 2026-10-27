@@ -22,22 +22,24 @@ final class FrontierV3CanonicalResumption {
         finally { NATIVE_TICKS.remove(server); }
     }
     static void bind(MinecraftServer server, FrontierV3ServerRuntime<?, ?> runtime,
-            BooleanSupplier admitted, Runnable physicalContinuation, Runnable checkFailure) {
+            BooleanSupplier admitted, BooleanSupplier ordinaryTime, Runnable physicalContinuation, Runnable checkFailure) {
         if (TURNS.containsKey(server)) throw new IllegalStateException("canonical resumption already bound");
         var turn = new FrontierV3ReadyTurn(task -> server.tell(new TickTask(server.getTickCount(), task)),
-                () -> resume(server, runtime, admitted, physicalContinuation, checkFailure));
+                () -> resume(server, runtime, admitted, ordinaryTime, physicalContinuation, checkFailure));
         TURNS.put(server, turn); runtime.onReady(turn::signal, turn::diagnostic);
     }
     /** No native-tick reentry, invented time, physical replay or renewed allowance. */
     private static void resume(MinecraftServer server, FrontierV3ServerRuntime<?, ?> runtime,
-            BooleanSupplier admitted, Runnable physicalContinuation, Runnable checkFailure) {
+            BooleanSupplier admitted, BooleanSupplier ordinaryTime, Runnable physicalContinuation, Runnable checkFailure) {
         if (!admitted.getAsBoolean() || NATIVE_TICKS.contains(server)
-                || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
-                || !FrontierV3PedestrianPlanning.recovered(runtime)) return;
+                || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         try (var turn = FrontierV3HostTiming.beginReadyTurn(runtime.executionMetrics())) {
             runtime.runPersistenceTurn(() -> ImmutablePlanningScope.within(() -> {
-                physicalContinuation.run();
-                runtime.resumeOrdinaryTurn(); return null;
+                FrontierV3PedestrianPlanning.resume(runtime);
+                if (ordinaryTime.getAsBoolean() && FrontierV3PedestrianPlanning.recovered(runtime)) {
+                    physicalContinuation.run();
+                    runtime.resumeOrdinaryTurn();
+                } return null;
             }));
         } catch (RuntimeException error) {
             PaleMirrorMod.LOGGER.error("Frontier v3 ready continuation failed before quarantine", error);

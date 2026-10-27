@@ -38,7 +38,7 @@ final class PedestrianSearchTask {
         search.prepareReuse();
         Step step = calculate(search, budget, mayContinue); work += step.spent(); stage = step.result().reason(); search.publishReuse(); return step;
     }
-    void submit(Executor executor, int budget) {
+    void submit(Executor executor, int budget, Runnable ready) {
         if (flight != null || cancelled) throw new IllegalStateException("pedestrian slice already running or retired");
         search.prepareReuse();
         var result = new CompletableFuture<Step>(); flight = result;
@@ -47,6 +47,7 @@ final class PedestrianSearchTask {
             executor.execute(() -> {
                 try { result.complete(calculate(captured, budget, () -> !cancelled)); }
                 catch (Throwable failure) { result.completeExceptionally(failure); }
+                finally { ready.run(); } // Notification only; publication stays with the owner.
             });
         } catch (RuntimeException rejected) { flight = null; throw rejected; }
     }
