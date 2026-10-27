@@ -11,7 +11,7 @@ class InMemoryFrontierReadinessTest {
     private static final WorldId WORLD = new WorldId("frontier:readiness-test");
     private static final SubjectId SUBJECT = new SubjectId("resident:readiness-test");
     @Test void exactSelfReplacementParksWithoutPublishingAndIndependentDueWorkStillRuns() {
-        var waiting = scheduled("schedule:calculation", "resident:waiting", 5, 1);
+        var waiting = scheduled("schedule:calculation", "resident:1-waiting", 5, 1);
         var other = scheduled("schedule:other", "resident:other", 5, 2);
         var preparing = new java.util.concurrent.atomic.AtomicBoolean();
         var ready = new java.util.concurrent.atomic.AtomicBoolean();
@@ -34,6 +34,10 @@ class InMemoryFrontierReadinessTest {
                 state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
                 (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
                 new EngineLimits(8, 100L, 8), List.of(waiting, other));
+        var narrow = engine.advanceTo(new SimInstant(10), new WorkBudget(4, 4, 1, 4, 4));
+        assertEquals(1, narrow.consumed().classifications(), "post-plan refusal cannot exceed its classification allowance");
+        assertEquals(Optional.of(waiting), narrow.deferredAction());
+        assertTrue(engine.transactions().isEmpty());
         engine.advanceTo(new SimInstant(10), new WorkBudget(4, 4));
         assertEquals(1, engine.transactions().size(), "only independent business work is a transaction");
         assertEquals(List.of(waiting), engine.scheduledActions());

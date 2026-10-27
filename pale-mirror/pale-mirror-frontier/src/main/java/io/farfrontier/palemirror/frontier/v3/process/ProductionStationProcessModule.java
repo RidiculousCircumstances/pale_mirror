@@ -45,30 +45,42 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
                 if (!waitingForOperation(state, action)) return Optional.empty();
                 var record = ProductionStationEnergy.record(state, action.subject());
                 var inputs = ImmutableDependencies.of(state.bootstrap(), state.productionStations().machines().get(action.subject()),
-                        record, state.inventory().surfaces().get(record.id()));
+                        record, state.inventory().surfaces().get(record.id()), inputAccount(state, record.id()));
                 return Optional.of(new ScheduledHold<>(action, wakeDependencies(state, action), current ->
                         inputs.matches(current.bootstrap(), current.productionStations().machines().get(action.subject()),
-                                current.inventory().containers().get(record.id()), current.inventory().surfaces().get(record.id()))));
+                                current.inventory().containers().get(record.id()), current.inventory().surfaces().get(record.id()),
+                                inputAccount(current, record.id()))));
             }
         };
     }
-    /** An attended machine cannot create its own operation. No clock advance or
-     * distant inventory change can make an empty operator-owned station runnable. */
+    /** Neither an absent operator-owned operation nor an empty automatic input
+     * can become available merely by advancing time. Their exact owners wake them. */
     private static boolean waitingForOperation(FrontierWorldState state, ScheduledAction action) {
         var machine = state.productionStations().machines().get(action.subject());
         if (machine == null || machine.operation().isPresent()) return false;
         var record = ProductionStationEnergy.record(state, action.subject());
         if (state.inventory().surfaces().get(record.id()).status() == ContainerSurfaceStatus.RETIRED) return false;
-        return AutomaticStationProduction.policy(state, record.productionStation().orElseThrow()).isEmpty();
+        var input = inputAccount(state, record.id());
+        return AutomaticStationProduction.policy(state, record.productionStation().orElseThrow()).isEmpty()
+                || input == null || input.lotQuantities().isEmpty();
+    }
+    private static CustodyAccount inputAccount(FrontierWorldState state, SubjectId container) {
+        return FungibleResourceCustodySupport.accountAtContainer(state, container, ContainerSectionId.INPUT).orElse(null);
     }
     /** Machine mutations may be caused by a job or inventory operation with another
      * event subject. The machine owner supplies its exact changed wake identities. */
     static Set<SubjectId> wakeKeys(FrontierWorldState previous, FrontierWorldState next) {
         var before = previous.productionStations().machines(); var after = next.productionStations().machines();
-        if (before == after) return Set.of();
         var keys = new HashSet<SubjectId>();
-        before.forEach((id, machine) -> { if (!Objects.equals(machine, after.get(id))) keys.add(id); });
-        after.forEach((id, machine) -> { if (!before.containsKey(id)) keys.add(id); });
+        if (before != after) {
+            before.forEach((id, machine) -> { if (!Objects.equals(machine, after.get(id))) keys.add(id); });
+            after.forEach((id, machine) -> { if (!before.containsKey(id)) keys.add(id); });
+        }
+        if (previous.inventory().fungibleResources().accounts() != next.inventory().fungibleResources().accounts())
+            after.forEach((id, machine) -> {
+                var container = ProductionStationEnergy.record(next, id).id();
+                if (inputAccount(previous, container) != inputAccount(next, container)) keys.add(id);
+            });
         return Set.copyOf(keys);
     }
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant now) {

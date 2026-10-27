@@ -638,3 +638,29 @@ be discriminated by the existing focused route-patrol slice. These supplementary
 failures remain recorded, not an unfiltered green claim. Economy55/55passed and
 production-effect5/5passed on cd. New kernel/wait changes require their affected
 selected native gate before the next deployment. Main stillfec4, privatecd; Gopen.
+
+
+B42 selected pure/adapter/guardrails+packaged/economy55+route-patrol4gate passes54s;
+the earlier isolated patrol admission failure did not reproduce in its focused
+native slice. Ordinary private100town still accumulatesdebt, so G remains open.
+Actual checked snapshot74814 contains137hungry,126MOVEmeals and89movements versus
+previous~3000hungry: feeding makes terminal progress, but clock throughput is low.
+It also shows396/400machinesidle and296overdue station reviews. The automatic
+machine owner previously parked only attended empty operations; input-empty
+automatic machines still committed a retry every20ticks. They now park on their
+exact input custody row (empty/absent only), retaining catalog/machine/container/
+surface dependencies. A real changed input row wakes its station independently of
+the event's courier subject. No demand/price/fuel-duration decision is inferred
+from an empty input, and occupied automatic inputs retain ordinary policy review.
+
+The connected input-wake path exposed another repeated full scan: the resource
+read index mixed custody-section lookup with available-balance rows. Alternating
+pre/post ledgers recreated all container entries even when only lots/claims
+changed. Section lookup now has its own four-entry immutable result view keyed
+only by the exact accounts map; local balance computation retains its existing
+full dependency set. Branch/recovery/stock tests retain correctness; this is not
+another ledger or slot authority. The no-change post-plan owner assessment now
+spends the existing classification allowance; exhausted allowance defers the
+original action instead of performing an uncharged evaluation. Added read-only
+readyDelivery.totalDelayNanos and ordinaryYields distinguish callback delay and
+runtime gates; latest-delay samples alone were not sufficient attribution.

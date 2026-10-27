@@ -388,10 +388,13 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 if (planned.size() == 1 && planned.getFirst().subject().equals(action.subject())
                         && planned.getFirst().payload() instanceof ScheduleEffect.Rescheduled unchanged
                         && unchanged.scheduleId().equals(action.id()) && unchanged.replacement().equals(action)) {
-                    admissionIndex.reconsider(action);
-                    var keys = scheduledPlanner.held(state, action) ? admissionIndex.wakeKeys(state, action) : Set.<SubjectId>of();
-                    schedules.holdSelected(action, keys, executionAt);
                     preparationAttempts++; weight = Math.addExact(weight, cost);
+                    admissionIndex.reconsider(action);
+                    var refusal = admissionIndex.assess(state, action);
+                    if (refusal == ScheduleAdmissionIndex.Decision.DEFERRED) { blocked = action; break; }
+                    var keys = refusal == ScheduleAdmissionIndex.Decision.HELD
+                            ? admissionIndex.wakeKeys(state, action) : Set.<SubjectId>of();
+                    schedules.holdSelected(action, keys, executionAt);
                     continue;
                 }
                 List<ProposedEvent> events = new ArrayList<>(planned.size() + 1);

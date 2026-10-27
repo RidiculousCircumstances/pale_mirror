@@ -339,6 +339,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 + ",\"lastInvalidatingPayload\":" + new com.google.gson.Gson().toJson(lastPreparationInvalidator)
                 + ",\"readyDelivery\":" + readyDeliveryDiagnostic.get()
                 + ",\"ordinaryBudgetExhaustions\":" + new com.google.gson.Gson().toJson(ordinaryBudgetExhaustions)
+                + ",\"ordinaryYields\":" + new com.google.gson.Gson().toJson(ordinaryYields)
                 + ",\"environmentalSamples\":" + environmentalSamples + ",\"yieldedEnvironmentalSamples\":" + yieldedEnvironmentalSamples + "}";
     }
 
@@ -354,6 +355,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
     private final java.util.Map<String, Long> ordinaryBudgetExhaustions = new java.util.TreeMap<>();
     private Long ordinaryBoundary;
+    private final java.util.Map<String, Long> ordinaryYields = new java.util.TreeMap<>();
     private static final long MAX_READY_PREFIX_NANOS = 2_000_000L;
     /** One allowance per observed host tick, shared by all ready continuations. */
     void beginOrdinaryTurn(WorkBudget budget) { ordinaryTurnBudget = Optional.of(Objects.requireNonNull(budget)); }
@@ -361,6 +363,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     /** Host clock bounds only the disposable slice; canonical time still comes from observed ticks. */
     void resumeOrdinaryTurn(java.util.function.LongSupplier hostClock) {
         boolean progressed = false;
+        if (ordinaryTurnBudget.isEmpty()) ordinaryYields.merge("NO_ALLOWANCE", 1L, Long::sum);
         // Keep cheap already-ready transitions in the same persistence turn.
         // A costly action or an asynchronous boundary yields immediately; every
         // prefix still spends the one original observed-tick allowance.
@@ -371,7 +374,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                     Math.min(1, budget.maxExecutionEvaluations()), budget.maxActionWeight());
             long before = instant.ticks();
             var result = advanceOrdinaryTime(quantum);
-            if (result.isEmpty()) break;
+            if (result.isEmpty()) { ordinaryYields.merge("NO_RESULT", 1L, Long::sum); break; }
             var used = result.orElseThrow().consumed();
             ordinaryTurnBudget = used.remaining(budget);
             if (ordinaryTurnBudget.isEmpty()) {
@@ -382,9 +385,11 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             }
             boolean advanced = instant.ticks() > before || used.actions() > 0 || used.classifications() > 0 || used.executions() > 0;
             progressed |= advanced;
-            if (!advanced || used.weight() > 1 || engine.hasPendingCalculation() || engine.hasPendingCommit()
-                    || pendingOrdinaryTicks == 0 && ordinaryBoundary == null
-                    || hostClock.getAsLong() - prefixStarted >= MAX_READY_PREFIX_NANOS) break;
+            String yield = !advanced ? "NO_PROGRESS" : used.weight() > 1 ? "WEIGHTED_ACTION"
+                    : engine.hasPendingCalculation() ? "CALCULATION" : engine.hasPendingCommit() ? "DURABILITY"
+                    : pendingOrdinaryTicks == 0 && ordinaryBoundary == null ? "CAUGHT_UP"
+                    : hostClock.getAsLong() - prefixStarted >= MAX_READY_PREFIX_NANOS ? "HOST_SLICE" : null;
+            if (yield != null) { ordinaryYields.merge(yield, 1L, Long::sum); break; }
         }
         if (ordinaryTurnBudget.isPresent() && (pendingOrdinaryTicks > 0 || ordinaryBoundary != null)
                 && !engine.hasPendingCalculation() && !engine.hasPendingCommit()
