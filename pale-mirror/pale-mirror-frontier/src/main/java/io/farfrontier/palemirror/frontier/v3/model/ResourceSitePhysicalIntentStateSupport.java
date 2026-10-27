@@ -42,6 +42,24 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
+    record ReferenceView(java.util.Set<SubjectId> subjects, Map<SubjectId, ResourceSiteLifecycle> conflicts) { }
+    private record ReferenceImage(Object sites, ReferenceView view) { }
+    private static final ThreadLocal<ReferenceImage> REFERENCE_IMAGE = new ThreadLocal<>();
+    /** Complete family-owned read set for common intent existence checks. Work
+     * progress does not change IDs; prepared conflicts retain their exact lifecycle. */
+    static ReferenceView referenceView(ResourceSiteState sites) {
+        var prior = REFERENCE_IMAGE.get();
+        if (prior != null && prior.sites() == sites.sites()) return prior.view();
+        var subjects = nonterminalSubjects(sites);
+        var conflicts = new LinkedHashMap<SubjectId, ResourceSiteLifecycle>();
+        sites.sites().forEach((id, site) -> { if (site.phase() == ResourceSitePhase.CONFLICT) conflicts.put(id, site); });
+        var view = new ReferenceView(prior != null && subjects.equals(prior.view().subjects())
+                ? prior.view().subjects() : ImmutableLookupSet.copyOf(subjects),
+                prior != null && conflicts.equals(prior.view().conflicts())
+                    ? prior.view().conflicts() : ImmutableLookupMap.copyOf(conflicts));
+        REFERENCE_IMAGE.set(new ReferenceImage(sites.sites(), view)); return view;
+    }
+
     /** Derived relation view for one immutable audit, not a second ownership register. */
     static java.util.Set<SubjectId> nonterminalSubjects(ResourceSiteState sites) {
         var subjects = new java.util.HashSet<SubjectId>();

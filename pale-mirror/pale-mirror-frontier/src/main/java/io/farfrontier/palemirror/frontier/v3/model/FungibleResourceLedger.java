@@ -20,7 +20,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     public static final int MAX_BINDINGS = 16_384;
 
     public FungibleResourceLedger {
-        lots = Map.copyOf(lots); claims = Map.copyOf(claims); accounts = Map.copyOf(accounts); bindings = Map.copyOf(bindings);
+        lots = ImmutableLookupMap.copyOf(lots); claims = ImmutableLookupMap.copyOf(claims); accounts = ImmutableLookupMap.copyOf(accounts); bindings = ImmutableLookupMap.copyOf(bindings);
         if (lots.size() > MAX_LOTS || claims.size() > MAX_CLAIMS || accounts.size() > MAX_ACCOUNTS || bindings.size() > MAX_BINDINGS) {
             throw new IllegalArgumentException("fungible resource retention limit exceeded");
         }
@@ -961,7 +961,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> result = new HashMap<>();
         bindings.forEach(binding -> (lots ? binding.lotQuantities() : binding.claimQuantities())
                 .forEach((id, quantity) -> result.merge(id, quantity, Integer::sum)));
-        return Map.copyOf(result);
+        return ImmutableLookupMap.copyOf(result);
     }
     private static CustodyAccount accountWithAdded(CustodyAccount account, Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {
         Map<SubjectId, Integer> nextLots = new HashMap<>(account.lotQuantities()); lots.forEach((id, quantity) -> nextLots.merge(id, quantity, Integer::sum));

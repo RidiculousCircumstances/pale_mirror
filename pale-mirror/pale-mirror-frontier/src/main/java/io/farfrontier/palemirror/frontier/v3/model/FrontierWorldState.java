@@ -150,6 +150,8 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     public static final int MAX_PHYSICAL_INTENTS = SimulationCapacity.MAX_PHYSICAL_INTENTS;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     private static final ThreadLocal<Integer> DEFERRED_FULL_VALIDATION_DEPTH = ThreadLocal.withInitial(() -> 0);
+    private static final ImmutableInvariantCheck<Void> PHYSICAL_REFERENCES = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> PHYSICAL_CONFIRMATIONS = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> BOOTSTRAP_RESIDENTS = new ImmutableInvariantCheck<>();
     public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
                               Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection,
@@ -474,8 +476,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         }
         SettlementServiceWorkStateSupport.validate(bootstrap, humanPopulation, actorLocations, infection, inventory, serviceWorks, physicalIntents);
         FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
+        var fieldReferences = ResourceSitePhysicalIntentStateSupport.referenceView(resourceSites);
+        PHYSICAL_REFERENCES.validate(() -> {
         if (physicalIntents.size() > MAX_PHYSICAL_INTENTS) throw new IllegalArgumentException("physical intent retention limit exceeded");
-        Set<SubjectId> fieldSubjects = ResourceSitePhysicalIntentStateSupport.nonterminalSubjects(resourceSites);
+        Set<SubjectId> fieldSubjects = fieldReferences.subjects();
         for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
             PhysicalIntent intent = entry.getValue();
             if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
@@ -527,15 +531,22 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                 }
             }
         }
+        }, bootstrap, expectedActors, physicalIntents, inventory.containers(), inventory.items(), inventory.cargo(),
+                inventory.fungibleResources().accounts(), inventory.fungibleResources().lots(), inventory.fungibleResources().claims(),
+                hiveColony, humanPopulation.birthJobs(), humanPopulation.medicalOperations(), humanPopulation.provisions(),
+                productionJobs, serviceWorks, strategicPlans.settlementAssaults(), routeConstructions, routeMaintenances,
+                fieldReferences.subjects(), fieldReferences.conflicts());
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
         FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks, resourceSites);
         ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations);
+        PHYSICAL_CONFIRMATIONS.validate(() -> {
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
                     && !physicalObservations.containsKey(intent.postconditionObservationId().orElseThrow())) {
                 throw new IllegalArgumentException("confirmed physical intent must retain its exact observation");
             }
         }
+        }, physicalIntents, physicalObservations);
         if (sceneLeases.size() > MAX_SCENE_LEASES) throw new IllegalArgumentException("scene lease retention limit exceeded");
         FrontierSceneLeaseValidationSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, routeConstructions,
                 routeMaintenances, strategicPlans, resourceSites, productionJobs, sceneLeases, serviceWorks, activelyAmbientLeased);

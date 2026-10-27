@@ -22,6 +22,19 @@ class IncrementalValidationTest {
         assertEquals(3, calls.get());
     }
 
+    @Test void fieldReferenceProjectionAndExactJobDirectoryFollowRetirement() {
+        var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
+        var sites = fixture.state().resourceSites(); var job = fixture.job();
+        var before = ResourceSitePhysicalIntentStateSupport.referenceView(sites);
+        assertTrue(before.subjects().contains(job.id()));
+        assertEquals(job, sites.harvestJob(job.id()).orElseThrow());
+        var after = sites.replace(sites.site(job.siteId()).destroyed());
+        assertFalse(ResourceSitePhysicalIntentStateSupport.referenceView(after).subjects().contains(job.id()));
+        assertTrue(after.harvestJob(job.id()).isEmpty());
+        assertEquals(job, sites.harvestJob(job.id()).orElseThrow(), "a later image cannot change an earlier immutable job directory");
+        assertTrue(ResourceSitePhysicalIntentStateSupport.referenceView(sites).subjects().contains(job.id()));
+    }
+
     @Test void deferredPreviewStillFailsAtPublicationAndRecoveryWhenAnExecutionRelationshipIsMissing() {
         var before = ResourceSiteHarvestProcessTest.awaitingEquipment(125L).state();
         var actors = new java.util.LinkedHashMap<>(before.actorLocations());

@@ -7,6 +7,18 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ImmutableLookupMapTest {
+    @Test void membershipSnapshotIsDefensiveAndImmutableIncludingAbsentMutations() {
+        var source = new java.util.ArrayList<>(List.of("BB", "Aa", "BB"));
+        var snapshot = ImmutableLookupSet.copyOf(source); source.clear();
+        assertEquals(java.util.Set.of("BB", "Aa"), snapshot);
+        assertEquals(List.of("BB", "Aa"), List.copyOf(snapshot));
+        assertTrue(snapshot.contains("BB")); assertFalse(snapshot.contains("missing"));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.iterator().remove());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.remove("missing"));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.removeIf(value -> false));
+        assertSame(snapshot, ImmutableLookupSet.copyOf(snapshot));
+        assertThrows(NullPointerException.class, () -> ImmutableLookupSet.copyOf(java.util.Collections.singleton(null)));
+    }
     @Test void snapshotIsDefensiveOrderedAndCannotBeMutatedThroughViews() {
         var source = new LinkedHashMap<String, Integer>();
         source.put("BB", 2); source.put("Aa", 1); // equal String hash, distinct identities

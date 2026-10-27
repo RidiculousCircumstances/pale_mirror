@@ -14,6 +14,19 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
                                 Map<CellMutationKey, ResourceFieldForeignChangeHeld> pendingForeignChanges,
                                 Map<SubjectId, CultivationReview> cultivation) {
     public static final int MAX_SITES = 1024;
+    private static final ImmutableResultView<String, Map<SubjectId, ResourceSiteHarvestJob>> HARVEST_DIRECTORY = new ImmutableResultView<>(4);
+    /** Exact declared job lookup; membership validates a FIELD_HARVEST reference,
+     * never discovers a job kind or assignment from an untyped identifier. */
+    public java.util.Optional<ResourceSiteHarvestJob> harvestJob(SubjectId jobId) {
+        var directory = HARVEST_DIRECTORY.get(java.util.List.of(sites), "harvest-jobs", () -> {
+            var result = new LinkedHashMap<SubjectId, ResourceSiteHarvestJob>();
+            sites.values().forEach(site -> site.harvestJobs().values().forEach(job -> {
+                if (result.putIfAbsent(job.id(), job) != null) throw new IllegalArgumentException("duplicate field job identity");
+            }));
+            return ImmutableLookupMap.copyOf(result);
+        });
+        return java.util.Optional.ofNullable(directory.get(Objects.requireNonNull(jobId)));
+    }
     private static final ImmutableInputView<Boolean> GEOMETRY_VALIDATION = new ImmutableInputView<>();
     public ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarations, Map<SubjectId, ResourceSiteLifecycle> sites,
             Map<SubjectId, ResourceFieldCycle> cycles, Map<CellMutationKey, ResourceFieldCellObserved> pendingWorldChanges,
@@ -34,13 +47,13 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
     }
 
     public ResourceSiteState {
-        declarations = Map.copyOf(Objects.requireNonNull(declarations, "resource-site declarations"));
-        cultivation = Map.copyOf(cultivation);
+        declarations = ImmutableLookupMap.copyOf(Objects.requireNonNull(declarations, "resource-site declarations"));
+        cultivation = ImmutableLookupMap.copyOf(cultivation);
         if (cultivation.size() > MAX_SITES) throw new IllegalArgumentException("unbounded cultivation reviews");
-        sites = Map.copyOf(Objects.requireNonNull(sites, "resource-site lifecycles"));
-        cycles = Map.copyOf(Objects.requireNonNull(cycles, "resource-site cell cycles"));
-        pendingWorldChanges = Map.copyOf(Objects.requireNonNull(pendingWorldChanges, "pending world field changes"));
-        pendingForeignChanges = Map.copyOf(Objects.requireNonNull(pendingForeignChanges, "pending foreign field changes"));
+        sites = ImmutableLookupMap.copyOf(Objects.requireNonNull(sites, "resource-site lifecycles"));
+        cycles = ImmutableLookupMap.copyOf(Objects.requireNonNull(cycles, "resource-site cell cycles"));
+        pendingWorldChanges = ImmutableLookupMap.copyOf(Objects.requireNonNull(pendingWorldChanges, "pending world field changes"));
+        pendingForeignChanges = ImmutableLookupMap.copyOf(Objects.requireNonNull(pendingForeignChanges, "pending foreign field changes"));
         if (sites.size() > MAX_SITES || !sites.keySet().equals(cycles.keySet()) || !sites.keySet().equals(declarations.keySet()))
             throw new IllegalArgumentException("every resource-site lifecycle needs one exact cell cycle");
         if (declarations.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().id())))
@@ -51,6 +64,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
         if (pendingForeignChanges.keySet().stream().anyMatch(key -> !declaredSites.contains(key.owner()))
                 || pendingForeignChanges.keySet().stream().anyMatch(pendingWorldChanges::containsKey))
             throw new IllegalArgumentException("foreign field change has no unique declared site owner");
+        var jobIds = new java.util.HashSet<SubjectId>();
         for (Map.Entry<SubjectId, ResourceSiteLifecycle> entry : sites.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().siteId())) throw new IllegalArgumentException("resource-site map key must match lifecycle identity");
             ResourceSiteLifecycle lifecycle = entry.getValue();
@@ -60,6 +74,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
             if (cycle.epoch() != lifecycle.growthEpoch())
                 throw new IllegalArgumentException("resource-site cell cycle must share its lifecycle epoch");
             for (ResourceSiteHarvestJob job : lifecycle.harvestJobs().values()) {
+                if (!jobIds.add(job.id())) throw new IllegalArgumentException("duplicate field job identity");
                 if (job.progress().totalCropSlots() != cycle.layout().cells().size())
                     throw new IllegalArgumentException("field worker must retain its exact admitted layout size");
                 if (job.navigationBlock().isPresent()
@@ -307,7 +322,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
     public Map<SubjectId, ResourceSite> descriptors(FrontierBootstrap bootstrap) {
         Map<SubjectId, ResourceSite> current = new LinkedHashMap<>();
         for (SubjectId id : sites.keySet()) current.put(id, descriptor(bootstrap, id));
-        return Map.copyOf(current);
+        return ImmutableLookupMap.copyOf(current);
     }
 
     public ResourceSiteState replace(ResourceSiteLifecycle lifecycle) {

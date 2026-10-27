@@ -17,9 +17,9 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
     public static final int MAX_RESERVATIONS = 4_096;
 
     public EconomicLedger {
-        accounts = Map.copyOf(accounts);
-        reservations = Map.copyOf(reservations);
-        budgets = Map.copyOf(budgets);
+        accounts = ImmutableLookupMap.copyOf(accounts);
+        reservations = ImmutableLookupMap.copyOf(reservations);
+        budgets = ImmutableLookupMap.copyOf(budgets);
         if (accounts.size() > MAX_ACCOUNTS) throw new IllegalArgumentException("economic account retention limit exceeded");
         if (reservations.size() > MAX_RESERVATIONS) throw new IllegalArgumentException("financial reservation retention limit exceeded");
         if (budgets.size() > MAX_RESERVATIONS) throw new IllegalArgumentException("financial budget retention limit exceeded");

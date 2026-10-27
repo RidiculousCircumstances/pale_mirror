@@ -22,12 +22,12 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     private static final int MAX_WORLD_CARRIERS = 4_096;
     private static final int MAX_CONFLICTS = 4_096;
     public ExactInventory {
-        containers = Map.copyOf(containers); items = Map.copyOf(items); cargo = Map.copyOf(cargo);
+        containers = ImmutableLookupMap.copyOf(containers); items = ImmutableLookupMap.copyOf(items); cargo = ImmutableLookupMap.copyOf(cargo);
         playerItems = playerItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
         worldCarrierItems = worldCarrierItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
-        conflicts = Map.copyOf(conflicts);
-        surfaces = Map.copyOf(surfaces); Objects.requireNonNull(economics, "economic ledger");
-        Objects.requireNonNull(fungibleResources, "fungible resource ledger"); occupiedSlots = Map.copyOf(occupiedSlots);
+        conflicts = ImmutableLookupMap.copyOf(conflicts);
+        surfaces = ImmutableLookupMap.copyOf(surfaces); Objects.requireNonNull(economics, "economic ledger");
+        Objects.requireNonNull(fungibleResources, "fungible resource ledger"); occupiedSlots = ImmutableLookupMap.copyOf(occupiedSlots);
         if (worldCarrierItems.size() > MAX_WORLD_CARRIERS) throw new IllegalArgumentException("world carrier retention limit exceeded");
         if (conflicts.size() > MAX_CONFLICTS) throw new IllegalArgumentException("inventory conflict retention limit exceeded");
         Map<InventoryCustody.ContainerSlot, SubjectId> slots = new HashMap<>();

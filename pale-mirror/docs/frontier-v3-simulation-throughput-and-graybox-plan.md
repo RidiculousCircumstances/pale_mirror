@@ -907,3 +907,21 @@ checks, service permission, reservation and reducer validation stay intact.
 The pending-farmer existence inquiry also uses existing residentsIn(home), not a
 whole-world resident scan. No new lookup owner or canonical schema. Changed field,
 equipment, labour and navigation negative coverage +guardrails PASS28s.
+
+
+54d0f0bcd exact release PASS66s and verified same-world deployment on both hosts.
+Native100 sample109132->110237 over333s, clock debt482->5996: stillFAIL.
+Latest20s field-immediate-goal-native.jfr attributes833server samples versus75
+exact-preparation samples;526visit transaction validation,429full owned-state
+validation.133MapN/77SetN samples expose clustered immutable compact-table probes;
+field UAE lookups also scan all sites repeatedly. The next correction uses the
+existing hashed immutable map representation for inventory/economic/field registers,
+plus immutable hashed actor membership and a bounded exact FIELD_HARVEST job
+directory. Producer uniqueness and declared kind checks remain mandatory.
+Common physical-intent existence checks retain successful proofs only across their
+complete immutable read set; the field owner projects nonterminal identities and
+exact conflict lifecycles. Confirmation checks retain both intent and observation
+images. Full bootstrap/recovery audits bypass proof reuse. No schema, authority,
+scheduling allowance, durability or cache-size increase. Existing focused
+resource-site, inventory, fungible-production, actor-identity and incremental
+negative/recovery checks and guardrails PASS; runtime effect not yet measured.

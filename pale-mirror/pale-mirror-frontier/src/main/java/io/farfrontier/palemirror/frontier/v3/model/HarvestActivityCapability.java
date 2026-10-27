@@ -45,9 +45,7 @@ final class HarvestActivityCapability implements ActorActivityCapability {
     }
     private static ResourceSiteHarvestJob job(ResourceSiteState sites, ActorExecutionId execution) {
         if (execution.activityKind() != ActorActivityKind.FIELD_HARVEST) throw new IllegalArgumentException("foreign field execution kind");
-        var job = sites.sites().values().stream()
-                .map(site -> site.harvestJob(execution.activityOwnerId())).flatMap(Optional::stream)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("field execution lost its exact job"));
+        var job = sites.harvestJob(execution.activityOwnerId()).orElseThrow(() -> new IllegalArgumentException("field execution lost its exact job"));
         if (!job.workerId().equals(execution.actorId())) throw new IllegalArgumentException("field execution has a foreign worker");
         return job;
     }

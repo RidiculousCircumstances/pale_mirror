@@ -31,22 +31,22 @@ final class ActorIdentityDeclarations {
             var animals = fleet.assets().keySet();
             var expected = new java.util.HashSet<>(bioforms); expected.addAll(residents); expected.addAll(animals);
             roster = new ProducerRoster(bootstrap, hive.spawnedBioforms(), people.residents(), fleet.assets(),
-                    Set.copyOf(bioforms), Set.copyOf(residents), Set.copyOf(animals), Set.copyOf(expected));
+                    ImmutableLookupSet.copyOf(bioforms), ImmutableLookupSet.copyOf(residents), ImmutableLookupSet.copyOf(animals), ImmutableLookupSet.copyOf(expected));
             cached = roster;
         }
         var bioforms = roster.bioforms(); var residents = roster.residents(); var animals = roster.animals();
         var expected = roster.expected();
+        if ((long) residents.size() + bioforms.size() + animals.size() != expected.size())
+            throw new IllegalArgumentException("actor identity has competing producer declarations");
         if (!expected.equals(actors.keySet()))
             throw new IllegalArgumentException("actor location index must own every and only canonical actor");
         for (var entry : actors.entrySet()) {
-            int producers = (residents.contains(entry.getKey()) ? 1 : 0) + (bioforms.contains(entry.getKey()) ? 1 : 0)
-                    + (animals.contains(entry.getKey()) ? 1 : 0);
             boolean declared = switch (entry.getValue().kind()) {
                 case RESIDENT -> residents.contains(entry.getKey());
                 case BIOFORM -> bioforms.contains(entry.getKey());
                 case PACK_ANIMAL -> animals.contains(entry.getKey());
             };
-            if (producers != 1 || !declared)
+            if (!declared)
                 throw new IllegalArgumentException("declared actor kind mismatches its exact producer roster");
         }
         return expected;
