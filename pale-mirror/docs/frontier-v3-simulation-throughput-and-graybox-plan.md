@@ -57,7 +57,7 @@ economic content and cannot establish a precise r30 speed ratio.
   still await their exact durable prefix. Bound cooperative work and preserve
   order, clocks, checkpoint fences, backpressure, error propagation and recovery.
   Do not hide debt by dropping ticks, increasing timeouts or merely raising budgets.
-- [ ] B. Migrate station-worker travel completely to common timed ActorMovement.
+- [x] B. Migrate station-worker travel completely to common timed ActorMovement.
   Add one explicit typed station-work context/provider through existing closed
   composition. The job owns phase/materials/station attendance; movement owns
   route, elapsed position, arrival and interruption checkpoint. Integrate service
@@ -157,3 +157,12 @@ longer actuate journeys; delivery cleanup can settle outside work hours. The old
 per-cell bakery MOVE and its private HOT result translator are deleted. Coherent
 production/food/multi-input/recovery and process-catalog checks passed (47seconds); no native or deployed
 performance claim is made from this source checkpoint.
+
+Phase C adds opt-in complete regional read versions to shared block knowledge.
+A versioned completed witness retains regional tokens instead of duplicating its
+block image. Development ground includes observed block state/uncertainty, scars,
+geological exclusions/declarations, bootstrap and protected-column permissions.
+Unversioned providers retain pointwise validation. New canonical land admission
+still refreshes selected block samples. Land, uncertainty, permissions and recovery
+checks passed in build/simulation-throughput/land-version-focused.log (39seconds).
+This is local query reuse, not permission to publish stale economic decisions.

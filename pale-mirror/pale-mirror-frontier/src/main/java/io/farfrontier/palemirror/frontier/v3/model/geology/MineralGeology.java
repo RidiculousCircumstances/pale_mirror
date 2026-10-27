@@ -38,6 +38,8 @@ public final class MineralGeology {
         return regions.getOrDefault(Region.at(position), List.of()).stream()
                 .filter(match -> match.section().volume().contains(position)).findFirst();
     }
+    /** Exact immutable declaration image, shared by bounded read consumers. */
+    public List<Match> in(Region region) { return regions.getOrDefault(region, List.of()); }
     public int indexedChunks() { return regions.size(); }
     @Override public boolean equals(Object other) { return this == other || other instanceof MineralGeology geology && deposits.equals(geology.deposits); }
     @Override public int hashCode() { return deposits.hashCode(); }

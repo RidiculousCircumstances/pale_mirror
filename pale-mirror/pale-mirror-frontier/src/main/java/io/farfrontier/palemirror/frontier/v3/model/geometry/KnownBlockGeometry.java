@@ -14,4 +14,10 @@ public interface KnownBlockGeometry<B> {
         }
     }
     Optional<Sample<B>> at(BlockPosition position);
+    /** Optional complete semantic version of every block and permission in these horizontal
+     * regions, at every height. Omitting any dependency is forbidden. A matching version
+     * permits derived read reuse only; new canonical admission still requires fresh samples. */
+    default Optional<Object> regionalReadVersion(java.util.Set<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region> regions) {
+        return Optional.empty();
+    }
 }

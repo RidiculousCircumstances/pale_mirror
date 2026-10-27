@@ -6,6 +6,7 @@ import java.util.*;
 /** Shared read-only land-development view. Observed uncertainty overrides the authored terrain baseline. */
 public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<NavigationBlockState> {
     private static final ImmutableResultView<String, Set<TerrainColumn>> PROTECTED = new ImmutableResultView<>(16);
+    private static final ImmutableInputView<RegionalBlockMap<PhysicalDelta>> DELTAS = new ImmutableInputView<>();
     private final FrontierWorldState state;
     private final Set<TerrainColumn> protectedColumns;
     public DevelopmentGroundKnowledge(FrontierWorldState state) {
@@ -24,6 +25,16 @@ public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<Navi
             }
             return Collections.unmodifiableSet(protectedLand);
         });
+    }
+
+    @Override public Optional<Object> regionalReadVersion(Set<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region> regions) {
+        var observations = RegionalBlockMap.copyOf(state.navigationGeometry().cells());
+        var deltas = DELTAS.get(List.of(state.physicalDeltas()), () -> RegionalBlockMap.copyOf(state.physicalDeltas()));
+        var exclusions = RegionalBlockSet.copyOf(state.extractionSites().geologicalExclusions().positions());
+        var facts = new HashMap<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region, List<Object>>();
+        for (var region : regions) facts.put(region, List.of(observations.token(region), deltas.token(region),
+                exclusions.token(region), state.extractionSites().geology().in(region)));
+        return Optional.of(new RegionalReadVersion(List.of(state.bootstrap(), protectedColumns), facts));
     }
 
     @Override public Optional<Sample<NavigationBlockState>> at(BlockPosition position) {

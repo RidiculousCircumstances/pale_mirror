@@ -43,6 +43,10 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
     public Map<BlockPosition, V> in(Region region) {
         var part = parts.get(region); return part == null ? Map.of() : part.values;
     }
+    /** Complete immutable regional facts; equality is exact and hashes are cached. */
+    public Object token(Region region) { return parts.getOrDefault(region, emptyPart()); }
+    private static final Part<?> EMPTY = new Part<>(Map.of());
+    @SuppressWarnings("unchecked") private static <T> Part<T> emptyPart() { return (Part<T>) EMPTY; }
     public Set<Region> regions() { return parts.keySet(); }
     public Set<Region> changesFrom(RegionalBlockMap<?> previous) {
         if (this == previous) return Set.of();

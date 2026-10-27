@@ -8,11 +8,20 @@ import java.util.*;
  * obtain fresh samples before constructing any new canonical admission proof. */
 public final class KnownBlockReadWitness<T> {
     private final Map<BlockPosition, Optional<KnownBlockGeometry.Sample<T>>> facts;
-    private KnownBlockReadWitness(Map<BlockPosition, Optional<KnownBlockGeometry.Sample<T>>> facts) {
-        this.facts = Map.copyOf(facts);
+    private final java.util.Set<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region> regions;
+    private final Optional<Object> matchingVersion;
+    private KnownBlockReadWitness(Map<BlockPosition, Optional<KnownBlockGeometry.Sample<T>>> facts, KnownBlockGeometry<T> source) {
+        this.regions = facts.keySet().stream().map(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region::at)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        matchingVersion = source.regionalReadVersion(regions);
+        // A complete provider token replaces the block image, rather than retaining
+        // thousands of duplicated samples per settlement. Changed tokens recompute.
+        this.facts = matchingVersion.isPresent() ? Map.of() : Map.copyOf(facts);
     }
-    public int size() { return facts.size(); }
+    public int size() { return matchingVersion.isPresent() ? regions.size() : facts.size(); }
     public boolean matches(KnownBlockGeometry<T> current) {
+        var version = current.regionalReadVersion(regions);
+        if (matchingVersion.isPresent()) return matchingVersion.equals(version);
         for (var entry : facts.entrySet()) {
             var before = entry.getValue(); var after = current.at(entry.getKey());
             if (before.isEmpty() != after.isEmpty()) return false;
@@ -40,7 +49,7 @@ public final class KnownBlockReadWitness<T> {
             return value;
         }
         public Optional<KnownBlockReadWitness<T>> completed() {
-            return overflow ? Optional.empty() : Optional.of(new KnownBlockReadWitness<>(facts));
+            return overflow ? Optional.empty() : Optional.of(new KnownBlockReadWitness<>(facts, source));
         }
     }
 }
