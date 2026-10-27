@@ -108,7 +108,8 @@ class FrontierV3ServerRuntimeTest {
         int committed;
         try {
             runtime.observeOrdinaryHostTick(); runtime.beginOrdinaryTurn(new WorkBudget(64, 128));
-            runtime.runPersistenceTurn(runtime::resumeOrdinaryTurn);
+            var hostClock = new java.util.concurrent.atomic.AtomicLong();
+            runtime.runPersistenceTurn(() -> runtime.resumeOrdinaryTurn(() -> hostClock.getAndAdd(500_000L)));
             committed = runtime.decodedState().orElseThrow().value();
             assertTrue(committed > 1 && committed < base.initialSchedules().size(),
                     "one cooperative prefix must batch ready progression and still yield to the native host");

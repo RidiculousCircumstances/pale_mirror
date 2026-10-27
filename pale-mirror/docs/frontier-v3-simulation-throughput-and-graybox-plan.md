@@ -321,3 +321,17 @@ story or visual acceptance. Task-owned20FPS client/display exited after the run.
 Main/private same-schema same-world deployments909 verified with pinned SHA;
 ordinary-time samples remain in dated-market-live-samples.jsonl. No debt-closure
 claim yet.
+
+The909ordinary336s sample remains insufficient: main5.92canonicalticks/s and
+100town6.54, with growing debt. Native100JFR again attributes95samples to the
+global pending-order predicate, corroborating8ee's local-key repair. Completed
+forecast acceptance improved, but that is not clock closure. Existing preparation
+telemetry now counts bounded owner-supplied rejection causes (no policy reads);
+it will distinguish own-input/geometry/conditional-consent churn on the same world.
+The ordinary ready prefix now yields after a2ms host slice rather than exactly
+four cheap transitions, always under the original tick's structural allowance.
+Required physical fences still stop immediately. Host time affects only yielding,
+never canonical elapsed time or domain permissions. The existing grouped-WAL/
+recovery test uses a controlled host clock instead of assuming the real machine
+can always execute multiple transactions in2ms. Runtime/file-store/ready-turn
+and guardrails PASS43s; advisory/preparation diagnostics PASS28s.

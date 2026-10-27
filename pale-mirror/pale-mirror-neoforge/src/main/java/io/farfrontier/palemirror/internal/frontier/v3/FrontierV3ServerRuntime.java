@@ -344,15 +344,18 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private Runnable readiness = () -> { };
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
     private Long ordinaryBoundary;
-    private static final int MAX_READY_TRANSACTION_PREFIX = 4;
+    private static final long MAX_READY_PREFIX_NANOS = 2_000_000L;
     /** One allowance per observed host tick, shared by all ready continuations. */
     void beginOrdinaryTurn(WorkBudget budget) { ordinaryTurnBudget = Optional.of(Objects.requireNonNull(budget)); }
-    void resumeOrdinaryTurn() {
+    void resumeOrdinaryTurn() { resumeOrdinaryTurn(System::nanoTime); }
+    /** Host clock bounds only the disposable slice; canonical time still comes from observed ticks. */
+    void resumeOrdinaryTurn(java.util.function.LongSupplier hostClock) {
         boolean progressed = false;
         // Keep cheap already-ready transitions in the same persistence turn.
         // A costly action or an asynchronous boundary yields immediately; every
         // prefix still spends the one original observed-tick allowance.
-        for (int part = 0; part < MAX_READY_TRANSACTION_PREFIX && ordinaryTurnBudget.isPresent(); part++) {
+        long prefixStarted = hostClock.getAsLong();
+        while (ordinaryTurnBudget.isPresent()) {
             var budget = ordinaryTurnBudget.orElseThrow();
             var quantum = new WorkBudget(1, budget.maxWeight(), Math.min(8, budget.maxClassificationEvaluations()),
                     Math.min(1, budget.maxExecutionEvaluations()), budget.maxActionWeight());
@@ -364,7 +367,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             boolean advanced = instant.ticks() > before || used.actions() > 0 || used.classifications() > 0 || used.executions() > 0;
             progressed |= advanced;
             if (!advanced || used.weight() > 1 || engine.hasPendingCalculation() || engine.hasPendingCommit()
-                    || pendingOrdinaryTicks == 0 && ordinaryBoundary == null) break;
+                    || pendingOrdinaryTicks == 0 && ordinaryBoundary == null
+                    || hostClock.getAsLong() - prefixStarted >= MAX_READY_PREFIX_NANOS) break;
         }
         if (ordinaryTurnBudget.isPresent() && (pendingOrdinaryTicks > 0 || ordinaryBoundary != null)
                 && !engine.hasPendingCalculation() && !engine.hasPendingCommit()

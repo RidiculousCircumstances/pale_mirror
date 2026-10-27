@@ -13,5 +13,7 @@ public interface ScheduledAdvisory<S> {
     interface Completion<S> {
         /** Empty rejects obsolete advice without consuming the retained due action. */
         Optional<ScheduledPreparation> revalidate(S current, SimInstant executionAt);
+        /** Bounded advisory telemetry only; never consulted by admission or policy. */
+        default String rejectionReason() { return "UNSPECIFIED"; }
     }
 }

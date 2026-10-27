@@ -19,20 +19,31 @@ final class GoodsParticipantReviewAdvice {
         var navigation = state.navigationGeometry(); var physical = state.physicalDeltas();
         return () -> {
             var prepared = SettlementEconomicPlanPreparation.review(state, action, at);
-            return (current, executionAt) -> {
-                if (current.bootstrap() != bootstrap
-                        || !participant.equals(current.companies().goodsTrade().participants().participants().get(action.subject()))
-                        || current.companies().goodsTrade().participants().economicState(action.subject()).inputRevision() != ownerInput
-                        || current.navigationGeometry() != navigation || current.physicalDeltas() != physical
-                        || !basis.equals(peers(current, participant)) || executionAt.compareTo(at) < 0
-                        || prepared.publication().filter(plan -> !SettlementEconomicPublication.peerEnvelopesCurrent(
-                                current.companies().goodsTrade().participants(), plan)
-                            || plan.peerVersions().keySet().stream().anyMatch(id -> !Objects.equals(peerInputs.get(id),
-                                current.companies().goodsTrade().participants().economicState(id).inputRevision()))).isPresent()
-                        || executionAt.ticks() >= prepared.publication().map(SettlementEconomicPlan::reviewAtTick)
-                                .orElse(Math.addExact(at.ticks(), bootstrap.ruleset().goodsTrade().reviewInterval())))
-                    return Optional.empty();
-                return Optional.of(() -> GoodsParticipantProcess.prepare(current, action, executionAt, prepared));
+            return new ScheduledAdvisory.Completion<FrontierWorldState>() {
+                private String rejection = "NONE";
+                @Override public String rejectionReason() { return rejection; }
+                private Optional<ScheduledPreparation> reject(String reason) { rejection = reason; return Optional.empty(); }
+                @Override public Optional<ScheduledPreparation> revalidate(FrontierWorldState current, SimInstant executionAt) {
+                    if (current.bootstrap() != bootstrap) return reject("BOOTSTRAP");
+                    if (!participant.equals(current.companies().goodsTrade().participants().participants().get(action.subject())))
+                        return reject("OWNER_TERMS");
+                    if (current.companies().goodsTrade().participants().economicState(action.subject()).inputRevision() != ownerInput)
+                        return reject("OWNER_INPUT");
+                    if (current.navigationGeometry() != navigation || current.physicalDeltas() != physical)
+                        return reject("GEOMETRY");
+                    if (!basis.equals(peers(current, participant))) return reject("PEER_IDENTITY");
+                    if (executionAt.compareTo(at) < 0) return reject("EXECUTION_TIME");
+                    if (prepared.publication().filter(plan -> !SettlementEconomicPublication.peerEnvelopesCurrent(
+                            current.companies().goodsTrade().participants(), plan)
+                        || plan.peerVersions().keySet().stream().anyMatch(id -> !Objects.equals(peerInputs.get(id),
+                            current.companies().goodsTrade().participants().economicState(id).inputRevision()))).isPresent())
+                        return reject("BUYER_CONSENT");
+                    if (executionAt.ticks() >= prepared.publication().map(SettlementEconomicPlan::reviewAtTick)
+                            .orElse(Math.addExact(at.ticks(), bootstrap.ruleset().goodsTrade().reviewInterval())))
+                        return reject("EXPIRED");
+                    rejection = "NONE";
+                    return Optional.of(() -> GoodsParticipantProcess.prepare(current, action, executionAt, prepared));
+                }
             };
         };
     }

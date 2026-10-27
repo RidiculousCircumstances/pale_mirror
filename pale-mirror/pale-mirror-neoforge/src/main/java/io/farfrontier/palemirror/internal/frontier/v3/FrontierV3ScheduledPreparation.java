@@ -15,6 +15,7 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
     private final java.util.concurrent.atomic.AtomicLong adviceCompleted = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong adviceNanos = new java.util.concurrent.atomic.AtomicLong();
     private long adviceAccepted, adviceRejected;
+    private final Map<String, Long> adviceRejectionReasons = new TreeMap<>();
     private long cancelled;
     private long cancelledReady;
     private volatile Runnable ready = () -> { };
@@ -24,7 +25,8 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                 + ",\"queued\":" + worker.getQueue().size() + ",\"completed\":" + completed.get()
                 + ",\"cancelled\":" + cancelled + ",\"cancelledReady\":" + cancelledReady + ",\"totalNanos\":" + totalNanos.get() + ",\"maxNanos\":" + maxNanos.get()
                 + ",\"adviceCompleted\":" + adviceCompleted.get() + ",\"adviceNanos\":" + adviceNanos.get()
-                + ",\"adviceAccepted\":" + adviceAccepted + ",\"adviceRejected\":" + adviceRejected + "}";
+                + ",\"adviceAccepted\":" + adviceAccepted + ",\"adviceRejected\":" + adviceRejected
+                + ",\"adviceRejectionReasons\":" + new com.google.gson.Gson().toJson(adviceRejectionReasons) + "}";
     }
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<>(2), task -> { // one exact review and one captured checkpoint
@@ -115,7 +117,15 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                     var completion = task.get();
                     return Optional.of((current, at) -> {
                         var result = completion.revalidate(current, at);
-                        if (result.isPresent()) adviceAccepted++; else adviceRejected++;
+                        if (result.isPresent()) adviceAccepted++;
+                        else {
+                            adviceRejected++;
+                            String reason = completion.rejectionReason();
+                            if (reason == null || !reason.matches("[A-Z_]{1,32}")
+                                    || !adviceRejectionReasons.containsKey(reason) && adviceRejectionReasons.size() >= 16)
+                                reason = "OTHER";
+                            adviceRejectionReasons.merge(reason, 1L, Long::sum);
+                        }
                         return result;
                     });
                 }
