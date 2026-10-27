@@ -864,3 +864,30 @@ publication remain unchanged. The existing worker suite now covers24short querie
 within one original allowance, no worker publication, foreign-turn refund denial,
 no double credit and cancellation/capacity. Focused worker/queue/invalidation/adapter/
 ready-turn plus guardrails PASS16s. Native throughput effect is still unmeasured.
+
+
+5c898d832 exact selected release/packaged/economy55/route-patrol4 gate PASS57s;
+both retained worlds verified SHA512672f902e0e2e150f65c16b12ba888576c1cd9d252d9b22e29468830620158bc8b0429ba8a604a96e80097d2a8fe085d04fe5c07deb9cc2747053bfe89fed9dd1.
+Main12town remains ACTIVE/zero debt/recent3ms host mean/max~10ms at418296.
+100town regresses:108939->108958/333s,debt533->7175 despite>100kcompletedpreparations.
+Navigation now completes far more queries but repeated discovery consumes them
+without productive admission. This is a retained contradiction, not acceptance.
+Navigation-credit-native.jfr attributes313/394exact-preparation samples to harvest
+planning (275admissions), rather than generic route search. The guessed missing
+wake/handoff is NOTestablished: Prepared.acquire explicitly re-signals already-ready
+results and the wake index retains runnable consumers until actual replacement.
+
+A connected concrete source defect remains: Optional.empty from work discovery
+conflates genuine refusal with a pending route. Harvest admission continues over
+all other residents; collection-based production does the same, and equipment
+selection tries more containers after an unresolved query. This can create a
+self-sustaining set of speculative alternatives under the bounded result cache.
+Shared ResidentWorkSelection now exposes Discovery(offer,planning), captured from
+explicit unresolved query evidence without executing another route. Batch scans
+stop at a pending candidate; proved unavailability can try the next worker.
+Farmer/miner/forester loops use the same result; bakery/forge/stock use the shared
+batch scan. Equipment selection waits on its first pending endpoint. No worker,
+resource or cell is reserved by waiting, and a later current-state review still
+validates all real admission facts. Existing labour regression distinguishes pending
+from NO_PATH, alongside actual harvest/forestry/extraction replay/bakery cases.
+Focused changed families+guardrails PASS38s; exact final ref/native effect pending.

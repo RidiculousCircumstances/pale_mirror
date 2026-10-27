@@ -29,8 +29,14 @@ final class ExtractionWorkProcess {
         var provider = new SettlementExtractionAdmission(developing);
         for (var resident : ResidentWorkComposition.SELECTION.eligible(projected, home, ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, now)) {
             Optional<ResidentWorkOffer<ExtractionWorkStarted>> offer;
-            try { offer = ResidentWorkComposition.SELECTION.offer(projected, resident, now, provider); }
-            catch (KnownPedestrianNavigation.RouteUnavailable pending) { continue; }
+            try {
+                var discovery = ResidentWorkComposition.SELECTION.assess(projected, resident, now, provider);
+                if (discovery.planning()) break;
+                offer = discovery.offer();
+            } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
+                if (pending.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING) break;
+                continue;
+            }
             if (offer.isEmpty()) continue;
             var start = offer.orElseThrow().execution();
             projected = ExtractionWorkAdmission.start(projected, start, now);

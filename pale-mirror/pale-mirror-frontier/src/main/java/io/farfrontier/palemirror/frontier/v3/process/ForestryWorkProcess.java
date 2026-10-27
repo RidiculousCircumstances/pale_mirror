@@ -29,8 +29,14 @@ final class ForestryWorkProcess {
         var provider = new ForestryWorkAdmission();
         for (var resident : ResidentWorkComposition.SELECTION.eligible(projected, action.subject(), ResidentWorkKind.FORESTRY, HumanCapability.EXTRACTION, now)) {
             Optional<ResidentWorkOffer<ForestryWorkStarted>> offer;
-            try { offer = ResidentWorkComposition.SELECTION.offer(projected, resident, now, provider); }
-            catch (KnownPedestrianNavigation.RouteUnavailable pending) { continue; }
+            try {
+                var discovery = ResidentWorkComposition.SELECTION.assess(projected, resident, now, provider);
+                if (discovery.planning()) break;
+                offer = discovery.offer();
+            } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
+                if (pending.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING) break;
+                continue;
+            }
             if (offer.isEmpty()) continue;
             var start = offer.orElseThrow().execution(); projected = ForestryWorkAdmission.start(projected, start, now);
             events.add(new ProposedEvent(start.work().id(), start));

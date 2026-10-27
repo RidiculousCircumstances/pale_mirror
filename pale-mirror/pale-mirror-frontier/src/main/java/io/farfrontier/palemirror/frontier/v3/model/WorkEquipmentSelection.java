@@ -31,6 +31,7 @@ public final class WorkEquipmentSelection {
                 return Optional.of(new Selection(item, source, route.size() > 1
                         ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailableRoute) {
+                if (unavailableRoute.status() == PedestrianRouteResult.Status.PLANNING) throw unavailableRoute;
                 if (unavailableRoute.status() != PedestrianRouteResult.Status.NO_PATH) waiting = unavailableRoute;
             }
         }

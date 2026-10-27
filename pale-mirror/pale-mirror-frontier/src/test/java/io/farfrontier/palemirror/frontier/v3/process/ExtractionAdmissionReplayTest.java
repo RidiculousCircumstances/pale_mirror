@@ -79,7 +79,7 @@ class ExtractionAdmissionReplayTest {
             if (action.kind().equals(ExtractionContinuation.REVIEW)) {
                 for (var resident : ResidentWorkComposition.SELECTION.eligible(state, action.subject(),
                         ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, tick)) {
-                    var offer = ResidentWorkComposition.SELECTION.offer(state, resident, tick, new SettlementExtractionAdmission(Set.of()));
+                    var offer = ResidentWorkComposition.SELECTION.assess(state, resident, tick, new SettlementExtractionAdmission(Set.of())).offer();
                     if (offer.isPresent()) return new Fixture(state, tick, offer.orElseThrow().execution());
                 }
             }

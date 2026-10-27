@@ -63,6 +63,40 @@ class SettlementLabourAllocationTest {
         assertTrue(selector.eligible(changed, home, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY, 200).isEmpty());
         assertTrue(HumanAssignmentProjection.compile(changed).idle(actor), "a preference probe never acquires an assignment");
     }
+    @Test void pendingDiscoveryWaitsForItsCandidateButKnownUnavailablePathsCanTryOtherWorkers() throws Exception {
+        var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
+        var selector = new ResidentWorkSelection(List.of()); var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var origin = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(2, 63, 1);
+        var geometry = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry() {
+            public Object version() { return this; }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 16, 16); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor position) { return false; }
+        };
+        var request = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteRequest.of(geometry, origin, target);
+        var provider = new ResidentWorkProvider<String>() {
+            public ResidentWorkKind kind() { return ResidentWorkKind.PRODUCTION; }
+            public HumanCapability capability() { return HumanCapability.INDUSTRY; }
+            public java.util.Optional<ResidentWorkOffer<String>> discover(FrontierWorldState current, ResidentProfile resident, long tick) {
+                calls.incrementAndGet();
+                var result = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.query(geometry, origin, target);
+                if (result.awaitable()) io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.await(request);
+                return java.util.Optional.empty();
+            }
+        };
+        int candidates = selector.eligible(state, home, provider.kind(), provider.capability(), 200).size();
+        assertTrue(candidates >= 2);
+        for (var status : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)) {
+            calls.set(0);
+            try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((g, a, b) ->
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(status, List.of(), 0, 0, "discovery-boundary"))) {
+                assertTrue(selector.offers(state, home, 200, provider).isEmpty());
+                assertEquals(status == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING ? 1 : candidates,
+                        calls.get(), "pending is not a refusal; a proved unavailable candidate does not reserve later workers");
+            }
+        }
+    }
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:labour-policy"), 71));
     }

@@ -82,7 +82,9 @@ final class ResourceSiteHarvestPlanning {
                 .filter(field -> state.structureConditions().get(field.facilityId()) == StructureCondition.INTACT)
                 .filter(field -> FieldWorkDemand.requested(state, field, atTick)).limit(2).count() > 1;
         for (ResidentProfile farmer : candidates) {
-            var offered = ResidentWorkComposition.SELECTION.offer(projected, farmer, atTick, provider);
+            var discovered = ResidentWorkComposition.SELECTION.assess(projected, farmer, atTick, provider);
+            if (discovered.planning()) break;
+            var offered = discovered.offer();
             if (offered.isEmpty()) continue;
             ResourceSiteHarvestStarted started = offered.orElseThrow().execution();
             ResourceSiteHarvestJob job = started.job();

@@ -13,8 +13,26 @@ public final class ResidentWorkSelection {
             throw new IllegalArgumentException("work preference composition has competing family opportunity owners");
     }
 
+    /** A pending calculation is neither refusal nor permission to speculate over
+     * every following worker. Known unavailable geometry can still try another. */
+    public record Discovery<T>(Optional<ResidentWorkOffer<T>> offer, boolean planning) {
+        public Discovery { java.util.Objects.requireNonNull(offer); }
+    }
+    public <T> Discovery<T> assess(FrontierWorldState state, ResidentProfile resident,
+                                  long atTick, ResidentWorkProvider<T> provider) {
+        return observe(() -> offer(state, resident, atTick, provider));
+    }
+    private static <T> Discovery<T> observe(java.util.function.Supplier<Optional<ResidentWorkOffer<T>>> discovery) {
+        var observed = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(discovery);
+        boolean planning = observed.result().isEmpty() && observed.requests().stream().anyMatch(request ->
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.peek(request.geometry(),
+                        request.start(), request.target(), request.extent()).map(result -> result.status()
+                            == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING).orElse(true));
+        return new Discovery<>(observed.result(), planning);
+    }
+
     /** Common selection never interprets concrete jobs, crop phases or station phases. */
-    public <T> Optional<ResidentWorkOffer<T>> offer(FrontierWorldState state, ResidentProfile resident,
+    private <T> Optional<ResidentWorkOffer<T>> offer(FrontierWorldState state, ResidentProfile resident,
                                                           long atTick, ResidentWorkProvider<T> provider) {
         if (atTick < 0) throw new IllegalArgumentException("work selection needs canonical time");
         if (!admissible(state, resident, provider.kind(), provider.capability(), atTick)
@@ -51,8 +69,13 @@ public final class ResidentWorkSelection {
 
     public <T> List<ResidentWorkOffer<T>> offers(FrontierWorldState state, SubjectId settlementId,
                                                        long atTick, ResidentWorkProvider<T> provider) {
-        return eligible(state, settlementId, provider.kind(), provider.capability(), atTick).stream()
-                .flatMap(resident -> discover(state, resident, atTick, provider).stream()).toList();
+        var offers = new java.util.ArrayList<ResidentWorkOffer<T>>();
+        for (var resident : eligible(state, settlementId, provider.kind(), provider.capability(), atTick)) {
+            var discovered = observe(() -> discover(state, resident, atTick, provider));
+            discovered.offer().ifPresent(offers::add);
+            if (discovered.planning()) break;
+        }
+        return List.copyOf(offers);
     }
 
     /** Candidate capability order is retained; activity and physical authority are checked per candidate. */
