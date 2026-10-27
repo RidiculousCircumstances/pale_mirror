@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3RuntimeBodyTestFixture.*;
+import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3RuntimeCounterTestFixture.*;
+
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 
@@ -197,8 +200,6 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(4, runtime.decodedState().orElseThrow().value());
         runtime.shutdown();
     }
-    private static final WorldId WORLD = new WorldId("frontier:runtime");
-    private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
 
     @Test void ordinaryTurnReturnsBeforeDiskAndPublishesEachCompletionOnce(@TempDir Path directory) {
         var tasks = new java.util.ArrayDeque<Runnable>();
@@ -934,98 +935,5 @@ class FrontierV3ServerRuntimeTest {
         assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
     }
 
-    private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {
-        return configuration(new StateCodec<>() {
-            @Override public byte[] encode(Counter state) { return ByteBuffer.allocate(4).putInt(state.value()).array(); }
-            @Override public Counter decode(byte[] bytes) {
-                if (bytes.length != 4) throw new IllegalArgumentException("counter state is malformed");
-                return new Counter(ByteBuffer.wrap(bytes).getInt());
-            }
-        });
-    }
 
-    private static FrontierEngineConfiguration<Counter, CounterProjection> configuration(StateCodec<Counter> codec) {
-        return new FrontierEngineConfiguration<>(WORLD, new Counter(0), SimInstant.ZERO,
-                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
-                (state, action) -> List.of(),
-                (state, event) -> new Counter(Math.addExact(state.value(), ((Delta) event.payload()).value())),
-                codec, (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
-                new EngineLimits(8, 100L, 8), List.of(), TransactionCommitter.noOp());
-    }
-
-    private static FrontierCommand command(String id, Revision revision, SimInstant instant, int value) {
-        CommandId commandId = new CommandId(id);
-        return new FrontierCommand(1, commandId, WORLD, revision, instant, SUBJECT, CauseChain.root(commandId), new Delta(value));
-    }
-
-    private static PayloadCodecs codecs() {
-        return new PayloadCodecs(List.of(new PayloadCodec() {
-            @Override public String type() { return "test.runtime_delta"; }
-            @Override public byte[] encode(FrontierPayload payload) {
-                return ByteBuffer.allocate(4).putInt(((Delta) payload).value()).array();
-            }
-            @Override public FrontierPayload decode(byte[] bytes) {
-                if (bytes.length != 4) throw new IllegalArgumentException("delta payload is malformed");
-                return new Delta(ByteBuffer.wrap(bytes).getInt());
-            }
-        }));
-    }
-
-    private static FrontierWorldState worldState(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow(() -> new AssertionError(
-                "runtime has no readable active state at " + runtime.calendarInstant() + ": " + runtime.status())).canonicalState());
-    }
-
-
-    /** Explicit modeled body event for filesystem recovery coverage, not a native movement claim. */
-    private static void presentModeledBody(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                         SubjectId actor, String phase) {
-        var state = worldState(runtime); var location = state.actorLocations().get(actor);
-        submitWorld(runtime, phase, new ActorBodyPresent(ActorBodyAuthority.current(state, actor),
-                location.body(), location.condition().health(), location.body(), location.condition().health()));
-    }
-
-    /** Explicit modeled body event for filesystem recovery coverage, not a native movement claim. */
-    private static void inspectModeledBody(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                         SubjectId actor, BodyPosition observed, String phase) {
-        var state = worldState(runtime); var location = state.actorLocations().get(actor);
-        submitWorld(runtime, phase, new ActorBodyInspected(ActorBodyAuthority.current(state, actor),
-                ActorBodyInspected.Source.INDEXED_LIVING, location.body(), location.condition().health(),
-                observed, location.condition().health(), state.actorExecutions().actors().get(actor).current()));
-    }
-
-    private static void submitWorld(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, FrontierPayload payload) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(); CommandId commandId = new CommandId("test:" + phase);
-        FrontierCommand command = new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload);
-        CommandResult result = runtime.submit(command).orElseThrow();
-        assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
-    }
-
-    private record Counter(int value) { }
-    private record CounterProjection(WorldId worldId, Revision revision, SimInstant instant, int value) implements FrontierProjection { }
-    private record Delta(int value) implements FrontierPayload {
-        @Override public String type() { return "test.runtime_delta"; }
-    }
-
-    private static final class CountingCounterCodec implements StateCodec<Counter> {
-        private int encodeCalls;
-        private int decodeCalls;
-
-        @Override public byte[] encode(Counter state) {
-            encodeCalls++;
-            return ByteBuffer.allocate(4).putInt(state.value()).array();
-        }
-
-        @Override public Counter decode(byte[] bytes) {
-            decodeCalls++;
-            if (bytes.length != 4) throw new IllegalArgumentException("counter state is malformed");
-            return new Counter(ByteBuffer.wrap(bytes).getInt());
-        }
-
-        private void reset() {
-            encodeCalls = 0;
-            decodeCalls = 0;
-        }
-    }
 }
