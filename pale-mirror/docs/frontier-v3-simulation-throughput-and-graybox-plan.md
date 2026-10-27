@@ -934,5 +934,7 @@ grows.52server samples now collect/filter field-scene candidates before asking
 whether any observer exists. All six common scene-admission callers now supply
 lazy read-only candidate inventories to the shared demand gate. No ordinary
 observer means no candidate calculation; retained scenes still execute/drain
-through the unchanged scheduler. Existing physical-demand native test now rejects
-any observer-free supplier evaluation and checks a later observed candidate.
+through the unchanged scheduler. Existing physical-demand native test checks a later observed candidate through
+the lazy boundary; the no-nearby-player physical-effect negative remains. An added
+assertion that the entire shared test level had no players was invalid: the parallel
+test creates a mock observer. Removed that assertion, not production demand checks.

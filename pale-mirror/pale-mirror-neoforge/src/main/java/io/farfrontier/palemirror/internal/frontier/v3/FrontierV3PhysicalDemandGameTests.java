@@ -20,9 +20,6 @@ public final class FrontierV3PhysicalDemandGameTests {
         helper.assertTrue(helper.getLevel().hasChunkAt(position), "the GameTest fixture must provide an ordinarily loaded chunk");
         helper.assertFalse(FrontierV3PhysicalDemand.exists(helper.getLevel(), position),
                 "chunk residency alone must not authorize a physical route or repair effect");
-        var candidates = FrontierV3SceneDemand.<DemandCandidate>demandedCandidates(helper.getLevel(),
-                () -> { throw new AssertionError("observer-free admission evaluated canonical candidates"); }, DemandCandidate::anchor);
-        helper.assertTrue(candidates.isEmpty(), "observer-free admission must stay empty without preparing candidates");
         helper.succeed();
     }
 
