@@ -13,8 +13,8 @@ final class GoodsParticipantReviewAdvice {
     static ScheduledAdvisory<FrontierWorldState> capture(FrontierWorldState state, ScheduledAction action, SimInstant at) {
         var participant = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(action.subject()), "economic advice owner");
         var basis = peers(state, participant); var bootstrap = state.bootstrap();
-        var peerInputs = new HashMap<SubjectId, Long>();
-        basis.keySet().forEach(id -> peerInputs.put(id, state.companies().goodsTrade().participants().economicState(id).inputRevision()));
+        var peerInputs = new HashMap<SubjectId, SettlementEconomicPlanningState>();
+        basis.keySet().forEach(id -> peerInputs.put(id, state.companies().goodsTrade().participants().economicState(id)));
         var ownerInput = state.companies().goodsTrade().participants().economicState(action.subject());
         var navigation = state.navigationGeometry(); var physical = state.physicalDeltas();
         return () -> {
@@ -35,10 +35,13 @@ final class GoodsParticipantReviewAdvice {
                     if (!basis.equals(peers(current, participant))) return reject("PEER_IDENTITY");
                     if (executionAt.compareTo(at) < 0) return reject("EXECUTION_TIME");
                     if (prepared.publication().filter(plan -> !SettlementEconomicPublication.peerEnvelopesCurrent(
-                            current.companies().goodsTrade().participants(), plan)
-                        || plan.peerVersions().keySet().stream().anyMatch(id -> !Objects.equals(peerInputs.get(id),
-                            current.companies().goodsTrade().participants().economicState(id).inputRevision()))).isPresent())
-                        return reject("BUYER_CONSENT");
+                            current.companies().goodsTrade().participants(), plan)).isPresent()) return reject("BUYER_PLAN");
+                    if (prepared.publication().filter(plan -> plan.peerVersions().keySet().stream().anyMatch(id -> {
+                        var captured = peerInputs.get(id);
+                        var latest = current.companies().goodsTrade().participants().economicState(id);
+                        return captured == null || latest.inputRevision() != captured.inputRevision()
+                                && !latest.onlyMarketChangesSince(captured);
+                    })).isPresent()) return reject("BUYER_INPUT");
                     if (executionAt.ticks() >= prepared.publication().map(SettlementEconomicPlan::reviewAtTick)
                             .orElse(Math.addExact(at.ticks(), bootstrap.ruleset().goodsTrade().reviewInterval())))
                         return reject("EXPIRED");

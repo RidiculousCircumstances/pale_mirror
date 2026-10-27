@@ -81,6 +81,10 @@ class ConditionalProductionQuoteTest {
                 .filter(SettlementEconomicPlanPublished.class::isInstance).map(SettlementEconomicPlanPublished.class::cast)
                 .anyMatch(event -> event.plan().peerVersions().containsKey(BUYER)), "the fixture must actually quote this buyer");
         var market = state.companies().goodsTrade(); var capturedRegistry = market.participants();
+        var buyerMarketChanged = capturedRegistry.withEconomicState(BUYER, capturedRegistry.economicState(BUYER).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.MARKET, Set.of("minecraft:bread"))));
+        assertTrue(advice.revalidate(state.withCompanies(state.companies().withGoodsTrade(market.withParticipants(buyerMarketChanged))), at).isPresent(),
+                "a quoted buyer retains the same accepted consent when only incoming market observations changed");
         var buyerCashChanged = capturedRegistry.withEconomicState(BUYER, capturedRegistry.economicState(BUYER).invalidate(
                 Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of())));
         assertTrue(advice.revalidate(state.withCompanies(state.companies().withGoodsTrade(market.withParticipants(buyerCashChanged))), at).isEmpty(),

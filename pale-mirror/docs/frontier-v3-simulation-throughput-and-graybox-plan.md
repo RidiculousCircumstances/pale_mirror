@@ -347,3 +347,10 @@ assessment/expiry, exact buyer envelopes and all current admission checks. Exist
 actual runtime-composition fixture checks valid refreshed publication and rejects
 CASH after MARKET; conditional offers/autonomous trading/input tests and guardrails
 PASS45s (dated-own-market-input-final.log). No persistence schema change.
+
+The same MARKET-only proof applies to an actually quoted buyer without changing
+its accepted plan binding. A changed buyer plan remains rejected; changed cash,
+stock and commitments remain rejected. A real conditional-offer fixture now proves
+that a buyer's unrelated incoming quote is not funding withdrawal and CASH still
+is. Diagnostic reasons split BUYER_PLAN from BUYER_INPUT. Focused actual advice/
+conditional-offer plus guardrails PASS21s (dated-buyer-market-input-final.log).
