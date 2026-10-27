@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3ScheduledPreparationTest {
     @Test @Timeout(10) void disposableAdviceRunsOffOwnerButOnlyCurrentOwnerMayAuthorizeItsExactContinuation() throws Exception {
         var owner = Thread.currentThread(); var entered = new CountDownLatch(1); var release = new CountDownLatch(1);
+        var otherEntered = new CountDownLatch(1);
         var computed = new AtomicReference<Thread>(); var validated = new AtomicReference<Thread>();
         var action = new ScheduledAction(new ScheduleId("schedule:advice"), new SimInstant(1), 0, new SubjectId("subject:advice"), "advice", 1);
         ScheduledActionPlanner<Integer> planner = new ScheduledActionPlanner<>() {
@@ -19,7 +20,8 @@ class FrontierV3ScheduledPreparationTest {
             public List<ScheduledAction> reconsideredBy(Integer before, Integer after, SimInstant at) { return List.of(action); }
             public Optional<ScheduledAdvisory<Integer>> advice(Integer captured, ScheduledAction ignored, SimInstant at) {
                 return Optional.of(() -> {
-                    computed.set(Thread.currentThread()); entered.countDown();
+                    computed.set(Thread.currentThread());
+                    if (captured == 7) otherEntered.countDown(); else entered.countDown();
                     try { release.await(); } catch (InterruptedException failure) { throw new IllegalStateException(failure); }
                     return (current, now) -> {
                         validated.set(Thread.currentThread());
@@ -30,10 +32,14 @@ class FrontierV3ScheduledPreparationTest {
             }
         };
         try (var host = new FrontierV3ScheduledPreparation<>(planner)) {
-            var ready = new CountDownLatch(1); host.onReady(ready::countDown);
+            var ready = new CountDownLatch(2); host.onReady(ready::countDown);
             var calculation = host.beginAdvice(host.advice(3, action, new SimInstant(1)).orElseThrow()).orElseThrow();
             entered.await(); assertTrue(calculation.poll().isEmpty()); assertNull(validated.get());
             assertNotSame(owner, computed.get());
+            var other = host.beginAdvice(host.advice(7, action, new SimInstant(1)).orElseThrow()).orElseThrow();
+            otherEntered.await();
+            assertTrue(other.poll().isEmpty());
+            assertEquals(1, release.getCount(), "one blocked settlement forecast cannot serialize an independent forecast");
             // The live kernel holds its exact predecessor during this stage. An
             // unrelated forecast must not keep it queued behind this blocked work.
             var independentReady = new CountDownLatch(1); host.onReady(independentReady::countDown);
@@ -45,6 +51,7 @@ class FrontierV3ScheduledPreparationTest {
             host.onReady(ready::countDown);
             release.countDown(); ready.await();
             var completion = calculation.poll().orElseThrow();
+            assertTrue(other.poll().orElseThrow().revalidate(4, new SimInstant(2)).isEmpty());
             assertTrue(completion.revalidate(4, new SimInstant(2)).isEmpty());
             assertSame(owner, validated.get());
             var exactReady = new CountDownLatch(1); host.onReady(exactReady::countDown);

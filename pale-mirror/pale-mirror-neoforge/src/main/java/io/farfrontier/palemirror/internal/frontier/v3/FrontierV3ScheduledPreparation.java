@@ -29,12 +29,14 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                 + ",\"adviceAccepted\":" + adviceAccepted + ",\"adviceRejected\":" + adviceRejected
                 + ",\"adviceRejectionReasons\":" + new com.google.gson.Gson().toJson(adviceRejectionReasons) + "}";
     }
-    private final ThreadPoolExecutor worker = worker("PMV3-scheduled-advice", 2);
-    private final ThreadPoolExecutor exactWorker = worker("PMV3-scheduled-preparation", 1);
-    private static ThreadPoolExecutor worker(String name, int capacity) {
-        return new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+    private final ThreadPoolExecutor worker = worker("PMV3-scheduled-advice", 2, 2);
+    private final ThreadPoolExecutor exactWorker = worker("PMV3-scheduled-preparation", 1, 1);
+    private static ThreadPoolExecutor worker(String name, int threads, int capacity) {
+        var sequence = new java.util.concurrent.atomic.AtomicInteger();
+        return new ThreadPoolExecutor(threads, threads, 0, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(capacity), task -> {
-                    var thread = new Thread(task, name); thread.setDaemon(true); return thread;
+                    var thread = new Thread(task, threads == 1 ? name : name + "-" + sequence.getAndIncrement());
+                    thread.setDaemon(true); return thread;
                 });
     }
     FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate) { this.delegate = Objects.requireNonNull(delegate); }

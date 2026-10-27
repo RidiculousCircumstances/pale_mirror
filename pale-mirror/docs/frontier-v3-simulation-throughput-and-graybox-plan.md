@@ -1006,3 +1006,13 @@ Focused owner/cargo/equipment/sourcing/validation checks+guardrails PASS34s;
 changed service/storage/equipment/procurement composition+guardrails PASS42s.
 Clean-ref release/deployment and native throughput measurement remain required;
 this is not phase-G closure or a measured speed ratio.
+
+The same post-change profile shows a saturated single advice worker (951samples)
+while navigation is idle (1sample). Independent immutable forecasts now have two
+bounded compute workers; exact-predecessor preparation remains single-lane and all
+revalidation/publication remains on the owner. Queue capacity and the reserved
+checkpoint slot are unchanged. The existing preparation test proves two independent
+forecasts enter while one is blocked, exact preparation remains independent, stale
+results reject, and only the owner authorizes/publishes continuations. Focused
+preparation/runtime checks PASS37s. This does not increase canonical work allowances
+or claim native throughput success; deploy/measure the connected correction together.
