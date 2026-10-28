@@ -11,6 +11,10 @@ import java.util.Objects;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork;
+import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState;
+import io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryWork;
 
 /**
  * Canonical read model for exclusive retained human work. It introduces no
@@ -24,26 +28,48 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
     private record Current(FrontierWorldState state, HumanAssignmentProjection projection) { }
     private static final ThreadLocal<Current> CURRENT = new ThreadLocal<>();
     private static final ImmutableRegistryView<SubjectId, ResourceSiteLifecycle, List<HumanAssignment>> FIELD_ROWS =
-            new ImmutableRegistryView<>(ResourceSiteState.MAX_SITES);
+            new ImmutableRegistryView<>(ResourceSiteState.MAX_SITES, Objects::equals);
     private static final ImmutableInputView<Map<SubjectId, List<HumanAssignment>>> FIELDS = new ImmutableInputView<>();
     private static Map<SubjectId, List<HumanAssignment>> fieldAssignments(FrontierWorldState state) {
         return FIELDS.get(List.of(state.bootstrap(), state.resourceSites().sites()), () -> FIELD_ROWS.project(
-                state.bootstrap(), state.resourceSites().sites(), HumanAssignmentProjection::sameFieldAssignments,
+                state.bootstrap(), state.resourceSites().sites(),
                 (id, field) -> field.harvestJobs().values().stream().map(job -> new HumanAssignment(
                         job.workerId(), HumanAssignmentKind.FIELD_HARVEST, java.util.Optional.of(job.id()))).toList()));
     }
-    private static boolean sameFieldAssignments(ResourceSiteLifecycle before, ResourceSiteLifecycle after) {
-        if (before == after) return true;
-        if (before == null || !before.siteId().equals(after.siteId())
-                || !before.harvestJobs().keySet().equals(after.harvestJobs().keySet())) return false;
-        for (var entry : before.harvestJobs().entrySet()) {
-            var next = after.harvestJobs().get(entry.getKey());
-            if (!entry.getValue().id().equals(next.id()) || !entry.getValue().workerId().equals(next.workerId())) return false;
-        }
-        return true;
+    private static final ImmutableRegistryView<SubjectId, ProductionJob, Optional<HumanAssignment>> PRODUCTION =
+            new ImmutableRegistryView<>(SimulationCapacity.MAX_RESIDENTS, Objects::equals);
+    private static final ImmutableRegistryView<SubjectId, ExtractionWork, Optional<HumanAssignment>> EXTRACTION =
+            new ImmutableRegistryView<>(ExtractionSiteState.MAX_WORK, Objects::equals);
+    private static final ImmutableRegistryView<SubjectId, ForestryWork, Optional<HumanAssignment>> FORESTRY =
+            new ImmutableRegistryView<>(SimulationCapacity.MAX_RESIDENTS, Objects::equals);
+    private static final ImmutableRegistryView<SubjectId, Shipment, Optional<HumanAssignment>> COURIERS =
+            new ImmutableRegistryView<>(ShipmentState.MAX_SHIPMENTS, Objects::equals);
+    private static Optional<HumanAssignment> assignment(SubjectId actor, HumanAssignmentKind kind, SubjectId owner) {
+        return Optional.of(new HumanAssignment(actor, kind, Optional.of(owner)));
+    }
+    private static Map<SubjectId, Optional<HumanAssignment>> production(FrontierWorldState state) {
+        return PRODUCTION.project(state.bootstrap(), state.productionJobs(),
+                (id, job) -> assignment(job.workerId(), HumanAssignmentKind.PRODUCTION, job.id()));
+    }
+    private static Map<SubjectId, Optional<HumanAssignment>> extraction(FrontierWorldState state) {
+        return EXTRACTION.project(state.bootstrap(), state.extractionSites().work(), (id, job) -> job.terminal()
+                ? Optional.empty() : assignment(job.execution().actorId(), HumanAssignmentKind.EXTRACTION, job.id()));
+    }
+    private static Map<SubjectId, Optional<HumanAssignment>> forestry(FrontierWorldState state) {
+        return FORESTRY.project(state.bootstrap(), state.forest().work(),
+                (id, job) -> assignment(job.execution().actorId(), HumanAssignmentKind.FORESTRY, job.id()));
+    }
+    private static Map<SubjectId, Optional<HumanAssignment>> couriers(FrontierWorldState state) {
+        return COURIERS.project(state.bootstrap(), state.shipments().shipments(), (id, shipment) ->
+                shipment.terminal() || TransportCargoExecution.shared(shipment) ? Optional.empty()
+                        : assignment(shipment.execution().actorId(), HumanAssignmentKind.COURIER, shipment.id()));
+    }
+    private static void claimProjected(Map<SubjectId, HumanAssignment> target, Map<SubjectId, Optional<HumanAssignment>> rows) {
+        rows.values().stream().flatMap(Optional::stream).sorted(Comparator.comparing(value -> value.ownerId().orElseThrow()))
+                .forEach(value -> claim(target, value.residentId(), value.kind(), value.ownerId().orElseThrow()));
     }
     private static final ImmutableRegistryView<SubjectId, UnitGroup, List<UnitGroup.Member>> GROUP_ROWS =
-            new ImmutableRegistryView<>(UnitGroupState.MAX_GROUPS);
+            new ImmutableRegistryView<>(UnitGroupState.MAX_GROUPS, Objects::equals);
     private static final ImmutableInputView<Map<SubjectId, List<UnitGroup.Member>>> GROUPS = new ImmutableInputView<>();
     private static Map<SubjectId, List<UnitGroup.Member>> groupMembers(FrontierWorldState state) {
         return GROUPS.get(List.of(state.bootstrap(), state.unitGroups().groups()), () -> GROUP_ROWS.project(
@@ -53,12 +79,12 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
     /** Identity comparisons of exactly the immutable sources read by compileFresh; no world-state hashing. */
     private record Dependencies(List<Object> sources) {
         static Dependencies of(FrontierWorldState state) {
-            return new Dependencies(List.of(state.humanPopulation().residents(), state.productionJobs(),
+            return new Dependencies(List.of(state.humanPopulation().residents(), production(state),
                     fieldAssignments(state), state.strategicPlans().routePatrols(),
                     state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
                     state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(),
-                    state.shipments().shipments(), groupMembers(state), ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations()),
-                    state.extractionSites().work(), state.forest().work()));
+                    couriers(state), groupMembers(state), ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations()),
+                    extraction(state), forestry(state)));
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof Dependencies value) || sources.size() != value.sources.size()) return false;
@@ -100,17 +126,12 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
     private static HumanAssignmentProjection compileFresh(FrontierWorldState state) {
         Map<SubjectId, HumanAssignment> values = new LinkedHashMap<>();
         state.humanPopulation().residentIds().stream().sorted().forEach(id -> values.put(id, HumanAssignment.idle(id)));
-        state.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))
-                .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.PRODUCTION, job.id()));
+        claimProjected(values, production(state));
         state.strategicPlans().settlementAssaults().values().stream().sorted(Comparator.comparing(SettlementAssault::id))
                 .flatMap(parent -> parent.equipmentReturnVisit().stream()).filter(visit -> visit.execution().isPresent())
                 .forEach(visit -> claim(values, visit.actorId(), HumanAssignmentKind.EQUIPMENT_SERVICE, visit.ownerId()));
-        state.extractionSites().work().values().stream().filter(job -> !job.terminal()).sorted(Comparator.comparing(
-                io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork::id))
-                .forEach(job -> claim(values, job.execution().actorId(), HumanAssignmentKind.EXTRACTION, job.id()));
-        state.forest().work().values().stream().sorted(Comparator.comparing(
-                io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryWork::id))
-                .forEach(job -> claim(values, job.execution().actorId(), HumanAssignmentKind.FORESTRY, job.id()));
+        claimProjected(values, extraction(state));
+        claimProjected(values, forestry(state));
         // A conflict suspends execution, not the retained job's exclusive worker claim.
         fieldAssignments(state).entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .flatMap(site -> site.getValue().stream())
@@ -140,11 +161,12 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                 });
         state.humanPopulation().migrations().values().stream().sorted(Comparator.comparing(ResidentMigrationJourney::residentId))
                 .forEach(journey -> claim(values, journey.residentId(), HumanAssignmentKind.TRANSIT, journey.residentId()));
-        state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
-                .filter(shipment -> !TransportCargoExecution.shared(shipment))
-                .filter(shipment -> state.actorLocations().get(shipment.execution().actorId()).kind() == ActorKind.RESIDENT)
-                .sorted(Comparator.comparing(Shipment::id))
-                .forEach(shipment -> claim(values, shipment.execution().actorId(), HumanAssignmentKind.COURIER, shipment.id()));
+        var courierRows = new LinkedHashMap<SubjectId, Optional<HumanAssignment>>();
+        couriers(state).forEach((id, assignment) -> {
+            if (assignment.filter(value -> state.actorLocations().get(value.residentId()).kind() == ActorKind.RESIDENT).isPresent())
+                courierRows.put(id, assignment);
+        });
+        claimProjected(values, courierRows);
         for (var group : groupMembers(state).entrySet())
             for (var member : group.getValue()) {
                 if (state.actorLocations().get(member.actorId()).kind() != ActorKind.RESIDENT) continue;

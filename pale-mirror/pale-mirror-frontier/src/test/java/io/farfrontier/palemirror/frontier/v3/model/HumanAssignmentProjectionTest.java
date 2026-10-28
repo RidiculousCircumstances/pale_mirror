@@ -25,7 +25,7 @@ class HumanAssignmentProjectionTest {
         // Read-only precursor fixture: no physical tool transfer or publication is claimed.
         var progress = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
                 FrontierWorldStateUpdate.begin().resourceSites(refreshed)));
-        assertEquals(before, HumanAssignmentProjection.compile(progress));
+        assertSame(before, HumanAssignmentProjection.compile(progress));
         var retired = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
                 FrontierWorldStateUpdate.begin().resourceSites(state.resourceSites().replace(state.resourceSites().site(job.siteId()).destroyed()))));
         org.junit.jupiter.api.Assertions.assertTrue(HumanAssignmentProjection.compile(retired).idle(job.workerId()));

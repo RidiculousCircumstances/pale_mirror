@@ -4008,3 +4008,30 @@ Focused adapter first-admission negative/harvest-hand/release/recovery plus doma
 and activity lifecycle checks passed30s. An initial compile caught a missing import, corrected
 before these checks. The next frozen artifact and SAME-world before/after farmer continuation
 are required; source existence is not a terminal liveness claim.
+
+
+### Assignment dependencies describe work identity, not execution progress
+
+be5cd7304 focused27domain+24adapterPASS30s, frozen61s +55nativeeconomy/JAR/guardrailsPASS;
+both retained313 deployments verified. SAMEworld town1 old scenes1/2 closed, body PREPARED1
+released with retained NEVER_CREATED admission history. Both residents then completed COLD
+meals without any client/teleport/reset: resident1-7 NOURISHED at71431, resident1-13 at71876;
+by73049/73052 both mealNONE/activityWORK/admissionREADY, coldAvailable=true/bodyCustody=false.
+This proves the blocked admission→meal continuation, not yet the complete resumed harvest.
+
+The remaining assignment read model used complete production/extraction/forestry/shipment
+registries as cache dependencies. Any material/cell/journey progress could rebuild and sort
+all residents' assignments although exact actor/kind/owner tuples stayed identical. The existing
+shared row projector now accepts explicit equality for an owner's complete immutable output;
+identity comparison remains the default for all unchanged callers. Assignment producers opt in
+with complete HumanAssignment/Optional/ordered-member values. Only changed rows are projected;
+progress keeps the previous output image while replacement/closure/removal changes it.
+
+Both dependency declaration and compileFresh consume these same explicit projections. Existing
+producer ordering, duplicate/foreign-worker rejection, terminal/shared-cargo conditions, group
+exceptions and current actor-kind filtering are preserved. Field projection no longer forces
+full custom-comparator reevaluation. No persisted authority, role inference, schema or business
+policy changes. A connected two-input production workflow now requires the same population
+assignment image throughout nonterminal LOAD/work/delivery steps, while existing retirement,
+branch, group, shipment, forestry, extraction and full codec checks retain their actual behavior.
+FocusedchecksPASS83s; final package/runtime measurement follows. G still open.

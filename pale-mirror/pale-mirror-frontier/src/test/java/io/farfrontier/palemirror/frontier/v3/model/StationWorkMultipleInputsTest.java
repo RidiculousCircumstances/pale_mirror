@@ -53,7 +53,10 @@ class StationWorkMultipleInputsTest {
             var proposed = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, tick));
             var step = proposed.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst();
             if (step.isEmpty()) continue;
+            var assignments = HumanAssignmentProjection.compile(state);
             state = ProductionProcess.reduceBakeryColdStep(state, home.id(), step.orElseThrow());
+            if (state.productionJobs().containsKey(job.id()))
+                assertSame(assignments, HumanAssignmentProjection.compile(state), "material/work progress does not reassign the resident population");
             if (step.orElseThrow().action() == BakeryColdStep.Action.LOAD) { loads++; state = codec.decode(codec.encode(state)); }
         }
         assertFalse(state.productionJobs().containsKey(job.id()), "complete shared workflow must reach storage, not stop after the first material");

@@ -10,10 +10,19 @@ import java.util.function.BiPredicate;
 final class ImmutableRegistryView<K, I, V> {
     private record Working<K, I, V>(Object generation, Map<K, I> source, Map<K, I> basis, Map<K, V> snapshot) { }
     private final int maximumEntries, maximumSnapshots;
+    private final BiPredicate<V, V> sameOutput;
     private final ThreadLocal<Working<K, I, V>> current = new ThreadLocal<>();
     private final ThreadLocal<ArrayDeque<Working<K, I, V>>> snapshots = ThreadLocal.withInitial(ArrayDeque::new);
     ImmutableRegistryView(int maximumEntries) { this(maximumEntries, 1); }
     ImmutableRegistryView(int maximumEntries, int maximumSnapshots) {
+        this(maximumEntries, maximumSnapshots, (before, after) -> before == after);
+    }
+    /** The owner explicitly supplies equality of its complete immutable projected value. */
+    ImmutableRegistryView(int maximumEntries, BiPredicate<V, V> sameOutput) {
+        this(maximumEntries, 1, sameOutput);
+    }
+    private ImmutableRegistryView(int maximumEntries, int maximumSnapshots, BiPredicate<V, V> sameOutput) {
+        this.sameOutput = Objects.requireNonNull(sameOutput);
         if (maximumEntries < 1 || maximumSnapshots < 1) throw new IllegalArgumentException("registry view requires declared positive bounds");
         this.maximumEntries = maximumEntries; this.maximumSnapshots = maximumSnapshots;
     }
@@ -62,7 +71,7 @@ final class ImmutableRegistryView<K, I, V> {
         var previous = sameEpoch ? working.snapshot() : Map.<K, V>of();
         var priorInputs = sameEpoch ? working.basis() : Map.<K, I>of();
         boolean useSourceBasis = identityComparison && inputs instanceof ImmutableMapImage<?, ?>;
-        var update = new Update<K, I, V>(priorInputs, previous, !useSourceBasis);
+        var update = new Update<K, I, V>(priorInputs, previous, !useSourceBasis, sameOutput);
         if (sameEpoch && changes.isPresent()) {
             for (var key : changes.orElseThrow()) {
                 if (inputs.containsKey(key)) update.accept(key, inputs.get(key), unchanged, compute);
@@ -85,11 +94,12 @@ final class ImmutableRegistryView<K, I, V> {
         private final Map<K, I> inputs;
         private final Map<K, V> previous;
         private final boolean captureInputs;
+        private final BiPredicate<V, V> sameOutput;
         private final Map<K, V> replacements = new HashMap<>();
         private final Map<K, I> inputReplacements = new HashMap<>();
         private final Set<K> removals = new HashSet<>();
-        private Update(Map<K, I> inputs, Map<K, V> previous, boolean captureInputs) {
-            this.inputs = inputs; this.previous = previous; this.captureInputs = captureInputs;
+        private Update(Map<K, I> inputs, Map<K, V> previous, boolean captureInputs, BiPredicate<V, V> sameOutput) {
+            this.inputs = inputs; this.previous = previous; this.captureInputs = captureInputs; this.sameOutput = sameOutput;
         }
         private void accept(K key, I input, BiPredicate<I, I> unchanged, BiFunction<K, I, V> compute) {
             Objects.requireNonNull(key); Objects.requireNonNull(input);
@@ -97,7 +107,7 @@ final class ImmutableRegistryView<K, I, V> {
             if (prior != null && unchanged.test(inputs.get(key), input)) return;
             var value = Objects.requireNonNull(compute.apply(key, input));
             if (captureInputs && inputs.get(key) != input) inputReplacements.put(key, input);
-            if (prior != value) replacements.put(key, value);
+            if (prior == null || !sameOutput.test(prior, value)) replacements.put(key, value);
         }
         private void remove(K key) {
             if (previous.containsKey(key)) removals.add(key);
