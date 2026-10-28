@@ -3,8 +3,20 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Optional;
 
-/** Bakery binds its order to the shared machine; the machine service never inspects this family. */
+/** Station fulfillment binds its exact order to the shared machine; the machine service never inspects this family. */
 public final class StationWorkOperation {
+    private static final ImmutableReferenceIndex.Source<ProductionStations, SubjectId, ProductionStations.Machine> MACHINES =
+            new ImmutableReferenceIndex.Source<>(ProductionStations::machines);
+    private static final ImmutableReferenceIndex<ProductionStations, SubjectId, ProductionJob> OPERATIONS =
+            new ImmutableReferenceIndex<>(SimulationCapacity.MAX_RESIDENTS, 1, java.util.List.of(MACHINES),
+                    (stations, job) -> job.stationWork().<java.util.List<ImmutableReferenceIndex.Read<ProductionStations>>>map(
+                            work -> java.util.List.of(MACHINES.at(work.stationId()))).orElseGet(java.util.List::of),
+                    (stations, id, job) -> { if (job.stationWork().isPresent()) validate(stations, job); });
+    static void validateAll(FrontierBootstrap bootstrap, ProductionStations stations, java.util.Map<SubjectId, ProductionJob> jobs) {
+        if (jobs.size() > SimulationCapacity.MAX_RESIDENTS)
+            jobs.values().stream().filter(job -> job.stationWork().isPresent()).forEach(job -> validate(stations, job));
+        else OPERATIONS.validate(bootstrap, jobs, stations);
+    }
     private StationWorkOperation() { }
     public static java.util.OptionalInt loadSlot(FrontierWorldState state, ProductionJob job) {
         var work = job.stationWork().orElseThrow();
@@ -116,7 +128,8 @@ public final class StationWorkOperation {
     public static void validate(ProductionStations stations, ProductionJob job) {
         var work = job.stationWork().orElseThrow();
         if (work.phase() != StationWorkState.Phase.PROCESSING && work.phase() != StationWorkState.Phase.STATION_UNLOAD) return;
-        var operation = stations.require(work.stationId()).operation().orElseThrow();
+        var operation = stations.require(work.stationId()).operation().orElseThrow(
+                () -> new IllegalArgumentException("station order lost its exact machine operation"));
         if (!operation.initiator().equals(new ProductionOperation.OrderInitiator(ProductionOrderKind.STATION_WORK, job.id()))
                 || !operation.orderId().equals(job.id()) || !operation.recipeId().equals(work.recipeId())
                 || !matchesInput(operation, job)

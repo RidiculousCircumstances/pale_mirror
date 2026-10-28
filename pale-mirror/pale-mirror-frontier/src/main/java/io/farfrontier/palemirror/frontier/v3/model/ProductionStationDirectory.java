@@ -25,6 +25,8 @@ public final class ProductionStationDirectory {
         if (record == null) throw new IllegalArgumentException("missing installed station identity");
         return record;
     }
+    /** Exact nominal station directory for dependency readers; no operability grant. */
+    static Map<SubjectId, ContainerRecord> declarations(ExactInventory inventory) { return read(inventory).stations(); }
     public static List<ContainerRecord> inFacility(ExactInventory inventory, SubjectId facility) {
         return read(inventory).facilities().getOrDefault(facility, List.of());
     }

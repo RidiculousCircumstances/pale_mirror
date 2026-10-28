@@ -3320,3 +3320,44 @@ fields, depleted sources, changed product scope and unavailable living workforce
 plus immutable predecessor and field codec recovery. Focused valuation, actual
 procurement, territorial agriculture, extraction forecast and architecture checks
 plus guardrails PASS15s. Frozen combined release/deployment/native effect pending.
+
+
+### Station order closure follows the changed material or machine (2026-10-28)
+
+The0f owned-state profile includes14samples at the per-job station material check
+and4 at the unconditional operation check; complete owned-state time6.535616s is
+inclusive, not their individual cost. The canonical constructor repeated both checks
+for every order under unrelated world changes. StationWorkReferenceValidation now
+uses the existing common reference index to select the exact order whose station,
+container, account, allocation, input/output lot or individual item changed. It calls
+the original StationWorkValidation; catalog and settlement come from the exact
+bootstrap epoch. Current and queued/loaded materials retain both positive and absent
+claim reads. Installed identity comes from ProductionStationDirectory's existing
+exact nominal directory, including station removal/replacement/duplicate rejection.
+StationWorkOperation independently indexes actual named machine changes; it retains
+the same processing/output/input and pending-physical-completion requirements.
+
+The derived-index budget is MAX_RESIDENTS rows,208material reads (64legs*2 plus
+64current input lots and16fixed reads). A larger registry receives full original
+checks instead of a new admission limit. Failed updates discard evidence; full
+audits recheck all rows. Rights, task/worker/facility metadata and other production
+protocols retain their existing checks. Missing machine operation now has an explicit
+station-order invariant error. New warmed-proof tests remove current/queued claims
+and a processing machine operation, preserve predecessor and codec recovery. Source
+checks, bakery COLD/HOT modeled continuations, source recovery, individual manufacture/
+repair, station lifecycle/recipe/modes, interrupted handoff/physical release, incremental
+validation and common reference-index checks plus guardrails PASS48s. These are modeled
+semantic/recovery checks, not new graphical/native acceptance. Frozen release/deploy
+and native effect pending.
+
+Frozen0ad release PASS36s; both retained-world deployments verified with SHA512
+838d65875c8947aa931f0d29d74591930eafb323090c9a9089e1b3ac985bdb42006bdf1a30c91e1af7a6586496e367446e6cbdd0828770ecdca888303861fd75.
+Untraced13sample ordinary observation 363.322196s, ticks209866→219138,mean25.520048/s;
+debt2005→peak3379→0, final two windows20.181582/20.018626/s withoutdebt.
+Early windows5.447925/5.779137/s and later32.90..41.65 catch-up show evolving
+load; this is no controlled source speedup or full-day/5-footprint acceptance.
+No JFR/build/restart during observation, allstatusok/notrecovering. G staysOPEN.
+
+Post0ad population audit:100towns,3030ALIVE,0unavailable at220400→220937.
+Independent town queries, not one simultaneous snapshot. No harvest duty observed
+in that cut, so the preceding20/s interval is not proof of sustained daytime work.

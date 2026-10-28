@@ -8,6 +8,23 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class StationWorkMultipleInputsTest {
+    @Test void unchangedOrderRejectsLostCurrentOrQueuedMaterialAfterSuccessfulReadEvidence() {
+        var fixture = started(); var state = fixture.state(); var job = fixture.job();
+        var current = ((ProductionInputHold.FungibleCold) job.inputHold()).claimId();
+        var queued = job.stationWork().orElseThrow().materials().queued().getFirst().claimId();
+        for (var claim : List.of(current, queued)) {
+            StationWorkReferenceValidation.validate(state.bootstrap(), state.inventory(), state.productionJobs());
+            var changed = state.inventory().withFungibleResources(state.inventory().fungibleResources().releaseClaims(Set.of(claim)));
+            assertThrows(IllegalArgumentException.class, () -> StationWorkReferenceValidation.validate(
+                    state.bootstrap(), changed, state.productionJobs()));
+            assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
+                StationWorkReferenceValidation.validate(state.bootstrap(), changed, state.productionJobs()); return null;
+            }));
+            assertDoesNotThrow(() -> StationWorkReferenceValidation.validate(state.bootstrap(), state.inventory(), state.productionJobs()));
+        }
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(state));
+        assertDoesNotThrow(() -> StationWorkReferenceValidation.validate(recovered.bootstrap(), recovered.inventory(), recovered.productionJobs()));
+    }
     @Test void oneOrderAcquiresBothMaterialsAcrossRecoveredTripsAndProducesOneTool() {
         var fixture = started(); var state = fixture.state(); var job = fixture.job(); var station = fixture.station();
         var home = state.bootstrap().settlements().getFirst();
@@ -119,6 +136,16 @@ class StationWorkMultipleInputsTest {
                 state = ProductionProcess.reduceBakeryColdStep(state, job.settlementId(), next);
         }
         var operation = state.productionStations().require(fixture.station().id()).operation().orElseThrow();
+        if (removedKind.equals("both")) {
+            var before = state;
+            StationWorkOperation.validateAll(before.bootstrap(), before.productionStations(), before.productionJobs());
+            var machine = before.productionStations().require(fixture.station().id());
+            var empty = new ProductionStations.Machine(machine.stationId(), machine.combustion(), Optional.empty(), machine.revision() + 1, Optional.empty());
+            var lost = new ProductionStations(ImmutableLookupMap.withEntry(before.productionStations().machines(), machine.stationId(), empty));
+            assertThrows(IllegalArgumentException.class, () -> StationWorkOperation.validateAll(before.bootstrap(), lost, before.productionJobs()),
+                    "an unchanged order cannot inherit an operation which disappeared from its exact machine");
+            assertDoesNotThrow(() -> StationWorkOperation.validateAll(before.bootstrap(), before.productionStations(), before.productionJobs()));
+        }
         var input = operation.inputCustody().materials().orElseThrow(); var ledger = state.inventory().fungibleResources();
         var claims = input.claims().keySet().stream().filter(id -> removedKind.equals("both") || ledger.claims().get(id).itemKind().equals(removedKind))
                 .collect(java.util.stream.Collectors.toSet());

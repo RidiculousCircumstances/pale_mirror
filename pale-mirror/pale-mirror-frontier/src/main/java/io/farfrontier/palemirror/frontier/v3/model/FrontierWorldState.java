@@ -321,8 +321,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                                           io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState actorExecutions,
                                           io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet,
                                           ProductionStations productionStations) {
-            productionJobs.values().stream().filter(job -> job.stationWork().isPresent())
-                    .forEach(job -> StationWorkOperation.validate(productionStations, job));
+            StationWorkOperation.validateAll(bootstrap, productionStations, productionJobs);
             OwnedChecks.STATION_RELATIONS.validate(() -> ProductionOperationCompletionComposition.validateRelations(productionStations,
                     Map.of(ProductionOrderKind.STATION_WORK, StationWorkOperation.activeOrders(productionJobs))), productionStations, productionJobs);
             OwnedChecks.RESOURCE_SITES.validate(() -> resourceSites.validate(bootstrap), resourceSites,
@@ -472,6 +471,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), entry.getKey().originAtY(0));
         }
         OwnedChecks.PRODUCTION_FACILITIES.validate(() -> ProductionFacilityReservations.validate(productionJobs), productionJobs);
+        StationWorkReferenceValidation.validate(bootstrap, inventory, productionJobs);
         for (Map.Entry<SubjectId, ProductionJob> entry : productionJobs.entrySet()) {
             ProductionJob job = entry.getValue();
             job.rights().validate(inventory, companies, job);
@@ -485,7 +485,6 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
             if (!worker.settlementId().equals(settlement.id())) throw new IllegalArgumentException("bread production job worker must belong to its retained settlement");
             if (job.stationWork().isPresent()) {
-                StationWorkValidation.validate(inventory, job, settlement, bootstrap.ruleset().production());
                 continue;
             }
             if (inventory.items().containsKey(job.outputItemId())) {
