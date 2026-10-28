@@ -5039,3 +5039,67 @@ them. Existing storage-adoption case checks unchanged discovery under walking an
 retains actual warehouse retirement rejection. Connected field/equipment purchase/
 cultivation/storage/transport-death selection passed39checks43s+guardrails. Frozen
 package and both deployments follow; no gain for this cut is claimed yet.
+
+
+### Local exact-item rows and update inputs
+
+0a28d859d frozen39tests (including9architecture) passed23s with guardrails/JAR/package;
+both retained servers verified. Ordinary16cut window304.264859s292057→295726
+=12.058573ticks/s, debt775→3191. No overlapping build/profile/client. This evolving
+workload does not isolate this cut's causal gain or regression; sustainable20 remains
+OPEN. Town7 and100 hungry1→0; town68bread0→9 but hungry8→8, finalstarving0 in5samples.
+Town35 accepted coal quantity7→40 proves a new accepted portion involving that town
+(buyer OR seller). No new terminal harvest in these5samples. Evidence
+local-field-work-facts-ordinary/. A fresh45sJFR starts only after this window.
+
+Source review found ExactItemReadIndex rebuilding all owners and kinds whenever
+any item changed. Use the existing shared ImmutableGroupView current rows under
+explicit owner and owner+kind scopes. Values, producer order, title changes, removals
+and independent branches still follow the current inventory; membership grants no
+availability/custody authority. Unknown groups retain no entries.
+
+ExactInventory's wear, title and custody replacements now use the existing immutable
+partition update rather than cloning every item into a HashMap. Existing identity,
+predecessor, container capacity, reverse custody and ingress checks remain unchanged.
+Productive equipment and retained-tool forecasts depend on actual owned row images;
+all other prior dependencies remain conservative. EquipmentStockProjection.units
+still retains its broad item input because repair promises also read referenced
+output items; this change does not assume their title to narrow that dependency.
+
+Existing real acquisition case now checks foreign wear leaves the nonempty own
+productive fleet/wear forecast/retained selection intact. One inventory case checks
+actual own condition, title migration to both owner scopes, removal and predecessor
+branch reconstruction. Existing shipment acceptance/recovery and inventory negative
+coverage are reused for the changed common mutation path. Verification pending.
+
+
+The post-window0a28JFR (local-field-work-current-ordinary100.jfr) has zero data-loss
+events. Completed owner coverage44.765887s295792→296156=8.131191/s under profiling,
+not ordinary capacity. Exclusive gates: owner52.32%, exact-running32.41%, WAL-running
+7.54%, ready exact waiting owner5.41%. Nested validation6.105379s and schedule
+allocation2.995035s are not additive to those gates. Actual matched47.240514s thread
+CPU: advice38.30/38.01s,server21.60s,exact14.04s,navigation5.17/4.83s. Advice threads
+allocated25.59/25.47GB by JFR thread allocation deltas; allocation-sample weights
+are not exact byte totals. Lookup call attribution names ContainerStockIndex.budget
+under ContainerPhysicalReservations as the leading advice lookup caller, plus
+FungibleResourceReadIndex.layout on account edits.
+
+Connected source review proves a local storage admission called uncoveredDemands
+for the entire world, backing prospective claims against every destination's stock
+budget. It now backs only the queried exact container and subtracts covered demand
+only in that scope. The declared demand index still validates duplicate declarations
+and the exact completion owner/section; per-receiver uncovered indexes do not evict
+that shared declared index. The unused world-wide backing path is removed. Original
+per-container sorted slot admission, player-displaceable prospective claims, physical
+effect fences, representation/section/owner checks and current packing stay intact.
+
+FungibleResourceReadIndex's placement directory depended on a claimed bit, rebuilding
+every holder/container/actor list whenever one reservation appeared or disappeared.
+Placement now reads custody only; carriesClaim reads the holder's current account
+rows, including multiple actor accounts. No old quantity or claim can be reused
+from the directory. Existing custody claim/release/transfer/old-branch checks cover
+this boundary, with the multiple-account holder assertion extended.
+
+Item-focused checks+guardrails passed75s. Existing custody/stock/ledger checks
+passed26s. Connected reservation/compartment/shipment recovery selection+guardrails passed32s
+for the local admission correction. Final frozen union/package remains required.

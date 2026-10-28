@@ -71,14 +71,16 @@ public final class EquipmentStockProjection {
     /** Select the actual productive units to retain. Market quality and storage filtering remain in the trade adapter. */
     public static Set<SubjectId> retainedItems(FrontierWorldState state, SubjectId home) {
         var demands = EquipmentDemandComposition.read(state, home);
-        return RETAINED.get(state.bootstrap(), home, List.of(state.inventory().items(), state.inventory().containers(),
+        var owned = ExactItemReadIndex.owned(state.inventory(), home);
+        return RETAINED.get(state.bootstrap(), home, List.of(owned, state.inventory().containers(),
                 state.inventory().surfaces(), state.humanPopulation().residents(),
                 ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()), demands),
-                () -> projectRetained(state, home, demands));
+                () -> projectRetained(state, home, demands, owned));
     }
-    private static Set<SubjectId> projectRetained(FrontierWorldState state, SubjectId home, List<EquipmentWorkDemand> demands) {
+    private static Set<SubjectId> projectRetained(FrontierWorldState state, SubjectId home, List<EquipmentWorkDemand> demands,
+            List<ExactItemStack> owned) {
         var retained = new HashSet<SubjectId>(); var catalog = state.bootstrap().ruleset().tools();
-        var units = ExactItemReadIndex.owned(state.inventory(), home).stream()
+        var units = owned.stream()
                 .filter(item -> item.economicOwnerId().equals(home) && catalog.find(item.itemKind()).isPresent())
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
                         && state.inventory().containers().get(slot.containerId()).ownerId().equals(home)

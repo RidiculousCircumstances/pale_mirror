@@ -9,6 +9,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FieldEquipmentTest {
+    @Test void ownerItemReadsFollowWearTitleRemovalAndIndependentInventoryBranches() {
+        var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
+        var inventory = fixture.state().inventory();
+        var tool = inventory.items().get(fixture.job().equipment().itemId());
+        var foreign = inventory.items().values().stream().filter(item -> item.condition().durable()
+                && !item.economicOwnerId().equals(tool.economicOwnerId())).findFirst().orElseThrow();
+        var owned = ExactItemReadIndex.owned(inventory, tool.economicOwnerId());
+        var kind = ExactItemReadIndex.owned(inventory, tool.economicOwnerId(), tool.itemKind());
+        var foreignWear = inventory.changeCondition(foreign, new ItemCondition(foreign.condition().maximumDamage(), 1));
+        assertSame(owned, ExactItemReadIndex.owned(foreignWear, tool.economicOwnerId()),
+                "foreign wear cannot rebuild unchanged owner rows");
+        assertSame(kind, ExactItemReadIndex.owned(foreignWear, tool.economicOwnerId(), tool.itemKind()));
+        var worn = foreignWear.changeCondition(tool, new ItemCondition(tool.condition().maximumDamage(), 1));
+        assertEquals(tool.withCondition(new ItemCondition(tool.condition().maximumDamage(), 1)),
+                ExactItemReadIndex.owned(worn, tool.economicOwnerId(), tool.itemKind()).stream()
+                        .filter(item -> item.id().equals(tool.id())).findFirst().orElseThrow());
+        var transferred = worn.transferItemTitle(worn.items().get(tool.id()), foreign.economicOwnerId());
+        assertTrue(ExactItemReadIndex.owned(transferred, tool.economicOwnerId()).stream().noneMatch(item -> item.id().equals(tool.id())));
+        assertTrue(ExactItemReadIndex.owned(transferred, foreign.economicOwnerId(), tool.itemKind()).stream()
+                .anyMatch(item -> item.id().equals(tool.id())));
+        var removed = transferred.withoutItem(tool.id());
+        assertTrue(ExactItemReadIndex.owned(removed, foreign.economicOwnerId()).stream().noneMatch(item -> item.id().equals(tool.id())));
+        assertEquals(owned, ExactItemReadIndex.owned(inventory, tool.economicOwnerId()), "old branch retains pristine title and condition");
+    }
+
     @Test void preparedEquipmentFencesLivingBodyAndAbortsOnlyTheExactUnusedGeneration() {
         var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
         var job = fixture.job(); var state = fixture.state();
@@ -99,6 +124,15 @@ class FieldEquipmentTest {
                 "another person's walk cannot change actual usable equipment");
         assertSame(needs, demand.read(moved, held.economicOwnerId()),
                 "unchanged local crops, workers, equipment and storage cannot gain a new wear forecast from foreign movement");
+        var retained = EquipmentStockProjection.retainedItems(after, held.economicOwnerId());
+        var foreign = after.inventory().items().values().stream().filter(item -> item.condition().durable()
+                && !item.economicOwnerId().equals(held.economicOwnerId())).findFirst().orElseThrow();
+        var changed = after.withInventory(after.inventory().changeCondition(foreign,
+                new ItemCondition(foreign.condition().maximumDamage(), 1)));
+        assertSame(productive, EquipmentProductiveCapacity.items(changed, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements()));
+        assertSame(needs, demand.read(changed, held.economicOwnerId()));
+        assertSame(retained, EquipmentStockProjection.retainedItems(changed, held.economicOwnerId()),
+                "foreign tool wear cannot reconstruct the own retained productive fleet");
         assertThrows(IllegalArgumentException.class, () -> FieldEquipmentProcess.reduce(after, job.siteId(), event, 22_100));
         var codec = new FrontierWorldStateCodec();
         assertEquals(after, codec.decode(codec.encode(after)));

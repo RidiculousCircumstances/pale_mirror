@@ -5,27 +5,19 @@ import java.util.*;
 
 /** Exact inventory-owned item index. Never supplies permission, availability or custody authority. */
 final class ExactItemReadIndex {
-    private record Key(SubjectId owner, String kind) { }
-    private record View(Map<SubjectId, List<ExactItemStack>> owners, Map<Key, List<ExactItemStack>> kinds) { }
-    private static final ImmutableInputView<View> VIEWS = new ImmutableInputView<>();
+    private sealed interface Scope permits Owner, Kind { }
+    private record Owner(SubjectId id) implements Scope { }
+    private record Kind(SubjectId owner, String kind) implements Scope { }
+    private static final ImmutableGroupView<SubjectId, ExactItemStack, Scope> ITEMS = new ImmutableGroupView<>();
     static List<ExactItemStack> owned(ExactInventory inventory, SubjectId owner) {
-        return view(inventory).owners().getOrDefault(owner, List.of());
+        return rows(inventory, new Owner(owner));
     }
     static List<ExactItemStack> owned(ExactInventory inventory, SubjectId owner, String kind) {
-        return view(inventory).kinds().getOrDefault(new Key(owner, kind), List.of());
+        return rows(inventory, new Kind(owner, kind));
     }
-    private static View view(ExactInventory inventory) {
-        return VIEWS.get(List.of(inventory.items()), () -> {
-            var owners = new HashMap<SubjectId, List<ExactItemStack>>();
-            var kinds = new HashMap<Key, List<ExactItemStack>>();
-            for (var item : inventory.items().values()) {
-                owners.computeIfAbsent(item.economicOwnerId(), ignored -> new ArrayList<>()).add(item);
-                kinds.computeIfAbsent(new Key(item.economicOwnerId(), item.itemKind()), ignored -> new ArrayList<>()).add(item);
-            }
-            owners.replaceAll((key, items) -> List.copyOf(items));
-            kinds.replaceAll((key, items) -> List.copyOf(items));
-            return new View(Map.copyOf(owners), Map.copyOf(kinds));
-        });
+    private static List<ExactItemStack> rows(ExactInventory inventory, Scope scope) {
+        return ITEMS.rows(ExactItemReadIndex.class, inventory.items(), item -> Set.of(
+                new Owner(item.economicOwnerId()), new Kind(item.economicOwnerId(), item.itemKind())), scope);
     }
     private ExactItemReadIndex() { }
 }

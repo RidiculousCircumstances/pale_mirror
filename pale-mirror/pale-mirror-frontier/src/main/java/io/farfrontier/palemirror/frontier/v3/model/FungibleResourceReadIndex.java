@@ -11,11 +11,11 @@ final class FungibleResourceReadIndex {
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
                          Map<SubjectId, Available> available, Object token) { }
-    private record Membership(ResourceCustody custody, boolean claimed) { }
+    private record Membership(ResourceCustody custody) { }
     private record Layout(Map<ResourceCustody, List<SubjectId>> holders,
                           Map<SubjectId, List<SubjectId>> containers, Map<SubjectId, List<SubjectId>> actors,
                           Map<ResourceCustody.Container, SubjectId> sections,
-                          List<SubjectId> ground, Set<ResourceCustody> claimed) { }
+                          List<SubjectId> ground) { }
     private sealed interface Query permits HolderQuery, ContainerQuery, ActorQuery, GroundQuery { }
     private record HolderQuery(ResourceCustody custody) implements Query { }
     private record ContainerQuery(SubjectId container) implements Query { }
@@ -85,7 +85,7 @@ final class FungibleResourceReadIndex {
     }
 
     static boolean carriesClaim(FungibleResourceLedger ledger, ResourceCustody holder) {
-        return custodies(ledger).layout.claimed().contains(holder);
+        return accountsAt(ledger, holder).stream().anyMatch(account -> !account.claimQuantities().isEmpty());
     }
     static List<CustodyAccount> accountsAt(FungibleResourceLedger ledger, ResourceCustody holder) {
         var image = custodies(ledger);
@@ -120,10 +120,10 @@ final class FungibleResourceReadIndex {
     private static Custodies custodies(FungibleResourceLedger ledger) {
         return CUSTODIES.get(List.of(ledger.accounts()), Boolean.TRUE, () -> {
             // This projection has one read-only algorithm epoch, not a world or
-            // execution epoch. Its complete inputs are account ID/custody/claim
-            // presence. Actual quantities always come from the captured ledger.
+            // execution epoch. Placement depends on account ID/custody only.
+            // Claims and quantities always come from the captured current rows.
             var members = MEMBERSHIPS.project(MEMBERSHIPS, ledger.accounts(),
-                    (id, account) -> new Membership(account.custody(), !account.claimQuantities().isEmpty()));
+                    (id, account) -> new Membership(account.custody()));
             var order = ACCOUNT_ORDER.get(ledger.accounts());
             return new Custodies(ledger.accounts(), LAYOUTS.get(List.of(members, order), Boolean.TRUE, () -> layout(members, order)));
         });
@@ -133,11 +133,10 @@ final class FungibleResourceReadIndex {
         var containers = new HashMap<SubjectId, List<SubjectId>>();
         var actors = new HashMap<SubjectId, List<SubjectId>>();
         var sections = new HashMap<ResourceCustody.Container, SubjectId>();
-        var ground = new ArrayList<SubjectId>(); var claimed = new HashSet<ResourceCustody>();
+        var ground = new ArrayList<SubjectId>();
         for (var id : order) {
             var member = members.get(id);
             holders.computeIfAbsent(member.custody(), ignored -> new ArrayList<>()).add(id);
-            if (member.claimed()) claimed.add(member.custody());
             if (member.custody() instanceof ResourceCustody.Container holder) {
                 if (sections.putIfAbsent(holder, id) != null)
                     throw new IllegalArgumentException("container section has competing resource accounts: " + holder);
@@ -151,7 +150,7 @@ final class FungibleResourceReadIndex {
         actors.replaceAll((id, accounts) -> accounts.stream().sorted().toList());
         ground.sort(Comparator.naturalOrder());
         return new Layout(ImmutableLookupMap.copyOf(holders), ImmutableLookupMap.copyOf(containers), ImmutableLookupMap.copyOf(actors), ImmutableLookupMap.copyOf(sections),
-                List.copyOf(ground), Set.copyOf(claimed));
+                List.copyOf(ground));
     }
 
     private static Map<Balance, Integer> balances(FungibleResourceLedger ledger, CustodyAccount account) {

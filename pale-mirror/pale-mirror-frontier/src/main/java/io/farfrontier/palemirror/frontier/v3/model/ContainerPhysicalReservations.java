@@ -6,12 +6,10 @@ import java.util.function.Function;
 /** Registered physical effect owners contribute exact held slots; storage does not inspect jobs. */
 final class ContainerPhysicalReservations {
     private static final ImmutableInputView<List<ContainerSlotClaim>> CLAIMS = new ImmutableInputView<>();
-    private static final ImmutableInputView<List<ContainerSlotClaim>> BACKED = new ImmutableInputView<>();
     private static final ImmutableInputView<Map<SubjectId, List<ContainerSlotClaim>>> BY_CONTAINER = new ImmutableInputView<>();
-    private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
+    private static final ImmutableKeyedInputView<SubjectId, List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableKeyedInputView<>(512);
     private static final ImmutableInputView<Map<SubjectId, BackingView>> LOCAL_BACKING = new ImmutableInputView<>();
     private static final ThreadLocal<List<ContainerSlotClaim>> previousDeclared = ThreadLocal.withInitial(List::of);
-    private static final ThreadLocal<List<ContainerSlotClaim>> previousBacked = ThreadLocal.withInitial(List::of);
     /** Local capacity facts only. A claim elsewhere cannot force this container's
      * sorted reservation admission to run again; player edits still change its budget. */
     private static final class BackingView {
@@ -59,17 +57,6 @@ final class ContainerPhysicalReservations {
     }
     private static List<ContainerSlotClaim> declared(FrontierWorldState state) {
         return claims(state.inventory(), new Owners(state.resourceSites().sites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.forest(), state.physicalIntents()));
-    }
-    static List<ContainerSlotClaim> claims(FrontierWorldState state) {
-        var declared = declared(state);
-        return BACKED.get(List.of(state.inventory(), declared), () -> {
-            var grouped = byContainer(declared);
-            var result = grouped.entrySet().stream().sorted(Map.Entry.comparingByKey())
-                    .flatMap(entry -> backingAt(state, entry.getKey(), entry.getValue()).stream()).toList();
-            var previous = previousBacked.get();
-            if (previous.equals(result)) return previous;
-            previousBacked.set(result); return result;
-        });
     }
     /** Prospective destinations reserve only still available capacity. External
      * edits may displace them; in-flight physical operations are separately fenced
@@ -140,14 +127,16 @@ final class ContainerPhysicalReservations {
         return claims.stream().filter(claim -> !claim.owner().equals(current))
                 .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
-    static List<ContainerInboundCapacity.Demand> uncoveredDemands(FrontierWorldState state) {
-        var physicalClaims = claims(state);
+    static List<ContainerInboundCapacity.Demand> uncoveredDemands(FrontierWorldState state, SubjectId container) {
+        // Capacity belongs to the queried receiver. Backing every other store's
+        // reservations here turns each local admission into a world stock scan.
+        var physicalClaims = atContainer(state, container);
         var demands = ContainerStorageDemandSources.demands(state);
-        return DEMANDS.get(List.of(physicalClaims, demands), () -> {
+        return DEMANDS.get(state.bootstrap(), container, List.of(physicalClaims, demands), () -> {
             var covered = new HashMap<DemandKey, Integer>();
             physicalClaims.stream().flatMap(claim -> claim.coveredDemand().stream()).forEach(physical ->
                     covered.merge(new DemandKey(physical.owner(), physical.container(), physical.section(), physical.itemKind(), physical.representation()), physical.quantity(), Math::addExact));
-            return demands.stream().map(demand -> {
+            return demands.stream().filter(demand -> demand.container().equals(container)).map(demand -> {
             int remaining = Math.subtractExact(demand.quantity(), covered.getOrDefault(
                     new DemandKey(demand.owner(), demand.container(), demand.section(), demand.itemKind(), demand.representation()), 0));
             if (remaining < 0) throw new IllegalArgumentException("physical claims exceed inbound demand");

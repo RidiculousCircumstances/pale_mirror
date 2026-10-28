@@ -56,6 +56,9 @@ class FungibleCustodyReadTest {
         var task = new java.util.concurrent.FutureTask<Integer>(() -> reserved.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
         new Thread(task).start(); assertEquals(2, task.get());
         assertEquals(2, reserved.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertTrue(FungibleResourceReadIndex.carriesClaim(reserved, HOLDER), "one holder may retain several current accounts");
+        assertFalse(FungibleResourceReadIndex.carriesClaim(original, HOLDER), "placement reuse is not a retained claim");
+        assertTrue(FungibleResourceReadIndex.carriesClaim(reserved, HOLDER));
         assertEquals(4, original.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
         assertEquals(0, titled.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
     }

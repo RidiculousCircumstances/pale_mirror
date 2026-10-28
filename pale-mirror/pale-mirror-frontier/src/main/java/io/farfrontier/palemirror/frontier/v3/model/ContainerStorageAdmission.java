@@ -32,11 +32,11 @@ public final class ContainerStorageAdmission {
     static ContainerIncomingStock inbound(FrontierWorldState state, ResourceCustody.Container holder, Optional<SubjectId> completing) {
         var container = holder.containerId();
         var demands = ContainerStorageDemandSources.demands(state);
-        var uncovered = ContainerPhysicalReservations.uncoveredDemands(state);
+        var uncovered = ContainerPhysicalReservations.uncoveredDemands(state, container);
         return INCOMING.get(state.bootstrap(), new IncomingQuery(container, holder.section(), completing), List.of(demands, uncovered), () -> {
             // Prove the completion's declared owner even when its entire demand is slot-backed.
             index(demands).requireCompletion(container, holder.section(), completing);
-            return index(uncovered).incomingExceptOwner(container, holder.section(), completing);
+            return ContainerInboundCapacity.index(uncovered).incomingExceptOwner(container, holder.section(), completing);
         });
     }
     static boolean receive(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {

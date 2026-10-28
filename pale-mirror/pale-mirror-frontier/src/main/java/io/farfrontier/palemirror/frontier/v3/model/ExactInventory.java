@@ -288,7 +288,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!Objects.equals(items.get(expected.id()), expected)
                 || !expected.condition().durable() || expected.condition().maximumDamage() != nextCondition.maximumDamage())
             throw new IllegalArgumentException("item condition update lost its exact predecessor or changes equipment lifetime");
-        var nextItems = new HashMap<>(items); nextItems.put(expected.id(), expected.withCondition(nextCondition));
+        var nextItems = ImmutableLookupMap.withEntry(items, expected.id(), expected.withCondition(nextCondition));
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 
@@ -595,8 +595,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<UUID, List<SubjectId>> nextCarriers = mutableCustody(worldCarrierItems);
         removeCarrierCustody(nextCarriers, from, itemId);
         addCarrierCustody(nextCarriers, to, itemId);
-        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
-        nextItems.put(itemId, current.withCustody(to));
+        var nextItems = ImmutableLookupMap.withEntry(items, itemId, current.withCustody(to));
         return admitNoNewContainerOvercommit(new ExactInventory(containers, nextItems, cargo, nextPlayers,
                 nextCarriers, conflicts, surfaces, economics, fungibleResources));
     }
@@ -634,8 +633,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!expected.equals(items.get(expected.id())) || expected.economicOwnerId().equals(owner))
             throw new IllegalArgumentException("individual title transfer has a stale item or unchanged owner");
         economics.require(owner);
-        var next = new HashMap<>(items);
-        next.put(expected.id(), expected.withOwnerAndCustody(owner, expected.custody()));
+        var next = ImmutableLookupMap.withEntry(items, expected.id(), expected.withOwnerAndCustody(owner, expected.custody()));
         return new ExactInventory(containers, next, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 

@@ -11,14 +11,15 @@ public final class EquipmentProductiveCapacity {
             Set<SubjectId> workers, EquipmentRequirements requirements) {
         var query = new Query(owner, Set.copyOf(workers), requirements);
         var reserved = WorkEquipmentClaimComposition.reserved(state);
-        return VIEWS.get(state.bootstrap(), query, List.of(state.inventory().items(), state.inventory().containers(),
+        var owned = ExactItemReadIndex.owned(state.inventory(), owner);
+        return VIEWS.get(state.bootstrap(), query, List.of(owned, state.inventory().containers(),
                 state.inventory().surfaces(), state.replicaCustody(),
                 ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()), reserved),
-                () -> project(state, owner, workers, requirements, reserved));
+                () -> project(state, owner, workers, requirements, reserved, owned));
     }
     private static List<ExactItemStack> project(FrontierWorldState state, SubjectId owner,
-            Set<SubjectId> workers, EquipmentRequirements requirements, Set<SubjectId> reserved) {
-        return ExactItemReadIndex.owned(state.inventory(), owner).stream().filter(item -> item.economicOwnerId().equals(owner)
+            Set<SubjectId> workers, EquipmentRequirements requirements, Set<SubjectId> reserved, List<ExactItemStack> owned) {
+        return owned.stream().filter(item -> item.economicOwnerId().equals(owner)
                 && requirements.serviceable(state.bootstrap().ruleset().tools(), item))
                 .filter(item -> item.custody() instanceof InventoryCustody.Actor actor && workers.contains(actor.actorId())
                         || item.custody() instanceof InventoryCustody.ContainerSlot slot && !reserved.contains(item.id())
