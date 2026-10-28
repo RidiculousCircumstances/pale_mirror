@@ -324,34 +324,37 @@ public final class ResourceSitePhysicalIntentStateSupport {
 
     static void validateState(ResourceSiteState sites, Map<PhysicalIntentId, PhysicalIntent> intents,
                               Map<PhysicalObservationId, PhysicalEffectObservation> observations) {
-        for (ResourceSiteLifecycle lifecycle : sites.sites().values()) {
-            if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && !lifecycle.hasWork()) continue;
-            PhysicalIntent intent = intents.get(intentId(lifecycle.siteId()));
-            if (intent == null) {
-                // COLD preparation is a canonical event.  Its loaded-world field is a deferred
-                // desired-state projection, not a physical-intent prerequisite for food.
-                if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && lifecycle.hasWork()) continue;
-                if (lifecycle.phase() == ResourceSitePhase.CONFLICT || lifecycle.phase() == ResourceSitePhase.DESTROYED
-                        || lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
-                        || lifecycle.phase() == ResourceSitePhase.HARVESTING) continue;
-                throw new IllegalArgumentException("resource-site lifecycle lacks its preparation intent");
-            }
-            if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION || !intent.causeSubjectId().equals(lifecycle.siteId())) {
-                throw new IllegalArgumentException("resource-site lifecycle has a foreign preparation intent");
-            }
-            if (lifecycle.phase() == ResourceSitePhase.UNPREPARED) {
-                preparation(lifecycle, intent.id());
-                if (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING) throw new IllegalArgumentException("unprepared field has terminal preparation");
-            } else if (lifecycle.phase() != ResourceSitePhase.CONFLICT && lifecycle.phase() != ResourceSitePhase.DESTROYED) {
-                if (intent.status() != PhysicalIntentStatus.CONFIRMED) throw new IllegalArgumentException("prepared field lacks confirmed preparation");
-                PhysicalEffectObservation observation = observations.get(intent.postconditionObservationId().orElseThrow());
-                if (!(observation instanceof ResourceSitePreparationObservation receipt)) throw new IllegalArgumentException("prepared field lacks preparation receipt");
-                validateReceipt(intent, receipt);
-            }
-            if (lifecycle.phase() == ResourceSitePhase.HARVESTING) validateHarvestState(sites, intents, observations, lifecycle);
-            lifecycle.harvestLineages().values().stream().filter(ResourceSiteHarvestLineage::receiptPending)
-                    .forEach(lineage -> validateDeferredHarvestState(intents, lifecycle, lineage));
+        ResourceSitePhysicalValidation.validate(sites, intents, observations);
+    }
+
+    static void validateLifecycle(Map<PhysicalIntentId, PhysicalIntent> intents,
+                                  Map<PhysicalObservationId, PhysicalEffectObservation> observations, ResourceSiteLifecycle lifecycle) {
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && !lifecycle.hasWork()) return;
+        PhysicalIntent intent = intents.get(intentId(lifecycle.siteId()));
+        if (intent == null) {
+            // COLD preparation is a canonical event.  Its loaded-world field is a deferred
+            // desired-state projection, not a physical-intent prerequisite for food.
+            if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && lifecycle.hasWork()) return;
+            if (lifecycle.phase() == ResourceSitePhase.CONFLICT || lifecycle.phase() == ResourceSitePhase.DESTROYED
+                    || lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
+                    || lifecycle.phase() == ResourceSitePhase.HARVESTING) return;
+            throw new IllegalArgumentException("resource-site lifecycle lacks its preparation intent");
         }
+        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION || !intent.causeSubjectId().equals(lifecycle.siteId())) {
+            throw new IllegalArgumentException("resource-site lifecycle has a foreign preparation intent");
+        }
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED) {
+            preparation(lifecycle, intent.id());
+            if (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING) throw new IllegalArgumentException("unprepared field has terminal preparation");
+        } else if (lifecycle.phase() != ResourceSitePhase.CONFLICT && lifecycle.phase() != ResourceSitePhase.DESTROYED) {
+            if (intent.status() != PhysicalIntentStatus.CONFIRMED) throw new IllegalArgumentException("prepared field lacks confirmed preparation");
+            PhysicalEffectObservation observation = observations.get(intent.postconditionObservationId().orElseThrow());
+            if (!(observation instanceof ResourceSitePreparationObservation receipt)) throw new IllegalArgumentException("prepared field lacks preparation receipt");
+            validateReceipt(intent, receipt);
+        }
+        if (lifecycle.phase() == ResourceSitePhase.HARVESTING) validateHarvestState(intents, observations, lifecycle);
+        lifecycle.harvestLineages().values().stream().filter(ResourceSiteHarvestLineage::receiptPending)
+                .forEach(lineage -> validateDeferredHarvestState(intents, lifecycle, lineage));
     }
 
     static void validateReceipt(PhysicalIntent intent, ResourceSitePreparationObservation receipt) {
@@ -403,7 +406,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
-    private static void validateHarvestState(ResourceSiteState sites, Map<PhysicalIntentId, PhysicalIntent> intents,
+    private static void validateHarvestState(Map<PhysicalIntentId, PhysicalIntent> intents,
                                              Map<PhysicalObservationId, PhysicalEffectObservation> observations, ResourceSiteLifecycle lifecycle) {
         for (ResourceSiteHarvestJob job : lifecycle.harvestJobs().values()) {
         PhysicalIntent intent = intents.get(job.intentId());
@@ -467,7 +470,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
     }
 
     private static SubjectId jobId(SubjectId siteId) { return new SubjectId("job:site-prepare-" + siteId.value().substring("site:".length())); }
-    private static PhysicalIntentId intentId(SubjectId siteId) { return new PhysicalIntentId("intent:site-prepare-" + siteId.value().substring("site:".length())); }
+    static PhysicalIntentId intentId(SubjectId siteId) { return new PhysicalIntentId("intent:site-prepare-" + siteId.value().substring("site:".length())); }
     private static FrontierWorldState replace(FrontierWorldState state, ResourceSiteState sites, Map<PhysicalIntentId, PhysicalIntent> intents,
                                               Map<PhysicalObservationId, PhysicalEffectObservation> observations) {
         return replace(state, sites, state.inventory(), intents, observations);

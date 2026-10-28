@@ -240,6 +240,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         private static final ImmutableInvariantCheck<Void> SETTLEMENT_POLICIES = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> PHYSICAL_DELTAS = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> PRODUCTION_FACILITIES = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> STRUCTURE_CONDITIONS = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> SERVICE_WORK = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> SETTLEMENT_ASSAULT = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> PHYSICAL_OBSERVATIONS = new ImmutableInvariantCheck<>();
@@ -440,7 +441,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         }
         Set<SubjectId> expectedStructures = FrontierWorldStateSupport.structureIds(bootstrap);
         Set<SubjectId> expectedSettlements = FrontierWorldStateSupport.settlementIds(bootstrap);
-        if (!expectedStructures.equals(structureConditions.keySet())) throw new IllegalArgumentException("structure condition index must own every and only bootstrap structure");
+        OwnedChecks.STRUCTURE_CONDITIONS.validate(() -> {
+            if (!expectedStructures.equals(structureConditions.keySet()))
+                throw new IllegalArgumentException("structure condition index must own every and only bootstrap structure");
+        }, bootstrap, structureConditions);
         int damageCellCount = 0;
         for (Map.Entry<SubjectId, StructureDamage> entry : structureDamage.entrySet()) {
             StructureDamage damage = entry.getValue();

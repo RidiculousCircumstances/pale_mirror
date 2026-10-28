@@ -203,18 +203,17 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
                 || ground.cellStates().values().stream().anyMatch(cell -> !cell.soil().cultivable()
                         || cell.crop() != ResourceFieldCycle.Crop.ABSENT || cell.accounted() || cell.yielded()))
             throw new IllegalArgumentException("new field must declare exact, unused bare land");
-        var nextDeclarations = new LinkedHashMap<>(declarations); nextDeclarations.put(declaration.id(), declaration);
-        var nextSites = new LinkedHashMap<>(sites);
-        nextSites.put(declaration.id(), new ResourceSiteLifecycle(declaration.id(), ResourceSitePhase.GROWING, 1, 0,
+        var nextDeclarations = ImmutableLookupMap.withEntry(declarations, declaration.id(), declaration);
+        var nextSites = ImmutableLookupMap.withEntry(sites, declaration.id(), new ResourceSiteLifecycle(declaration.id(), ResourceSitePhase.GROWING, 1, 0,
                 java.util.Optional.empty(), java.util.Optional.empty(), Map.of(), Map.of(), 0));
-        var nextCycles = new LinkedHashMap<>(cycles); nextCycles.put(declaration.id(), ground);
+        var nextCycles = ImmutableLookupMap.withEntry(cycles, declaration.id(), ground);
         return new ResourceSiteState(nextDeclarations, nextSites, nextCycles, pendingWorldChanges, pendingForeignChanges, cultivation);
     }
 
     public ResourceSiteState reviewed(SubjectId home, CultivationReview review) {
         var prior = cultivation.get(home);
         if (prior != null && prior.atTick() >= review.atTick()) throw new IllegalArgumentException("stale cultivation review");
-        var next = new LinkedHashMap<>(cultivation); next.put(home, review);
+        var next = ImmutableLookupMap.withEntry(cultivation, home, review);
         return new ResourceSiteState(declarations, sites, cycles, pendingWorldChanges, pendingForeignChanges, next);
     }
 
@@ -239,7 +238,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
         if (!lifecycle.harvestJobs().isEmpty() || lifecycle.preparationWork().isPresent() || hasPendingWorldChange(id)
                 || lifecycle.harvestLineages().values().stream().anyMatch(ResourceSiteHarvestLineage::receiptPending))
             throw new IllegalArgumentException("field extension overlaps a live execution or unresolved physical receipt");
-        var next = new LinkedHashMap<>(cycles); next.put(id, cycle(id).extended(layout, added));
+        var next = ImmutableLookupMap.withEntry(cycles, id, cycle(id).extended(layout, added));
         return new ResourceSiteState(declarations, sites, next, pendingWorldChanges, pendingForeignChanges, cultivation);
     }
 
@@ -332,7 +331,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
     public ResourceSiteState replace(ResourceSiteLifecycle lifecycle) {
         Objects.requireNonNull(lifecycle, "resource-site lifecycle");
         if (!sites.containsKey(lifecycle.siteId())) throw new IllegalArgumentException("unknown resource site: " + lifecycle.siteId().value());
-        Map<SubjectId, ResourceSiteLifecycle> next = new LinkedHashMap<>(sites); next.put(lifecycle.siteId(), lifecycle);
+        var next = ImmutableLookupMap.withEntry(sites, lifecycle.siteId(), lifecycle);
         return new ResourceSiteState(declarations, next, cycles, pendingWorldChanges, pendingForeignChanges, cultivation);
     }
 
@@ -342,10 +341,8 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
         if (!sites.containsKey(lifecycle.siteId()) || !cycle.siteId().equals(lifecycle.siteId())
                 || !cycle.layout().equals(cycles.get(lifecycle.siteId()).layout()))
             throw new IllegalArgumentException("resource-site cell replacement has a foreign owner or layout");
-        Map<SubjectId, ResourceSiteLifecycle> nextSites = new LinkedHashMap<>(sites);
-        nextSites.put(lifecycle.siteId(), lifecycle);
-        Map<SubjectId, ResourceFieldCycle> nextCycles = new LinkedHashMap<>(cycles);
-        nextCycles.put(lifecycle.siteId(), cycle);
+        var nextSites = ImmutableLookupMap.withEntry(sites, lifecycle.siteId(), lifecycle);
+        var nextCycles = ImmutableLookupMap.withEntry(cycles, lifecycle.siteId(), cycle);
         return new ResourceSiteState(declarations, nextSites, nextCycles, pendingWorldChanges, pendingForeignChanges, cultivation);
     }
 }

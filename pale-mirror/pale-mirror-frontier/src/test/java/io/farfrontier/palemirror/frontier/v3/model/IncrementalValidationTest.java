@@ -9,6 +9,53 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class IncrementalValidationTest {
+    @Test void fieldPhysicalClosureRechecksChangedIntentReceiptAndLifecycleAfterSuccessfulEvidence() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:field-physical-reads"), 125L));
+        var site = state.resourceSites().declarations().keySet().iterator().next();
+        var id = ResourceSitePhysicalIntentStateSupport.intentId(site);
+        var preparation = new ResourceSitePreparationJob(new SubjectId("job:site-prepare-" + site.value().substring("site:".length())), site, id);
+        var preparing = state.resourceSites().site(site).preparing(preparation);
+        var cycle = state.resourceSites().cycle(site);
+        var sites = state.resourceSites().replace(preparing.prepared(), ResourceFieldCycle.seeded(site, cycle.layout(), 1));
+        var prepared = new PhysicalIntent(id, PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.PREPARED,
+                site, PhysicalIntentRoleBinding.sitePreparation(site, preparation.id()),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION);
+        var receipt = new ResourceSitePreparationObservation(new PhysicalObservationId("observation:field-reference-prepared"), id, site, 1, 1);
+        var confirmed = prepared.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id()));
+        Map<PhysicalIntentId, PhysicalIntent> intents = ImmutableLookupMap.copyOf(Map.of(id, confirmed));
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = ImmutableLookupMap.copyOf(Map.of(receipt.id(), receipt));
+        ResourceSitePhysicalIntentStateSupport.validateState(sites, intents, observations);
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.validateState(sites, intents, Map.of()),
+                "receipt retirement must invalidate an unchanged lifecycle's successful evidence");
+        var foreignReceipt = new ResourceSitePreparationObservation(receipt.id(), id, new SubjectId("site:foreign"), 1, 1);
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.validateState(sites, intents,
+                ImmutableLookupMap.withEntry(observations, receipt.id(), foreignReceipt)), "same-address foreign receipt cannot inherit its predecessor's proof");
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.validateState(sites,
+                ImmutableLookupMap.withEntry(intents, id, prepared), observations), "changed intent status cannot reuse a confirmed-field proof");
+        var unprepared = state.resourceSites().replace(preparing);
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.validateState(unprepared, intents, observations),
+                "a lifecycle-only change must recheck the physical boundary");
+        assertDoesNotThrow(() -> ResourceSitePhysicalIntentStateSupport.validateState(sites, intents, observations));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> {
+            ResourceSitePhysicalIntentStateSupport.validateState(sites, intents, observations); return null;
+        }));
+        var recovered = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
+        assertDoesNotThrow(() -> ResourceSitePhysicalIntentStateSupport.validateState(recovered.resourceSites(), Map.of(), Map.of()));
+    }
+    @Test void structureMembershipCannotReuseSuccessfulEvidenceAfterEitherInsertionOrRemoval() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:structure-membership"), 125L));
+        var first = state.structureConditions().keySet().iterator().next();
+        for (var changed : List.of(ImmutableLookupMap.withoutEntry(state.structureConditions(), first),
+                ImmutableLookupMap.withEntry(state.structureConditions(), new SubjectId("structure:foreign"), StructureCondition.INTACT))) {
+            var preview = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                    FrontierWorldStateUpdate.begin().structureConditions(changed)));
+            assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(state, preview));
+            assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(preview));
+        }
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(state, state));
+    }
     @Test void successfulEvidenceIsIdentityBoundAndFullAuditNeverUsesIt() {
         var check = new ImmutableInvariantCheck<Void>(); var calls = new AtomicInteger();
         var first = new Object(); var second = new Object();

@@ -3077,5 +3077,35 @@ Connected coverage includes independently replayed certified runs, local proof
 withdrawal, foreign height, world bounds, sloped/directed denial, full audit,
 producer task exclusions, wider bodies, immutable route-view invalidation, frozen
 predecessors, closure/recovery and current field layout recovery. Connected focused
-checks plus guardrails PASS48s. Frozen release/deploy/native effect pending.
-G remains OPEN/FAILED; no aggregate result claimed.
+checks plus guardrails PASS48s; frozen release PASS38s, both retained-world
+deployments verifiedbac56f983. After180s warm, trace194047events/noDataLoss
+44.944732s=5.540138ticks/s,debt3209→3862,owner69.97%,exact21.84%,WAL5.86%.
+Exact movement2.366123s,canonical validation12.347269s(inclusive),due-actions
+5.661664s. This evolving workload is no controlled before/after comparison.
+G remains OPEN/FAILED; no aggregate speedup claimed.
+
+
+### Field physical checks follow exact changed reads (2026-10-28)
+
+Warmed owned-validation samples still enter field physical-state scanning and
+structure-condition membership comparison on ordinary publications. Field physical
+validation now uses the existing ImmutableReferenceIndex with explicitly declared
+preparation/job/lineage intents, their exact observation addresses and intermediate
+batch receipt absence. The original field-owned lifecycle checker is unchanged;
+common indexing neither interprets a phase nor chooses an owner. Full audit/new
+declaration epochs reconstruct all rows; a failed update discards derived evidence.
+The read bound derives from the existing64workers and128lineages per lifecycle.
+
+Single-row field declaration, review, extension and replacement now use the common
+immutable replacement primitive instead of copying through an intermediate mutable
+map. That retains its exact weak direct-change evidence for downstream indexes,
+removes one redundant copy and preserves registry iteration order, checks and
+immutable predecessors. Structure membership uses existing exact immutable owned
+check evidence, keyed by bootstrap and complete condition map; full audits still
+compare every required structure. No change to condition/damage semantics.
+
+Focused index/field preparation/harvest/progress/scene/receipt/recovery/expansion
+checks plus guardrails PASS32s. New warmed-evidence negatives reject retired or
+foreign receipts, changed intent status, changed lifecycle and inserted/removed
+structure identities; full reconstruction and valid predecessors still pass.
+Frozen release/deploy/native effect pending. G remains OPEN/FAILED.
