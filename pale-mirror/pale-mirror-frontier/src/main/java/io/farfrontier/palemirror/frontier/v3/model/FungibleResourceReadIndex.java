@@ -11,33 +11,13 @@ final class FungibleResourceReadIndex {
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
                          Map<SubjectId, Available> available, Object token) { }
-    private record Membership(ResourceCustody custody) { }
-    private record Layout(Map<ResourceCustody, List<SubjectId>> holders,
-                          Map<SubjectId, List<SubjectId>> containers, Map<SubjectId, List<SubjectId>> actors,
-                          Map<ResourceCustody.Container, SubjectId> sections,
-                          List<SubjectId> ground) { }
     private sealed interface Query permits HolderQuery, ContainerQuery, ActorQuery, GroundQuery { }
     private record HolderQuery(ResourceCustody custody) implements Query { }
     private record ContainerQuery(SubjectId container) implements Query { }
     private record ActorQuery(SubjectId actor) implements Query { }
     private enum GroundQuery implements Query { INSTANCE }
-    /** Only queried groups materialize current rows. Quantity changes never
-     * rewrite the world-wide membership directory or reuse an old account value. */
-    private static final class Custodies {
-        final Map<SubjectId, CustodyAccount> accounts;
-        final Layout layout;
-        final BoundedValueMemo<Query, List<CustodyAccount>> rows = new BoundedValueMemo<>(FungibleResourceLedger.MAX_ACCOUNTS * 3 + 1);
-        Custodies(Map<SubjectId, CustodyAccount> accounts, Layout layout) { this.accounts = accounts; this.layout = layout; }
-        CustodyAccount account(SubjectId id) { return Objects.requireNonNull(accounts.get(id), "custody layout lost its current account"); }
-        List<CustodyAccount> read(Query query, List<SubjectId> ids) {
-            return rows.get(query, () -> ids.stream().map(this::account).toList());
-        }
-    }
-    private static final ImmutableResultView<Boolean, Custodies> CUSTODIES = new ImmutableResultView<>(4);
-    private static final ImmutableResultView<Boolean, Layout> LAYOUTS = new ImmutableResultView<>(4);
-    private static final ImmutableRegistryView<SubjectId, CustodyAccount, Membership> MEMBERSHIPS =
-            new ImmutableRegistryView<>(FungibleResourceLedger.MAX_ACCOUNTS, Objects::equals);
-    private static final ImmutableKeyOrderView<SubjectId> ACCOUNT_ORDER = new ImmutableKeyOrderView<>(FungibleResourceLedger.MAX_ACCOUNTS);
+    private static final ImmutableGroupView<SubjectId, CustodyAccount, Query> CUSTODIES = new ImmutableGroupView<>();
+    private static final ImmutableGroupView<SubjectId, CustodyAccount, ResourceCustody.Container> SECTIONS = new ImmutableGroupView<>();
     // Retain one immutable image per owner thread, not accumulated world revisions.
     private static final ThreadLocal<Image> CURRENT = new ThreadLocal<>();
     private FungibleResourceReadIndex() { }
@@ -73,31 +53,26 @@ final class FungibleResourceReadIndex {
     }
 
     static Optional<CustodyAccount> container(FungibleResourceLedger ledger, SubjectId container, ContainerSectionId section) {
-        var image = custodies(ledger);
-        var id = image.layout.sections().get(new ResourceCustody.Container(Objects.requireNonNull(container), Objects.requireNonNull(section)));
-        return id == null ? Optional.empty() : Optional.of(image.account(id));
+        var rows = at(ledger, new HolderQuery(new ResourceCustody.Container(Objects.requireNonNull(container), Objects.requireNonNull(section))));
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
     /** All retained accounts, not a first-account shortcut for physical capacity. */
     static List<CustodyAccount> containerAccounts(FungibleResourceLedger ledger, SubjectId container) {
-        var image = custodies(ledger);
-        return image.read(new ContainerQuery(container), image.layout.containers().getOrDefault(container, List.of()));
+        return sorted(at(ledger, new ContainerQuery(Objects.requireNonNull(container))));
     }
 
     static boolean carriesClaim(FungibleResourceLedger ledger, ResourceCustody holder) {
         return accountsAt(ledger, holder).stream().anyMatch(account -> !account.claimQuantities().isEmpty());
     }
     static List<CustodyAccount> accountsAt(FungibleResourceLedger ledger, ResourceCustody holder) {
-        var image = custodies(ledger);
-        return image.read(new HolderQuery(Objects.requireNonNull(holder)), image.layout.holders().getOrDefault(holder, List.of()));
+        return at(ledger, new HolderQuery(Objects.requireNonNull(holder)));
     }
     static List<CustodyAccount> actorAccounts(FungibleResourceLedger ledger, SubjectId actor) {
-        var image = custodies(ledger);
-        return image.read(new ActorQuery(Objects.requireNonNull(actor)), image.layout.actors().getOrDefault(actor, List.of()));
+        return sorted(at(ledger, new ActorQuery(Objects.requireNonNull(actor))));
     }
     static List<CustodyAccount> groundAccounts(FungibleResourceLedger ledger) {
-        var image = custodies(ledger);
-        return image.read(GroundQuery.INSTANCE, image.layout.ground());
+        return sorted(at(ledger, GroundQuery.INSTANCE));
     }
 
     private static Image image(FungibleResourceLedger ledger) {
@@ -115,42 +90,22 @@ final class FungibleResourceReadIndex {
         return current;
     }
 
-    /** One complete read-only custody image. It grants neither title nor availability.
-     * Revisions and independent immutable branches never share a mutable index. */
-    private static Custodies custodies(FungibleResourceLedger ledger) {
-        return CUSTODIES.get(List.of(ledger.accounts()), Boolean.TRUE, () -> {
-            // This projection has one read-only algorithm epoch, not a world or
-            // execution epoch. Placement depends on account ID/custody only.
-            // Claims and quantities always come from the captured current rows.
-            var members = MEMBERSHIPS.project(MEMBERSHIPS, ledger.accounts(),
-                    (id, account) -> new Membership(account.custody()));
-            var order = ACCOUNT_ORDER.get(ledger.accounts());
-            return new Custodies(ledger.accounts(), LAYOUTS.get(List.of(members, order), Boolean.TRUE, () -> layout(members, order)));
-        });
+    /** Current rows from declared custody. Membership/value changes update only
+     * affected groups; no account edit rebuilds every holder's placement directory. */
+    private static List<CustodyAccount> at(FungibleResourceLedger ledger, Query query) {
+        if (!SECTIONS.uniqueMemberships(FungibleResourceReadIndex.class, ledger.accounts(), account ->
+                account.custody() instanceof ResourceCustody.Container holder ? Set.of(holder) : Set.of()))
+            throw new IllegalArgumentException("container section has competing resource accounts");
+        return CUSTODIES.rows(FungibleResourceReadIndex.class, ledger.accounts(), account -> {
+            var groups = new HashSet<Query>(); groups.add(new HolderQuery(account.custody()));
+            if (account.custody() instanceof ResourceCustody.Container holder) groups.add(new ContainerQuery(holder.containerId()));
+            else if (account.custody() instanceof ResourceCustody.Actor holder) groups.add(new ActorQuery(holder.actorId()));
+            else if (account.custody() instanceof ResourceCustody.Ground) groups.add(GroundQuery.INSTANCE);
+            return groups;
+        }, query);
     }
-    private static Layout layout(Map<SubjectId, Membership> members, List<SubjectId> order) {
-        var holders = new HashMap<ResourceCustody, List<SubjectId>>();
-        var containers = new HashMap<SubjectId, List<SubjectId>>();
-        var actors = new HashMap<SubjectId, List<SubjectId>>();
-        var sections = new HashMap<ResourceCustody.Container, SubjectId>();
-        var ground = new ArrayList<SubjectId>();
-        for (var id : order) {
-            var member = members.get(id);
-            holders.computeIfAbsent(member.custody(), ignored -> new ArrayList<>()).add(id);
-            if (member.custody() instanceof ResourceCustody.Container holder) {
-                if (sections.putIfAbsent(holder, id) != null)
-                    throw new IllegalArgumentException("container section has competing resource accounts: " + holder);
-                containers.computeIfAbsent(holder.containerId(), ignored -> new ArrayList<>()).add(id);
-            } else if (member.custody() instanceof ResourceCustody.Actor holder)
-                actors.computeIfAbsent(holder.actorId(), ignored -> new ArrayList<>()).add(id);
-            else if (member.custody() instanceof ResourceCustody.Ground) ground.add(id);
-        }
-        holders.replaceAll((holder, accounts) -> List.copyOf(accounts)); // Preserve first-at-custody query order.
-        containers.replaceAll((id, accounts) -> accounts.stream().sorted().toList());
-        actors.replaceAll((id, accounts) -> accounts.stream().sorted().toList());
-        ground.sort(Comparator.naturalOrder());
-        return new Layout(ImmutableLookupMap.copyOf(holders), ImmutableLookupMap.copyOf(containers), ImmutableLookupMap.copyOf(actors), ImmutableLookupMap.copyOf(sections),
-                List.copyOf(ground));
+    private static List<CustodyAccount> sorted(List<CustodyAccount> rows) {
+        return rows.size() < 2 ? rows : rows.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList();
     }
 
     private static Map<Balance, Integer> balances(FungibleResourceLedger ledger, CustodyAccount account) {

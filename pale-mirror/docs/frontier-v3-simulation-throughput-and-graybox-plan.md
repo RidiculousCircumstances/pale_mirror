@@ -5103,3 +5103,37 @@ this boundary, with the multiple-account holder assertion extended.
 Item-focused checks+guardrails passed75s. Existing custody/stock/ledger checks
 passed26s. Connected reservation/compartment/shipment recovery selection+guardrails passed32s
 for the local admission correction. Final frozen union/package remains required.
+
+### Incremental current custody groups
+
+89b1260fa frozen93tests0failures44s+guardrails/JAR/package and both retained
+deployments verified. Ordinary16cuts304.227227s299419→302659=10.649934ticks/s,
+debt942→3787. New town100 terminal harvest15; no new accepted trade quantity in5
+samples. Food town1 186→186,hungry0→0;7 248→247,0→1;35 131→144,2→1;
+68 1→0,0→11;100 81→77,0→0. Sample5starving0. No overlapping build/profile/client;
+not sustainable20 and not an isolated A/B comparison of changing world workloads.
+
+Follow-up89bJFR local-storage-backing-current-ordinary100.jfr has zero data-loss
+events; covered44.892463s302718→303102=8.553774/s under profiling. Gates owner53.69%,
+exact30.24%,WAL7.51%,readyexactwaitingowner6.03%. The former all-container backing
+call is absent from the leading lookup stacks. Advice CPU36.96/36.33s over47.180400s;
+exact14.03,server22.70,nav4.78/4.70. This identifies remaining work; it does not prove
+20/s. Exact station supply still invokes full equipment acquisition/market valuation;
+this separate planning/execution boundary remains open, with no schema change yet.
+
+The old custody directory also rebuilds all placement maps on actual account
+membership/custody changes. Replace its private all-holder Layout/Custodies with
+shared ImmutableGroupView current holder/container/actor/ground rows. Preserve
+producer order for accountsAt and natural account-ID order for the other queries;
+only the selected local group needs sorting. Current quantities/claims/presentation
+come from current rows, not old membership images. Shared uniqueness membership
+still rejects duplicate container sections globally, even on an unrelated actor
+query. Availability, title, conservation, binding and mutation rules stay unchanged.
+
+Shared ImmutableGroupView now constructs producer ranks only for an ordered query;
+uniqueness checks need memberships alone. A later ordered lookup refreshes ranks
+independently, including a preceding uniqueness visit to a reordered source.
+Existing order/branch/failure cases are extended, plus one duplicate-section and
+predecessor-negative custody case. Connected custody/ledger/storage/compartment/
+shipment/unit inventory/station processing/common-group focus+guardrails passed40s.
+Final frozen combined checks and package follow; no new runtime gain claimed yet.

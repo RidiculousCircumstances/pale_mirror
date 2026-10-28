@@ -91,4 +91,15 @@ class FungibleCustodyReadTest {
         assertThrows(UnsupportedOperationException.class, () -> before.clear());
         source.put("c", 5); assertThrows(IllegalArgumentException.class, () -> view.get(source));
     }
+    @Test void aDuplicateContainerSectionFailsEvenForAnotherCustodyQueryAndCannotPoisonItsPredecessor() {
+        var original = ledger(4, false);
+        var before = FungibleResourceReadIndex.actorAccounts(original, ACTOR);
+        var holder = new ResourceCustody.Container(new SubjectId("container:duplicate"));
+        var rows = new LinkedHashMap<SubjectId, CustodyAccount>();
+        original.accounts().forEach((id, account) -> rows.put(id, new CustodyAccount(id, holder,
+                account.lotQuantities(), account.claimQuantities())));
+        var duplicate = new FungibleResourceLedger(original.lots(), original.claims(), rows, original.bindings());
+        assertThrows(IllegalArgumentException.class, () -> FungibleResourceReadIndex.actorAccounts(duplicate, ACTOR));
+        assertEquals(before, FungibleResourceReadIndex.actorAccounts(original, ACTOR));
+    }
 }

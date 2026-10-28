@@ -72,7 +72,10 @@ class ImmutableGroupViewTest {
         assertEquals(List.of(), view.rows(epoch, removed, points, "target"), "removal cannot retain an inbound obligation");
         assertFalse(view.uniqueMemberships(epoch, source, points), "returning to an old branch must restore its collision too");
         var reversed = new LinkedHashMap<String, Row>(); reversed.put("b", input.get("b")); reversed.put("a", input.get("a"));
-        assertEquals(List.of("b", "a"), view.keys(epoch, ImmutableLookupMap.copyOf(reversed), points, "target"));
+        var reverseImage = ImmutableLookupMap.copyOf(reversed);
+        assertFalse(view.uniqueMemberships(epoch, reverseImage, points));
+        assertEquals(List.of("b", "a"), view.keys(epoch, reverseImage, points, "target"),
+                "a membership-only visit cannot retain the preceding producer order");
         assertEquals(List.of("a", "b"), original, "published candidate lists never follow later updates");
         assertThrows(UnsupportedOperationException.class, () -> original.add("c"));
     }

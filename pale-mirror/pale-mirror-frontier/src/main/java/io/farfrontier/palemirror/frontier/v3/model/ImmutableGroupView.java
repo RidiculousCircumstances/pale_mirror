@@ -32,6 +32,7 @@ final class ImmutableGroupView<K, V, G> {
         if (image == null || image.epoch != epoch) image = new Image<>(epoch);
         try {
             update(image, snapshot, memberships);
+            refreshOrder(image, snapshot);
             current.set(image);
             var candidates = image.groups.get(group);
             if (candidates == null) return List.of();
@@ -71,14 +72,19 @@ final class ImmutableGroupView<K, V, G> {
         } catch (RuntimeException | Error failed) { current.remove(); throw failed; }
     }
 
-    private void update(Image<K, V, G> image, Map<K, V> source, Function<V, Set<G>> project) {
-        if (image.source == source) return;
+    /** Uniqueness needs memberships only; rank every producer key only for an
+     * ordered query. A preceding uniqueness check cannot hide a changed order. */
+    private void refreshOrder(Image<K, V, G> image, Map<K, V> source) {
         var nextOrder = order.get(source);
         if (nextOrder != image.order) {
             var ranks = new HashMap<K, Integer>();
             for (int i = 0; i < nextOrder.size(); i++) ranks.put(nextOrder.get(i), i);
             image.ranks = ranks; image.order = nextOrder; image.ordered.clear(); image.rows.clear();
         }
+    }
+
+    private void update(Image<K, V, G> image, Map<K, V> source, Function<V, Set<G>> project) {
+        if (image.source == source) return;
         ImmutableMapChanges.forEachIdentityChangedKey(image.source, source, key -> {
             var row = source.get(key);
             var next = row == null ? Set.<G>of() : Set.copyOf(project.apply(row));
