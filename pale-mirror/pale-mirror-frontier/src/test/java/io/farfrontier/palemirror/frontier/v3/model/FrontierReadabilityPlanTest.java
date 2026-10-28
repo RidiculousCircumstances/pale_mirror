@@ -16,6 +16,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierReadabilityPlanTest {
     @Test
+    void scaleCatalogueRetainsEveryDeclaredOwnerAndIndependentOverlayAcrossRecovery() {
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:scale-board-catalogue"), 126L,
+                FrontierRulesets.installed("frontier-v3-simulation-scale-r31"));
+        var baseline = FrontierWorldState.initial(bootstrap);
+        var organ = new HiveOrgan(new SubjectId("organ:scale-board-relay"), bootstrap.hive().id(),
+                new SubjectId("nest:seed-east"), HiveOrganKind.RELAY,
+                new BlockPosition(420, 64, 432), java.util.Optional.empty());
+        var state = baseline.addHiveOrgan(organ);
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(state));
+        for (var current : java.util.List.of(state, recovered)) {
+            var geometry = FrontierReadabilityPlan.StableObjectGeometry.compile(current);
+            var index = new FrontierReadabilityPlan.StableBoardIndex(current, geometry);
+            int expected = bootstrap.settlements().stream().mapToInt(value -> value.structures().size()).sum()
+                    + bootstrap.hive().organs().size() + current.resourceSites().sites().size() + 1;
+            assertTrue(expected > 256, "the world catalogue exceeds the former small-world bound");
+            assertEquals(expected, index.placements().size());
+            assertEquals(expected, index.placements().stream().map(FrontierObjectBoard.Placement::ownerId).distinct().count());
+            var lastSettlement = current.bootstrap().settlements().getLast();
+            var hall = lastSettlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL)
+                    .findFirst().orElseThrow();
+            assertTrue(index.render(current, hall.id(), 0L).text().startsWith(lastSettlement.displayName()));
+            var overlay = FrontierReadabilityPlan.compileDynamicHiveOverlay(current);
+            assertEquals(java.util.Set.of(organ.id()), overlay.boards().keySet());
+            var complete = FrontierReadabilityPlan.compile(current, 0L);
+            assertEquals(expected + 1, complete.boards().size());
+            assertEquals(overlay.boards().get(organ.id()), complete.boards().get(organ.id()));
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> index.render(current, new SubjectId("board:undeclared"), 0L));
+        }
+    }
+
+    @Test
     void localFormattingRetainsGeometryAndReadsChangedPopulation() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-local"), 91L));
         var geometry = FrontierReadabilityPlan.StableObjectGeometry.compile(state);
@@ -97,7 +130,7 @@ class FrontierReadabilityPlanTest {
 
         FrontierReadabilityPlan stableBefore = FrontierReadabilityPlan.compileStableBaseline(baseline, 0L);
         FrontierReadabilityPlan stableAfter = FrontierReadabilityPlan.compileStableBaseline(grown, 0L);
-        FrontierReadabilityPlan dynamic = FrontierReadabilityPlan.compileDynamicHiveOverlay(grown, 256 - stableAfter.boards().size());
+        FrontierReadabilityPlan dynamic = FrontierReadabilityPlan.compileDynamicHiveOverlay(grown);
         java.util.Map<SubjectId, FrontierObjectBoard> recomposed = new java.util.LinkedHashMap<>(stableAfter.boards());
         recomposed.putAll(dynamic.boards());
 

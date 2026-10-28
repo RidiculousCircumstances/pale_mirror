@@ -13,7 +13,6 @@ import java.util.Objects;
  * state, a debug dashboard, or permission to overwrite a physical world change.
  */
 public final class FrontierReadabilityPlan {
-    private static final int MAX_BOARDS = 256;
     private final Map<SubjectId, FrontierObjectBoard> boards;
 
     private FrontierReadabilityPlan(Map<SubjectId, FrontierObjectBoard> boards) { this.boards = Map.copyOf(boards); }
@@ -21,9 +20,9 @@ public final class FrontierReadabilityPlan {
     public static FrontierReadabilityPlan compile(FrontierWorldState state, long atTick) {
         Objects.requireNonNull(state, "state");
         FrontierReadabilityPlan baseline = compileStableBaseline(state, atTick);
-        FrontierReadabilityPlan dynamicHive = compileDynamicHiveOverlay(state, MAX_BOARDS - baseline.boards().size());
+        FrontierReadabilityPlan dynamicHive = compileDynamicHiveOverlay(state);
         Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>(baseline.boards());
-        dynamicHive.boards().values().forEach(board -> add(values, board, MAX_BOARDS));
+        dynamicHive.boards().values().forEach(board -> add(values, board));
         return new FrontierReadabilityPlan(values);
     }
 
@@ -90,7 +89,11 @@ public final class FrontierReadabilityPlan {
         return new FrontierReadabilityPlan(values);
     }
 
-    /** Read-only formatting index. Each selected board reads current facts, not cached job text. */
+    /**
+     * Read-only world catalogue, bounded by the declared settlement/structure, resource-site and
+     * organ registries. It is not the loaded scene or its per-turn publication budget. Each
+     * selected board reads current facts, not cached job text; geometry stays lazy per owner.
+     */
     public static final class StableBoardIndex {
         private final StableObjectGeometry geometry;
         private final java.util.List<FrontierObjectBoard.Placement> placements;
@@ -124,7 +127,6 @@ public final class FrontierReadabilityPlan {
                 var value = new LinkedHashMap<SubjectId, FrontierObjectBoard>(); addRouteNetwork(value, current);
                 return value.get(FrontierRouteNetwork.OWNER);
             });
-            if (renderers.size() > MAX_BOARDS) throw new IllegalArgumentException("board index exceeds bound");
             this.renderers = Map.copyOf(renderers);
         }
 
@@ -155,15 +157,14 @@ public final class FrontierReadabilityPlan {
     }
 
     /**
-     * Exact current boards for bounded added-hive organs only.  {@code capacity} preserves the
-     * whole-plan board ceiling when this overlay is recombined with its stable baseline.
+     * Exact current boards for the independently bounded added-organ registry. Settlement
+     * catalogue size cannot consume its capacity; physical publication has a separate budget.
      */
-    public static FrontierReadabilityPlan compileDynamicHiveOverlay(FrontierWorldState state, int capacity) {
+    public static FrontierReadabilityPlan compileDynamicHiveOverlay(FrontierWorldState state) {
         Objects.requireNonNull(state, "state");
-        if (capacity < 0 || capacity > MAX_BOARDS) throw new IllegalArgumentException("invalid dynamic board capacity");
         Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>();
         Map<SubjectId, InfectionOverlayStage> contamination = contamination(state, FrontierGrayboxPlan.currentDynamicHiveObjectCellsByOwner(state));
-        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id()), capacity));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
         return new FrontierReadabilityPlan(values);
     }
 
@@ -276,17 +277,13 @@ public final class FrontierReadabilityPlan {
     }
 
     private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage) {
-        addOrgan(values, state, organ, stage, MAX_BOARDS);
-    }
-
-    private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage, int capacity) {
         boolean operational = state.isHiveOrganOperational(organ.id());
         MobilizationReadout mobilization = mobilizationReadout(state, organ);
         FrontierObjectBoard.Tone tone = stage == null && operational && mobilization.tone() == FrontierObjectBoard.Tone.HIVE
                 ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING;
         add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), tone,
                 organ.kind() == HiveOrganKind.GANGLION ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL,
-                "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? mobilization.text() : "DISABLED · REPAIR NEEDED", stage)), capacity);
+                "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? mobilization.text() : "DISABLED · REPAIR NEEDED", stage)));
     }
 
     private static MobilizationReadout mobilizationReadout(FrontierWorldState state, HiveOrgan organ) {
@@ -664,11 +661,6 @@ public final class FrontierReadabilityPlan {
     }
 
     private static void add(Map<SubjectId, FrontierObjectBoard> values, FrontierObjectBoard board) {
-        add(values, board, MAX_BOARDS);
-    }
-
-    private static void add(Map<SubjectId, FrontierObjectBoard> values, FrontierObjectBoard board, int capacity) {
         if (values.putIfAbsent(board.ownerId(), board) != null) throw new IllegalArgumentException("duplicate object board: " + board.ownerId().value());
-        if (values.size() > capacity) throw new IllegalArgumentException("object board limit exceeded");
     }
 }

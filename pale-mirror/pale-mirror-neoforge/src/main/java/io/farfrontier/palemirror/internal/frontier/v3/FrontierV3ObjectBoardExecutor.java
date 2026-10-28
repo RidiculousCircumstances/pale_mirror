@@ -61,11 +61,11 @@ final class FrontierV3ObjectBoardExecutor {
             GEOMETRIES.put(runtime, geometry);
             var index = new FrontierReadabilityPlan.StableBoardIndex(state, geometry);
             BOARD_INDEXES.put(runtime, index);
-            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state, 256 - index.placements().size());
+            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state);
             cursor = Cursor.from(input, index.placements(), sorted(dynamicHive), cursor);
             CURSORS.put(runtime, cursor);
         } else if (!cursor.sameOverlay(input)) {
-            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state, cursor.dynamicHiveCapacity());
+            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state);
             cursor = cursor.withDynamicHiveOverlay(input, sorted(dynamicHive));
             CURSORS.put(runtime, cursor);
         }
@@ -272,7 +272,6 @@ final class FrontierV3ObjectBoardExecutor {
             return input.bootstrap() == next.bootstrap() && input.hiveColony() == next.hiveColony()
                     && input.infection() == next.infection() && input.physicalDeltas() == next.physicalDeltas();
         }
-        int dynamicHiveCapacity() { return 256 - baselineBoards.size(); }
         boolean hasNext() { return !baselineBoards.isEmpty() || !dynamicHiveBoards.isEmpty(); }
         FrontierObjectBoard.Placement next() {
             if (baselineBoards.isEmpty()) return nextDynamicHive();

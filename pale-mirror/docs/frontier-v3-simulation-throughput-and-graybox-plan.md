@@ -3361,3 +3361,25 @@ No JFR/build/restart during observation, allstatusok/notrecovering. G staysOPEN.
 Post0ad population audit:100towns,3030ALIVE,0unavailable at220400→220937.
 Independent town queries, not one simultaneous snapshot. No harvest duty observed
 in that cut, so the preceding20/s interval is not proof of sustained daytime work.
+
+
+### World board catalogue is independent of loaded publication (2026-10-28)
+
+Frozen e713 station-reference release PASS37s; both retained-world deployments
+verified. Actual fullpack100town HOT entry then reproduced a product quarantine:
+StableBoardIndex rejected the world catalogue at256boards. Private runtime saved
+all dimensions and stopped; no terrain frames or terminal acceptance resulted.
+Incident retained at build/simulation-throughput/board-scale-quarantine-20261028.log
+and station-reads-terrain-scale-client-2 receipts. Main16town runtime was unaffected.
+
+Remove the obsolete aggregate presentation ceiling, including its negative remaining
+capacity passed to the added-organ overlay. Catalogue cardinality is bounded by its
+validated source registries: at most100settlements, one structure per StructureKind,
+MAX_SITES resource sites, exact bootstrap organs, MAX_ADDED_ORGANS added organs and
+one route owner. This is no increase to physical-scene/mob admission. The executor
+retains its8slot count and wall budget, entity-storage readiness, lazy local text/
+geometry, cursor fairness and no-observer deferral. Duplicate full-plan owner and
+unknown/stale render rejection remain. Added an actual100town catalogue+independent
+overlay/codec recovery regression, including the last settlement and unknown owner.
+Focused readability, scale bootstrap/persistence, contextual board card and guardrails
+PASS20s (readability20checks). Native recovery and frozen deployment pending.
