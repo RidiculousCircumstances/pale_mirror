@@ -3809,3 +3809,33 @@ remains complete. Common execution membership similarly checks changed actor ref
 Harvest scene membership resolves its explicitly declared site/job directly; terminal
 release rules remain unchanged. Focused negative/recovery/branch/order/player-field
 checks pass44s; frozen delivery and retained-world effect pending. G OPEN.
+
+### Computing-thread geometry and exact nested job lookup
+
+Ded6b2aba retained-world delivery verified both services. Ordinary mature capture
+9860→10384/44.753513s=11.708578/s,debt907→1286; restart resets the wall-clock debt
+counter and is not proof of catching up. Workload differs from the preceding mature
+capture; no controlled percent improvement. Owner64.75%,exact20.04%,WAL11.17%;
+validation11.064760s inclusive. G remains OPEN.
+
+KnownPedestrianRouteKnowledge had one synchronized mutable geometry/cache basis shared
+by owner and advisory/preparation threads. Reading their different immutable snapshots
+replaced that basis and cleared field/settlement/journey views. Each computing thread
+now owns its existing bounded scratch/cache and regional-fact builder. Returned geometry
+remains immutable; regional versions still compare full physical facts and permissions.
+No new authority, source of terrain truth, epoch assignment or routing policy. A worker
+reads original/obstructed snapshots without evicting the owner's unchanged view; both
+threads agree on original facts, and both reject the actual obstruction. Existing
+unknown-support, storage-passage, COLD/HOT and recovery checks remain in force.
+
+The same JFR's leading named lookup stack was an existing passive-presence invariant
+scanning every resident(60samples). It now selects explicitly declared BIOFORM candidates
+through the common kind group and checks the same presence/cocoon/ambient predicates.
+No new hive business or enabled feature. Harvest execution checks use exact changed
+job references, including suspended work, rather than rescanning all current farmers.
+A shared bounded ImmutableNestedMapView builds exact child lookup from declared producer
+rows: changed producers only; immutable published outputs; atomic child transfer; duplicate
+rejection and complete failed-image discard. It introduces no owner/type inference or
+canonical registry. ResourceSiteState uses it for its existing job-id lookup.
+Focused geometry/negative/recovery/typed-kind/nested-index/harvest checks pass38s;
+final job-removal negative, frozen verification and measured delivery follow.

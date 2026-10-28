@@ -5,7 +5,20 @@ import java.util.Optional;
 
 /** Field owner supplies its exact checkpoint and preserves work/cargo through interruption. */
 final class HarvestActivityCapability implements ActorActivityCapability {
-    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
+    private static final ImmutableReferenceIndex.Source<ResourceSiteState, io.farfrontier.palemirror.frontier.v3.api.SubjectId,
+            ResourceSiteHarvestJob> JOBS = new ImmutableReferenceIndex.Source<>(ResourceSiteState::harvestJobs);
+    private static final ImmutableReferenceIndex<ResourceSiteState, io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecution> REFERENCES =
+            new ImmutableReferenceIndex<>(ActorExecutionState.MAX_ACTORS, 2, java.util.List.of(JOBS), (sites, execution) -> {
+                var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<ResourceSiteState>>();
+                execution.current().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST)
+                        .ifPresent(id -> reads.add(JOBS.at(id.activityOwnerId())));
+                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST)
+                        .ifPresent(id -> reads.add(JOBS.at(id.activityOwnerId())));
+                return reads;
+            }, (sites, actor, execution) -> {
+                execution.current().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST).ifPresent(id -> job(sites, id));
+                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST).ifPresent(id -> job(sites, id));
+            });
     @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder> navigationOrder(
             FrontierWorldState state, ActorExecutionId execution) {
         var job = job(state, execution);
@@ -51,12 +64,7 @@ final class HarvestActivityCapability implements ActorActivityCapability {
         return job;
     }
     static void validateReferences(ResourceSiteState sites, ActorExecutionState executions) {
-        REFERENCES.validate(() -> validateCurrent(sites, executions), sites, executions);
-    }
-    private static void validateCurrent(ResourceSiteState sites, ActorExecutionState executions) {
-        executions.current(ActorActivityKind.FIELD_HARVEST).values().forEach(id -> job(sites, id));
-        executions.suspended().stream().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST)
-                .forEach(id -> job(sites, id));
+        REFERENCES.validate(HarvestActivityCapability.class, executions.actors(), sites);
     }
     @Override public void validateReference(FrontierWorldState state, ActorExecutionId execution) { job(state, execution); }
     @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution) {

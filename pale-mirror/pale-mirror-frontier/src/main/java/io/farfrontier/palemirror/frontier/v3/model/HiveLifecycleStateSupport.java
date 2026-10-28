@@ -29,8 +29,9 @@ final class HiveLifecycleStateSupport {
         Objects.requireNonNull(physicalDeltas, "physical deltas");
         Objects.requireNonNull(executions, "actor executions");
 
-        executions.current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE)
-                .keySet().forEach(actorId -> {
+        var presence = executions.current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE);
+        ActorIdentityDeclarations.actorsOfKind(bootstrap, actorLocations, ActorKind.BIOFORM).forEach(actorId -> {
+            if (!presence.containsKey(actorId)) return;
             ActorLocation actor = actorLocations.get(actorId);
             if (actor != null && actor.kind() == ActorKind.BIOFORM
                     && !HivePresencePolicy.permits(colony, physicalDeltas, actorId))
@@ -48,9 +49,10 @@ final class HiveLifecycleStateSupport {
             }
         });
 
-        ambientLeases.values().stream().filter(lease -> lease.status() != AmbientLeaseStatus.CLOSED).forEach(lease -> {
-            BioformLifecycle lifecycle = colony.bioformLifecycles().get(lease.actorId());
-            if (lifecycle != null && !HivePhysiologySupport.permitsAmbientLease(colony, physicalDeltas, lease.actorId())) {
+        colony.bioformLifecycles().keySet().forEach(actorId -> {
+            var lease = ambientLeases.get(actorId);
+            if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED
+                    && !HivePhysiologySupport.permitsAmbientLease(colony, physicalDeltas, actorId)) {
                 throw new IllegalArgumentException("cocoon-retained or unconfirmed waking bioform may not retain an active ambient lease");
             }
         });

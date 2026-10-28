@@ -23,6 +23,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void advisoryGeometryCannotReplaceTheOwnersCacheOrHideAChangedPhysicalFact() throws Exception {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:geometry-worker-isolation"), 20260918065L));
+        var home = state.bootstrap().settlements().getFirst();
+        var surface = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var owner = KnownPedestrianRouteKnowledge.forFrontier(state);
+        assertTrue(owner.traversable(List.of(surface)));
+        var proof = owner.geometry().regionalRevision().orElseThrow();
+        var changed = state.recordPhysicalDelta(new PhysicalDelta(surface.support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:worker-obstruction"));
+        var task = new java.util.concurrent.FutureTask<Void>(() -> {
+            var original = KnownPedestrianRouteKnowledge.forFrontier(state);
+            assertEquals(proof, original.geometry().regionalRevision().orElseThrow(),
+                    "complete regional facts agree across computing threads");
+            var blocked = KnownPedestrianRouteKnowledge.forFrontier(changed);
+            assertTrue(!blocked.traversable(List.of(surface)));
+            org.junit.jupiter.api.Assertions.assertNotEquals(proof, blocked.geometry().regionalRevision().orElseThrow());
+            return null;
+        });
+        var worker = new Thread(task); worker.start(); task.get(); worker.join();
+        org.junit.jupiter.api.Assertions.assertSame(owner, KnownPedestrianRouteKnowledge.forFrontier(state),
+                "an advisory snapshot cannot invalidate the unchanged owner geometry basis");
+        assertTrue(!KnownPedestrianRouteKnowledge.forFrontier(changed).traversable(List.of(surface)),
+                "the owner still rejects the changed physical fact");
+        assertTrue(owner.traversable(List.of(surface)), "the retained original view remains immutable");
+        assertEquals(proof, KnownPedestrianRouteKnowledge.forFrontier(state).geometry().regionalRevision().orElseThrow());
+    }
+
     @Test void replacementStorageAtAFacilityThresholdHasAnExecutablePassageAndBlockedServiceDoesNotInviteFoodPlanning() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:replacement-storage-threshold"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13")));

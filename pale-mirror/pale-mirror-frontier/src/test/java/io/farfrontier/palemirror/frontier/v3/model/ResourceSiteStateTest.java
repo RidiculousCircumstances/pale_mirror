@@ -15,6 +15,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteStateTest {
+    @Test void executionReferencesRejectJobRemovalWhileItsActorAuthorityIsUnchanged() {
+        var fixture = FrontierResourceSiteHarvestFixture.create(new WorldId("frontier:harvest-reference-removal"), 125L);
+        var state = fixture.state(); var sites = state.resourceSites(); var lifecycle = sites.site(fixture.siteId());
+        HarvestActivityCapability.validateReferences(sites, state.actorExecutions());
+        var phase = lifecycle.growthStage() == ResourceSiteLifecycle.MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING;
+        var absent = new ResourceSiteLifecycle(lifecycle.siteId(), phase, lifecycle.growthEpoch(), lifecycle.growthStage(),
+                lifecycle.preparationWork(), lifecycle.conflictDisposition(), Map.of(), lifecycle.harvestLineages(), lifecycle.harvestSequence());
+        var changed = sites.replace(absent);
+        assertThrows(IllegalArgumentException.class, () -> HarvestActivityCapability.validateReferences(changed, state.actorExecutions()));
+        HarvestActivityCapability.validateReferences(sites, state.actorExecutions());
+    }
+
     @Test void warmedRegisterStillRejectsChangedCyclesDeclarationsAndMissingMembership() {
         var fields = initial().resourceSites();
         var id = fields.sites().keySet().iterator().next();

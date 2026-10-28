@@ -17,6 +17,11 @@ final class ActorIdentityDeclarations {
         if (ImmutableInvariantCheck.fullAudit()) return KINDS.project(bootstrap, actors, (before, after) -> false, (id, actor) -> actor.kind());
         return KINDS.project(bootstrap, actors, (id, actor) -> actor.kind());
     }
+    private static final ImmutableGroupView<SubjectId, ActorKind, ActorKind> KIND_MEMBERS = new ImmutableGroupView<>();
+    /** Read-only candidates from the actor's explicit kind; no type or owner is inferred. */
+    static java.util.List<SubjectId> actorsOfKind(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors, ActorKind kind) {
+        return KIND_MEMBERS.keys(bootstrap, declaredKinds(bootstrap, actors), java.util.Set::of, kind);
+    }
     private static final ImmutableRegistryView<SubjectId, ActorLocation, ActorLifeStatus> LIFE_STATUSES =
             new ImmutableRegistryView<>(SimulationCapacity.MAX_ACTORS, 4);
     static Map<SubjectId, ActorLifeStatus> lifeStatuses(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors) {

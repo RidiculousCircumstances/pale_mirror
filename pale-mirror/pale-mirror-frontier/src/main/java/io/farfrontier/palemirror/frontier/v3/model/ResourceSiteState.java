@@ -14,21 +14,19 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
                                 Map<CellMutationKey, ResourceFieldForeignChangeHeld> pendingForeignChanges,
                                 Map<SubjectId, CultivationReview> cultivation) {
     public static final int MAX_SITES = 1024;
-    private static final ImmutableResultView<String, Map<SubjectId, ResourceSiteHarvestJob>> HARVEST_DIRECTORY = new ImmutableResultView<>(4);
+    private static final ImmutableNestedMapView<SubjectId, ResourceSiteLifecycle, SubjectId, ResourceSiteHarvestJob> HARVEST_DIRECTORY =
+            new ImmutableNestedMapView<>(MAX_SITES, MAX_SITES * ResourceSiteLifecycle.MAX_HARVEST_WORKERS);
     private static final ImmutableResultView<String, Map<SubjectId, ResourceSite>> DESCRIPTORS = new ImmutableResultView<>(4);
     private static final ImmutableKeyOrderView<SubjectId> DESCRIPTOR_ORDER = new ImmutableKeyOrderView<>(MAX_SITES);
     /** Exact declared job lookup; membership validates a FIELD_HARVEST reference,
      * never discovers a job kind or assignment from an untyped identifier. */
     public java.util.Optional<ResourceSiteHarvestJob> harvestJob(SubjectId jobId) {
-        var directory = HARVEST_DIRECTORY.get(java.util.List.of(sites), "harvest-jobs", () -> {
-            var result = new LinkedHashMap<SubjectId, ResourceSiteHarvestJob>();
-            sites.values().forEach(site -> site.harvestJobs().values().forEach(job -> {
-                if (result.putIfAbsent(job.id(), job) != null) throw new IllegalArgumentException("duplicate field job identity");
-            }));
-            return ImmutableLookupMap.copyOf(result);
-        });
-        return java.util.Optional.ofNullable(directory.get(Objects.requireNonNull(jobId)));
+        return java.util.Optional.ofNullable(harvestJobs().get(Objects.requireNonNull(jobId)));
     }
+    Map<SubjectId, ResourceSiteHarvestJob> harvestJobs() {
+        return HARVEST_DIRECTORY.project(ResourceSiteState.class, sites, ResourceSiteLifecycle::harvestJobs);
+    }
+
     private static final ImmutableInvariantCheck<Void> GEOMETRY_VALIDATION = new ImmutableInvariantCheck<>();
     public ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarations, Map<SubjectId, ResourceSiteLifecycle> sites,
             Map<SubjectId, ResourceFieldCycle> cycles, Map<CellMutationKey, ResourceFieldCellObserved> pendingWorldChanges,
