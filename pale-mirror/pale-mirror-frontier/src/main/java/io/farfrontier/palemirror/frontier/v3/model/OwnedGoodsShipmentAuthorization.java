@@ -7,12 +7,14 @@ final class OwnedGoodsShipmentAuthorization extends SameOwnerShipmentAuthorizati
     @Override public boolean departureReady(Shipment shipment, TransportOrganization organization) {
         return organization.itinerary() == TransportOrganization.Itinerary.DESTINATION_COLLECTION;
     }
-    @Override public Object[] continuationValidationInputs(FrontierWorldState state, Shipment shipment) {
+    @Override public List<ImmutableReferenceIndex.Read<FrontierWorldState>> continuationValidationReads(FrontierWorldState state, Shipment shipment) {
         var grant = shipment.authorization();
-        return new Object[] { state.inventory().fungibleResources().claims().get(grant.claimId()),
-                shipment.transportMissionId().map(state.shipments().missions()::get).orElse(null),
-                state.companies().goodsTrade().participants().participants().get(grant.claimantId()),
-                shipment.cargo() instanceof ShipmentCargo.Individual cargo ? state.inventory().items().get(cargo.itemId()) : null };
+        var reads = new ArrayList<ImmutableReferenceIndex.Read<FrontierWorldState>>();
+        reads.add(ShipmentValidationReads.CLAIMS.at(grant.claimId()));
+        reads.add(ShipmentValidationReads.PARTICIPANTS.at(grant.claimantId()));
+        shipment.transportMissionId().ifPresent(id -> reads.add(ShipmentValidationReads.MISSIONS.at(id)));
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) reads.add(ShipmentValidationReads.ITEMS.at(cargo.itemId()));
+        return List.copyOf(reads);
     }
     @Override public void validate(FrontierWorldState state, Shipment shipment, boolean admission) {
         var grant = shipment.authorization();

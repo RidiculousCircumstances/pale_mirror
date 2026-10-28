@@ -3240,3 +3240,32 @@ Untraced d963 observation: 13 samples over 363.331154s, ordinary 10.230337ticks/
 debt3973→7522, all statusok/notrecovering, no JFR/build/restart during interval.
 Rates across30s windows 7.629957..12.446696. This fails20/s independently of tracing;
 no controlled aggregate comparison to older refs.
+
+
+### Parcel checks follow exact source/issuer dependencies (2026-10-28)
+
+The401 native server CPU stack includes143 samples in ShipmentStateSupport's
+all-parcel validationInputs construction (166 in its enclosing validation; inclusive
+samples overlap). Every unrelated state change rebuilds all those arrays before
+the existing per-parcel checker can skip unchanged work. Validation now uses the
+existing ImmutableReferenceIndex over exact shipment rows. Registered endpoint,
+source and authorization ports declare their precise reads. Cargo accounts/items,
+claim, contract, organizer, mission, asset, container, physical surface and deposit
+changes recheck their actual readers; bootstrap is the epoch. Changed reads are
+recompiled before their existing owner performs validation. Failed images are
+discarded and full ingress/recovery ignores incremental evidence.
+
+The maximum13 declared reads derives from two three-read endpoints, two mobile
+asset/mission reads, four issuer reads and one current cargo read, even counting
+duplicates. MAX_SHIPMENTS remains the row bound. No canonical/schema/permission
+change or cache bound increase; source and issuer Object[] validation paths are
+removed, while the existing endpoint array adapter remains for group callers.
+The transport checker still owns cargo consistency and execution references;
+commercial and same-owner providers still own their terms. Added warmed-proof
+negative checks for a missing allocation and relocated cargo under an unchanged
+shipment, invalid fork cleanup and codec recovery. Connected shipment, individual
+cargo, paid collection, grouped transport, fleet, death, ground-source, incremental
+validation and reference-index checks plus guardrails PASS26s. Initial relocated
+fixture targeted an already occupied storage account; corrected to a vacant actor
+custody, keeping the one-account-per-location invariant unchanged. Combined frozen
+release/deployment/native effect pending.

@@ -10,8 +10,8 @@ final class GroundResourceSourcePort implements ResourceSourcePort {
             throw new IllegalArgumentException("ground source has foreign nominal schema");
         return ground;
     }
-    @Override public Object[] validationInputs(FrontierWorldState state, ResourceSourceEndpoint source) {
-        return new Object[] { state.bootstrap() };
+    @Override public List<ImmutableReferenceIndex.Read<FrontierWorldState>> validationReads(ResourceSourceEndpoint source) {
+        declared(source); return List.of(); // validate reads only the enclosing bootstrap epoch.
     }
     @Override public void validate(FrontierWorldState state, ResourceSourceEndpoint source) {
         declared(source); FrontierWorldStateSupport.settlement(state.bootstrap(), source.settlementId());

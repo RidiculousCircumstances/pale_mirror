@@ -7,8 +7,11 @@ public final class ShipmentStateSupport {
     public static boolean departureReady(FrontierWorldState state, Shipment shipment, TransportOrganization organization) {
         return ShipmentAuthorizationComposition.departureReady(state, shipment, organization);
     }
-    private static final ImmutableRegistryView<SubjectId, ImmutableDependencies, Boolean> VALIDATION =
-            new ImmutableRegistryView<>(ShipmentState.MAX_SHIPMENTS);
+    // At most two three-read endpoints, two asset/mission reads, four issuer
+    // reads and one cargo read. The index selects checks; owners still validate.
+    private static final ImmutableReferenceIndex<FrontierWorldState, SubjectId, Shipment> VALIDATION =
+            new ImmutableReferenceIndex<>(ShipmentState.MAX_SHIPMENTS, 13, ShipmentValidationReads.SOURCES,
+                    ShipmentStateSupport::validationReads, (state, id, shipment) -> validateCurrent(state, shipment));
     private ShipmentStateSupport() { }
     public static boolean serviceAvailable(FrontierWorldState state, Shipment shipment) {
         return ShipmentServiceAccess.available(state, shipment);
@@ -182,27 +185,22 @@ public final class ShipmentStateSupport {
     }
     public static void validate(FrontierWorldState state) {
         ShipmentExecutionCapability.validateReferences(state.shipments(), state.actorExecutions());
-        var inputs = new java.util.LinkedHashMap<SubjectId, ImmutableDependencies>();
-        state.shipments().shipments().forEach((id, shipment) -> inputs.put(id, validationInputs(state, shipment)));
-        VALIDATION.project(state.bootstrap(), inputs,
-                (before, after) -> !ImmutableInvariantCheck.fullAudit() && before.sameAs(after),
-                (id, ignored) -> { validateCurrent(state, state.shipments().shipments().get(id)); return Boolean.TRUE; });
+        VALIDATION.validate(state.bootstrap(), state.shipments().shipments(), state);
     }
-    private static ImmutableDependencies validationInputs(FrontierWorldState state, Shipment shipment) {
-        var inputs = new java.util.ArrayList<Object>(); inputs.add(shipment);
-        java.util.Collections.addAll(inputs, ResourceSourceComposition.validationInputs(state, shipment.sender()));
-        java.util.Collections.addAll(inputs, ShipmentEndpointComposition.validationInputs(state, shipment.receiver()));
+    private static java.util.List<ImmutableReferenceIndex.Read<FrontierWorldState>> validationReads(FrontierWorldState state, Shipment shipment) {
+        var reads = new java.util.ArrayList<>(ResourceSourceComposition.validationReads(shipment.sender()));
+        reads.addAll(ShipmentEndpointComposition.validationReads(shipment.receiver()));
         if (shipment.mobileContainerId().isPresent()) {
-            inputs.add(state.transportFleet().assets().get(shipment.execution().actorId()));
-            inputs.add(shipment.transportMissionId().map(state.shipments().missions()::get).orElse(null));
+            reads.add(ShipmentValidationReads.ASSETS.at(shipment.execution().actorId()));
+            shipment.transportMissionId().ifPresent(id -> reads.add(ShipmentValidationReads.MISSIONS.at(id)));
         }
         if (!shipment.terminal()) {
-            java.util.Collections.addAll(inputs, ShipmentAuthorizationComposition.continuationValidationInputs(state, shipment));
-            if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) inputs.add(state.inventory().items().get(cargo.itemId()));
-            else inputs.add(state.inventory().fungibleResources().accounts().get(shipment.status() == Shipment.Status.AWAITING_LOAD
+            reads.addAll(ShipmentAuthorizationComposition.continuationValidationReads(state, shipment));
+            if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) reads.add(ShipmentValidationReads.ITEMS.at(cargo.itemId()));
+            else reads.add(ShipmentValidationReads.ACCOUNTS.at(shipment.status() == Shipment.Status.AWAITING_LOAD
                     ? shipment.sourceAccountId() : shipment.carriedAccountId()));
         }
-        return ImmutableDependencies.of(inputs.toArray());
+        return java.util.List.copyOf(reads);
     }
     private static void validateCurrent(FrontierWorldState state, Shipment shipment) {
         ResourceSourceComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());

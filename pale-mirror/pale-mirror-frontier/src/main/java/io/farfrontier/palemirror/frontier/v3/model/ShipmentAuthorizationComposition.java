@@ -21,10 +21,10 @@ final class ShipmentAuthorizationComposition {
             throw new IllegalArgumentException("shipment disposition owner competed with transport/body authority");
         return changes;
     }
-    static Object[] continuationValidationInputs(FrontierWorldState state, Shipment shipment) {
+    static java.util.List<ImmutableReferenceIndex.Read<FrontierWorldState>> continuationValidationReads(FrontierWorldState state, Shipment shipment) {
         var port = PORTS.get(shipment.authorization().kind());
         if (port == null) throw new IllegalArgumentException("unregistered shipment permission provider");
-        return port.continuationValidationInputs(state, shipment);
+        return port.continuationValidationReads(state, shipment);
     }
     static void validate(FrontierWorldState state, Shipment shipment, boolean admission) {
         ShipmentAuthorizationPort port = PORTS.get(shipment.authorization().kind());

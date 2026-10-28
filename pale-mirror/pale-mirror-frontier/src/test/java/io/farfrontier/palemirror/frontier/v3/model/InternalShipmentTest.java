@@ -10,6 +10,28 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InternalShipmentTest {
+    @Test void unchangedShipmentCannotReuseProofAfterItsClaimOrCargoCustodyChanges() {
+        var fixture = machineSupplyFixture(); var state = fixture.state(); var shipment = fixture.shipment();
+        var ledger = state.inventory().fungibleResources();
+        var account = ledger.accounts().get(shipment.sourceAccountId());
+        var elsewhere = new ResourceCustody.Actor(shipment.execution().actorId());
+        var relocated = new CustodyAccount(account.id(), elsewhere, account.lotQuantities(), account.claimQuantities());
+        var moved = new FungibleResourceLedger(ledger.lots(), ledger.claims(),
+                ImmutableLookupMap.withEntry(ledger.accounts(), account.id(), relocated), ledger.bindings());
+        for (var resources : List.of(ledger.releaseClaims(Set.of(shipment.authorization().claimId())), moved)) {
+            ShipmentStateSupport.validate(state); // Warm successful evidence before each independent changed dependency.
+            var preview = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                    FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(resources))));
+            assertSame(state.shipments(), preview.shipments());
+            assertThrows(IllegalArgumentException.class, () -> ShipmentStateSupport.validate(preview));
+            assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
+                ShipmentStateSupport.validate(preview); return null;
+            }));
+            assertDoesNotThrow(() -> ShipmentStateSupport.validate(state), "failed fork cannot poison predecessor evidence");
+        }
+        var codec = new FrontierWorldStateCodec();
+        assertDoesNotThrow(() -> ShipmentStateSupport.validate(codec.decode(codec.encode(state))));
+    }
     @Test void arrivedCourierWaitsForItsServiceBoundaryInsteadOfSleepingUntilPolicyReview() {
         var fixture = machineSupplyFixture(); var state = fixture.state(); var parcel = fixture.shipment();
         var actor = parcel.execution().actorId();

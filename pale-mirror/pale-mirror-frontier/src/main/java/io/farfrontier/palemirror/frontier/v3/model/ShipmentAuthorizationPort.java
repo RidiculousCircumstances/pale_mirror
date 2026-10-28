@@ -11,7 +11,7 @@ interface ShipmentAuthorizationPort {
     }
     void validate(FrontierWorldState state, Shipment shipment, boolean admission);
     /** Complete immutable read set for validate(..., false); admission has additional capacity policy. */
-    Object[] continuationValidationInputs(FrontierWorldState state, Shipment shipment);
+    java.util.List<ImmutableReferenceIndex.Read<FrontierWorldState>> continuationValidationReads(FrontierWorldState state, Shipment shipment);
     void validateMission(FrontierWorldState state, Shipment shipment, TransportOrganization organization);
     boolean departureReady(Shipment shipment, TransportOrganization organization);
     boolean receptionAccepted(FrontierWorldState state, Shipment shipment, ShipmentReception reception);
