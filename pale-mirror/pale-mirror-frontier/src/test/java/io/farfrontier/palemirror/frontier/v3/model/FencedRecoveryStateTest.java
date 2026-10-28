@@ -177,17 +177,34 @@ class FencedRecoveryStateTest {
             retained.put(id, new FencedRecoveryTombstone(id, FencedRecoveryAsset.BODY, OWNER, 7L, 1L,
                     FencedRecoveryDisposition.REJECT_STALE, "confirmed"));
         }
-        FencedRecoveryState full = new FencedRecoveryState(Map.of(), retained);
+        FencedRecoveryState full = new FencedRecoveryState(Map.of(), retained, 0L);
         SubjectId successor = new SubjectId("body:retention-successor");
         FencedRecoveryState next = full.prepare(binding(successor, FencedRecoveryAsset.BODY, 1L, true));
 
         assertEquals(FencedRecoveryState.MAX_BINDINGS, next.current().size() + next.tombstones().size());
         assertTrue(next.current().containsKey(successor));
+        assertEquals(2L, next.nextEpoch(new SubjectId("body:retention-0000")),
+                "automatic eviction must preserve a numeric fence for the forgotten identity");
         assertFalse(next.tombstones().containsKey(new SubjectId("body:retention-0000")),
                 "compaction is deterministic rather than depending on map iteration or a later visitor");
         assertEquals(FencedRecoveryDisposition.REJECT_STALE,
                 next.lateLoad(new SubjectId("body:retention-0000"), FencedRecoveryAsset.BODY, OWNER, 1L),
                 "compaction never converts a forgotten projection into authority");
+    }
+
+    @Test void forgettingTerminalDetailCannotReuseAnIncarnationEvenAfterAnotherCompaction() {
+        var retired = FencedRecoveryState.empty().prepare(binding(BODY, FencedRecoveryAsset.BODY, 7L, true))
+                .running(BODY, 7L).revokeToCold(BODY, 7L);
+        var compacted = retired.compactTombstones(java.util.Set.of(BODY));
+        assertTrue(compacted.current().isEmpty());
+        assertTrue(compacted.tombstones().isEmpty());
+        assertEquals(8L, compacted.nextEpoch(BODY));
+        assertThrows(IllegalArgumentException.class, () -> compacted.prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true)));
+        var next = compacted.prepare(binding(CARGO, FencedRecoveryAsset.CARGO, compacted.nextEpoch(CARGO), true));
+        next = next.cancelBeforeEffect(CARGO, 8L).compactTombstones(java.util.Set.of(CARGO));
+        assertEquals(9L, next.nextEpoch(BODY));
+        assertEquals(9L, next.nextEpoch(CARGO));
+        assertEquals(FencedRecoveryDisposition.REJECT_STALE, next.lateLoad(BODY, FencedRecoveryAsset.BODY, OWNER, 7L));
     }
 
     private static FencedRecoveryBinding binding(SubjectId id, FencedRecoveryAsset asset, long epoch, boolean reversible) {

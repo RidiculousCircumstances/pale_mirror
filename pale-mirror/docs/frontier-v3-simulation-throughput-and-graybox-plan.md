@@ -3712,3 +3712,28 @@ CONFLICT scopes without resuming work or issuing resources. A crash after canoni
 binding but before witness cleanup uses that exact binding plus saved departure to retire
 only the matching witness. Ordinary work still requires HOT; no custody fence is removed.
 Focused owner/recovery/negative checks pass; retained-world terminal proof pending.
+
+Retained-world 43695571a verification: the same resident:1-7 became NOURISHED with
+no meal and COLD custody available; its old scene CLOSED and harvest advanced44→55
+cells (43→54carried). No client, reset, teleport or custody bypass. Receipts under
+build/simulation-throughput/body-recovery-diagnostic/terminal-hand-fix-*.txt. This is
+exploratory server evidence of that recovery, not graphical/M3 or final scale acceptance.
+
+### Compacted recovery epochs — bounded detail must not erase incarnation identity
+
+Second confirmed contradiction: FencedRecoveryState.nextEpoch advertised monotonic
+allocation but read only current/tombstone maps. At4096 entries automatic compaction
+could erase a body's last epoch, then demand allocate1 again. Actual resident:1-10/
+1-11 state had PREPAREDepoch1 while the physical carrier retainedepoch2; rejection was
+correct and the allocator was wrong. Late-load rejection alone cannot protect against
+reusing an old numeric incarnation.
+
+Schema312 retains one scalar retiredEpochFloor in the same canonical recovery owner.
+Explicit and automatic compaction raise it to every discarded epoch; allocation uses
+max(current, retained, floor)+1. Current authority stays exact; no per-actor historical
+map, second allocator, extra disk writes, authority bypass or enlarged entity limit.
+Every transition and codec preserves the scalar; callers must pass it explicitly.
+Negative compaction/reallocation and full-world codec/restart checks pass along with
+connected recovery/body/scene/harvest/meal tests49s. Schema311 cannot reconstruct erased
+history and is explicitly rejected. Preserve its diagnosed world, then create fresh
+schema312 runtime worlds. Freeze/deployment/terminal HOT/COLD/ordinary20/s proof pending.

@@ -69,6 +69,21 @@ class ActorBodyAuthorityTest {
         assertEquals(body.physicalEpoch() + 1L, next.physicalEpoch());
         assertEquals(execution, recovered.actorExecutions().actors().get(actor).current().orElseThrow());
     }
+    @Test void compactedBodyEpochSurvivesFullStatePersistenceAndDoesNotReincarnateAsOne() {
+        var state = ResourceSiteHarvestProcessTest.initial();
+        var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        state = ActorBodyAuthority.demand(state, actor);
+        var first = ActorBodyAuthority.current(state, actor);
+        state = ActorBodyAuthority.released(ActorBodyAuthority.running(state, first), first);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                state.fencedRecovery().compactTombstones(java.util.Set.of(ActorBodyId.recoveryBindingId(actor)))));
+        var codec = new FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(state));
+        var second = ActorBodyAuthority.current(ActorBodyAuthority.demand(restored, actor), actor);
+        assertEquals(first.physicalEpoch() + 1L, second.physicalEpoch());
+        assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.prepare(restored, first));
+    }
+
     @Test void missingActorForeignOwnerAndSceneRevisionCannotBecomeBodyAuthority() {
         var state = ResourceSiteHarvestProcessTest.initial();
         var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();

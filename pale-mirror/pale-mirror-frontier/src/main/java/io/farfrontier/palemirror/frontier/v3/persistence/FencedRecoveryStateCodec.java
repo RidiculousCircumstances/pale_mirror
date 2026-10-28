@@ -18,6 +18,7 @@ final class FencedRecoveryStateCodec {
     private FencedRecoveryStateCodec() { }
 
     static void write(DataOutputStream output, FencedRecoveryState state) throws IOException {
+        output.writeLong(state.retiredEpochFloor());
         FrontierWorldStateCodec.writeCount(output, state.current().size());
         for (FencedRecoveryBinding binding : state.current().values().stream().sorted(Comparator.comparing(FencedRecoveryBinding::bindingId)).toList()) {
             writeBinding(output, binding);
@@ -32,6 +33,7 @@ final class FencedRecoveryStateCodec {
 
 
     static FencedRecoveryState read(DataInputStream input) throws IOException {
+        long retiredEpochFloor = input.readLong();
         Map<SubjectId, FencedRecoveryBinding> current = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             FencedRecoveryBinding binding = readBinding(input);
@@ -45,7 +47,7 @@ final class FencedRecoveryStateCodec {
                     disposition(input.readUnsignedByte()), FrontierWorldStateCodec.readString(input));
             if (tombstones.put(id, tombstone) != null) throw new IllegalArgumentException("duplicate fenced recovery tombstone");
         }
-        return new FencedRecoveryState(current, tombstones);
+        return new FencedRecoveryState(current, tombstones, retiredEpochFloor);
     }
 
 

@@ -17,7 +17,8 @@ final class FrontierStateSchema {
     // Data-declared soil wire identities replace closed observation-specific soil tags.
     // Canonical lifecycle capacity/composition includes the100settlement cohort.
     // Public market orders retain one shared remaining quantity; bilateral schema310 is rejected.
-    static final int VERSION = 311;
+    // Compaction retains the durable epoch floor; erased history cannot be reconstructed.
+    static final int VERSION = 312;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {
