@@ -468,6 +468,11 @@ final class FrontierV3AmbientActorExecutor {
     }
     static FrontierV3AmbientAdmissionDiagnostic admissionDiagnostic(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                      FrontierWorldState state, SubjectId actorId) {
+        return physicalAdmissionDiagnostic(level, runtime, state, actorId)
+                .withBodyCustody(FrontierV3BodyCustodyDiagnostic.read(level, runtime, state, actorId));
+    }
+    private static FrontierV3AmbientAdmissionDiagnostic physicalAdmissionDiagnostic(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId actorId) {
         var location = state.actorLocations().get(actorId);
         if (location == null) return FrontierV3AmbientAdmissionDiagnostic.notCanonical();
         UUID expectedId = entityId(state, actorId);

@@ -602,7 +602,17 @@ final class FrontierV3DiagnosticJson {
                 + ",\"trackerCalls\":" + value.trackerCalls() + ",\"trackerImpulseCalls\":" + value.trackerImpulseCalls()
                 + ",\"motionStatus\":\"" + quote(motion.status()) + "\",\"motionTarget\":" + motionTarget
                 + ",\"motionAcceptedMoves\":" + motion.acceptedMoves()
-                + FrontierV3NavigationDiagnosticJson.fragment(value.navigation()) + "}";
+                + FrontierV3NavigationDiagnosticJson.fragment(value.navigation()) + bodyCustody(value.bodyCustody()) + "}";
+    }
+
+    private static String bodyCustody(FrontierV3BodyCustodyDiagnostic value) {
+        if (value == null) return "";
+        return ",\"bodyCustody\":{\"phase\":\"" + quote(value.phase()) + "\",\"epoch\":" + value.epoch()
+                + ",\"firstAdmission\":\"" + quote(value.firstAdmission()) + "\",\"carrierEpoch\":" + value.carrierEpoch()
+                + ",\"departure\":" + value.departure() + ",\"departureCurrent\":" + value.departureCurrent()
+                + ",\"departureSaved\":" + value.departureSaved() + ",\"currentResidence\":" + value.currentResidence()
+                + ",\"departureConflict\":" + value.departureConflict() + ",\"pendingAdoption\":" + value.pendingAdoption()
+                + ",\"storedRecovery\":\"" + quote(value.storedRecovery()) + "\",\"entityWriteEpoch\":" + value.entityWriteEpoch() + "}";
     }
 
     private static String item(String id, FrontierScheduleView checkpoint, FrontierWorldState state) {

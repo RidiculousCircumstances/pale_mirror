@@ -82,6 +82,16 @@ final class FrontierV3BodyStoredRecovery {
         queue.active = new Batch(selected, FrontierV3StoredBodyEvidence.inspect(level, ids));
     }
 
+    /** Query one existing queue entry; diagnostics never offer work or allocate a queue. */
+    static String diagnostic(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actor) {
+        var queue = QUEUES.get(runtime);
+        if (queue == null) return "NOT_OFFERED";
+        if (queue.pending.containsKey(actor)) return "QUEUED";
+        if (queue.active != null && queue.active.candidates().containsKey(actor))
+            return queue.active.future().isDone() ? "RESULT_READY" : "READING";
+        return queue.attempted.containsKey(actor) ? "ATTEMPTED" : "NOT_OFFERED";
+    }
+
     private static void unresolved(Candidate candidate, String reason) {
         PaleMirrorMod.LOGGER.warn("PMV3_BODY_STORED_RECOVERY actor={} epoch={} reason={}",
                 candidate.body().actorId().value(), candidate.body().physicalEpoch(), reason);

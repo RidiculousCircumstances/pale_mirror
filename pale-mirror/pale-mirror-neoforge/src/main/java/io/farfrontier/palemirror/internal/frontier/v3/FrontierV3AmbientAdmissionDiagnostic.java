@@ -9,10 +9,22 @@ record FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolea
                                             BlockPosition observedPosition, FrontierV3AmbientActorExecutor.ObservedPosition observedExact,
                                             int trackerCalls, int trackerImpulseCalls,
                                             FrontierV3ControlledMobMotion.MotionObservation motion,
-                                            FrontierV3MinecraftGoalNavigation.Observation navigation) {
+                                            FrontierV3MinecraftGoalNavigation.Observation navigation,
+                                            FrontierV3BodyCustodyDiagnostic bodyCustody) {
     FrontierV3AmbientAdmissionDiagnostic {
         if (motion == null) motion = FrontierV3ControlledMobMotion.MotionObservation.idle();
         if (navigation == null) navigation = FrontierV3MinecraftGoalNavigation.Observation.idle();
+    }
+    FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement,
+            BlockPosition observedPosition, FrontierV3AmbientActorExecutor.ObservedPosition observedExact,
+            int trackerCalls, int trackerImpulseCalls, FrontierV3ControlledMobMotion.MotionObservation motion,
+            FrontierV3MinecraftGoalNavigation.Observation navigation) {
+        this(status, entityId, pending, placement, observedPosition, observedExact, trackerCalls, trackerImpulseCalls,
+                motion, navigation, null);
+    }
+    FrontierV3AmbientAdmissionDiagnostic withBodyCustody(FrontierV3BodyCustodyDiagnostic custody) {
+        return new FrontierV3AmbientAdmissionDiagnostic(status, entityId, pending, placement, observedPosition,
+                observedExact, trackerCalls, trackerImpulseCalls, motion, navigation, custody);
     }
     FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement,
             BlockPosition observedPosition, FrontierV3AmbientActorExecutor.ObservedPosition observedExact,
@@ -22,7 +34,7 @@ record FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolea
     }
     FrontierV3AmbientAdmissionDiagnostic withNavigation(FrontierV3MinecraftGoalNavigation.Observation observation) {
         return new FrontierV3AmbientAdmissionDiagnostic(status, entityId, pending, placement, observedPosition,
-                observedExact, trackerCalls, trackerImpulseCalls, motion, observation);
+                observedExact, trackerCalls, trackerImpulseCalls, motion, observation, bodyCustody);
     }
     /** Backward-compatible read-only diagnostic construction for tests and non-motion scopes. */
     FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement,
