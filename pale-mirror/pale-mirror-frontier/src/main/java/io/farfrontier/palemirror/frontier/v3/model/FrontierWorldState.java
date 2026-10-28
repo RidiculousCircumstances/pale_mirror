@@ -439,8 +439,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             }
         }
         Set<SubjectId> expectedStructures = FrontierWorldStateSupport.structureIds(bootstrap);
-        Set<SubjectId> expectedSettlements = bootstrap.settlements().stream()
-                .map(Settlement::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        Set<SubjectId> expectedSettlements = FrontierWorldStateSupport.settlementIds(bootstrap);
         if (!expectedStructures.equals(structureConditions.keySet())) throw new IllegalArgumentException("structure condition index must own every and only bootstrap structure");
         int damageCellCount = 0;
         for (Map.Entry<SubjectId, StructureDamage> entry : structureDamage.entrySet()) {

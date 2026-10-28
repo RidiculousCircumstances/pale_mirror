@@ -3013,3 +3013,34 @@ No changed prices, claims, reservations, priorities or fixed resources.
 Equipment planning (absent materials then supplied order), actual repair/manufacture/
 food interruption/restart, management, labour, procurement and guardrails PASS25s.
 Clean release/deploy/native effect pending. G remainsOPEN/FAILED.
+
+### Incremental reference unions and immutable bootstrap declarations (2026-10-28)
+
+b2fde5fd8 clean release PASS29s and both retained deployments verified
+(deploy-{scale311,r279}-equipment-readiness). Early ordinary100231621events/
+noDataLoss44.759043s=5.585463ticks/s,debt2535→3186. A separate3minute
+non-restarting observation (equipment-readiness-longitudinal.jsonl) measured
+7.234,9.045,9.546,10.537,11.297,9.577ticks/s on successive30s intervals;
+debt4195→6096. Thus this is not solely startup reconstruction/JIT. A later
+warmed trace243777events/noDataLoss44.999334s=10.266819ticks/s,debt6582→7020,
+owner56.41%,exact28.16%,WAL10.88%,validation11.058506s. G stillFAILED.
+Do not compare early and warmed slices as a source-change speedup.
+
+Owned-validation CPU samples identify global field reference union construction
+and bootstrap structure-ID assembly on each ordinary publication. Resource-site
+reference projection now consumes exact changed lifecycle rows and composes their
+explicit reference sets with ImmutableSetContributions. Counts preserve a subject
+referenced by multiple fields; retiring one contributor cannot retire another's
+reference. No-change progress retains the accepted immutable union. Conflict rows
+retain their exact current lifecycle, complete audit reconstructs every contribution,
+and failed derived updates discard their entire thread image. This is a reusable
+computing-thread immutable-union builder, never canonical ownership or liveness.
+Source/contributor bounds remain the original ResourceSiteState.MAX_SITES.
+
+The validation barrier also reuses the already existing immutable bootstrap
+declaration index for expected structure/settlement IDs, instead of recollecting
+those fixed declarations on every transaction. All original existence, condition,
+damage and role validation remains. Focused shared-union overlap/retirement/bounds/
+immutability, full/predecessor field projection, negative publication and harvest
+scene/progress checks plus guardrails PASS26s. Frozen release/deploy/native effect
+pending; no HOT/terminal/scale acceptance inferred.

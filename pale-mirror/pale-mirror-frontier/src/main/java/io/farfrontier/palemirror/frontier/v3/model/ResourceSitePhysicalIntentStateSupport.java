@@ -43,45 +43,59 @@ public final class ResourceSitePhysicalIntentStateSupport {
     }
 
     record ReferenceView(java.util.Set<SubjectId> subjects, Map<SubjectId, ResourceSiteLifecycle> conflicts) { }
-    private record ReferenceImage(Object sites, ReferenceView view) { }
+    private static final class ReferenceImage {
+        Map<SubjectId, ResourceSiteLifecycle> sites = Map.of();
+        final ImmutableSetContributions<SubjectId, SubjectId> subjects = new ImmutableSetContributions<>(ResourceSiteState.MAX_SITES);
+        ReferenceView view = new ReferenceView(java.util.Set.of(), Map.of());
+    }
     private static final ThreadLocal<ReferenceImage> REFERENCE_IMAGE = new ThreadLocal<>();
     /** Complete family-owned read set for common intent existence checks. Work
      * progress does not change IDs; prepared conflicts retain their exact lifecycle. */
     static ReferenceView referenceView(ResourceSiteState sites) {
-        var prior = REFERENCE_IMAGE.get();
-        if (prior != null && prior.sites() == sites.sites()) return prior.view();
-        var subjects = nonterminalSubjects(sites);
-        var conflicts = new LinkedHashMap<SubjectId, ResourceSiteLifecycle>();
-        sites.sites().forEach((id, site) -> { if (site.phase() == ResourceSitePhase.CONFLICT) conflicts.put(id, site); });
-        var view = new ReferenceView(prior != null && subjects.equals(prior.view().subjects())
-                ? prior.view().subjects() : ImmutableLookupSet.copyOf(subjects),
-                prior != null && conflicts.equals(prior.view().conflicts())
-                    ? prior.view().conflicts() : ImmutableLookupMap.copyOf(conflicts));
-        REFERENCE_IMAGE.set(new ReferenceImage(sites.sites(), view)); return view;
+        var image = REFERENCE_IMAGE.get();
+        if (image == null || ImmutableInvariantCheck.fullAudit()) { image = new ReferenceImage(); REFERENCE_IMAGE.set(image); }
+        if (image.sites == sites.sites()) return image.view;
+        try {
+            var changed = new java.util.HashSet<SubjectId>();
+            ImmutableMapChanges.forEachIdentityChangedKey(image.sites, sites.sites(), changed::add);
+            var updates = new LinkedHashMap<SubjectId, java.util.Set<SubjectId>>();
+            Map<SubjectId, ResourceSiteLifecycle> conflicts = null;
+            for (var id : changed) {
+                var site = sites.sites().get(id);
+                updates.put(id, site == null ? java.util.Set.of() : nonterminalSubjects(site));
+                var conflict = site != null && site.phase() == ResourceSitePhase.CONFLICT ? site : null;
+                if (image.view.conflicts().get(id) != conflict) {
+                    if (conflicts == null) conflicts = new LinkedHashMap<>(image.view.conflicts());
+                    if (conflict == null) conflicts.remove(id); else conflicts.put(id, conflict);
+                }
+            }
+            var subjects = image.subjects.replaceAll(updates);
+            var nextConflicts = conflicts == null ? image.view.conflicts() : ImmutableLookupMap.copyOf(conflicts);
+            if (subjects != image.view.subjects() || nextConflicts != image.view.conflicts()) image.view = new ReferenceView(subjects, nextConflicts);
+            image.sites = sites.sites(); return image.view;
+        } catch (RuntimeException | Error invalid) { REFERENCE_IMAGE.remove(); throw invalid; }
     }
 
     /** Derived relation view for one immutable audit, not a second ownership register. */
-    static java.util.Set<SubjectId> nonterminalSubjects(ResourceSiteState sites) {
+    private static java.util.Set<SubjectId> nonterminalSubjects(ResourceSiteLifecycle lifecycle) {
         var subjects = new java.util.HashSet<SubjectId>();
-        for (var lifecycle : sites.sites().values()) {
-            if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && lifecycle.preparationWork().isPresent()) {
-                var job = lifecycle.preparationWork().orElseThrow();
-                subjects.add(job.siteId()); subjects.add(job.id());
-            }
-            if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
-                subjects.add(lifecycle.siteId());
-                for (var job : lifecycle.harvestJobs().values()) {
-                    subjects.add(job.id()); subjects.add(job.actorAccountId());
-                    subjects.add(job.depotAccountId()); subjects.add(job.outputItemId());
-                }
-            }
-            for (var lineage : lifecycle.harvestLineages().values()) {
-                if (!lineage.receiptPending()) continue;
-                subjects.add(lifecycle.siteId()); subjects.add(lineage.predecessorJobId()); subjects.add(lineage.workerId());
-                subjects.add(lineage.actorAccountId()); subjects.add(lineage.depotAccountId()); subjects.add(lineage.outputItemId());
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && lifecycle.preparationWork().isPresent()) {
+            var job = lifecycle.preparationWork().orElseThrow();
+            subjects.add(job.siteId()); subjects.add(job.id());
+        }
+        if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
+            subjects.add(lifecycle.siteId());
+            for (var job : lifecycle.harvestJobs().values()) {
+                subjects.add(job.id()); subjects.add(job.actorAccountId());
+                subjects.add(job.depotAccountId()); subjects.add(job.outputItemId());
             }
         }
-        return subjects;
+        for (var lineage : lifecycle.harvestLineages().values()) {
+            if (!lineage.receiptPending()) continue;
+            subjects.add(lifecycle.siteId()); subjects.add(lineage.predecessorJobId()); subjects.add(lineage.workerId());
+            subjects.add(lineage.actorAccountId()); subjects.add(lineage.depotAccountId()); subjects.add(lineage.outputItemId());
+        }
+        return java.util.Set.copyOf(subjects);
     }
 
     /** The terminal field disposition retains exact causal ownership without a resumable intent. */

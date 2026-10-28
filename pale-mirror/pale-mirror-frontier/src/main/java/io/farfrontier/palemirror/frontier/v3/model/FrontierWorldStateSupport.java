@@ -51,9 +51,10 @@ public final class FrontierWorldStateSupport {
     }
 
     static Set<SubjectId> structureIds(FrontierBootstrap bootstrap) {
-        Set<SubjectId> ids = new HashSet<>();
-        bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> ids.add(structure.id())));
-        return ids;
+        return declarations(bootstrap).structures().keySet();
+    }
+    static Set<SubjectId> settlementIds(FrontierBootstrap bootstrap) {
+        return declarations(bootstrap).settlements().keySet();
     }
 
     static boolean hasSettlement(FrontierBootstrap bootstrap, SubjectId settlementId) {

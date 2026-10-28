@@ -54,11 +54,17 @@ class IncrementalValidationTest {
         var before = ResourceSitePhysicalIntentStateSupport.referenceView(sites);
         assertTrue(before.subjects().contains(job.id()));
         assertEquals(job, sites.harvestJob(job.id()).orElseThrow());
+        var refreshed = sites.replace(sites.site(job.siteId()).withHarvestEquipment(job, job.equipment().transferred()));
+        assertNotEquals(sites, refreshed, "fixture advances the equipment phase without changing field references");
+        assertSame(before.subjects(), ResourceSitePhysicalIntentStateSupport.referenceView(refreshed).subjects(),
+                "an unchanged declaration does not rebuild every field's reference membership");
         var after = sites.replace(sites.site(job.siteId()).destroyed());
         assertFalse(ResourceSitePhysicalIntentStateSupport.referenceView(after).subjects().contains(job.id()));
         assertTrue(after.harvestJob(job.id()).isEmpty());
         assertEquals(job, sites.harvestJob(job.id()).orElseThrow(), "a later image cannot change an earlier immutable job directory");
         assertTrue(ResourceSitePhysicalIntentStateSupport.referenceView(sites).subjects().contains(job.id()));
+        var full = ImmutableInvariantCheck.full(() -> ResourceSitePhysicalIntentStateSupport.referenceView(sites));
+        assertEquals(before, full, "full audit reconstructs the same complete owner reference set");
     }
 
     @Test void deferredPreviewStillFailsAtPublicationAndRecoveryWhenAnExecutionRelationshipIsMissing() {
