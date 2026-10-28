@@ -3434,3 +3434,40 @@ expanded fields invalidate the first-crop camera assumption. Its64block assertio
 correctly failed; no frame or presentation acceptance. New camera is resolved from
 the actual board position within~13blocks. Retain board-scale-settlement-client
 failure. Do not extend the timeout or relax the visibility assertion.
+
+
+### Board scan fairness and durable catalogue closure (2026-10-28)
+
+cf98 retained-world deployments verified SHA512
+f37b2d9a37daa5772be07b00da15afe25a98ca412064bcd0362b2bfe97b33e9f0a02d40825bfa29437250bb946e4ec93c6c8454116539930a300b7429a1dc899.
+Scoped source/navigation/guardrails/JAR passed. Expanded scene gate129/135,6failures
+(registry diagnostic,2patrol,2graybox reloadEOF,inactive assault timeout), explicitly
+not fullgreen. Isolated samecandidate patrol4/4PASS31s; unchangedb5baseline3/4fails
+occupied-patrol49s. Remaining broader failures open; no claim allarepreexisting.
+
+Fullpack scale ingress produced one frame and continued tosettlement7, then failed
+its visible-board assertion. Actual image shows an incomplete scene/void and is
+NOT presentation acceptance despite the prior entity-based board check. Second
+visit delayed~37s and board absent after30s; retain shared-geometry-scale-client
+manifest/log/frame. Allclientsdisplays exited. Source reveals a fairness contradiction:
+any placement change reset the entire world cursor tozero. Frequent independent
+field expansion can keep laterowners frompublication. Resume by next exactowner,
+use current placement, and afterremoval choose the next owner in declared sorted
+order. Added deterministic repeated-relocation/add/remove/wrap regression; no timing
+assertion. No canonical owner/type is inferred; this is presentation iteration only.
+
+The earlier catalogue fix missed the durable journal's independent256ceiling.
+Its4096retained-claim safetybound now accommodates the current maximum2065declared
+boards. This is world metadata, no change to simultaneous entity/scene/mob admission,
+8slot/time publication budget or missing-body/foreign-identity checks.1313claim
+save/load plus idempotent append, identity mutation and duplicate recovery negatives
+pass. Scope/card/journal checks+guardrails PASS11s. Frozen release/native repeat pending.
+
+Current cf98 COLD JFR250691events/noDataLoss covers43.875240s:5.789142/s,debt5447->6095,
+owner60.42%,exact24.94%,WAL9.58%; canonical validation7.113932s and schedule allocation
+5.072218s inclusive. No geometry-composition frames in its reported method samples,
+but different evolving workload prevents aggregate source-gain claims. G stillOPEN.
+Held-classification stack discriminator now points to ServiceAccessCapabilities:
+each point evaluation traverses all production/shipment/harvest demands, repeating
+execution and inbound-capacity checks under every changed world root. Inspect exact
+family candidate membership/indexing next; no service fix implemented in thiscut.

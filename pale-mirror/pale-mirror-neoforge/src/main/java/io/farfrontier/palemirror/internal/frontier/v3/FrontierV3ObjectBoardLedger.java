@@ -15,7 +15,10 @@ import java.util.Map;
 /** Bounded durable provenance for v3 TextDisplay boards; it never grants recreation authority. */
 final class FrontierV3ObjectBoardLedger extends FrontierV3JournaledSavedData {
     private static final int FORMAT = 1;
-    private static final int MAX_BOARDS = 256;
+    // Durable world catalogue, not simultaneous loaded entities. Current validated producers
+    // declare at most2065 boards (900structures,1024sites,12seed/128added organs,1route).
+    // Publication still has its independent eight-slot/time/readiness budget.
+    private static final int MAX_BOARDS = 4096;
     private final Map<String, Claim> claims;
 
     private FrontierV3ObjectBoardLedger() { this(new LinkedHashMap<>()); }

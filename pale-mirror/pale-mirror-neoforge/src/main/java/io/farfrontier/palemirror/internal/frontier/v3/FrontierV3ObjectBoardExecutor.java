@@ -253,12 +253,23 @@ final class FrontierV3ObjectBoardExecutor {
         }
         static Cursor from(FrontierWorldState input, List<FrontierObjectBoard.Placement> baselineBoards,
                            List<FrontierObjectBoard> dynamicHiveBoards, Cursor prior) {
-            int baselineIndex = prior != null && prior.baselineBoards.equals(baselineBoards)
-                    ? prior.baselineIndex % Math.max(1, baselineBoards.size()) : 0;
+            int baselineIndex = resumeBaseline(baselineBoards, prior);
             int dynamicHiveIndex = prior != null && sameSlots(prior.dynamicHiveBoards, dynamicHiveBoards)
                     ? prior.dynamicHiveIndex % Math.max(1, dynamicHiveBoards.size()) : 0;
             return new Cursor(input, baselineBoards, dynamicHiveBoards, baselineIndex, dynamicHiveIndex,
                     prior == null || prior.baselineNext);
+        }
+        /** Slot relocation or another field's expansion cannot restart the world scan. */
+        private static int resumeBaseline(List<FrontierObjectBoard.Placement> next, Cursor prior) {
+            if (prior == null || prior.baselineBoards.isEmpty() || next.isEmpty()) return 0;
+            var owner = prior.baselineBoards.get(prior.baselineIndex % prior.baselineBoards.size()).ownerId();
+            int following = -1;
+            for (int i = 0; i < next.size(); i++) {
+                int order = next.get(i).ownerId().compareTo(owner);
+                if (order == 0) return i;
+                if (order > 0 && following == -1) following = i;
+            }
+            return following == -1 ? 0 : following;
         }
         Cursor withDynamicHiveOverlay(FrontierWorldState input, List<FrontierObjectBoard> dynamicHiveBoards) {
             int next = sameSlots(this.dynamicHiveBoards, dynamicHiveBoards) ? dynamicHiveIndex % Math.max(1, dynamicHiveBoards.size()) : 0;
