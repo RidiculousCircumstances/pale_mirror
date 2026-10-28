@@ -19,12 +19,18 @@ class MarketOfferBookTest {
         assertEquals(List.of(competitor, cheap, costly), book.offers(buyer, Optional.empty(), Set.of()).stream().map(MarketOfferBook.Pair::sell).toList());
         assertEquals(other, book.offers(buyer, Optional.empty(), Set.of()).getFirst().sell().party());
         assertEquals(Set.of(buyer), book.buyers());
+        assertFalse(book.validAt(9), "an earlier branch may include already expired quotes");
+        assertTrue(book.validAt(10)); assertTrue(book.validAt(20));
+        assertFalse(book.validAt(21), "a captured book cannot retain quotes beyond their exact expiry");
         assertEquals(Set.of(seller, other), book.sellers(buyer));
         assertTrue(book.sellers(other).isEmpty());
         assertTrue(book.offers(other, Optional.empty(), Set.of()).isEmpty());
         assertEquals(List.of(competitor), book.offers(buyer, Optional.of(other), Set.of()).stream().map(MarketOfferBook.Pair::sell).toList());
         assertTrue(book.offers(buyer, Optional.of(party("unknown")), Set.of()).isEmpty());
         assertTrue(book.offers(buyer, Optional.empty(), Set.of("minecraft:bread")).isEmpty());
+        var expired = new MarketOfferBook(List.of(costly, bid, cheap, competitor), 21);
+        assertTrue(expired.offers(buyer, Optional.of(seller), Set.of()).isEmpty());
+        assertTrue(expired.validAt(Long.MAX_VALUE), "an unchanged empty book cannot acquire future supply by waiting");
     }
     @Test void onePublicAskSharesItsRemainderAcrossManyBuyersWithoutDuplicatedSupply() {
         var seller = party("seller"); var ask = order("shared", seller, GoodsTradeOrder.Side.SELL, 2, 20);

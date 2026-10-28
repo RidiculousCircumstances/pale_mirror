@@ -4930,3 +4930,39 @@ reclassification/player-edit and fuel checks passed65checks59s+guardrails before
 the final direct field lookup. Existing field equipment fence/abort/wear checks
 join the frozen union before deployment. No schema/business/backward-compatibility
 path changed. Target20 and HOT/five-footprint acceptance remain open.
+
+
+### Reuse the exact dated book and localize market/population notifications
+
+6b55c2ae0 frozen70checks56s+guardrails/JAR/package and both retained deployments
+verified. Ordinary16cut observation304.310037s advanced264499→268088=11.793893ticks/s,
+debt474→2972. All5sampleplans renewed. New terminal harvest35-field-12 appeared.
+Town7 retained accepted cobblestone quantity rose0→4: this proves a new accepted
+trade portion involving town7 (diagnostic counts both purchases and sales), not a
+claim of a complete returning caravan. Town68bread8→5,hungry13→10; all5samples had
+zero starving at end, not a census of100towns. Target20 remains open.
+
+Current saved lookup attribution also identifies MarketOfferBook construction
+under reserveSelected and global GoodsMarketInterest regrouping for one quote.
+A book's membership/order changes only when its immutable orders change or its
+next live quote expires. Retain one exact book over that validity interval, with
+inclusive expiry matching the original predicate; earlier-time branches rebuild.
+No arbitrary TTL, stale consent, state mutation or new market limit. Selected-seller
+queries use a seller/commodity sublist in the exact existing global price/time/ID
+order. Unknown sellers and fully filled/expired orders retain their empty results.
+Commodity/side interests use the shared current-row inverse, then original maximum
+party expiry and mutual-knowledge checks. They no longer regroup unrelated goods.
+
+Source review found the economic population notifier independently scanned every
+nutrition row after one person's integration, although shared exact map deltas
+already exist. Use changed keys for need/schedule updates and changed actor rows
+under the SAME tombstone guard for life changes. Same-status satiety integration,
+removal handling and exact home/NEED/CAPACITY outcomes stay unchanged.
+
+Existing book case checks exact expiry boundaries, earlier branches and expired
+seller results. A registered-party case checks duplicate interest expiries,
+withdrawal, undated invalidations and predecessor restoration. Existing economic
+publication coverage adds actual individual hunger integration/consumption, only
+home invalidation and codec preservation. Connected market, advice, publication,
+autonomous trade and need checks passed49checks61s+guardrails. Frozen package and
+both deployments follow. No schema or backward-compatibility path was introduced.

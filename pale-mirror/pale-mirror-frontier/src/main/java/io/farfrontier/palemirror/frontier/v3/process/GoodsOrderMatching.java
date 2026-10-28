@@ -6,12 +6,18 @@ import java.util.*;
 
 /** Matches explicit mutual consent. It cannot invent targets, change limits or read unknown stocks. */
 final class GoodsOrderMatching {
-    private static final ImmutableInputView<Map<Long, io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook>> BOOKS = new ImmutableInputView<>();
+    private static final class Book {
+        private io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook current;
+        io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook at(Collection<GoodsTradeOrder> orders, long now) {
+            if (current == null || !current.validAt(now))
+                current = new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(orders, now);
+            return current;
+        }
+    }
+    private static final ImmutableInputView<Book> BOOKS = new ImmutableInputView<>();
     private static io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook book(FrontierWorldState state, long now) {
         var orders = state.companies().goodsTrade().orders();
-        var times = BOOKS.get(List.of(orders), HashMap::new);
-        if (times.size() >= 8 && !times.containsKey(now)) times.clear();
-        return times.computeIfAbsent(now, ignored -> new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(orders.values(), now));
+        return BOOKS.get(List.of(orders), Book::new).at(orders.values(), now);
     }
     static List<GoodsParticipant> sellers(FrontierWorldState state, GoodsParticipant buyer, long now) {
         var participants = state.companies().goodsTrade().participants().participants();

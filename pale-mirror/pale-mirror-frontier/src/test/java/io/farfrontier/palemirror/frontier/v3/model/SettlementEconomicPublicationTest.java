@@ -80,6 +80,27 @@ class SettlementEconomicPublicationTest {
         assertTrue(stepped.companies().goodsTrade().participants().economicState(new SubjectId("settlement:2")).accepted().isEmpty(),
                 "reading one participant cannot recursively plan its neighbour");
     }
+    @Test void oneResidentsHungerThresholdInvalidatesOnlyItsOwnPlanAndRecoveryPreservesTheCause() {
+        var state = AcceptedEconomyFixture.publish(initial(), HOME, 10);
+        var actor = state.humanPopulation().residentsIn(HOME).getFirst();
+        var rules = state.bootstrap().ruleset().residentLife();
+        long onset = state.humanPopulation().nutrition(actor.id()).nextThresholdTick(rules,
+                actor.characteristics().effectiveMetabolismPermille(0));
+        var sameStatus = state.withHumanPopulation(state.humanPopulation().accrueHunger(actor.id(), 1, rules));
+        assertSame(state.companies().goodsTrade().participants().planning(), sameStatus.companies().goodsTrade().participants().planning(),
+                "ordinary satiety integration is not a new economic need threshold");
+        var changed = sameStatus.withHumanPopulation(sameStatus.humanPopulation().accrueHunger(actor.id(), onset, rules));
+        var reasons = changed.companies().goodsTrade().participants().economicState(HOME).affected();
+        assertEquals(Set.of(SettlementFoodPolicy.BREAD), reasons.get(SettlementEconomicPlanningState.Change.NEED));
+        assertEquals(state.companies().goodsTrade().participants().economicState(new SubjectId("settlement:2")),
+                changed.companies().goodsTrade().participants().economicState(new SubjectId("settlement:2")));
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(changed));
+        assertEquals(reasons, recovered.companies().goodsTrade().participants().economicState(HOME).affected());
+        var restored = recovered.withHumanPopulation(recovered.humanPopulation().consumeResidentBread(actor.id(), onset, rules));
+        assertTrue(restored.companies().goodsTrade().participants().economicState(HOME).inputRevision()
+                > changed.companies().goodsTrade().participants().economicState(HOME).inputRevision());
+    }
+
     @Test void budgetedSoilPreparationKeepsThePlanButSoilDamageRequiresImmediateReview() {
         var state = CultivationPlanningTest.prepared();
         var site = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(HOME)).findFirst().orElseThrow();

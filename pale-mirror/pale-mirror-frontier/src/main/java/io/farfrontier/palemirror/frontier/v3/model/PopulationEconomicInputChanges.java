@@ -10,23 +10,26 @@ final class PopulationEconomicInputChanges implements EconomicInputChangePort {
         // Physical death owns the fenced life boundary. Ordinary movement does
         // not change it and therefore never scans the resident population here.
         if (before.fencedRecovery().tombstones() != after.fencedRecovery().tombstones())
-            for (var resident : b.residents().values()) {
-                var old = before.actorLocations().get(resident.id()); var next = after.actorLocations().get(resident.id());
+            ImmutableMapChanges.forEachIdentityChangedKey(before.actorLocations(), after.actorLocations(), id -> {
+                var resident = b.residents().get(id); if (resident == null) return;
+                var old = before.actorLocations().get(id); var next = after.actorLocations().get(id);
                 if (old != null && next != null && old.condition().status() != next.condition().status())
                     sink.changed(resident.settlementId(), CAPACITY, Set.of());
-            }
+            });
         EconomicInputChangePort.difference(a.residents(), b.residents(), (old, next) -> {
             if (old != null) sink.changed(old.settlementId(), CAPACITY, Set.of());
             if (next != null) sink.changed(next.settlementId(), CAPACITY, Set.of());
         });
-        if (a.nutrition() != b.nutrition()) for (var entry : b.nutrition().entrySet()) {
-            var prior = a.nutrition().get(entry.getKey()); var next = entry.getValue();
-            if (prior != null && prior.status() == next.status()) continue;
-            var resident = b.residents().get(entry.getKey());
-            sink.resource(resident.settlementId(), NEED, SettlementFoodPolicy.BREAD);
-        }
-        if (a.schedules() != b.schedules()) for (var entry : b.schedules().entrySet())
-            if (!entry.getValue().equals(a.schedules().get(entry.getKey()))) sink.changed(entry.getKey(), CAPACITY, Set.of());
+        ImmutableMapChanges.forEachIdentityChangedKey(a.nutrition(), b.nutrition(), id -> {
+            var next = b.nutrition().get(id); if (next == null) return;
+            var prior = a.nutrition().get(id);
+            if (prior != null && prior.status() == next.status()) return;
+            sink.resource(b.residents().get(id).settlementId(), NEED, SettlementFoodPolicy.BREAD);
+        });
+        ImmutableMapChanges.forEachIdentityChangedKey(a.schedules(), b.schedules(), id -> {
+            var next = b.schedules().get(id);
+            if (next != null && !next.equals(a.schedules().get(id))) sink.changed(id, CAPACITY, Set.of());
+        });
         EconomicInputChangePort.difference(before.transportFleet().assets(), after.transportFleet().assets(), (old, next) -> {
             if (old != null) sink.changed(old.homeSettlementId(), COMMITMENT, Set.of());
             if (next != null) sink.changed(next.homeSettlementId(), COMMITMENT, Set.of());
