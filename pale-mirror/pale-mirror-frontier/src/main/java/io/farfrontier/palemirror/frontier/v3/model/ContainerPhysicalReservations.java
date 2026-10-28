@@ -14,16 +14,26 @@ final class ContainerPhysicalReservations {
             io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,
             io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest,
             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> equipment) { }
+    private static <I> Function<Owners, List<ContainerSlotClaim>> port(
+            Function<Owners, I> inputs, Function<I, List<ContainerSlotClaim>> read) {
+        var view = new ImmutableInputView<List<ContainerSlotClaim>>();
+        return owners -> {
+            var source = inputs.apply(owners);
+            return view.get(List.of(source), () -> List.copyOf(read.apply(source)));
+        };
+    }
     private static final List<Function<Owners, List<ContainerSlotClaim>>> PORTS = List.of(
-            owners -> HarvestContainerReservations.claims(owners.sites()),
-            owners -> ShipmentPhysicalAuthority.slotClaims(owners.shipments()),
-            owners -> StationWorkPhysicalAuthority.slotClaims(owners.production()),
-            owners -> ExtractionPhysicalAuthority.slotClaims(owners.extraction()),
-            owners -> ForestryPhysicalAuthority.slotClaims(owners.forest()),
-            owners -> EquipmentPhysicalAuthority.slotClaims(owners.equipment()));
+            port(Owners::sites, HarvestContainerReservations::claims),
+            port(Owners::shipments, ShipmentPhysicalAuthority::slotClaims),
+            port(Owners::production, StationWorkPhysicalAuthority::slotClaims),
+            port(Owners::extraction, ExtractionPhysicalAuthority::slotClaims),
+            port(Owners::forest, ForestryPhysicalAuthority::slotClaims),
+            port(Owners::equipment, EquipmentPhysicalAuthority::slotClaims));
     private static List<ContainerSlotClaim> claims(ExactInventory inventory, Owners owners) {
-        return CLAIMS.get(List.of(inventory.containers(), owners.sites(), owners.production(), owners.shipments(), owners.extraction(), owners.forest(), owners.equipment()), () -> {
-            var claims = PORTS.stream().flatMap(port -> port.apply(owners).stream()).toList();
+        var contributions = PORTS.stream().map(port -> port.apply(owners)).toList();
+        var inputs = new ArrayList<Object>(contributions); inputs.add(inventory.containers());
+        return CLAIMS.get(inputs, () -> {
+            var claims = contributions.stream().flatMap(List::stream).toList();
             requireExclusive(inventory, claims);
             return claims;
         });

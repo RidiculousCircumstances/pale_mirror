@@ -49,6 +49,29 @@ class ImmutableLookupMapTest {
         assertEquals(java.util.Set.of(target), ((ImmutableMapImage<CountedKey, Integer>) updated)
                 .changedKeysFrom(initial).orElseThrow());
     }
+    @Test void batchReplacementsPreserveOrderBranchesAndRejectMembershipChangesAtomically() {
+        var rows = new LinkedHashMap<String, Integer>();
+        for (int i = 0; i < 512; i++) rows.put("row:" + i, i);
+        rows.put("Aa", 1); rows.put("BB", 2);
+        var before = ImmutableLookupMap.copyOf(rows);
+        var replacements = new LinkedHashMap<String, Integer>();
+        replacements.put("Aa", 9); replacements.put("BB", 10); replacements.put("row:77", -1);
+        var after = ImmutableLookupMap.replacing(before, replacements);
+        rows.putAll(replacements);
+        assertEquals(rows, after);
+        assertEquals(List.copyOf(before.keySet()), List.copyOf(after.keySet()));
+        assertEquals(java.util.Set.copyOf(replacements.keySet()),
+                ((ImmutableMapImage<String, Integer>) after).changedKeysFrom(before).orElseThrow());
+        replacements.clear(); assertEquals(9, after.get("Aa")); assertEquals(1, before.get("Aa"));
+        assertThrows(IllegalArgumentException.class, () -> ImmutableLookupMap.replacing(after, Map.of("Aa", 11, "absent", 3)));
+        assertEquals(9, after.get("Aa")); assertFalse(after.containsKey("absent"));
+        assertThrows(UnsupportedOperationException.class, () -> after.entrySet().iterator().next().setValue(0));
+        var branch = ImmutableLookupMap.replacing(before, Map.of("Aa", 7));
+        assertEquals(7, branch.get("Aa")); assertEquals(9, after.get("Aa"));
+        var small = ImmutableLookupMap.copyOf(Map.of("Aa", 1, "BB", 2));
+        assertThrows(IllegalArgumentException.class, () -> ImmutableLookupMap.replacing(small, Map.of("absent", 4)));
+        assertEquals(Map.of("Aa", 4, "BB", 2), ImmutableLookupMap.replacing(small, Map.of("Aa", 4)));
+    }
     @Test void largeRegistryEditsMatchOrderedMapsAcrossCollisionsMembershipAndBranches() {
         var expected = new LinkedHashMap<String, Integer>();
         for (int i = 0; i < 512; i++) expected.put("key:" + i, i);

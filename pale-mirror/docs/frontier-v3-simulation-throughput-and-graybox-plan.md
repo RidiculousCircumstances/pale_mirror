@@ -3886,3 +3886,26 @@ its value and retained-input images. No owner/type/invariant or canonical schema
 changes. Functional branch/mutability checks and a connected producer→group consumer
 hash-work discriminator pass31s together with actor/meal/field/geometry checks.
 Frozen package and runtime effect follow. G staysOPEN.
+
+
+### Sparse derived replacement and addressed work lookup
+
+The 154090bfe ordinary trace advanced 42316→42693 in 44.825812s (8.410333/s),
+with debt 4865→5389; owner turns consumed 61.18%, exact preparation 25.59%,
+WAL 9.18%. Sustained 20/s is still unproven and G remains open. Its longer
+ordinary observation also grew debt; COLD meals/harvest made terminal progress.
+
+The connected source review found that a changed derived row still cloned its
+whole output map and discarded shared-page lineage. The common immutable map
+now supports value-only batch replacement, copying each affected page once and
+preserving exact key order. Registry views accumulate row changes before publishing
+one immutable result; bulk ingress and membership changes retain their prior
+iteration semantics. No canonical schema or ownership rule changes.
+
+Profiled field death-resource reads now resolve the explicit execution's job through
+the existing exact nested registry; duplicate/foreign work still fails closed.
+Station work goals use the existing declared station directory and still reject a
+foreign facility. Physical capacity ports retain independent immutable contributions,
+so field progress does not rerun unchanged production/shipment/extraction/forest/
+equipment sources. Combined slot exclusivity and current inventory backing checks
+remain mandatory. These are source-cost corrections, not an accepted runtime gain.

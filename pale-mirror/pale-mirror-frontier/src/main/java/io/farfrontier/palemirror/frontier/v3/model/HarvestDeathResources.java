@@ -14,10 +14,8 @@ public final class HarvestDeathResources {
                 .or(() -> authority.suspended().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST));
     }
     public static Optional<ResourceSiteHarvestJob> work(FrontierWorldState state, SubjectId actor) {
-        return execution(state, actor).map(id -> state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJob(id.activityOwnerId()).stream())
+        return execution(state, actor).map(id -> state.resourceSites().harvestJob(id.activityOwnerId())
                 .filter(job -> job.workerId().equals(actor))
-                .reduce((left, right) -> { throw new IllegalArgumentException("duplicate retained harvest owner"); })
                 .orElseThrow(() -> new IllegalArgumentException("field execution lost its exact retained job")));
     }
     public static Optional<SubjectId> pendingOwner(FrontierWorldState state, SubjectId actor) {

@@ -85,8 +85,9 @@ final class ImmutableRegistryView<K, I, V> {
         private final Map<K, I> inputs;
         private final Map<K, V> previous;
         private final boolean captureInputs;
-        private Map<K, V> next;
-        private Map<K, I> nextInputs;
+        private final Map<K, V> replacements = new HashMap<>();
+        private final Map<K, I> inputReplacements = new HashMap<>();
+        private final Set<K> removals = new HashSet<>();
         private Update(Map<K, I> inputs, Map<K, V> previous, boolean captureInputs) {
             this.inputs = inputs; this.previous = previous; this.captureInputs = captureInputs;
         }
@@ -95,28 +96,22 @@ final class ImmutableRegistryView<K, I, V> {
             var prior = previous.get(key);
             if (prior != null && unchanged.test(inputs.get(key), input)) return;
             var value = Objects.requireNonNull(compute.apply(key, input));
-            if (captureInputs && inputs.get(key) != input) {
-                if (nextInputs == null) nextInputs = new HashMap<>(inputs);
-                nextInputs.put(key, input);
-            }
-            if (prior == value) return;
-            if (next == null) next = new HashMap<>(previous);
-            next.put(key, value);
+            if (captureInputs && inputs.get(key) != input) inputReplacements.put(key, input);
+            if (prior != value) replacements.put(key, value);
         }
         private void remove(K key) {
-            if (!previous.containsKey(key)) return;
-            if (captureInputs) {
-                if (nextInputs == null) nextInputs = new HashMap<>(inputs);
-                nextInputs.remove(key);
-            }
-            if (next == null) next = new HashMap<>(previous);
-            next.remove(key);
+            if (previous.containsKey(key)) removals.add(key);
         }
-        private Map<K, V> values() {
-            return next == null ? previous : ImmutableLookupMap.copyOf(next);
+        private <T> Map<K, T> finish(Map<K, T> source, Map<K, T> changed) {
+            if (removals.isEmpty() && changed.keySet().stream().allMatch(source::containsKey))
+                return ImmutableLookupMap.replacing(source, changed);
+            // Membership changes retain the previous HashMap iteration semantics.
+            // Bulk ingress is one copy, never a chain of thousands of insertions.
+            var next = new HashMap<>(source);
+            removals.forEach(next::remove); next.putAll(changed);
+            return ImmutableLookupMap.copyOf(next);
         }
-        private Map<K, I> basis() {
-            return nextInputs == null ? inputs : ImmutableLookupMap.copyOf(nextInputs);
-        }
+        private Map<K, V> values() { return finish(previous, replacements); }
+        private Map<K, I> basis() { return finish(inputs, inputReplacements); }
     }
 }

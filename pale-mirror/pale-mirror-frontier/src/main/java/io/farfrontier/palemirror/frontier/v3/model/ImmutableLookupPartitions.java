@@ -43,6 +43,22 @@ final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
         }
         return new ImmutableLookupPartitions<>(lineage, next, nextOrder);
     }
+    /** Replaces declared existing values in one draft per touched page. Membership
+     * and producer order stay exact; no predecessor or mutable draft escapes. */
+    ImmutableLookupPartitions<K, V> replacing(Map<K, V> replacements) {
+        var drafts = new HashMap<Integer, Map<K, V>>();
+        replacements.forEach((key, value) -> {
+            Objects.requireNonNull(value);
+            int index = page(key); var original = pages.get(index);
+            if (!original.containsKey(key)) throw new IllegalArgumentException("replacement has no existing map key");
+            if (original.get(key) != value)
+                drafts.computeIfAbsent(index, ignored -> new HashMap<>(original)).put(key, value);
+        });
+        if (drafts.isEmpty()) return this;
+        var next = new ArrayList<>(pages);
+        drafts.forEach((index, values) -> next.set(index, Collections.unmodifiableMap(values)));
+        return new ImmutableLookupPartitions<>(lineage, next, order);
+    }
     /** Same-lineage branches retain exact page identities without retaining parents.
      * An unrelated immutable map still requires ordinary complete comparison. */
     Optional<Set<K>> changedKeysFrom(ImmutableLookupPartitions<?, ?> previous) {

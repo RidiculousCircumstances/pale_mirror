@@ -22,6 +22,15 @@ class ImmutableGroupViewTest {
         hashes.set(0);
         assertSame(first, consumer.keys(epoch, producer.project(epoch, input, (id, row) -> row), Row::points, "target"));
         assertTrue(hashes.get() < source.size() / 4, "an unchanged derived registry must not rehash the whole producer catalogue");
+        var changedKey = source.keySet().iterator().next();
+        var nextRow = new Row(Set.of("target"), 1);
+        var changedInput = ImmutableLookupMap.withEntry(input, changedKey, nextRow);
+        hashes.set(0);
+        var changedSnapshot = producer.project(epoch, changedInput, (id, row) -> row);
+        assertSame(first, consumer.keys(epoch, changedSnapshot, Row::points, "target"));
+        assertSame(nextRow, changedSnapshot.get(changedKey));
+        assertTrue(hashes.get() < source.size() / 4, "one projected row must not copy or rehash every registry entry");
+        assertSame(snapshot.get(changedKey), input.get(changedKey), "the retained predecessor stays immutable");
     }
 
     @Test void changedProgressKeepsMembershipButCurrentRowsMovesRemovalsBranchesAndOrderRemainExact() {

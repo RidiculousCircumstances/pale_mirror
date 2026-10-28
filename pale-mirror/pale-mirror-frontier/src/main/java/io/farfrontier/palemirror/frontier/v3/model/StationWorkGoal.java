@@ -25,11 +25,10 @@ public record StationWorkGoal(SubjectId jobId, SubjectId workerId, StationWorkSt
                 || work.phase() == StationWorkState.Phase.DEPOT_DELIVERY) {
             target = StationWorkStorage.access(state, job).interactionStation(state);
         } else {
-            ProductionStationSpec machine = state.inventory().containers().values().stream()
-                    .flatMap(container -> container.productionStation().stream())
-                    .filter(station -> station.id().equals(work.stationId()) && station.facilityId().equals(job.facilityId()))
-                    .reduce((left, right) -> { throw new IllegalArgumentException("bakery goal station is ambiguous"); })
-                    .orElseThrow(() -> new IllegalArgumentException("bakery goal has no current declared station"));
+            ProductionStationSpec machine = ProductionStationDirectory.require(state.inventory(), work.stationId())
+                    .productionStation().orElseThrow();
+            if (!machine.facilityId().equals(job.facilityId()))
+                throw new IllegalArgumentException("bakery goal station belongs to a foreign facility");
             target = machine.workerStation();
         }
         return new StationWorkGoal(job.id(), job.workerId(), work.phase(), target, work.goalOrdinal());

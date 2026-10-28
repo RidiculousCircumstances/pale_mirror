@@ -49,6 +49,28 @@ public final class ImmutableLookupMap<K, V> extends AbstractMap<K, V> implements
         }
         readOnly = Collections.unmodifiableMap(values); change = capture(source, key);
     }
+    private ImmutableLookupMap(Map<K, V> source, Map<K, V> replacements) {
+        var basis = storage(source);
+        if (basis instanceof ImmutableLookupPartitions<?, ?> partitions) {
+            @SuppressWarnings("unchecked") var typed = (ImmutableLookupPartitions<K, V>) partitions;
+            values = typed.replacing(replacements);
+        } else {
+            var copy = snapshot(source);
+            replacements.forEach((key, value) -> {
+                if (!copy.containsKey(Objects.requireNonNull(key)))
+                    throw new IllegalArgumentException("replacement has no existing map key");
+                copy.put(key, Objects.requireNonNull(value));
+            });
+            values = copy;
+        }
+        readOnly = Collections.unmodifiableMap(values);
+        change = source instanceof ImmutableMapImage<?, ?>
+                ? Optional.of(new DirectChange<>(new WeakReference<>(source), Set.copyOf(replacements.keySet()))) : Optional.empty();
+    }
+    static <K, V> Map<K, V> replacing(Map<K, V> source, Map<K, V> replacements) {
+        Objects.requireNonNull(source); Objects.requireNonNull(replacements);
+        return replacements.isEmpty() ? source : new ImmutableLookupMap<>(source, replacements);
+    }
     private static Map<?, ?> storage(Map<?, ?> source) {
         // These closed representations already own defensive immutable storage;
         // the validation marker is not a reason to clone its entire backing map.
