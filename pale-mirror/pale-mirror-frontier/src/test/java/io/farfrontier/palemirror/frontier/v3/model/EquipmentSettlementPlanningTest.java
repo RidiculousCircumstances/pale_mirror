@@ -77,6 +77,8 @@ class EquipmentSettlementPlanningTest {
             if (item.economicOwnerId().equals(home.id()) && state.bootstrap().ruleset().tools().find(item.itemKind()).isPresent())
                 inventory = inventory.moveObservedItem(item.id(), item.custody(), player);
         state = state.withInventory(inventory);
+        assertTrue(EquipmentProductionPlanning.ready(state, home.id(), 300).isEmpty(),
+                "a future equipment requirement is not executable work without its material bundle");
         var depot = FrontierWorldState.depotId(home.id());
         var source = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElseThrow().id();
         var material = new SubjectId("lot:equipment-plan-stone"); var staging = new SubjectId("custody:equipment-plan-stone");

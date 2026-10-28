@@ -83,8 +83,24 @@ public final class EquipmentProductionPlanning {
     /** An immediate equipment shortage may use an executable alternative instead of waiting on theoretical imports. */
     private static boolean materialAvailable(FrontierWorldState state, SubjectId home, ProductionRecipe recipe) {
         return AutomaticStationProduction.stations(state, home, recipe).stream().anyMatch(record ->
-                ProductionStationProcessing.canStart(state, record.productionStation().orElseThrow().id(), recipe.id(), recipe.inputUnitsPerBatch())
-                && ProductionMaterialSupply.select(state, home, record.productionStation().orElseThrow(), recipe, 1).isPresent());
+                executableInput(state, home, record.productionStation().orElseThrow(), recipe).isPresent());
+    }
+    private static Optional<ProductionMaterialSupply.Bundle> executableInput(FrontierWorldState state, SubjectId home,
+            ProductionStationSpec station, ProductionRecipe recipe) {
+        return ProductionStationProcessing.canStart(state, station.id(), recipe.id(), recipe.inputUnitsPerBatch())
+                ? ProductionMaterialSupply.select(state, home, station, recipe, 1) : Optional.empty();
+    }
+    /** A necessary current-work condition, not a replacement for make-or-buy policy.
+     * Forecast requests still consider obtainable future inputs at occupied stations. */
+    private static boolean canAttemptCurrentWork(FrontierWorldState state, SubjectId home) {
+        var tools = state.bootstrap().ruleset().tools();
+        return state.bootstrap().ruleset().production().recipes().stream()
+                .filter(recipe -> tools.find(recipe.product().itemKind()).isPresent())
+                .anyMatch(recipe -> AutomaticStationProduction.stations(state, home, recipe).stream().anyMatch(record -> {
+                    var station = record.productionStation().orElseThrow();
+                    return ProductionFacilityReservations.available(state.productionJobs(), station.facilityId())
+                            && executableInput(state, home, station, recipe).isPresent();
+                }));
     }
     public record Planned(Request request, int operations) { }
     public record Purchase(String pool, String itemKind, int quantity) { }
@@ -166,16 +182,18 @@ public final class EquipmentProductionPlanning {
     }
     /** Stock-only availability; route calculations belong to exact order admission. */
     public static Optional<Ready> ready(FrontierWorldState state, SubjectId home, long tick) {
+        // An empty or occupied station cannot start a worker now. Do not build
+        // the complete market acquisition portfolio merely to rediscover that.
+        if (!canAttemptCurrentWork(state, home)) return Optional.empty();
         for (var plan : planned(state, home, tick)) {
             var request = plan.request();
             var recipe = request.recipe();
             for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
                 var station = record.productionStation().orElseThrow();
-                if (!ProductionFacilityReservations.available(state.productionJobs(), station.facilityId())
-                        || !ProductionStationProcessing.canStart(state, station.id(), recipe.id(), recipe.inputUnitsPerBatch())) continue;
+                if (!ProductionFacilityReservations.available(state.productionJobs(), station.facilityId())) continue;
                 var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
                         .filter(value -> value.id().equals(station.facilityId())).findFirst().orElseThrow();
-                var selected = ProductionMaterialSupply.select(state, home, station, recipe, 1);
+                var selected = executableInput(state, home, station, recipe);
                 if (selected.isPresent() && ProductionOutputCapacity.selectRecipeDestination(state, ProductionRights.publicService(home), recipe,
                         recipe.inputUnitsPerBatch(), selected.orElseThrow().sources().getFirst().containerId(),
                         SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach(), request.maintenance()).isPresent())

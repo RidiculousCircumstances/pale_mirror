@@ -2988,3 +2988,28 @@ provisions/procurement and multi-input station checks plus guardrails PASS42s;
 final changed ground/actor negatives PASS10s. Changed branches, removed drops,
 foreign title and retained predecessor sources remain isolated. Clean frozen
 release/deploy/native effect pending. G remainsOPEN/FAILED.
+
+### Current equipment readiness precedes global sourcing (2026-10-28)
+
+57926bf95 clean release PASS42s and both retained deployments verified
+(deploy-{scale311,r279}-custody-query). Main follow-up1003194/rev2124875/statusok,
+debt0. Native ordinary100230833events/noDataLoss44.766530s:5.204781ticks/s,
+debt1008→1672 STILLFAILED. Owner50.50%,exact34.80%,WAL7.74%;
+validation9.698898s. Local hauling still costs1.392720s exact preparation;
+these evolving loads cannot establish aggregate speedup.
+
+The same recording attributes138exact-preparation CPU samples to equipment ready(),
+including99through production staffing. Its implementation calculated the full
+make-or-buy portfolio before checking current station/material feasibility.
+EquipmentProductionPlanning now first tests that at least one declared equipment
+recipe has a vacant eligible facility and an actually selectable input bundle.
+Only then does it run the unchanged acquisition/ranking policy and exact output/
+maintenance admission. One shared executableInput helper supplies the same current
+material condition in readiness and existing material-availability reads.
+Future requests/acquisition/reserve valuation still consider absent or imported
+materials and occupied stations; the early gate applies only to current ready work.
+No changed prices, claims, reservations, priorities or fixed resources.
+
+Equipment planning (absent materials then supplied order), actual repair/manufacture/
+food interruption/restart, management, labour, procurement and guardrails PASS25s.
+Clean release/deploy/native effect pending. G remainsOPEN/FAILED.
