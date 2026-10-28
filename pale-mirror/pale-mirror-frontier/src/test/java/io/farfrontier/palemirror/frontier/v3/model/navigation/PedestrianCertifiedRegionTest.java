@@ -58,6 +58,87 @@ class PedestrianCertifiedRegionTest {
         assertEquals(evictions, cache.diagnostic().evictions(), "plane certificates cannot evict a graph even when the cache is full");
         assertEquals(1, firstColumn.get(), "completed graph pressure cannot erase unfinished work");
     }
+    @Test void reusedLayeredGraphSurvivesAOneUseSurveyWithoutPinningEveryNewGraph() {
+        var revision = PedestrianGeometryRevision.initial();
+        PedestrianRouteGeometry geometry = new PedestrianRouteGeometry() {
+            public Object version() { return revision; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(revision); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 128_000, 16); }
+            public SurfaceAnchor supportAt(int x, int z) { return x % 16 == 0 && z == 0 ? SurfaceAnchor.at(x, 63, z) : null; }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+        };
+        var cache = new PedestrianRegionCache(); var local = new PedestrianRegion.Tile(0, 0);
+        var graph = cache.region(geometry, local, 100_000).region(); assertNotNull(graph);
+        assertSame(graph, cache.region(geometry, local, 1).region(), "a second calculation demonstrates actual reuse");
+        for (int x = 1; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 100_000).region());
+        assertTrue(cache.diagnostic().evictions() > 0);
+        assertSame(graph, cache.region(geometry, local, 1).region(),
+                "one-use distant surveys must not evict a proven reusable local graph");
+        assertTrue(cache.diagnostic().retainedEntries() <= 2048);
+        var changed = new PedestrianGeometryRevision(revision.scope(), revision.geometryScope(), revision.baseline(),
+                Map.of(new PedestrianGeometryRevision.Region(0, 0), new Object()));
+        PedestrianRouteGeometry blocked = new PedestrianRouteGeometry() {
+            public Object version() { return changed; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(changed); }
+            public WorldBounds bounds() { return geometry.bounds(); }
+            public SurfaceAnchor supportAt(int x, int z) { return geometry.supportAt(x, z); }
+            public boolean blocked(SurfaceAnchor surface) { return true; }
+        };
+        var denied = cache.region(blocked, local, 100_000).region(); assertNotNull(denied);
+        assertEquals(0, denied.size(), "retention grants no reuse under changed permissions");
+        assertSame(graph, cache.region(geometry, local, 1).region());
+        // Reuse is bounded, not a pin: newer genuinely reused geography can
+        // demote an older graph, and another survey eventually evicts it.
+        for (int x = 2201; x <= 3300; x++) {
+            var tile = new PedestrianRegion.Tile(x, 0);
+            var next = cache.region(geometry, tile, 100_000).region(); assertNotNull(next);
+            assertSame(next, cache.region(geometry, tile, 1).region());
+        }
+        for (int x = 3301; x <= 5500; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 100_000).region());
+        assertNull(cache.region(geometry, local, 1).region(), "old reuse does not permanently pin a graph");
+        var retention = cache.retentionDiagnostic();
+        assertTrue(retention.get("entries") <= 2048); assertTrue(retention.get("reservedSurfaceSlots") <= 2048L * 256);
+        cache.clear(); assertEquals(0, cache.retentionDiagnostic().get("reservedSurfaceSlots"));
+    }
+    @Test void retiredGeometryScopesReleaseEveryRetentionQueue() {
+        for (boolean versioned : List.of(false, true)) {
+            var cache = new PedestrianRegionCache(); var tile = new PedestrianRegion.Tile(0, 0);
+            var views = new ArrayList<PedestrianRouteGeometry>();
+            for (int i = 0; i < 65; i++) {
+                var revision = PedestrianGeometryRevision.initial();
+                var geometry = new PedestrianRouteGeometry() {
+                    public Object version() { return revision; }
+                    public Optional<PedestrianGeometryRevision> regionalRevision() { return versioned ? Optional.of(revision) : Optional.empty(); }
+                    public WorldBounds bounds() { return new WorldBounds(0, 0, 16, 16); }
+                    public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+                    public boolean blocked(SurfaceAnchor surface) { return false; }
+                };
+                views.add(geometry);
+                var built = cache.region(geometry, tile, 100_000).region(); assertNotNull(built);
+                assertSame(built, cache.region(geometry, tile, 1).region());
+            }
+            assertEquals(versioned ? 64 : 1, cache.diagnostic().retainedEntries());
+            assertEquals(cache.diagnostic().retainedEntries() * 256,
+                    cache.retentionDiagnostic().get("reservedSurfaceSlots"));
+            assertNull(cache.region(views.getFirst(), tile, 1).region(), "retired scope cannot supply an old graph");
+            assertNotNull(cache.region(views.getFirst(), tile, 100_000).region());
+            cache.clear(); assertEquals(0, cache.retentionDiagnostic().get("entries"));
+            assertEquals(0, cache.retentionDiagnostic().get("builders"));
+        }
+    }
+    @Test void clearedWorkerCannotRepublishDetachedRetention() {
+        var cache = new PedestrianRegionCache(); var tile = new PedestrianRegion.Tile(0, 0);
+        var geometry = plane(false, new AtomicInteger()); var cleared = new java.util.concurrent.atomic.AtomicBoolean();
+        var detached = cache.region(geometry, tile, 100_000, () -> {
+            if (cleared.compareAndSet(false, true)) cache.clear();
+            return true;
+        }).region();
+        assertNotNull(detached, "an already admitted worker can finish its immutable private result");
+        assertEquals(0, cache.retentionDiagnostic().get("entries"));
+        assertEquals(0, cache.retentionDiagnostic().get("reservedSurfaceSlots"));
+        var current = cache.region(geometry, tile, 100_000).region(); assertNotNull(current); assertNotSame(detached, current);
+        assertSame(current, cache.region(geometry, tile, 1).region());
+    }
     private static PedestrianRouteGeometry plane(boolean certified, AtomicInteger reads) {
         return new PedestrianRouteGeometry() {
             public WorldBounds bounds() { return new WorldBounds(-32, -32, 128, 128); }

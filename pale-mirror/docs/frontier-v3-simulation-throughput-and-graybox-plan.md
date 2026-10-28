@@ -4682,3 +4682,42 @@ question for the next deployed build, not a second observability mechanism.
 
 Region retention/revision/eviction focus PASS33s+guardrails; frozen relevant union
 and both retained world deployments follow before using the new diagnostic fields.
+
+
+### Protect demonstrated regional reuse from one-use surveys
+
+The add5894f0 deployment passed97 selected checks, guardrails and packaged-JAR
+verification; both retained worlds use that exact artifact. New runtime counters
+show2,031 distinct scoped tiles among2,031 retained graphs, then6,527 graphs built
+and4,511 evictions with2,016 retained entries/2,010 distinct tiles. This is working
+set pressure, predominantly different geography, not obsolete-version crowding.
+Evidence: build/simulation-throughput/claim-images-region-retention/. The final
+samples overlap the first focused build; use these counters for attribution,
+not a clean throughput comparison.
+
+A source-confirmed cache defect is independently reproduced in
+region-scan-retention-red.log: a completed graph hit by a second calculation is
+lost after2,200 one-use layered surveys. Existing retention treats all completed
+graphs alike, so distant exploration can continually flush useful local graphs.
+Replace that eviction policy with bounded probation/reuse queues. New graphs
+enter probation; only a subsequent completed hit promotes them. Builder polls
+are not reuse. Reused graphs may occupy at most half of the existing graph and
+surface ceilings; older reuse is demoted and can be evicted. Both queues borrow
+otherwise unused capacity. No capacity increase or world-size heuristic.
+
+The shared bounds remain2,048 entries,524,288 reserved surface slots and64
+unfinished builders. Exact terrain/profile/local permission/bounds keys are
+unchanged. Cheap certified planes still bypass graph admission. Independent
+builders retain nonblocking per-entry locks. Queue and size maintenance is
+constant-time per hit/eviction; no repeated complete graph-list scan. Retiring
+a scope or clearing a planner detaches every queue, including unfinished workers;
+a late private completion cannot resurrect an obsolete bucket. Unversioned weak
+views retain only a bounded bucket directory and retire collected-view queues.
+No new canonical state, route authority, schema or compatibility decoder.
+
+Existing pressure/unfinished-worker, changed-permission, world/profile separation,
+worker ordering, regional facts, incremental search and demand tests cover the
+changed lifecycle. Added the actual scan counterexample, eventual demotion/eviction,
+64-scope retirement and a controlled clear-before-worker-publication case.
+Initial connected focus passed before the final controlled clear case; the frozen
+union must pass before deployment. Runtime throughput benefit is unmeasured.
