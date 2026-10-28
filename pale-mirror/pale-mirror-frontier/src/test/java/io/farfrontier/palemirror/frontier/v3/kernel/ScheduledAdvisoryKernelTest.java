@@ -8,6 +8,45 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScheduledAdvisoryKernelTest {
+    @Test void freeAdviceLaneIsReservedDuringAnExactPredecessorWithoutExecutingBeforeIt() {
+        var advice = scheduled("schedule:starved-advice", "settlement:advice", 1, 1);
+        var first = scheduled("schedule:exact-first", "settlement:first", 2, 1);
+        var next = scheduled("schedule:exact-next", "settlement:next", 3, 1);
+        var available = new AtomicBoolean(); var exactReady = new AtomicBoolean();
+        var begun = new AtomicInteger(); var exactInputs = new ArrayList<Counter>();
+        var planner = new ScheduledActionPlanner<Counter>() {
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) { throw new AssertionError("exact preparation bypass"); }
+            public boolean adviceAvailable() { return available.get(); }
+            public Optional<ScheduledAdvisory<Counter>> advice(Counter state, ScheduledAction action, SimInstant at) {
+                if (!action.equals(advice)) return Optional.empty();
+                return Optional.of(() -> {
+                    assertEquals(new Counter(1), state, "admitted advice uses its committed exact predecessor");
+                    return (current, now) -> Optional.of(() -> () -> List.of(new ProposedEvent(action.subject(), new Delta(10))));
+                });
+            }
+            public Optional<ScheduledAdviceCalculation<Counter>> beginAdvice(ScheduledAdvisory<Counter> work) {
+                begun.incrementAndGet(); return ScheduledActionPlanner.super.beginAdvice(work);
+            }
+            public ScheduledCalculation begin(Counter state, ScheduledAction action, SimInstant at) {
+                exactInputs.add(state);
+                return () -> exactReady.getAndSet(false)
+                        ? Optional.of(List.of(new ProposedEvent(action.subject(), new Delta(1)))) : Optional.empty();
+            }
+        };
+        var engine = schedulingEngine(planner, List.of(advice, first, next)); var at = new SimInstant(5);
+        var budget = new WorkBudget(16, 16);
+        // Busy advice admission must not start its calculation yet.
+        // The exact predecessor remains independently runnable.
+        engine.advanceTo(at, budget); assertTrue(engine.hasPendingCalculation());
+        available.set(true); engine.advanceTo(at, budget);
+        assertEquals(0, begun.get()); assertEquals(new Counter(0), engine.canonicalState().state());
+        exactReady.set(true); engine.advanceTo(at, budget);
+        assertEquals(1, begun.get(), "continuous asynchronous exact work must not starve an idle advice lane");
+        assertEquals(new Counter(11), engine.canonicalState().state());
+        assertEquals(List.of(new Counter(0), new Counter(11)), exactInputs);
+        assertTrue(engine.hasPendingCalculation(), "the next exact operation keeps its exclusive predecessor");
+        assertEquals(List.of(next), engine.checkpoint().schedules());
+    }
     @Test void slowAdviceDoesNotBlockExactWorkAndObsoleteResultsCannotPublish() {
         var advisory = scheduled("schedule:advice", "settlement:advice", 1, 1);
         var exact = scheduled("schedule:exact", "settlement:exact", 2, 1);

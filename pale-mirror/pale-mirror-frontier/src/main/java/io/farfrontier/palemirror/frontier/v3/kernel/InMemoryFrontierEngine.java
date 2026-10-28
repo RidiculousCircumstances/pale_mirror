@@ -87,7 +87,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         for (var value : pendingAdvice.values())
             if (value.calculation().ready()) schedules.signalReadiness(value.action(), target);
         if (adviceReservation != null && !schedules.containsExact(adviceReservation)) adviceReservation = null;
-        if (pendingCalculation == null && adviceReservation == null && pendingAdvice.size() < MAX_PENDING_ADVICE
+        // Reserving derived readiness neither starts advice nor releases the
+        // exact predecessor. A continuously refilled exact lane must not hide
+        // free advisory capacity between every pair of owner turns.
+        if (adviceReservation == null && pendingAdvice.size() < MAX_PENDING_ADVICE
                 && scheduledPlanner.adviceAvailable()) {
             var waiting = schedules.firstAdviceCapacityWait();
             if (waiting != null) { adviceReservation = waiting; schedules.signalReadiness(waiting, target); }

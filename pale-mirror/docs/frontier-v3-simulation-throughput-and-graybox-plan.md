@@ -4280,3 +4280,35 @@ explicit second fixture phase. Their exact title/payment assertions remain.
 The corrected AutonomousGoodsTradeTest plus guardrails pass in23s
 (economic-review-terminal-focus.log). Frozen candidate verification and deployment
 follow; no live speedup or town35 recovery claim yet.
+
+
+### Advisory capacity cannot starve behind a continuously refilled exact lane
+
+fad251d59 frozen102tests/guardrails/JAR/package PASS103s; both retained worlds
+verified at SHA5125d099a58739c14d28ff33e85603983c1f289440594e26884419dfcae0067eb22f8ff93aca5bb6ee79fa2579d99814dad56f6ae66d1c966304dcc85b27ce78327.
+Its16-sample ordinary observation is15.946284ticks/sec,debt870→2103. No20/s claim.
+Sampletown35 plan85→87 proves publication progresses, but bread remains0;
+several other towns also stop renewing plans after initial publications.
+
+Confirmed second cause: the adapter's asynchronous exact lane usually ends each
+host turn with an exact predecessor retained. InMemoryFrontierEngine checked
+free advice capacity only at entry and only when pendingCalculation was null.
+Completing one exact task and starting another inside that call provided no such
+entry gap. Advice counters froze at590 (workers idle), while exact completions
+continued into tens of thousands. The after-warm45s trace contains zero ADVICE
+lifecycle events and4536 EXACT completions; ordinary14.034019/s,debt2143→2417.
+
+Reserve one waiting advisory admission even while an exact predecessor is held.
+This changes reconstructible readiness only: no advice starts/captures admitted
+inputs, publishes or releases that predecessor. After the exact commit, normal
+selection/current owner checks may admit the reserved action. Original allowance,
+canonical action membership, fair capacity order, cancellation and recovery remain.
+No business family is named by the kernel.
+
+ScheduledAdvisoryKernelTest's controlled asynchronous exact chain reproduces the
+old starvation (RED, expected begun1 but actual0), proves no early advice/state
+mutation while the predecessor remains pending, then requires both advisory
+progress and the next exact task to capture the committed state. Existing bounded
+capacity, stale-result, cancellation and recovery checks remain. Focus82 kernel/
+queue/readiness/economic-advice tests plus guardrails PASS28s in
+advice-capacity-starvation-focus.log. Frozen verification/deployment follows.
