@@ -340,6 +340,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     String preparationDiagnostic() {
         String base = preparations.diagnostic(engine != null && engine.hasPendingCalculation());
         return base.substring(0, base.length() - 1) + ",\"commandInvalidations\":" + commandPreparationInvalidations
+                + ",\"advisoryQueue\":" + (engine == null ? "null" : FrontierV3AdvisoryDiagnosticJson.render(engine.advisoryStatus()))
                 + ",\"lastInvalidatingPayload\":" + new com.google.gson.Gson().toJson(lastPreparationInvalidator)
                 + ",\"readyDelivery\":" + readyDeliveryDiagnostic.get()
                 + ",\"ordinaryBudgetExhaustions\":" + new com.google.gson.Gson().toJson(ordinaryBudgetExhaustions)

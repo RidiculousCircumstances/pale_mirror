@@ -91,6 +91,11 @@ public final class ScheduledActionQueue {
         execution.holdCalculation(action, capacity);
     }
     ScheduledAction firstAdviceCapacityWait() { return execution.firstCapacityWait(); }
+    int adviceCapacityWaitCount() { return execution.capacityWaitCount(); }
+    io.farfrontier.palemirror.frontier.v3.api.FrontierAdvisoryStatus.Readiness readiness(ScheduledAction action) {
+        return containsExact(action) ? execution.readiness(action)
+                : io.farfrontier.palemirror.frontier.v3.api.FrontierAdvisoryStatus.Readiness.ABSENT;
+    }
     void releaseCalculation(ScheduledAction action, SimInstant now) {
         if (containsExact(action)) execution.releaseCalculation(action, now);
     }

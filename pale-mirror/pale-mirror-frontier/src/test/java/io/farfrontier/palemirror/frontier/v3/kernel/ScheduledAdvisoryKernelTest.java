@@ -38,14 +38,20 @@ class ScheduledAdvisoryKernelTest {
         // Busy advice admission must not start its calculation yet.
         // The exact predecessor remains independently runnable.
         engine.advanceTo(at, budget); assertTrue(engine.hasPendingCalculation());
+        assertEquals(1, engine.advisoryStatus().capacityWaiters());
+        assertTrue(engine.advisoryStatus().reservation().isEmpty());
         available.set(true); engine.advanceTo(at, budget);
         assertEquals(0, begun.get()); assertEquals(new Counter(0), engine.canonicalState().state());
+        assertEquals(Optional.of(advice), engine.advisoryStatus().reservation());
+        assertEquals(FrontierAdvisoryStatus.Readiness.CHECKING, engine.advisoryStatus().reservationReadiness());
+        assertEquals(0, engine.advisoryStatus().inFlight());
         exactReady.set(true); engine.advanceTo(at, budget);
         assertEquals(1, begun.get(), "continuous asynchronous exact work must not starve an idle advice lane");
         assertEquals(new Counter(11), engine.canonicalState().state());
         assertEquals(List.of(new Counter(0), new Counter(11)), exactInputs);
         assertTrue(engine.hasPendingCalculation(), "the next exact operation keeps its exclusive predecessor");
         assertEquals(List.of(next), engine.checkpoint().schedules());
+        assertTrue(engine.advisoryStatus().reservation().isEmpty());
     }
     @Test void slowAdviceDoesNotBlockExactWorkAndObsoleteResultsCannotPublish() {
         var advisory = scheduled("schedule:advice", "settlement:advice", 1, 1);

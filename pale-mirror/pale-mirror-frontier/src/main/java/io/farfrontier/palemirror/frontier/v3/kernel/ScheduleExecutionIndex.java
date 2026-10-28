@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.kernel;
 
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierAdvisoryStatus.Readiness;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.*;
@@ -102,6 +103,15 @@ final class ScheduleExecutionIndex {
     ScheduledAction firstCapacityWait() {
         for (var wait : calculations.values()) if (wait.capacity()) return wait.action();
         return null;
+    }
+    int capacityWaitCount() { return (int) calculations.values().stream().filter(CalculationWait::capacity).count(); }
+    Readiness readiness(ScheduledAction action) {
+        if (ready.contains(action)) return Readiness.READY;
+        if (checking.containsKey(action.id())) return Readiness.CHECKING;
+        if (future.contains(action)) return Readiness.FUTURE;
+        if (calculations.containsKey(action.id())) return Readiness.CALCULATION;
+        return waiting.containsKey(action.id()) ? Readiness.HELD
+                : Readiness.ABSENT;
     }
     void releaseCalculation(ScheduledAction action, SimInstant now) {
         if (calculations.remove(action.id()) == null) return;

@@ -4312,3 +4312,25 @@ progress and the next exact task to capture the committed state. Existing bounde
 capacity, stale-result, cancellation and recovery checks remain. Focus82 kernel/
 queue/readiness/economic-advice tests plus guardrails PASS28s in
 advice-capacity-starvation-focus.log. Frozen verification/deployment follows.
+
+
+### Expose the remaining advisory admission stall before further policy changes
+
+4ee404bff frozen119tests+guardrails/JAR/package PASS94s, deployed and verified on
+both retained worlds (SHA5121bf4d8200f3ca3b5f5d6952e24be569209713f1663c1d3fff034df3be68f45fbddc73a39a481b2d8a02f9944c8ad4b276759571e4ca0468acab96479932dc6fc).
+Ordinary304.166914s advances4722ticks=15.524371/s,debt866→2228. Advice initially
+progresses but counters then freeze750/accepted526/rejected224 for>3500canonical
+ticks while exact work continues. Thus removing the entry-gap guard is a proven
+correction, NOT a complete live-stall fix or20/s acceptance. No policy, buyer-input
+fence or compatibility behavior is weakened to explain the remaining stall.
+
+Add an operator-only owning-thread technical queue cut: in-flight/ready counts,
+capacity wait count, host availability, one reserved action's exact ID/kind/subject/
+deadline and derived readiness, and the FIFO capacity waiter. It reads existing
+bounded execution metadata; it starts/polls no computation, modifies no canonical
+or derived queue state, and is not another scheduler or persisted authority.
+The current performance diagnostic includes this bounded object. Existing controlled
+kernel regression checks that the diagnostic sees a reserved CHECKING action while
+its predecessor still owns state, then sees its release after the safe commit.
+Kernel checks+guardrails+adapter compilation PASS21s; deployment needed to identify
+the remaining exact block. No instrumentation-only completion claim.

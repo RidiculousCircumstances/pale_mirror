@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.kernel;
 
+import io.farfrontier.palemirror.frontier.v3.api.FrontierAdvisoryStatus;
 import io.farfrontier.palemirror.frontier.v3.api.AdvanceResult;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
@@ -59,6 +60,13 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     @Override public boolean hasPendingCalculation() { requireOwnerThread(); return pendingCalculation != null; }
     @Override public Optional<ScheduledAction> pendingScheduledCalculation() {
         requireOwnerThread(); return pendingCalculation == null ? Optional.empty() : Optional.of(pendingCalculation.action());
+    }
+    @Override public FrontierAdvisoryStatus advisoryStatus() {
+        requireOwnerThread();
+        return new FrontierAdvisoryStatus(pendingAdvice.size(), (int) pendingAdvice.values().stream()
+                .filter(value -> value.calculation().ready()).count(), schedules.adviceCapacityWaitCount(), scheduledPlanner.adviceAvailable(),
+                Optional.ofNullable(adviceReservation), adviceReservation == null ? FrontierAdvisoryStatus.Readiness.NONE
+                    : schedules.readiness(adviceReservation), Optional.ofNullable(schedules.firstAdviceCapacityWait()));
     }
     @Override public void cancelPendingCalculation() {
         requireOwnerThread();
