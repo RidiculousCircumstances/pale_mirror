@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.*;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,13 @@ class GoodsParticipantOpportunityAdviceTest {
             assertTrue(result.stream().noneMatch(event -> event.payload() instanceof GoodsTradeReserved
                     || event.payload() instanceof TransportMissionStarted));
             assertTrue(result.stream().anyMatch(event -> event.payload() instanceof ScheduleEffect.Rescheduled));
+            var observed = new NavigationGeometryObserved(state.navigationGeometry().revision(),
+                    Map.of(new BlockPosition(0, 64, 0), NavigationObservation.known(NavigationCell.AIR)))
+                    .apply(state, NavigationGeometryObserved.OWNER);
+            assertTrue(advice.revalidate(observed, at).isEmpty(), "new terrain knowledge retires the pending input frame");
+            assertEquals("GEOMETRY", advice.rejectionReason());
+            var replacement = GoodsParticipantProcess.planner().advice(observed, action, at).orElseThrow().prepare();
+            assertTrue(replacement.revalidate(observed, at).isPresent(), "a fresh capture can use the new geometry epoch");
         }
     }
     private static SubjectId buyer(FrontierWorldState state) {

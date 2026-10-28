@@ -1760,3 +1760,22 @@ guardrailsPASS23s; finalclarity/diagnostic changesPASS20s. Delivery failures now
 kind/schedule/subject around the original cause, without suppressing quarantine.
 Specific native failure attribution and clock closure still require the new candidate's
 runtime evidence; the source counterexample is not universal native acceptance.
+
+
+### Pending advice follows newly observed terrain
+
+f67b83a38 exact release PASS (71 frontier / 9 classes +29 runtime, guardrails,
+packaged JAR); private retained-world deployment VERIFIED. Ordinary observation is
+running and already contradicts throughput acceptance: sample0→1 advances21397→21405
+in30.4s while debt4747→5349. No claimed scale completion or speedup. Navigation has
+only one active search at the discriminating sample; investigation continues into
+actual decision/transition cost, not a blind pool increase.
+
+Connected source correction: a retained OPPORTUNITY advice reporting
+AWAITING_NAVIGATION must reject a replaced navigation observation epoch. Otherwise
+newly observed terrain wakes the producer while its captured snapshot continues
+requesting the old unknown cells. Selected dated choices already run fresh exact
+geometry admission; unrelated physical crop deltas do not automatically retire the
+pending frame. Existing pending-choice regression now verifies rejection and fresh
+capture on a real NavigationGeometryObserved transition. Three affected classes
+and guardrails PASS23s. Native proof remains open.

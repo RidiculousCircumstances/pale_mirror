@@ -13,6 +13,7 @@ final class GoodsParticipantOpportunityAdvice {
         var owner = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(action.subject()));
         var party = owner.party(); var bootstrap = state.bootstrap();
         var book = state.companies().goodsTrade().orders();
+        var navigation = state.navigationGeometry();
         long input = state.companies().goodsTrade().participants().economicState(party.id()).inputRevision();
         return () -> {
             var review = new SettlementEconomicPlanPreparation.Review(at.ticks(), owner.prices(), Optional.empty());
@@ -27,6 +28,10 @@ final class GoodsParticipantOpportunityAdvice {
                     if (participant == null || !participant.party().equals(party)) return reject("OWNER_IDENTITY");
                     if (now.compareTo(at) < 0) return reject("EXECUTION_TIME");
                     if (now.ticks() - at.ticks() >= bootstrap.ruleset().goodsTrade().reviewInterval()) return reject("EXPIRED");
+                    // A resumed pending query must not keep asking its captured unknown
+                    // terrain after the observation owner has supplied newer knowledge.
+                    if (choice == GoodsTripPlanning.Disposition.AWAITING_NAVIGATION
+                            && current.navigationGeometry() != navigation) return reject("GEOMETRY");
                     // An old absence must not erase a newly published opportunity.
                     // A selected dated quote still faces all current admission checks.
                     if (choice == GoodsTripPlanning.Disposition.NO_PURCHASE && (book != current.companies().goodsTrade().orders()
