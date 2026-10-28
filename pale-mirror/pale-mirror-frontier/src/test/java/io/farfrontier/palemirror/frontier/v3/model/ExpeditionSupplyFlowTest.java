@@ -227,11 +227,42 @@ class ExpeditionSupplyFlowTest {
                         new ResourceCustody.Container(asset.containerId()), Optional.empty(), FoodCatalog.BREAD, stocked.lotQuantities()),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(asset.containerId()), travelling.actorLocations().get(donor).supportingSurface(), slot, 0, 1);
         travelling = travelling.withInventory(ActorItemCustody.transferCold(travelling, donation));
+        // A remote recipient needs a real route to the attached store during selection.
+        // Acceptance must validate that explicit station without running another search.
+        var carrier = travelling.actorLocations().get(asset.actorId());
+        var departure = mission.supplies().orElseThrow().journey().outward().surfaces().stream()
+                .filter(surface -> {
+                    long x = (long) surface.x() - carrier.supportingSurface().x();
+                    long z = (long) surface.z() - carrier.supportingSurface().z();
+                    return x * x + z * z >= 25 && x * x + z * z <= 144;
+                }).findFirst().orElseThrow();
         long refillAt = engine.executionView().instant().ticks(); var population = travelling.humanPopulation();
         var nutrition = new LinkedHashMap<>(population.nutrition());
         nutrition.put(donor, new ResidentNutrition(ResidentNutritionStatus.HUNGRY, travelling.bootstrap().ruleset().residentLife().eatBelowUnits() - 1, refillAt, 0));
         travelling = travelling.withHumanPopulation(new HumanPopulation(population.households(), population.residents(), population.birthJobs(),
                 population.health(), population.quarantines(), population.migrations(), population.provisions(), nutrition, population.medicalOperations(), population.schedules(), population.meals(), population.mealResourceObligations()));
+        var refillState = travelling.withActorBody(donor, departure.standingBody());
+        var routeProposal = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.select(refillState, mission, refillAt).orElseThrow();
+        assertEquals(donor, routeProposal.actorId()); assertNotEquals(departure, routeProposal.station());
+        var unsafe = new UnitResourceTransfer(routeProposal.claimId(), routeProposal.actorId(), routeProposal.containerId(), routeProposal.sourceAccountId(),
+                routeProposal.destinationAccountId(), routeProposal.sourceEconomicOwnerId(), routeProposal.itemKind(), routeProposal.lots(), routeProposal.slot(),
+                departure, routeProposal.execution(), Optional.empty());
+        assertThrows(IllegalArgumentException.class, () ->
+                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.start(refillState, mission.id(), unsafe, refillAt));
+        var routeRequests = new java.util.concurrent.atomic.AtomicInteger();
+        try (var pendingRoute = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            routeRequests.incrementAndGet();
+            return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                    List.of(), 0, 0, "test:calculation-not-currently-ready");
+        })) {
+            var admitted = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.start(refillState, mission.id(), routeProposal, refillAt);
+            assertEquals(0, routeRequests.get(), "refill acceptance must not repeat asynchronous recipient/route choice");
+            FrontierReferenceClosure.validateTransition(refillState, admitted, List.of());
+            assertEquals(admitted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted)));
+        }
+        // The separate near-source branch below proves actual custody transfer and consumption.
+        // The remote branch proves admission only; it cannot award physical arrival or pickup.
         var refill = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.select(travelling, mission, refillAt).orElseThrow();
         assertEquals(donor, refill.actorId());
         var holding = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.start(travelling, mission.id(), refill, refillAt);

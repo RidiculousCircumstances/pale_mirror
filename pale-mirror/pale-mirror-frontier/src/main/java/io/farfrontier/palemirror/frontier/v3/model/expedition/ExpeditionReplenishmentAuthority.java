@@ -53,6 +53,11 @@ public final class ExpeditionReplenishmentAuthority {
         return false;
     }
     public static Optional<UnitResourceTransfer> select(FrontierWorldState state, TransportMission mission, long now) {
+        return assess(state, mission, now, Optional.empty());
+    }
+    /** Validate one explicit proposal without rerunning recipient or asynchronous route choice. */
+    private static Optional<UnitResourceTransfer> assess(FrontierWorldState state, TransportMission mission, long now,
+                                                       Optional<UnitResourceTransfer> proposed) {
         if (mission.replenishment().isPresent()
                 || mission.preparingSupplies() || mission.stage() == TransportMission.Stage.COMPLETE)
             return Optional.empty();
@@ -63,6 +68,7 @@ public final class ExpeditionReplenishmentAuthority {
         var resources = state.inventory().fungibleResources(); var life = state.bootstrap().ruleset().residentLife();
         var returnDemand = supplierVisit(state, mission) ? ExpeditionReturnProvisioning.missing(state, mission, now) : Map.<SubjectId, Integer>of();
         for (var member : group.members()) {
+            if (proposed.isPresent() && !proposed.orElseThrow().actorId().equals(member.actorId())) continue;
             var profile = state.humanPopulation().resident(member.actorId()); if (profile == null) continue;
             var body = state.actorLocations().get(member.actorId());
             if (body.condition().status() != ActorLifeStatus.ALIVE || state.humanPopulation().meals().containsKey(member.actorId())) continue;
@@ -75,6 +81,8 @@ public final class ExpeditionReplenishmentAuthority {
             if (execution.isEmpty() || slot.isEmpty()
                     || remaining == 0 && life.foods().foods().keySet().stream().anyMatch(kind -> UnitInventory.available(resources, member.actorId(), profile.settlementId(), kind) > 0)) continue;
             for (var location : sources) for (var food : new TreeMap<>(life.foods().foods()).values()) {
+                if (proposed.isPresent() && (!proposed.orElseThrow().containerId().equals(location.container())
+                        || !proposed.orElseThrow().itemKind().equals(food.itemKind()))) continue;
                 if (ReferenceContainerCustody.blocksCanonicalUse(state, location.container())) continue;
                 var source = FungibleResourceCustodySupport.accountAtContainer(state, location.container()).orElse(null);
                 if (source == null) continue;
@@ -83,9 +91,7 @@ public final class ExpeditionReplenishmentAuthority {
                 int quantity = !location.mobile() && mission.supplies().orElseThrow().foodKind().equals(food.itemKind())
                         ? Math.min(64, Math.min(available, remaining)) : food.portionFor(nutrition.nutritionWanted(life), available);
                 if (quantity == 0) continue;
-                var station = location.mobile() ? MobileContainerAccess.station(state, member.actorId(), location.container(),
-                        TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()))
-                        : Optional.of(visitedSupplier(mission).station());
+                var station = station(state, mission, member.actorId(), location, proposed);
                 if (station.isEmpty()) continue;
                 var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(), location.owner(), food.itemKind(), quantity).orElseThrow();
                 var identity = UUID.nameUUIDFromBytes((mission.id().value() + "\n" + member.actorId().value() + "\n" + now)
@@ -97,6 +103,14 @@ public final class ExpeditionReplenishmentAuthority {
             }
         }
         return Optional.empty();
+    }
+    private static Optional<SurfaceAnchor> station(FrontierWorldState state, TransportMission mission,
+            SubjectId recipient, Source source, Optional<UnitResourceTransfer> proposed) {
+        if (!source.mobile()) return Optional.of(visitedSupplier(mission).station());
+        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver());
+        if (proposed.isEmpty()) return MobileContainerAccess.station(state, recipient, source.container(), knowledge);
+        return proposed.map(UnitResourceTransfer::station).filter(selected ->
+                MobileContainerAccess.permitsStation(state, recipient, source.container(), selected, knowledge));
     }
     private record Source(SubjectId container, SubjectId owner, boolean mobile) { }
     private static int purchasable(FrontierWorldState state, TransportMission mission, Source source, String kind, long now) {
@@ -134,7 +148,9 @@ public final class ExpeditionReplenishmentAuthority {
     }
     public static FrontierWorldState start(FrontierWorldState state, SubjectId missionId, UnitResourceTransfer transfer, long now) {
         var mission = require(state, missionId);
-        if (!select(state, mission, now).equals(Optional.of(transfer))) throw new IllegalArgumentException("refill differs from current actual free supplies and recipient");
+        var expected = assess(state, mission, now, Optional.of(transfer));
+        if (!expected.equals(Optional.of(transfer))) throw new IllegalArgumentException(
+                "refill differs from current actual free supplies and declared recipient; expected=" + expected + "; proposed=" + transfer);
         var resources = state.inventory().fungibleResources();
         var claim = new ClaimAllocation(transfer.claimId(), mission.id(), transfer.sourceEconomicOwnerId(), transfer.itemKind(), transfer.quantity(), transfer.lots(), ClaimPurpose.EXPEDITION_SUPPLY);
         var bindings = resources.bindings().values().stream().filter(b -> b.accountId().equals(transfer.sourceAccountId())).toList();

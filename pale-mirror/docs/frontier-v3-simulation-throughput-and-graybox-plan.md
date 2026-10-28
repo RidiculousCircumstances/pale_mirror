@@ -3471,3 +3471,46 @@ Held-classification stack discriminator now points to ServiceAccessCapabilities:
 each point evaluation traverses all production/shipment/harvest demands, repeating
 execution and inbound-capacity checks under every changed world root. Inspect exact
 family candidate membership/indexing next; no service fix implemented in thiscut.
+
+
+### Exact replenishment proposal is not a second asynchronous selection (2026-10-28)
+
+b2 board release PASS46s/55economy, both retained worlds verified SHA512
+6fb0708a5b2598799f6a89544f8837412c69a3ce93c4fcb509894f6ac9eb84d63361bf5fbd504a9ff5af0935ce6d01c037127019ccb96e520e2bd90a1abbf469.
+Before the next client's connection the100town runtime quarantined at240325,
+revision4098095 replenishment-start reduction for buyer_collection mission
+8c9bc8970d8c63c3f06005237d69c485: refill differs from current actual free supplies
+and recipient. It saved all worlds and stopped. Retain board-fairness-runtime-stop-
+20261028.log; client connection-refused receipt, all taskclient/display processes
+closed. Main remainsactiveb2. No world reset or blind unchanged-binary restart.
+
+Source: start reran the entire recipient/source/food and asynchronous mobile-access
+route selection, comparing a new choice to the declared proposal. Calculator
+availability is not canonical state: a previously completed route can be pending
+in a fresh read. Deadline/currentInstant overloads were audited and are correct.
+The owning assessor now constrains itself to the explicit recipient/container/item,
+recomputing all original quantity/slot/account/claim/lot/execution fields. Mobile
+access owns one shared current-station/candidate-station predicate for selection
+and exact validation; acceptance never asks for a new route or another recipient.
+Fixed supplier station, current geometry/claim exclusions, material capacity,
+finite paid terms and all custody guards remain. Movement still owns actual travel
+and arrival; admitting a resource claim cannot award pickup. Invalid proposals fail
+with expected/proposed detail. No fallback, guard suppression or resource shortcut.
+
+A regression fork places the recipient on the actual retained outward path away
+from the animal. Select a valid instruction, then make the runtime calculator return
+PLANNING without changing canonical state. New acceptance makes zero route queries,
+rejects an out-of-reach station, validates reference closure and codec recovery.
+A separate unchanged near-source branch proves actual custody and consumption.
+The identical test on clean sourceb5c6c586f fails with the exact native error
+(refill-exact-proposal-baseline.log,17s); baseline worktree restored clean. Changed
+focused model/paid checks PASS25s. Complete supply, paid replenishment, independent
+storage, clock, servicewait, transferdeath and guardrails PASS43s. No timing unit
+assertion; frozen release/retained native continuation pending.
+
+Recurrence principle: a reducer validates the complete declared proposal against
+current canonical facts, not equality to a newly selected best candidate. Route
+selection and mutable calculation readiness belong to planning. If completed route
+proof is required at admission, carry an exact immutable typed proof. Never rerun
+asynchronous selection inside a canonical validity check. Deterministic material
+and financial recomputation remains required; a stale/forged declaration fails.
