@@ -15,10 +15,18 @@ class PedestrianPathValidationTest {
         int initial = reads.get(); assertTrue(initial > 0);
         PedestrianPathValidation.require(geometry(version, false, reads), path);
         assertEquals(initial, reads.get(), "recreated immutable view shares the exact version, not new traversal work");
+        KnownPedestrianNavigation.requireRoute(clear, path.surfaces());
+        assertEquals(initial, reads.get(), "cell-list replay uses the same exact proof instead of resurveying its edges");
+        ImmutableValidationScope.full(() -> { KnownPedestrianNavigation.requireRoute(clear, path.surfaces()); return null; });
+        assertTrue(reads.get() > initial, "explicit full ingress audits still inspect every accepted route");
         assertThrows(IllegalArgumentException.class, () -> PedestrianPathValidation.require(geometry(new Object(), true, reads), path));
         assertTrue(reads.get() > initial);
         var unknown = PedestrianPathProof.from(List.of(SurfaceAnchor.at(0, 1, 0), SurfaceAnchor.at(1, 1, 0)));
         assertThrows(IllegalArgumentException.class, () -> PedestrianPathValidation.require(clear, unknown));
+        assertFalse(PedestrianPathValidation.supportsRoute(clear, List.of(path.origin(), SurfaceAnchor.at(2, 0, 0))),
+                "a disconnected advisory hint must not become an accepted path");
+        assertThrows(IllegalArgumentException.class, () -> KnownPedestrianNavigation.requireRoute(clear,
+                List.of(path.origin(), SurfaceAnchor.at(2, 0, 0))));
     }
     @Test void remoteChangeDoesNotResurveyAValidatedJourneyButPristineLocalAndForeignChangesDo() {
         var reads = new AtomicInteger(); var revision = PedestrianGeometryRevision.initial();
@@ -28,6 +36,8 @@ class PedestrianPathValidationTest {
         var distant = revision.changed(java.util.Set.of(new PedestrianGeometryRevision.Region(100, 100)));
         PedestrianPathValidation.require(regional(distant, false, reads), path);
         assertEquals(initial, reads.get(), "unrelated world edits cannot rescan every edge of this journey");
+        KnownPedestrianNavigation.requireRoute(regional(distant, false, reads), path.surfaces());
+        assertEquals(initial, reads.get(), "cell-list replay retains the same regional footprint proof");
         var local = distant.changed(java.util.Set.of(new PedestrianGeometryRevision.Region(0, 0)));
         assertThrows(IllegalArgumentException.class, () -> PedestrianPathValidation.require(regional(local, true, reads), path));
         assertTrue(reads.get() > initial, "a formerly pristine region is still an exact dependency");

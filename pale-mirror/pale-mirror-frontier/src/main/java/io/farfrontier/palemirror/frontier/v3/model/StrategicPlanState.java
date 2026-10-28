@@ -20,6 +20,8 @@ public final class StrategicPlanState {
     private static final ImmutableInvariantCheck<Void> VALIDATION = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<ActiveObjectives> ACTIVE_OBJECTIVES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> TASK_GRAPH = new ImmutableInvariantCheck<>();
+    private static final ImmutableResultView<Boolean, Map<SubjectId, List<StrategicTask>>> OWNED_TASKS =
+            new ImmutableResultView<>(4);
     private record OwnerLane(SubjectId owner, StrategicObjectiveLane lane) { }
     /** Derived membership only; the retained objective remains the decision authority. */
     private record ActiveObjectives(Map<SubjectId, Set<SubjectId>> byOwner,
@@ -232,6 +234,17 @@ public final class StrategicPlanState {
 
     public Map<SubjectId, StrategicObjective> objectives() { return objectives; }
     public Map<SubjectId, StrategicTask> tasks() { return tasks; }
+    /** Complete owner-declared task scope, in the retained registry's order.
+     * Read-only membership never substitutes for current task/authority validation. */
+    public List<StrategicTask> tasksOwnedBy(SubjectId owner) {
+        Objects.requireNonNull(owner, "task owner");
+        return OWNED_TASKS.get(List.of(tasks), Boolean.TRUE, () -> {
+            var owners = new HashMap<SubjectId, List<StrategicTask>>();
+            for (var task : tasks.values()) owners.computeIfAbsent(task.ownerId(), ignored -> new java.util.ArrayList<>()).add(task);
+            owners.replaceAll((id, values) -> List.copyOf(values));
+            return Map.copyOf(owners);
+        }).getOrDefault(owner, List.of());
+    }
     public Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
     public Map<SubjectId, SettlementAssault> settlementAssaults() { return settlementAssaults; }
     public SettlementInfectionKnowledge infectionKnowledge() { return infectionKnowledge; }

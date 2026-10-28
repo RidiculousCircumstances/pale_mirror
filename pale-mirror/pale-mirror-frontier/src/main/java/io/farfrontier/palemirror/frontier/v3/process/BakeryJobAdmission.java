@@ -21,7 +21,7 @@ final class BakeryJobAdmission {
         var workshop = ProductionProcess.workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                 || !SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id())) return false;
-        for (var task : state.strategicPlans().tasks().values().stream()
+        for (var task : state.strategicPlans().tasksOwnedBy(settlement.id()).stream()
                 .filter(task -> task.ownerId().equals(settlement.id()) && task.kind() == StrategicTaskKind.PRODUCE_AT_STATION
                         && task.status() == StrategicTaskStatus.PENDING)
                 .sorted(java.util.Comparator.comparing(StrategicTask::id)).toList()) {

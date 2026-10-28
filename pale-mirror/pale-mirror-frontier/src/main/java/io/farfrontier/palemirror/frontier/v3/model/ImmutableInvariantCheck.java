@@ -9,7 +9,6 @@ import java.util.function.Supplier;
 final class ImmutableInvariantCheck<T> {
     private record Accepted<T>(ImmutableDependencies dependencies, T result) { }
     private final ThreadLocal<Accepted<T>> accepted = new ThreadLocal<>();
-    private static final ThreadLocal<Boolean> FULL = new ThreadLocal<>();
 
     T value(Supplier<T> check, Object... inputs) {
         Objects.requireNonNull(check, "owned invariant check");
@@ -22,10 +21,8 @@ final class ImmutableInvariantCheck<T> {
     void validate(Runnable check, Object... inputs) {
         value(() -> { check.run(); return null; }, inputs);
     }
-    static boolean fullAudit() { return Boolean.TRUE.equals(FULL.get()); }
+    static boolean fullAudit() { return ImmutableValidationScope.fullAudit(); }
     static <R> R full(Supplier<R> operation) {
-        var old = FULL.get(); FULL.set(true);
-        try { return operation.get(); }
-        finally { if (old == null) FULL.remove(); else FULL.set(old); }
+        return ImmutableValidationScope.full(operation);
     }
 }

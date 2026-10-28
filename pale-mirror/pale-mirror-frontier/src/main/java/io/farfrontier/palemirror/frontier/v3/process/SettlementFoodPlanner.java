@@ -20,7 +20,7 @@ final class SettlementFoodPlanner implements SettlementOperationPlanner {
         if (!workshop || BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(settlement.id()), atTick).isEmpty()) return Assessment.empty();
         var proposal = new StrategicOperationProposal(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD,
                 Optional.empty(), reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE);
-        var replaced = state.strategicPlans().tasks().values().stream()
+        var replaced = state.strategicPlans().tasksOwnedBy(settlement.id()).stream()
                 .filter(task -> reserveShort && task.ownerId().equals(settlement.id())
                         && task.kind() == StrategicTaskKind.DECONTAMINATE_INFECTION_CELL
                         && task.status() == StrategicTaskStatus.PENDING)

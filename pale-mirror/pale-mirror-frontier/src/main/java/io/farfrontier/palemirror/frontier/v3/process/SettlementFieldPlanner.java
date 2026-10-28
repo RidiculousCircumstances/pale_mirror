@@ -12,7 +12,7 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
     @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> expandActiveTasks(
             FrontierWorldState state, Settlement settlement,
             io.farfrontier.palemirror.frontier.v3.api.ScheduleId cause, long atTick) {
-        for (var task : state.strategicPlans().tasks().values().stream()
+        for (var task : state.strategicPlans().tasksOwnedBy(settlement.id()).stream()
                 .filter(value -> value.ownerId().equals(settlement.id())
                         && value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
                         && value.status() == StrategicTaskStatus.ACTIVE)

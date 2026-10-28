@@ -23,11 +23,21 @@ public final class PedestrianPathValidation {
     }
     private static final Map<PedestrianPathProof, Validation> VALIDATED = new LinkedHashMap<>(16, .75f, true);
     private PedestrianPathValidation() { }
+    /** Cell-list consumers use the same complete geometry proof as whole journeys.
+     * A malformed advisory list is unusable evidence, not a failed semantic order. */
+    public static boolean supportsRoute(PedestrianRouteGeometry geometry,
+            java.util.List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> route) {
+        PedestrianPathProof path;
+        try { path = PedestrianPathProof.from(route); }
+        catch (IllegalArgumentException | ArithmeticException malformed) { return false; }
+        return supports(geometry, path);
+    }
     public static boolean supports(PedestrianRouteGeometry geometry, PedestrianPathProof path) {
         Objects.requireNonNull(geometry.version());
         Validation prior;
         synchronized (VALIDATED) { prior = VALIDATED.get(path); }
-        if (prior != null && prior.matches(geometry)) return true;
+        if (!io.farfrontier.palemirror.frontier.v3.model.ImmutableValidationScope.fullAudit()
+                && prior != null && prior.matches(geometry)) return true;
         if (!KnownPedestrianNavigation.supportsRoute(geometry, path.surfaces())) return false;
         var captured = capture(geometry, path);
         synchronized (VALIDATED) {
@@ -60,6 +70,6 @@ public final class PedestrianPathValidation {
     }
     public static void require(PedestrianRouteGeometry geometry, PedestrianPathProof path) {
         if (!supports(geometry, path))
-            KnownPedestrianNavigation.requireRoute(geometry, path.surfaces()); // Preserve the exact failing cell in diagnostics.
+            KnownPedestrianNavigation.requireRouteExact(geometry, path.surfaces()); // Preserve the exact failing cell in diagnostics.
     }
 }

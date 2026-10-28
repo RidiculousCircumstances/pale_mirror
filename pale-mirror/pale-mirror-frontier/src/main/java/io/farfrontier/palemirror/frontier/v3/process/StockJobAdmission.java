@@ -9,7 +9,7 @@ import static io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.*;
 /** Stock policy supplies the complete order; common worker selection and station work fulfill it. */
 final class StockJobAdmission {
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long tick) {
-        return state.strategicPlans().tasks().values().stream().anyMatch(task -> task.ownerId().equals(resident.settlementId())
+        return state.strategicPlans().tasksOwnedBy(resident.settlementId()).stream().anyMatch(task -> task.ownerId().equals(resident.settlementId())
                 && task.status() == StrategicTaskStatus.PENDING && task.kind() == StrategicTaskKind.PRODUCE_AT_STATION
                 && state.strategicPlans().objectives().get(task.objectiveId()).kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_STOCK)
                 && AttendedStockProduction.ready(state, resident.settlementId(), tick).isPresent();

@@ -32,15 +32,19 @@ public record PedestrianPathProof(SurfaceAnchor origin, List<Run> runs) {
         if (route.isEmpty() || route.size() > MAX_EDGES + 1)
             throw new IllegalArgumentException("itinerary needs bounded nonempty geometry");
         var runs = new ArrayList<Run>();
+        int dx = 0, dy = 0, dz = 0, edges = 0;
         for (int i = 1; i < route.size(); i++) {
             var from = route.get(i - 1); var to = route.get(i);
-            var run = new Run(Math.subtractExact(to.x(), from.x()), Math.subtractExact(to.y(), from.y()),
-                    Math.subtractExact(to.z(), from.z()), 1);
-            if (!runs.isEmpty() && runs.getLast().sameDirection(run)) {
-                var last = runs.removeLast(); run = new Run(run.dx(), run.dy(), run.dz(), last.edges() + 1);
+            int x = Math.subtractExact(to.x(), from.x()), y = Math.subtractExact(to.y(), from.y()),
+                    z = Math.subtractExact(to.z(), from.z());
+            if (!PedestrianEdge.boundedDelta(x, y, z))
+                throw new IllegalArgumentException("itinerary run needs bounded pedestrian edges");
+            if (edges > 0 && (dx != x || dy != y || dz != z)) {
+                runs.add(new Run(dx, dy, dz, edges)); edges = 0;
             }
-            runs.add(run);
+            dx = x; dy = y; dz = z; edges++;
         }
+        if (edges > 0) runs.add(new Run(dx, dy, dz, edges));
         return new PedestrianPathProof(route.getFirst(), runs);
     }
     public long edges() { return runs.stream().mapToLong(Run::edges).sum(); }

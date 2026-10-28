@@ -493,7 +493,7 @@ public final class FrontierReadabilityPlan {
                 "minecraft:wheat", 64, site.layout().cells().getFirst().workstation(),
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE), endpoint -> true).isEmpty())
             return "READY TO HARVEST · STORAGE UNAVAILABLE";
-        boolean pendingExactHarvest = state.strategicPlans().tasks().values().stream()
+        boolean pendingExactHarvest = state.strategicPlans().tasksOwnedBy(site.settlementId()).stream()
                 .anyMatch(task -> task.ownerId().equals(site.settlementId())
                         && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
                         && task.resourceSiteTarget().equals(java.util.Optional.of(site.id()))

@@ -229,12 +229,7 @@ public final class KnownPedestrianNavigation {
             candidate.addAll(hint.subList(join, goal + 1));
             if (candidate.size() > TimedKnownRoute.MAX_SURFACES) continue;
             // A changed surface invalidates this optimization, not the semantic order.
-            if (candidate.stream().anyMatch(surface -> !geometry.bounds().contains(surface.support())
-                    || geometry.blocked(surface) || !geometry.knowsSupport(surface))) continue;
-            boolean connected = true;
-            for (int index = 1; index < candidate.size(); index++)
-                if (!geometry.canTraverse(candidate.get(index - 1), candidate.get(index))) { connected = false; break; }
-            if (!connected) continue;
+            if (!PedestrianPathValidation.supportsRoute(geometry, candidate)) continue;
             if (candidate.size() > 1) new PedestrianRouteReceipt(candidate);
             if (best == null || candidate.size() < best.size()) best = List.copyOf(candidate);
         }
@@ -307,6 +302,10 @@ public final class KnownPedestrianNavigation {
         return true;
     }
     public static void requireRoute(PedestrianRouteGeometry geometry, List<SurfaceAnchor> route) {
+        if (!PedestrianPathValidation.supportsRoute(geometry, route)) requireRouteExact(geometry, route);
+    }
+    /** The complete replay checker, also used for a failed proof's exact diagnosis. */
+    static void requireRouteExact(PedestrianRouteGeometry geometry, List<SurfaceAnchor> route) {
         if (route.isEmpty()) throw new IllegalArgumentException("accepted pedestrian route is empty");
         for (SurfaceAnchor surface : route) {
             if (!geometry.bounds().contains(surface.support()) || geometry.blocked(surface)

@@ -2922,3 +2922,39 @@ assumed that 1,000,000 ticks would exhaust 64 bread; the existing nutritional
 forecast disproved that fixture assumption. The corrected test derives a genuinely
 exhausting duration from the unchanged life/food rules; no production rule was
 changed to satisfy it. Frozen release/deploy/native effect pending; G remainsOPEN.
+
+### Owner task scopes and common route-proof reuse (2026-10-28)
+
+Measured preparation stacks still spend time scanning global strategic tasks in
+each resident's work-preference probe. StrategicPlanState now supplies a complete
+read-only tasksOwnedBy projection, keyed only by the exact immutable task registry
+and bounded to four registry images. Agriculture, bakery, equipment/stock admission,
+field expansion, food policy, settled-provision wakes and field diagnostics consume
+the owner scope; their original kind/status/authority filters and ordering remain.
+The projection uses each task's explicit owner declaration, not ID conventions or
+owner discovery. Closed graphs remain fully audited by their existing validator.
+
+A second traced path revalidated complete cell lists in known-route hints and
+accepted movement while whole-itinerary consumers already used PedestrianPathValidation.
+Both now use that same exact geometry-proof mechanism. A miss still checks all
+supports, obstacles and directed transitions; unchanged complete consulted regional
+facts reuse successful proof, local changes/profile/permissions/epoch invalidate it.
+A malformed advisory hint is discarded for ordinary planning, whereas an invalid
+accepted route retains its exact failing-cell exception. Full ingress/recovery
+audits explicitly bypass proof reuse through common ImmutableValidationScope;
+existing invariant helpers delegate to the same scope, not another validation mode.
+Run-length proof construction allocates one record per actual directional run,
+instead of two temporary records per straight edge, preserving exact wire geometry.
+
+Connected owner/management/labour/station checks PASS37s; final owner/path/navigation/
+shape/group/harvest/codec plus guardrails PASS58s. Negative coverage includes a foreign
+owner, a changed task branch, immutable results/predecessor, disconnected hint,
+changed local or foreign geometry and forced full audit. No gameplay/capacity limits
+changed. Frozen release/deploy/native effect pending; G remainsOPEN/FAILED.
+
+The preceding fed794d0b provisioning cut is frozen-release verified and deployed
+to both retained worlds (receipts deploy-{scale311,r279}-provisioning-facts).
+Main follow-up tick974305/rev2054598/statusok/debt0. Ordinary100 provisioning-facts
+capture142126events/noDataLoss44.691236s:2.685090ticks/s,debt1547→2295 STILLFAILED.
+Owner54.06%,exact36.80%,WAL3.70%;validation9.217884s. This evolving workload is
+not a controlled aggregate comparison. No performance acceptance inferred.

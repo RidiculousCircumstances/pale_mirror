@@ -14,6 +14,27 @@ import static org.junit.jupiter.api.Assertions.*;
 class StrategicPlanGraphValidationTest {
     private static final SubjectId OWNER = new SubjectId("settlement:graph-owner");
 
+    @Test void ownerTaskScopeRetainsOrderAndCannotLeakAChangedOrForeignTask() {
+        var objective = objective("objective:local-tasks", Optional.empty());
+        var other = new StrategicObjective(new SubjectId("objective:other-tasks"), new SubjectId("settlement:other"),
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        var a = task("task:a", objective, List.of()); var b = task("task:b", objective, List.of());
+        var foreign = task("task:foreign", other, List.of());
+        var tasks = new LinkedHashMap<SubjectId, StrategicTask>();
+        tasks.put(b.id(), b); tasks.put(foreign.id(), foreign); tasks.put(a.id(), a);
+        var state = new StrategicPlanState(Map.of(objective.id(), objective, other.id(), other), tasks, Map.of());
+        var original = state.tasks().values().stream().filter(value -> value.ownerId().equals(OWNER)).toList();
+        assertEquals(original, state.tasksOwnedBy(OWNER));
+        assertEquals(List.of(foreign), state.tasksOwnedBy(other.ownerId()));
+        assertTrue(state.tasksOwnedBy(new SubjectId("settlement:absent")).isEmpty());
+        assertThrows(UnsupportedOperationException.class, () -> state.tasksOwnedBy(OWNER).clear());
+        var changed = state.transitionTask(a.id(), StrategicTaskStatus.ACTIVE);
+        assertEquals(changed.tasks().values().stream().filter(value -> value.ownerId().equals(OWNER)).toList(), changed.tasksOwnedBy(OWNER));
+        assertEquals(StrategicTaskStatus.ACTIVE, changed.tasksOwnedBy(OWNER).stream().filter(value -> value.id().equals(a.id())).findFirst().orElseThrow().status());
+        assertEquals(original, state.tasksOwnedBy(OWNER), "changed branch cannot overwrite the predecessor task view");
+        assertEquals(state.tasksOwnedBy(OWNER), state.withHiveDoctrine(HiveDoctrineState.initial()).tasksOwnedBy(OWNER));
+    }
+
     @Test void retainedGraphsRemainImmutableAcrossUnrelatedPlanRevisions() {
         var objective = objective("objective:graph", Optional.empty());
         var draft = new LinkedHashMap<>(Map.of(objective.id(), objective));

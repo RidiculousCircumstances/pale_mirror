@@ -136,7 +136,7 @@ final class ResourceSiteHarvestPlanning {
 
     /** Family-owned executable opportunity; this probe creates no assignment, movement or reservation. */
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
-        for (var task : state.strategicPlans().tasks().values().stream()
+        for (var task : state.strategicPlans().tasksOwnedBy(resident.settlementId()).stream()
                 .filter(task -> task.ownerId().equals(resident.settlementId())
                         && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
                         && (task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE))

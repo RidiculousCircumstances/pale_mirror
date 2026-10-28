@@ -377,7 +377,7 @@ public final class StrategicObjectiveProcess {
     }
 
     private static List<ProposedEvent> pendingHarvestStarts(FrontierWorldState state, SubjectId settlementId, long dueAt) {
-        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId))
+        return state.strategicPlans().tasksOwnedBy(settlementId).stream().filter(task -> task.ownerId().equals(settlementId))
                 .filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE && task.status() == StrategicTaskStatus.PENDING)
                 .filter(task -> task.resourceSiteTarget().map(state.resourceSites()::site)
                         .map(ResourceFieldGrowthProcess::eligible).orElse(false))
