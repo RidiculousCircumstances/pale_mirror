@@ -66,6 +66,13 @@ public final class FungibleResourceLedger {
         this.accounts = ImmutableLookupMap.withEntry(before.accounts, account.id(), reservation.account());
     }
 
+    /** The resource owner alone applies a closed proof tied to its exact predecessor. */
+    private FungibleResourceLedger(FungibleResourceAccrual.Prepared delta) {
+        lots = delta.lots(); accounts = delta.accounts();
+        claims = delta.before().claims; bindings = delta.before().bindings;
+        if (ImmutableInvariantCheck.fullAudit()) validateComplete();
+    }
+
     public static FungibleResourceLedger empty() { return new FungibleResourceLedger(Map.of(), Map.of(), Map.of(), Map.of()); }
 
     /** Transfers only allocated economic rights; physical holder and exact total stay unchanged. */
@@ -79,12 +86,7 @@ public final class FungibleResourceLedger {
 
     /** Creates one initial lot/account pair for an authorized resource producer. */
     public FungibleResourceLedger issue(ResourceLot lot, CustodyAccount account) {
-        Objects.requireNonNull(lot, "issued lot"); Objects.requireNonNull(account, "issued account");
-        if (lots.containsKey(lot.id()) || accounts.containsKey(account.id()) || !account.lotQuantities().equals(Map.of(lot.id(), lot.quantity()))
-                || !account.claimQuantities().isEmpty()) throw new IllegalArgumentException("fungible resource issue does not establish one fresh exact account");
-        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); nextLots.put(lot.id(), lot);
-        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts); nextAccounts.put(account.id(), account);
-        return new FungibleResourceLedger(nextLots, claims, nextAccounts, bindings);
+        return new FungibleResourceLedger(FungibleResourceAccrual.issue(this, lot, account));
     }
 
     /**
@@ -112,19 +114,7 @@ public final class FungibleResourceLedger {
             return issue(next, new CustodyAccount(accountId, new ResourceCustody.Actor(actorId),
                     Map.of(next.id(), extracted.quantity()), Map.of()));
         }
-        ResourceLot prior = lots.get(next.id());
-        if (!(account.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(actorId)
-                || prior == null || !account.lotQuantities().equals(Map.of(next.id(), prior.quantity()))
-                || !account.claimQuantities().isEmpty() || bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId))
-                || prior.quantity() >= 64 || next.quantity() != Math.addExact(prior.quantity(), extracted.quantity())
-                || !next.withQuantity(prior.quantity()).equals(prior)) {
-            throw new IllegalArgumentException("actor extraction accrual lacks its exact unbound predecessor part");
-        }
-        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
-        nextLots.put(next.id(), next);
-        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        nextAccounts.put(accountId, account.withQuantities(Map.of(next.id(), next.quantity()), Map.of()));
-        return new FungibleResourceLedger(nextLots, claims, nextAccounts, bindings);
+        return new FungibleResourceLedger(FungibleResourceAccrual.prepare(this, extracted, next, accountId, actorId));
     }
 
     /**

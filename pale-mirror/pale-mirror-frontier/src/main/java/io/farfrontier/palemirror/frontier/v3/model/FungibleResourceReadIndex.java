@@ -35,7 +35,7 @@ final class FungibleResourceReadIndex {
     private static final ImmutableResultView<Boolean, Custodies> CUSTODIES = new ImmutableResultView<>(4);
     private static final ImmutableResultView<Boolean, Layout> LAYOUTS = new ImmutableResultView<>(4);
     private static final ImmutableRegistryView<SubjectId, CustodyAccount, Membership> MEMBERSHIPS =
-            new ImmutableRegistryView<>(FungibleResourceLedger.MAX_ACCOUNTS);
+            new ImmutableRegistryView<>(FungibleResourceLedger.MAX_ACCOUNTS, Objects::equals);
     private static final ImmutableKeyOrderView<SubjectId> ACCOUNT_ORDER = new ImmutableKeyOrderView<>(FungibleResourceLedger.MAX_ACCOUNTS);
     // Retain one immutable image per owner thread, not accumulated world revisions.
     private static final ThreadLocal<Image> CURRENT = new ThreadLocal<>();
@@ -114,8 +114,6 @@ final class FungibleResourceReadIndex {
             // execution epoch. Its complete inputs are account ID/custody/claim
             // presence. Actual quantities always come from the captured ledger.
             var members = MEMBERSHIPS.project(MEMBERSHIPS, ledger.accounts(),
-                    (before, after) -> before != null && before.custody().equals(after.custody())
-                            && before.claimQuantities().isEmpty() == after.claimQuantities().isEmpty(),
                     (id, account) -> new Membership(account.custody(), !account.claimQuantities().isEmpty()));
             var order = ACCOUNT_ORDER.get(ledger.accounts());
             return new Custodies(ledger.accounts(), LAYOUTS.get(List.of(members, order), Boolean.TRUE, () -> layout(members, order)));

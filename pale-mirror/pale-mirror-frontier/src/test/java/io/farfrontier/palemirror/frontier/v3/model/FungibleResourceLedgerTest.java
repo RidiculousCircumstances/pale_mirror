@@ -207,6 +207,12 @@ class FungibleResourceLedgerTest {
                         "field:one:epoch-1:part-1", List.of()), new SubjectId("custody:second-harvest"), farmer);
         assertEquals(2, ActorCarriedResources.accounts(independent, farmer).size(),
                 "custody is personal; exclusivity of a field job belongs to its work owner, not the whole inventory");
+        var grown = independent.accrueColdActorExtractionPart(grain(), second, account, farmer);
+        assertEquals(3, grown.totalQuantity(OWNER, "minecraft:wheat"));
+        assertEquals(grown, new FungibleResourceLedger(grown.lots(), grown.claims(), grown.accounts(), grown.bindings()),
+                "a local accrual must pass the complete ingress conservation audit with unrelated custody retained");
+        assertEquals(2, independent.totalQuantity(OWNER, "minecraft:wheat"), "the predecessor remains unchanged");
+        assertEquals(grown, ImmutableInvariantCheck.full(() -> independent.accrueColdActorExtractionPart(grain(), second, account, farmer)));
     }
 
     @Test
@@ -220,6 +226,8 @@ class FungibleResourceLedgerTest {
         FungibleResourceLedger one = FungibleResourceLedger.empty().accrueObservedActorExtractionPart(grain(),
                 first, account, farmer, 4L, observedOne);
         ResourceLot second = first.withQuantity(2);
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorExtractionPart(grain(), second, account, farmer),
+                "local COLD accounting cannot bypass a live physical hand binding");
         FungiblePhysicalObservation.Stack observedTwo = new FungiblePhysicalObservation.Stack(hand, "minecraft:wheat", 2);
         FungibleResourceLedger two = one.accrueObservedActorExtractionPart(grain(), second, account, farmer, 4L, observedTwo);
         assertEquals(2, two.totalQuantity(OWNER, "minecraft:wheat"));

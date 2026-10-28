@@ -4035,3 +4035,35 @@ policy changes. A connected two-input production workflow now requires the same 
 assignment image throughout nonterminal LOAD/work/delivery steps, while existing retirement,
 branch, group, shipment, forestry, extraction and full codec checks retain their actual behavior.
 FocusedchecksPASS83s; final package/runtime measurement follows. G still open.
+
+
+### Resource increments retain conservation proof and shared registry lineage
+
+fc0401bbc frozen67sPASS and bothretained313 deployments verified. Ordinary333.056134s
+75668→80116=13.355106/s,debt814→3028; JFR44.805496s78147→78722=12.833247/s,
+debt2218→2547,owner50.64%,exact33.29%,WAL7.78%,zeroDataLoss. G is still open.
+The named reference-index stacks still compare complete lot/account registries after small
+producer updates. Existing issue/accrual copied both maps and re-summed global conservation.
+
+A resource-owned checked increment now handles fresh lot/account issue and exact growth of one
+existing unbound COLD actor part. Its closed Prepared value can only be built after validation
+and retains its exact immutable predecessor; the ledger's private constructor cannot apply that
+proof against another state. Fresh issue checks IDs, exact lot/account backing, retention and
+current actor capacity/presentation. Existing-part growth requires sole complete prior lot
+custody, unchanged metadata/owner/lineage, no claims or physical binding, exact output delta and
+stack bound. Equal lot/account increments preserve global conservation; claims/bindings and
+unrelated accounts stay unchanged. Full audit and hydration still run complete validation.
+
+Both operations use shared immutable replacement pages and preserve existing producer order.
+Custody membership projection opts into complete Membership value equality, so quantity-only
+changes no longer force full custom-comparator ingress or rebuild holder layout. Current balances
+still resolve current lot/claim/account records. New actor issuance checks its own carried rows;
+it does not introduce container-section uniqueness as an unrelated ledger invariant.
+
+An initial large-file guardrail rejected putting this proof into the near-limit ledger facade;
+it was extracted as the isolated reusable FungibleResourceAccrual mechanism instead. Broader
+harvest/extraction/forestry checks passed119s before the final fresh-issue extension; final
+ledger/custody/cold-receipt/harvest focus passed44s. Added assertions require complete conservation
+reconstruction with unrelated custody intact and rejection of COLD growth into a live HOT binding.
+No native effect, quantity, resource limit, canonical schema or compatibility path changes.
+Frozen/native packaging and measured runtime follow; no throughput improvement claim yet.
