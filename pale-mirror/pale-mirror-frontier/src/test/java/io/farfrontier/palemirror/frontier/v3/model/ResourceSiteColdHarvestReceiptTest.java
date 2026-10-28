@@ -585,6 +585,15 @@ class ResourceSiteColdHarvestReceiptTest {
                 "restart retains the retired composition boundary rather than replaying or falsely starting harvest work");
         assertEquals(state.inventory().fungibleResources(), restored.inventory().fungibleResources(),
                 "restart retains the same lot/account custody independently from later materialization");
+        FrontierDomainRelationships.validateHarvestReferences(restored);
+        var retainedLineageState = restored;
+        var missingPeople = FrontierWorldState.duringUnpublishedTransition(() -> retainedLineageState.withChanges(
+                FrontierWorldStateUpdate.begin().humanPopulation(new HumanPopulation(java.util.Map.of(), java.util.Map.of(), java.util.Map.of()))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validateHarvestReferences(missingPeople),
+                "unchanged field history must be rechecked when its retained resident disappears");
+        assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validate(missingPeople));
+        FrontierDomainRelationships.validateHarvestReferences(restored);
+
 
         StrategicObjective breadObjective = new StrategicObjective(new SubjectId("objective:deferred-harvest-bread"),
                 new SubjectId("settlement:1"), StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 98,
@@ -666,6 +675,21 @@ class ResourceSiteColdHarvestReceiptTest {
                 "a subsequent epoch and restart retain the new active job without orphaning the retired predecessor request");
         ScheduledAction successorAction = ((ScheduleEffect.Created) successorPlan.stream().map(ProposedEvent::payload)
                 .filter(ScheduleEffect.Created.class::isInstance).findFirst().orElseThrow()).action();
+        // Explicit retained-reference fixture: ordinary completed COLD history does not
+        // automatically bind a successor. Exercise target invalidation only when declared.
+        var lifecycle = state.resourceSites().site(site);
+        var histories = new java.util.LinkedHashMap<>(lifecycle.harvestLineages());
+        histories.put(complete.predecessorIntentId(), complete.bindSuccessor(successor.job()));
+        var linked = new ResourceSiteLifecycle(lifecycle.siteId(), lifecycle.phase(), lifecycle.growthEpoch(), lifecycle.growthStage(),
+                lifecycle.preparationWork(), lifecycle.conflictDisposition(), lifecycle.harvestJobs(), histories, lifecycle.harvestSequence());
+        var successorState = state.withResourceSites(state.resourceSites().replace(linked));
+        FrontierDomainRelationships.validateHarvestReferences(successorState);
+        var missingTask = FrontierWorldState.duringUnpublishedTransition(() -> successorState.withChanges(
+                FrontierWorldStateUpdate.begin().strategicPlans(StrategicPlanState.empty())));
+        assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validateHarvestReferences(missingTask),
+                "unchanged predecessor must be rechecked when its exact successor task is removed");
+        assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validate(missingTask));
+        FrontierDomainRelationships.validateHarvestReferences(state);
         state = completeColdHarvest(state, site, successorAction);
         ResourceSiteHarvestLineage successorComplete = state.resourceSites().site(site).harvestLineage(successor.job().intentId()).orElseThrow();
         assertFalse(successorComplete.receiptPending());

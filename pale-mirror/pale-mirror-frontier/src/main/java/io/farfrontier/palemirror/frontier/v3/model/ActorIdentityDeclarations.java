@@ -24,14 +24,18 @@ final class ActorIdentityDeclarations {
                 (before, after) -> false, (id, actor) -> actor.condition().status());
         return LIFE_STATUSES.project(bootstrap, actors, (id, actor) -> actor.condition().status());
     }
-    private static final ImmutableInvariantCheck<Void> EXECUTION_REFERENCES = new ImmutableInvariantCheck<>();
+    private static final ImmutableReferenceIndex.Source<Map<SubjectId, ActorKind>, SubjectId, ActorKind> EXECUTION_ACTORS =
+            new ImmutableReferenceIndex.Source<>(kinds -> kinds, (before, after) -> (before == null) == (after == null));
+    private static final ImmutableReferenceIndex<Map<SubjectId, ActorKind>, SubjectId,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecution> EXECUTION_REFERENCES = new ImmutableReferenceIndex<>(
+            SimulationCapacity.MAX_ACTORS, 1, java.util.List.of(EXECUTION_ACTORS),
+            (kinds, execution) -> java.util.List.of(EXECUTION_ACTORS.at(execution.actorId())), (kinds, actor, execution) -> {
+                if (!kinds.containsKey(actor)) throw new IllegalArgumentException("execution names unknown actor");
+            });
     static void validateExecutions(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
             io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState executions) {
         var kinds = declaredKinds(bootstrap, actors);
-        EXECUTION_REFERENCES.validate(() -> {
-            if (!kinds.keySet().containsAll(executions.actors().keySet()))
-                throw new IllegalArgumentException("execution names unknown actor");
-        }, kinds, executions.actors());
+        EXECUTION_REFERENCES.validate(bootstrap, executions.actors(), kinds);
     }
     private static final ImmutableInvariantCheck<Set<SubjectId>> CHECK = new ImmutableInvariantCheck<>();
     private ActorIdentityDeclarations() { }

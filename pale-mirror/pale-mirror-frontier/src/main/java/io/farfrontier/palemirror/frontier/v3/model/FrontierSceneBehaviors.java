@@ -446,8 +446,9 @@ public final class FrontierSceneBehaviors {
                                                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
                                                          StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs,
                                                          Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease) {
-            ResourceSiteHarvestJob job = resourceSites.sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
-                    .filter(value -> value.id().equals(cause(lease).jobId())).findFirst().orElse(null);
+            var declared = cause(lease);
+            var siteOwner = resourceSites.sites().get(declared.siteId());
+            ResourceSiteHarvestJob job = siteOwner == null ? null : siteOwner.harvestJob(declared.jobId()).orElse(null);
             // A CLOSED lease is retained evidence.  Its matching harvest job is deliberately
             // consumed by the immediately subsequent exact depot receipt, so requiring that
             // transient active record here would make the valid close -> receipt sequence

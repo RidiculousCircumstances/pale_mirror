@@ -19,6 +19,7 @@ class ImmutableGroupViewTest {
         var original = view.keys(epoch, source, points, "target");
         assertEquals(List.of("a", "b"), original);
         assertEquals(2, calls.get());
+        assertFalse(view.uniqueMemberships(epoch, source, points), "two declared producers cannot claim a unique member");
         assertEquals(List.of("a"), view.keys(epoch, source, points, "source"));
         assertEquals(2, calls.get(), "querying another group cannot recompile every producer row");
         var changed = ImmutableLookupMap.withEntry(source, "b", new Row(Set.of("target"), 1));
@@ -27,11 +28,13 @@ class ImmutableGroupViewTest {
         assertEquals(1, changed.get(original.getLast()).progress(), "candidate identity resolves from the current producer");
         var moved = ImmutableLookupMap.withEntry(changed, "a", new Row(Set.of("other"), 2));
         assertEquals(List.of("b"), view.keys(epoch, moved, points, "target"));
+        assertTrue(view.uniqueMemberships(epoch, moved, points), "moving the declared membership resolves the collision");
         assertEquals(List.of("a"), view.keys(epoch, moved, points, "other"));
         assertEquals(List.of(), view.keys(epoch, moved, points, "source"));
         var removed = ImmutableLookupMap.withoutEntry(moved, "b");
         assertEquals(List.of(), view.keys(epoch, removed, points, "target"));
         assertEquals(original, view.keys(epoch, source, points, "target"), "old immutable branches must restore complete membership");
+        assertFalse(view.uniqueMemberships(epoch, source, points), "returning to an old branch must restore its collision too");
         var reversed = new LinkedHashMap<String, Row>(); reversed.put("b", input.get("b")); reversed.put("a", input.get("a"));
         assertEquals(List.of("b", "a"), view.keys(epoch, ImmutableLookupMap.copyOf(reversed), points, "target"));
         assertEquals(List.of("a", "b"), original, "published candidate lists never follow later updates");

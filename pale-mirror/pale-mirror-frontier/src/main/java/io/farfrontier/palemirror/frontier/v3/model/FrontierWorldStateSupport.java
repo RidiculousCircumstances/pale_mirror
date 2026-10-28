@@ -278,6 +278,9 @@ public final class FrontierWorldStateSupport {
         }
 
         @Override public Map<K, V> immutableStorage() { return values; }
+        @Override public Object keyOrderIdentity() {
+            return values instanceof ImmutableMapImage<?, ?> image ? image.keyOrderIdentity() : values;
+        }
         @Override public Set<Entry<K, V>> entrySet() { return values.entrySet(); }
         @Override public V get(Object key) { return values.get(key); }
         @Override public boolean containsKey(Object key) { return values.containsKey(key); }

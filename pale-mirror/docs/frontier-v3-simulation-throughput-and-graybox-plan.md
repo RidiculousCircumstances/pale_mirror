@@ -3783,3 +3783,29 @@ verifiededad7cf9b artifact on their retained worlds. New schema313 fresh-world d
 is required by the changed closed composition, not evidence that an existing world
 recovered. Added negative early-header/full-state rejection; keep historical traces
 and do not compare different-world rates as a controlled optimization gain.
+
+### Local field-register and reference validation
+
+Delivered3e99c557c schema313 to fresh100-town and live terrain worlds (old312 retained).
+One20FPS native pack client completed checked-in ingress1→7→100→1, all board assertions
+and4frames; one frame is occluded by a structure, so this is presentation diagnostics,
+not visual/M3 acceptance or terminal work. Client was closed before ordinary captures.
+Early44.769054s:1281→2110=18.517255/s,debt1115→1189. Mature44.961672s:6523→6808=6.338732/s,
+debt8632→9247. Workload growth disproves any claim of sustained20/s. Mature owner61.05%,
+exact27.93%,WAL7.57%; COLD harvest planning8.086709s and validation7.030201s inclusive.
+
+Source-confirmed remaining whole-register work is replaced with the existing exact
+immutable dependency machinery: lifecycle/cycle consistency checks one changed field
+and every changed referent; generic membership grouping enforces global job uniqueness.
+Declaration and membership invariants retain complete checks when those inputs change.
+All player/world pending-hold predicates remain unchanged. Closed immutable maps expose
+an opaque key-order identity so value changes cannot rebuild identical key lists;
+removal, reinsertion and mutable/unrelated ingress retain exact order checks. No new
+canonical state, owner discovery, process grammar or schema change.
+
+Harvest relationship validation still runs the same typed-edge/incident checks, now
+per changed site and exact retained successor-task/resident reads. Full graph diagnosis
+remains complete. Common execution membership similarly checks changed actor references.
+Harvest scene membership resolves its explicitly declared site/job directly; terminal
+release rules remain unchanged. Focused negative/recovery/branch/order/player-field
+checks pass44s; frozen delivery and retained-world effect pending. G OPEN.

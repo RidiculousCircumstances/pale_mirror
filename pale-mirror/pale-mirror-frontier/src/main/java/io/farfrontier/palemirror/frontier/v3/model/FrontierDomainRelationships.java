@@ -499,7 +499,7 @@ public final class FrontierDomainRelationships {
                     s.inventory().economics().reservations(), s.humanPopulation().residents(), s.hiveColony().growthJobs()),
                     FrontierDomainRelationships::addMarketAndProduction),
             new ValidationFamily("relations-harvest", s -> List.of(s.resourceSites().sites(), s.strategicPlans().tasks(), s.humanPopulation().residents()),
-                    FrontierDomainRelationships::addHarvest),
+                    (state, edges, incidents) -> validateHarvestReferences(state)),
             new ValidationFamily("relations-provision", s -> List.of(s.humanPopulation().provisions(), s.humanPopulation().residents(),
                     s.inventory().items(), s.inventory().fungibleResources().lots()), FrontierDomainRelationships::addProvision),
             new ValidationFamily("relations-leases", s -> List.of(s.sceneLeases(), s.ambientLeases()), (s, edges, incidents) -> addLeases(s, edges)),
@@ -622,41 +622,68 @@ public final class FrontierDomainRelationships {
         }
     }
 
+    private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, StrategicTask> HARVEST_TASKS =
+            new ImmutableReferenceIndex.Source<>(state -> state.strategicPlans().tasks(), (before, after) -> (before == null) == (after == null));
+    private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, ResidentProfile> HARVEST_RESIDENTS =
+            new ImmutableReferenceIndex.Source<>(state -> state.humanPopulation().residents(), (before, after) -> (before == null) == (after == null));
+    private static final ImmutableReferenceIndex<FrontierWorldState, SubjectId, ResourceSiteLifecycle> HARVEST_REFERENCES =
+            new ImmutableReferenceIndex<>(ResourceSiteState.MAX_SITES, ResourceSiteLifecycle.MAX_HARVEST_WORKERS * 4,
+                    List.of(HARVEST_TASKS, HARVEST_RESIDENTS), (state, site) -> {
+                        var reads = new ArrayList<ImmutableReferenceIndex.Read<FrontierWorldState>>();
+                        for (var lineage : site.harvestLineages().values()) {
+                            lineage.successorTaskId().ifPresent(task -> reads.add(HARVEST_TASKS.at(task)));
+                            reads.add(HARVEST_RESIDENTS.at(lineage.workerId()));
+                        }
+                        return reads;
+                    }, (state, id, site) -> {
+                        var incidents = new ArrayList<Incident>();
+                        addHarvestSite(state, site, new ArrayList<>(), incidents);
+                        incidents.stream().filter(incident -> incident.traceCorrelation().startsWith("relationship:"))
+                                .sorted(Comparator.comparing((Incident incident) -> incident.kind().tag())
+                                        .thenComparing(incident -> incident.owner().stableKey())).findFirst().ifPresent(first -> {
+                                    throw new IllegalArgumentException("domain relationship " + first.kind().tag() + " " + first.reason()
+                                            + ": " + first.expected() + " / " + first.observed());
+                                });
+                    });
+    static void validateHarvestReferences(FrontierWorldState state) {
+        HARVEST_REFERENCES.validate(state.bootstrap(), state.resourceSites().sites(), state);
+    }
     private static void addHarvest(FrontierWorldState state, List<Edge> edges, List<Incident> incidents) {
-        for (ResourceSiteLifecycle lifecycle : state.resourceSites().sites().values()) {
-            Endpoint site = subject(EntityKind.RESOURCE_SITE, lifecycle.siteId());
-            lifecycle.harvestJobs().values().forEach(job -> {
-                Endpoint jobEndpoint = subject(EntityKind.RESOURCE_HARVEST_JOB, job.id());
-                edge(edges, Kind.HARVEST_SITE, site, site, jobEndpoint, Lifecycle.ACTIVE, job.id().value());
-                edge(edges, Kind.HARVEST_TASK, jobEndpoint, jobEndpoint, subject(EntityKind.TASK, job.taskId()), Lifecycle.ACTIVE, job.id().value());
-                edge(edges, Kind.HARVEST_WORKER, jobEndpoint, jobEndpoint, subject(EntityKind.RESIDENT, job.workerId()), Lifecycle.ACTIVE, job.id().value());
-                if (!job.equipment().settled()) {
-                    edge(edges, Kind.HARVEST_TOOL, jobEndpoint, jobEndpoint, subject(EntityKind.EXACT_ITEM, job.equipment().itemId()), Lifecycle.ACTIVE, job.id().value());
-                    edge(edges, Kind.HARVEST_TOOL_STORAGE, jobEndpoint, jobEndpoint, subject(EntityKind.CONTAINER, job.equipment().source().containerId()), Lifecycle.ACTIVE, job.id().value());
-                    job.equipment().returnTarget().filter(target -> !target.containerId().equals(job.equipment().source().containerId()))
-                            .ifPresent(target -> edge(edges, Kind.HARVEST_TOOL_STORAGE, jobEndpoint, jobEndpoint,
-                                    subject(EntityKind.CONTAINER, target.containerId()), Lifecycle.ACTIVE, job.id().value()));
-                }
-                edge(edges, Kind.HARVEST_ACTOR_ACCOUNT, jobEndpoint, jobEndpoint,
-                        subject(EntityKind.RESOURCE_ACCOUNT, job.actorAccountId()), Lifecycle.ACTIVE, job.id().value());
-                edge(edges, Kind.HARVEST_DEPOT_ACCOUNT, jobEndpoint, jobEndpoint,
-                        subject(EntityKind.RESOURCE_ACCOUNT, job.depotAccountId()), Lifecycle.ACTIVE, job.id().value());
+        for (var site : state.resourceSites().sites().values()) addHarvestSite(state, site, edges, incidents);
+    }
+    private static void addHarvestSite(FrontierWorldState state, ResourceSiteLifecycle lifecycle, List<Edge> edges, List<Incident> incidents) {
+        Endpoint site = subject(EntityKind.RESOURCE_SITE, lifecycle.siteId());
+        lifecycle.harvestJobs().values().forEach(job -> {
+            Endpoint jobEndpoint = subject(EntityKind.RESOURCE_HARVEST_JOB, job.id());
+            edge(edges, Kind.HARVEST_SITE, site, site, jobEndpoint, Lifecycle.ACTIVE, job.id().value());
+            edge(edges, Kind.HARVEST_TASK, jobEndpoint, jobEndpoint, subject(EntityKind.TASK, job.taskId()), Lifecycle.ACTIVE, job.id().value());
+            edge(edges, Kind.HARVEST_WORKER, jobEndpoint, jobEndpoint, subject(EntityKind.RESIDENT, job.workerId()), Lifecycle.ACTIVE, job.id().value());
+            if (!job.equipment().settled()) {
+                edge(edges, Kind.HARVEST_TOOL, jobEndpoint, jobEndpoint, subject(EntityKind.EXACT_ITEM, job.equipment().itemId()), Lifecycle.ACTIVE, job.id().value());
+                edge(edges, Kind.HARVEST_TOOL_STORAGE, jobEndpoint, jobEndpoint, subject(EntityKind.CONTAINER, job.equipment().source().containerId()), Lifecycle.ACTIVE, job.id().value());
+                job.equipment().returnTarget().filter(target -> !target.containerId().equals(job.equipment().source().containerId()))
+                        .ifPresent(target -> edge(edges, Kind.HARVEST_TOOL_STORAGE, jobEndpoint, jobEndpoint,
+                                subject(EntityKind.CONTAINER, target.containerId()), Lifecycle.ACTIVE, job.id().value()));
+            }
+            edge(edges, Kind.HARVEST_ACTOR_ACCOUNT, jobEndpoint, jobEndpoint,
+                    subject(EntityKind.RESOURCE_ACCOUNT, job.actorAccountId()), Lifecycle.ACTIVE, job.id().value());
+            edge(edges, Kind.HARVEST_DEPOT_ACCOUNT, jobEndpoint, jobEndpoint,
+                    subject(EntityKind.RESOURCE_ACCOUNT, job.depotAccountId()), Lifecycle.ACTIVE, job.id().value());
+        });
+        lifecycle.harvestLineages().values().forEach(lineage -> {
+            Endpoint predecessor = subject(EntityKind.RESOURCE_HARVEST_JOB, lineage.predecessorJobId());
+            edge(edges, Kind.HARVEST_PREDECESSOR, site, site, predecessor, Lifecycle.TERMINAL_RETAINED, lineage.predecessorJobId().value());
+            lineage.successorTaskId().ifPresent(task -> {
+                if (!state.strategicPlans().tasks().containsKey(task)) incident(incidents, Kind.HARVEST_SUCCESSOR_TASK, site, IncidentReason.MISSING_ENDPOINT, "retained successor task", task.value());
+                else edge(edges, Kind.HARVEST_SUCCESSOR_TASK, site, predecessor, subject(EntityKind.TASK, task), Lifecycle.ACTIVE, lineage.predecessorJobId().value());
             });
-            lifecycle.harvestLineages().values().forEach(lineage -> {
-                Endpoint predecessor = subject(EntityKind.RESOURCE_HARVEST_JOB, lineage.predecessorJobId());
-                edge(edges, Kind.HARVEST_PREDECESSOR, site, site, predecessor, Lifecycle.TERMINAL_RETAINED, lineage.predecessorJobId().value());
-                lineage.successorTaskId().ifPresent(task -> {
-                    if (!state.strategicPlans().tasks().containsKey(task)) incident(incidents, Kind.HARVEST_SUCCESSOR_TASK, site, IncidentReason.MISSING_ENDPOINT, "retained successor task", task.value());
-                    else edge(edges, Kind.HARVEST_SUCCESSOR_TASK, site, predecessor, subject(EntityKind.TASK, task), Lifecycle.ACTIVE, lineage.predecessorJobId().value());
-                });
-                lineage.successorJobId().ifPresent(job -> {
-                    ResourceSiteHarvestJob active = lifecycle.harvestJob(job).orElse(null);
-                    if (active == null || !active.id().equals(job)) incident(incidents, Kind.HARVEST_SUCCESSOR_JOB, site, IncidentReason.STALE_RELATION, "active retained successor harvest", job.value());
-                    else edge(edges, Kind.HARVEST_SUCCESSOR_JOB, site, predecessor, subject(EntityKind.RESOURCE_HARVEST_JOB, job), Lifecycle.ACTIVE, lineage.predecessorJobId().value());
-                });
-                if (state.humanPopulation().resident(lineage.workerId()) == null) incident(incidents, Kind.HARVEST_PREDECESSOR, site, IncidentReason.MISSING_ENDPOINT, "retained predecessor farmer", lineage.workerId().value());
+            lineage.successorJobId().ifPresent(job -> {
+                ResourceSiteHarvestJob active = lifecycle.harvestJob(job).orElse(null);
+                if (active == null || !active.id().equals(job)) incident(incidents, Kind.HARVEST_SUCCESSOR_JOB, site, IncidentReason.STALE_RELATION, "active retained successor harvest", job.value());
+                else edge(edges, Kind.HARVEST_SUCCESSOR_JOB, site, predecessor, subject(EntityKind.RESOURCE_HARVEST_JOB, job), Lifecycle.ACTIVE, lineage.predecessorJobId().value());
             });
-        }
+            if (state.humanPopulation().resident(lineage.workerId()) == null) incident(incidents, Kind.HARVEST_PREDECESSOR, site, IncidentReason.MISSING_ENDPOINT, "retained predecessor farmer", lineage.workerId().value());
+        });
     }
 
     private static void addProvision(FrontierWorldState state, List<Edge> edges, List<Incident> incidents) {

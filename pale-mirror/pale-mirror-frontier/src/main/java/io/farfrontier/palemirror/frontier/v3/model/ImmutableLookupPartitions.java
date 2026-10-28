@@ -65,6 +65,7 @@ final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
         int hash = Objects.requireNonNull(key).hashCode();
         return (hash ^ (hash >>> 16)) & (PAGES - 1);
     }
+    Object keyOrderIdentity() { return order; }
     @Override public V get(Object key) { return pages.get(page(key)).get(key); }
     @Override public boolean containsKey(Object key) { return pages.get(page(key)).containsKey(key); }
     @Override public int size() { return order.size(); }

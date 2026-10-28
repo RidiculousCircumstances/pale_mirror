@@ -12,4 +12,6 @@ sealed interface ImmutableMapImage<K, V> extends Map<K, V>
     Optional<Set<K>> changedKeysFrom(Map<?, ?> predecessor);
     /** Closed immutable storage only, for sharing representation across validation wrappers. */
     Map<K, V> immutableStorage();
+    /** Opaque immutable key-order identity; value replacement may preserve it. */
+    Object keyOrderIdentity();
 }

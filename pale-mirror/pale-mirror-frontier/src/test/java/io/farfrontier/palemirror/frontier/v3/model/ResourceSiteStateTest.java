@@ -15,6 +15,23 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteStateTest {
+    @Test void warmedRegisterStillRejectsChangedCyclesDeclarationsAndMissingMembership() {
+        var fields = initial().resourceSites();
+        var id = fields.sites().keySet().iterator().next();
+        var cycle = fields.cycle(id);
+        var forged = ImmutableLookupMap.withEntry(fields.cycles(), id,
+                ResourceFieldCycle.unsurveyed(id, cycle.layout(), cycle.epoch() + 1));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(fields.declarations(), fields.sites(), forged));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(fields.declarations(),
+                ImmutableLookupMap.withoutEntry(fields.sites(), id), fields.cycles()));
+        var foreign = fields.declarations().values().stream().filter(value -> !value.id().equals(id)).findFirst().orElseThrow();
+        var declarations = ImmutableLookupMap.withEntry(fields.declarations(), id, foreign);
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(declarations, fields.sites(), fields.cycles()));
+        var restored = new ResourceSiteState(fields.declarations(), fields.sites(), fields.cycles());
+        assertEquals(fields, restored, "failed partial validation must not poison the valid predecessor");
+        assertEquals(fields, ImmutableInvariantCheck.full(() -> new ResourceSiteState(fields.declarations(), fields.sites(), fields.cycles())));
+    }
+
     @Test void warmedLayoutValidationRejectsAnOutOfBoundsForkAndKeepsItsPredecessorValid() {
         var state = initial(); var sites = state.resourceSites(); var id = sites.declarations().keySet().iterator().next();
         sites.validate(state.bootstrap()); var before = sites.descriptors(state.bootstrap()); var cycle = sites.cycle(id);

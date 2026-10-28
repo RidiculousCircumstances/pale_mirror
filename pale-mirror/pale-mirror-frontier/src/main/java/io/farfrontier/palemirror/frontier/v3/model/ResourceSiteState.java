@@ -56,66 +56,10 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
         cycles = ImmutableLookupMap.copyOf(Objects.requireNonNull(cycles, "resource-site cell cycles"));
         pendingWorldChanges = ImmutableLookupMap.copyOf(Objects.requireNonNull(pendingWorldChanges, "pending world field changes"));
         pendingForeignChanges = ImmutableLookupMap.copyOf(Objects.requireNonNull(pendingForeignChanges, "pending foreign field changes"));
-        if (sites.size() > MAX_SITES || !sites.keySet().equals(cycles.keySet()) || !sites.keySet().equals(declarations.keySet()))
-            throw new IllegalArgumentException("every resource-site lifecycle needs one exact cell cycle");
-        if (declarations.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().id())))
-            throw new IllegalArgumentException("resource-site declaration key differs from its exact owner");
-        var declaredSites = sites.keySet();
-        if (pendingWorldChanges.keySet().stream().anyMatch(key -> !declaredSites.contains(key.owner())))
-            throw new IllegalArgumentException("world field change has no declared site owner");
-        if (pendingForeignChanges.keySet().stream().anyMatch(key -> !declaredSites.contains(key.owner()))
-                || pendingForeignChanges.keySet().stream().anyMatch(pendingWorldChanges::containsKey))
-            throw new IllegalArgumentException("foreign field change has no unique declared site owner");
-        var jobIds = new java.util.HashSet<SubjectId>();
-        for (Map.Entry<SubjectId, ResourceSiteLifecycle> entry : sites.entrySet()) {
-            if (!entry.getKey().equals(entry.getValue().siteId())) throw new IllegalArgumentException("resource-site map key must match lifecycle identity");
-            ResourceSiteLifecycle lifecycle = entry.getValue();
-            ResourceFieldCycle cycle = cycles.get(entry.getKey());
-            if (!entry.getKey().equals(cycle.siteId()))
-                throw new IllegalArgumentException("resource-site cell cycle declares another site owner");
-            if (cycle.epoch() != lifecycle.growthEpoch())
-                throw new IllegalArgumentException("resource-site cell cycle must share its lifecycle epoch");
-            for (ResourceSiteHarvestJob job : lifecycle.harvestJobs().values()) {
-                if (!jobIds.add(job.id())) throw new IllegalArgumentException("duplicate field job identity");
-                if (job.progress().totalCropSlots() != cycle.layout().cells().size())
-                    throw new IllegalArgumentException("field worker must retain its exact admitted layout size");
-                if (job.navigationBlock().isPresent()
-                        && job.navigationBlock().orElseThrow().layoutRevision() != cycle.layout().revision())
-                    throw new IllegalArgumentException("farmer's blocked goal has a foreign field layout revision");
-                if (!job.progress().complete() && !job.returningForBatch()) {
-                    ResourceFieldLayout.CellId selected = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
-                    if (!job.target().current(cycle)
-                            || !job.target().cellId().equals(selected))
-                        throw new IllegalArgumentException("field target has a stale generation or disagrees with its work pool");
-                }
-            }
-        }
-        for (var entry : pendingWorldChanges.entrySet()) {
-            SubjectId siteId = entry.getKey().owner();
-            ResourceFieldCellObserved observation = entry.getValue();
-            ResourceFieldCycle cycle = cycles.get(siteId);
-            if (!entry.getKey().equals(mutationKey(observation.siteId(), observation.cellId())) || observation.source() != ResourceFieldCellObserved.Source.WORLD
-                    || observation.change() == ResourceFieldCellObserved.Change.UNCHANGED
-                    || observation.epoch() != cycle.epoch() || observation.layoutRevision() != cycle.layout().revision()
-                    || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(observation.cellId())).equals(observation.before())
-                    && !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(observation.cellId())).equals(observation.after())
-                    || cycle.pendingPlayerBreaks().containsKey(observation.cellId()))
-                throw new IllegalArgumentException("world field hold has a stale or competing canonical predecessor");
-        }
-        for (var entry : pendingForeignChanges.entrySet()) {
-            SubjectId siteId = entry.getKey().owner();
-            ResourceFieldForeignChangeHeld held = entry.getValue();
-            ResourceFieldCycle cycle = cycles.get(siteId);
-            if (!entry.getKey().equals(mutationKey(held.siteId(), held.cellId())) || held.epoch() != cycle.epoch()
-                    || held.layoutRevision() != cycle.layout().revision()
-                    || !held.before().equals(cycle.cell(held.cellId()))
-                    && !foreignTransition(held.before(), cycle.cell(held.cellId()))
-                    || cycle.pendingPlayerBreaks().containsKey(held.cellId()))
-                throw new IllegalArgumentException("foreign field hold has a stale or competing canonical predecessor");
-        }
+        ResourceSiteStateValidation.validate(declarations, sites, cycles, pendingWorldChanges, pendingForeignChanges);
     }
 
-    private static boolean foreignTransition(ResourceFieldCycle.CellState before, ResourceFieldCycle.CellState after) {
+    static boolean foreignTransition(ResourceFieldCycle.CellState before, ResourceFieldCycle.CellState after) {
         boolean foreign = before.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                 || before.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
                 || after.soil() == ResourceFieldCycle.Soil.OBSTRUCTED

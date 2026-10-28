@@ -21,8 +21,12 @@ class ImmutableLookupMapTest {
         assertTrue(hashes.get() < source.size() / 4,
                 "one row replacement through a validation wrapper cannot rehash the complete registry");
         assertEquals(0, initial.get(target)); assertEquals(-1, updated.get(target));
+        var orderView = new ImmutableKeyOrderView<CountedKey>(2048);
+        var initialOrder = orderView.get(initial);
+        assertSame(initialOrder, orderView.get(updated), "value replacement retains exact immutable key order");
         var another = source.keySet().stream().skip(1).findFirst().orElseThrow();
         var branch = ImmutableLookupMap.withEntry(initial, another, -2);
+        assertSame(initialOrder, orderView.get(branch), "sibling value branches share the same membership order");
         hashes.set(0);
         var changed = new java.util.HashSet<CountedKey>();
         ImmutableMapChanges.forEachIdentityChangedKey(updated, branch, changed::add);
@@ -38,6 +42,9 @@ class ImmutableLookupMapTest {
         assertFalse(deleted.containsKey(target)); assertEquals(2047, deleted.size());
         var restored = ImmutableLookupMap.withEntry(deleted, target, 17);
         assertEquals(target, List.copyOf(restored.keySet()).getLast(), "reinsertion retains ordinary insertion order");
+        assertEquals(List.copyOf(restored.keySet()), orderView.get(restored));
+        assertNotSame(initialOrder, orderView.get(restored), "remove and reinsert must invalidate the order proof");
+        assertEquals(initialOrder, orderView.get(initial));
         assertEquals(0, initial.get(target)); assertEquals(-1, updated.get(target));
         assertEquals(java.util.Set.of(target), ((ImmutableMapImage<CountedKey, Integer>) updated)
                 .changedKeysFrom(initial).orElseThrow());

@@ -91,6 +91,9 @@ public final class ImmutableLookupMap<K, V> extends AbstractMap<K, V> implements
         return new ImmutableLookupMap<>(source);
     }
 
+    @Override public Object keyOrderIdentity() {
+        return values instanceof ImmutableLookupPartitions<?, ?> pages ? pages.keyOrderIdentity() : values;
+    }
     @Override public void forEach(java.util.function.BiConsumer<? super K, ? super V> action) { values.forEach(action); }
     @Override public int hashCode() { return values.hashCode(); }
     @Override public V get(Object key) { return values.get(Objects.requireNonNull(key, "map key")); }

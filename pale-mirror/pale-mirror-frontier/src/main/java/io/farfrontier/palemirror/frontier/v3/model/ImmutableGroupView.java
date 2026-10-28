@@ -13,6 +13,7 @@ final class ImmutableGroupView<K, V, G> {
         Map<K, V> source = Map.of();
         final Map<K, Set<G>> memberships = new HashMap<>();
         final Map<G, Set<K>> groups = new HashMap<>();
+        final Set<G> duplicates = new HashSet<>();
         final Map<G, List<K>> ordered = new HashMap<>();
         List<K> order = List.of();
         Map<K, Integer> ranks = Map.of();
@@ -47,6 +48,18 @@ final class ImmutableGroupView<K, V, G> {
         }
     }
 
+    /** Uniqueness of producer-declared memberships, never discovery of canonical ownership. */
+    boolean uniqueMemberships(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships) {
+        Objects.requireNonNull(epoch); Objects.requireNonNull(source); Objects.requireNonNull(memberships);
+        Map<K, V> snapshot = source instanceof ImmutableMapImage<?, ?> ? source : ImmutableLookupMap.copyOf(source);
+        var image = current.get();
+        if (image == null || image.epoch != epoch || ImmutableInvariantCheck.fullAudit()) image = new Image<>(epoch);
+        try {
+            update(image, snapshot, memberships); current.set(image);
+            return image.duplicates.isEmpty();
+        } catch (RuntimeException | Error failed) { current.remove(); throw failed; }
+    }
+
     private void update(Image<K, V, G> image, Map<K, V> source, Function<V, Set<G>> project) {
         if (image.source == source) return;
         var nextOrder = order.get(source);
@@ -63,10 +76,12 @@ final class ImmutableGroupView<K, V, G> {
             for (var group : previous) if (!next.contains(group)) {
                 var keys = image.groups.get(group); keys.remove(key);
                 if (keys.isEmpty()) image.groups.remove(group);
+                if (keys.size() < 2) image.duplicates.remove(group);
                 image.ordered.remove(group);
             }
             for (var group : next) if (!previous.contains(group)) {
-                image.groups.computeIfAbsent(group, ignored -> new HashSet<>()).add(key);
+                var keys = image.groups.computeIfAbsent(group, ignored -> new HashSet<>()); keys.add(key);
+                if (keys.size() > 1) image.duplicates.add(group);
                 image.ordered.remove(group);
             }
             if (next.isEmpty()) image.memberships.remove(key);

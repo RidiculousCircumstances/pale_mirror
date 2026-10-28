@@ -7,7 +7,7 @@ import java.util.Objects;
 /** Exact immutable registry iteration order, independent of row-value changes.
  * One computing-thread image; no parent-map chain or canonical authority. */
 final class ImmutableKeyOrderView<K> {
-    private record Image<K>(Map<K, ?> source, List<K> order) { }
+    private record Image<K>(Object token, List<K> order) { }
     private final int maximumKeys;
     private final ThreadLocal<Image<K>> current = new ThreadLocal<>();
     ImmutableKeyOrderView(int maximumKeys) {
@@ -18,10 +18,11 @@ final class ImmutableKeyOrderView<K> {
         Objects.requireNonNull(source);
         if (source.size() > maximumKeys) throw new IllegalArgumentException("registry order exceeds its producer bound");
         var prior = current.get();
-        if (source instanceof ImmutableMapImage<?, ?> && prior != null && prior.source() == source) return prior.order();
+        Object token = source instanceof ImmutableMapImage<?, ?> image ? image.keyOrderIdentity() : null;
+        if (token != null && prior != null && prior.token() == token) return prior.order();
         var order = List.copyOf(source.keySet());
         if (prior != null && prior.order().equals(order)) order = prior.order();
-        current.set(new Image<>(source, order));
+        current.set(new Image<>(token, order));
         return order;
     }
 }
