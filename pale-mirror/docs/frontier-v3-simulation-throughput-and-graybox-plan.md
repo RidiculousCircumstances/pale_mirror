@@ -4134,3 +4134,34 @@ Focused coverage extends existing ownership/title/claim/branch/thread reads and
 idle refusal across unrelated material change versus real food arrival. Physical
 item mutation, scene custody and hunger business semantics are unchanged.
 No compatibility/schema work; no timing assertions. G remains OPEN.
+
+
+### Idle refusal follows local service possibility, not remote progress
+
+`700840c5d` retained-world measurement still fails steady time: ordinary
+121.708760s109982→110875=7.337188/s,debt1039→2580; JFR44.817602s
+110132→110400=5.979793/s,debt1334→1969,owner55.10%,exact29.16%,WAL7.17%,
+zero data loss. No causal comparison with different preceding workloads.
+
+End-to-end review of the idle branch found its remaining complete geometry and
+inventory roots still invalidated a food-absence hold after any remote field or
+quarry progress. The closed branch now retains only the exact idle resident's
+profile/nutrition/meal/migration/body/movement/execution/lease, population/schedule
+inputs and the food owner's absence fact. It directly rechecks the existing
+ResidentServiceTurnover.mayPlan admission and inventory-interaction fence,
+as well as absence of an active assignment. Thus a local new service point,
+changed clearance geometry or released body can revoke the wait immediately;
+there is no guessed global geometry read set or persisted access grant.
+Assigned work continues using its conservative owner proof.
+
+Existing connected test extends the refusal through preparation of a remote
+field, then rejects it for a newly declared empty service point under the exact
+resident. It also retains the personal/warehouse food and non-food/title/need
+negatives. No route search is introduced into the hold: mayPlan remains the
+existing admission predicate; destination routing belongs to actual execution.
+
+Host observation during focused verification (not a clean throughput window):
+16logical CPUs, load≈9.86, availableRAM≈9.8GiB,swap≈7.4/8GiB. Other processes include
+three QEMU instances and a Python process in stream_miner. They are unrelated
+and were not stopped; their contribution is not a proved cause of PM gate costs.
+G remains OPEN.

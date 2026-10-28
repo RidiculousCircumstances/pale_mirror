@@ -42,6 +42,18 @@ class ResidentActivityProcessTest {
                         1, "test", List.of()));
         var nonFoodChanged = state.withInventory(state.inventory().withFungibleResources(materials));
         assertTrue(proof.stillHeld().test(nonFoodChanged), "moving non-food stock cannot create food for this idle resident");
+        var foreignSite = new SubjectId("site:2-wheat-field");
+        var preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(foreignSite, 4_000L));
+        var remote = ResourceSiteProcess.reducePreparationStarted(state, foreignSite, (ResourceSitePreparationStarted) preparation.getFirst().payload());
+        remote = ResourceSiteProcess.reducePrepared(remote, foreignSite, (ResourceSitePrepared) preparation.get(1).payload());
+        assertTrue(proof.stillHeld().test(remote), "remote field geometry and progress cannot create food or local service turnover");
+        var storageId = new SubjectId("container:idle-local-clearance");
+        var station = state.actorLocations().get(actor).supportingSurface();
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), storageId, station, java.util.Optional.empty(), station);
+        var record = new ContainerRecord(storageId, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, java.util.Optional.empty(),
+                java.util.Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var localService = new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)).apply(state, home.id());
+        assertFalse(proof.stillHeld().test(localService), "a new service point under this resident must release the idle refusal even without food");
         var personalLot = new SubjectId("lot:admission-personal-food");
         var personal = state.inventory().fungibleResources().issue(new ResourceLot(personalLot, home.id(), ResidentMeal.BREAD_KIND,
                 1, "test", List.of()), new CustodyAccount(new SubjectId("custody:admission-personal-food"),

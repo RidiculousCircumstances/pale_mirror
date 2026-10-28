@@ -60,10 +60,12 @@ public final class ResidentActivityProcess {
                 && ResidentMealOpportunity.foodStockAbsent(state, actor)) {
             var dependencies = ImmutableDependencies.of(idleFoodInputs(state, actor));
             boolean inventoryEffect = ActorInventoryInteractionFences.pending(state, actor);
+            long now = Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(actor).lastEvaluatedTick());
             return java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<>(action,
                     waiting.dependencies(), current -> current.bootstrap() == bootstrap
                         && dependencies.matches(idleFoodInputs(current, actor))
                         && !HumanAssignmentProjection.compile(current).assignment(actor).active()
+                        && !ResidentServiceTurnover.mayPlan(current, actor, now)
                         && ActorInventoryInteractionFences.pending(current, actor) == inventoryEffect));
         }
         return java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<>(
@@ -73,17 +75,14 @@ public final class ResidentActivityProcess {
 
     private static Object[] idleFoodInputs(FrontierWorldState state, SubjectId actor) {
         var people = state.humanPopulation();
+        // Food absence is re-read from its owner; local service turnover is
+        // re-assessed by the caller. Remote progress is neither food nor a change
+        // to this idle resident. No world-wide geometry/inventory root is needed.
         return new Object[] { state.bootstrap(), people.resident(actor), people.nutrition().get(actor),
                 people.meals().get(actor), people.migrations().get(actor), people.schedules(), people.residents(),
                 state.actorLocations().get(actor), state.actorMovements().get(actor),
-                state.actorExecutions().actors().get(actor), state.ambientLeases().get(actor), state.sceneLeases(),
-                ResidentMealOpportunity.foodStockAbsent(state, actor),
-                state.inventory().containers(), state.inventory().items(), state.inventory().cargo(),
-                state.inventory().playerItems(), state.inventory().worldCarrierItems(), state.inventory().conflicts(),
-                state.inventory().surfaces(), state.inventory().economics(), state.inventory().occupiedSlots(),
-                state.replicaCustody(), state.physicalDeltas(), state.structureDamage(),
-                state.structureConditions(), state.routeTopology(), state.resourceSites(),
-                state.extractionSites().deposits(), state.productionStations().machines(), state.hiveColony().addedOrgans() };
+                state.actorExecutions().actors().get(actor), state.ambientLeases().get(actor),
+                ResidentMealOpportunity.foodStockAbsent(state, actor) };
     }
     private ResidentActivityProcess() { }
 
