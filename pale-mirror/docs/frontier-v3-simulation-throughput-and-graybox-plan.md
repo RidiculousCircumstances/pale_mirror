@@ -3839,3 +3839,31 @@ rejection and complete failed-image discard. It introduces no owner/type inferen
 canonical registry. ResourceSiteState uses it for its existing job-id lookup.
 Focused geometry/negative/recovery/typed-kind/nested-index/harvest checks pass38s;
 final job-removal negative, frozen verification and measured delivery follow.
+
+### Complete geometry scratch ownership and physical-reference read sets
+
+7d44ac054 frozen57sPASS and both retained-world deployments verified. The next
+ordinary capture26072→26109/44.712160s=0.827515/s,debt2556→3415 exposed incomplete
+geometry cache isolation: KnownPedestrianGeometryScopes still shared its mutable
+scope/composition basis across computing threads. Independent equal regional blocks
+then required deep comparisons through that shared basis (671leafBlocks.equals samples;
+10.682581s schedule allocation). Compilerwarmup14.9CPU seconds is also material;
+this is a failed throughput result, not an accepted optimization.
+
+The scope cache and its composition seed now belong to the same computing thread
+as the geometry preparation. Its256entry bound and full-fact equality, eviction,
+permission and out-of-order-read semantics remain unchanged. No epoch or equality
+shortcut is introduced. Keep benchmarking the actual retained workload.
+
+PhysicalIntentReferenceValidation now owns the SAME existence/cause/role predicates,
+with explicit source maps for every declared cause/role ID. Membership-only reads
+ignore quantity/position changes, and changed/missing targets invalidate unchanged
+intent rows. Route construction/maintenance and retained field conflict reads remain
+exact-value-sensitive. Unfactored global colony/assault/static-roster inputs remain
+conservative epoch dependencies. Output IDs and field-subject membership are derived
+from current producer declarations, never selected as an owner/type. The private
+input image is assembled inside the validator; no caller supplies a guessed index.
+Existing full audit/recovery still runs every row. Removing a service item's exact
+role target after warming the index rejects identically to the full check, and the
+valid predecessor remains usable. Focused canonical-state/harvest/production and
+geometry unknown/permission/negative/recovery checks pass34s; frozen delivery follows.

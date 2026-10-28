@@ -150,7 +150,6 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     public static final int MAX_PHYSICAL_INTENTS = SimulationCapacity.MAX_PHYSICAL_INTENTS;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     private static final ThreadLocal<Integer> DEFERRED_FULL_VALIDATION_DEPTH = ThreadLocal.withInitial(() -> 0);
-    private static final ImmutableInvariantCheck<Void> PHYSICAL_REFERENCES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> PHYSICAL_CONFIRMATIONS = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> BOOTSTRAP_RESIDENTS = new ImmutableInvariantCheck<>();
     public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
@@ -523,66 +522,9 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                     physicalIntents), bootstrap, humanPopulation, actorLocations, infection, inventory, serviceWorks, physicalIntents);
         OwnedChecks.SETTLEMENT_ASSAULT.validate(() -> FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans),
                     bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
-        var fieldReferences = ResourceSitePhysicalIntentStateSupport.referenceView(resourceSites);
-        PHYSICAL_REFERENCES.validate(() -> {
-        if (physicalIntents.size() > MAX_PHYSICAL_INTENTS) throw new IllegalArgumentException("physical intent retention limit exceeded");
-        Set<SubjectId> fieldSubjects = fieldReferences.subjects();
-        for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
-            PhysicalIntent intent = entry.getValue();
-            if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
-            boolean preparedConflictCustody = ResourceSitePhysicalIntentStateSupport.ownsPreparedConflictIntent(resourceSites, intent);
-            if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && !preparedConflictCustody)
-                    && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
-                    && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
-                    && !humanPopulation.medicalOperations().containsKey(intent.causeSubjectId())
-                    && !humanPopulation.provisions().containsKey(intent.causeSubjectId())
-                    && !expectedStructures.contains(intent.causeSubjectId()) && !expectedSettlements.contains(intent.causeSubjectId())
-                    && !productionJobs.containsKey(intent.causeSubjectId())
-                    && !serviceWorks.containsKey(intent.causeSubjectId())
-                    && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
-                    && !strategicPlans.settlementAssaults().containsKey(intent.causeSubjectId()) && !SceneStrikeStateSupport.isSettlementAssaultCause(strategicPlans, intent)
-                    && !bootstrap.hive().id().equals(intent.causeSubjectId())
-                    && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !routeConstructions.containsKey(intent.causeSubjectId())
-                    && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, intent.causeSubjectId()) && !fieldSubjects.contains(intent.causeSubjectId())) {
-                throw new IllegalArgumentException("physical intent cause must be a canonical subject");
-            }
-            for (var subjectEntry : intent.roles().namedRoles().entrySet()) {
-                SubjectId subject = subjectEntry.getValue();
-                if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || preparedConflictCustody) continue;
-                RouteConstruction routeConstruction = routeConstructions.get(intent.causeSubjectId());
-                boolean hiveNutrientSubject = HiveNutrientTransferStateSupport.ownsIntentSubject(hiveColony, intent, subject);
-                boolean reservedRouteConstructionCargo = intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING && routeConstruction != null && routeConstruction.cargoId().isEmpty()
-                        && (subject.equals(routeConstruction.plannedCargoId())
-                        || subject.equals(routeConstruction.plannedCargoItemId()));
-                boolean reservedRouteMaintenanceCargo = RouteMaintenanceStateSupport.reservesSubject(routeMaintenances, intent, subject);
-                boolean productionResourceSubject = intent.roles().schema() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.PRODUCTION_RESOURCES
-                        && (subject.equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CUSTODY_ACCOUNT))
-                        && inventory.fungibleResources().accounts().containsKey(subject)
-                        || subject.equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_CONTAINER))
-                        && inventory.containers().containsKey(subject));
-                boolean declaredResourceContainer = subjectEntry.getKey() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_CONTAINER
-                        && inventory.containers().containsKey(subject);
-                if (!declaredResourceContainer && !productionResourceSubject && !hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) &&
-                        !expectedStructures.contains(subject) && !expectedSettlements.contains(subject)
-                        && !inventory.items().containsKey(subject)
-                        && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject)
-                        && !inventory.fungibleResources().lots().containsKey(subject) && !inventory.fungibleResources().claims().containsKey(subject)
-                        && !humanPopulation.provisions().containsKey(subject) && !humanPopulation.medicalOperations().containsKey(subject)
-                        && !serviceWorks.containsKey(subject)
-                        && productionJobs.values().stream().noneMatch(job -> job.outputItemId().equals(subject))
-                        && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
-                        && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject) && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, subject)
-                        && !strategicPlans.settlementAssaults().containsKey(subject)
-                        && !reservedRouteConstructionCargo && !reservedRouteMaintenanceCargo && !fieldSubjects.contains(subject)) {
-                    throw new IllegalArgumentException("physical intent references an unknown canonical subject");
-                }
-            }
-        }
-        }, bootstrap, expectedActors, physicalIntents, inventory.containers(), inventory.items(), inventory.cargo(),
-                inventory.fungibleResources().accounts(), inventory.fungibleResources().lots(), inventory.fungibleResources().claims(),
-                hiveColony, humanPopulation.birthJobs(), humanPopulation.medicalOperations(), humanPopulation.provisions(),
-                productionJobs, serviceWorks, strategicPlans.settlementAssaults(), routeConstructions, routeMaintenances,
-                fieldReferences.subjects(), fieldReferences.conflicts());
+        PhysicalIntentReferenceValidation.validate(bootstrap, actorLocations,
+                expectedActors, expectedStructures, expectedSettlements, physicalIntents, inventory, hiveColony, humanPopulation,
+                productionJobs, serviceWorks, strategicPlans, routeConstructions, routeMaintenances, resourceSites);
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
         OwnedChecks.PHYSICAL_OBSERVATIONS.validate(() -> FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents,
                     physicalObservations, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks, resourceSites), bootstrap, inventory, infection,

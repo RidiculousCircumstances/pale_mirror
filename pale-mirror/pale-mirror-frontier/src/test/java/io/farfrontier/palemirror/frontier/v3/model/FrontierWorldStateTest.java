@@ -116,6 +116,16 @@ class FrontierWorldStateTest {
         assertEquals(work, state.serviceWorks().get(work.id()));
         assertEquals(HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentProjection.compile(state).assignment(medic.id()).kind());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        physicalReferences(state, inventory);
+        var missingReference = inventory.consume(work.inputItemId(), 1);
+        var incremental = assertThrows(IllegalArgumentException.class, () -> physicalReferences(state, missingReference),
+                "removing a role target must invalidate an unchanged intent");
+        var full = assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
+            physicalReferences(state, missingReference); return null;
+        }));
+        assertEquals(full.getMessage(), incremental.getMessage());
+        physicalReferences(state, inventory);
+
         SettlementServiceWork atSource = work;
         while (atSource.inputTraversalCursor() < atSource.inputTraversal().linearCorridorSurfaces().size() - 1) {
             atSource = atSource.withInputTraversalCursor(atSource.inputTraversalCursor() + 1);
@@ -509,4 +519,11 @@ class FrontierWorldStateTest {
                 FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
                 corridor.stream().map(SurfaceAnchor::new).toList());
     }
+    private static void physicalReferences(FrontierWorldState state, ExactInventory inventory) {
+        PhysicalIntentReferenceValidation.validate(state.bootstrap(), state.actorLocations(), state.actorLocations().keySet(),
+                FrontierWorldStateSupport.structureIds(state.bootstrap()), FrontierWorldStateSupport.settlementIds(state.bootstrap()),
+                state.physicalIntents(), inventory, state.hiveColony(), state.humanPopulation(), state.productionJobs(),
+                state.serviceWorks(), state.strategicPlans(), state.routeConstructions(), state.routeMaintenances(), state.resourceSites());
+    }
+
 }

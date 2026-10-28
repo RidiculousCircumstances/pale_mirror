@@ -14,20 +14,24 @@ final class KnownPedestrianGeometryScopes {
     private record ScopeIdentity(Object epoch, Object view) { }
     /** Reconstructible facts: cache eviction cannot manufacture a terrain change. */
     private record RegionFacts(Object ground, Object hard, Object overlay, Object accessRestrictions) { }
-    private static final Map<Object, Scope> SCOPES = new LinkedHashMap<>();
+    private static final class Working {
+        final Map<Object, Scope> scopes = new LinkedHashMap<>();
+        Scope compositionBasis;
+    }
+    private static final ThreadLocal<Working> WORKING = ThreadLocal.withInitial(Working::new);
     // One immutable composition seed, not another per-task cache or permission authority.
     // A new/evicted query compares every input against this seed and replaces exact changed
     // regions. It need not reconstruct all world facts merely because its own key is absent.
-    private static Scope compositionBasis;
     private KnownPedestrianGeometryScopes() { }
 
-    static synchronized PedestrianGeometryRevision revision(Object key, RegionalBlockSet hard,
+    static PedestrianGeometryRevision revision(Object key, RegionalBlockSet hard,
             Map<TerrainColumn, List<SurfaceAnchor>> overlayMap, RegionalBlockSet accessRestrictions, PedestrianGeometryRevision capturedGround) {
+        var working = WORKING.get();
         var overlay = RegionalSurfaceMap.copyOf(overlayMap);
         var ground = capturedGround;
-        var prior = SCOPES.get(key);
+        var prior = working.scopes.get(key);
         if (prior != null && !prior.ground().scope().equals(ground.scope())) prior = null;
-        var basis = prior != null ? prior : compositionBasis;
+        var basis = prior != null ? prior : working.compositionBasis;
         if (basis != null && !basis.ground().scope().equals(ground.scope())) basis = null;
         var changed = new HashSet<PedestrianGeometryRevision.Region>();
         if (basis != null) {
@@ -35,8 +39,8 @@ final class KnownPedestrianGeometryScopes {
             changed.addAll(hard.changesFrom(basis.hard())); changed.addAll(overlay.changesFrom(basis.overlay()));
             changed.addAll(accessRestrictions.changesFrom(basis.accessRestrictions()));
             if (prior != null && changed.isEmpty()) {
-                compositionBasis = new Scope(hard, overlay, accessRestrictions, ground, prior.revision());
-                SCOPES.put(key, compositionBasis);
+                working.compositionBasis = new Scope(hard, overlay, accessRestrictions, ground, prior.revision());
+                working.scopes.put(key, working.compositionBasis);
                 return prior.revision();
             }
         } else {
@@ -61,9 +65,9 @@ final class KnownPedestrianGeometryScopes {
         var revision = prior != null ? prior.revision().withRevisions(tokens.with(updates))
                 : new PedestrianGeometryRevision(new ScopeIdentity(ground.scope(), key),
                 ground.geometryScope(), ground.baseline(), tokens.with(updates));
-        if (SCOPES.size() >= MAX_SCOPES && !SCOPES.containsKey(key)) SCOPES.remove(SCOPES.keySet().iterator().next());
-        compositionBasis = new Scope(hard, overlay, accessRestrictions, ground, revision);
-        SCOPES.put(key, compositionBasis); return revision;
+        if (working.scopes.size() >= MAX_SCOPES && !working.scopes.containsKey(key)) working.scopes.remove(working.scopes.keySet().iterator().next());
+        working.compositionBasis = new Scope(hard, overlay, accessRestrictions, ground, revision);
+        working.scopes.put(key, working.compositionBasis); return revision;
     }
 
 }
