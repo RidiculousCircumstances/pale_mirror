@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 
 import java.util.HashMap;
 import java.util.List;
@@ -40,20 +41,35 @@ final class FrontierReferenceClosure {
     static void validateTransition(FrontierWorldState before, FrontierWorldState after,
                                    java.util.function.Supplier<List<ScheduledAction>> schedules,
                                    List<ScheduledAction> retainedChanges) {
-        GoodsTradeStateSupport.validateTransition(before, after);
-        ShipmentStateSupport.validateTransition(before, after);
+        validateTransition(before, after, schedules, retainedChanges, FrontierExecutionMetrics.noOp());
+    }
+    static void validateTransition(FrontierWorldState before, FrontierWorldState after,
+                                   java.util.function.Supplier<List<ScheduledAction>> schedules,
+                                   List<ScheduledAction> retainedChanges, FrontierExecutionMetrics metrics) {
+        String owner = after.bootstrap().worldId().value();
+        try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-trade", owner)) {
+            GoodsTradeStateSupport.validateTransition(before, after);
+        }
+        try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-shipments", owner)) {
+            ShipmentStateSupport.validateTransition(before, after);
+        }
         FrontierDomainRelationships.verifyCurrentOwnerSurfaces();
-        FrontierDomainRelationships.validateTransition(before, after);
-        // Changed schedules and retired targets are independent dimensions:
-        // owner retirement must still reject unchanged incoming continuations.
-        ResidentMealReferenceClosure.validateTransition(before, after);
-        if (before.physicalIntents() != after.physicalIntents() || before.inventory().items() != after.inventory().items())
-            validateExactPhysicalCustody(after);
-        var removed = ScheduledSubjectExistence.removed(before, after);
-        if (!removed.isEmpty()) for (var action : schedules.get()) if (removed.contains(action.subject())
-                && !SYSTEM_SUBJECTS.contains(action.subject().value()))
-            throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
-        validateScheduledSubjects(after, retainedChanges);
+        FrontierDomainRelationships.validateTransition(before, after, metrics);
+        try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-meals", owner)) {
+            ResidentMealReferenceClosure.validateTransition(before, after);
+        }
+        try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-physical-custody", owner)) {
+            if (before.physicalIntents() != after.physicalIntents() || before.inventory().items() != after.inventory().items())
+                validateExactPhysicalCustody(after);
+        }
+        try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-schedule-subjects", owner)) {
+            // Retired targets and newly retained actions remain independent checks.
+            var removed = ScheduledSubjectExistence.removed(before, after);
+            if (!removed.isEmpty()) for (var action : schedules.get()) if (removed.contains(action.subject())
+                    && !SYSTEM_SUBJECTS.contains(action.subject().value()))
+                throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
+            validateScheduledSubjects(after, retainedChanges);
+        }
     }
 
     private static void validateExactPhysicalCustody(FrontierWorldState state) {

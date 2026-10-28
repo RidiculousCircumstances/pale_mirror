@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
@@ -454,13 +455,19 @@ public final class FrontierDomainRelationships {
 
     /** Equivalent owned-family checks, invalidated by every source and target read by that family. */
     static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
+        validateTransition(before, after, FrontierExecutionMetrics.noOp());
+    }
+    static void validateTransition(FrontierWorldState before, FrontierWorldState after, FrontierExecutionMetrics metrics) {
         var edges = new ArrayList<Edge>();
         var incidents = new ArrayList<Incident>();
         for (var family : VALIDATION_FAMILIES) {
             List<Object> old = family.dependencies().apply(before), next = family.dependencies().apply(after);
             boolean changed = false;
             for (int index = 0; index < old.size(); index++) if (old.get(index) != next.get(index)) { changed = true; break; }
-            if (changed) family.collect().collect(after, edges, incidents);
+            if (changed) try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION,
+                    family.traceName(), after.bootstrap().worldId().value())) {
+                family.collect().collect(after, edges, incidents);
+            }
         }
         // Sorting is diagnostic work only; a valid transition never sorts a whole relation view.
         incidents.stream().filter(incident -> incident.traceCorrelation().startsWith("relationship:"))
@@ -472,31 +479,31 @@ public final class FrontierDomainRelationships {
     }
 
     private interface ValidationCollector { void collect(FrontierWorldState state, List<Edge> edges, List<Incident> incidents); }
-    private record ValidationFamily(java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
+    private record ValidationFamily(String traceName, java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
                                     ValidationCollector collect) { }
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
-            new ValidationFamily(s -> List.of(s.forest(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory()),
+            new ValidationFamily("relations-forestry", s -> List.of(s.forest(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory()),
                     (s, edges, incidents) -> ForestryRelationships.collect(s, edges)),
-            new ValidationFamily(s -> List.of(s.extractionSites(), s.humanPopulation().residents(), s.actorExecutions(), s.inventory()),
+            new ValidationFamily("relations-extraction", s -> List.of(s.extractionSites(), s.humanPopulation().residents(), s.actorExecutions(), s.inventory()),
                     (s, edges, incidents) -> ExtractionRelationships.collect(s, edges)),
-            new ValidationFamily(s -> List.of(s.inventory().economics(), s.shipments()),
+            new ValidationFamily("relations-budgets", s -> List.of(s.inventory().economics(), s.shipments()),
                     (s, edges, incidents) -> FinancialBudgetRelationships.collect(s, edges)),
-            new ValidationFamily(s -> List.of(s.unitGroups(), s.shipments(), s.actorLocations(), s.actorExecutions(), s.actorMovements(), s.bootstrap(), s.inventory().fungibleResources(), s.transportFleet()),
+            new ValidationFamily("relations-groups", s -> List.of(s.unitGroups(), s.shipments(), s.actorLocations(), s.actorExecutions(), s.actorMovements(), s.bootstrap(), s.inventory().fungibleResources(), s.transportFleet()),
                     (s, edges, incidents) -> UnitGroupRelationships.collect(s, edges)),
-            new ValidationFamily(s -> List.of(s.shipments(), s.actorExecutions(), s.companies().goodsTrade(), s.inventory().containers(),
+            new ValidationFamily("relations-shipments", s -> List.of(s.shipments(), s.actorExecutions(), s.companies().goodsTrade(), s.inventory().containers(),
                     s.inventory().fungibleResources(), s.bootstrap(), s.transportFleet(), s.actorLocations()), (s, edges, incidents) -> ShipmentRelationships.collect(s, edges)),
-            new ValidationFamily(s -> List.of(s.companies().goodsTrade(), s.inventory().economics(), s.inventory().containers(),
+            new ValidationFamily("relations-trade", s -> List.of(s.companies().goodsTrade(), s.inventory().economics(), s.inventory().containers(),
                     s.inventory().fungibleResources()), (s, edges, incidents) -> GoodsTradeRelationships.collect(s, edges)),
-            new ValidationFamily(s -> List.of(s.strategicPlans()), FrontierDomainRelationships::addStrategic),
-            new ValidationFamily(s -> List.of(s.companies().market(), s.productionJobs(), s.strategicPlans().tasks(),
+            new ValidationFamily("relations-strategy", s -> List.of(s.strategicPlans()), FrontierDomainRelationships::addStrategic),
+            new ValidationFamily("relations-market-production", s -> List.of(s.companies().market(), s.productionJobs(), s.strategicPlans().tasks(),
                     s.inventory().economics().reservations(), s.humanPopulation().residents(), s.hiveColony().growthJobs()),
                     FrontierDomainRelationships::addMarketAndProduction),
-            new ValidationFamily(s -> List.of(s.resourceSites().sites(), s.strategicPlans().tasks(), s.humanPopulation().residents()),
+            new ValidationFamily("relations-harvest", s -> List.of(s.resourceSites().sites(), s.strategicPlans().tasks(), s.humanPopulation().residents()),
                     FrontierDomainRelationships::addHarvest),
-            new ValidationFamily(s -> List.of(s.humanPopulation().provisions(), s.humanPopulation().residents(),
+            new ValidationFamily("relations-provision", s -> List.of(s.humanPopulation().provisions(), s.humanPopulation().residents(),
                     s.inventory().items(), s.inventory().fungibleResources().lots()), FrontierDomainRelationships::addProvision),
-            new ValidationFamily(s -> List.of(s.sceneLeases(), s.ambientLeases()), (s, edges, incidents) -> addLeases(s, edges)),
-            new ValidationFamily(s -> List.of(s.serviceWorks(), s.hiveColony().mobilizations()),
+            new ValidationFamily("relations-leases", s -> List.of(s.sceneLeases(), s.ambientLeases()), (s, edges, incidents) -> addLeases(s, edges)),
+            new ValidationFamily("relations-retirement", s -> List.of(s.serviceWorks(), s.hiveColony().mobilizations()),
                     (s, edges, incidents) -> addCurrentRetirementFamilies(s, edges)));
 
     /**

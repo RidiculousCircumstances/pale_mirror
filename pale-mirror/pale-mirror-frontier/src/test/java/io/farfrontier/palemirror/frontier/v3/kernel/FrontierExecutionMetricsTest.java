@@ -39,6 +39,7 @@ class FrontierExecutionMetricsTest {
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.REDUCTION));
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.VALIDATION));
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.TRANSACTION));
+        assertTrue(metrics.details.containsAll(List.of("owned-state", "reference-closure", "reference-meals", "retirement-proofs")));
         assertTrue(metrics.queueObserved, "queue depth and deferred-lag observation is emitted on every canonical advance");
     }
 
@@ -57,12 +58,15 @@ class FrontierExecutionMetricsTest {
     @Test
     void failedObservationCannotChangeCanonicalOutcome() {
         WorldId world = new WorldId("frontier:faulting-execution-metrics");
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> baseline = FrontierWorldRuntimeDefinition.configuration(world, 713L);
-        FrontierEngine<FrontierWorldProjection> measured = FrontierEngines.create(baseline.withExecutionMetrics(new FaultingMetrics()));
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> baseline = withExactReview(FrontierWorldRuntimeDefinition.configuration(world, 713L));
+        var metrics = new FaultingMetrics();
+        FrontierEngine<FrontierWorldProjection> measured = FrontierEngines.create(baseline.withExecutionMetrics(metrics));
         FrontierEngine<FrontierWorldProjection> control = FrontierEngines.create(baseline);
 
-        measured.advanceTo(new SimInstant(1L), new WorkBudget(128, 512));
-        control.advanceTo(new SimInstant(1L), new WorkBudget(128, 512));
+        var due = baseline.initialSchedules().getFirst().dueAt();
+        measured.advanceTo(due, new WorkBudget(128, 512));
+        control.advanceTo(due, new WorkBudget(128, 512));
+        assertTrue(metrics.detailFailures > 0, "the failing detail observer must actually be exercised");
 
         assertArrayEquals(control.checkpoint().canonicalState(), measured.checkpoint().canonicalState(),
                 "a failed timing callback may not alter canonical events, schedules or state");
@@ -71,6 +75,8 @@ class FrontierExecutionMetricsTest {
     private static final class CapturingMetrics implements FrontierExecutionMetrics {
         private final List<Stage> stages = new ArrayList<>();
         private boolean queueObserved;
+        private final List<String> details = new ArrayList<>();
+        @Override public Span detail(Stage stage, String kind, String owner) { return () -> details.add(kind); }
 
         @Override public Span begin(Stage stage, String kind, String owner) {
             return () -> stages.add(stage);
@@ -84,6 +90,10 @@ class FrontierExecutionMetricsTest {
     }
 
     private static final class FaultingMetrics implements FrontierExecutionMetrics {
+        private int detailFailures;
+        @Override public Span detail(Stage stage, String kind, String owner) {
+            detailFailures++; throw new IllegalStateException("synthetic detail observation failure");
+        }
         @Override public Span begin(Stage stage, String kind, String owner) {
             return () -> { throw new IllegalStateException("synthetic diagnostic close failure"); };
         }

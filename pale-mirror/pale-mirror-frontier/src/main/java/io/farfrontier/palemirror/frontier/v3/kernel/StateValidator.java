@@ -53,6 +53,15 @@ public interface StateValidator<S> {
         validateTransition(previous, next);
     }
 
+    /** Optional observational detail; existing validators keep the same barrier.
+     * Diagnostics never decide whether a canonical transition is valid. */
+    default void validateTransaction(S previous, S next, List<FrontierEvent> events,
+                                     java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
+                                     java.util.function.Supplier<List<ScheduledAction>> schedulesAfter,
+                                     List<ScheduledAction> retainedChanges, FrontierExecutionMetrics metrics) {
+        validateTransaction(previous, next, events, schedulesBefore, schedulesAfter, retainedChanges);
+    }
+
     static <S> StateValidator<S> none() {
         return new StateValidator<>() {
             @Override public void validateInitial(S state) { }

@@ -2564,3 +2564,29 @@ The connected focused suite (reference index, movement/interruption, groups,
 shipments, closure, extraction disruption, forestry and expedition supply/refill,
 consolidated trade) plus guardrails passed in2m4s. Native aggregate effect remains
 unmeasured; G is still open.
+
+
+### Refine the remaining validation attribution (2026-10-28)
+
+994bd186b selective-reference release84frontier/45native+guardrails/packagePASS31s;
+both retainedworlddeploysverified, SHA512b3b76e81e292074fa33d6ebd7b6a0ea137c2a5a3c86874bfffcc0f4417a5634cec10d213487a938eef8e86762784ef29d76824e4343f4972b7653750acd656e9.
+reference-index-ordinary100.jfr:144493events/noDataLoss,44.808894s accounted;
+ticks70563→70746=4.084011/s,debt1572→2286: G STILLFAILED. OWNER57.05%,
+EXACT36.67%,WAL4.36%,budget0.14%;canonicalvalidation12.245218s nested for3286
+advance-result transactions. No material aggregate gain established for this cut.
+Do not treat a correct local invalidation improvement as proof of scale completion.
+
+Before choosing another validator migration, refine the EXISTING on-demand trace.
+The kernel now offers the same barrier an optional metrics context; existing
+validators delegate to the unchanged default. The model reports owned-state,
+reference-closure and retirement-proof spans. Closure reports trade, shipments,
+meals, physical custody, scheduled subjects and twelve explicit relationship-family
+labels. These are nested timing explanations, not additive work or new ownership.
+
+Fine detail uses a separate optional hook: no ordinary counter/histogram attribution
+is added. Native detail creates only the enabled JFR stage event and otherwise
+returns no-op; no domain clock, new thread/store, decision branch, recovery/schema
+change or check bypass. The original check bodies/order and retirement constraints
+are unchanged. Focused engine, metrics, reference/relationship negatives and native
+diagnostic-budget checks PASS21s. The real nested detail callback is exercised by
+successful and deliberately failing collectors, with identical canonical bytes.

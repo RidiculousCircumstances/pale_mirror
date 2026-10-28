@@ -84,6 +84,16 @@ public interface FrontierExecutionMetrics {
 
     Span begin(Stage stage, String kind, String owner);
 
+    /** Optional fine-grained tracing. Disabled collectors retain no counters or spans. */
+    default Span detail(Stage stage, String kind, String owner) { return NoOp.SPAN; }
+    static Span safelyDetail(FrontierExecutionMetrics metrics, Stage stage, String kind, String owner) {
+        try {
+            var span = metrics.detail(stage, kind, owner);
+            if (span == null || span == NoOp.SPAN) return NoOp.SPAN;
+            return () -> { try { span.close(); } catch (RuntimeException ignored) { } };
+        } catch (RuntimeException ignored) { return NoOp.SPAN; }
+    }
+
     /** Diagnostic correlation only; never identity or permission for executing an action. */
     default Span action(io.farfrontier.palemirror.frontier.v3.api.WorldId world, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant at) {
         return NoOp.SPAN;

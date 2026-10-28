@@ -53,6 +53,11 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
         };
     }
 
+    @Override public Span detail(Stage stage, String kind, String owner) {
+        var traced = FrontierV3DelayTrace.stage(stage, kind, owner);
+        return traced == null ? null : () -> FrontierV3DelayTrace.close(traced);
+    }
+
     @Override public Span action(io.farfrontier.palemirror.frontier.v3.api.WorldId world, ScheduledAction action,
             io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant at) {
         return FrontierV3DelayTrace.action(world, action, revision, at);
