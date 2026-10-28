@@ -21,6 +21,10 @@ public final class ContainerStorageAdmission {
     }
     private record IncomingQuery(SubjectId container, ContainerSectionId section, Optional<SubjectId> completing) { }
     private static final ImmutableKeyedInputView<IncomingQuery, ContainerIncomingStock> INCOMING = new ImmutableKeyedInputView<>(512);
+    private static final ImmutableResultView<Boolean, ContainerInboundCapacity.Index> DEMAND_INDEXES = new ImmutableResultView<>(4);
+    private static ContainerInboundCapacity.Index index(List<ContainerInboundCapacity.Demand> immutableDemands) {
+        return DEMAND_INDEXES.get(List.of(immutableDemands), Boolean.TRUE, () -> ContainerInboundCapacity.index(immutableDemands));
+    }
 
     static ContainerIncomingStock inbound(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
         return inbound(state, new ResourceCustody.Container(container), completing);
@@ -31,9 +35,8 @@ public final class ContainerStorageAdmission {
         var uncovered = ContainerPhysicalReservations.uncoveredDemands(state);
         return INCOMING.get(state.bootstrap(), new IncomingQuery(container, holder.section(), completing), List.of(demands, uncovered), () -> {
             // Prove the completion's declared owner even when its entire demand is slot-backed.
-            ContainerInboundCapacity.incoming(demands, container, holder.section(), completing);
-            return ContainerInboundCapacity.incoming(uncovered.stream()
-                    .filter(demand -> completing.filter(demand.owner()::equals).isEmpty()).toList(), container, holder.section(), Optional.empty());
+            index(demands).requireCompletion(container, holder.section(), completing);
+            return index(uncovered).incomingExceptOwner(container, holder.section(), completing);
         });
     }
     static boolean receive(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {

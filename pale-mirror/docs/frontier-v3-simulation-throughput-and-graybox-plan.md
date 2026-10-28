@@ -3532,3 +3532,32 @@ closed. Guard nullable initialization and retry under the SAME bounded assertion
 TEXT_NOT_READY is diagnostic text, never success. Position, text, distance and angle
 requirements unchanged. No new timingunit test or gameplaybehavior. compileJava and
 currentfocusedguardrails pass; actualframe/HOTacceptance remainsOPEN.
+
+
+### Storage and service admission read images follow explicit endpoint scope (2026-10-28)
+
+The cf98 held-call discriminator includes ContainerInboundCapacity.incoming in
+22samples among its displayed server stack groups, plus service-demand evaluation. Source
+repeatedly rebuilt globalduplicate sets and totals for every container/completing
+owner query and copied the entire uncovered list for owner exclusion. The common
+immutable incoming index validates duplicates once and groups explicit container,
+section and owner, retaining fungible/individual representation and checkedlong
+sums. Completion must first exist in the FULLdeclaredimage, including entirely
+slot-backed output; only its uncovered portion is subtracted for capacity. The
+shared admission owner memoizes4producer-declared immutable demandimages; ordinary
+list convenience still defensively observes mutable callers, via the samealgorithm.
+All active callers use the index; no price, permission, reservation or capacity rule
+changes, no new admissionlimit. Scope/representation/unknowncompletion/duplicate/
+mutablepredecessor coverage and reservation/haul/sourcecompile/guardrails PASS13s;
+connected physicalrelease/resumedhandoff/paidreplenishment/storage checks PASS19s.
+
+ServiceAccessCapabilities also discarded ALLcurrent answers at its129th distinct
+point, despite a scale world having hundreds of declared points. The lazy current-
+state image now retains only keys in ServiceBoundaryComposition's closed finite
+registry. Unknown requests still run normalvalidation without retainingcacheentries;
+a statechange replaces the image. This uses the actual producerbound, not an arbitrary
+cachecapacity increase or additional permission. Current service/fence/currentbody/
+registrynegative, expeditionwait and containerreservation checks+guardrails PASS14s.
+Global candidate scanning inside each family still remains and is a separate next
+optimization. No claim that these local cuts alone achieve20ticks/s. Frozenrelease,
+retaineddeploy and aggregate native effect pending; G remainsOPEN.

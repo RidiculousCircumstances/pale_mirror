@@ -11,6 +11,32 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContainerReservationTest {
+    @Test void indexedInboundKeepsHolderSectionRepresentationAndCompletionProofIsolated() {
+        var a = new SubjectId("container:index-a"); var b = new SubjectId("container:index-b");
+        var first = new SubjectId("job:index-first"); var other = new SubjectId("job:index-other");
+        var section = new ContainerSectionId("input");
+        var rows = new java.util.ArrayList<>(List.of(
+                new ContainerInboundCapacity.Demand(first, a, "minecraft:bread", 64),
+                new ContainerInboundCapacity.Demand(other, a, "minecraft:bread", 3),
+                new ContainerInboundCapacity.Demand(other, a, "minecraft:iron_pickaxe", 2, ContainerInboundCapacity.Representation.INDIVIDUAL),
+                new ContainerInboundCapacity.Demand(first, a, "minecraft:coal", 4, ContainerInboundCapacity.Representation.FUNGIBLE, section),
+                new ContainerInboundCapacity.Demand(first, b, "minecraft:bread", 5)));
+        var index = ContainerInboundCapacity.index(rows);
+        var stock = index.incoming(a, ContainerSectionId.STOCK, java.util.Optional.empty());
+        assertEquals(Map.of("minecraft:bread", 67L), stock.fungible());
+        assertEquals(Map.of("minecraft:iron_pickaxe", 2L), stock.individual());
+        assertEquals(Map.of("minecraft:bread", 3L), index.incoming(a, ContainerSectionId.STOCK, java.util.Optional.of(first)).fungible());
+        assertEquals(ContainerIncomingStock.empty(), index.incoming(a, section, java.util.Optional.of(first)));
+        assertThrows(IllegalArgumentException.class, () -> index.requireCompletion(b, section, java.util.Optional.of(first)));
+        assertEquals(stock, index.incomingExceptOwner(a, ContainerSectionId.STOCK, java.util.Optional.of(new SubjectId("job:slot-backed"))),
+                "uncovered stock need not contain a completion already proved by declared slot-backed demand");
+        rows.removeFirst();
+        assertEquals(stock, index.incoming(a, ContainerSectionId.STOCK, java.util.Optional.empty()), "captured commitments remain immutable");
+        assertEquals(Map.of("minecraft:bread", 3L), ContainerInboundCapacity.incoming(rows, a, java.util.Optional.empty()).fungible(),
+                "the list facade observes current mutable caller data rather than reusing an identity cache");
+        rows.add(rows.getFirst());
+        assertThrows(IllegalArgumentException.class, () -> ContainerInboundCapacity.index(rows));
+    }
     @Test void individualOutputsReserveOneSlotEachAndCannotMergeWithFungibleStock() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:individual-capacity"), 41));

@@ -17,10 +17,10 @@ final class ServiceAccessCapabilities {
             new DefenderEquipmentServiceAccess(), new ForestryServiceAccess()));
     private final Map<ServiceAccessDemand.Kind, ServiceAccessCapability> capabilities;
     private final ThreadLocal<PointIndex> pointIndexes = new ThreadLocal<>();
-    private static final int MAX_RETAINED_POINTS = 128;
 
     /** Derived only; one immutable state and its queried points per owner thread, never history. */
-    private record PointIndex(FrontierWorldState state, Map<SubjectId, List<ServiceAccessDemand>> points) { }
+    private record PointIndex(FrontierWorldState state, Set<SubjectId> declared,
+                              Map<SubjectId, List<ServiceAccessDemand>> points) { }
 
     ServiceAccessCapabilities(List<? extends ServiceAccessCapability> registrations) {
         var values = new EnumMap<ServiceAccessDemand.Kind, ServiceAccessCapability>(ServiceAccessDemand.Kind.class);
@@ -42,11 +42,16 @@ final class ServiceAccessCapabilities {
     List<ServiceAccessDemand> indexed(FrontierWorldState state, SubjectId pointId) {
         PointIndex index = pointIndexes.get();
         if (index == null || index.state() != state) {
-            index = new PointIndex(Objects.requireNonNull(state, "service state"), new java.util.HashMap<>());
+            Objects.requireNonNull(state, "service state");
+            index = new PointIndex(state, ServiceBoundaryComposition.declarations(state).keySet(), new java.util.HashMap<>());
             pointIndexes.set(index);
         }
         Objects.requireNonNull(pointId, "service point");
-        if (!index.points().containsKey(pointId) && index.points().size() >= MAX_RETAINED_POINTS) index.points().clear();
+        // Bound retained queries by the closed world's actual declaration registry. An
+        // arbitrary request cannot grow this image; a valid larger world must not flush
+        // all earlier point answers at its129th query. Unknown declarations still reach
+        // the ordinary capability validation, without retaining a new cache entry.
+        if (!index.declared().contains(pointId)) return evaluate(state, pointId);
         return index.points().computeIfAbsent(pointId, ignored -> evaluate(state, pointId));
     }
 
