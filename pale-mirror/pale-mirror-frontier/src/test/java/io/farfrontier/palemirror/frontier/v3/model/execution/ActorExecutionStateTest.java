@@ -10,6 +10,40 @@ class ActorExecutionStateTest {
     private static final SubjectId ACTOR = new SubjectId("resident:execution-contract");
     private static final SubjectId OWNER = new SubjectId("job:execution-contract");
 
+    @Test void incrementalTransitionsMatchFullIngressIncludingProducerOrderAndSuspensions() {
+        var state = ActorExecutionState.empty();
+        var actors = java.util.List.of(new SubjectId("resident:z"), new SubjectId("resident:a"), new SubjectId("resident:m"));
+        for (var actor : actors) { state = state.begin(state.next(actor, ActorActivityKind.FIELD_HARVEST, actor), 0L); assertFullImage(state); }
+        var before = state;
+        var first = state.current(ActorActivityKind.FIELD_HARVEST).get(actors.getFirst());
+        var last = state.current(ActorActivityKind.FIELD_HARVEST).get(actors.getLast());
+        state = state.suspendAndBegin(last, state.next(last.actorId(), ActorActivityKind.MEAL, OWNER)); assertFullImage(state);
+        state = state.suspendAndBegin(first, state.next(first.actorId(), ActorActivityKind.MEAL, OWNER)); assertFullImage(state);
+        assertEquals(java.util.List.of(first, last), state.suspended(), "continuations follow actor producer order, not interruption order");
+        var meal = state.current(ActorActivityKind.MEAL).get(first.actorId());
+        state = state.finish(meal); assertFullImage(state);
+        state = state.resume(first, state.next(first.actorId(), first.activityKind(), first.activityOwnerId())); assertFullImage(state);
+        var lastMeal = state.current(ActorActivityKind.MEAL).get(last.actorId());
+        state = state.retireSuspended(last); assertFullImage(state);
+        state = state.finish(lastMeal); assertFullImage(state);
+        state = state.begin(state.next(last.actorId(), ActorActivityKind.FIELD_HARVEST, last.activityOwnerId()), state.generation(last.actorId())); assertFullImage(state);
+        assertEquals(actors, java.util.List.copyOf(state.current(ActorActivityKind.FIELD_HARVEST).keySet()));
+        assertEquals(actors, java.util.List.copyOf(before.current(ActorActivityKind.FIELD_HARVEST).keySet()));
+        assertTrue(before.suspended().isEmpty(), "published predecessors cannot acquire later continuations");
+        var published = state;
+        assertThrows(IllegalArgumentException.class, () -> published.finish(first));
+        assertFullImage(published);
+    }
+    private static void assertFullImage(ActorExecutionState state) {
+        var recovered = new ActorExecutionState(state.actors());
+        assertEquals(recovered, state); assertEquals(recovered.currentKinds(), state.currentKinds());
+        for (var kind : ActorActivityKind.values()) {
+            assertEquals(recovered.current(kind), state.current(kind));
+            assertEquals(java.util.List.copyOf(recovered.current(kind).keySet()), java.util.List.copyOf(state.current(kind).keySet()));
+        }
+        assertEquals(recovered.suspended(), state.suspended());
+    }
+
     @Test void interruptionKeepsOnlyOneContinuationAndResumeNeedsVacantExactNewGeneration() {
         var empty = ActorExecutionState.empty();
         var work = empty.next(ACTOR, ActorActivityKind.FIELD_HARVEST, OWNER);

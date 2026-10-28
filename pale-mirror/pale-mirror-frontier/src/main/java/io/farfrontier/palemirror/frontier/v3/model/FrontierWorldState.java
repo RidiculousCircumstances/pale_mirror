@@ -471,21 +471,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         }
         OwnedChecks.PRODUCTION_FACILITIES.validate(() -> ProductionFacilityReservations.validate(productionJobs), productionJobs);
         StationWorkReferenceValidation.validate(bootstrap, inventory, productionJobs);
-        for (Map.Entry<SubjectId, ProductionJob> entry : productionJobs.entrySet()) {
-            ProductionJob job = entry.getValue();
-            job.rights().validate(inventory, companies, job);
-            if (!entry.getKey().equals(job.id())) throw new IllegalArgumentException("production job map key must match job identity");
-            requireJobTask(strategicPlans, job.taskId(), job.settlementId(), StrategicTaskKind.PRODUCE_AT_STATION, "production");
+        ProductionJobReferenceValidation.validate(bootstrap, inventory, companies, humanPopulation.residents(), strategicPlans.tasks(), productionJobs);
+        for (ProductionJob job : productionJobs.values()) {
+            if (job.stationWork().isPresent()) continue;
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, job.settlementId());
-            SettlementStructure facility = FrontierWorldStateSupport.structure(settlement, job.facilityId());
-            if (job.stationWork().isEmpty() && facility.kind() != StructureKind.WORKSHOP)
-                throw new IllegalArgumentException("legacy production job facility must be a workshop");
-            ResidentProfile worker = humanPopulation.resident(job.workerId());
-            if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
-            if (!worker.settlementId().equals(settlement.id())) throw new IllegalArgumentException("bread production job worker must belong to its retained settlement");
-            if (job.stationWork().isPresent()) {
-                continue;
-            }
             if (inventory.items().containsKey(job.outputItemId())) {
                 throw new IllegalArgumentException("active production job must not retain its output stack");
             }

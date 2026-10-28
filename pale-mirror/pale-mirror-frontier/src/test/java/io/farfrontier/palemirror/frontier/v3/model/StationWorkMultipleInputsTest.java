@@ -8,6 +8,21 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class StationWorkMultipleInputsTest {
+    @Test void unchangedProductionOrderRejectsRemovedDeclaredWorkerOrTaskAfterWarmValidation() {
+        var fixture = started(); var state = fixture.state(); var job = fixture.job();
+        var residents = state.humanPopulation().residents(); var tasks = state.strategicPlans().tasks();
+        for (boolean removeWorker : List.of(true, false)) {
+            ProductionJobReferenceValidation.validate(state.bootstrap(), state.inventory(), state.companies(), residents, tasks, state.productionJobs());
+            var changedResidents = removeWorker ? ImmutableLookupMap.withoutEntry(residents, job.workerId()) : residents;
+            var changedTasks = removeWorker ? tasks : ImmutableLookupMap.withoutEntry(tasks, job.taskId());
+            assertThrows(IllegalArgumentException.class, () -> ProductionJobReferenceValidation.validate(
+                    state.bootstrap(), state.inventory(), state.companies(), changedResidents, changedTasks, state.productionJobs()));
+            assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
+                ProductionJobReferenceValidation.validate(state.bootstrap(), state.inventory(), state.companies(), changedResidents, changedTasks, state.productionJobs()); return null;
+            }));
+            assertDoesNotThrow(() -> ProductionJobReferenceValidation.validate(state.bootstrap(), state.inventory(), state.companies(), residents, tasks, state.productionJobs()));
+        }
+    }
     @Test void unchangedOrderRejectsLostCurrentOrQueuedMaterialAfterSuccessfulReadEvidence() {
         var fixture = started(); var state = fixture.state(); var job = fixture.job();
         var current = ((ProductionInputHold.FungibleCold) job.inputHold()).claimId();

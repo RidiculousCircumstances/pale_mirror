@@ -3909,3 +3909,27 @@ foreign facility. Physical capacity ports retain independent immutable contribut
 so field progress does not rerun unchanged production/shipment/extraction/forest/
 equipment sources. Combined slot exclusivity and current inventory backing checks
 remain mandatory. These are source-cost corrections, not an accepted runtime gain.
+
+
+### Execution register lineage and production declaration reads
+
+abc4ce5f9 focused208checks passed; frozen64s package/negative/recovery checks plus55 native
+economy tests passed. Both retained313 worlds deployed and verified. The next ordinary
+capture46829→46955/44.952139s=2.802981/s, debt797→1571, fails the target. Owner56.18%,
+exact29.33%,WAL9.20%; navigation/advice and compiler warmup are material. This evolving
+workload does not establish a comparative improvement or regression from the sparse-map change.
+
+The named owner stacks still compare whole execution registries: ActorExecutionState.put
+cloned every actor and rebuilt every activity index. Its private transition constructor now
+replaces one validated actor in shared immutable storage and updates only affected family/
+continuation views. Derived ranks preserve the original actor producer order across leave,
+rejoin and interruption; constructor/hydration still checks all rows. No insertion-order
+change, authority relaxation, new persisted field or compatibility branch is introduced.
+
+Production's base declaration check uses the existing shared reference index over its exact
+worker, strategic task, title/employer accounts, company declarations and destination storage.
+The same rights/facility/task/worker predicates remain authoritative; changed or removed targets
+invalidate unchanged jobs. Other production protocols keep their material checks. Complete
+audit/recovery ignores cached proof. Focused coverage compares incremental execution views with
+full reconstruction, and removes each unchanged production job's worker/task after warm reads,
+checking the same rejection during a full audit and successful reuse of its valid predecessor.

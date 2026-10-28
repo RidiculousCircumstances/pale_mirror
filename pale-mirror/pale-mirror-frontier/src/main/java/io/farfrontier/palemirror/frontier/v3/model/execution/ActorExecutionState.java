@@ -11,6 +11,9 @@ import java.util.Optional;
 public final class ActorExecutionState {
     public static final int MAX_ACTORS = io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_ACTORS;
     private final Map<SubjectId, ActorExecution> actors;
+    // Derived producer-order ranks are shared across value-only transitions and
+    // reconstructed at ingress; they grant no execution authority.
+    private final Map<SubjectId, Integer> ranks;
     private final Map<ActorActivityKind, Map<SubjectId, ActorExecutionId>> currentByKind;
     private final java.util.List<ActorExecutionId> suspended;
     public ActorExecutionState(Map<SubjectId, ActorExecution> actors) {
@@ -18,17 +21,20 @@ public final class ActorExecutionState {
         if (this.actors.size() > MAX_ACTORS) throw new IllegalArgumentException("actor execution retention bound exceeded");
         var current = new java.util.EnumMap<ActorActivityKind, Map<SubjectId, ActorExecutionId>>(ActorActivityKind.class);
         var continuations = new java.util.ArrayList<ActorExecutionId>();
+        var order = new LinkedHashMap<SubjectId, Integer>();
         this.actors.forEach((actor, execution) -> {
             if (!actor.equals(execution.actorId())) throw new IllegalArgumentException("execution index has foreign actor");
+            order.put(actor, order.size());
             execution.current().ifPresent(id -> current.computeIfAbsent(id.activityKind(), ignored -> new LinkedHashMap<>()).put(actor, id));
             execution.suspended().ifPresent(continuations::add);
         });
         current.replaceAll((kind, values) -> ImmutableLookupMap.copyOf(values));
+        ranks = ImmutableLookupMap.copyOf(order);
         currentByKind = Map.copyOf(current);
         suspended = java.util.List.copyOf(continuations);
     }
     public Map<SubjectId, ActorExecution> actors() { return actors; }
-    /** Derived immutable indices are rebuilt only on execution transitions, never per world tick. */
+    /** Derived immutable indices change with their exact execution transition, never per world tick. */
     public Map<SubjectId, ActorExecutionId> current(ActorActivityKind kind) {
         return currentByKind.getOrDefault(Objects.requireNonNull(kind, "activity kind"), Map.of());
     }
@@ -106,9 +112,55 @@ public final class ActorExecutionState {
             throw new IllegalArgumentException("retirement has a foreign suspended execution");
         return put(new ActorExecution(previous.actorId(), previous.generation(), previous.current(), Optional.empty()));
     }
-    private ActorExecutionState put(ActorExecution execution) {
-        var next = new LinkedHashMap<>(actors);
-        next.put(execution.actorId(), execution);
-        return new ActorExecutionState(next);
+    private ActorExecutionState(ActorExecutionState previous, ActorExecution execution) {
+        var actor = execution.actorId();
+        var before = previous.actors.get(actor);
+        actors = ImmutableLookupMap.withEntry(previous.actors, actor, execution);
+        if (actors.size() > MAX_ACTORS) throw new IllegalArgumentException("actor execution retention bound exceeded");
+        ranks = before == null ? ImmutableLookupMap.withEntry(previous.ranks, actor, previous.ranks.size()) : previous.ranks;
+        var prior = before == null ? Optional.<ActorExecutionId>empty() : before.current();
+        var next = execution.current();
+        if (prior.equals(next)) currentByKind = previous.currentByKind;
+        else {
+            var current = new java.util.EnumMap<ActorActivityKind, Map<SubjectId, ActorExecutionId>>(ActorActivityKind.class);
+            current.putAll(previous.currentByKind);
+            if (prior.isPresent() && next.isPresent() && prior.orElseThrow().activityKind() == next.orElseThrow().activityKind()) {
+                var id = next.orElseThrow();
+                current.put(id.activityKind(), ImmutableLookupMap.withEntry(current.get(id.activityKind()), actor, id));
+            } else {
+                if (prior.isPresent()) {
+                    var kind = prior.orElseThrow().activityKind();
+                    var remaining = ImmutableLookupMap.withoutEntry(current.get(kind), actor);
+                    if (remaining.isEmpty()) current.remove(kind); else current.put(kind, remaining);
+                }
+                next.ifPresent(id -> current.put(id.activityKind(), insertOrdered(
+                        current.getOrDefault(id.activityKind(), Map.of()), actor, id)));
+            }
+            currentByKind = Map.copyOf(current);
+        }
+        var paused = before == null ? Optional.<ActorExecutionId>empty() : before.suspended();
+        if (paused.equals(execution.suspended())) suspended = previous.suspended;
+        else {
+            var continuations = new java.util.ArrayList<>(previous.suspended);
+            paused.ifPresent(continuations::remove);
+            execution.suspended().ifPresent(id -> {
+                int position = 0;
+                while (position < continuations.size() && ranks.get(continuations.get(position).actorId()) < ranks.get(actor)) position++;
+                continuations.add(position, id);
+            });
+            suspended = java.util.List.copyOf(continuations);
+        }
     }
+    private Map<SubjectId, ActorExecutionId> insertOrdered(Map<SubjectId, ActorExecutionId> values,
+                                                          SubjectId actor, ActorExecutionId execution) {
+        var result = new LinkedHashMap<SubjectId, ActorExecutionId>(); boolean inserted = false;
+        int rank = ranks.get(actor);
+        for (var entry : values.entrySet()) {
+            if (!inserted && ranks.get(entry.getKey()) > rank) { result.put(actor, execution); inserted = true; }
+            result.put(entry.getKey(), entry.getValue());
+        }
+        if (!inserted) result.put(actor, execution);
+        return ImmutableLookupMap.copyOf(result);
+    }
+    private ActorExecutionState put(ActorExecution execution) { return new ActorExecutionState(this, execution); }
 }
