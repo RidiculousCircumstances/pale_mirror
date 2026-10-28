@@ -6,18 +6,22 @@ import java.util.*;
 /** Read-only installation lookup over exact container declarations. It grants
  * no operability, service access, materials or runtime machine authority. */
 public final class ProductionStationDirectory {
-    private record Index(Map<SubjectId, ContainerRecord> stations, Map<SubjectId, List<ContainerRecord>> facilities) { }
+    private record Index(Map<SubjectId, ContainerRecord> stations, Map<SubjectId, List<ContainerRecord>> facilities,
+                         Map<SubjectId, List<ContainerRecord>> owners) { }
     private static final ImmutableInputView<Index> VIEW = new ImmutableInputView<>();
     private static Index read(ExactInventory inventory) {
         return VIEW.get(List.of(inventory.containers()), () -> {
             var stations = new HashMap<SubjectId, ContainerRecord>(); var facilities = new HashMap<SubjectId, List<ContainerRecord>>();
+            var owners = new HashMap<SubjectId, List<ContainerRecord>>();
             inventory.containers().values().forEach(record -> record.productionStation().ifPresent(station -> {
                 if (stations.putIfAbsent(station.id(), record) != null)
                     throw new IllegalArgumentException("duplicate installed station identity");
                 facilities.computeIfAbsent(station.facilityId(), ignored -> new ArrayList<>()).add(record);
+                owners.computeIfAbsent(record.ownerId(), ignored -> new ArrayList<>()).add(record);
             }));
             facilities.replaceAll((facility, records) -> List.copyOf(records));
-            return new Index(Map.copyOf(stations), Map.copyOf(facilities));
+            owners.replaceAll((owner, records) -> List.copyOf(records));
+            return new Index(Map.copyOf(stations), Map.copyOf(facilities), Map.copyOf(owners));
         });
     }
     public static ContainerRecord require(ExactInventory inventory, SubjectId station) {
@@ -29,6 +33,10 @@ public final class ProductionStationDirectory {
     static Map<SubjectId, ContainerRecord> declarations(ExactInventory inventory) { return read(inventory).stations(); }
     public static List<ContainerRecord> inFacility(ExactInventory inventory, SubjectId facility) {
         return read(inventory).facilities().getOrDefault(facility, List.of());
+    }
+    /** Producer order is retained; current operability and access remain caller checks. */
+    public static List<ContainerRecord> owned(ExactInventory inventory, SubjectId owner) {
+        return read(inventory).owners().getOrDefault(owner, List.of());
     }
     private ProductionStationDirectory() { }
 }

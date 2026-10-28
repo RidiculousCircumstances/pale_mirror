@@ -8,7 +8,7 @@ final class ProductionStationSupply {
     static Optional<InternalShipmentDispatched> offer(FrontierWorldState state, ResidentProfile worker, long tick) {
         var catalog = state.bootstrap().ruleset().production();
         record Candidate(ContainerRecord record, long deadline) { }
-        var candidates = state.inventory().containers().values().stream()
+        var candidates = ProductionStationDirectory.owned(state.inventory(), worker.settlementId()).stream()
                 .filter(record -> record.ownerId().equals(worker.settlementId()) && record.productionStation().isPresent()
                         && !ReferenceContainerCustody.blocksCanonicalUse(state, record.id())
                         && (record.productionStation().orElseThrow().fuelSlot().isPresent() || AutomaticStationProduction.policy(state, record.productionStation().orElseThrow()).isPresent()))
@@ -32,7 +32,7 @@ final class ProductionStationSupply {
                 for (var source : ResourceStorageSelection.candidates(state, worker.settlementId(), fuel.itemKind(),
                         endpoint.exteriorApproach(), Set.of(ResourceStorageRole.WAREHOUSE))) {
                     var ledger = state.inventory().fungibleResources();
-                    int availableAtSource = ledger.accounts().values().stream().filter(account -> account.custody().equals(source.custody()))
+                    int availableAtSource = FungibleResourceCustodySupport.accountsAt(ledger, source.custody()).stream()
                             .mapToInt(account -> ledger.unclaimedQuantity(account.id(), worker.settlementId(), fuel.itemKind())).sum();
                     long allAvailable = ResourceStorageSelection.containers(state, worker.settlementId(), fuel.itemKind(), Set.of(ResourceStorageRole.WAREHOUSE)).stream()
                             .flatMap(id -> FungibleResourceCustodySupport.accountAtContainer(state, id).stream())

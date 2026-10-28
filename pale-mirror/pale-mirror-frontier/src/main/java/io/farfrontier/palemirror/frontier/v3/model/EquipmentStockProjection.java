@@ -15,7 +15,8 @@ public final class EquipmentStockProjection {
     }
     public static List<Unit> units(FrontierWorldState state, SubjectId home) {
         return UNITS.get(state.bootstrap(), home, List.of(state.inventory().items(), state.inventory().containers(),
-                state.inventory().surfaces(), state.humanPopulation().residents(), state.actorLocations(),
+                state.inventory().surfaces(), state.humanPopulation().residents(),
+                ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()),
                 state.companies().goodsTrade().contracts(), state.productionJobs(), state.shipments().shipments()),
                 () -> projectUnits(state, home));
     }
@@ -71,7 +72,8 @@ public final class EquipmentStockProjection {
     public static Set<SubjectId> retainedItems(FrontierWorldState state, SubjectId home) {
         var demands = EquipmentDemandComposition.read(state, home);
         return RETAINED.get(state.bootstrap(), home, List.of(state.inventory().items(), state.inventory().containers(),
-                state.inventory().surfaces(), state.humanPopulation().residents(), state.actorLocations(), demands),
+                state.inventory().surfaces(), state.humanPopulation().residents(),
+                ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()), demands),
                 () -> projectRetained(state, home, demands));
     }
     private static Set<SubjectId> projectRetained(FrontierWorldState state, SubjectId home, List<EquipmentWorkDemand> demands) {

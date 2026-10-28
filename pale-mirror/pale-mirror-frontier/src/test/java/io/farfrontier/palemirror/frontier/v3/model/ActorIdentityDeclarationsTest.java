@@ -13,6 +13,9 @@ class ActorIdentityDeclarationsTest {
         var originalKinds = ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations());
         var originalLife = ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations());
         var actor = state.humanPopulation().residents().keySet().iterator().next();
+        var originalPopulation = LivingResidentStockView.counts(state);
+        var home = state.humanPopulation().resident(actor).settlementId();
+        var originalEquipment = EquipmentStockProjection.units(state, home);
         var body = state.actorLocations().get(actor);
         var moved = ImmutableLookupMap.withEntry(state.actorLocations(), actor, body.withBody(body.body().offset(1, 0, 0)));
         var task = new java.util.concurrent.FutureTask<Void>(() -> {
@@ -23,9 +26,15 @@ class ActorIdentityDeclarationsTest {
         new Thread(task).start(); task.get();
         assertSame(originalKinds, ActorIdentityDeclarations.declaredKinds(state.bootstrap(), moved));
         assertSame(originalLife, ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), moved));
+        var movedState = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(moved));
+        assertSame(originalPopulation, LivingResidentStockView.counts(movedState));
+        assertSame(originalEquipment, EquipmentStockProjection.units(movedState, home));
         var deceased = ImmutableLookupMap.withEntry(moved, actor, body.deadAt(body.body()));
         assertEquals(ActorLifeStatus.DEAD, ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), deceased).get(actor));
         assertSame(originalKinds, ActorIdentityDeclarations.declaredKinds(state.bootstrap(), deceased));
+        var deadState = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(deceased));
+        assertEquals(originalPopulation.get(home) - 1, LivingResidentStockView.counts(deadState).get(home));
+        assertEquals(originalPopulation, LivingResidentStockView.counts(state), "a draft death must not change its predecessor");
     }
 
     @Test void acceptedExecutionMembershipCannotHideRemovedActorsOrNewUnknownExecutions() {

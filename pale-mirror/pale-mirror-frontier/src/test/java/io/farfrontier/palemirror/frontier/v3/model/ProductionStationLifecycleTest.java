@@ -39,6 +39,11 @@ class ProductionStationLifecycleTest {
         var replaced = install.apply(state, spec.id(), BakeryStationInstallation::installed);
         assertEquals(record, ProductionStationDirectory.require(replaced.inventory(), spec.id()));
         assertTrue(ProductionStationDirectory.inFacility(replaced.inventory(), spec.facilityId()).contains(record));
+        assertEquals(replaced.inventory().containers().values().stream().filter(value ->
+                value.ownerId().equals(record.ownerId()) && value.productionStation().isPresent()).toList(),
+                ProductionStationDirectory.owned(replaced.inventory(), record.ownerId()));
+        assertFalse(ProductionStationDirectory.owned(priorInventory, record.ownerId()).contains(record),
+                "the owner directory cannot lend a replacement to the previous inventory");
         assertThrows(IllegalArgumentException.class, () -> ProductionStationDirectory.require(priorInventory, spec.id()),
                 "a derived lookup cannot lend the replacement to a predecessor inventory");
         assertFalse(replaced.productionStations().machines().containsKey(original.id()));

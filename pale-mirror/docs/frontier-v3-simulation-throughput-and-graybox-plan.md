@@ -4067,3 +4067,33 @@ ledger/custody/cold-receipt/harvest focus passed44s. Added assertions require co
 reconstruction with unrelated custody intact and rejection of COLD growth into a live HOT binding.
 No native effect, quantity, resource limit, canonical schema or compatibility path changes.
 Frozen/native packaging and measured runtime follow; no throughput improvement claim yet.
+
+
+### Economic read locality after resource-accrual profiling (2026-10-28)
+
+The retained 100-town world on `ac9c0efee` still misses ordinary time:
+45s JFR covered 44.867728s, 101011→101377 = 8.157311 ticks/s,
+debt 1102→1638. Owner wall gates 55.15%, exact preparation 30.25%,
+WAL 8.38%; no JFR data loss. The later workload differs from the prior
+13.355/s window; these figures do not establish a causal regression or gain.
+
+Confirmed source/caller costs, addressed without changing planning decisions:
+
+- LivingResidentStockView rebuilt every town's live population on each actor
+  position change. It and EquipmentStockProjection now depend on the existing
+  explicit ActorIdentityDeclarations life-status image, rather than complete
+  locations. Birth/death invalidation remains exact.
+- GoodsStockSpecification.forKind repeatedly streamed all participant commodity
+  policies in receiving-capacity and transport reads. A bounded thread-local
+  derived index now uses the exact immutable policy root. Constructor agreement,
+  undeclared-item rejection and quality decisions remain unchanged.
+- ProductionStationSupply scanned all world containers and resource accounts per
+  candidate worker/source. The existing ProductionStationDirectory now indexes
+  declared owners preserving producer order; custody lookup uses the existing
+  shared resource index. Actual operability, access, stock, reservations and
+  shipment admission are still checked against the current state.
+
+Existing connected negative coverage is extended for warmed population reads
+across movement/death/predecessor branches, and station replacement/predecessor
+isolation. No new schema, compatibility bridge, timing test or authority cache.
+G remains open; these are bounded-read corrections, not evidence of 20 ticks/s.

@@ -9,10 +9,11 @@ final class LivingResidentStockView {
     private static final ThreadLocal<Map<SubjectId, Integer>> PREVIOUS = ThreadLocal.withInitial(Map::of);
     private LivingResidentStockView() { }
     static Map<SubjectId, Integer> counts(FrontierWorldState state) {
-        return VIEW.get(List.of(state.humanPopulation().residents(), state.actorLocations()), () -> {
+        var life = ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations());
+        return VIEW.get(List.of(state.humanPopulation().residents(), life), () -> {
             var next = new HashMap<SubjectId, Integer>();
             for (var resident : state.humanPopulation().residents().values())
-                if (state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                if (life.get(resident.id()) == ActorLifeStatus.ALIVE)
                     next.merge(resident.settlementId(), 1, Math::addExact);
             var previous = PREVIOUS.get();
             if (previous.equals(next)) return previous;
