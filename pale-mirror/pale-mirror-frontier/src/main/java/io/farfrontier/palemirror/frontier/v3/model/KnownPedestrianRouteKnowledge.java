@@ -55,6 +55,13 @@ public final class KnownPedestrianRouteKnowledge {
     private final RegionalBlockSet hard;
     private final Set<BlockPosition> raisedDepartureSupports;
     private final BoundedPedestrianApproach.SurveyedSurface surveyed;
+    private final RegionalBlockSet accessRestrictions;
+    /** Additional contact permissions must travel with the survey, not just its predicate. */
+    private record AccessSurvey(BoundedPedestrianApproach.SurveyedSurface surface, RegionalBlockSet restrictions) {
+        AccessSurvey excluding(Set<BlockPosition> contacts) {
+            return new AccessSurvey(BoundedPedestrianApproach.excluding(surface, contacts), restrictions.overlay(Set.of(), contacts));
+        }
+    }
     private final Object scopeKey;
     private final io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision capturedGround;
     private final java.util.Map<TerrainColumn, List<SurfaceAnchor>> overlay;
@@ -121,21 +128,21 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
-            BoundedPedestrianApproach.SurveyedSurface surveyed, Object scopeKey,
+            AccessSurvey access, Object scopeKey,
             java.util.Map<TerrainColumn, List<SurfaceAnchor>> overlay, Set<BlockPosition> raisedDepartureSupports) {
-        this(bootstrap, hard, surveyed, scopeKey, overlay, raisedDepartureSupports, Objects.requireNonNull(selectedGround));
+        this(bootstrap, hard, access, scopeKey, overlay, raisedDepartureSupports, Objects.requireNonNull(selectedGround));
     }
     private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
-            BoundedPedestrianApproach.SurveyedSurface surveyed, Object scopeKey,
+            AccessSurvey access, Object scopeKey,
             java.util.Map<TerrainColumn, List<SurfaceAnchor>> overlay, Set<BlockPosition> raisedDepartureSupports,
             io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision capturedGround) {
         this.bootstrap = bootstrap;
         this.hard = RegionalBlockSet.copyOf(hard);
         this.raisedDepartureSupports = Set.copyOf(raisedDepartureSupports);
-        this.surveyed = surveyed;
+        this.surveyed = access.surface(); this.accessRestrictions = access.restrictions();
         this.scopeKey = Objects.requireNonNull(scopeKey); this.overlay = RegionalSurfaceMap.copyOf(overlay);
         this.capturedGround = capturedGround;
-        var revision = KnownPedestrianGeometryScopes.revision(scopeKey, this.hard, this.overlay, capturedGround);
+        var revision = KnownPedestrianGeometryScopes.revision(scopeKey, this.hard, this.overlay, this.accessRestrictions, capturedGround);
         this.geometry = KnownPedestrianNavigation.geometry(bootstrap, this.hard, surveyed, revision, Optional.of(revision));
         this.terrainGeometry = geometry; this.profile = null; // Unbound terrain knowledge grants no actor profile.
     }
@@ -143,7 +150,7 @@ public final class KnownPedestrianRouteKnowledge {
     private KnownPedestrianRouteKnowledge(KnownPedestrianRouteKnowledge source,
             UnitNavigationProfile profile) {
         this.bootstrap = source.bootstrap; this.hard = source.hard; this.raisedDepartureSupports = source.raisedDepartureSupports;
-        this.surveyed = source.surveyed; this.scopeKey = source.scopeKey; this.overlay = source.overlay;
+        this.surveyed = source.surveyed; this.accessRestrictions = source.accessRestrictions; this.scopeKey = source.scopeKey; this.overlay = source.overlay;
         this.capturedGround = source.capturedGround;
         this.terrainGeometry = source.terrainGeometry; this.profile = Objects.requireNonNull(profile);
         this.geometry = profiled(terrainGeometry);
@@ -437,7 +444,8 @@ public final class KnownPedestrianRouteKnowledge {
         if (previous != null) return previous;
         var refinedOverlay = new java.util.LinkedHashMap<>(overlay);
         refinedOverlay.put(new TerrainColumn(start.x(), start.z()), List.of(start));
-        var revision = KnownPedestrianGeometryScopes.revision(new RefinedScope(scopeKey, start), hard, refinedOverlay, capturedGround);
+        var revision = KnownPedestrianGeometryScopes.revision(new RefinedScope(scopeKey, start), hard, refinedOverlay,
+                raisedContact ? accessRestrictions.overlay(Set.of(start.support()), Set.of()) : accessRestrictions, capturedGround);
         var refined = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry() {
             @Override public WorldBounds bounds() { return terrainGeometry.bounds(); }
             @Override public Object version() { return revision; }
@@ -509,7 +517,7 @@ public final class KnownPedestrianRouteKnowledge {
     }
     /** Facility access and container tops are explicit contact permissions, not
      * collision volumes. Opening a passage never opens a physical container. */
-    private static BoundedPedestrianApproach.SurveyedSurface accessSurvey(FrontierWorldState state,
+    private static AccessSurvey accessSurvey(FrontierWorldState state,
             BoundedPedestrianApproach.SurveyedSurface ground, Set<BlockPosition> cleared) {
         var storage = KnownStorageGeometry.fixedSupports(state);
         // Authored support exclusions do not depend on moving actors, crop stages or
@@ -526,7 +534,7 @@ public final class KnownPedestrianRouteKnowledge {
             if (ACCESS_EXCLUSIONS.size() >= MAX_LOCAL_VIEWS) ACCESS_EXCLUSIONS.remove(ACCESS_EXCLUSIONS.keySet().iterator().next());
             ACCESS_EXCLUSIONS.put(Set.copyOf(cleared), denied);
         }
-        return BoundedPedestrianApproach.excluding(ground, denied);
+        return new AccessSurvey(BoundedPedestrianApproach.excluding(ground, denied), denied);
     }
 
     /** Typed field overlay on the same structural/physical knowledge and route operation. */
@@ -561,10 +569,8 @@ public final class KnownPedestrianRouteKnowledge {
                 var hard = occupied(state, settlement, passages).overlay(Set.of(), Set.copyOf(site.irrigationSlots()))
                         .overlay(Set.of(), obstructions);
                 var knowledge = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
-                        BoundedPedestrianApproach.excluding(BoundedPedestrianApproach.excluding(
-                                accessSurvey(state, ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site, sites),
-                                        passageClearance(settlement, passages)), Set.copyOf(site.irrigationSlots())),
-                                obstructions), new FieldScope(site.id(), port.endpoint()),
+                        accessSurvey(state, ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site, sites),
+                                passageClearance(settlement, passages)).excluding(Set.copyOf(site.irrigationSlots())).excluding(obstructions), new FieldScope(site.id(), port.endpoint()),
                         site.cropSlots().stream().collect(java.util.stream.Collectors.toMap(
                                 crop -> new TerrainColumn(crop.x(), crop.z()), crop -> List.of(new SurfaceAnchor(crop.offset(0, -1, 0))))),
                         raisedDepartureSupports(state));
@@ -587,7 +593,7 @@ public final class KnownPedestrianRouteKnowledge {
             if (departure != null) return departure;
             var cleared = new HashSet<BlockPosition>(); clearance(cleared, witnessedStart);
             var hard = knowledge.hard.overlay(cleared, Set.of());
-            departure = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, knowledge.surveyed,
+            departure = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, new AccessSurvey(knowledge.surveyed, knowledge.accessRestrictions),
                     new WitnessedScope(knowledge.scopeKey, witnessedStart), knowledge.overlay, knowledge.raisedDepartureSupports, knowledge.capturedGround);
             if (cached.witnessedDepartures().size() >= 32)
                 cached.witnessedDepartures().remove(cached.witnessedDepartures().keySet().iterator().next());
@@ -632,7 +638,7 @@ public final class KnownPedestrianRouteKnowledge {
         var forbidden = excluded.stream().map(SurfaceAnchor::support).collect(java.util.stream.Collectors.toSet());
         var allowedDepartures = new HashSet<>(raisedDepartureSupports);
         excluded.forEach(surface -> allowedDepartures.remove(surface.support()));
-        var constrainedKnowledge = new KnownPedestrianRouteKnowledge(bootstrap, hard, BoundedPedestrianApproach.excluding(surveyed, forbidden),
+        var constrainedKnowledge = new KnownPedestrianRouteKnowledge(bootstrap, hard, new AccessSurvey(surveyed, accessRestrictions).excluding(forbidden),
                 new TaskExclusionScope(scopeKey, excluded), overlay, allowedDepartures, capturedGround);
         return profile == null ? constrainedKnowledge : constrainedKnowledge.forProfile(profile);
     }

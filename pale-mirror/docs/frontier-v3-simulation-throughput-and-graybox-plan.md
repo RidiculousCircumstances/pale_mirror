@@ -2863,3 +2863,35 @@ admission/cache validity and have no reset/repair operation. Compare deltas in o
 ordinary recording to distinguish unique work, eviction/recreation and cheap hits;
 do not enlarge caches or alter COLD group semantics from sample-count guesses.
 Focused navigation/shape and bounded diagnostic/guardrail checks PASS12s.
+
+
+### Correct incomplete support-permission certificates (2026-10-28)
+
+The new regional-edge reuse exposed a real certificate omission. Main cd26 stopped
+at tick922388 on ForestryMovementProvider.requireColdRoute, resident6-10,
+edge ending(-586,64,14); retained journal is regional-edge-main-journal.txt.
+2df92c8be restarted the same world and is healthy afterward, but restart is NOT
+proof of repair. Its ordinary100 trace:44.805309s/noDataLoss,3.972743ticks/s,
+debt2009→2730 STILLFAILED. Edge counter deltas:3,253,746queries,3,176,981regional
+reads,3,168,637computations,0newscopes; only0.263%of regionalreads avoided a
+computation. These counts justify investigating reuse, not a guessed larger cache.
+
+Reachable source counterexample: warm an allowed edge, then call the existing
+withTaskExclusions for its destination. supportExcluded is true but cached
+canTraverse returned true. geometry-permissions-baseline.log proves this exact
+failure on2df source. Existing regional graph reuse also depended on the same
+incomplete certificates. The trace is consistent with this contradiction; exact
+historical incident replay is not yet claimed.
+
+The geometry producer now carries an explicit AccessSurvey pair: the actual
+survey predicate and its additional contact restrictions. Composition of facility,
+field and task exclusions updates both; a witnessed raised departure removes
+only its authorized origin restriction. Every knowledge constructor requires
+that pair. Regional facts/deltas include exact support restrictions alongside
+hard collision blocks and support overlays. Thus graph and edge caches share
+only equivalent local access, with no task-kind branches or guessed permission.
+No route checker/quarantine rule is weakened. The focused regression also checks
+that the changed local token differs while a remote token stays equal and the
+predecessor remains unchanged. Connected navigation/shape/meal/forestry/group and
+guardrail checks PASS1m1s. Frozen release and retained-world verification pending.
+Separate unfinished crew-stock optimization remains unstaged and is excluded.

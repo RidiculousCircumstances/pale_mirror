@@ -9,6 +9,23 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KnownPedestrianGeometryScopesTest {
+    @Test void taskSupportExclusionsArePartOfSharedLocalGeometryFacts() {
+        var state = ResourceSiteHarvestProcessTest.initial();
+        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state)
+                .forProfile(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER);
+        var geometry = knowledge.geometry(); var bounds = geometry.bounds();
+        var from = geometry.supportAt(bounds.minX() + 8, bounds.minZ() + 8);
+        var to = geometry.supportAt(bounds.minX() + 9, bounds.minZ() + 8);
+        assertNotNull(from); assertNotNull(to); assertTrue(geometry.canTraverse(from, to));
+        var restricted = knowledge.withTaskExclusions(Set.of(to)).geometry();
+        assertTrue(restricted.supportExcluded(to));
+        assertFalse(restricted.canTraverse(from, to), "a shared edge result cannot erase an explicit support restriction");
+        var local = PedestrianGeometryRevision.Region.at(to.support());
+        var before = geometry.regionalRevision().orElseThrow(); var after = restricted.regionalRevision().orElseThrow();
+        assertNotEquals(before.at(local.x(), local.z()), after.at(local.x(), local.z()));
+        assertEquals(before.at(1000, 1000), after.at(1000, 1000));
+        assertTrue(geometry.canTraverse(from, to), "restriction does not mutate the predecessor's permissions");
+    }
     private record CollidingFact(String value) { @Override public int hashCode() { return 7; } }
     @Test void regionalPagesPreserveExactCollisionsRemovalAndImmutablePredecessors() {
         var a = new PedestrianGeometryRevision.Region(-1, -1);
@@ -197,15 +214,15 @@ class KnownPedestrianGeometryScopesTest {
         var supports = Map.of(column, List.of(SurfaceAnchor.at(20, 63, 2)));
         var versions = new KnownPedestrianGroundVersions();
         var initial = ground(versions, bootstrap, Set.of(wall), supports, Set.of());
-        var before = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of(wall)), supports, initial);
-        var otherTask = KnownPedestrianGeometryScopes.revision("test:other-task", RegionalBlockSet.copyOf(Set.of()), supports, initial);
+        var before = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of(wall)), supports, RegionalBlockSet.copyOf(Set.of()), initial);
+        var otherTask = KnownPedestrianGeometryScopes.revision("test:other-task", RegionalBlockSet.copyOf(Set.of()), supports, RegionalBlockSet.copyOf(Set.of()), initial);
         assertNotEquals(before.scope(), otherTask.scope());
         assertEquals(before.geometryScope(), otherTask.geometryScope());
         assertNotEquals(before.at(0, 0), otherTask.at(0, 0), "passage restrictions stay in the local geometry proof");
         assertEquals(before.at(1, 0), otherTask.at(1, 0), "identical distant terrain can be shared across task policies");
         for (int index = 0; index < 300; index++)
-            KnownPedestrianGeometryScopes.revision("test:eviction-" + index, RegionalBlockSet.copyOf(Set.of()), Map.of(), initial);
-        var reconstructed = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of(wall)), supports, initial);
+            KnownPedestrianGeometryScopes.revision("test:eviction-" + index, RegionalBlockSet.copyOf(Set.of()), Map.of(), RegionalBlockSet.copyOf(Set.of()), initial);
+        var reconstructed = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of(wall)), supports, RegionalBlockSet.copyOf(Set.of()), initial);
         assertEquals(before.scope(), reconstructed.scope());
         assertSame(before.baseline(), reconstructed.baseline());
         assertTrue(reconstructed.changesSince(before).isEmpty());
@@ -214,11 +231,11 @@ class KnownPedestrianGeometryScopesTest {
 
         var changedSupports = Map.of(column, List.of(SurfaceAnchor.at(20, 62, 2)));
         var changedGround = ground(versions, bootstrap, Set.of(wall), changedSupports, Set.of());
-        var changed = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of(wall)), changedSupports, changedGround);
+        var changed = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of(wall)), changedSupports, RegionalBlockSet.copyOf(Set.of()), changedGround);
         assertEquals(Set.of(new PedestrianGeometryRevision.Region(1, 0)), changed.changesSince(reconstructed));
         assertEquals(before.at(0, 0), changed.at(0, 0));
         assertNotEquals(before.at(1, 0), changed.at(1, 0));
-        var removedWall = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), changedSupports, changedGround);
+        var removedWall = KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), changedSupports, RegionalBlockSet.copyOf(Set.of()), changedGround);
         assertEquals(Set.of(new PedestrianGeometryRevision.Region(0, 0)), removedWall.changesSince(changed));
         var foreign = ground(versions, new Object(), Set.of(), Map.of(), Set.of());
         assertFalse(foreign.matches(initial, Set.of(new PedestrianGeometryRevision.Region(30, 30))),
@@ -226,7 +243,7 @@ class KnownPedestrianGeometryScopesTest {
         for (int index = 0; index < 12; index++) ground(versions, new Object(), Set.of(), Map.of(), Set.of());
         assertEquals(initial, ground(versions, bootstrap, Set.of(wall), supports, Set.of()),
                 "world switching and cache eviction cannot alter an immutable world's regional facts");
-        assertNotEquals(before.scope(), KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), Map.of(), foreign).scope());
-        assertNotEquals(before.geometryScope(), KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), Map.of(), foreign).geometryScope());
+        assertNotEquals(before.scope(), KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), Map.of(), RegionalBlockSet.copyOf(Set.of()), foreign).scope());
+        assertNotEquals(before.geometryScope(), KnownPedestrianGeometryScopes.revision("test:retained", RegionalBlockSet.copyOf(Set.of()), Map.of(), RegionalBlockSet.copyOf(Set.of()), foreign).geometryScope());
     }
 }
