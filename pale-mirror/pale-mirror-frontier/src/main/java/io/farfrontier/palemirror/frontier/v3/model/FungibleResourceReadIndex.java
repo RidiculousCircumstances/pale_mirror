@@ -6,10 +6,11 @@ import java.util.*;
 /** Disposable queries of the sole immutable ledger; never allocation or custody authority. */
 final class FungibleResourceReadIndex {
     private record Balance(SubjectId owner, String kind) { }
-    private record Available(CustodyAccount account, ImmutableDependencies dependencies, Map<Balance, Integer> quantities) { }
+    private record Available(CustodyAccount account, ImmutableDependencies dependencies,
+                             Map<Balance, Integer> quantities, Object checkedIn) { }
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
-                         Map<SubjectId, Available> available) { }
+                         Map<SubjectId, Available> available, Object token) { }
     private record Membership(ResourceCustody custody, boolean claimed) { }
     private record Layout(Map<ResourceCustody, List<SubjectId>> holders,
                           Map<SubjectId, List<SubjectId>> containers, Map<SubjectId, List<SubjectId>> actors,
@@ -46,17 +47,24 @@ final class FungibleResourceReadIndex {
         if (!ledger.accounts().containsKey(Objects.requireNonNull(account, "custody account")))
             throw new IllegalArgumentException("unknown custody account");
         var row = ledger.accounts().get(account);
-        var views = image(ledger).available();
+        var image = image(ledger); var views = image.available();
+        var previous = views.get(account);
+        // Every queried account was checked against these exact immutable roots.
+        // Many residents can ask about one warehouse without rebuilding its lot
+        // and claim dependency vector for each read. A new image still checks it.
+        if (previous != null && previous.checkedIn() == image.token())
+            return previous.quantities().getOrDefault(new Balance(owner, kind), 0);
         var inputs = new Object[1 + row.lotQuantities().size() + row.claimQuantities().size()];
         int index = 0; inputs[index++] = row;
         for (var id : row.lotQuantities().keySet()) inputs[index++] = ledger.lots().get(id);
         for (var id : row.claimQuantities().keySet()) inputs[index++] = ledger.claims().get(id);
-        var previous = views.get(account);
         if (previous == null || !previous.dependencies().matches(inputs)) {
             var quantities = balances(ledger, row);
-            previous = new Available(row, ImmutableDependencies.of(inputs), quantities);
-            views.put(account, previous);
+            previous = new Available(row, ImmutableDependencies.of(inputs), quantities, image.token());
+        } else {
+            previous = new Available(row, previous.dependencies(), previous.quantities(), image.token());
         }
+        views.put(account, previous);
         return previous.quantities().getOrDefault(new Balance(owner, kind), 0);
     }
 
@@ -101,7 +109,7 @@ final class FungibleResourceReadIndex {
         // withdrawn accounts (including a new world) release their old evidence.
         var available = current == null ? new HashMap<SubjectId, Available>() : current.available();
         available.entrySet().removeIf(entry -> ledger.accounts().get(entry.getKey()) != entry.getValue().account());
-        current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), available);
+        current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), available, new Object());
         CURRENT.set(current);
         return current;
     }

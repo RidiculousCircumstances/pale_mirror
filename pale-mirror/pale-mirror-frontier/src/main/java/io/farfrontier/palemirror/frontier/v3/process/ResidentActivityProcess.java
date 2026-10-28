@@ -56,7 +56,8 @@ public final class ResidentActivityProcess {
         // may read its own work/health/cohort and keeps the conservative proof.
         // With FOOD_STOCK established, foreign actor motion/service turns cannot
         // create a food candidate; geometry can still admit idle buffer turnover.
-        if (!HumanAssignmentProjection.compile(state).assignment(actor).active()) {
+        if (!HumanAssignmentProjection.compile(state).assignment(actor).active()
+                && ResidentMealOpportunity.foodStockAbsent(state, actor)) {
             var dependencies = ImmutableDependencies.of(idleFoodInputs(state, actor));
             boolean inventoryEffect = ActorInventoryInteractionFences.pending(state, actor);
             return java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<>(action,
@@ -76,7 +77,11 @@ public final class ResidentActivityProcess {
                 people.meals().get(actor), people.migrations().get(actor), people.schedules(), people.residents(),
                 state.actorLocations().get(actor), state.actorMovements().get(actor),
                 state.actorExecutions().actors().get(actor), state.ambientLeases().get(actor), state.sceneLeases(),
-                state.inventory(), state.replicaCustody(), state.physicalDeltas(), state.structureDamage(),
+                ResidentMealOpportunity.foodStockAbsent(state, actor),
+                state.inventory().containers(), state.inventory().items(), state.inventory().cargo(),
+                state.inventory().playerItems(), state.inventory().worldCarrierItems(), state.inventory().conflicts(),
+                state.inventory().surfaces(), state.inventory().economics(), state.inventory().occupiedSlots(),
+                state.replicaCustody(), state.physicalDeltas(), state.structureDamage(),
                 state.structureConditions(), state.routeTopology(), state.resourceSites(),
                 state.extractionSites().deposits(), state.productionStations().machines(), state.hiveColony().addedOrgans() };
     }

@@ -40,6 +40,25 @@ class FungibleCustodyReadTest {
         assertEquals(Optional.of(pocket), FungibleResourceReadIndex.actorAccounts(current, ACTOR).getFirst().actorPresentation());
         assertTrue(held.getFirst().actorPresentation().isEmpty(), "membership reuse cannot retain an old inventory presentation");
     }
+    @Test void warmedAvailabilityReadsCannotLendTitleOrClaimsToAnotherImmutableImage() throws Exception {
+        var original = ledger(4, false);
+        assertEquals(4, original.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(4, original.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        var other = new SubjectId("settlement:other");
+        var first = original.lots().get(LOT_A);
+        var titled = new FungibleResourceLedger(ImmutableLookupMap.withEntry(original.lots(), LOT_A,
+                first.withEconomicOwner(other)),
+                original.claims(), original.accounts(), original.bindings());
+        assertEquals(0, titled.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(4, titled.unclaimedQuantity(FIRST, other, "minecraft:bread"));
+        var reserved = original.reserve(new ClaimAllocation(new SubjectId("claim:availability"), new SubjectId("process:meal"),
+                OWNER, "minecraft:bread", 2, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), FIRST);
+        var task = new java.util.concurrent.FutureTask<Integer>(() -> reserved.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        new Thread(task).start(); assertEquals(2, task.get());
+        assertEquals(2, reserved.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(4, original.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(0, titled.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+    }
     @Test void transfersAndClaimReleaseRebuildOnlyReadFactsWithoutLosingTheCurrentHolder() {
         var actors = ledger(4, false); var container = new SubjectId("container:source");
         var source = new CustodyAccount(FIRST, new ResourceCustody.Container(container), Map.of(LOT_A, 4), Map.of());

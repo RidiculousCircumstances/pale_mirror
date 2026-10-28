@@ -35,6 +35,19 @@ class ResidentActivityProcessTest {
         assertSame(refusal, ResidentActivityProcess.admission(unrelated, action));
         var changed = state.withHumanPopulation(state.humanPopulation().accrueHunger(actor, 24_000L));
         assertFalse(proof.stillHeld().test(changed));
+        var materials = state.inventory().fungibleResources().transformCold(
+                ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home.id())),
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
+                new ResourceLot(new SubjectId("lot:admission-dependencies-material"), home.id(), "minecraft:cobblestone",
+                        1, "test", List.of()));
+        var nonFoodChanged = state.withInventory(state.inventory().withFungibleResources(materials));
+        assertTrue(proof.stillHeld().test(nonFoodChanged), "moving non-food stock cannot create food for this idle resident");
+        var personalLot = new SubjectId("lot:admission-personal-food");
+        var personal = state.inventory().fungibleResources().issue(new ResourceLot(personalLot, home.id(), ResidentMeal.BREAD_KIND,
+                1, "test", List.of()), new CustodyAccount(new SubjectId("custody:admission-personal-food"),
+                new ResourceCustody.Actor(actor), Map.of(personalLot, 1), Map.of(), java.util.Optional.of(new ActorItemSlot.Pocket(0))));
+        assertFalse(proof.stillHeld().test(state.withInventory(state.inventory().withFungibleResources(personal))),
+                "personal food must release an idle food-stock refusal too");
         var ledger = state.inventory().fungibleResources().transformCold(
                 ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home.id())),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),

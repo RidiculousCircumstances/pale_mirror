@@ -8,7 +8,12 @@ import java.util.Optional;
 /** Read-only feasible meal source; hunger alone does not make a meal an executable activity. */
 public final class ResidentMealOpportunity {
     private ResidentMealOpportunity() { }
-    private static final java.util.Set<ResourceStorageRole> FOOD_STORAGE =
+    /** A conservative absence fact for a resource-free idle refusal. It does not
+     * rank sources, inspect service access or start any navigation calculation. */
+    public static boolean foodStockAbsent(FrontierWorldState state, SubjectId resident) {
+        return ResidentFoodStock.absent(state, resident);
+    }
+    static final java.util.Set<ResourceStorageRole> FOOD_STORAGE =
             java.util.Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER);
 
     public record Source(ResidentFoodSource foodSource, SurfaceAnchor clearingSurface,

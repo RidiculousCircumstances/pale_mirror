@@ -4097,3 +4097,40 @@ Existing connected negative coverage is extended for warmed population reads
 across movement/death/predecessor branches, and station replacement/predecessor
 isolation. No new schema, compatibility bridge, timing test or authority cache.
 G remains open; these are bounded-read corrections, not evidence of 20 ticks/s.
+
+
+### Repeated stock reads and an idle food-refusal proof (2026-10-28)
+
+The next retained-world trace on `5f6b3a2f5` again contradicts steady time:
+44.803777s, 106605→106900 = 6.584266 ticks/s, debt1456→2059;
+owner55.03%, exact29.85%, WAL7.54%, zero data loss. The read-only ordinary
+observer was deliberately ended after seven samples/181.693650s:
+106295→107760 =8.063023/s, debt890→3059. This is partial observation,
+not a completed terminal/steady-clock acceptance run. Workload/JIT differs;
+no gain or regression is attributed to the preceding cut from these windows.
+
+Two connected source costs are removed:
+
+- FungibleResourceReadIndex previously allocated and walked a complete account
+  lot/claim dependency vector on *every* availability query, including repeat
+  reads of the identical immutable roots. A private image token now acknowledges
+  a checked row within those exact roots. A changed image still checks its
+  complete dependency vector; title/claim changes with an unchanged account,
+  predecessors and another thread cannot borrow an old balance. Tokens retain
+  no previous image or canonical-state chain.
+- The activity owner's idle FOOD_STOCK hold used the entire inventory as one
+  dependency, so unrelated material mutations forced food search again. The
+  food owner now supplies a conservative absence fact, shared per settlement
+  warehouse stock and checked against the exact actor accounts. Its warehouse
+  tiers come from the same meal-source policy. All declared stores/all actor
+  accounts form a superset of actual meal sources: positive stock at even a
+  blocked/ineligible source falls back to ordinary admission. There is no
+  source/access grant, path search or food reservation in this proof.
+  Only an unassigned idle refusal uses it. Other non-resource inventory roots,
+  actor/body state, checkpoint, geometry and interaction fences remain covered;
+  food appearing in personal or warehouse stock invalidates the hold.
+
+Focused coverage extends existing ownership/title/claim/branch/thread reads and
+idle refusal across unrelated material change versus real food arrival. Physical
+item mutation, scene custody and hunger business semantics are unchanged.
+No compatibility/schema work; no timing assertions. G remains OPEN.
