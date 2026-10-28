@@ -10,7 +10,8 @@ public final class LandUseExclusions {
     }
     private static final ImmutableResultView<AccessImage, RegionalColumnSet> VIEW = new ImmutableResultView<>(16);
     private static final ImmutableResultView<String, RegionalColumnSet> BASE = new ImmutableResultView<>(4), ROADS = new ImmutableResultView<>(4), ORGANS = new ImmutableResultView<>(4);
-    private static final ImmutableResultView<io.farfrontier.palemirror.frontier.v3.api.SubjectId, RegionalColumnSet> FIELDS = new ImmutableResultView<>(SimulationCapacity.MAX_SETTLEMENTS * 2);
+    private static final ImmutableRegistryView<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ResourceFieldLayout, RegionalColumnSet>
+            FIELDS = new ImmutableRegistryView<>(ResourceSiteState.MAX_SITES);
     public static RegionalColumnSet columns(FrontierWorldState state) {
         var base = BASE.get(List.of(state.bootstrap()), "initial", () -> {
             var positions = new HashSet<BlockPosition>();
@@ -29,9 +30,10 @@ public final class LandUseExclusions {
         var organs = ORGANS.get(List.of(state.hiveColony().addedOrgans()), "added", () -> RegionalColumnSet.fromPositions(
                 FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values()))));
         var parts = new ArrayList<>(List.of(base, roads, organs));
-        state.resourceSites().cycles().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
-                parts.add(FIELDS.get(List.of(entry.getValue().layout()), entry.getKey(),
-                        () -> RegionalColumnSet.fromPositions(entry.getValue().layout().managedSlots()))));
+        var layouts = new HashMap<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ResourceFieldLayout>();
+        state.resourceSites().cycles().forEach((id, cycle) -> layouts.put(id, cycle.layout()));
+        FIELDS.project(state.bootstrap(), layouts, (id, layout) -> RegionalColumnSet.fromPositions(layout.managedSlots()))
+                .entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> parts.add(entry.getValue()));
         var inputs = new ArrayList<Object>(parts);
         var endpoints = state.inventory().containers().values().stream().filter(container -> container.storage().isPresent())
                 .sorted(Comparator.comparing(ContainerRecord::id)).map(container -> container.storage().orElseThrow().endpoint()).toList();

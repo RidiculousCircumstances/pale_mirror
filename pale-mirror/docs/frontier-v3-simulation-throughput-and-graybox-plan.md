@@ -1872,3 +1872,41 @@ one32-item wheat lot to bread with unchanged custody quantities still rejects a
 one-slot overflow. Existing ledger, player-edit, compartment, reservation and trade
 negative coverage retained. Exact clean release, deployment and ordinary100 runtime
 measurement remain required; no measured capacity speedup or complete G claim yet.
+
+
+### Active field geometry must not evict itself during one registry scan
+
+70235e6ec exactrelease67frontier/9classes+29runtime/guardrails/packagePASS43s,
+both retained-world deployments VERIFIED. Ordinary10023672→24125/272.5s,
+debt555→5553 FAILED. Warm20s affected-container-capacity-warm.jfr/attribution.txt
+shows review/transport-cost/installed-capacity/land preparation now dominates, rather
+than all-container admission. Actual allocations advice10.70+10.10GB, server6.72GB,
+exactprep5.69GB, nav0.45+0.36GB. Different phase/work, no isolated allocation ratio.
+Final planning has252owner waits but ZEROactive/deferred/inflight searches; total
+waits are not proof of a navigation queue bottleneck or a need for more threads.
+
+Connected static cause in land preparation: LandUseExclusions.FIELDS was an LRU of
+MAX_SETTLEMENTS*2=200 entries, but the current native saved image contains400actual
+field cycles (revision464110/instant25383), within ResourceSiteState.MAX_SITES1024.
+A complete sorted registry scan evicts its own prior results. That changes every
+contributor identity, misses the final protected-land union cache and reconstructs
+world-wide geometry again for each economic/development query. Read-only native saved
+image probe: build/simulation-throughput/active-field-registry-native-cardinality.txt;
+no native state/time edit or simulated outcome.
+
+The land producer now uses a common computing-thread immutable registry projection:
+every exact live field/layout retains its own completed column image. Its bound is
+the existing declared resource-site registry bound, not an undersized LRU or a raised
+domain capacity. Changed layouts recompute; removed rows and a new bootstrap release
+old inputs. Published outputs remain immutable; a failed projection installs no partial
+trusted basis. No second geometry writer, stale terrain permission, larger worker pool
+or approximation. The helper is immediately consumed by LandUseExclusions.
+
+Focused active-registry/land/cultivation/extraction and advice checks+guardrails PASS42s.
+One existing input-view test now covers300active rows, one changed/deleted row, immutable
+predecessors, failed construction and a new epoch, with computation counts rather than
+wall-time assertions. Exactrelease/deploy and sustained ordinaryclock measurement remain
+open. Separating unit-cost metadata from timed production forecasts is a possible later
+boundary improvement; do not begin that wider refactor solely because this cheaper
+source-proven churn had not yet been removed. No incremental ledger rewrite is warranted
+by this latest attribution.
