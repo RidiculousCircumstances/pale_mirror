@@ -15,7 +15,7 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
     /** Complete owner-declared immutable inputs to this context's structural reference check. */
-    Object[] validationInputs(ActorMovementReferences references);
+    java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences references, ActorMovement movement);
     /** Explicit caller-owned goal delegation; the registered provider validates its retained relationship. */
     java.util.Optional<SubjectId> delegatedGoalOwner();
     default java.util.Optional<SubjectId> clearancePoint() { return java.util.Optional.empty(); }
@@ -30,8 +30,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
             return phase == StationWorkState.Phase.DELIVERED ? java.util.Optional.of(pointId) : java.util.Optional.empty();
         }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.productionJobs().get(jobId) };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.PRODUCTION.at(jobId));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var job = refs.productionJobs().get(jobId);
@@ -49,8 +49,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
             if (jobRevision < 1) throw new IllegalArgumentException("invalid forestry movement revision"); }
         @Override public Provider provider() { return Provider.FORESTRY; }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.forest().work().get(jobId) };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.FORESTRY.at(jobId));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var job = refs.forest().work().get(jobId);
@@ -64,8 +64,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         public DefenderEquipmentReturn { Objects.requireNonNull(assaultId); Objects.requireNonNull(transferId); }
         @Override public Provider provider() { return Provider.DEFENDER_EQUIPMENT_RETURN; }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(assaultId); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.strategicPlans().settlementAssaults().get(assaultId) };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.ASSAULTS.at(assaultId));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var parent = refs.strategicPlans().settlementAssaults().get(assaultId);
@@ -85,8 +85,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         @Override public Provider provider() { return Provider.SERVICE_EXIT; }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(executionOwnerId); }
         @Override public java.util.Optional<SubjectId> clearancePoint() { return java.util.Optional.of(point.containerId()); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.inventory().containers().get(point.containerId()) };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.CONTAINERS.at(point.containerId()));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             point.validate(refs.inventory());
@@ -100,9 +100,10 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         public ExpeditionSupply { Objects.requireNonNull(missionId); Objects.requireNonNull(claimId); }
         @Override public Provider provider() { return Provider.EXPEDITION_SUPPLY; }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(missionId); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
             var mission = refs.shipments().missions().get(missionId);
-            return new Object[] { mission, mission == null ? null : refs.groups().groups().get(mission.groupId()) };
+            return mission == null ? java.util.List.of(ActorMovementReferences.MISSIONS.at(missionId))
+                    : java.util.List.of(ActorMovementReferences.MISSIONS.at(missionId), ActorMovementReferences.GROUPS.at(mission.groupId()));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var mission = refs.shipments().missions().get(missionId);
@@ -121,9 +122,10 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         public ExpeditionAssembly { Objects.requireNonNull(missionId); }
         @Override public Provider provider() { return Provider.EXPEDITION_SUPPLY; }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(missionId); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
             var mission = refs.shipments().missions().get(missionId);
-            return new Object[] { mission, mission == null ? null : refs.groups().groups().get(mission.groupId()) };
+            return mission == null ? java.util.List.of(ActorMovementReferences.MISSIONS.at(missionId))
+                    : java.util.List.of(ActorMovementReferences.MISSIONS.at(missionId), ActorMovementReferences.GROUPS.at(mission.groupId()));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var mission = refs.shipments().missions().get(missionId);
@@ -140,8 +142,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         public ExpeditionReplenishment { Objects.requireNonNull(missionId); }
         @Override public Provider provider() { return Provider.EXPEDITION_SUPPLY; }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(missionId); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.shipments().missions().get(missionId) };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.MISSIONS.at(missionId));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var mission = refs.shipments().missions().get(missionId);
@@ -161,8 +163,9 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
         @Override public java.util.Optional<SubjectId> clearancePoint() { return java.util.Optional.of(point.containerId()); }
         public ServiceExit { Objects.requireNonNull(point); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.inventory().containers().get(point.containerId()), refs.people().residents() };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.CONTAINERS.at(point.containerId()),
+                    ActorMovementReferences.RESIDENTS.at(movement.order().actorId()));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             point.validate(refs.inventory());
@@ -179,8 +182,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
             Objects.requireNonNull(shipmentId, "movement shipment");
             if (shipmentRevision < 1) throw new IllegalArgumentException("movement shipment revision is invalid");
         }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.shipments().shipments().get(shipmentId) };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.SHIPMENTS.at(shipmentId));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var shipment = refs.shipments().shipments().get(shipmentId);
@@ -196,8 +199,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
             Objects.requireNonNull(groupId);
             if (groupRevision < 1) throw new IllegalArgumentException("group movement has an invalid revision");
         }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
-            return new Object[] { refs.groups().groups().get(groupId) };
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.GROUPS.at(groupId));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var group = refs.groups().groups().get(groupId);
@@ -216,10 +219,10 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         }
         @Override public Provider provider() { return Provider.EXTRACTION; }
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
-        @Override public Object[] validationInputs(ActorMovementReferences refs) {
+        @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
             var job = refs.extractionSites().work().get(jobId);
-            var deposit = job == null ? null : refs.extractionSites().deposits().get(job.siteId());
-            return new Object[] { job, deposit == null ? null : deposit.site() };
+            return job == null ? java.util.List.of(ActorMovementReferences.EXTRACTION.at(jobId))
+                    : java.util.List.of(ActorMovementReferences.EXTRACTION.at(jobId), ActorMovementReferences.DEPOSITS.at(job.siteId()));
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var job = refs.extractionSites().work().get(jobId);

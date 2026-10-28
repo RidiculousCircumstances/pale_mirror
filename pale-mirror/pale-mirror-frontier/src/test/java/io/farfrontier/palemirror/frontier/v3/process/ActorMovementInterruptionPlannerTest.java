@@ -54,7 +54,7 @@ class ActorMovementInterruptionPlannerTest {
         assertSame(result, result.validate(state, actor));
         assertThrows(IllegalArgumentException.class, () -> result.validate(state, new SubjectId("resident:1-2")));
         assertThrows(IllegalArgumentException.class, () -> result.validate(
-                state.withChanges(FrontierWorldStateUpdate.begin()), actor));
+                state.withActorBody(actor, state.actorLocations().get(actor).body().offset(1, 0, 0)), actor));
     }
     @Test void interruptionCancelsItsOwnContinuationAndStartsFoodInOneEngineTransaction() {
         FrontierWorldState state = fixture(false);

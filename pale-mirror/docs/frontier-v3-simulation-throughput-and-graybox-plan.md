@@ -2511,3 +2511,56 @@ local wide-body proof test forbids consulting remote fact hashes, retains the ex
 neighbour wall and rejects the proof after that neighbour changes. Focused geometry,
 profile, shapes and cooperative path tests+guardrailsPASS17s. Native gain not yet
 measured. This is not acceptance for20ticks/s or HOT terminal movement.
+
+
+### Selective immutable reference checks (2026-10-28)
+
+47dce7515 cleanrelease geometry/profile/shapes/cooperative+45native/guardrails/package
+PASS45s; both retainedworld deployments verified, SHA51298462b5b19334ff424d3d04d8137c60701d7c6a212f7966de6908dd1cb71e6b865cc62ced12c972c0472690ffaba37e0a4bee8231af844de170401a37f940ce0.
+Main ongoingfollowup tick761771/rev1580762/statusok/debt0/recoveryfalse.
+lazy-profile-ordinary100.jfr:149698events/noDataLoss,44.940734s exactlyaccounted;
+ticks67113→67294=4.027527/s,debt784→1506: STILLFAILED20/s. OWNER59.57%,
+EXACT33.25%,WAL4.55%,budget0.22%. Eagerprofile expansion is no longer in the
+preparation top65 method samples; this is not a controlled aggregate speedup.
+
+ActorMovementStateSupport still reconstructed every row's complete dependency
+array for any changed actor/job/inventory image. Existing proof memoization only
+skipped the check body. The source and retained validation stacks show those
+reference gets on ordinary publication. The next connected change replaces that
+path with a bounded reusable ImmutableReferenceIndex. Producers explicitly declare
+typed Source<context,key,value> and sealed reads of exact keys; a closed source
+registry rejects unknown declarations. Each index binds its read compiler and real
+check once at construction; callers cannot reuse its successful evidence with a
+substituted validation algorithm. The index knows no profession, process
+stage, movement rule or authoritative owner. It selects the existing checks through
+reverse read dependencies. Each changed source map is compared once using exact
+identity deltas (or complete comparison when a direct immutable witness is absent).
+
+Changed declarations and dependent target changes invoke their unchanged checks.
+Missing targets, reused row IDs, dynamic mission→group/deposit retargets, failed
+checks and withdrawn rows have explicit rebuild/unlink behavior. Full ingress and
+new epochs rebuild all successful evidence. A failed update discards the complete
+partial image. Row/read limits bound all reverse entries; no world history or
+calculation closure is retained. Mutable canonical data, TTLs and hash-only proofs
+are not admissible inputs.
+
+First consumer is the complete movement-reference family: all eleven existing
+nominal ActorMovementContext variants now issue declared reads rather than raw
+Object arrays. Actor/execution/competing-meal reads remain common; family contexts
+retain their job/mission/group/container/deposit responsibility. Extraction reads
+the whole exact deposit conservatively; service exit reads its exact resident.
+The reverse SERVICE_EXIT-execution→movement obligation remains checked separately.
+No old active movement-validation path remains. Full family-wide relationship
+projection and other validators are separate remaining costs, not claimed fixed.
+
+Coverage includes generic changed/missing/equal-distinct inputs, full audit, epoch,
+failure discard, dynamic retarget, withdrawal/reuse and unregistered sources;
+existing movement/cargo/group/mining/forestry/meal/recovery checks are retained.
+One prior test used an empty world patch as a fake changed basis; after8529 this is
+the same snapshot, so the test now changes the actor's real body before requiring
+acknowledgement rejection. No product invariant is waived.
+
+The connected focused suite (reference index, movement/interruption, groups,
+shipments, closure, extraction disruption, forestry and expedition supply/refill,
+consolidated trade) plus guardrails passed in2m4s. Native aggregate effect remains
+unmeasured; G is still open.

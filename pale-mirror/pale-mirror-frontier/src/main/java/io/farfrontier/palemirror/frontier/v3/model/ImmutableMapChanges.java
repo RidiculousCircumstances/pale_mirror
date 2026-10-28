@@ -19,6 +19,20 @@ final class ImmutableMapChanges {
         }
         return before.keySet().equals(after.keySet());
     }
+    /** Complete identity changes for immutable dependency evidence, not value equality. */
+    static <K> void forEachIdentityChangedKey(Map<K, ?> before, Map<K, ?> after, Consumer<K> consume) {
+        if (before == after) return;
+        if (after instanceof ImmutableMapImage<?, ?> image) {
+            @SuppressWarnings("unchecked") var typed = (ImmutableMapImage<K, ?>) image;
+            var keys = typed.changedKeysFrom(before);
+            if (keys.isPresent()) {
+                for (var key : keys.orElseThrow()) if (before.get(key) != after.get(key)) consume.accept(key);
+                return;
+            }
+        }
+        for (var key : before.keySet()) if (before.get(key) != after.get(key)) consume.accept(key);
+        for (var key : after.keySet()) if (!before.containsKey(key)) consume.accept(key);
+    }
     /** Membership-only removal delta: value changes must not compare large records. */
     static <K> void forEachRemovedKey(Map<K, ?> before, Map<K, ?> after, Consumer<K> consume) {
         if (before == after) return;
