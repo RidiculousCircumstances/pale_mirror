@@ -62,8 +62,8 @@ public final class ActorMovementProcess {
         state.actorExecutions().requireCurrent(expected.executionId());
         ActorMovementProviders.require(expected).validate(state, expected);
         var movements = new LinkedHashMap<>(state.actorMovements()); movements.remove(actorId);
-        var actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(actorId, actors.get(actorId).withBody(bodyAt(state, actorId, tick)));
+        var actors = ImmutableLookupMap.withEntry(state.actorLocations(), actorId,
+                state.actorLocations().get(actorId).withBody(bodyAt(state, actorId, tick)));
         return state.withChanges(ownedUpdate.actorMovements(movements).actorLocations(actors));
     }
 
@@ -206,8 +206,8 @@ public final class ActorMovementProcess {
         BodyPosition body = arrived == null
                 ? BodyPosition.above(travel.route().get(safeIndex))
                 : BodyPosition.above(arrived);
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(subject, actor.withBody(body));
+        var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject,
+                actor.withBody(body));
         if (arrived != null && movement.order().arrivedAt(arrived)) next.remove(subject);
         else next.put(subject, movement.withoutColdTravel());
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).actorMovements(next)

@@ -94,8 +94,7 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         state.actorExecutions().requireCurrent(movement.executionId());
         var movements = new LinkedHashMap<>(state.actorMovements());
         movements.remove(subject);
-        var actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(subject, actors.get(subject).withBody(event.retainedBody()));
+        var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject, state.actorLocations().get(subject).withBody(event.retainedBody()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(movements).actorLocations(actors)
                 .actorExecutions(ActorMovementProviders.require(movement).interruptionAuthority(state, movement)));
     }

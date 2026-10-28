@@ -11,16 +11,23 @@ final class ActorIdentityDeclarations {
                                   Set<SubjectId> expected) { }
     // One bounded immutable derived view. Position, nutrition and activity changes are not births.
     private static volatile ProducerRoster cached;
+    private static final ImmutableRegistryView<SubjectId, ActorLocation, ActorKind> KINDS =
+            new ImmutableRegistryView<>(SimulationCapacity.MAX_ACTORS);
+    static Map<SubjectId, ActorKind> declaredKinds(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors) {
+        if (ImmutableInvariantCheck.fullAudit()) return KINDS.project(bootstrap, actors, (before, after) -> false, (id, actor) -> actor.kind());
+        return KINDS.project(bootstrap, actors, (id, actor) -> actor.kind());
+    }
     private static final ImmutableInvariantCheck<Set<SubjectId>> CHECK = new ImmutableInvariantCheck<>();
     private ActorIdentityDeclarations() { }
     static Set<SubjectId> validate(FrontierBootstrap bootstrap, HiveColony hive, HumanPopulation people,
                                   Map<SubjectId, ActorLocation> actors,
                                   io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet fleet) {
-        return CHECK.value(() -> validateCurrent(bootstrap, hive, people, actors, fleet),
-                bootstrap, hive.spawnedBioforms(), people.residents(), actors, fleet.assets());
+        var kinds = declaredKinds(bootstrap, actors);
+        return CHECK.value(() -> validateCurrent(bootstrap, hive, people, kinds, fleet),
+                bootstrap, hive.spawnedBioforms(), people.residents(), kinds, fleet.assets());
     }
     private static Set<SubjectId> validateCurrent(FrontierBootstrap bootstrap, HiveColony hive, HumanPopulation people,
-                                  Map<SubjectId, ActorLocation> actors,
+                                  Map<SubjectId, ActorKind> kinds,
                                   io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet fleet) {
         var roster = cached;
         if (roster == null || roster.bootstrap() != bootstrap || roster.spawned() != hive.spawnedBioforms()
@@ -38,10 +45,10 @@ final class ActorIdentityDeclarations {
         var expected = roster.expected();
         if ((long) residents.size() + bioforms.size() + animals.size() != expected.size())
             throw new IllegalArgumentException("actor identity has competing producer declarations");
-        if (!expected.equals(actors.keySet()))
+        if (!expected.equals(kinds.keySet()))
             throw new IllegalArgumentException("actor location index must own every and only canonical actor");
-        for (var entry : actors.entrySet()) {
-            boolean declared = switch (entry.getValue().kind()) {
+        for (var entry : kinds.entrySet()) {
+            boolean declared = switch (entry.getValue()) {
                 case RESIDENT -> residents.contains(entry.getKey());
                 case BIOFORM -> bioforms.contains(entry.getKey());
                 case PACK_ANIMAL -> animals.contains(entry.getKey());

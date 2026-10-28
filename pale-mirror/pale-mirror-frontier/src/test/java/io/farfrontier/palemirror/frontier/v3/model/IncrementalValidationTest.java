@@ -22,6 +22,32 @@ class IncrementalValidationTest {
         assertEquals(3, calls.get());
     }
 
+    @Test void exactActorReplacementRetainsDeclaredKindsButCannotHideInvalidPositionKindOrRetirement() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:actor-map-change"), 421L));
+        var id = state.bootstrap().settlements().getFirst().residents().getFirst().id(); var actor = state.actorLocations().get(id);
+        var presence = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(id,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, id, 1);
+        var idle = io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState.empty().begin(presence, 0);
+        var alive = ImmutableLookupMap.copyOf(Map.of(id, actor));
+        PresenceActivityCapability.validateReferences(alive, idle);
+        assertThrows(IllegalArgumentException.class, () -> PresenceActivityCapability.validateReferences(
+                ImmutableLookupMap.withEntry(alive, id, actor.deadAt(actor.body())), idle),
+                "unchanged presence authority must still reject a changed dead actor");
+        assertDoesNotThrow(() -> PresenceActivityCapability.validateReferences(alive, idle));
+        var kinds = ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations());
+        var moved = ImmutableLookupMap.withEntry(state.actorLocations(), id, actor.withBody(actor.body().offset(1, 0, 0)));
+        assertSame(kinds, ActorIdentityDeclarations.declaredKinds(state.bootstrap(), moved));
+        var outside = actor.withBody(BodyPosition.above(SurfaceAnchor.at(state.bootstrap().bounds().maxXExclusive(), 64, 0)));
+        var candidates = List.of(ImmutableLookupMap.withEntry(state.actorLocations(), id, outside),
+                ImmutableLookupMap.withEntry(state.actorLocations(), id, new ActorLocation(actor.body(), actor.condition(), ActorKind.BIOFORM, actor.navigationProfile())),
+                ImmutableLookupMap.withoutEntry(state.actorLocations(), id));
+        for (var actors : candidates) {
+            var preview = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)));
+            assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(state, preview));
+        }
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(state));
+    }
+
     @Test void fieldReferenceProjectionAndExactJobDirectoryFollowRetirement() {
         var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
         var sites = fixture.state().resourceSites(); var job = fixture.job();

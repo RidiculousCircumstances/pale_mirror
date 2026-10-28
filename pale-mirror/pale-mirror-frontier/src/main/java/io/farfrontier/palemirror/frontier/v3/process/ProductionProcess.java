@@ -462,8 +462,7 @@ public final class ProductionProcess {
             inventory = inventory.withoutItem(input.id());
             replacement = replacement.withInputHold(new ProductionInputHold.Cold(input));
         }
-        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actor.withBody(step.body()));
+        java.util.Map<SubjectId, ActorLocation> actors = ImmutableLookupMap.withEntry(state.actorLocations(), job.workerId(), actor.withBody(step.body()));
         java.util.Map<SubjectId, ProductionJob> jobs = new java.util.LinkedHashMap<>(state.productionJobs()); jobs.put(replacement.id(), replacement);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).physicalIntents(intents)
                 .productionJobs(jobs).actorLocations(actors));

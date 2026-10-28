@@ -576,8 +576,7 @@ public final class ResourceSiteHarvestProcess {
         if (actor == null || (actor.body().equals(next) && job.navigationBlock().isEmpty()
                 && (!arrived || job.arriveAtSemanticGoal(goal).equals(job))))
             throw new IllegalArgumentException("COLD field goal has no forward travel or new arrival");
-        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actor.withBody(next));
+        java.util.Map<SubjectId, ActorLocation> actors = ImmutableLookupMap.withEntry(state.actorLocations(), job.workerId(), actor.withBody(next));
         ResourceSiteLifecycle resumed = job.navigationBlock().isPresent()
                 ? lifecycle.clearHarvestRouteBlock(job, job.navigationBlock().orElseThrow()) : lifecycle;
         ResourceSiteHarvestJob active = resumed.harvestJob(job.id()).orElseThrow();

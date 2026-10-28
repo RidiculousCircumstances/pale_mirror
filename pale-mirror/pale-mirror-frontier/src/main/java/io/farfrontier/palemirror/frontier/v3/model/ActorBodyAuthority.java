@@ -10,11 +10,17 @@ import java.util.Objects;
  * Ordinary activity changes do not call prepare/retire: they leave this authority intact.
  */
 public final class ActorBodyAuthority {
+    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
     private ActorBodyAuthority() { }
 
     /** Versioned hydration and pre-WAL closure reject all historical scene-owned body tuples. */
-    static void validate(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
+    static void validate(FrontierBootstrap bootstrap,
+                         java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
                          FencedRecoveryState recovery) {
+        REFERENCES.validate(() -> validateCurrent(actors, recovery), ActorIdentityDeclarations.declaredKinds(bootstrap, actors), recovery);
+    }
+    private static void validateCurrent(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
+                                        FencedRecoveryState recovery) {
         for (var binding : recovery.current().values()) {
             if (binding.asset() != FencedRecoveryAsset.BODY) continue;
             requireDeclared(actors, binding.bindingId(), binding.ownerId(), binding.ownerRevision());
@@ -157,8 +163,7 @@ public final class ActorBodyAuthority {
                 || settlement.changes().changedComponents().contains(FrontierWorldStateUpdate.Component.FENCED_RECOVERY)
                 || settlement.changes().changedComponents().contains(FrontierWorldStateUpdate.Component.ACTOR_EXECUTIONS))
             throw new IllegalArgumentException("death consequence port cannot replace physical/common execution authority");
-        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(observed.body().actorId(), actor.deadAt(position));
+        var actors = ImmutableLookupMap.withEntry(state.actorLocations(), observed.body().actorId(), actor.deadAt(position));
         return ActorExecutionComposition.LIFECYCLE.preparePassiveDeath(state, observed.body().actorId(), settlement.executions())
                 .commit(state, settlement.changes().actorLocations(actors).fencedRecovery(death(state.fencedRecovery(), observed.body())));
     }
@@ -177,8 +182,7 @@ public final class ActorBodyAuthority {
         if (binding.phase() != FencedRecoveryPhase.RUNNING && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
             throw new IllegalArgumentException("body inspection cannot admit an uncreated incarnation");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
-        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
+        var actors = ImmutableLookupMap.withEntry(state.actorLocations(), observed.body().actorId(), new ActorLocation(observed.observedBody(),
                 actor.condition().withHealth(observed.observedHealth()), actor.kind(), actor.navigationProfile()));
         var recovery = binding.phase() == FencedRecoveryPhase.AMBIGUOUS
                 && observed.source() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING
@@ -210,8 +214,7 @@ public final class ActorBodyAuthority {
         if (binding.phase() != FencedRecoveryPhase.PREPARED && binding.phase() != FencedRecoveryPhase.AMBIGUOUS)
             throw new IllegalArgumentException("body presence requires exact pending admission or inspection");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
-        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
+        var actors = ImmutableLookupMap.withEntry(state.actorLocations(), observed.body().actorId(), new ActorLocation(observed.observedBody(),
                 actor.condition().withHealth(observed.observedHealth()), actor.kind(), actor.navigationProfile()));
         var recovery = binding.phase() == FencedRecoveryPhase.PREPARED
                 ? state.fencedRecovery().running(binding.bindingId(), observed.body().physicalEpoch())
@@ -263,8 +266,7 @@ public final class ActorBodyAuthority {
         if (ActorInventoryInteractionFences.pending(state, observed.body().actorId()))
             throw new IllegalArgumentException("body unload retains a prepared inventory interaction");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
-        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
+        var actors = ImmutableLookupMap.withEntry(state.actorLocations(), observed.body().actorId(), new ActorLocation(observed.observedBody(),
                 actor.condition().withHealth(observed.observedHealth()), actor.kind(), actor.navigationProfile()));
         // Exact saved-absence evidence may resolve body ambiguity, never a resource effect.
         // There is no published RUNNING intermediate or permission to actuate a saved body.

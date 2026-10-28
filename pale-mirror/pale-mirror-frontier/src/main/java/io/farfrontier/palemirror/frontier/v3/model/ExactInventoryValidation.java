@@ -14,7 +14,7 @@ final class ExactInventoryValidation {
     private static final ImmutableInvariantCheck<Void> CARGO_TITLES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> EXACT_CUSTODY = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> FUNGIBLE_CUSTODY = new ImmutableInvariantCheck<>();
-    private static final ImmutableRegistryView<SubjectId, ResourceCustody, ResourceCustody> HOLDERS =
+    private static final ImmutableRegistryView<SubjectId, CustodyAccount, ResourceCustody> HOLDERS =
             new ImmutableRegistryView<>(FungibleResourceLedger.MAX_ACCOUNTS);
     static void validate(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
                          Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems,
@@ -101,9 +101,9 @@ final class ExactInventoryValidation {
             }
             if (!slots.equals(occupiedSlots)) throw new IllegalArgumentException("container slot index must exactly match exact item custody");
         }, items, cargo, playerItems, worldCarrierItems, containers, occupiedSlots);
-        var inputs = new HashMap<SubjectId, ResourceCustody>();
-        fungibleResources.accounts().forEach((id, account) -> inputs.put(id, account.custody()));
-        var holders = HOLDERS.project(containers, inputs, (id, custody) -> custody);
+        var holders = ImmutableInvariantCheck.fullAudit()
+                ? HOLDERS.project(containers, fungibleResources.accounts(), (before, after) -> false, (id, account) -> account.custody())
+                : HOLDERS.project(containers, fungibleResources.accounts(), (id, account) -> account.custody());
         FUNGIBLE_CUSTODY.validate(() -> validateFungibleResourceCustody(containers, cargo, occupiedSlots, holders, fungibleResources.bindings()),
                 containers, cargo, occupiedSlots, holders, fungibleResources.bindings());
     }

@@ -299,7 +299,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             navigationGeometry.requireWithin(bootstrap.bounds());
             productionStations.validate(inventory, bootstrap.ruleset().production(), bootstrap.ruleset().tools());
             ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites, forest, physicalIntents);
-            ActorBodyAuthority.validate(actorLocations, fencedRecovery);
+            ActorBodyAuthority.validate(bootstrap, actorLocations, fencedRecovery);
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
                 serviceWorks, physicalIntents, physicalObservations, sceneLeases, hiveColony,
                 structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans,
@@ -399,7 +399,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             if (account.ownerKind() == EconomicOwnerKind.RESIDENT && humanPopulation.resident(account.ownerId()) == null)
                 throw new IllegalArgumentException("resident resource-title registration must name a known person");
         }
-        for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.supportingSurface().support());
+        ActorLocationBounds.validate(bootstrap.bounds(), actorLocations);
         StrategicPlanState validatedPlans = strategicPlans;
         for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
             ActorLocation actor = actorLocations.get(journey.residentId());
@@ -790,7 +790,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     public FrontierWorldState withActorBody(SubjectId actor, BodyPosition body, StrategicPlanState nextPlans) {
         Objects.requireNonNull(actor, "actor"); Objects.requireNonNull(body, "actor body"); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), body.supportingSurface().support());
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
-        Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations); next.put(actor, actorLocations.get(actor).withBody(body));
+        Map<SubjectId, ActorLocation> next = ImmutableLookupMap.withEntry(actorLocations, actor, actorLocations.get(actor).withBody(body));
         return withChanges(FrontierWorldStateUpdate.begin().actorLocations(next).strategicPlans(nextPlans));
     }
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {

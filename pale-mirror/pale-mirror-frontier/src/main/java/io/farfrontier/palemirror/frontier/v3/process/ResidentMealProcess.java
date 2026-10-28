@@ -678,15 +678,15 @@ public final class ResidentMealProcess {
                         || !actor.supportingSurface().equals(serviceSurface(state, meal))))
                     throw new IllegalArgumentException("meal movement lacks an accepted route or exact station");
                 if (meal.coldTravel().isPresent() && step.nextSurface().isEmpty()) {
-                    Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-                    actors.put(subject, actor.withBody(interruptionBodyAt(meal, step.atTick())));
+                    var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject,
+                            actor.withBody(interruptionBodyAt(meal, step.atTick())));
                     yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                             .humanPopulation(state.humanPopulation().advanceMeal(meal,
                                     meal.withoutColdTravel())));
                 }
                 if (step.nextSurface().isPresent()) {
-                    Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-                    actors.put(subject, actor.withBody(BodyPosition.above(step.nextSurface().orElseThrow())));
+                    var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject,
+                            actor.withBody(BodyPosition.above(step.nextSurface().orElseThrow())));
                     ResidentMeal arrived = meal.withoutColdTravel();
                     yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                             .humanPopulation(state.humanPopulation().advanceMeal(meal, arrived)));
@@ -727,15 +727,15 @@ public final class ResidentMealProcess {
                     yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal,
                             meal.advance(ResidentMeal.Phase.CONSUME)));
                 if (meal.coldTravel().isPresent() && step.nextSurface().isEmpty()) {
-                    Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-                    actors.put(subject, actor.withBody(interruptionBodyAt(meal, step.atTick())));
+                    var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject,
+                            actor.withBody(interruptionBodyAt(meal, step.atTick())));
                     yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                             .humanPopulation(state.humanPopulation().advanceMeal(meal,
                                     meal.withoutColdTravel())));
                 }
                 if (step.nextSurface().isPresent()) {
-                    Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-                    actors.put(subject, actor.withBody(BodyPosition.above(step.nextSurface().orElseThrow())));
+                    var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject,
+                            actor.withBody(BodyPosition.above(step.nextSurface().orElseThrow())));
                     ResidentMeal arrived = meal.withoutColdTravel();
                     yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                             .humanPopulation(state.humanPopulation().advanceMeal(meal, arrived)));

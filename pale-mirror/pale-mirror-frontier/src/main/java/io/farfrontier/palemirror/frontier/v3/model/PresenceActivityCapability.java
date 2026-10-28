@@ -5,21 +5,30 @@ import java.util.Optional;
 
 /** Actor-owned passive presence has no job, labour or resource continuation. */
 final class PresenceActivityCapability implements ActorActivityCapability {
-    private static final ImmutableInvariantCheck<Void> CHECK = new ImmutableInvariantCheck<>();
+    private record Validated(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
+                             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecutionId> presence) { }
+    private static final ThreadLocal<Validated> CHECK = new ThreadLocal<>();
     private final ActorPresencePolicies policies;
     PresenceActivityCapability(ActorPresencePolicies policies) {
         this.policies = java.util.Objects.requireNonNull(policies);
     }
     static void validateReferences(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
                                     ActorExecutionState executions) {
-        CHECK.validate(() -> validateCurrent(actors, executions), actors, executions);
+        var presence = executions.current(ActorActivityKind.PRESENCE); var previous = CHECK.get();
+        if (!ImmutableInvariantCheck.fullAudit() && previous != null && previous.presence() == presence) {
+            if (previous.actors() == actors) return;
+            ImmutableMapChanges.forEach(previous.actors(), actors, change -> {
+                var id = presence.get(change.key());
+                if (id != null) validateDeclared(actors, id);
+            });
+        } else for (var id : presence.values()) validateDeclared(actors, id);
+        CHECK.set(new Validated(actors, presence));
     }
-    private static void validateCurrent(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
-                                    ActorExecutionState executions) {
-        for (var id : executions.current(ActorActivityKind.PRESENCE).values())
-            if (!id.activityOwnerId().equals(id.actorId()) || !actors.containsKey(id.actorId())
-                    || actors.get(id.actorId()).condition().status() != ActorLifeStatus.ALIVE)
-                throw new IllegalArgumentException("presence lost its declared actor owner");
+    private static void validateDeclared(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
+                                          ActorExecutionId id) {
+        if (!id.activityOwnerId().equals(id.actorId()) || !actors.containsKey(id.actorId())
+                || actors.get(id.actorId()).condition().status() != ActorLifeStatus.ALIVE)
+            throw new IllegalArgumentException("presence lost its declared actor owner");
     }
     @Override public ActorActivityKind kind() { return ActorActivityKind.PRESENCE; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }

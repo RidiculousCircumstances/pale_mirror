@@ -63,7 +63,7 @@ final class ScheduledSubjectExistence {
     }
     private static boolean sameKeys(List<Map<SubjectId, ?>> before, List<Map<SubjectId, ?>> after) {
         for (int i = 0; i < before.size(); i++) if (before.get(i) != after.get(i)
-                && !before.get(i).keySet().equals(after.get(i).keySet())) return false;
+                && !ImmutableMapChanges.sameKeys(before.get(i), after.get(i))) return false;
         return true;
     }
     private static Set<SubjectId> nestedSubjects(FrontierWorldState state) {

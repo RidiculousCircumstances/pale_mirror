@@ -47,8 +47,7 @@ public final class AmbientLeaseStateProcess {
         if (movement != null && movement.coldTravel().isPresent()) {
             if (movement.coldTravel().orElseThrow().authorityEpoch() != lease.revision())
                 throw new IllegalArgumentException("movement travel cannot hand off across a foreign authority epoch");
-            Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-            actors.put(lease.actorId(), actor.withBody(lease.handoffBody()));
+            Map<SubjectId, ActorLocation> actors = ImmutableLookupMap.withEntry(state.actorLocations(), lease.actorId(), actor.withBody(lease.handoffBody()));
             Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement> movements =
                     new LinkedHashMap<>(state.actorMovements());
             movements.put(lease.actorId(), movement.withoutColdTravel());
@@ -59,8 +58,7 @@ public final class AmbientLeaseStateProcess {
         if (meal == null || meal.coldTravel().isEmpty()) return copy(state, state.actorLocations(), next);
         if (meal.coldTravel().orElseThrow().authorityEpoch() != lease.revision())
             throw new IllegalArgumentException("meal travel cannot hand off across a foreign authority epoch");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(lease.actorId(), actor.withBody(lease.handoffBody()));
+        Map<SubjectId, ActorLocation> actors = ImmutableLookupMap.withEntry(state.actorLocations(), lease.actorId(), actor.withBody(lease.handoffBody()));
         return copy(state, actors, next,
                 state.humanPopulation().advanceMeal(meal, meal.withoutColdTravel()));
     }

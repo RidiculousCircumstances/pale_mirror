@@ -246,7 +246,7 @@ public final class FrontierWorldStateSupport {
         // already immutable map.  Keep a private marker around that validated
         // copy so later strict audits can distinguish it from an arbitrary
         // externally supplied Map without repeating a full entry scan.
-        input.forEach((key, value) -> {
+        if (!(input instanceof ImmutableLookupMap<?, ?>)) input.forEach((key, value) -> {
             Objects.requireNonNull(key, label + " key");
             Objects.requireNonNull(value, label + " value");
         });
@@ -254,7 +254,7 @@ public final class FrontierWorldStateSupport {
     }
 
     /** Immutable, validated map identity local to canonical state construction. */
-    private static final class ValidatedImmutableMap<K, V> extends AbstractMap<K, V> {
+    static final class ValidatedImmutableMap<K, V> extends AbstractMap<K, V> implements ImmutableMapImage<K, V> {
         private final Map<K, V> values;
         private final Object attachment;
 
@@ -263,6 +263,14 @@ public final class FrontierWorldStateSupport {
         }
 
         private ValidatedImmutableMap<K, V> withAttachment(Object nextAttachment) { return new ValidatedImmutableMap<>(values, nextAttachment); }
+
+        @Override public Optional<Set<K>> changedKeysFrom(Map<?, ?> predecessor) {
+            if (values instanceof ImmutableMapImage<?, ?> image) {
+                @SuppressWarnings("unchecked") var typed = (ImmutableMapImage<K, V>) image;
+                return typed.changedKeysFrom(predecessor);
+            }
+            return Optional.empty();
+        }
 
         @Override public Set<Entry<K, V>> entrySet() { return values.entrySet(); }
         @Override public V get(Object key) { return values.get(key); }

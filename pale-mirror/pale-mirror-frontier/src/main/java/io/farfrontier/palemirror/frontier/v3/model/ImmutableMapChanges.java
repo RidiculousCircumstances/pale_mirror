@@ -7,8 +7,31 @@ import java.util.function.Consumer;
 final class ImmutableMapChanges {
     record Change<K, V>(K key, V before, V after) { }
     private ImmutableMapChanges() { }
+    static boolean sameKeys(Map<?, ?> before, Map<?, ?> after) {
+        if (before == after) return true;
+        if (before.size() != after.size()) return false;
+        if (after instanceof ImmutableMapImage<?, ?> image) {
+            var changed = image.changedKeysFrom(before);
+            if (changed.isPresent()) {
+                for (var key : changed.orElseThrow()) if (before.containsKey(key) != after.containsKey(key)) return false;
+                return true;
+            }
+        }
+        return before.keySet().equals(after.keySet());
+    }
     static <K, V> void forEach(Map<K, V> before, Map<K, V> after, Consumer<Change<K, V>> consume) {
         if (before == after) return;
+        if (after instanceof ImmutableMapImage<?, ?> image) {
+            @SuppressWarnings("unchecked") var typed = (ImmutableMapImage<K, V>) image;
+            var keys = typed.changedKeysFrom(before);
+            if (keys.isPresent()) {
+                for (var key : keys.orElseThrow()) {
+                    var previous = before.get(key); var next = after.get(key);
+                    if (!Objects.equals(previous, next)) consume.accept(new Change<>(key, previous, next));
+                }
+                return;
+            }
+        }
         for (var entry : before.entrySet()) {
             var next = after.get(entry.getKey());
             if (!Objects.equals(entry.getValue(), next)) consume.accept(new Change<>(entry.getKey(), entry.getValue(), next));

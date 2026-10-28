@@ -19,6 +19,31 @@ class ImmutableLookupMapTest {
         assertSame(snapshot, ImmutableLookupSet.copyOf(snapshot));
         assertThrows(NullPointerException.class, () -> ImmutableLookupSet.copyOf(java.util.Collections.singleton(null)));
     }
+    @Test void directChangesAreExactAndMutableOrNonAdjacentSourcesStillReceiveCompleteComparison() {
+        var before = ImmutableLookupMap.copyOf(Map.of("Aa", 1, "BB", 2));
+        var changed = ImmutableLookupMap.withEntry(before, "Aa", 3);
+        assertEquals(java.util.Set.of("Aa"), ((ImmutableMapImage<String, Integer>) changed).changedKeysFrom(before).orElseThrow());
+        assertTrue(ImmutableMapChanges.sameKeys(before, changed));
+        var differences = new java.util.ArrayList<ImmutableMapChanges.Change<String, Integer>>();
+        ImmutableMapChanges.forEach(before, changed, differences::add);
+        assertEquals(List.of(new ImmutableMapChanges.Change<>("Aa", 1, 3)), differences);
+        var later = ImmutableLookupMap.withEntry(changed, "new", 4);
+        differences.clear(); ImmutableMapChanges.forEach(before, later, differences::add);
+        assertEquals(List.of("Aa", "new"), differences.stream().map(ImmutableMapChanges.Change::key).sorted().toList());
+        assertFalse(ImmutableMapChanges.sameKeys(before, ImmutableLookupMap.withoutEntry(later, "BB")),
+                "a non-adjacent remove/add cannot certify equal membership from equal sizes");
+        var removed = ImmutableLookupMap.withoutEntry(changed, "BB");
+        differences.clear(); ImmutableMapChanges.forEach(changed, removed, differences::add);
+        assertEquals(List.of(new ImmutableMapChanges.Change<>("BB", 2, null)), differences);
+        var mutable = new LinkedHashMap<>(before); var snapshot = ImmutableLookupMap.withEntry(mutable, "Aa", 5);
+        mutable.put("BB", 99);
+        differences.clear(); ImmutableMapChanges.forEach(mutable, snapshot, differences::add);
+        assertEquals(List.of("Aa", "BB"), differences.stream().map(ImmutableMapChanges.Change::key).sorted().toList(),
+                "a mutable source cannot certify that no other key changed after its defensive copy");
+        mutable.remove("BB"); mutable.put("later", 9);
+        assertFalse(ImmutableMapChanges.sameKeys(mutable, snapshot));
+        assertEquals(Map.of("Aa", 1, "BB", 2), before);
+    }
     @Test void snapshotIsDefensiveOrderedAndCannotBeMutatedThroughViews() {
         var source = new LinkedHashMap<String, Integer>();
         source.put("BB", 2); source.put("Aa", 1); // equal String hash, distinct identities

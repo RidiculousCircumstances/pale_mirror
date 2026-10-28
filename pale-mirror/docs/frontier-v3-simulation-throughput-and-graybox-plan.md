@@ -2069,3 +2069,54 @@ withdrawal, replay and repeated-effect rejection assertions. Existing immutable-
 regression checks equal read sets with fresh wrapper objects and changed source facts.
 Focus81checks/12classes plus guardrails PASS93s. Release/deploy and native throughput
 remain pending. G remains OPEN; no claim of terminal100settlement operation.
+
+
+### 2026-10-28 — exact direct collection changes across the real producer path
+
+7c52de7f2 exact release PASS91s and both retained deployments VERIFIED. Ordinary100
+observer95831:35131→35756/272.5s, debt2909→7737, still FAIL. Per-family improvements
+have not established the target clock or completed any terminal scale story.
+
+A common representation problem remains in actual economic-input comparison and
+canonical actor/reference checks: immutable replacement discards knowledge of its
+one changed entry. Every consumer then compares full registers. ImmutableMapImage
+is a closed collection contract implemented only by ImmutableLookupMap and the
+existing constructor-owned ValidatedImmutableMap. Functional withEntry/withoutEntry
+retain an exact direct changed-key set ONLY for those closed immutable predecessors,
+using a WEAK predecessor reference. All maps still own flat defensive snapshots;
+there is no retained parent/history chain, mutable-source certificate, inferred owner,
+new event/schema or canonical dependency on garbage collection. Absent/non-adjacent/
+collected evidence performs the existing complete exact comparison. Mutable inputs
+can never certify that no other row changed after copying.
+
+ImmutableMapChanges and scheduler subject-membership comparison consume the same
+exact witness. Existing registry views consume it for ordinary identity projections,
+retain the published projection when changed source rows produce identical values,
+and update the accepted input basis only after all computations succeed. An explicitly
+supplied comparison always runs its complete reevaluation; full invariant audits
+cannot take a same-source shortcut. Withdrawals/epochs remain bounded by each producer.
+Collection replacement itself still copies its flat map: this is not a claim that an
+entire mutation is constant-time or that all global work has disappeared.
+
+Immediate connected producers include common actor body updates; generic navigator,
+meal COLD arrivals/interruption; HOT lease handoff and body observation/death/unload;
+and existing field/production checkpoints. The source constructor no longer repeats
+nullable-entry validation on the collection implementation that already proved it.
+Actor identity uses the exact declared-kind projection, so movement does not look like
+a changed population roster. Body-reference checks read that declaration index and
+the actual recovery store; body coordinates never establish ownership. Position bounds
+validate changed actor records through the same registry mechanism. Presence references
+check changed actors when the exact current presence index is unchanged. Full ingress
+forces the original complete declaration, life, body-fence and bounds checks; changed
+rosters, types, current authorities and recovery facts remain strict.
+
+These are read-only proof/index changes in the existing owners, not new movement or
+custody authorities. Hive content is unchanged. Existing projections release removed
+rows and prior epochs; no ThreadLocal is allocated per entity.
+
+Existing regressions now cover exact direct update/remove and non-adjacent comparison,
+mutable-parent edits of values AND keys, a changed source whose projection is unchanged,
+forced full reevaluation, actor wrong-kind/out-of-bounds/withdrawal and death under
+unchanged presence authority. Existing body death/inspection/reentry, meal, field and
+navigator coverage retained. Focus139checks/17classes+guardrailsPASS63s; final closure
+30checks/5classes+guardrailsPASS25s. Release/native throughput remains pending. G OPEN.

@@ -36,6 +36,17 @@ class ImmutableKeyedInputViewTest {
         assertNotSame(before, view.project(epoch, Map.of(1, ImmutableDependencies.of(new Object())), ImmutableDependencies::sameAs,
                 (id, ignored) -> new Object()));
     }
+    @Test void changedInputWithTheSameProjectionRetainsItsImageButExplicitRevalidationStillRuns() {
+        var view = new ImmutableRegistryView<Integer, Object, Boolean>(1); var epoch = new Object();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.BiFunction<Integer, Object, Boolean> compute = (id, input) -> { calls.incrementAndGet(); return Boolean.TRUE; };
+        var inputs = ImmutableLookupMap.copyOf(Map.of(1, new Object())); var before = view.project(epoch, inputs, compute);
+        var changed = ImmutableLookupMap.withEntry(inputs, 1, new Object());
+        assertSame(before, view.project(epoch, changed, compute)); assertEquals(2, calls.get());
+        assertSame(before, view.project(epoch, changed, (old, next) -> false, compute));
+        assertEquals(3, calls.get(), "forced full audit must not take the same-source shortcut");
+        assertTrue(view.project(epoch, ImmutableLookupMap.withoutEntry(changed, 1), compute).isEmpty());
+    }
     @Test void independentSubjectsRetainExactInputsButChangesAndEvictionRecompute() {
         var view = new ImmutableKeyedInputView<String, Object>(2);
         var world = new Object(); var input = new Object(); var changed = new Object();
