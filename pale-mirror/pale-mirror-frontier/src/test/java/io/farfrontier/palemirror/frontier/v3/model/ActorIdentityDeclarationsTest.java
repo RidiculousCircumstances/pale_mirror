@@ -8,6 +8,26 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorIdentityDeclarationsTest {
+    @Test void workerProjectionCannotReplaceTheOwnersUnchangedKindAndLifeImages() throws Exception {
+        var state = ResourceSiteHarvestProcessTest.initial();
+        var originalKinds = ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations());
+        var originalLife = ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations());
+        var actor = state.humanPopulation().residents().keySet().iterator().next();
+        var body = state.actorLocations().get(actor);
+        var moved = ImmutableLookupMap.withEntry(state.actorLocations(), actor, body.withBody(body.body().offset(1, 0, 0)));
+        var task = new java.util.concurrent.FutureTask<Void>(() -> {
+            ActorIdentityDeclarations.declaredKinds(state.bootstrap(), moved);
+            ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), moved);
+            return null;
+        });
+        new Thread(task).start(); task.get();
+        assertSame(originalKinds, ActorIdentityDeclarations.declaredKinds(state.bootstrap(), moved));
+        assertSame(originalLife, ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), moved));
+        var deceased = ImmutableLookupMap.withEntry(moved, actor, body.deadAt(body.body()));
+        assertEquals(ActorLifeStatus.DEAD, ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), deceased).get(actor));
+        assertSame(originalKinds, ActorIdentityDeclarations.declaredKinds(state.bootstrap(), deceased));
+    }
+
     @Test void acceptedExecutionMembershipCannotHideRemovedActorsOrNewUnknownExecutions() {
         var state = ResourceSiteHarvestProcessTest.initial();
         var actor = state.humanPopulation().residents().keySet().iterator().next();

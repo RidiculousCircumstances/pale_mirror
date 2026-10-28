@@ -2723,3 +2723,36 @@ unrelated fungible/money changes. No check, policy, schema or clock rule is remo
 Focused39station/custody/body/extraction disruption and recovery checks plus
 guardrails PASS48s. Wider release includes the existing forestry cases. No new
 microbenchmark or timing test is introduced; native effect is not measured yet.
+
+### Keep projection results and their input basis together (2026-10-28)
+
+b20b26da0 cleanrelease56frontier+45runtime/guardrails/packagePASS43s; bothretained
+worlds deployed and verified. component-proof ordinary100:44.819219s/noDataLoss,
+4.373124ticks/s,debt4601→5302,STILLFAILED. Canonicalvalidation10.600458s,
+owned-state6.275929s,closure4.285646s. Workload evolves; no controlled global gain.
+CPU stacks now identify ImmutableRegistryView.Update.accept rebuilding row metadata
+inside declared-kind/liveness projection, as well as remaining production checks.
+
+The recent outer shared kind/liveness result memo returned a table without restoring
+its projector basis. Before/after and worker visits could therefore cause a full
+registry comparison on the next direct change. The common view now optionally retains
+four complete computing-thread immutable images and restores both basis and result.
+Actor identity uses that facility; the outer shared result memos are removed. Other
+consumers retain their one-image limit. Unknown/mutable Map sources receive no
+snapshot shortcut; explicit strict/full-audit comparisons clear history and rerun.
+
+A second connected cost was copying the per-row input/answer table on every actor
+position change, even when the projected enum or validation result was identical.
+The immutable source already owns those row inputs. The view now retains that
+source as its basis and copies the answer map only when an answer actually changes.
+Ordinary mutable sources still retain a defensive accepted-input image. Changed
+inputs always execute their real check before an identical answer may be reused;
+failed computations cannot publish a partial image. No rule, owner, epoch, schema
+or domain decision is inferred or skipped.
+
+Coverage checks restored predecessor bases, strict-check failure, epoch replacement,
+mutable Map changes, unchanged answers with advanced input bases, worker/owner
+isolation and changed liveness. Wider connected registry/storage/geometry/closure
+checks PASS42s; final generic/identity/index checks plus guardrails PASS17s after
+preserving the mutable-source accepted-basis behavior. No timing test is introduced.
+Native impact remains unmeasured; G remains open.
