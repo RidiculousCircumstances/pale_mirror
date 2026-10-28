@@ -12,11 +12,11 @@ class CultivationPlanningTest {
         var state = prepared(); var home = new SubjectId("settlement:1");
         var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
         var first = FieldDevelopmentLand.survey(state, home, fields, 3);
-        var reconstructed = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
+        var reconstructed = fields.stream().map(f -> new ResourceSite(f.id(), f.settlementId(), f.facilityId(), f.kind(), f.layout())).toList();
         assertNotSame(fields.getFirst(), reconstructed.getFirst());
         assertEquals(fields, reconstructed, "a descriptor read changes no field identity, layout or permission");
         assertSame(first.cells().getFirst(), FieldDevelopmentLand.survey(state, home, reconstructed, 3).cells().getFirst(),
-                "production callers reconstruct descriptors on each review");
+                "equivalent descriptor reconstruction cannot require another land search");
     }
 
     @Test void distantGroundChangesReuseLocalLandButNeverItsOldAdmissionProof() {

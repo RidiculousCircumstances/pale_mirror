@@ -3198,7 +3198,8 @@ PASS10s. The initial new transfer test attempted an already-forbidden raw actor
 handoff; corrected to a lawful container source, production guard unchanged.
 Focused negatives cover fresh quantities/personal presentation under equal custody,
 registry reordering, frozen predecessor lists, ground handoff, claim release and
-bounded order reconstruction. Frozen release/deploy/native effect pending.
+bounded order reconstruction. Frozen release PASS42s and both retained-world deployments
+verified d96386b22. Untraced six-minute ordinary observation below.
 
 Native CPU cross-check for401 spans47.0008s: process134.12CPU seconds, surviving
 threads76.04CPU seconds,8new/7retired. Known server28.50CPU seconds,known Z threads
@@ -3208,3 +3209,34 @@ among missing endpoint matches, not their complete CPU attribution. The earlier
 short GC-pause totals do not rule out concurrent GC work. A settled uninstrumented
 longitudinal sample and workload/population checks are still needed; no JFR-on/off
 cost or completely warmed performance claim is made. G remains OPEN/FAILED.
+
+
+### Field layout dependencies exclude crop and job progress (2026-10-28)
+
+Native validation caller samples repeatedly rebuild a sorted all-field layout
+dependency list after a cell mutation. ResourceSiteLayoutDirectory projects the
+exact layout of each cycle through the existing bounded immutable registry view.
+The geometry invariant consumes the resulting declarations/layout image; a new
+layout still runs the original owning-farm, authored-land, overlap and world-bound
+checks. Full recovery audits explicitly bypass prior invariant success. Descriptor
+rows contain only nominal identity and declared layout, and now depend on those
+facts plus the actual lifecycle key iteration order. They cannot grant physical
+clearance, crop maturity or access permission.
+
+Connected source review covers field planning/demand/development, exact native
+preparation/initialization and restart selection, ingress/visibility, field block
+ownership, current diagnostics and board rendering. Consumers read current plant,
+lifecycle, physical claims and terrain separately; none uses descriptor identity
+as their replacement. Known geometry permissions remain independent producer facts
+under the c57 restriction fix. No wire/schema/authority or retention-bound change.
+Changed-layout out-of-bounds/full-audit/predecessor regression and existing field
+expansion/recovery checks plus affected field executor/projection, board and geometry
+checks with guardrails PASS35s. The negative fixture now supplies a forged hydration
+image (ordinary cell revision already rejects moved identities); the land-survey
+check explicitly reconstructs equivalent DTOs rather than requiring cache misses.
+Frozen release/deployment/native effect pending.
+
+Untraced d963 observation: 13 samples over 363.331154s, ordinary 10.230337ticks/s,
+debt3973→7522, all statusok/notrecovering, no JFR/build/restart during interval.
+Rates across30s windows 7.629957..12.446696. This fails20/s independently of tracing;
+no controlled aggregate comparison to older refs.

@@ -16,6 +16,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
     public static final int MAX_SITES = 1024;
     private static final ImmutableResultView<String, Map<SubjectId, ResourceSiteHarvestJob>> HARVEST_DIRECTORY = new ImmutableResultView<>(4);
     private static final ImmutableResultView<String, Map<SubjectId, ResourceSite>> DESCRIPTORS = new ImmutableResultView<>(4);
+    private static final ImmutableKeyOrderView<SubjectId> DESCRIPTOR_ORDER = new ImmutableKeyOrderView<>(MAX_SITES);
     /** Exact declared job lookup; membership validates a FIELD_HARVEST reference,
      * never discovers a job kind or assignment from an untyped identifier. */
     public java.util.Optional<ResourceSiteHarvestJob> harvestJob(SubjectId jobId) {
@@ -28,7 +29,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
         });
         return java.util.Optional.ofNullable(directory.get(Objects.requireNonNull(jobId)));
     }
-    private static final ImmutableInputView<Boolean> GEOMETRY_VALIDATION = new ImmutableInputView<>();
+    private static final ImmutableInvariantCheck<Void> GEOMETRY_VALIDATION = new ImmutableInvariantCheck<>();
     public ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarations, Map<SubjectId, ResourceSiteLifecycle> sites,
             Map<SubjectId, ResourceFieldCycle> cycles, Map<CellMutationKey, ResourceFieldCellObserved> pendingWorldChanges,
             Map<CellMutationKey, ResourceFieldForeignChangeHeld> pendingForeignChanges) {
@@ -155,14 +156,13 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
     }
 
     void validate(FrontierBootstrap bootstrap) {
-        if (!bootstrap.settlements().stream().map(Settlement::id).collect(java.util.stream.Collectors.toSet()).containsAll(cultivation.keySet()))
+        if (!FrontierWorldStateSupport.settlementIds(bootstrap).containsAll(cultivation.keySet()))
             throw new IllegalArgumentException("cultivation review has an unknown home");
-        var inputs = new java.util.ArrayList<Object>(java.util.List.of(bootstrap, declarations));
-        cycles.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> inputs.add(entry.getValue().layout()));
-        GEOMETRY_VALIDATION.get(inputs, () -> { validateGeometry(bootstrap); return Boolean.TRUE; });
+        var layouts = ResourceSiteLayoutDirectory.layouts(this);
+        GEOMETRY_VALIDATION.validate(() -> validateGeometry(bootstrap, layouts), bootstrap, declarations, layouts);
     }
 
-    private void validateGeometry(FrontierBootstrap bootstrap) {
+    private void validateGeometry(FrontierBootstrap bootstrap, Map<SubjectId, ResourceFieldLayout> layouts) {
         var authored = FrontierResourceSitePlan.compile(bootstrap);
         if (!declarations.keySet().containsAll(authored.keySet()))
             throw new IllegalArgumentException("resource-site state lost an initial declared field");
@@ -178,7 +178,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
             if (facility.kind() != StructureKind.FARM || declaration.kind() != ResourceSiteKind.WHEAT_FIELD) {
                 throw new IllegalArgumentException("resource-site lifecycle must bind an owning farm");
             }
-            var layout = cycles.get(declaration.id()).layout();
+            var layout = layouts.get(declaration.id());
             declaration.land().ground().keySet().forEach(layout::requireCell);
             for (BlockPosition position : layout.managedSlots())
                 if (!bootstrap.bounds().contains(position) || !occupied.add(position))
@@ -321,9 +321,10 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
 
     public Map<SubjectId, ResourceSite> descriptors(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "resource-site descriptor bootstrap");
-        return DESCRIPTORS.get(java.util.List.of(declarations, cycles, sites), "descriptors", () -> {
+        var layouts = ResourceSiteLayoutDirectory.layouts(this); var order = DESCRIPTOR_ORDER.get(sites);
+        return DESCRIPTORS.get(java.util.List.of(declarations, layouts, order), "descriptors", () -> {
             Map<SubjectId, ResourceSite> current = new LinkedHashMap<>();
-            for (SubjectId id : sites.keySet()) current.put(id, descriptor(bootstrap, id));
+            for (SubjectId id : order) current.put(id, declarations.get(id).describe(layouts.get(id)));
             return ImmutableLookupMap.copyOf(current);
         });
     }

@@ -15,6 +15,23 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteStateTest {
+    @Test void warmedLayoutValidationRejectsAnOutOfBoundsForkAndKeepsItsPredecessorValid() {
+        var state = initial(); var sites = state.resourceSites(); var id = sites.declarations().keySet().iterator().next();
+        sites.validate(state.bootstrap()); var before = sites.descriptors(state.bootstrap()); var cycle = sites.cycle(id);
+        int offset = state.bootstrap().bounds().width() * 2;
+        var cells = cycle.layout().cells().stream().map(cell -> new ResourceFieldLayout.Cell(cell.id(),
+                cell.crop().offset(offset, 0, 0), new SurfaceAnchor(cell.soil().support().offset(offset, 0, 0)),
+                new SurfaceAnchor(cell.workstation().support().offset(offset, 0, 0)))).toList();
+        // Hydration may supply a forged layout; ordinary revision already rejects moved cell IDs.
+        var layout = new ResourceFieldLayout(cycle.layout().revision() + 1, cycle.layout().nextCellId(), cells, cycle.layout().irrigationSlots());
+        var cycles = ImmutableLookupMap.withEntry(sites.cycles(), id, ResourceFieldCycle.unsurveyed(id, layout, cycle.epoch()));
+        var changed = new ResourceSiteState(sites.declarations(), sites.sites(), cycles);
+        assertThrows(IllegalArgumentException.class, () -> changed.validate(state.bootstrap()));
+        assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> { changed.validate(state.bootstrap()); return null; }));
+        sites.validate(state.bootstrap());
+        assertEquals(before, sites.descriptors(state.bootstrap()));
+        assertEquals(layout, changed.descriptors(state.bootstrap()).get(id).layout(), "a read view cannot conceal the changed declaration even when validation rejects it");
+    }
     @Test
     void currentDescriptorTakesIdentityFromRegistryAndGeometryFromCanonicalCycle() {
         FrontierWorldState baseline = initial();
