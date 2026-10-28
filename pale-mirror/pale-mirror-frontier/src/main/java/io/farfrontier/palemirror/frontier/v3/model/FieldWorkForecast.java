@@ -8,6 +8,8 @@ import java.util.*;
  * Travel is a geometric cost estimate, never a path or confirmed delivery. */
 final class FieldWorkForecast {
     private record PreparationCost(WorkOperation operation, io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement tool, int effortPermille) { }
+    private static final ImmutableKeyedInputView<SubjectId, List<ResidentProfile>> VALUATION_WORKERS =
+            new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     private final FrontierBootstrap bootstrap;
     private final SettlementDailySchedule schedule;
     private final List<BlockPosition> stores;
@@ -19,6 +21,10 @@ final class FieldWorkForecast {
         this(state, home, workers, true);
     }
     FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers, boolean equipmentBacked) {
+        this(state, home, workers, equipmentBacked, storagePositions(state, home));
+    }
+    FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers, boolean equipmentBacked,
+            List<BlockPosition> storagePositions) {
         bootstrap = state.bootstrap(); schedule = state.humanPopulation().schedule(home);
         sowTicks = duration(state, workers, WorkOperation.SOW, equipmentBacked, null, 1000);
         harvestTicks = duration(state, workers, WorkOperation.HARVEST, equipmentBacked, FieldHarvestExtraction.DEFINITION.toolRequirement(), 1000);
@@ -30,9 +36,7 @@ final class FieldWorkForecast {
             preparations.put(soil, total);
         }
         preparationTicks = Map.copyOf(preparations);
-        var participant = state.companies().goodsTrade().participants().participants().get(home);
-        stores = GoodsParticipantStorage.containers(state, participant, FieldHarvestExtraction.ITEM).stream()
-                .map(id -> state.inventory().surfaces().get(id).position(state)).toList();
+        stores = List.copyOf(storagePositions);
         distanceFactor = bootstrap.ruleset().goodsTrade().supplyPlanning().sourcing()
                 .map(rules -> rules.provisionalDistancePermille()).orElse(1000);
     }
@@ -47,9 +51,15 @@ final class FieldWorkForecast {
                 .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
         return candidates.stream().limit(equipment.size()).toList();
     }
+    static List<BlockPosition> storagePositions(FrontierWorldState state, SubjectId home) {
+        var participant = state.companies().goodsTrade().participants().participants().get(home);
+        return GoodsParticipantStorage.positions(state, participant, FieldHarvestExtraction.ITEM);
+    }
     static List<ResidentProfile> valuationWorkers(FrontierWorldState state, SubjectId home) {
-        var definition = state.bootstrap().ruleset().workCatalog().require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST);
-        return SupplyLabourCapacity.potential(state, home, ResidentWorkKind.AGRICULTURE, definition.capability());
+        return VALUATION_WORKERS.get(state.bootstrap(), home, SupplyLabourCapacity.potentialInputs(state, home), () -> {
+            var definition = state.bootstrap().ruleset().workCatalog().require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST);
+            return SupplyLabourCapacity.potential(state, home, ResidentWorkKind.AGRICULTURE, definition.capability());
+        });
     }
     RenewableWorkForecast.Source source(FieldSupplyCapacity.Cell cell) {
         var condition = cell.condition();

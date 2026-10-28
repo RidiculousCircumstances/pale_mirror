@@ -4823,3 +4823,30 @@ Connected population/need/starvation/incremental-validation/container packing fo
 passed35s plus guardrails. These are structural corrections with unchanged domain
 choices, not a claim of sustainable20 or a new terminal product proof. Frozen
 verification, both deployments and ordinary-clock observation follow.
+
+
+### Retain field valuation across foreign body and market edits
+
+3dce2dbef ordinary observation completed 304.187344551s, canonical245060→249002:
+12.959119012ticks/s; debt1014→3156. All five sampled plans renewed. A new terminal
+COLD harvest at town35 was present after the window; no new accepted trade was
+proved in those returned histories. Sustainable20 remains open.
+
+FieldSupplyCapacity valuation depended on the whole resource-site state, all actor
+positions and all participants although its actual cost reads only local field
+conditions, productive workforce and eligible warehouse positions. Current saved
+JFR attributes work to FieldWorkForecast.travel/valueInstalled through equipment
+recipe valuation. Narrow the read tuple to explicit home site membership, each
+current lifecycle/cycle, potential labour inputs and actual eligible fixed/mobile
+storage positions. Both complete pending mutation maps remain conservative.
+GoodsParticipantStorage supplies positions using the existing owner/filter/role
+selection; this grants no stock, movement or admission authority. Cache potential
+workers on their existing complete potentialInputs, not body movement or activity.
+
+Existing field valuation case now proves foreign walking preserves the local
+result, while productive-field destruction, predecessor restoration and codec
+recovery retain their assertions. Connected valuation, equipment purchase, market
+sourcing, conditional quotes and storage adoption passed28checks in32s plus
+guardrails. No schema, recipe, business priority or compatibility path changed.
+Frozen package verification and both retained-world deployments follow; no gain
+for this cut is claimed from source-only evidence.

@@ -17,6 +17,12 @@ class SupplyValuationReadTest {
         var field = state.resourceSite(id); var port = new FieldSupplyCapacity();
         var costs = port.valuation(state, field.settlementId(), Map.of());
         assertFalse(costs.isEmpty());
+        var foreign = state.bootstrap().settlements().stream().filter(home -> !home.id().equals(field.settlementId()))
+                .findFirst().orElseThrow().residents().getFirst().id();
+        var body = state.actorLocations().get(foreign).body();
+        var moved = state.withActorBody(foreign, body.offset(1, 0, 0));
+        assertSame(costs, port.valuation(moved, field.settlementId(), Map.of()),
+                "another resident's walk cannot reprice unchanged local fields and warehouse positions");
         var destroyed = state.withStructureCondition(field.facilityId(), StructureCondition.DESTROYED);
         assertTrue(port.valuation(destroyed, field.settlementId(), Map.of()).isEmpty());
         assertEquals(costs, port.valuation(state, field.settlementId(), Map.of()));

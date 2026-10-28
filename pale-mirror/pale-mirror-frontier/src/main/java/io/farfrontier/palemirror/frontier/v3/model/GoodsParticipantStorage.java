@@ -22,6 +22,12 @@ public final class GoodsParticipantStorage {
         result.addAll(ResourceStorageSelection.containers(state, participant.party().id(), kind, ROLES));
         return Set.copyOf(result);
     }
+    /** Actual positions of the current eligible warehouse scope. Cost estimates
+     * consume these values; they never acquire storage or movement authority. */
+    public static List<BlockPosition> positions(FrontierWorldState state, GoodsParticipant participant, String kind) {
+        return containers(state, participant, kind).stream()
+                .map(id -> state.inventory().surfaces().get(id).position(state)).toList();
+    }
     /** Resolve an exact previously selected container declaration, including a retired one needed for disposition. */
     public static ShipmentEndpoint endpoint(FrontierWorldState state, SubjectId container) {
         var record = state.inventory().containers().get(container);

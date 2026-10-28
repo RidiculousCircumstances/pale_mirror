@@ -22,21 +22,28 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
         return assess(state, home, stocks, window, cells(state, home));
     }
     @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
-        var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
-        Collections.addAll(inputs, state.resourceSites(), state.inventory().containers(), state.inventory().surfaces(),
-                state.replicaCustody(), state.actorLocations(), state.companies().goodsTrade().participants().participants());
-        // Haul cost reads storage position (including a declared mobile surface);
-        // the current actor map remains an explicit conservative dependency.
-        return VALUATIONS.get(state.bootstrap(), home, inputs, () -> valueInstalled(state, home));
-    }
-    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home) {
         if (state.bootstrap().ruleset().fields().agriculture().isEmpty()
                 || SupplyPlanningWindow.dailyWork(state.humanPopulation().schedule(home)) == 0) return List.of();
         if (state.bootstrap().ruleset().tools().definitions().values().stream().noneMatch(tool ->
                 FieldEquipment.requirements().alternatives().stream().anyMatch(group -> group.stream().allMatch(tool::supports)))) return List.of();
         var workers = FieldWorkForecast.valuationWorkers(state, home);
         if (workers.isEmpty()) return List.of();
-        var estimate = new FieldWorkForecast(state, home, workers, false);
+        var stores = FieldWorkForecast.storagePositions(state, home);
+        var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
+        var sites = state.resourceSites(); var local = sites.siteIdsIn(home);
+        inputs.add(local);
+        for (var id : local) { inputs.add(sites.site(id)); inputs.add(sites.cycle(id)); }
+        // Mutation presence affects which cells are usable. Keep both complete
+        // pending maps conservative until their owner supplies a local directory.
+        inputs.add(sites.pendingWorldChanges()); inputs.add(sites.pendingForeignChanges());
+        // The provider resolves current fixed/mobile positions and eligibility.
+        // Other residents' movement and foreign market prices are not travel costs.
+        inputs.addAll(stores);
+        return VALUATIONS.get(state.bootstrap(), home, inputs, () -> valueInstalled(state, home, workers, stores));
+    }
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home,
+            List<ResidentProfile> workers, List<BlockPosition> stores) {
+        var estimate = new FieldWorkForecast(state, home, workers, false, stores);
         var labour = cells(state, home).stream().filter(FieldSupplyCapacity::productive)
                 .mapToLong(estimate::unitLabour).max();
         if (labour.isEmpty()) return List.of();
