@@ -45,8 +45,7 @@ public final class FrontierReadabilityPlan {
 
         private StableObjectGeometry(FrontierWorldState state) {
             bootstrap = state.bootstrap(); conditions = state.structureConditions();
-            fields = state.resourceSites().cycles().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
-                    Map.Entry::getKey, entry -> entry.getValue().layout()));
+            fields = ResourceSiteLayoutDirectory.layouts(state.resourceSites());
             var factories = new LinkedHashMap<SubjectId, java.util.function.Supplier<java.util.Set<BlockPosition>>>();
             bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> factories.put(structure.id(),
                     () -> FrontierGrayboxPlan.objectCells(bootstrap.terrain(), structure, conditions.get(structure.id())))));
@@ -69,9 +68,7 @@ public final class FrontierReadabilityPlan {
         }
         public boolean matches(FrontierWorldState state) {
             return bootstrap == state.bootstrap() && conditions == state.structureConditions()
-                    && fields.size() == state.resourceSites().cycles().size()
-                    && fields.entrySet().stream().allMatch(entry -> state.resourceSites().cycles().containsKey(entry.getKey())
-                        && state.resourceSites().cycle(entry.getKey()).layout() == entry.getValue());
+                    && fields == ResourceSiteLayoutDirectory.layouts(state.resourceSites());
         }
     }
 
@@ -97,6 +94,9 @@ public final class FrontierReadabilityPlan {
     public static final class StableBoardIndex {
         private final StableObjectGeometry geometry;
         private final java.util.List<FrontierObjectBoard.Placement> placements;
+        private record Column(int x, int z) { }
+        private final Map<SubjectId, FrontierObjectBoard.Placement> placementRows;
+        private final ImmutableGroupView<SubjectId, FrontierObjectBoard.Placement, Column> columns = new ImmutableGroupView<>();
         private final Map<SubjectId, java.util.function.BiFunction<FrontierWorldState, Long, FrontierObjectBoard>> renderers;
 
         public StableBoardIndex(FrontierWorldState state, StableObjectGeometry geometry) {
@@ -110,6 +110,9 @@ public final class FrontierReadabilityPlan {
             positions.put(FrontierRouteNetwork.OWNER, FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3));
             placements = positions.entrySet().stream().sorted(Map.Entry.comparingByKey())
                     .map(entry -> new FrontierObjectBoard.Placement(entry.getKey(), entry.getValue())).toList();
+            var rows = new LinkedHashMap<SubjectId, FrontierObjectBoard.Placement>();
+            placements.forEach(slot -> rows.put(slot.ownerId(), slot));
+            placementRows = ImmutableLookupMap.copyOf(rows);
             var renderers = new LinkedHashMap<SubjectId, java.util.function.BiFunction<FrontierWorldState, Long, FrontierObjectBoard>>();
             state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
                     renderers.put(structure.id(), (current, atTick) -> structureBoard(current, settlement, structure, stage(current, structure.id()), atTick))));
@@ -144,6 +147,12 @@ public final class FrontierReadabilityPlan {
 
         public boolean contains(SubjectId owner) { return renderers.containsKey(owner); }
         public java.util.List<FrontierObjectBoard.Placement> placements() { return placements; }
+        /** Current catalogue candidates only; native readiness and publication remain adapter-owned. */
+        public java.util.List<FrontierObjectBoard.Placement> placementsIn(int chunkX, int chunkZ) {
+            return columns.keys(this, placementRows, slot -> java.util.Set.of(new Column(
+                    Math.floorDiv(slot.position().x(), 16), Math.floorDiv(slot.position().z(), 16))),
+                    new Column(chunkX, chunkZ)).stream().map(placementRows::get).toList();
+        }
     }
 
     private static FrontierObjectBoard structureBoard(FrontierWorldState state, Settlement settlement,

@@ -3737,3 +3737,22 @@ Negative compaction/reallocation and full-world codec/restart checks pass along 
 connected recovery/body/scene/harvest/meal tests49s. Schema311 cannot reconstruct erased
 history and is explicitly rejected. Preserve its diagnosed world, then create fresh
 schema312 runtime worlds. Freeze/deployment/terminal HOT/COLD/ordinary20/s proof pending.
+
+### Requested-chunk board publication and current attribution
+
+Schema312 native ingress exposed a second-town board timeout: the bounded executor
+spent publication attempts cycling the entire 2065-slot world catalogue, including
+unloaded settlements. Board candidates now come from actual requested chunks via
+the shared immutable group index; native storage/readiness gates remain mandatory.
+Stable field geometry reuses the existing layout directory instead of rescanning
+all fields per board. Field handoff diagnostics retain the exact blocking cell and
+committed/target/observed conditions. Focused catalogue, cursor, HOT handoff and
+guardrails pass19s; terminal native recheck remains open.
+
+Latest ordinary100 trace on edad7cf9b:614 canonical ticks/44.880620s=13.680738/s,
+debt5058→5341; owner59.04%, WAL21.78%, exact calculation15.01%. Different fresh-world
+workload and compiler warmup prohibit comparison with the former6/s as source gain.
+COLD crop preparation accounts for7.794655s WAL gate: preparation and completion
+already share one transaction but physical preparation requests a per-cell flush.
+Next cut must model one atomic COLD receipt while preserving HOT durable-before-effect.
+G remains OPEN.

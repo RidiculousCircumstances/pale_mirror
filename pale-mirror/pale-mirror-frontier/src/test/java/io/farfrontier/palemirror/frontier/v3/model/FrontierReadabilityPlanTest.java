@@ -34,6 +34,16 @@ class FrontierReadabilityPlanTest {
             assertTrue(expected > 256, "the world catalogue exceeds the former small-world bound");
             assertEquals(expected, index.placements().size());
             assertEquals(expected, index.placements().stream().map(FrontierObjectBoard.Placement::ownerId).distinct().count());
+            var byChunk = index.placements().stream().collect(java.util.stream.Collectors.groupingBy(
+                    slot -> java.util.List.of(Math.floorDiv(slot.position().x(), 16), Math.floorDiv(slot.position().z(), 16))));
+            var selected = new java.util.HashSet<FrontierObjectBoard.Placement>();
+            byChunk.forEach((column, slots) -> {
+                assertEquals(slots, index.placementsIn(column.get(0), column.get(1)),
+                        "requested-chunk discovery preserves exact owners, ordering and negative coordinates");
+                selected.addAll(index.placementsIn(column.get(0), column.get(1)));
+            });
+            assertEquals(java.util.Set.copyOf(index.placements()), selected);
+            assertTrue(index.placementsIn(Integer.MAX_VALUE, Integer.MIN_VALUE).isEmpty());
             var lastSettlement = current.bootstrap().settlements().getLast();
             var hall = lastSettlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL)
                     .findFirst().orElseThrow();

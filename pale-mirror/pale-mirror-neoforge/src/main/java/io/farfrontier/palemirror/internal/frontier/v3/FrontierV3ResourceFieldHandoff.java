@@ -79,7 +79,10 @@ final class FrontierV3ResourceFieldHandoff {
             var target = ResourceFieldPhysicalSurface.Condition.of(canonical);
             if (retained.pending().isPresent() || !retained.committed().equals(target)
                     || !(actual instanceof FrontierV3ResourceFieldObservation.Owned owned) || !owned.condition().equals(target))
-                return new FrontierV3HotHandoff.Check(cycle.siteId(), WAITING, "field_projection_or_observation");
+                return new FrontierV3HotHandoff.Check(cycle.siteId(), WAITING,
+                        "field_projection_or_observation:cell=" + cell.id().value()
+                        + ";pending=" + retained.pending().isPresent() + ";committed=" + retained.committed()
+                        + ";target=" + target + ";observed=" + actual.getClass().getSimpleName());
         }
         return new FrontierV3HotHandoff.Check(cycle.siteId(), READY, "current_field");
     }

@@ -61,16 +61,23 @@ final class FrontierV3ObjectBoardExecutor {
             GEOMETRIES.put(runtime, geometry);
             var index = new FrontierReadabilityPlan.StableBoardIndex(state, geometry);
             BOARD_INDEXES.put(runtime, index);
-            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state);
-            cursor = Cursor.from(input, index.placements(), sorted(dynamicHive), cursor);
+        }
+        var index = BOARD_INDEXES.get(runtime);
+        // Unloaded villages consume no local publication slot. Candidate discovery follows
+        // actual tracking demand, including unsent chunks, rather than a world-wide sweep.
+        var candidates = new java.util.ArrayList<FrontierObjectBoard.Placement>();
+        FrontierV3PhysicalDemand.forEachRequestedChunk(level, chunk -> candidates.addAll(index.placementsIn(chunk.x, chunk.z)));
+        candidates.sort(Comparator.comparing(FrontierObjectBoard.Placement::ownerId));
+        if (cursor == null || !cursor.baselineBoards.equals(candidates)) {
+            var overlay = cursor != null && cursor.sameOverlay(input) ? cursor.dynamicHiveBoards
+                    : sorted(FrontierReadabilityPlan.compileDynamicHiveOverlay(state));
+            cursor = Cursor.from(input, List.copyOf(candidates), overlay, cursor);
             CURSORS.put(runtime, cursor);
         } else if (!cursor.sameOverlay(input)) {
-            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state);
-            cursor = cursor.withDynamicHiveOverlay(input, sorted(dynamicHive));
+            cursor = cursor.withDynamicHiveOverlay(input, sorted(FrontierReadabilityPlan.compileDynamicHiveOverlay(state)));
             CURSORS.put(runtime, cursor);
         }
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
-        var index = BOARD_INDEXES.get(runtime);
         var budget = new FrontierV3PhysicalTransitionBudget((long)
                 (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
