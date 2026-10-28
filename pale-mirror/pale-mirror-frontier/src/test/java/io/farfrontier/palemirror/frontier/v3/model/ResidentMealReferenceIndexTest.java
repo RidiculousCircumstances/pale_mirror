@@ -11,6 +11,13 @@ class ResidentMealReferenceIndexTest {
         var state = meal(); var population = state.humanPopulation();
         var meal = population.meals().values().iterator().next();
         var actor = meal.residentId(); var resident = population.resident(actor);
+        ResidentMealExecutionAuthority.validate(population, state.actorExecutions());
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealExecutionAuthority.validate(population,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState.empty()));
+        var abandoned = population.abandonMealSource(meal);
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealExecutionAuthority.validate(abandoned,
+                state.actorExecutions()), "an execution without its exact meal cannot survive the reverse check");
+        ResidentMealExecutionAuthority.validate(population, state.actorExecutions());
         var other = population.residents().values().stream()
                 .filter(person -> !person.settlementId().equals(resident.settlementId())).findFirst().orElseThrow();
         assertEquals(population, populationWith(population, population.residents(), population.households(),
