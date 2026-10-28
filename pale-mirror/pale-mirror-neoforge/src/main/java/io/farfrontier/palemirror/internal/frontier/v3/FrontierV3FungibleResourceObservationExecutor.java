@@ -43,8 +43,6 @@ final class FrontierV3FungibleResourceObservationExecutor {
                 .filter(value -> value.custody() instanceof ResourceCustody.Container)
                 .sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
             ResourceCustody.Container custody = (ResourceCustody.Container) account.custody();
-            if (FrontierV3DepotClickLedger.get(level).pending(custody.containerId()) != null) continue;
-            if (FrontierV3ContainerEffectFence.pending(level, state, custody.containerId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(custody.containerId());
             if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
             var physical = FrontierV3PhysicalContainer.loaded(level, state, custody.containerId()).orElse(null);
@@ -54,6 +52,9 @@ final class FrontierV3FungibleResourceObservationExecutor {
             // physical image, including exact equipment. A layout observer cannot release it.
             if (ReferenceContainerCustody.isReferenceContainer(state, custody.containerId())
                     && (lease == null || !lease.live() || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)) continue;
+            // Eligibility reads do not observe or mutate stacks. Cold/unowned
+            // containers need no full cross-owner before-effect fence lookup.
+            // observe() retains the fence immediately before reading inventory.
             long epoch = lease == null ? nextEpoch(state, custody.containerId()) : lease.authorityEpoch();
             if (!observe(level, runtime, state, account, physical.inventory(), epoch)) return;
         }

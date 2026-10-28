@@ -2207,3 +2207,32 @@ GroupTravelCohesion.segment arbitrates each member's proposed path against CURRE
 positions and clips the admitted individual interval. This can retain frequent COLD
 boundaries despite long-distance regional navigation. Evaluate its total live cost after
 this coherent increment; no group-clock redesign has yet been implemented or accepted.
+
+
+### Cold inventory observation and registered stock reads (2026-10-28)
+
+2a5d24d90 exact release76frontier+29runtime/guardrails/packagePASS45s; both retained
+world deployments VERIFIED. Ordinary100 still FAILED after recovery:42725→42819 in
+61.32s, debt729→1862, maxhost203.5ms unexplained. Fresh owned-reference-batch-warm.jfr
+retains advice cost in selected trade drafts; server includes46samples in fungible
+observation,45 in ContainerEffectFence.pending. No terminal scale story yet.
+
+Source-proven unnecessary physical work: the fungible layout observer called every
+family's pending-effect fence for EVERY container account before checking whether a
+physical container was loaded, ticking and acquired. Eligibility lookups inspect no
+stacks and mutate nothing. The duplicated early fence/click-ledger probe is removed;
+the existing observe() STILL checks the complete same fence immediately before reading
+inventory. Its composition includes pending player clicks. COLD/unowned/unloaded
+containers therefore do not scan all work families. Physical write, custody release,
+recovery and player mutation fences are unchanged. Relevant existing physical executor,
+physical pass and runtime35checks/3classes+guardrailsPASS46s.
+
+GoodsParticipantView used a whole participant record (including its known-peer roster)
+as a HashMap key on every stock read, and cleared all memoized views at64 rows despite
+the active100 settlement registry. It now keeps at most one row per CURRENT registered
+participant ID under the SAME complete immutable stock/protection dependencies plus
+that exact participant registry. A replaced registry releases old rows. Unregistered
+or unpublished participant values still compute normally without entering the memo.
+No arbitrary cache quota, new business identity inference, policy or stale-view reuse.
+Existing participant/declaration, economic publication/recovery and procurement checks
++guardrailsPASS24s. Native effect remains pending, G OPEN.
