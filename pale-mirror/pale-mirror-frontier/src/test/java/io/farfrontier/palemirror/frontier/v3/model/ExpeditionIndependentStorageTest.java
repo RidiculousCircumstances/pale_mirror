@@ -60,14 +60,18 @@ class ExpeditionIndependentStorageTest {
     }
 
     private static FrontierWorldState review(FrontierWorldState state, SubjectId owner, long now) {
-        for (var event : GoodsParticipantProcess.plan(state, GoodsParticipantProcess.review(owner, now), new SimInstant(now))) {
-            if (event.payload() instanceof ScheduleEffect) continue;
-            var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
-            var payload = codecs.decode(event.payload().type(), codecs.encode(event.payload()));
-            state = FrontierWorldRuntimeDefinition.reduce(state, new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
-                    new EventId("event:independent-provisions"), new TransactionId("transaction:independent-provisions"),
-                    state.bootstrap().worldId(), new Revision(1), new SimInstant(now), event.subject(),
-                    CauseChain.root(new CommandId("command:independent-provisions")), payload));
+        var market = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested)
+                GoodsParticipantWakeup.party(state, owner, "fixture-market", now - 1).getFirst().payload()).action();
+        for (var phase : List.of(GoodsParticipantProcess.review(owner, now), market)) {
+            for (var event : GoodsParticipantProcess.plan(state, phase, new SimInstant(now))) {
+                if (event.payload() instanceof ScheduleEffect) continue;
+                var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+                var payload = codecs.decode(event.payload().type(), codecs.encode(event.payload()));
+                state = FrontierWorldRuntimeDefinition.reduce(state, new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                        new EventId("event:independent-provisions"), new TransactionId("transaction:independent-provisions"),
+                        state.bootstrap().worldId(), new Revision(1), new SimInstant(now), event.subject(),
+                        CauseChain.root(new CommandId("command:independent-provisions")), payload));
+            }
         }
         return state;
     }

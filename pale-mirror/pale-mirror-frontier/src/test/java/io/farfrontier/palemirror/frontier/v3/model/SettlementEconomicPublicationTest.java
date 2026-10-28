@@ -8,6 +8,35 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementEconomicPublicationTest {
+    @Test void marketOnlyEvidenceStartsAtCaptureAndCannotCrossANonMarketBranch() {
+        var stock = Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread"));
+        var market = Map.of(SettlementEconomicPlanningState.Change.MARKET, Set.of("minecraft:coal"));
+        var captured = SettlementEconomicPlanningState.empty().invalidate(stock);
+        var changed = captured.invalidate(market).invalidate(market);
+        assertTrue(changed.onlyMarketChangesSince(captured), "stock was already accounted at capture; only later causes matter");
+        assertFalse(changed.invalidate(stock).onlyMarketChangesSince(captured),
+                "the same dirty stock flag cannot hide a second stock change");
+        var branch = SettlementEconomicPlanningState.empty().invalidate(stock).invalidate(market).invalidate(market);
+        assertEquals(changed, branch, "canonical causes/revisions may coincide on independent branches");
+        assertFalse(branch.onlyMarketChangesSince(captured), "equal values are not evidence of the same non-market basis");
+        var rebuilt = new SettlementEconomicPlanningState(captured.inputRevision(), captured.accepted(), captured.affected());
+        assertEquals(captured, rebuilt);
+        assertFalse(rebuilt.invalidate(market).onlyMarketChangesSince(captured));
+        assertTrue(rebuilt.invalidate(market).onlyMarketChangesSince(rebuilt));
+    }
+    @Test void recoveryKeepsCanonicalInputsButStartsAFreshMarketEvidenceBoundary() {
+        var state = initial();
+        var captured = SettlementEconomicPlanningState.empty().invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread")));
+        state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().withParticipants(
+                state.companies().goodsTrade().participants().withEconomicState(HOME, captured))));
+        var codec = new FrontierWorldStateCodec(); var restored = codec.decode(codec.encode(state));
+        assertEquals(state, restored); assertArrayEquals(codec.encode(state), codec.encode(restored));
+        var recovered = restored.companies().goodsTrade().participants().economicState(HOME);
+        var changed = recovered.invalidate(Map.of(SettlementEconomicPlanningState.Change.MARKET, Set.of("minecraft:coal")));
+        assertTrue(changed.onlyMarketChangesSince(recovered));
+        assertFalse(changed.onlyMarketChangesSince(captured), "a pre-restart calculation cannot borrow new-process evidence");
+    }
     private static final SubjectId HOME = new SubjectId("settlement:1");
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:published-economy"),

@@ -4,8 +4,26 @@ import java.util.*;
 
 /** One participant's accepted intent and addressed invalidations. An empty resource
  * set on a cause explicitly means the whole participant, never an unknown resource. */
-public record SettlementEconomicPlanningState(long inputRevision, Optional<SettlementEconomicPlan> accepted,
-        Map<Change, Set<String>> affected) {
+public final class SettlementEconomicPlanningState {
+    private final long inputRevision;
+    private final Optional<SettlementEconomicPlan> accepted;
+    private final Map<Change, Set<String>> affected;
+    /** Rebuildable same-process evidence, not a canonical revision or history.
+     * Only MARKET invalidations inherit it. No predecessor state is retained. */
+    private final Object nonMarketBasis;
+    private static final SettlementEconomicPlanningState EMPTY =
+            new SettlementEconomicPlanningState(0, Optional.empty(), Map.of());
+    public long inputRevision() { return inputRevision; }
+    public Optional<SettlementEconomicPlan> accepted() { return accepted; }
+    public Map<Change, Set<String>> affected() { return affected; }
+    @Override public boolean equals(Object other) {
+        return this == other || other instanceof SettlementEconomicPlanningState value
+                && inputRevision == value.inputRevision && accepted.equals(value.accepted) && affected.equals(value.affected);
+    }
+    @Override public int hashCode() { return (Long.hashCode(inputRevision) * 31 + accepted.hashCode()) * 31 + affected.hashCode(); }
+    @Override public String toString() {
+        return "SettlementEconomicPlanningState[inputRevision=" + inputRevision + ", accepted=" + accepted + ", affected=" + affected + "]";
+    }
     public enum Change {
         STOCK("STOCK"), COMMITMENT("COMMITMENT"), CASH("CASH"), CAPACITY("CAPACITY"),
         MARKET("MARKET"), NEED("NEED"), DELIVERY("DELIVERY"), DEADLINE("DEADLINE");
@@ -18,7 +36,13 @@ public record SettlementEconomicPlanningState(long inputRevision, Optional<Settl
         }
     }
     public enum Status { AWAITING_PLAN, CURRENT, REVIEW_REQUIRED }
-    public SettlementEconomicPlanningState {
+    /** External/bootstrap/hydration input starts a fresh proof boundary. */
+    public SettlementEconomicPlanningState(long inputRevision, Optional<SettlementEconomicPlan> accepted,
+            Map<Change, Set<String>> affected) {
+        this(inputRevision, accepted, affected, new Object());
+    }
+    private SettlementEconomicPlanningState(long inputRevision, Optional<SettlementEconomicPlan> accepted,
+            Map<Change, Set<String>> affected, Object nonMarketBasis) {
         accepted = Objects.requireNonNull(accepted);
         var copy = new EnumMap<Change, Set<String>>(Change.class);
         affected.forEach((reason, resources) -> copy.put(Objects.requireNonNull(reason), Set.copyOf(resources)));
@@ -26,9 +50,11 @@ public record SettlementEconomicPlanningState(long inputRevision, Optional<Settl
         if (inputRevision < 0 || accepted.filter(plan -> plan.inputRevision() > inputRevision).isPresent()
                 || affected.values().stream().anyMatch(items -> items.size() > 256 || items.stream().anyMatch(String::isBlank)))
             throw new IllegalArgumentException("invalid economic input generation");
+        this.inputRevision = inputRevision; this.accepted = accepted; this.affected = affected;
+        this.nonMarketBasis = Objects.requireNonNull(nonMarketBasis);
     }
     public static SettlementEconomicPlanningState empty() {
-        return new SettlementEconomicPlanningState(0, Optional.empty(), Map.of());
+        return EMPTY;
     }
     public Set<Change> changes() { return affected.keySet(); }
     public Status status(long now) {
@@ -70,13 +96,15 @@ public record SettlementEconomicPlanningState(long inputRevision, Optional<Settl
             if (prior.isEmpty() || added.isEmpty()) return Set.of();
             var union = new HashSet<>(prior); union.addAll(added); return Set.copyOf(union);
         }));
-        return new SettlementEconomicPlanningState(Math.incrementExact(inputRevision), accepted, next);
+        return new SettlementEconomicPlanningState(Math.incrementExact(inputRevision), accepted, next,
+                changes.keySet().equals(Set.of(Change.MARKET)) ? nonMarketBasis : new Object());
     }
-    /** Market notifications are dated observations. Retained dirty causes prove
-     * that no stock/cash/capacity/need/commitment changed since this same accepted plan. */
+    /** Market notifications are dated observations. A closed inherited basis
+     * proves no new non-market change since capture, even when the captured
+     * state was already dirty. Equal dirty sets cannot prove that history. */
     public boolean onlyMarketChangesSince(SettlementEconomicPlanningState captured) {
         return inputRevision > captured.inputRevision && accepted.equals(captured.accepted)
-                && affected.keySet().equals(Set.of(Change.MARKET));
+                && nonMarketBasis == captured.nonMarketBasis;
     }
     public SettlementEconomicPlanningState accept(SettlementEconomicPlan plan) {
         long next = Math.incrementExact(accepted.map(SettlementEconomicPlan::revision).orElse(0L));

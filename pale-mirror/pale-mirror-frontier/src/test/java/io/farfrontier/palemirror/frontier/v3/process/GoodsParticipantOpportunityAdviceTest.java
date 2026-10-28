@@ -11,6 +11,43 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsParticipantOpportunityAdviceTest {
+    @Test void economicPublicationDoesNotWaitForItsSuccessorCaravanRoute() throws Exception {
+        var state = quoted(); var owner = buyer(state); var at = new SimInstant(402);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        PedestrianRoutePlanner pending = (geometry, start, target) -> {
+            calls.incrementAndGet();
+            return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "PENDING_TEST_CALCULATION");
+        };
+        try (var binding = PedestrianRoutePlanning.bind(pending)) {
+            var action = GoodsParticipantProcess.review(owner, at.ticks());
+            var completion = GoodsParticipantProcess.planner().advice(state, action, at).orElseThrow().prepare();
+            var events = completion.revalidate(state, at).orElseThrow().prepare().get();
+            assertEquals(0, calls.get(), "neither forecasting nor exact publication may start caravan routing");
+            assertTrue(events.stream().anyMatch(event -> event.payload() instanceof SettlementEconomicPlanPublished));
+            assertTrue(events.stream().noneMatch(event -> event.payload() instanceof GoodsTradeReserved
+                    || event.payload() instanceof TransportMissionStarted));
+            var successor = events.stream().map(ProposedEvent::payload)
+                    .filter(ScheduleEffect.ReconsiderationRequested.class::isInstance)
+                    .map(ScheduleEffect.ReconsiderationRequested.class::cast).map(ScheduleEffect.ReconsiderationRequested::action)
+                    .filter(next -> next.kind().equals(GoodsParticipantWakeup.OPPORTUNITY)).findFirst().orElseThrow();
+            assertEquals(owner, successor.subject()); assertEquals(new SimInstant(403), successor.dueAt());
+            for (var proposed : events) if (!(proposed.payload() instanceof ScheduleEffect))
+                state = FrontierWorldRuntimeDefinition.reduce(state, new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                        new EventId("event:review-before-routing"), new TransactionId("transaction:review-before-routing"),
+                        state.bootstrap().worldId(), new Revision(1), at, proposed.subject(),
+                        CauseChain.root(new CommandId("command:review-before-routing")), proposed.payload()));
+            var published = state.companies().goodsTrade().participants().economicState(owner).accepted().orElseThrow();
+            assertEquals(at.ticks(), published.atTick());
+            var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+            state = codec.decode(codec.encode(state));
+            var opportunity = GoodsParticipantProcess.planner().advice(state, successor, successor.dueAt()).orElseThrow().prepare();
+            var waiting = opportunity.revalidate(state, successor.dueAt()).orElseThrow().prepare().get();
+            assertTrue(calls.get() > 0, "the independent successor owns the still-pending route");
+            assertTrue(waiting.stream().noneMatch(event -> event.payload() instanceof SettlementEconomicPlanPublished
+                    || event.payload() instanceof GoodsTradeReserved || event.payload() instanceof TransportMissionStarted));
+            assertEquals(published, state.companies().goodsTrade().participants().economicState(owner).accepted().orElseThrow());
+        }
+    }
     @Test void stableChoiceMatchesDirectPlanningButCurrentFundingStillOwnsAdmission() {
         var state = quoted(); var buyer = buyer(state); var at = new SimInstant(401);
         var action = GoodsParticipantWakeup.action(buyer, at.ticks());

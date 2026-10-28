@@ -407,14 +407,18 @@ class ConsolidatedGoodsTradeTest {
                     .noneMatch(e -> e.activityOwnerId().equals(completedGroup)));
     }
     private static FrontierWorldState review(FrontierWorldState state, SubjectId party, long tick) {
-        for (var proposed : GoodsParticipantProcess.plan(state, GoodsParticipantProcess.review(party, tick), new SimInstant(tick))) {
-            if (proposed.payload() instanceof ScheduleEffect) continue;
-            var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
-            var payload = codecs.decode(proposed.payload().type(), codecs.encode(proposed.payload()));
-            var event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:trip-test"), new TransactionId("transaction:trip-test"),
-                    state.bootstrap().worldId(), new Revision(1), new SimInstant(tick), proposed.subject(),
-                    CauseChain.root(new CommandId("command:trip-test")), payload);
-            state = FrontierWorldRuntimeDefinition.reduce(state, event);
+        var market = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested)
+                GoodsParticipantWakeup.party(state, party, "fixture-market", tick - 1).getFirst().payload()).action();
+        for (var phase : List.of(GoodsParticipantProcess.review(party, tick), market)) {
+            for (var proposed : GoodsParticipantProcess.plan(state, phase, new SimInstant(tick))) {
+                if (proposed.payload() instanceof ScheduleEffect) continue;
+                var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+                var payload = codecs.decode(proposed.payload().type(), codecs.encode(proposed.payload()));
+                var event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:trip-test"), new TransactionId("transaction:trip-test"),
+                        state.bootstrap().worldId(), new Revision(1), new SimInstant(tick), proposed.subject(),
+                        CauseChain.root(new CommandId("command:trip-test")), payload);
+                state = FrontierWorldRuntimeDefinition.reduce(state, event);
+            }
         }
         return state;
     }

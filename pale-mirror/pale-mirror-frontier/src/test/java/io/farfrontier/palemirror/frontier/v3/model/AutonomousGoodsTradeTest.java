@@ -133,7 +133,8 @@ class AutonomousGoodsTradeTest {
         assertTrue(state.shipments().shipments().isEmpty(), "same-container title transfer must not invent a cargo trip");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         state = review(state, COMPANY, state.companies().goodsTrade().orders().get(contract.sellOrderId()).expiresAtTick() + 1);
-        assertTrue(state.companies().goodsTrade().contracts().get(contract.id()).fulfilled());
+        // Completed contracts may already be retired by the second due phase;
+        // exact title and payment below are the terminal result.
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(HOME, "minecraft:wheat"));
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:wheat"));
         assertEquals(publicMoney.plus(FixedScalar.whole(64)), state.inventory().economics().require(HOME).balance());
@@ -178,7 +179,9 @@ class AutonomousGoodsTradeTest {
                 assertEquals(periodic ? executedAt : recovered.companies().goodsTrade().participants().participants().get(COMPANY).reviewedAtTick(),
                         next.companies().goodsTrade().participants().participants().get(COMPANY).reviewedAtTick(),
                         "matching an opportunity must not renew the independent economic forecast");
-                if (executedAt == sell.expiresAtTick()) {
+                if (periodic) {
+                    assertTrue(next.companies().goodsTrade().contracts().isEmpty(), "publication defers matching to its own scheduled owner");
+                } else if (executedAt == sell.expiresAtTick()) {
                     var contract = next.companies().goodsTrade().contracts().values().stream().findFirst().orElseThrow();
                     assertEquals(sell.id(), contract.sellOrderId());
                     assertEquals(64, contract.quantity(), "the declared inclusive expiry boundary remains valid");
@@ -227,7 +230,8 @@ class AutonomousGoodsTradeTest {
         assertEquals(FixedScalar.whole(1), contract.goodsUnitPrice());
         assertEquals(FixedScalar.ZERO, state.inventory().economics().availableToReserve(COMPANY));
         state = review(state, COMPANY, 401);
-        assertTrue(state.companies().goodsTrade().contracts().get(contract.id()).fulfilled());
+        // Completed contracts may already be retired by the second due phase;
+        // exact title and payment below are the terminal result.
         assertEquals(FixedScalar.ZERO, state.inventory().economics().require(COMPANY).balance());
         assertEquals(5, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:wheat"));
     }
@@ -245,7 +249,8 @@ class AutonomousGoodsTradeTest {
                 participant.reviewRevision(), participant.decision(), participant.reviewedAtTick()));
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().withParticipants(new GoodsParticipantState(map))));
         state = review(state, HOME, 800);
-        assertTrue(state.companies().goodsTrade().participants().participants().get(HOME).decision().startsWith("NO_KNOWN_COUNTERPARTY"));
+        assertTrue(state.companies().goodsTrade().participants().participants().get(HOME).known().isEmpty());
+        assertTrue(state.companies().goodsTrade().orders().isEmpty());
         assertTrue(state.companies().goodsTrade().contracts().isEmpty());
     }
 
@@ -360,8 +365,13 @@ class AutonomousGoodsTradeTest {
     }
 
     private static FrontierWorldState review(FrontierWorldState state, SubjectId participant, long tick) {
-        return apply(state, GoodsParticipantProcess.plan(state, GoodsParticipantProcess.review(participant, tick),
+        state = apply(state, GoodsParticipantProcess.plan(state, GoodsParticipantProcess.review(participant, tick),
                 new SimInstant(tick)), tick, "goods-trade");
+        // Isolated policy fixture executes both independently due phases at this
+        // instant; the kernel test below owns automatic successor scheduling.
+        var market = ((ScheduleEffect.ReconsiderationRequested) GoodsParticipantWakeup.party(state, participant,
+                "fixture-market", tick - 1).getFirst().payload()).action();
+        return apply(state, GoodsParticipantProcess.plan(state, market, new SimInstant(tick)), tick, "goods-trade");
     }
 
     private static FrontierWorldState apply(FrontierWorldState state, List<ProposedEvent> events, long tick, String family) {

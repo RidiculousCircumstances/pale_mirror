@@ -20,14 +20,9 @@ final class GoodsParticipantReviewAdvice {
         var navigation = state.navigationGeometry(); var physical = state.physicalDeltas();
         return new ScheduledAdvisory<>() {
             private SettlementEconomicPlanPreparation.Review assessment;
-            private java.util.function.Supplier<GoodsParticipantProcess.PreparedDecision> calculation;
             @Override public Completion<FrontierWorldState> prepare() {
-                if (calculation == null) {
-                    assessment = SettlementEconomicPlanPreparation.review(state, action, at);
-                    calculation = GoodsParticipantProcess.prepareDecisionCalculation(state, action, at, assessment, Optional.empty());
-                }
+                if (assessment == null) assessment = SettlementEconomicPlanPreparation.review(state, action, at);
                 var prepared = assessment;
-                var choice = calculation.get().choice();
                 return new ScheduledAdvisory.Completion<FrontierWorldState>() {
                     private String rejection = "NONE";
                     @Override public String rejectionReason() { return rejection; }
@@ -57,7 +52,7 @@ final class GoodsParticipantReviewAdvice {
                         rejection = "NONE";
                         var refreshed = inputShift == 0 ? prepared : new SettlementEconomicPlanPreparation.Review(prepared.atTick(),
                                 prepared.prices(), prepared.publication().map(plan -> plan.withInputRevision(Math.addExact(plan.inputRevision(), inputShift))));
-                        return Optional.of(() -> GoodsParticipantProcess.prepareDecision(current, action, executionAt, refreshed, Optional.of(choice)).completion());
+                        return Optional.of(() -> GoodsParticipantProcess.prepareDecision(current, action, executionAt, refreshed, Optional.empty()).completion());
                     }
                 };
             }

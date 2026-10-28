@@ -155,7 +155,9 @@ public final class GoodsParticipantProcess {
             events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order)));
             pendingQuotes.add(key); published++;
         }
-        var trip = rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.calculation(state, participant, now, choice))
+        // Publishing a production plan must not wait for a caravan's route or
+        // admission. The existing opportunity owner performs that successor.
+        var trip = !periodic && rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.calculation(state, participant, now, choice))
                 : Optional.<java.util.function.Supplier<GoodsTripPlanning.Result>>empty();
         var preparedState = state; int preparedPublished = published;
         return () -> {
@@ -171,7 +173,10 @@ public final class GoodsParticipantProcess {
         var rules = state.bootstrap().ruleset().goodsTrade();
         boolean periodic = action.kind().equals(REVIEW);
         String decision; boolean awaitingNavigation = false;
-        if (rules.supplyPlanning().enabled()) {
+        if (periodic) {
+            decision = "ECONOMIC_REVIEW_PUBLISHED; MARKET_OPPORTUNITY_REQUESTED";
+            events.addAll(GoodsParticipantWakeup.party(state, participant.party().id(), "economic-publication", now));
+        } else if (rules.supplyPlanning().enabled()) {
             var trip = preparedTrip.orElseThrow();
             state = trip.state(); events.addAll(trip.events()); decision = trip.decision() + "; published=" + published;
             awaitingNavigation = trip.awaitingNavigation();

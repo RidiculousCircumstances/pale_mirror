@@ -42,6 +42,11 @@ class GoodsParticipantReviewAdviceTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:advice-proof"), 126L,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
         var home = state.bootstrap().settlements().get(6).id();
+        var previousTrade = state.companies().goodsTrade();
+        var dirtyBeforeCapture = previousTrade.participants().economicState(home).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread")));
+        state = state.withCompanies(state.companies().withGoodsTrade(previousTrade.withParticipants(
+                previousTrade.participants().withEconomicState(home, dirtyBeforeCapture))));
         var action = GoodsParticipantProcess.review(home, 4000); var at = new SimInstant(4000);
         var completion = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(state.bootstrap())
                 .scheduledPlanner().advice(state, action, at).orElseThrow().prepare();

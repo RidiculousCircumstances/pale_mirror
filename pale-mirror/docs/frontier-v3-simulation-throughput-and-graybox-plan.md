@@ -4232,3 +4232,51 @@ Do not memoize generic ScheduledHold.stillHeld by canonical-state identity:
 its contract includes time/external dependencies (existing readiness tests use
 an external readiness flag). That tempting kernel shortcut was rejected.
 No compatibility or new persistence schema is needed for this cut.
+
+
+### Economic publication independent of trip routing (2026-10-29)
+
+The completed 06be ten-minute ordinary run still advances only11.126382 canonical
+ ticks/sec, debt1011→6409 (late five-minute rate11.958044, still growing debt).
+Its45s after-warm trace attributes52.89% wall to owner,30.63% exact and7.67% WAL;
+these are exclusive gates, unlike overlapping nested stage durations. No20/s claim.
+Advice completed4058,accepted2189,rejected1869: BUYER_INPUT808,OWNER_INPUT457,
+CHANGED_EMPTY_MARKET592,BUYER_PLAN8,EXPIRED4. No observed GEOMETRY rejection.
+Town35 has bread0,wheat225,coal65 and a production plan overdue>3000ticks;
+its accumulated CAPACITY/NEED invalidations block new bread work. The cumulative
+causes do not identify which earlier source supplied whole CAPACITY; do not guess
+or narrow legitimate invalidations to unblock it.
+
+Two connected source defects are addressed in the next cut:
+
+- Dirty causes summarize everything since acceptance, not since advice capture.
+  A pre-existing STOCK flag incorrectly rejected a later MARKET-only successor.
+  Planning state retains a private, rebuildable non-market basis identity, inherited
+  only by MARKET-only changes. Repeated same STOCK, independent equal-valued branches,
+  public reconstruction and hydration cannot borrow that proof. Canonical fields,
+  manual codec and recovery checks remain; no compatibility code or predecessor chain.
+- Economic review first calculated a forecast, then a complete disposable trade
+  decision including route waits, before it could publish the production plan.
+  Review advice now calculates only the forecast. Current exact review still owns
+  prices, plan publication, quote/obligation maintenance and its next deadline;
+  it wakes the existing coalesced OPPORTUNITY owner for matching/routing/dispatch.
+  REVIEW never admits a new caravan or waits for its route. OPPORTUNITY never
+  recalculates the economic forecast and retains exact current resource, funding,
+  consent, workforce, provision, geometry and expiry admission.
+
+The connected regression holds routing in PLANNING, requires zero route calls
+through forecast/publication, roundtrips the published state, then exercises the
+actual opportunity successor and forbids reservation/dispatch while still waiting.
+Existing title/payment/expiry and terminal kernel fixtures remain; isolated policy
+helpers explicitly execute both due phases. No second active execution path,
+new process/payload/schema or weakened admission. Verification/deployment pending.
+Evidence: build/simulation-throughput/economic-review-publication-focus.log and
+staffing-peer-facts-current-ordinary100-{report,cpu}.txt; raw five-town snapshots
+retain explicit trade diagnostic omissions. Missing retained history is not no trade.
+
+Verification: economic-review-publication-focus.log completed102 tests with100
+passing; the two failures dereferenced completed contracts already retired by the
+explicit second fixture phase. Their exact title/payment assertions remain.
+The corrected AutonomousGoodsTradeTest plus guardrails pass in23s
+(economic-review-terminal-focus.log). Frozen candidate verification and deployment
+follow; no live speedup or town35 recovery claim yet.
