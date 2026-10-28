@@ -19,6 +19,9 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
     }
     private final Map<Page, Part<V>> pages;
     private final int size, hash;
+    private record ReadPage<V>(int x, int z, Map<Region, V> values) { }
+    /** One exact immutable page, not a world/route result or an accumulated cache. */
+    private volatile ReadPage<V> lastRead;
     private ImmutableRegionMap(Map<Page, Part<V>> pages) {
         this.pages = Collections.unmodifiableMap(new HashMap<>(pages));
         int count = 0, fingerprint = 0;
@@ -81,7 +84,16 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
         return Set.copyOf(changed);
     }
     private Map<Region, V> in(Page page) { var part = pages.get(page); return part == null ? Map.of() : part.values; }
-    @Override public V get(Object key) { return key instanceof Region region ? in(Page.at(region)).get(region) : null; }
+    @Override public V get(Object key) {
+        if (!(key instanceof Region region)) return null;
+        int x = region.x() >> 4, z = region.z() >> 4;
+        var read = lastRead;
+        if (read == null || read.x() != x || read.z() != z) {
+            read = new ReadPage<>(x, z, in(new Page(x, z)));
+            lastRead = read;
+        }
+        return read.values().get(region);
+    }
     @Override public boolean containsKey(Object key) { return get(key) != null; }
     @Override public int size() { return size; }
     @Override public int hashCode() { return hash; }

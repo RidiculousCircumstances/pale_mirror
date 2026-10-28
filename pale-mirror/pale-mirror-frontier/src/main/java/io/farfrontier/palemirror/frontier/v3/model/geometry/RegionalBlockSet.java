@@ -12,15 +12,9 @@ public final class RegionalBlockSet extends AbstractSet<BlockPosition> {
     private final int hash;
 
     /** Exact immutable contents with an O(1) hash; hashes alone never authorize equality. */
-    private static final class Blocks {
-        private final Set<BlockPosition> values;
-        private final int hash;
+    private static final class Blocks extends ImmutableRegionalValue<Set<BlockPosition>> {
         Blocks(Set<BlockPosition> values) {
-            this.values = Collections.unmodifiableSet(new HashSet<>(values)); this.hash = values.hashCode();
-        }
-        @Override public int hashCode() { return hash; }
-        @Override public boolean equals(Object other) {
-            return this == other || other instanceof Blocks blocks && hash == blocks.hash && values.equals(blocks.values);
+            super(Collections.unmodifiableSet(new HashSet<>(values)));
         }
     }
     private RegionalBlockSet(Map<Region, Blocks> regions) {

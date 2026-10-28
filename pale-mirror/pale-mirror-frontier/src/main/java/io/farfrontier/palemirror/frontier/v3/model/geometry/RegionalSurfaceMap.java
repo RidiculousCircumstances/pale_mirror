@@ -8,21 +8,18 @@ import java.util.*;
 /** Immutable layered support directory. A regional token hashes once and compares exact contents. */
 public final class RegionalSurfaceMap extends AbstractMap<TerrainColumn, List<SurfaceAnchor>> {
     private static final RegionalSurfaceMap EMPTY = new RegionalSurfaceMap(Map.of());
-    private static final class Columns {
-        final Map<TerrainColumn, List<SurfaceAnchor>> values;
-        final int hash;
+    private static final class Columns extends ImmutableRegionalValue<Map<TerrainColumn, List<SurfaceAnchor>>> {
         Columns(Map<TerrainColumn, List<SurfaceAnchor>> values) {
+            super(copy(values));
+        }
+        private static Map<TerrainColumn, List<SurfaceAnchor>> copy(Map<TerrainColumn, List<SurfaceAnchor>> values) {
             var copy = new HashMap<TerrainColumn, List<SurfaceAnchor>>();
             values.forEach((column, levels) -> {
                 if (levels.isEmpty() || levels.stream().anyMatch(surface -> surface.x() != column.x() || surface.z() != column.z()))
                     throw new IllegalArgumentException("support contribution differs from its column");
                 copy.put(column, List.copyOf(levels));
             });
-            this.values = Collections.unmodifiableMap(copy); hash = copy.hashCode();
-        }
-        @Override public int hashCode() { return hash; }
-        @Override public boolean equals(Object other) {
-            return this == other || other instanceof Columns columns && hash == columns.hash && values.equals(columns.values);
+            return Collections.unmodifiableMap(copy);
         }
     }
     private static final Columns EMPTY_COLUMNS = new Columns(Map.of());

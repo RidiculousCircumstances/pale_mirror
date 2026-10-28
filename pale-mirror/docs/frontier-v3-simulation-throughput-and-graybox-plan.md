@@ -4449,3 +4449,28 @@ bounds negative passed; corrected the assertion to require successful valid
 predecessor validation. Four state update/recovery checks PASS18s. Common storage/
 adoption/group-index focus and guardrails PASS28s. Frozen full affected focus and
 packaging follow, without a new timing-test or baseline campaign.
+
+The local hauling/storage cut219ea842b frozen verification passes48 affected
+checks plus guardrails/JAR/package in31s; it has not yet been deployed separately.
+
+### Reuse exact regional equality and the current immutable page
+
+The same warm trace has repeated RegionalBlockSet.Blocks.equals and support-column
+equality in real planner stacks, plus allocations attributed to ImmutableRegionMap
+page keys. RegionalBlockMap already memoizes one previously proven immutable pair,
+but blocks and support maps independently repeat full equality. Extract that exact
+algorithm into ImmutableRegionalValue and use it for all three nominal fact types:
+first compare real contents, retain one weak symmetric peer, reject different
+nominal types and never infer equality from hashes. No strong predecessor chain
+or unbounded interning. Existing counted-value/hash-collision/independent-branch
+coverage runs through the extracted algorithm; extend it to colliding block sets
+and changed support elevations.
+
+ImmutableRegionMap also retains one exact last-read spatial page under one volatile
+immutable tuple. Repeated local reads avoid constructing a directory key for each
+region lookup; switching pages, absent pages, negative coordinates and fresh
+successor maps still use their actual immutable contents. No geometry, route or
+permission result is cached by this shortcut. Generic regional projection, scope,
+invalidation and extraction checks plus guardrails PASS34s before the extra block/
+support collision assertions; frozen final verification must execute those updated
+assertions. No live speedup is claimed before deploying the combined candidate.

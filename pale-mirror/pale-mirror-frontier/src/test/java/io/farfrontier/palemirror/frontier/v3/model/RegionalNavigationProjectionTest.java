@@ -39,6 +39,21 @@ class RegionalNavigationProjectionTest {
         assertEquals(Set.of(Region.at(position)), first.changesFrom(collision));
         assertTrue(first.changesFrom(same).isEmpty(), "successor cannot mutate the proven snapshots");
         assertEquals(Set.of(Region.at(position)), same.changesFrom(same.replace(Map.of(Region.at(position), Map.of()))));
+        var block = new BlockPosition(1, 0, 0); var differentBlock = new BlockPosition(0, 31, 0);
+        assertEquals(block.hashCode(), differentBlock.hashCode());
+        var blocks = RegionalBlockSet.copyOf(Set.of(block)); var equalBlocks = RegionalBlockSet.copyOf(Set.of(block));
+        assertTrue(blocks.changesFrom(equalBlocks).isEmpty());
+        var collidingBlocks = RegionalBlockSet.copyOf(Set.of(differentBlock));
+        assertEquals(blocks.hashCode(), collidingBlocks.hashCode());
+        assertEquals(Set.of(Region.at(block)), blocks.changesFrom(collidingBlocks));
+        assertTrue(equalBlocks.changesFrom(blocks).isEmpty(), "a colliding new part cannot poison earlier exact equality");
+        var column = new TerrainColumn(1, 0);
+        var levels = RegionalSurfaceMap.copyOf(Map.of(column, List.of(new SurfaceAnchor(block))));
+        var equalLevels = RegionalSurfaceMap.copyOf(Map.of(column, List.of(new SurfaceAnchor(block))));
+        assertTrue(levels.changesFrom(equalLevels).isEmpty());
+        var changedLevels = RegionalSurfaceMap.copyOf(Map.of(column, List.of(new SurfaceAnchor(block.offset(0, 1, 0)))));
+        assertEquals(Set.of(Region.at(block)), changedLevels.changesFrom(levels));
+        assertTrue(equalLevels.changesFrom(levels).isEmpty());
     }
     private record CountedValue(String text, java.util.concurrent.atomic.AtomicInteger comparisons) {
         @Override public int hashCode() { return text.hashCode(); }
