@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model.market;
 
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
+import io.farfrontier.palemirror.frontier.v3.model.supply.ProductionCost;
 import java.math.BigInteger;
 import java.util.*;
 
@@ -8,6 +9,9 @@ import java.util.*;
  * No resource names, physical jobs or paid fictional wages. */
 public final class ProductionInputValue {
     public static long assess(String item, List<SupplyPlanner.Process> processes, Map<String, Long> prices, long labourPerTick) {
+        return costs(item, processes.stream().map(ProductionCost::from).toList(), prices, labourPerTick);
+    }
+    public static long costs(String item, List<ProductionCost> processes, Map<String, Long> prices, long labourPerTick) {
         if (labourPerTick < 0) throw new IllegalArgumentException("negative labour value");
         long best = 0;
         for (var process : processes) {

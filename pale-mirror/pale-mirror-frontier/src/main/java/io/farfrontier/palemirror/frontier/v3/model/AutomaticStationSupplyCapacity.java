@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
+import io.farfrontier.palemirror.frontier.v3.model.supply.ProductionCost;
 import java.util.*;
 
 /** Installed automatic equipment advertises finite throughput and actual stored energy to the common planner. */
@@ -9,21 +10,31 @@ final class AutomaticStationSupplyCapacity implements SupplyCapacityPort {
     @Override public Key key() { return Key.AUTOMATIC_STATIONS; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
-        return assess(state, home, stocks, window, true);
+        return assess(state, home, stocks, window);
     }
-    @Override public List<SupplyPlanner.Process> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
-                                                         SupplyPlanningWindow window) {
-        return assess(state, home, stocks, window, false);
+    @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        var result = new ArrayList<ProductionCost>(); var catalog = state.bootstrap().ruleset().production();
+        var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.burnTicks()));
+        for (var policy : catalog.automaticPolicies()) {
+            var recipe = catalog.require(policy.recipeId());
+            for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
+                var inputs = ProductionRecipeInputs.select(recipe, kind -> -(stocks.containsKey(kind) ? stocks.get(kind).covered() : 0L));
+                result.add(new ProductionCost(recipe.id().value() + "/" + record.productionStation().orElseThrow().id().value(),
+                        recipe.product().itemKind(), recipe.product().quantity(), inputs,
+                        recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), fuels, 0, 1));
+            }
+        }
+        return List.copyOf(result);
     }
     private static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
-            SupplyPlanningWindow window, boolean executable) {
+            SupplyPlanningWindow window) {
         var result = new ArrayList<SupplyPlanner.Process>(); var catalog = state.bootstrap().ruleset().production();
         for (var policy : catalog.automaticPolicies()) {
             var recipe = catalog.require(policy.recipeId());
             for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
                 var station = record.productionStation().orElseThrow();
                 var machine = state.productionStations().require(station.id());
-                if (executable && ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) continue;
+                if (ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) continue;
                 var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.burnTicks()));
                 var inputs = ProductionRecipeInputs.select(recipe, kind -> -(stocks.containsKey(kind) ? stocks.get(kind).covered() : 0L));
                 long duration = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE).workUnits();

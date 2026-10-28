@@ -17,6 +17,13 @@ class SupplyOperationBatchTest {
         assertEquals(0, process.recipesForLabour(1199));
         assertEquals(0, process.labourTicks(0));
         var valuation = SourcingValuation.processes(List.of(process), Map.of("bread", 100L, "wheat", 1L, "coal", 20L), List.of(), 1);
+        var costs = List.of(ProductionCost.from(process));
+        assertEquals(valuation, SourcingValuation.costs(costs, Map.of("bread", 100L, "wheat", 1L, "coal", 20L), List.of(), 1));
+        assertEquals(costs.getFirst(), ProductionCost.from(new SupplyPlanner.Process("station", "bread", 1,
+                Map.of("wheat", 3), 80, Map.of("coal", 1600L), 0, 40000, 40000, 1, 1200, Map.of(), 21)),
+                "output timing, stored heat, labour envelope and batch availability are not recipe costs");
+        assertThrows(IllegalArgumentException.class, () -> new ProductionCost("station", "bread", 1,
+                Map.of("wheat", 3), 80, Map.of(), 1200, 21), "burning recipe must declare actual usable fuels");
         assertEquals(62, valuation.get("station")); // ceil(1200/21) labour + 3 grain + 1 heat share
     }
 }

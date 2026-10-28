@@ -3,12 +3,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.model.market.*;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
+import io.farfrontier.palemirror.frontier.v3.model.supply.ProductionCost;
 import java.util.*;
 
 /** Converts declared production capabilities into price constraints, without inspecting concrete jobs. */
 final class GoodsProductionPricing {
     record Assessment(Map<String, FixedScalar> opportunities, Map<String, FixedScalar> alternatives,
-                      List<SupplyPlanner.Process> processes) {
+                      List<ProductionCost> processes) {
         Assessment { opportunities = Map.copyOf(opportunities); alternatives = Map.copyOf(alternatives); processes = List.copyOf(processes); }
     }
     static Map<String, FixedScalar> floors(ProductionCatalog catalog, WorkCatalog work, Map<String, FixedScalar> prices) {
@@ -39,9 +40,9 @@ final class GoodsProductionPricing {
         var economic = collected.market().processUnitCosts();
         var opportunities = new TreeMap<String, FixedScalar>();
         var sourcing = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing();
-        var potential = sourcing.isPresent() ? SupplyCapacityComposition.forValuation(state, view.participant()) : capacities;
+        var potential = sourcing.isPresent() ? SupplyCapacityComposition.forValuation(state, view.participant()) : capacities.stream().map(ProductionCost::from).toList();
         var estimates = new TreeMap<String, Long>(); prices.forEach((kind, price) -> estimates.put(kind, price.raw()));
-        var replacementCosts = sourcing.isPresent() ? io.farfrontier.palemirror.frontier.v3.model.supply.SourcingValuation.processes(potential,
+        var replacementCosts = sourcing.isPresent() ? io.farfrontier.palemirror.frontier.v3.model.supply.SourcingValuation.costs(potential,
                 estimates, collected.market().offers(), sourcing.orElseThrow().labourValuePerTick()) : economic;
         for (var process : potential) if (replacementCosts.containsKey(process.id())) opportunities.merge(process.product(), new FixedScalar(replacementCosts.get(process.id())),
                 (a, b) -> a.compareTo(b) <= 0 ? a : b);

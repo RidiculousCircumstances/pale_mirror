@@ -10,6 +10,9 @@ final class SettlementSourcingMarket {
     }
     private static final ImmutableInputView<ImmutableResultView<Long, Facts>> FACTS = new ImmutableInputView<>();
     static SourcingMarket read(FrontierWorldState state, GoodsParticipant buyer, List<SupplyPlanner.Process> capacities, long now) {
+        return costs(state, buyer, capacities.stream().map(ProductionCost::from).toList(), now);
+    }
+    static SourcingMarket costs(FrontierWorldState state, GoodsParticipant buyer, List<ProductionCost> capacities, long now) {
         if (now < 0) throw new IllegalArgumentException("negative sourcing instant");
         var tradeRules = state.bootstrap().ruleset().goodsTrade();
         var selection = tradeRules.supplyPlanning().sourcing();
@@ -21,7 +24,7 @@ final class SettlementSourcingMarket {
         var facts = FACTS.get(List.of(state), () -> new ImmutableResultView<Long, Facts>(256))
                 .get(List.of(buyer), now, () -> observe(state, buyer, now));
         return new SourcingMarket(state.inventory().economics().availableToReserve(buyer.party().id()).raw(),
-                policy.switchingSavingsPermille(), SourcingValuation.processes(capacities, facts.references(), facts.offers(),
+                policy.switchingSavingsPermille(), SourcingValuation.costs(capacities, facts.references(), facts.offers(),
                         policy.labourValuePerTick()), facts.offers());
     }
     private static Facts observe(FrontierWorldState state, GoodsParticipant buyer, long now) {

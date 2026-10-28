@@ -10,8 +10,8 @@ final class IndividualStationSupplyCapacity implements SupplyCapacityPort {
     public Key key() { return Key.INDIVIDUAL_STATIONS; }
     public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home,
             Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window) { return List.of(); }
-    public List<SupplyPlanner.Process> valuation(FrontierWorldState state, SubjectId home,
-            Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window) {
+    public List<io.farfrontier.palemirror.frontier.v3.model.supply.ProductionCost> valuation(FrontierWorldState state, SubjectId home,
+            Map<String, SupplyPlanner.Stock> stocks) {
         // Restoring one worn item is not manufacturing another whole item.
         return StationRecipeValuation.read(state, home, recipe -> recipe.outcome() instanceof ProductionRecipeOutcome.Individual);
     }

@@ -23,7 +23,7 @@ public final class GoodsResourceValuation {
                         .orElse(commodity.minimumSellPrice()).raw()));
         if (rules.supplyPlanning().sourcing().isPresent()) {
             var capacities = SupplyCapacityComposition.forValuation(state, participant);
-            var costs = SourcingValuation.processes(capacities, prices, List.of(),
+            var costs = SourcingValuation.costs(capacities, prices, List.of(),
                     rules.supplyPlanning().sourcing().orElseThrow().labourValuePerTick());
             // Replacement by a current local capability does not cost a past
             // emergency buyer's willingness to pay. Inputs without a local

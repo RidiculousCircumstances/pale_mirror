@@ -27,7 +27,7 @@ final class GoodsEconomicPricing {
         var outputValues = new TreeMap<>(prices);
         // A costly way of making an output does not increase the value of its
         // inputs. Only independently observed output value supports substitution.
-        long inputValue = ProductionInputValue.assess(item, production.processes(), outputValues,
+        long inputValue = ProductionInputValue.costs(item, production.processes(), outputValues,
                 rules.supplyPlanning().sourcing().orElseThrow().labourValuePerTick());
         long value = Math.max(references.get(item).raw(), inputValue);
         // A published production counterquote is price advice, never ready

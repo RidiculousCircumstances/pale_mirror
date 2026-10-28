@@ -13,6 +13,18 @@ class EconomicRecoveryTest {
         assertFalse(FieldWorkForecast.workers(state, home).isEmpty(), "fixture starts with productive tools");
         state = exhaust(state, home);
         var participant = state.companies().goodsTrade().participants().participants().get(home);
+        var workers = FieldWorkForecast.valuationWorkers(state, home);
+        var estimate = new FieldWorkForecast(state, home, workers, false);
+        for (var site : state.resourceSites().sites().values()) {
+            if (!state.resourceSites().declarations().get(site.siteId()).settlementId().equals(home)) continue;
+            var cycle = state.resourceSites().cycle(site.siteId());
+            for (var cell : cycle.layout().cells()) {
+                var candidate = new FieldSupplyCapacity.Cell(cell.crop(), cycle.cell(cell.id()), cycle.sowing().cells().contains(cell.id()));
+                var source = estimate.source(candidate);
+                assertEquals(Math.ceilDiv(Math.addExact(source.harvest(), Math.max(source.preparation(),
+                        source.renew() ? source.repeatPreparation() : 0)), source.yield()), estimate.unitLabour(candidate));
+            }
+        }
         var before = state;
         var assessment = SettlementEconomicEvaluation.domestic(state, participant, 5000);
         assertTrue(FieldWorkForecast.workers(state, home).isEmpty());

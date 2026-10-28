@@ -56,13 +56,25 @@ final class FieldWorkForecast {
         boolean planted = condition.crop() == ResourceFieldCycle.Crop.MATURE || condition.crop() == ResourceFieldCycle.Crop.GROWING;
         long growthStage = Math.multiplyExact(FieldAgronomy.growthPeriods(bootstrap, cell.crop()),
                 bootstrap.ruleset().cadence().resourceGrowthStageInterval());
-        long travel = travel(cell.crop(), FieldAgronomy.yield(bootstrap, cell.crop()));
+        int yield = FieldAgronomy.yield(bootstrap, cell.crop());
+        long travel = travel(cell.crop(), yield);
         long sow = Math.addExact(sowTicks, travel);
-        return new RenewableWorkForecast.Source(FieldAgronomy.yield(bootstrap, cell.crop()),
+        return new RenewableWorkForecast.Source(yield,
                 planted ? 0 : Math.addExact(sow, preparationTicks.getOrDefault(condition.soil(), 0L)),
                 Math.addExact(harvestTicks, travel),
                 Math.multiplyExact(ResourceSiteLifecycle.MATURE_STAGE - condition.growthStage(), growthStage),
                 Math.multiplyExact(ResourceSiteLifecycle.MATURE_STAGE, growthStage), sow, planted, cell.renew());
+    }
+    /** Same per-unit labour used by the dated source, without simulating growth or releases. */
+    long unitLabour(FieldSupplyCapacity.Cell cell) {
+        int yield = FieldAgronomy.yield(bootstrap, cell.crop());
+        long travel = travel(cell.crop(), yield);
+        long sow = Math.addExact(sowTicks, travel);
+        boolean planted = cell.condition().crop() == ResourceFieldCycle.Crop.MATURE
+                || cell.condition().crop() == ResourceFieldCycle.Crop.GROWING;
+        long preparation = planted ? 0 : Math.addExact(sow, preparationTicks.getOrDefault(cell.condition().soil(), 0L));
+        return Math.ceilDiv(Math.addExact(Math.addExact(harvestTicks, travel),
+                Math.max(preparation, cell.renew() ? sow : 0)), yield);
     }
     long lead(FieldSupplyCapacity.Cell cell) {
         var source = source(cell);

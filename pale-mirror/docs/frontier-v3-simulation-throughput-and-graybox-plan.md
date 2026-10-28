@@ -2120,3 +2120,38 @@ forced full reevaluation, actor wrong-kind/out-of-bounds/withdrawal and death un
 unchanged presence authority. Existing body death/inspection/reentry, meal, field and
 navigator coverage retained. Focus139checks/17classes+guardrailsPASS63s; final closure
 30checks/5classes+guardrailsPASS25s. Release/native throughput remains pending. G OPEN.
+
+
+### Installed production cost is not a dated supply forecast (2026-10-28)
+
+483d7f7ae exact release/retained-world deployments passed. Ordinary100 observation
+still FAILED:38833→39335 in272.54s, debt3655→8605. JFR
+`build/simulation-throughput/immutable-direct-change-warm.jfr` confirms that advice
+still spends substantial sampled work in GoodsTripPlanning reserve/assembly and
+GoodsResourceValuation→SupplyCapacityComposition→FieldSupplyCapacity, while server
+reference closure includes UnitGroupRelationships. Inclusive counts are not additive
+percentages. No allocation stalls observed;136.8ms host maximum remains unexplained.
+
+Source contradiction: installed replacement pricing constructed full SupplyPlanner
+processes with per-cell dated biological releases, windows, labour budgets, current
+station heat and occupancy. Consumers used only recipe inputs/output, burn fuel and
+labour. A replacement cost must not pretend to be a dated production commitment.
+All seven closed capacity ports now declare ProductionCost separately from executable
+SupplyPlanner.Process. Market replacement/retention, equipment manufacture/repair and
+ingredient substitution consume this narrow type; actual sourcing/allocation continues
+to use finite dated equipment-backed capacity. Common pricing never inspects concrete
+field/mining/station jobs. No jobs, claims, cash, route or schema changes.
+
+Field valuation uses the same actual admitted productive cells, biological yield,
+soil preparation/sowing/harvest and storage-distance labour, without sorting or
+simulating a growth/release schedule. Mining retains its real finite prerequisite
+work graph and tool capability; forests retain actual remaining trees. Stations
+retain installed recipe support, workforce and current stock-based ingredient choice.
+Worn replaceable tools do not erase installed cost; destroyed land/absent capability
+still does. Actual output promises, stock and funding are unchanged.
+
+Existing batch test checks exact cost arithmetic and independence from stored heat,
+release timing and labour envelope; invalid fuel declarations reject. Existing
+recovery test checks direct field labour against its dated-source formula, worn tools,
+destroyed land and exhausted mining equipment. Focus62checks/10classes, guardrails
+PASS27s. Native throughput effect remains unmeasured; G OPEN.

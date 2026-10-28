@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
+import io.farfrontier.palemirror.frontier.v3.model.supply.ProductionCost;
 import java.util.*;
 
 /** Closed owner composition; missing/duplicate producers never inherit availability. */
@@ -13,7 +14,7 @@ public final class SupplyCapacityComposition {
     private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(
             new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity(), new AutomaticStationSupplyCapacity(),
             new IndividualStationSupplyCapacity(), new AttendedStockSupplyCapacity(), new ForestrySupplyCapacity()));
-    private static final ImmutableKeyedInputView<SubjectId, List<SupplyPlanner.Process>> VALUATIONS = new ImmutableKeyedInputView<>(256);
+    private static final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> VALUATIONS = new ImmutableKeyedInputView<>(256);
     private SupplyCapacityComposition() { }
     public static Map<SupplyCapacityPort.Key, SupplyCapacityPort> register(List<SupplyCapacityPort> ports) {
         var result = new EnumMap<SupplyCapacityPort.Key, SupplyCapacityPort>(SupplyCapacityPort.Key.class);
@@ -23,11 +24,11 @@ public final class SupplyCapacityComposition {
     }
     /** Local replacement costs need physical capabilities, not a reserve or market plan.
      * No target/incoming promise is manufactured by this valuation-only projection. */
-    static List<SupplyPlanner.Process> forValuation(FrontierWorldState state, GoodsParticipant participant) {
+    static List<ProductionCost> forValuation(FrontierWorldState state, GoodsParticipant participant) {
         return VALUATIONS.get(state.bootstrap(), participant.party().id(), List.of(state, participant),
                 () -> valueInstalled(state, participant));
     }
-    private static List<SupplyPlanner.Process> valueInstalled(FrontierWorldState state, GoodsParticipant participant) {
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, GoodsParticipant participant) {
         var stocks = new TreeMap<String, SupplyPlanner.Stock>();
         var rules = state.bootstrap().ruleset().goodsTrade();
         if (!rules.supplyPlanning().enabled()) return List.of(); // This content declares no supply/cost model.
@@ -36,9 +37,8 @@ public final class SupplyCapacityComposition {
             stocks.put(kind, new SupplyPlanner.Stock(GoodsParticipantStorage.unclaimed(state, participant, kind),
                     0, 0, 0, 0, 0, 1, rules.supplyPlanning().require(kind)));
         }
-        var window = SupplyPlanningWindow.forSettlement(state, participant.settlementId(), List.of());
-        var result = new ArrayList<SupplyPlanner.Process>();
-        for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).valuation(state, participant.settlementId(), stocks, window));
+        var result = new ArrayList<ProductionCost>();
+        for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).valuation(state, participant.settlementId(), stocks));
         return List.copyOf(result);
     }
     public static List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,

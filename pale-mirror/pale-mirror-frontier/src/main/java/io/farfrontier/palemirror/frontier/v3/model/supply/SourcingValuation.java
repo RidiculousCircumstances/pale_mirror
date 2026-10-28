@@ -7,6 +7,10 @@ public final class SourcingValuation {
     private SourcingValuation() { }
     public static Map<String, Long> processes(List<SupplyPlanner.Process> capacities, Map<String, Long> references,
             List<SourcingMarket.Offer> offers, long labourValuePerTick) {
+        return costs(capacities.stream().map(ProductionCost::from).toList(), references, offers, labourValuePerTick);
+    }
+    public static Map<String, Long> costs(List<ProductionCost> capacities, Map<String, Long> references,
+            List<SourcingMarket.Offer> offers, long labourValuePerTick) {
         if (labourValuePerTick < 1 || references.values().stream().anyMatch(value -> value <= 0))
             throw new IllegalArgumentException("invalid replacement valuation");
         var prices = new HashMap<>(references);
@@ -21,7 +25,7 @@ public final class SourcingValuation {
         for (var process : capacities) cost(process, capacities, prices, quoted.keySet(), result, visiting, labourValuePerTick);
         return Map.copyOf(result);
     }
-    private static long cost(SupplyPlanner.Process process, List<SupplyPlanner.Process> capacities,
+    private static long cost(ProductionCost process, List<ProductionCost> capacities,
             Map<String, Long> prices, Set<String> quoted, Map<String, Long> costs, Set<String> visiting, long labour) {
         if (costs.containsKey(process.id())) return costs.get(process.id());
         if (!visiting.add(process.product())) throw new IllegalArgumentException("cyclic sourcing capability");
@@ -44,7 +48,7 @@ public final class SourcingValuation {
         costs.put(process.id(), unit);
         return unit;
     }
-    private static long replacement(String item, List<SupplyPlanner.Process> capacities, Map<String, Long> prices,
+    private static long replacement(String item, List<ProductionCost> capacities, Map<String, Long> prices,
             Set<String> quoted, Map<String, Long> costs, Set<String> visiting, long labour) {
         long reference = Objects.requireNonNull(prices.get(item), "missing explicit replacement estimate " + item);
         long result = quoted.contains(item) ? reference : Long.MAX_VALUE;

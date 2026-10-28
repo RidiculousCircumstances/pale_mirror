@@ -2,13 +2,14 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
+import io.farfrontier.palemirror.frontier.v3.model.supply.ProductionCost;
+import io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast;
 import java.util.*;
 
 /** Field owner supplies finite biological capacity and labour separately; never starts work or routes. */
 final class FieldSupplyCapacity implements SupplyCapacityPort {
-    private record ForecastScope(SubjectId home, boolean equipmentBacked) { }
-    private static final ImmutableKeyedInputView<ForecastScope, io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Memo>
-            FORECASTS = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS * 2);
+    private static final ImmutableKeyedInputView<SubjectId, io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Memo>
+            FORECASTS = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     /** A considered cultivation option is not admitted land, incoming stock or a production commitment. */
     record Cell(BlockPosition crop, ResourceFieldCycle.CellState condition, boolean renew) {
         Cell { Objects.requireNonNull(crop); Objects.requireNonNull(condition); }
@@ -18,11 +19,19 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
                                                     SupplyPlanningWindow window) {
         return assess(state, home, stocks, window, cells(state, home));
     }
-    @Override public List<SupplyPlanner.Process> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
-                                                         SupplyPlanningWindow window) {
+    @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        if (state.bootstrap().ruleset().fields().agriculture().isEmpty()
+                || SupplyPlanningWindow.dailyWork(state.humanPopulation().schedule(home)) == 0) return List.of();
         if (state.bootstrap().ruleset().tools().definitions().values().stream().noneMatch(tool ->
                 FieldEquipment.requirements().alternatives().stream().anyMatch(group -> group.stream().allMatch(tool::supports)))) return List.of();
-        return assess(state, home, stocks, window, cells(state, home), FieldWorkForecast.valuationWorkers(state, home), false);
+        var workers = FieldWorkForecast.valuationWorkers(state, home);
+        if (workers.isEmpty()) return List.of();
+        var estimate = new FieldWorkForecast(state, home, workers, false);
+        var labour = cells(state, home).stream().filter(FieldSupplyCapacity::productive)
+                .mapToLong(estimate::unitLabour).max();
+        if (labour.isEmpty()) return List.of();
+        return List.of(new ProductionCost("field-capacity:" + home.value(), FieldHarvestExtraction.ITEM, 1,
+                Map.of(), 0, Map.of(), labour.getAsLong(), 1));
     }
     private static List<Cell> cells(FrontierWorldState state, SubjectId home) {
         var cells = new ArrayList<Cell>();
@@ -41,11 +50,7 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
 
     static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home,
             Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window, List<Cell> cells) {
-        return assess(state, home, stocks, window, cells, FieldWorkForecast.workers(state, home), true);
-    }
-    private static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home,
-            Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window, List<Cell> cells,
-            List<ResidentProfile> workers, boolean equipmentBacked) {
+        var workers = FieldWorkForecast.workers(state, home);
         if (cells.size() > ResourceFieldLayout.MAX_CELLS || cells.stream().map(Cell::crop).distinct().count() != cells.size())
             throw new IllegalArgumentException("field capacity option has duplicate or unbounded land");
         if (state.bootstrap().ruleset().fields().agriculture().isEmpty()) return List.of();
@@ -53,37 +58,25 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
         var schedule = state.humanPopulation().schedule(home);
         long workWindow = SupplyPlanningWindow.dailyWork(schedule);
         if (workWindow == 0) return List.of();
-        var estimate = new FieldWorkForecast(state, home, workers, equipmentBacked);
-        var sources = cells.stream().filter(cell -> {
-            var value = cell.condition();
-            return !value.workAccessBlocked() && value.soil().cultivable()
-                    && (value.crop() == ResourceFieldCycle.Crop.MATURE || value.crop() == ResourceFieldCycle.Crop.GROWING
-                        || cell.renew() && value.crop() == ResourceFieldCycle.Crop.ABSENT);
-        }).sorted(Comparator.comparingInt((Cell c) -> c.condition().crop() == ResourceFieldCycle.Crop.MATURE ? 0
-                : c.condition().crop() == ResourceFieldCycle.Crop.GROWING ? 1 : 2)
-                .thenComparingInt(c -> c.crop().x()).thenComparingInt(c -> c.crop().z()).thenComparingInt(c -> c.crop().y()))
-                .map(estimate::source).toList();
+        var estimate = new FieldWorkForecast(state, home, workers);
+        var sources = sources(cells, estimate);
         if (sources.isEmpty()) return List.of();
-        long labour = sources.stream().mapToLong(source -> Math.ceilDiv(Math.addExact(source.harvest(),
-                Math.max(source.preparation(), source.renew() ? source.repeatPreparation() : 0)), source.yield())).max().orElseThrow();
+        long labour = labour(sources);
         long period = Math.max(1, Math.ceilDiv(Math.multiplyExact(labour, schedule.dayTicks()),
                 Math.multiplyExact(workWindow, workers.size())));
-        var memo = FORECASTS.get(state.bootstrap(), new ForecastScope(home, equipmentBacked), List.of(state.bootstrap()),
+        var memo = FORECASTS.get(state.bootstrap(), home, List.of(state.bootstrap()),
                 () -> new io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Memo(4));
         var forecast = memo.assess(sources, workers.size(), schedule.dayTicks(), workWindow, window.ticks());
-        long equipmentOutput = Long.MAX_VALUE;
-        if (equipmentBacked) {
-            var equipment = EquipmentProductiveCapacity.items(state, home, workers.stream().map(ResidentProfile::id)
-                    .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
-            long operations = EquipmentProductiveCapacity.remainingOperations(state, equipment, FieldHarvestExtraction.DEFINITION.toolRequirement());
-            long tilling = cells.stream().filter(cell -> cell.renew() && cell.condition().soil().untilled()).count();
-            long yieldPerUse = cells.stream().mapToLong(cell -> FieldAgronomy.yield(state.bootstrap(), cell.crop())).min().orElse(1);
-            equipmentOutput = Math.multiplyExact(Math.max(0, operations - tilling), yieldPerUse);
-        }
+        var equipment = EquipmentProductiveCapacity.items(state, home, workers.stream().map(ResidentProfile::id)
+                .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+        long operations = EquipmentProductiveCapacity.remainingOperations(state, equipment, FieldHarvestExtraction.DEFINITION.toolRequirement());
+        long tilling = cells.stream().filter(cell -> cell.renew() && cell.condition().soil().untilled()).count();
+        long yieldPerUse = cells.stream().mapToLong(cell -> FieldAgronomy.yield(state.bootstrap(), cell.crop())).min().orElse(1);
+        long equipmentOutput = Math.multiplyExact(Math.max(0, operations - tilling), yieldPerUse);
         var releases = new ArrayList<SupplyPlanner.OutputRelease>();
         long promised = stocks.get(FieldHarvestExtraction.ITEM).promisedProduction();
         for (var release : forecast) {
-            long available = equipmentBacked ? Math.min(release.recipes(), equipmentOutput) - promised : release.recipes();
+            long available = Math.min(release.recipes(), equipmentOutput) - promised;
             if (available > 0 && (releases.isEmpty() || available > releases.getLast().recipes())) releases.add(new SupplyPlanner.OutputRelease(release.afterTicks(), Math.toIntExact(available)));
         }
         if (releases.isEmpty()) return List.of();
@@ -91,6 +84,22 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
                 Map.of(), 0, Map.of(), 0, releases.getFirst().afterTicks(), period,
                 releases.getLast().recipes(), labour, SupplyLabourCapacity.over(state, home, workers.stream().map(ResidentProfile::id).toList(), window),
                 1, releases));
+    }
+    private static List<RenewableWorkForecast.Source> sources(List<Cell> cells, FieldWorkForecast estimate) {
+        return cells.stream().filter(FieldSupplyCapacity::productive).sorted(Comparator.comparingInt((Cell c) -> c.condition().crop() == ResourceFieldCycle.Crop.MATURE ? 0
+                : c.condition().crop() == ResourceFieldCycle.Crop.GROWING ? 1 : 2)
+                .thenComparingInt(c -> c.crop().x()).thenComparingInt(c -> c.crop().z()).thenComparingInt(c -> c.crop().y()))
+                .map(estimate::source).toList();
+    }
+    private static boolean productive(Cell cell) {
+        var value = cell.condition();
+        return !value.workAccessBlocked() && value.soil().cultivable()
+                && (value.crop() == ResourceFieldCycle.Crop.MATURE || value.crop() == ResourceFieldCycle.Crop.GROWING
+                    || cell.renew() && value.crop() == ResourceFieldCycle.Crop.ABSENT);
+    }
+    private static long labour(List<RenewableWorkForecast.Source> sources) {
+        return sources.stream().mapToLong(source -> Math.ceilDiv(Math.addExact(source.harvest(),
+                Math.max(source.preparation(), source.renew() ? source.repeatPreparation() : 0)), source.yield())).max().orElseThrow();
     }
     @Override public List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home,
             Map<String, SupplyPlanner.Stock> stocks) { return List.of(); }

@@ -18,7 +18,7 @@ final class EquipmentRecipeValuation {
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var capacities = new ArrayList<>(SupplyCapacityComposition.forValuation(state, participant));
         capacities.addAll(StationRecipeValuation.read(state, home, recipe -> recipe.outcome() instanceof ProductionRecipeOutcome.Repair));
-        return SettlementSourcingMarket.read(state, participant, capacities, tick);
+        return SettlementSourcingMarket.costs(state, participant, capacities, tick);
     }
     private EquipmentRecipeValuation() { }
 }
