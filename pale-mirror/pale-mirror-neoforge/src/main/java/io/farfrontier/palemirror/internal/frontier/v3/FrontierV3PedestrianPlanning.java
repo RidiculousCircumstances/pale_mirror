@@ -198,6 +198,8 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"searchWorkUnits\":" + (owner == runtime ? planner.workUnits() : 0)
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
                 + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)
+                + ",\"edgeFacts\":" + new com.google.gson.Gson().toJson(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.ProfiledPedestrianGeometry.edgeFactsDiagnostic())
                 + ",\"regionCache\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.regionCacheDiagnostic()) : "null")
                 + (details ? ",\"completedOutcomes\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.completedOutcomes()) : "{}")
                     + ",\"regionRetention\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.regionRetentionDiagnostic()) : "{}")

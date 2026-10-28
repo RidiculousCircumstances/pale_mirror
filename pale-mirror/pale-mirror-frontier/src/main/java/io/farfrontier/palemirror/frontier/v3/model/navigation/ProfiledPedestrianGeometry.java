@@ -11,6 +11,18 @@ import io.farfrontier.palemirror.frontier.v3.model.geometry.*;
 public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry {
     /** Rebuildable geometry-only retention ceiling, not actor positions or route authority. */
     private static final int MAX_VOLUME_RESULTS = 8_192;
+    private static final java.util.concurrent.atomic.LongAdder EDGE_QUERIES = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder REGIONAL_READS = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder REGIONAL_COMPUTATIONS = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder UNVERSIONED_COMPUTATIONS = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder SCOPE_CONSTRUCTIONS = new java.util.concurrent.atomic.LongAdder();
+    /** Process-lifetime bounded counters only; a read never drives cache or domain decisions. */
+    public record EdgeFactsDiagnostic(long queries, long regionalReads, long regionalComputations,
+                                      long unversionedComputations, long scopeConstructionAttempts) { }
+    public static EdgeFactsDiagnostic edgeFactsDiagnostic() {
+        return new EdgeFactsDiagnostic(EDGE_QUERIES.sum(), REGIONAL_READS.sum(), REGIONAL_COMPUTATIONS.sum(),
+                UNVERSIONED_COMPUTATIONS.sum(), SCOPE_CONSTRUCTIONS.sum());
+    }
     private record Volume(double x, double z, int feetY) { }
     private record DirectedEdge(SurfaceAnchor from, SurfaceAnchor to) { }
     /** Exact local facts plus a bounded declared geometry epoch; no world-state or actor snapshot. */
@@ -212,9 +224,11 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         // A captured geometry/profile is immutable. The per-view hot cache
         // shares directed swept-body facts; reuse across views below requires
         // their complete declared local regional facts to match.
+        EDGE_QUERIES.increment();
         var edge = new DirectedEdge(from, to);
         return remembered(edges, edge, () -> {
-            if (revision.isEmpty()) return traverse(from, to);
+            if (revision.isEmpty()) { UNVERSIONED_COMPUTATIONS.increment(); return traverse(from, to); }
+            REGIONAL_READS.increment();
             var facts = revision.orElseThrow();
             var origin = PedestrianGeometryRevision.Region.at(from.support());
             var target = PedestrianGeometryRevision.Region.at(to.support());
@@ -223,9 +237,11 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
             // retained; a remote edit need not destroy this local result.
             var key = new RegionalEdge(facts.geometryScope(), facts.baseline(), profile, bounds(), edge,
                     facts.at(origin.x(), origin.z()), facts.at(target.x(), target.z()));
-            var shared = REGIONAL_EDGES.get(facts.geometryScope(), () ->
-                    new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(MAX_VOLUME_RESULTS));
-            return shared.get(key, () -> traverse(from, to));
+            var shared = REGIONAL_EDGES.get(facts.geometryScope(), () -> {
+                SCOPE_CONSTRUCTIONS.increment();
+                return new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(MAX_VOLUME_RESULTS);
+            });
+            return shared.get(key, () -> { REGIONAL_COMPUTATIONS.increment(); return traverse(from, to); });
         });
     }
     private boolean traverse(SurfaceAnchor from, SurfaceAnchor to) {

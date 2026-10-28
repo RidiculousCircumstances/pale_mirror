@@ -2845,3 +2845,21 @@ obstruction/clearance invalidation, wide bodies affected by a neighbouring chunk
 foreign world/baseline isolation and immutable predecessor behavior. Existing
 shape/layered/regional/group cases PASS60checks/guardrails31s, final halo/epoch
 focused checkPASS9s. Native impact remains to be measured; G stays open.
+
+
+### Observe actual regional edge reuse before changing retention (2026-10-28)
+
+cd26f3662 cleanrelease60frontier+45runtime/guardrails/packagePASS35s; both retained
+worlds verified. Native183706events/noDataLoss,44.921243s:5.632079ticks/s,
+debt2837→3482 STILLFAILED. Owner51.76%,exact41.75%,WAL4.55%; validation9.367247s.
+No controlled aggregate speedup claimed from changing workloads. Exact movement
+still costs7.103487s, so a cache-hit rate cannot be inferred from CPU samples.
+
+Add five process-lifetime scalar counters: directed queries, regional lookups,
+regional computation attempts, unversioned computations and scope-construction
+attempts. Existing performance/pedestrian diagnostics renders their read-only
+snapshot. Counters retain no subjects/world history, use no clock, do not affect
+admission/cache validity and have no reset/repair operation. Compare deltas in one
+ordinary recording to distinguish unique work, eviction/recreation and cheap hits;
+do not enlarge caches or alter COLD group semantics from sample-count guesses.
+Focused navigation/shape and bounded diagnostic/guardrail checks PASS12s.
