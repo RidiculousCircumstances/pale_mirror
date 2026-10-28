@@ -37,13 +37,13 @@
         "diagnostic": {
           "view": "site",
           "id": "site:1-wheat-field",
-          "field": "firstCrop"
+          "field": "boardPosition"
         }
       },
       "offset": {
         "x": 8,
-        "y": 0,
-        "z": -10
+        "y": -3,
+        "z": 10
       },
       "settleMs": 0
     },
@@ -94,13 +94,13 @@
         "diagnostic": {
           "view": "site",
           "id": "site:7-wheat-field",
-          "field": "firstCrop"
+          "field": "boardPosition"
         }
       },
       "offset": {
         "x": 8,
-        "y": 0,
-        "z": -10
+        "y": -3,
+        "z": 10
       },
       "settleMs": 0
     },
@@ -151,13 +151,13 @@
         "diagnostic": {
           "view": "site",
           "id": "site:100-wheat-field",
-          "field": "firstCrop"
+          "field": "boardPosition"
         }
       },
       "offset": {
         "x": 8,
-        "y": 0,
-        "z": -10
+        "y": -3,
+        "z": 10
       },
       "settleMs": 0
     },
@@ -208,13 +208,13 @@
         "diagnostic": {
           "view": "site",
           "id": "site:1-wheat-field",
-          "field": "firstCrop"
+          "field": "boardPosition"
         }
       },
       "offset": {
         "x": 8,
-        "y": 0,
-        "z": -10
+        "y": -3,
+        "z": 10
       },
       "settleMs": 0
     },

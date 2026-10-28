@@ -9,6 +9,44 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KnownPedestrianGeometryScopesTest {
+    @Test void newAndEvictedTaskScopesReuseRemoteFactsWithoutInheritingLocalPermissions() {
+        var epoch = new Object(); var baseline = new Object();
+        var local = new BlockPosition(2, 64, 2); var remote = new BlockPosition(16000, 64, 16000);
+        var localRegion = PedestrianGeometryRevision.Region.at(local);
+        var remoteRegion = PedestrianGeometryRevision.Region.at(remote);
+        var forbidRemoteHash = new java.util.concurrent.atomic.AtomicBoolean();
+        Object remoteFact = new Object() {
+            @Override public int hashCode() {
+                if (forbidRemoteHash.get()) throw new AssertionError("local task change rebuilt remote world facts");
+                return 19;
+            }
+        };
+        var ground = new PedestrianGeometryRevision(epoch, baseline, Map.of(remoteRegion, remoteFact));
+        var walls = RegionalBlockSet.copyOf(Set.of(local, remote));
+        var open = walls.overlay(Set.of(local), Set.of());
+        var empty = RegionalBlockSet.copyOf(Set.of());
+        var restrictions = RegionalBlockSet.copyOf(Set.of(local));
+        var supports = RegionalSurfaceMap.copyOf(Map.of(new TerrainColumn(local.x(), local.z()),
+                List.of(SurfaceAnchor.at(local.x(), 63, local.z()))));
+        var first = KnownPedestrianGeometryScopes.revision("seed:task", walls, supports, empty, ground);
+        forbidRemoteHash.set(true);
+        for (int i = 0; i < 300; i++) {
+            var next = KnownPedestrianGeometryScopes.revision("new:task-" + i,
+                    i % 2 == 0 ? open : walls, supports, i % 2 == 0 ? restrictions : empty, ground);
+            assertSame(first.at(remoteRegion.x(), remoteRegion.z()), next.at(remoteRegion.x(), remoteRegion.z()));
+            assertNotEquals(first.scope(), next.scope(), "a composition seed never supplies task identity");
+            assertEquals(first.geometryScope(), next.geometryScope());
+            assertEquals(i % 2 != 0, first.at(localRegion.x(), localRegion.z()).equals(next.at(localRegion.x(), localRegion.z())),
+                    "new task facts retain their own walls, supports and denied contacts");
+        }
+        var restored = KnownPedestrianGeometryScopes.revision("seed:task", walls, supports, empty, ground);
+        assertEquals(first, restored, "eviction and unrelated task reads cannot change permission facts");
+        assertSame(first.at(remoteRegion.x(), remoteRegion.z()), restored.at(remoteRegion.x(), remoteRegion.z()));
+        var historical = KnownPedestrianGeometryScopes.revision("old:branch", open, Map.of(), restrictions, ground);
+        assertNotEquals(first.at(localRegion.x(), localRegion.z()), historical.at(localRegion.x(), localRegion.z()));
+        assertEquals(first, KnownPedestrianGeometryScopes.revision("seed:task", walls, supports, empty, ground));
+    }
+
     @Test void taskSupportExclusionsArePartOfSharedLocalGeometryFacts() {
         var state = ResourceSiteHarvestProcessTest.initial();
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state)

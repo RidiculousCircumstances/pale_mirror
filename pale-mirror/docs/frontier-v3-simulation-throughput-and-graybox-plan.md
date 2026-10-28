@@ -3398,3 +3398,39 @@ position from actual site diagnostics. It visits1,7,100and returns to1, requires
 visible owned field boards and final conflict-free summary, with4linked frames.
 This is a presentation/HOT-ingress diagnostic, not simultaneous five-player demand
 or terminal farmer/baker/trade acceptance. Declarative schema validation passes.
+
+
+### Share complete regional composition across task-cache misses (2026-10-28)
+
+After the station/fleet cuts, current native b5c6c586f JFR still covers44.560328s
+without data loss:4.331207canonical ticks/s,debt4150->4860. Exclusive owner59.99%,
+exact-running24.37%,WAL8.31%; inclusive schedule allocation5.943648s and canonical
+validation6.049941s are nested costs, not additive gates.195server samples enter
+KnownPedestrianGeometryScopes.revision,116 ImmutableRegionMap.with. Active work
+and world differ from earlier captures; no controlled source-regression claim.
+Capture metadata accidentally names harness HEAD0e4; actual installed/source/binary
+identity is b5c6c586f, verified by retained deployment SHA/PID1806902/runtime.
+Observer board-scale-cold windows overlapping this recording, the later client or
+build are explicitly not untraced ordinary throughput acceptance.
+
+Static cause: a new or evicted task key rebuilt RegionFacts for every hard/overlay/
+permission region in the world. Keep the existing256query cache unchanged and retain
+one immutable composition basis. A missing query compares all four actual regional
+inputs (ground,hard,support overlay,access restrictions) against that basis, replacing
+only exact differences in shared immutable pages. Bootstrap scope fences worlds;
+the new query still supplies its own scope, geometry scope and baseline. It never
+inherits the seed's permissions or task identity. Existing queries retain their own
+exact predecessor/profile lineage. There is no new route authority, stale-region
+reuse, lossy hash equality or cache capacity increase. One extra basis is bounded
+and contains no predecessor chain. Out-of-order/foreign-world/permission tests remain.
+A300distinct-query regression rejects remote fact rehashing while alternating local
+walls/denied contacts, then revisits an evicted key and an older branch. Focused
+scope/route/ground source checks plus guardrails PASS13s; connected regional invalidation,
+incremental routing, proof codec, meal/vertical/hierarchical navigation PASS13s.
+Frozen release and native effect pending.
+
+The first scale-settlement diagnostic camera was65.46blocks from the field board:
+expanded fields invalidate the first-crop camera assumption. Its64block assertion
+correctly failed; no frame or presentation acceptance. New camera is resolved from
+the actual board position within~13blocks. Retain board-scale-settlement-client
+failure. Do not extend the timeout or relax the visibility assertion.
