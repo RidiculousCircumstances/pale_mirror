@@ -26,6 +26,32 @@ class KnownPedestrianGeometryScopesTest {
         assertThrows(UnsupportedOperationException.class, () -> before.entrySet().iterator().next().setValue(new CollidingFact("forged")));
         assertThrows(UnsupportedOperationException.class, () -> before.remove(a));
     }
+    @Test void localWideBodyProofRetainsOnlyItsExactNeighbourFacts() {
+        var forbidRemoteHash = new java.util.concurrent.atomic.AtomicBoolean();
+        var remote = new Object() {
+            @Override public int hashCode() {
+                if (forbidRemoteHash.get()) throw new AssertionError("local proof consulted remote fact hashes");
+                return 19;
+            }
+        };
+        var scope = new Object(); var baseline = new Object();
+        var local = new PedestrianGeometryRevision.Region(0, 0);
+        var neighbouring = new PedestrianGeometryRevision.Region(1, 0);
+        var remoteRegion = new PedestrianGeometryRevision.Region(1000, 1000);
+        var terrain = new PedestrianGeometryRevision(scope, baseline, Map.of(local, "local", neighbouring, "wall", remoteRegion, remote));
+        forbidRemoteHash.set(true);
+        var wide = terrain.profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY);
+        assertEquals(List.of("local", "wall"), wide.at(0, 0));
+        var proof = wide.restrictedTo(Set.of(local));
+        assertEquals(Set.of(local), proof.revisions().keySet());
+        assertTrue(wide.matches(proof, Set.of(local)));
+        assertSame(baseline, wide.at(-1000, -1000));
+        var changed = terrain.changed(Set.of(neighbouring)).profiled(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY);
+        assertFalse(changed.matches(proof, Set.of(local)), "a neighbour affecting body clearance still invalidates the local proof");
+        assertTrue(changed.changesSince(wide).contains(local));
+        assertFalse(changed.changesSince(wide).contains(remoteRegion));
+    }
     @Test void localSuccessorReusesRemoteFactHashesAndMatchesFreshProfileAfterRemoval() {
         var scope = new Object(); var baseline = new Object(); var noHash = new java.util.concurrent.atomic.AtomicBoolean();
         Object remoteFact = new Object() {
@@ -44,6 +70,7 @@ class KnownPedestrianGeometryScopesTest {
         facts.put(new PedestrianGeometryRevision.Region(0, 0), "replacement");
         var expected = new PedestrianGeometryRevision(scope, baseline, facts)
                 .profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY);
+        oldProfile.hashCode(); expected.hashCode(); // Explicit complete consumers warm the reusable page/hash seed.
         noHash.set(true);
         var pages = ImmutableRegionMap.copyOf(before.revisions()).with(Map.of(
                 new PedestrianGeometryRevision.Region(-1, -1), java.util.Optional.empty(),

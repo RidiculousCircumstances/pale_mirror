@@ -2479,3 +2479,35 @@ An ID still present on another accepted surface is not falsely retired. Actual
 removal still audits unchanged schedules, and newly retained references still
 must exist. No lifecycle/type/owner is inferred from membership. The old union
 implementation is removed, not retained as an active alternative.
+
+
+### Demand-driven wide-body regional projection (2026-10-28)
+
+43eed8769 subject-removal release focus+45native/guardrails/packagePASS26s;
+both retained-worlddeploymentsverified, SHA5126c4ea1d673351ca492653c8e399a570355dc674f4c6b62fb0a99c0899c7fedb450b2c4a74145fcd0ba0daa0253248124d6bd5168d3dcad86b67f7b767081b520.
+subject-removal-ordinary100.jfr:104012events/noDataLoss,44.671600s accounted;
+ticks65878→66004=2.820584/s,debt1457→2226: G STILLFAILED. OWNER58.89%,
+EXACT_RUNNING34.89%,WAL4.04%,budget0.09%. No controlled speedup claim.
+
+The preceding no-op recording also shows198 preparation CPU samples in
+PedestrianGeometryRevision.profiled under movement/grounding, with ImmutableRegionMap
+page construction. Source confirms eager complete nine-neighbour token expansion
+for a wide profile, even when grounding/route proof consults only local regions.
+
+Wide-body profiles now retain a pure immutable expansion descriptor and calculate
+the same lexical neighbour tuple on local at/restrictedTo/matches reads. Local
+proofs retain only queried facts. Complete revisions/hash/equality are still exact,
+lazily materialized once, using existing page seeds and MAX_REGIONS bounds;
+ordinary narrow profiles still share the original regional map. Source changes
+compare exact immutable terrain pages and expand only changed regional neighbours.
+No changed collision volume, contact, profile dimensions, access rule, missing-data
+classification, path quality, canonical state or planner allowance. Explicit full-map
+consumers (including the isolated synchronous direct-planner cache) still pay for
+complete facts. Native regional proofs avoid that request.
+
+Existing incremental page/hash test now explicitly requests the complete old/fresh
+hash before asserting reuse; constructor eagerness is no longer a contract. A
+local wide-body proof test forbids consulting remote fact hashes, retains the exact
+neighbour wall and rejects the proof after that neighbour changes. Focused geometry,
+profile, shapes and cooperative path tests+guardrailsPASS17s. Native gain not yet
+measured. This is not acceptance for20ticks/s or HOT terminal movement.
