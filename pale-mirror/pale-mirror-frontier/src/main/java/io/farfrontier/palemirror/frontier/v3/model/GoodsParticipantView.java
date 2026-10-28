@@ -21,7 +21,8 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
             Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan) {
         this(participant, residents, availableMoney, stocks, purchaseLimits, supplyPlan, Set.of());
     }
-    private static final ImmutableInputView<Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, GoodsParticipantView>> VIEWS = new ImmutableInputView<>();
+    private static final ImmutableKeyedInputView<io.farfrontier.palemirror.frontier.v3.api.SubjectId, GoodsParticipantView> VIEWS =
+            new ImmutableKeyedInputView<>(GoodsParticipantState.MAX_PARTICIPANTS);
     public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
                                 Map<String, Stock> stocks, Map<String, Integer> purchaseLimits) {
         this(participant, residents, availableMoney, stocks, purchaseLimits, Optional.empty());
@@ -83,18 +84,20 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         var inventory = state.inventory();
         var participants = state.companies().goodsTrade().participants().participants();
         if (participants.get(participant.party().id()) != participant) return project(state, participant);
-        var views = VIEWS.get(List.of(state.bootstrap(), inventory.items(), inventory.containers(), inventory.surfaces(),
+        var inputs = new ArrayList<Object>();
+        Collections.addAll(inputs, inventory.items(), inventory.containers(), inventory.surfaces(),
                 inventory.fungibleResources().accounts(), inventory.fungibleResources().lots(), inventory.fungibleResources().claims(),
                 inventory.economics(), state.shipments(), state.replicaCustody(), state.fencedRecovery(),
-                state.companies().goodsTrade().contracts(), participants, state.companies().goodsTrade().participants().planning(),
-                LivingResidentStockView.counts(state), WorkEquipmentClaimComposition.reserved(state)), HashMap::new);
-        var prior = views.get(participant.party().id());
-        if (prior != null) return prior;
-        var result = project(state, participant);
-        // Exactly one row per current registered party. Hashing a participant
-        // would also hash its full known-peer roster on every stock read.
-        views.put(participant.party().id(), result);
-        return result;
+                state.companies().goodsTrade().contracts(), participant,
+                state.companies().goodsTrade().participants().economicState(participant.party().id()).accepted(),
+                LivingResidentStockView.counts(state), WorkEquipmentClaimComposition.reserved(state),
+                ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()));
+        // Dynamic reserve protection reads this owner's accepted publication.
+        // Baseline profiles instead read resident membership and current satiety.
+        if (!SettlementReservePlanning.enabled(state)) {
+            inputs.add(state.humanPopulation().residents()); inputs.add(state.humanPopulation().nutrition());
+        }
+        return VIEWS.get(state.bootstrap(), participant.party().id(), inputs, () -> project(state, participant));
     }
     private static GoodsParticipantView project(FrontierWorldState state, GoodsParticipant participant) {
         participant.party().validate(state.inventory().economics());

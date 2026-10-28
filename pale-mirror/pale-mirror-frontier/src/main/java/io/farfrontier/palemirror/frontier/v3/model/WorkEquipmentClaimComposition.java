@@ -18,13 +18,21 @@ public final class WorkEquipmentClaimComposition {
                     .map(ShipmentCargo.Individual.class::cast).map(ShipmentCargo.Individual::itemId),
             state -> state.companies().goodsTrade().individualAllocations().values().stream().map(IndividualResourceAllocation::itemId));
     private static final ImmutableInputView<Set<SubjectId>> CLAIMS = new ImmutableInputView<>();
+    private static final ImmutableInputView<ImmutableSetContributions<Boolean, SubjectId>> IMAGES = new ImmutableInputView<>();
     public static Set<SubjectId> reserved(FrontierWorldState state) {
         // These are the complete inputs read by the registered claim producers.
         // A new view of the same claims must not invalidate downstream forecasts.
         return CLAIMS.get(List.of(state.bootstrap(), state.extractionSites().work(), state.forest().work(),
                 state.resourceSites().sites(), state.productionJobs(), state.shipments().shipments(),
-                state.companies().goodsTrade().individualAllocations()), () -> OWNERS.stream()
-                    .flatMap(owner -> owner.apply(state)).collect(java.util.stream.Collectors.toUnmodifiableSet()));
+                state.companies().goodsTrade().individualAllocations()), () -> {
+            var declared = OWNERS.stream().flatMap(owner -> owner.apply(state))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            // The complete declared union is one contribution. Common immutable
+            // set images preserve equality across progress-only changes without
+            // retaining world snapshots or inventing reservation authority.
+            return IMAGES.get(List.of(state.bootstrap()), () -> new ImmutableSetContributions<>(1))
+                    .replaceAll(Map.of(Boolean.TRUE, declared));
+        });
     }
     private WorkEquipmentClaimComposition() { }
 }

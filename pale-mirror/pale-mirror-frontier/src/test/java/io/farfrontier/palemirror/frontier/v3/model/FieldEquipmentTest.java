@@ -19,8 +19,11 @@ class FieldEquipmentTest {
         var step = new WorkEquipmentStep(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(body, execution), job.storageRevision()),
                 item, (InventoryCustody.ContainerSlot) item.custody(), 1L);
+        var claims = WorkEquipmentClaimComposition.reserved(state);
         var prepared = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(job.siteId())
                 .withHarvestEquipment(job, job.equipment().prepare(step))));
+        assertSame(claims, WorkEquipmentClaimComposition.reserved(prepared),
+                "preparing the same owner's equipment step cannot manufacture a changed reservation image");
         assertFalse(ContainerPhysicalAuthorityComposition.pending(state, step.slot().containerId()));
         assertTrue(ContainerPhysicalAuthorityComposition.pending(prepared, step.slot().containerId()));
         assertFalse(ContainerPhysicalAuthorityComposition.pending(state, step.slot().containerId()), "an immutable predecessor cannot inherit a candidate fence");

@@ -4966,3 +4966,39 @@ publication coverage adds actual individual hunger integration/consumption, only
 home invalidation and codec preservation. Connected market, advice, publication,
 autonomous trade and need checks passed49checks61s+guardrails. Frozen package and
 both deployments follow. No schema or backward-compatibility path was introduced.
+
+
+### Keep participant facts and financial reads local
+
+1c68c3bab frozen package/guardrails passed22s,49focused results FROM-CACHE, both
+retained deployments verified. No throughput gain was claimed without measurement.
+
+GoodsParticipantView.observe included all registered participants and all accepted
+plans in its cache key, although a raw participant view reads only its own declared
+participant and protection plan. Use a bounded keyed-party view and those exact
+local publication inputs. Preserve prior inventory/custody/finance roots conservatively.
+Also capture actual life statuses for mobile storage eligibility; baseline profiles
+read resident membership and satiety and now declare those inputs explicitly.
+The existing current-participant guard still bypasses reuse for external/draft terms.
+Existing publication coverage now proves that a foreign accepted plan cannot discard
+unchanged local raw stock, and codec reconstruction returns the same facts.
+
+Current saved attribution identifies EconomicLedger.availableToReserve scanning
+all financial holds. It now uses shared current-row groups for explicit payer
+reservations and budgets. Actual registered account, checked scalar sums, available
+balance/credit and strict constructor validation remain unchanged. Existing budget/
+purchase lifecycle adds independent predecessor and another payer's hold checks.
+Do not assume every resident owns a money account or add a new finance authority.
+
+WorkEquipmentClaimComposition promises that unchanged claims preserve downstream
+facts, but job-progress roots emitted new equal sets. Reuse the existing common
+ImmutableSetContributions for one complete declared union. Same membership preserves
+the immutable image; actual additions/releases still replace it; bootstrap scope
+releases old evidence. No world history or permission is cached. The real field
+equipment preparation case checks unchanged membership; existing individual shipment
+recovery, title acceptance and receipt retirement still prove actual claim release.
+
+Connected participant/funding/advice/trade/recovery focus passed57checks69s+guardrails.
+Targeted field/shipment/common-set selection passed21checks29s after the image change
+(overlapping selections, not78unique checks). Frozen combined union/package and both
+deployments follow. No schema, business rules or compatibility path changed.

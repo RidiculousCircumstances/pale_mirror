@@ -80,6 +80,19 @@ class SettlementEconomicPublicationTest {
         assertTrue(stepped.companies().goodsTrade().participants().economicState(new SubjectId("settlement:2")).accepted().isEmpty(),
                 "reading one participant cannot recursively plan its neighbour");
     }
+    @Test void aForeignAcceptedPlanCannotDiscardUnchangedLocalObservedStock() {
+        var state = AcceptedEconomyFixture.publish(initial(), HOME, 10);
+        var party = state.companies().goodsTrade().participants().participants().get(HOME);
+        var observed = GoodsParticipantView.observe(state, party);
+        var publishedPeer = AcceptedEconomyFixture.publish(state, new SubjectId("settlement:2"), 11);
+        assertSame(observed, GoodsParticipantView.observe(publishedPeer, party),
+                "foreign market planning is not a new local stock, protection or cash fact");
+        assertSame(state.inventory(), publishedPeer.inventory());
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(publishedPeer));
+        assertEquals(observed, GoodsParticipantView.observe(recovered,
+                recovered.companies().goodsTrade().participants().participants().get(HOME)));
+    }
+
     @Test void oneResidentsHungerThresholdInvalidatesOnlyItsOwnPlanAndRecoveryPreservesTheCause() {
         var state = AcceptedEconomyFixture.publish(initial(), HOME, 10);
         var actor = state.humanPopulation().residentsIn(HOME).getFirst();

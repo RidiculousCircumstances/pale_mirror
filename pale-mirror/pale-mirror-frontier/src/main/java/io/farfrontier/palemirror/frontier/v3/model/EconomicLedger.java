@@ -15,6 +15,8 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
                              Map<SubjectId, FinancialBudget> budgets) {
     public static final int MAX_ACCOUNTS = 4_096;
     public static final int MAX_RESERVATIONS = 4_096;
+    private static final ImmutableGroupView<SubjectId, FinancialReservation, SubjectId> PURCHASES_BY_PAYER = new ImmutableGroupView<>();
+    private static final ImmutableGroupView<SubjectId, FinancialBudget, SubjectId> BUDGETS_BY_PAYER = new ImmutableGroupView<>();
 
     public EconomicLedger {
         accounts = ImmutableLookupMap.copyOf(accounts);
@@ -230,10 +232,11 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
 
     public FixedScalar availableToReserve(SubjectId payerId) {
         EconomicAccount payer = require(payerId);
-        FixedScalar held = reservations.values().stream().filter(reservation -> reservation.payerId().equals(payerId))
-                .map(FinancialReservation::amount).reduce(FixedScalar.ZERO, FixedScalar::plus);
-        held = held.plus(budgets.values().stream().filter(budget -> budget.payerId().equals(payerId))
-                .map(FinancialBudget::remaining).reduce(FixedScalar.ZERO, FixedScalar::plus));
+        FixedScalar held = FixedScalar.ZERO;
+        for (var reservation : PURCHASES_BY_PAYER.rows(EconomicLedger.class, reservations,
+                value -> java.util.Set.of(value.payerId()), payerId)) held = held.plus(reservation.amount());
+        for (var budget : BUDGETS_BY_PAYER.rows(EconomicLedger.class, budgets,
+                value -> java.util.Set.of(value.payerId()), payerId)) held = held.plus(budget.remaining());
         return payer.balance().plus(payer.creditLimit()).minus(held);
     }
 

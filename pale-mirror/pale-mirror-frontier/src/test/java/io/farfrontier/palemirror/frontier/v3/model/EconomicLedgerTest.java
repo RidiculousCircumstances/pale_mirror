@@ -55,6 +55,13 @@ class EconomicLedgerTest {
         assertEquals(FixedScalar.whole(97), completed.availableToReserve(sender));
         assertEquals(FixedScalar.whole(100), completed.require(sender).balance().plus(completed.require(host).balance()));
         assertTrue(completed.releaseBudget(budget.id()).budgets().isEmpty());
+        assertEquals(FixedScalar.whole(80), funded.availableToReserve(sender), "an older branch retains its own budget");
+        assertEquals(FixedScalar.whole(100), initial.availableToReserve(sender), "retiring holds cannot mutate prior branches");
+        var hostHold = new FinancialReservation(new SubjectId("reservation:host"), host, sender,
+                new SubjectId("contract:host"), FixedScalar.ONE);
+        var hostOrdered = completed.reserve(hostHold);
+        assertEquals(FixedScalar.whole(2), hostOrdered.availableToReserve(host));
+        assertEquals(FixedScalar.whole(97), hostOrdered.availableToReserve(sender), "another payer's hold cannot charge this treasury");
     }
 
     @Test void restoredHoldsCannotOvercommitTreasuryOrLoseTheirBudget() {
