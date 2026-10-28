@@ -8,6 +8,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Declared-contract fixture isolates custody/payment and recovery; not route or market-policy evidence. */
 class IndividualShipmentTest {
+    @Test void unchangedCommercialAllocationRejectsChangedItemConditionLikeFullRecovery() {
+        var f = fixture(); var before = f.state();
+        FrontierDomainRelationships.validateTransition(before, before);
+        var item = f.item().withCondition(new ItemCondition(250, 18));
+        var inventory = before.inventory();
+        var changed = new ExactInventory(inventory.containers(), ImmutableLookupMap.withEntry(inventory.items(), item.id(), item),
+                inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(), inventory.conflicts(),
+                inventory.surfaces(), inventory.economics(), inventory.fungibleResources());
+        var after = FrontierWorldState.duringUnpublishedTransition(() -> before.withInventory(changed));
+        assertSame(before.companies().goodsTrade(), after.companies().goodsTrade());
+        var full = assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validate(after));
+        var incremental = assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validateTransition(before, after));
+        assertEquals(full.getMessage(), incremental.getMessage());
+    }
     @Test void deliveryPreservesIdentityAndWearAndPaysOnlyOnAcceptanceAcrossRecovery() {
         var f = fixture(); var state = dispatch(f); var shipment = f.shipment();
         long balance = state.inventory().economics().require(f.contract().buyer().id()).balance().raw();

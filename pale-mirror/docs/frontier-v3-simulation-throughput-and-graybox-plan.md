@@ -4174,3 +4174,33 @@ comparison for unrelated images. Unchanged rows still revalidate referenced
 lots/claims once per current image. The prior invariant is preserved: every
 retained row still has the current exact account value, removed/replaced accounts
 cannot lend a balance, and thread-local views do not affect canonical data.
+
+
+### Trade transition dependencies: exact items, not every resource balance
+
+f8 retained ordinary121.675924s114672→115955=10.544403/s,debt1037→2187;
+JFR44.772033s115869→116388=11.592058/s,debt1985→2368,owner50.32%,
+exact30.43%,WAL8.08%,zeroDataLoss. Still not steady20. Workload differs;
+no causal percentage gain is claimed. Canonicalvalidation5.636954s and
+scheduleallocation4.817822s are inclusive/nested, not additive.
+
+Source review found that the trade relationship transition family depended on
+the whole fungible ledger, although its actual resource read is only claims;
+conversely it omitted exact item rows and legal-company rows read by its owner.
+A retained individual-contract fixture with a changed allocated tool condition
+confirmed the gap: full audit rejected it, transition validation accepted it.
+`trade-inputs-negative-before.log` records that failing regression.
+The transition family now names claims/items/companies plus its existing trade,
+economic and container inputs. It calls the same GoodsTradeStateSupport.validate
+directly; the diagnostic edge construction whose result was discarded on this
+path is no longer performed. Full recovery/diagnostic graph collection remains.
+The focused trade/individual-shipment/relationship/retirement/recovery suite
+passes with full and transition rejection messages agreeing. No price/consent,
+contract, stock, schema, compatibility or physical-effect policy changes.
+
+Next material unresolved source remains exact work planning re-entering the
+full equipment acquisition/make-versus-buy portfolio. An accepted economic plan
+does not currently retain that portfolio. Before changing this boundary, trace
+the complete reserve/assessment/plan-publication/ready-work/dirty-wake flow;
+retain exact current stock, quality, funding and shipment admission. Do not
+replace it with stale snapshot caching, skipped feasibility or price constants.
