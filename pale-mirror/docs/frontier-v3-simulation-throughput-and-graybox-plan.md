@@ -2816,3 +2816,32 @@ shape/regional invalidation fixtures remain included.
 
 Connected index/meal/movement/group/shape checks and guardrails PASS46s. No timing
 assertions or microbenchmark campaign introduced. Native effect remains pending.
+
+
+### Regional edge facts survive remote view replacement (2026-10-28)
+
+25380170d cleanrelease/guardrails/runtime/packagePASS36s; both retained worlds
+verified. ordinary10044.842289s/noDataLoss:4.571577ticks/s,debt2145→2838,STILLFAILED.
+Owner49.62%,exact39.21%,WAL7.19%; validation8.909993s, meals1.046882s. Workload
+continues evolving; these are observations, not a controlled speedup claim.
+Mainfollowup tick912712/rev1912848/statusok/debt0/recoveryfalse.
+
+New profile still attributes expensive swept-body work to newly constructed
+geometry decorators. Source identifies the invalidation boundary: a changed
+whole-world geometry input clears all journey views. A per-instance edge cache
+therefore cannot retain unchanged distant facts. The profiled provider now reuses
+an edge result across views only when its declared compatible geometry scope,
+exact baseline identity, profile, bounds, directed endpoints and complete local
+regional facts match. It uses the existing profiled regional halo and explicit
+cross-query geometryScope contract, never a guessed correspondence or hash-only
+proof. Unknown/unversioned providers keep conservative per-instance behavior.
+
+Retention is at most8 declared geometry/profile scopes ×8192 edge facts; old
+scopes are evicted, local keys retain no world-state snapshot or revision chain.
+Detailed regional facts are compared exactly and are not deep-hashed on lookup.
+This changes neither path search capability nor movement/custody/arrival authority.
+Coverage proves remote-edit/cross-query reuse without terrain rereads, local
+obstruction/clearance invalidation, wide bodies affected by a neighbouring chunk,
+foreign world/baseline isolation and immutable predecessor behavior. Existing
+shape/layered/regional/group cases PASS60checks/guardrails31s, final halo/epoch
+focused checkPASS9s. Native impact remains to be measured; G stays open.

@@ -98,6 +98,51 @@ class UnitNavigationProfileTest {
         assertEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.calculate(resident, floor(0, -2), floor(0, 2)).status());
         assertNotEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.calculate(animal, floor(0, -2), floor(0, 2)).status());
     }
+    @Test void capturedEdgeUsesOnlyItsLocalRegionalFactsAndNeverReusesAChangedNeighbour() {
+        var revision = new PedestrianGeometryRevision(new Object(), new Object(), new String("baseline"), java.util.Map.of());
+        var from = floor(0, 0); var to = floor(1, 0);
+        var original = new ProfiledPedestrianGeometry(terrain(Set.of(), revision, UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, ignored -> false);
+        assertTrue(original.canTraverse(from, to));
+        var distant = revision.changed(Set.of(new PedestrianGeometryRevision.Region(1000, 1000)));
+        var reconstructed = new ProfiledPedestrianGeometry(terrain(Set.of(), distant, (x, z) -> {
+            throw new AssertionError("unchanged local edge re-read terrain after a remote change");
+        }), UnitNavigationProfile.DONKEY, ignored -> false);
+        assertTrue(reconstructed.canTraverse(from, to));
+        var otherQuery = new PedestrianGeometryRevision(new Object(), revision.geometryScope(), revision.baseline(), java.util.Map.of());
+        var sameDeclaredLocalGeometry = new ProfiledPedestrianGeometry(terrain(Set.of(), otherQuery, (x, z) -> {
+            throw new AssertionError("explicitly shared local geometry was recomputed for another query");
+        }), UnitNavigationProfile.DONKEY, ignored -> false);
+        assertTrue(sameDeclaredLocalGeometry.canTraverse(from, to));
+        var wall = Set.of(new BlockPosition(1, 65, 0), new BlockPosition(1, 66, 0));
+        var changed = revision.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)));
+        var obstructed = new ProfiledPedestrianGeometry(terrain(wall, changed, UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, wall::contains);
+        assertFalse(obstructed.canTraverse(from, to));
+        assertTrue(original.canTraverse(from, to));
+        var foreignEpoch = new ProfiledPedestrianGeometry(terrain(wall, PedestrianGeometryRevision.initial(),
+                UnitNavigationProfileTest::floor), UnitNavigationProfile.DONKEY, wall::contains);
+        assertFalse(foreignEpoch.canTraverse(from, to));
+        var otherBaseline = new PedestrianGeometryRevision(new Object(), revision.geometryScope(), new String("baseline"), java.util.Map.of());
+        var resetBaseline = new ProfiledPedestrianGeometry(terrain(wall, otherBaseline, UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, wall::contains);
+        assertFalse(resetBaseline.canTraverse(from, to), "equal labels cannot replace the exact baseline epoch");
+        var cleared = new ProfiledPedestrianGeometry(terrain(Set.of(), changed.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))),
+                UnitNavigationProfileTest::floor), UnitNavigationProfile.DONKEY, ignored -> false);
+        assertTrue(cleared.canTraverse(from, to), "an old negative result cannot survive local clearance");
+        var boundary = PedestrianGeometryRevision.initial(); var leftWall = new java.util.HashSet<BlockPosition>();
+        for (int z = -2; z <= 3; z++) for (int y = 65; y <= 66; y++) leftWall.add(new BlockPosition(14, y, z));
+        var openBoundary = new ProfiledPedestrianGeometry(terrain(leftWall, boundary, UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, leftWall::contains);
+        assertTrue(openBoundary.canTraverse(floor(15, 0), floor(15, 1)));
+        var bothWalls = new java.util.HashSet<>(leftWall);
+        for (int z = -2; z <= 3; z++) for (int y = 65; y <= 66; y++) bothWalls.add(new BlockPosition(16, y, z));
+        var changedNeighbour = new ProfiledPedestrianGeometry(terrain(bothWalls,
+                boundary.changed(Set.of(new PedestrianGeometryRevision.Region(1, 0))), UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, bothWalls::contains);
+        assertFalse(changedNeighbour.canTraverse(floor(15, 0), floor(15, 1)), "wide-body facts include the neighbouring region");
+    }
+
     @Test void wideBodyCanApproachAndStepOntoRoadWithoutMakingAdjacentLowColumnACentredStation() {
         var raw = terrain(Set.of(), PedestrianGeometryRevision.initial(), (x, z) -> SurfaceAnchor.at(x, x >= 1 ? 65 : 64, z));
         var animal = new ProfiledPedestrianGeometry(raw, UnitNavigationProfile.DONKEY, ignored -> false);
