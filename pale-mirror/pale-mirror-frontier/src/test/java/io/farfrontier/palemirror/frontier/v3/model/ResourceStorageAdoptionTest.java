@@ -7,6 +7,23 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceStorageAdoptionTest {
+    @Test void backgroundStorageSnapshotCannotReplaceTheOwnersCurrentPhysicalFootprint() throws Exception {
+        var initial = initial(); var adoption = event(initial, false);
+        var state = adoption.apply(initial, adoption.declaration().container().ownerId());
+        var position = adoption.declaration().position();
+        var obstacles = KnownStorageGeometry.forState(state); var supports = KnownStorageGeometry.fixedSupports(state);
+        assertTrue(obstacles.contains(position)); assertTrue(supports.contains(position));
+        var worker = new java.util.concurrent.FutureTask<Void>(() -> {
+            assertFalse(KnownStorageGeometry.forState(initial).contains(position));
+            assertFalse(KnownStorageGeometry.fixedSupports(initial).contains(position));
+            return null;
+        });
+        var thread = new Thread(worker); thread.start(); worker.get(); thread.join();
+        assertSame(obstacles, KnownStorageGeometry.forState(state));
+        assertSame(supports, KnownStorageGeometry.fixedSupports(state));
+        assertFalse(KnownStorageGeometry.forState(initial).contains(position));
+        assertTrue(obstacles.contains(position), "published footprint cannot follow a later snapshot");
+    }
     @Test void economicProjectionSurvivesPlannerDraftButNeverReusesChangedStock() {
         var state = initial();
         var participant = state.companies().goodsTrade().participants().participants().values().stream()

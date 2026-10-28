@@ -10,6 +10,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationShapeIntegrationTest {
+    @Test void backgroundShapeSnapshotCannotEvictUnchangedOwnerProjection() throws Exception {
+        var point = new BlockPosition(20, 64, 20);
+        var partial = new NavigationGeometryState(0, Map.of(point, NavigationObservation.known(SLAB)), Map.of());
+        var full = new NavigationGeometryState(1, Map.of(point, NavigationObservation.known(NavigationCell.SOLID)), Map.of());
+        var owner = RetainedNavigationGeometry.facts(partial, Map.of());
+        var worker = new java.util.concurrent.FutureTask<Void>(() -> {
+            assertEquals(owner, RetainedNavigationGeometry.facts(partial, Map.of()));
+            assertEquals(Optional.of(NavigationCell.SOLID), RetainedNavigationGeometry.facts(full, Map.of()).get(point));
+            return null;
+        });
+        var thread = new Thread(worker); thread.start(); worker.get(); thread.join();
+        assertSame(owner, RetainedNavigationGeometry.facts(partial, Map.of()), "background input cannot force the owner to rebuild unchanged facts");
+        assertEquals(Optional.of(SLAB), owner.get(point));
+        assertEquals(Optional.of(NavigationCell.SOLID), RetainedNavigationGeometry.facts(full, Map.of()).get(point));
+    }
     @Test void typedUnknownAndNeighbourDependenciesSurviveCodecAndColdChangesInvalidateCapturedShapes() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:context-shape"), 41));
         var origin = new BlockPosition(20, 64, 20); var neighbour = origin.offset(1, 0, 0);

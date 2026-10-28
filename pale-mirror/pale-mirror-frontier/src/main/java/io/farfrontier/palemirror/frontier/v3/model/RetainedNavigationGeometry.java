@@ -8,11 +8,14 @@ import java.util.*;
 final class RetainedNavigationGeometry {
     private record Index(Map<TerrainColumn, List<BlockPosition>> columns, Set<TerrainColumn> detailed) { }
     private record Projection(RegionalBlockMap<Optional<NavigationCell>> cells, Map<Region, Index> index) { }
-    private static RegionalBlockMap<NavigationObservation> priorObserved = RegionalBlockMap.copyOf(Map.of());
-    private static RegionalBlockMap<NavigationBlockState> priorSources = RegionalBlockMap.copyOf(Map.of());
-    private static Map<NavigationBlockState, NavigationObservation> priorDefinitions = Map.of();
-    private static Projection projected = new Projection(RegionalBlockMap.copyOf(Map.of()), Map.of());
-    private static final Set<Region> contextualRegions = new HashSet<>();
+    private static final class Working {
+        RegionalBlockMap<NavigationObservation> priorObserved = RegionalBlockMap.copyOf(Map.of());
+        RegionalBlockMap<NavigationBlockState> priorSources = RegionalBlockMap.copyOf(Map.of());
+        Map<NavigationBlockState, NavigationObservation> priorDefinitions = Map.of();
+        Projection projected = new Projection(RegionalBlockMap.copyOf(Map.of()), Map.of());
+        final Set<Region> contextualRegions = new HashSet<>();
+    }
+    private static final ThreadLocal<Working> CURRENT = ThreadLocal.withInitial(Working::new);
     private RetainedNavigationGeometry() { }
     /** Exact collision facts used by both the geometry reader and its version proof. */
     static RegionalBlockMap<Optional<NavigationCell>> facts(NavigationGeometryState observations,
@@ -88,7 +91,11 @@ final class RetainedNavigationGeometry {
             }
         };
     }
-    private static synchronized Projection project(NavigationGeometryState observations, RegionalBlockMap<NavigationBlockState> sources) {
+    private static Projection project(NavigationGeometryState observations, RegionalBlockMap<NavigationBlockState> sources) {
+        var working = CURRENT.get();
+        var priorObserved = working.priorObserved; var priorSources = working.priorSources;
+        var priorDefinitions = working.priorDefinitions; var projected = working.projected;
+        var contextualRegions = working.contextualRegions;
         var observed = RegionalBlockMap.copyOf(observations.cells());
         var changed = new HashSet<>(observed.changesFrom(priorObserved));
         for (var region : changed) {
@@ -104,7 +111,13 @@ final class RetainedNavigationGeometry {
         if (priorDefinitions != observations.definitions() && !priorDefinitions.equals(observations.definitions())) {
             changed.addAll(sources.regions()); changed.addAll(priorSources.regions());
         }
-        if (changed.isEmpty()) return projected;
+        if (changed.isEmpty()) {
+            // Equal facts still acknowledge the complete current input basis;
+            // otherwise later reads repeatedly compare an older immutable image.
+            working.priorObserved = observed; working.priorSources = sources;
+            working.priorDefinitions = observations.definitions();
+            return projected;
+        }
         var updates = new HashMap<Region, Map<BlockPosition, Optional<NavigationCell>>>();
         for (var region : changed) {
             var result = new HashMap<BlockPosition, Optional<NavigationCell>>();
@@ -147,8 +160,8 @@ final class RetainedNavigationGeometry {
             columns.replaceAll((key, values) -> List.copyOf(values));
             index.put(region, new Index(Map.copyOf(columns), Set.copyOf(detailed)));
         }
-        priorObserved = observed; priorSources = sources; priorDefinitions = observations.definitions();
-        projected = new Projection(cells, Map.copyOf(index));
-        return projected;
+        working.priorObserved = observed; working.priorSources = sources; working.priorDefinitions = observations.definitions();
+        working.projected = new Projection(cells, Map.copyOf(index));
+        return working.projected;
     }
 }

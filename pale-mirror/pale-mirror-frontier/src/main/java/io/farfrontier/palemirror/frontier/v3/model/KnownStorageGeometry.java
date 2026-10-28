@@ -7,17 +7,21 @@ import java.util.Set;
 
 /** Rebuildable physical footprint only; stock, filters and access status are not terrain. */
 final class KnownStorageGeometry {
-    private static FrontierBootstrap bootstrap;
-    private static Map<SubjectId, ContainerRecord> records;
-    private static Map<SubjectId, ContainerSurface> surfaces;
-    private static Set<BlockPosition> obstacles = Set.of();
-    private static Set<BlockPosition> fixedSupports = Set.of();
+    private static final class Working {
+        FrontierBootstrap bootstrap;
+        Map<SubjectId, ContainerRecord> records;
+        Map<SubjectId, ContainerSurface> surfaces;
+        Set<BlockPosition> obstacles = Set.of();
+        Set<BlockPosition> fixedSupports = Set.of();
+    }
+    private static final ThreadLocal<Working> CURRENT = ThreadLocal.withInitial(Working::new);
     private KnownStorageGeometry() { }
 
-    static synchronized Set<BlockPosition> forState(FrontierWorldState state) {
+    static Set<BlockPosition> forState(FrontierWorldState state) {
+        var working = CURRENT.get();
         var currentRecords = state.inventory().containers();
         var currentSurfaces = state.inventory().surfaces();
-        if (bootstrap == state.bootstrap() && records == currentRecords && surfaces == currentSurfaces) return obstacles;
+        if (working.bootstrap == state.bootstrap() && working.records == currentRecords && working.surfaces == currentSurfaces) return working.obstacles;
         var projected = new HashSet<BlockPosition>();
         var contacts = new HashSet<BlockPosition>();
         currentSurfaces.values().stream().filter(ContainerSurface::fixed)
@@ -29,14 +33,14 @@ final class KnownStorageGeometry {
                     if (currentRecords.get(surface.containerId()).purpose() == ContainerPurpose.RESOURCE_STORAGE)
                         projected.add(surface.position());
                 });
-        if (bootstrap != state.bootstrap() || !obstacles.equals(projected)) obstacles = Set.copyOf(projected);
-        if (bootstrap != state.bootstrap() || !fixedSupports.equals(contacts)) fixedSupports = Set.copyOf(contacts);
-        bootstrap = state.bootstrap(); records = currentRecords; surfaces = currentSurfaces;
-        return obstacles;
+        if (working.bootstrap != state.bootstrap() || !working.obstacles.equals(projected)) working.obstacles = Set.copyOf(projected);
+        if (working.bootstrap != state.bootstrap() || !working.fixedSupports.equals(contacts)) working.fixedSupports = Set.copyOf(contacts);
+        working.bootstrap = state.bootstrap(); working.records = currentRecords; working.surfaces = currentSurfaces;
+        return working.obstacles;
     }
     /** Physical contact does not depend on the container's economic purpose. */
-    static synchronized Set<BlockPosition> fixedSupports(FrontierWorldState state) {
+    static Set<BlockPosition> fixedSupports(FrontierWorldState state) {
         forState(state);
-        return fixedSupports;
+        return CURRENT.get().fixedSupports;
     }
 }

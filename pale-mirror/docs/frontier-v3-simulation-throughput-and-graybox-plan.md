@@ -3957,3 +3957,26 @@ A view's prior last image must still enter a new scope's branch history: bypassi
 would lose that guarantee. The connected branch/failure test now starts with a warmed last image.
 Retirement revisits a retained pre-state after its successor; codec checks preserve projection
 order and immutability. No new canonical data, schema or compatibility path is involved.
+
+
+### Complete isolation of dynamic shape and storage projection inputs
+
+2b797d53c focused123checksPASS96s; frozen scopednegative/recovery/package/guardrailsPASS20s.
+It is not separately deployed: the following connected geometry correction joins the same
+next artifact, avoiding an extra restart/profile cycle. Runtime remains ac851163a until verified.
+
+A source sweep of active geometry projection roots found two remaining shared mutable bases:
+RetainedNavigationGeometry's observed/source/definition/contextual-halo projection, and
+KnownStorageGeometry's current container/surface footprint. They now keep one computing-thread
+working image each; immutable results, complete collision facts, contextual-neighbour invalidation,
+unknown refusal and storage contact semantics remain unchanged. Equal fact results also acknowledge
+the current complete input roots, avoiding repeated comparison with an older equal image.
+Bootstrap-only immutable terrain caches stay shared. Inactive HiveGroundNavigation is excluded;
+no new hive implementation or routing policy is introduced.
+
+Connected threaded checks prove old/new shape facts agree where equal, the changed shape remains
+visible, a worker cannot evict an unchanged owner projection, and changed storage footprint/support
+reads do not contaminate the owner's retained image. Existing contextual-shape/unknown/body-width,
+codec/recovery/permission and replacement-storage checks passed before the final equal-basis
+acknowledgement (24s); frozen checks include that final branch. No runtime speed claim follows
+from cache identity or unit checks; the next ordinary scale trace still owns that result.
