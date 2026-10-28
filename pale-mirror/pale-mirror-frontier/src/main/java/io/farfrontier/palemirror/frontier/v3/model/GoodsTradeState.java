@@ -32,6 +32,13 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     }
     private static final ImmutableGroupView<SubjectId, GoodsTradeContract, GoodsTradeParty> BUYERS = new ImmutableGroupView<>();
     private static final ImmutableGroupView<SubjectId, GoodsTradeContract, GoodsTradeParty> SELLERS = new ImmutableGroupView<>();
+    private record OrderScope(GoodsTradeParty party, GoodsTradeOrder.Side side) { }
+    private static final ImmutableGroupView<SubjectId, GoodsTradeOrder, OrderScope> PARTY_ORDERS = new ImmutableGroupView<>();
+    /** Declared authorizations only; matching still owns time, price and current admission. */
+    public java.util.List<GoodsTradeOrder> ordersFor(GoodsTradeParty party, GoodsTradeOrder.Side side) {
+        return PARTY_ORDERS.rows(GoodsTradeState.class, orders, order -> java.util.Set.of(new OrderScope(order.party(), order.side())),
+                new OrderScope(java.util.Objects.requireNonNull(party), java.util.Objects.requireNonNull(side)));
+    }
     /** Read-only inverse of explicit contract parties, including retained terminal rows. */
     java.util.List<GoodsTradeContract> purchases(GoodsTradeParty party) {
         return BUYERS.rows(GoodsTradeState.class, contracts, contract -> java.util.Set.of(contract.buyer()), party);
@@ -41,7 +48,13 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     }
     private static final ImmutableEntryInvariantCheck<SubjectId, GoodsTradeOrder> ORDER_IDENTITIES =
             new ImmutableEntryInvariantCheck<>(MAX_ORDERS);
-    private static final ImmutableInvariantCheck<Void> CONTRACT_IDENTITIES = new ImmutableInvariantCheck<>();
+    private static final ImmutableEntryInvariantCheck<SubjectId, GoodsTradeContract> CONTRACT_IDENTITIES =
+            new ImmutableEntryInvariantCheck<>(MAX_CONTRACTS);
+    private sealed interface ExclusiveReference permits Allocation, Receipt, Funding { }
+    private record Allocation(SubjectId id) implements ExclusiveReference { }
+    private record Receipt(SubjectId id) implements ExclusiveReference { }
+    private record Funding(SubjectId id) implements ExclusiveReference { }
+    private static final ImmutableGroupView<SubjectId, GoodsTradeContract, ExclusiveReference> CONTRACT_EXCLUSIVITY = new ImmutableGroupView<>();
     public GoodsTradeState {
         orders = ImmutableLookupMap.copyOf(orders);
         java.util.Objects.requireNonNull(participants);
@@ -59,17 +72,21 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         ORDER_IDENTITIES.validate(GoodsTradeState.class, checkedOrders, (id, order) -> {
             if (!id.equals(order.id())) throw new IllegalArgumentException("invalid bounded goods-trade registry");
         });
-        CONTRACT_IDENTITIES.validate(() -> validateContractIdentities(checkedContracts), checkedContracts);
+        CONTRACT_IDENTITIES.validate(GoodsTradeState.class, checkedContracts, (id, contract) -> {
+            if (!id.equals(contract.id())) throw new IllegalArgumentException("invalid bounded goods-trade registry");
+        });
+        validateContractIdentities(checkedContracts);
     }
     private static void validateContractIdentities(Map<SubjectId, GoodsTradeContract> contracts) {
-        if (contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id())))
-            throw new IllegalArgumentException("invalid bounded goods-trade registry");
-        var claimIds = contracts.values().stream().flatMap(c -> c.outstandingClaims().keySet().stream()).toList();
-        var receiptIds = contracts.values().stream().flatMap(c -> java.util.stream.Stream.concat(
-                c.acceptances().keySet().stream(), c.dispositions().keySet().stream())).toList();
-        if (claimIds.stream().distinct().count() != claimIds.size()
-                || receiptIds.stream().distinct().count() != receiptIds.size()
-                || contracts.values().stream().map(GoodsTradeContract::financialReservationId).distinct().count() != contracts.size()) {
+        if (!CONTRACT_EXCLUSIVITY.uniqueMemberships(GoodsTradeState.class, contracts, contract -> {
+            var references = new java.util.HashSet<ExclusiveReference>();
+            contract.outstandingClaims().keySet().forEach(id -> references.add(new Allocation(id)));
+            // The contract constructor already rejects acceptance/disposition
+            // overlap inside one row. This checks the same role across rows.
+            contract.acceptances().keySet().forEach(id -> references.add(new Receipt(id)));
+            contract.dispositions().keySet().forEach(id -> references.add(new Receipt(id)));
+            references.add(new Funding(contract.financialReservationId())); return references;
+        })) {
             throw new IllegalArgumentException("goods contracts compete for an allocation, receipt or financial hold");
         }
     }

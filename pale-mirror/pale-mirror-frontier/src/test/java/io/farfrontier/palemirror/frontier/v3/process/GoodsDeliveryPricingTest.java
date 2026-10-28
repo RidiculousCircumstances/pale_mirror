@@ -19,6 +19,10 @@ class GoodsDeliveryPricingTest {
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(sell).place(buy)));
         state = AcceptedEconomyFixture.publish(state, seller.party().id(), 400);
         state = AcceptedEconomyFixture.publish(state, buyer.party().id(), 400);
+        var quoted = GoodsOrderMatching.quotes(state, seller, buyer, 400);
+        assertFalse(quoted.isEmpty());
+        assertEquals(new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(
+                state.companies().goodsTrade().orders().values(), 400).offers(buyer.party(), Optional.of(seller.party()), Set.of()), quoted);
         var search = GoodsOrderMatching.first(state, buyer, 400, Optional.of(seller.party()), Optional.of(buyer.party()));
         assertTrue(search.match().isPresent(), search.disposition());
         var match = search.match().orElseThrow();
@@ -31,6 +35,11 @@ class GoodsDeliveryPricingTest {
             assertTrue(GoodsDeliveryPricing.reserve(state, events, parcels, new DeliveryCost(FixedScalar.whole(1000), 10000), 400).isEmpty(),
                     "own provisions cannot bypass the acquisition limit: " + mode);
             var accepted = GoodsDeliveryPricing.reserve(state, events, parcels, new DeliveryCost(FixedScalar.whole(1), 10000), 400).orElseThrow();
+            assertEquals(new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(
+                    accepted.state().companies().goodsTrade().orders().values(), 400)
+                    .offers(buyer.party(), Optional.of(seller.party()), Set.of()),
+                    GoodsOrderMatching.quotes(accepted.state(), seller, buyer, 400), "actual reserved remainders replace the selected book");
+            assertEquals(quoted, GoodsOrderMatching.quotes(state, seller, buyer, 400), "a reserved draft cannot consume its immutable predecessor's consent");
             var priced = accepted.parcels().getFirst().contract();
             assertEquals(mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY, priced.deliveryUnitPrice().raw() > 0);
             assertEquals(priced.outstandingPrice(), accepted.state().inventory().economics().reservations().get(priced.financialReservationId()).amount());

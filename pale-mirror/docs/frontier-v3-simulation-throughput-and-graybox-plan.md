@@ -5159,3 +5159,48 @@ iron pickaxe multi-material journey checks its positive one-batch backing and he
 then acquires both materials, processes, recovers and delivers its real tool.
 Connected material-loss/replacement, equipment manufacture/repair, food interruption,
 station supply and planning focus+guardrails passed66s. Final frozen package follows.
+
+### Selected-party market reads and incremental contract exclusivity
+
+d89636446 frozen28tests0failures20s+guardrails/JAR/package; both retained deployments
+verified. Combined custody/fuel ordinary window304.292142s309829→313001=10.424193/s,
+debt1585→4499. New accepted sticks+2 involving town7 (buyer OR seller), no new terminal
+harvest in5samples; town68hungry1→0,100hungry2→0; all5starving0. Still below20, no
+isolated causal comparison across the evolving workloads. Evidence admitted-station-
+fuel-ordinary/. No overlapping builds/profile/client during that window.
+
+The saved current89b lookup trace repeatedly constructs a full MarketOfferBook
+under GoodsTripPlanning.reserveSelected after each actual draft reservation. That
+caller is unchanged by custody/fuel cuts. GoodsTradeState now exposes read-only
+current order rows by explicit complete party+side through the shared incremental
+group view. For an already selected seller AND buyer, GoodsOrderMatching builds the
+same price/time book only over that seller's asks and that buyer's bids. Quote-pair
+reads use the same scope. Discovery and unrestricted search keep the full projection.
+One canonical order registry, shared remainders, matching algorithm, price policy,
+stock/funds/custody admission and contracts remain; the scoped book grants no rights.
+Its bounded party-pair memo depends on actual row images and bootstrap, with the
+original inclusive expiry validity interval and earlier-time rebuild. Foreign quotes
+cannot enter a selected pair; actual changed remainders still replace its inputs.
+
+The same draft path gathered every contract's claims, receipts and financial hold
+to recheck uniqueness after one contract changed. Reuse shared immutable entry
+validation for exact map key/record ID and shared uniqueness memberships for explicit
+allocation/receipt/funding roles. Cross-role equal IDs remain independent, as before.
+The contract constructor already rejects acceptance/disposition overlap inside its
+own row. Full ingress audits still visit every declaration. Wrong keys, duplicate
+allocations, holds and cross-contract receipts fail closed; rejected drafts cannot
+poison their immutable predecessor. No constructor/quantity/contract-term rule is
+removed and no schema or cache ceiling is raised.
+
+Existing actual freight-pricing/reservation cases compare selected quotes to the
+full book before/after reservation and revisit the earlier branch. The quote-envelope
+case checks the inclusive expiry boundary and rewind. Existing registry negatives
+are retained and expanded with receipt collision/full audit. That invariant case
+is extracted to GoodsTradeRegistryValidationTest to keep GoodsTradeTest below the
+1000-line guardrail; the first focus refusal was that file-size check, not a product
+test failure. The connected focus ran70checks with69passing; the one new receipt-collision fixture
+incorrectly disposed only part of an unpartitioned claim. Corrected it to dispose
+the complete allocation, preserving the strict production guard. Extracted registry
+negative focus passed18s. Final frozen focus also covers the selected envelope with
+an unrelated cheaper foreign ask and the original expiry/rewind checks. No runtime
+gain claimed for this cut.

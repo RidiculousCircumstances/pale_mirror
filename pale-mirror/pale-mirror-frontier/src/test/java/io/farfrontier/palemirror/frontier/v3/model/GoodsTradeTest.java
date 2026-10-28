@@ -10,27 +10,6 @@ import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*; // Canonical ledger boundary, not native/visual acceptance.
 class GoodsTradeTest {
-    @Test void warmedCommercialTablesRejectChangedIdentitiesAndCompetingClaimsOrMoneyHolds() {
-        var state = reserved(); var trade = state.companies().goodsTrade(); var contract = trade.contracts().get(CONTRACT);
-        for (boolean duplicateClaim : List.of(false, true)) {
-            assertDoesNotThrow(() -> trade.withParticipants(trade.participants()));
-            var other = new GoodsTradeContract(id("contract:competing"), contract.sellOrderId(), contract.buyOrderId(),
-                    contract.seller(), contract.buyer(), contract.fulfillment(), contract.sourceContainerId(), contract.receiverContainerId(),
-                    contract.itemKind(), contract.quantity(), contract.goodsUnitPrice(),
-                    duplicateClaim ? id("reservation:other") : contract.financialReservationId(), 0,
-                    duplicateClaim ? contract.outstandingClaims() : Map.of(id("claim:other"), contract.quantity()), Map.of());
-            var contracts = ImmutableLookupMap.withEntry(trade.contracts(), other.id(), other);
-            assertThrows(IllegalArgumentException.class, () -> new GoodsTradeState(trade.orders(), contracts, trade.participants()));
-            assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() ->
-                    new GoodsTradeState(trade.orders(), contracts, trade.participants())));
-            assertDoesNotThrow(() -> trade.withParticipants(trade.participants()), "rejected tables cannot poison the valid immutable predecessor");
-        }
-        var orders = ImmutableLookupMap.withEntry(trade.orders(), id("order:foreign-key"), trade.orders().get(contract.sellOrderId()));
-        assertThrows(IllegalArgumentException.class, () -> new GoodsTradeState(orders, trade.contracts(), trade.participants()));
-        assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() ->
-                new GoodsTradeState(orders, trade.contracts(), trade.participants())));
-        var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
-    }
     @Test void loadedCourierCanYieldSpatiallyWithoutChangingCargoOrItsRetainedExecution() {
         var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
         state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));

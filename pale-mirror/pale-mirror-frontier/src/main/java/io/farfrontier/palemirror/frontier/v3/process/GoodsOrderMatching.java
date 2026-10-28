@@ -9,15 +9,31 @@ final class GoodsOrderMatching {
     private static final class Book {
         private io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook current;
         io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook at(Collection<GoodsTradeOrder> orders, long now) {
+            return at(() -> orders, now);
+        }
+        io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook at(
+                java.util.function.Supplier<Collection<GoodsTradeOrder>> orders, long now) {
             if (current == null || !current.validAt(now))
-                current = new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(orders, now);
+                current = new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(orders.get(), now);
             return current;
         }
     }
     private static final ImmutableInputView<Book> BOOKS = new ImmutableInputView<>();
+    private record Parties(GoodsTradeParty seller, GoodsTradeParty buyer) { }
+    private static final ImmutableKeyedInputView<Parties, Book> SELECTED_BOOKS = new ImmutableKeyedInputView<>(256);
     private static io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook book(FrontierWorldState state, long now) {
         var orders = state.companies().goodsTrade().orders();
         return BOOKS.get(List.of(orders), Book::new).at(orders.values(), now);
+    }
+    private static io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook book(
+            FrontierWorldState state, long now, GoodsTradeParty seller, GoodsTradeParty buyer) {
+        var trade = state.companies().goodsTrade();
+        var asks = trade.ordersFor(seller, GoodsTradeOrder.Side.SELL);
+        var bids = trade.ordersFor(buyer, GoodsTradeOrder.Side.BUY);
+        return SELECTED_BOOKS.get(state.bootstrap(), new Parties(seller, buyer), List.of(asks, bids), Book::new).at(() -> {
+            var orders = new ArrayList<GoodsTradeOrder>(asks.size() + bids.size()); orders.addAll(asks); orders.addAll(bids);
+            return orders;
+        }, now);
     }
     static List<GoodsParticipant> sellers(FrontierWorldState state, GoodsParticipant buyer, long now) {
         var participants = state.companies().goodsTrade().participants().participants();
@@ -29,7 +45,7 @@ final class GoodsOrderMatching {
     record Search(Optional<Match> match, String disposition, int checkedPairs) { }
     static List<io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook.Pair> quotes(
             FrontierWorldState state, GoodsParticipant seller, GoodsParticipant buyer, long now) {
-        return book(state, now).offers(buyer.party(), Optional.of(seller.party()), Set.of());
+        return book(state, now, seller.party(), buyer.party()).offers(buyer.party(), Optional.of(seller.party()), Set.of());
     }
     static List<Endpoints> endpointPairs(FrontierWorldState state, GoodsParticipant seller, GoodsParticipant buyer, long now) {
         return quotes(state, seller, buyer, now).stream()
@@ -60,7 +76,8 @@ final class GoodsOrderMatching {
                         Set<String> excludedCommodities, Optional<Endpoints> endpoints, FixedScalar unreservedDeliveryExpense) {
         if (unreservedDeliveryExpense.raw() < 0) throw new IllegalArgumentException("negative anticipated delivery expense");
         var trade = state.companies().goodsTrade();
-        var book = book(state, now);
+        var book = selectedSeller.isPresent() && selectedBuyer.isPresent()
+                ? book(state, now, selectedSeller.orElseThrow(), selectedBuyer.orElseThrow()) : book(state, now);
         var offers = book.buyers().stream().filter(buyer -> selectedBuyer.filter(value -> !value.equals(buyer)).isEmpty())
                 .flatMap(buyer -> book.offers(buyer, selectedSeller, excludedCommodities).stream())
                 .filter(pair -> endpoints.map(points -> points.source().equals(pair.sell().containerId())

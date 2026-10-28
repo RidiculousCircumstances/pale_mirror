@@ -134,13 +134,21 @@ class GoodsParticipantReviewAdviceTest {
         for (int i = 0; i < 2; i++) state = GoodsTradeStateSupport.place(state, buyer.party().id(), new GoodsTradeOrder(
                 new SubjectId("order:quote-envelope-bid-" + i), buyer.party(), GoodsTradeOrder.Side.BUY, receiver,
                 "minecraft:coal", 60, 0, FixedScalar.whole(2), 5000), 4000);
+        var foreign = participants.get(state.bootstrap().settlements().get(2).id());
+        state = GoodsTradeStateSupport.place(state, foreign.party().id(), new GoodsTradeOrder(new SubjectId("order:foreign-envelope-ask"),
+                foreign.party(), GoodsTradeOrder.Side.SELL, FrontierWorldState.depotId(foreign.settlementId()),
+                "minecraft:coal", 128, 0, new FixedScalar(FixedScalar.SCALE / 2), 4500), 4000);
         var inventory = state.inventory(); var trade = state.companies().goodsTrade();
         var lines = GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 4000);
         assertEquals(70, lines.get("minecraft:coal").quantity(), "two bids cannot duplicate the one public ask");
         assertSame(inventory, state.inventory()); assertSame(trade, state.companies().goodsTrade());
         assertTrue(trade.contracts().isEmpty(), "a quote envelope is not backed or admitted commercial authority");
+        assertEquals(70, GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 5000)
+                .get("minecraft:coal").quantity(), "the original inclusive expiry boundary remains valid");
         assertTrue(GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 5001).isEmpty(),
                 "expired consent cannot remain a preliminary alternative");
+        assertEquals(70, GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 4000)
+                .get("minecraft:coal").quantity(), "a later expiry check cannot erase an earlier dated branch");
     }
 
     @Test void marketOpportunityUsesPublishedConsentWithoutRenewingTheEconomicForecast() {
