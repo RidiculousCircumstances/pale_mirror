@@ -3383,3 +3383,18 @@ unknown/stale render rejection remain. Added an actual100town catalogue+independ
 overlay/codec recovery regression, including the last settlement and unknown owner.
 Focused readability, scale bootstrap/persistence, contextual board card and guardrails
 PASS20s (readability20checks). Native recovery and frozen deployment pending.
+
+
+Frozen b5c6c586f release PASS45s, including55required physical economy GameTests;
+both retained-world deployments verified SHA512
+758a904d95eb4945a129c40a867f6ef37c3b35958a16303599a211388ed310ce94dc4e014e45c5f2682c1e801ae1f6180fdbe8f2f853841f39db31e8bb20977b.
+Native repeat entered the100town world and received/compiled511neighbour sections
+without the former board-index quarantine. However, its selected terrain-profile
+scenario was invalid for scale-r31: the latter declares FLAT, so the tunnel landmark
+is absent. Stopped the one diagnostic client; this is no terrain acceptance or
+terminal work proof. Retained board-scale-terrain-client receipts name that limit.
+New live-r31-scale-settlement-ingress scenario declares100towns and resolves every
+position from actual site diagnostics. It visits1,7,100and returns to1, requires
+visible owned field boards and final conflict-free summary, with4linked frames.
+This is a presentation/HOT-ingress diagnostic, not simultaneous five-player demand
+or terminal farmer/baker/trade acceptance. Declarative schema validation passes.

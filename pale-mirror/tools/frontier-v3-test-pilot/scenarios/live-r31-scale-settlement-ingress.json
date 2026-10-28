@@ -1,0 +1,299 @@
+{
+  "schema": 1,
+  "id": "live_r31_scale_settlement_ingress",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok",
+            "settlements": 100
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": 8,
+        "y": 0,
+        "z": -10
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "boardPosition"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_board",
+      "text": "WHEAT FIELD",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "boardPosition"
+        }
+      },
+      "radius": 3,
+      "maxDistance": 64,
+      "maxAngleDeg": 50,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:1-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": 8,
+        "y": 0,
+        "z": -10
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "boardPosition"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_board",
+      "text": "WHEAT FIELD",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "boardPosition"
+        }
+      },
+      "radius": 3,
+      "maxDistance": 64,
+      "maxAngleDeg": 50,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:7-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:100-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": 8,
+        "y": 0,
+        "z": -10
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:100-wheat-field",
+          "field": "boardPosition"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_board",
+      "text": "WHEAT FIELD",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:100-wheat-field",
+          "field": "boardPosition"
+        }
+      },
+      "radius": 3,
+      "maxDistance": 64,
+      "maxAngleDeg": 50,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:100"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:100-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": 8,
+        "y": 0,
+        "z": -10
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "boardPosition"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_board",
+      "text": "WHEAT FIELD",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "boardPosition"
+        }
+      },
+      "radius": 3,
+      "maxDistance": 64,
+      "maxAngleDeg": 50,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:1-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 25,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "settlements": 100,
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 6,
+      "name": "scale-settlement-1-visit-1"
+    },
+    {
+      "after": 12,
+      "name": "scale-settlement-7-visit-2"
+    },
+    {
+      "after": 18,
+      "name": "scale-settlement-100-visit-3"
+    },
+    {
+      "after": 24,
+      "name": "scale-settlement-1-visit-4"
+    }
+  ]
+}
