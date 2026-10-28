@@ -26,12 +26,15 @@ public final class RegionalSurfaceMap extends AbstractMap<TerrainColumn, List<Su
         }
     }
     private static final Columns EMPTY_COLUMNS = new Columns(Map.of());
-    private final Map<Region, Columns> regions;
+    private final ImmutableRegionMap<Columns> regions;
     private final int size, hash;
     private RegionalSurfaceMap(Map<Region, Columns> regions) {
-        this.regions = Collections.unmodifiableMap(new HashMap<>(regions));
+        this.regions = ImmutableRegionMap.copyOf(regions);
         size = regions.values().stream().mapToInt(columns -> columns.values.size()).sum();
         hash = regions.values().stream().mapToInt(Columns::hashCode).sum();
+    }
+    private RegionalSurfaceMap(ImmutableRegionMap<Columns> regions, int size, int hash) {
+        this.regions = regions; this.size = size; this.hash = hash;
     }
     public static RegionalSurfaceMap copyOf(Map<TerrainColumn, List<SurfaceAnchor>> values) {
         if (values instanceof RegionalSurfaceMap indexed) return indexed;
@@ -58,20 +61,21 @@ public final class RegionalSurfaceMap extends AbstractMap<TerrainColumn, List<Su
         };
     }
     public Set<Region> changesFrom(RegionalSurfaceMap previous) {
-        if (this == previous) return Set.of();
-        var changed = new HashSet<>(regions.keySet()); changed.addAll(previous.regions.keySet());
-        changed.removeIf(region -> token(region).equals(previous.token(region)));
-        return Set.copyOf(changed);
+        return regions.changesFrom(previous.regions);
     }
     public RegionalSurfaceMap replace(Map<Region, Map<TerrainColumn, List<SurfaceAnchor>>> updates) {
-        Map<Region, Columns> next = null;
+        var next = new HashMap<Region, Optional<Columns>>();
+        int count = size, fingerprint = hash;
         for (var entry : updates.entrySet()) {
             if (in(entry.getKey()).equals(entry.getValue())) continue;
             if (entry.getValue().keySet().stream().anyMatch(column -> !region(column).equals(entry.getKey())))
                 throw new IllegalArgumentException("support contribution crosses its region");
-            if (next == null) next = new HashMap<>(regions);
-            if (entry.getValue().isEmpty()) next.remove(entry.getKey()); else next.put(entry.getKey(), new Columns(entry.getValue()));
+            var old = regions.getOrDefault(entry.getKey(), EMPTY_COLUMNS);
+            var replacement = entry.getValue().isEmpty() ? EMPTY_COLUMNS : new Columns(entry.getValue());
+            count += replacement.values.size() - old.values.size(); fingerprint += replacement.hash - old.hash;
+            next.put(entry.getKey(), replacement == EMPTY_COLUMNS ? Optional.empty() : Optional.of(replacement));
         }
-        return next == null ? this : new RegionalSurfaceMap(next);
+        var updated = regions.with(next);
+        return updated == regions ? this : new RegionalSurfaceMap(updated, count, fingerprint);
     }
 }

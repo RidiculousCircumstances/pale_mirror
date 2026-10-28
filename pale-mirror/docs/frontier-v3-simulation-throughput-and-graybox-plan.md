@@ -1779,3 +1779,34 @@ geometry admission; unrelated physical crop deltas do not automatically retire t
 pending frame. Existing pending-choice regression now verifies rejection and fresh
 capture on a real NavigationGeometryObserved transition. Three affected classes
 and guardrails PASS23s. Native proof remains open.
+
+
+### Batch geometry producer changes and reuse the existing spatial pages
+
+Native f67 ordinary10021397→21590 in272.9s, debt4747→10016: FAILED. Its20s warm
+JFR attributes repeated global geometry composition to both advisory workers, exact
+preparation and server thread: KnownPedestrianRouteKnowledge.refresh →
+KnownPedestrianObstacleIndex SITES/WITHDRAWN → RegionalBlockContributions.replace.
+Actual thread allocation deltas: advice8.92+8.84GB, server4.21GB, exactprep2.48GB,
+navigation1.55+1.46GB; sampled allocation weights are not byte totals. Evidence:
+build/simulation-throughput/advisory-snapshot-lifetime-{warm.jfr,attribution.txt,
+geometry-attribution.txt,geometry-stacks.txt}. c14 pending-input invalidation and
+both retained-world deployments VERIFIED; its observation still accumulates debt.
+
+Source cause is connected common work, not a trade-specific obstacle rule: each
+producer replacement constructed intermediate unions, enumerated/copy-constructed
+already indexed regional blocks, and all three spatial directories copied/scanned
+flat region maps even for a local change. The common contribution owner now batches
+a complete input epoch into one final exact union and shares immutable contributor
+parts. RegionalBlockSet, RegionalBlockMap and RegionalSurfaceMap reuse EXISTING
+ImmutableRegionMap spatial pages; unchanged pages skip deep comparison and local
+replacements adjust cached size/hash by changed-part deltas. No parent chain,
+probabilistic equality, new cache capacity, discarded obstacles, state schema or
+canonical ownership change. All production consumers use the corrected shared types.
+
+Focused guardrails+69frontier/9classes PASS81s. Existing reconstruction, collision,
+terrain/unknown, multilevel, historical branch and trade checks retained. Added two
+focused obligations: exact size/hash/equality/removal under deliberately colliding
+facts and direct shared regional parts across a batched producer handoff/private fork.
+No timing assertion or broad native claim. Exact release/deployment and measured
+ordinary100 progress still required; this source correction alone does not closeG.

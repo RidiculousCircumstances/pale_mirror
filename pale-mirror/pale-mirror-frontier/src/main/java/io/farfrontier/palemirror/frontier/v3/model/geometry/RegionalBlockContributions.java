@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model.geometry;
 
-import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region;
 import java.util.*;
 
@@ -15,17 +14,20 @@ public final class RegionalBlockContributions<K> {
     public RegionalBlockContributions<K> fork() { return new RegionalBlockContributions<>(this); }
 
     public RegionalBlockSet replace(K owner, RegionalBlockSet contribution) {
-        Objects.requireNonNull(owner); Objects.requireNonNull(contribution);
-        var prior = sources.getOrDefault(owner, RegionalBlockSet.copyOf(Set.of()));
-        var changed = contribution.changesFrom(prior);
-        if (contribution.isEmpty()) sources.remove(owner); else sources.put(owner, contribution);
-        var updates = new HashMap<Region, Set<BlockPosition>>();
-        for (var region : changed) {
-            var blocks = new HashSet<BlockPosition>();
-            for (var source : sources.values()) blocks.addAll(source.in(region));
-            updates.put(region, blocks);
-        }
-        snapshot = snapshot.replace(updates); return snapshot;
+        return replaceAll(Map.of(owner, contribution));
+    }
+    /** One input epoch publishes one final union, never intermediate world-wide unions. */
+    public RegionalBlockSet replaceAll(Map<K, RegionalBlockSet> contributions) {
+        var changed = new HashSet<Region>();
+        contributions.forEach((owner, contribution) -> {
+            Objects.requireNonNull(owner); Objects.requireNonNull(contribution);
+            changed.addAll(contribution.changesFrom(sources.getOrDefault(owner, RegionalBlockSet.copyOf(Set.of()))));
+        });
+        contributions.forEach((owner, contribution) -> {
+            if (contribution.isEmpty()) sources.remove(owner); else sources.put(owner, contribution);
+        });
+        snapshot = snapshot.replaceUnion(changed, sources.values());
+        return snapshot;
     }
     public RegionalBlockSet snapshot() { return snapshot; }
 }

@@ -16,22 +16,27 @@ final class KnownPedestrianObstacleIndex {
 
     void refresh(FrontierWorldState state, KnownSiteGeometry.View sites, Set<BlockPosition> storage,
                  Supplier<Set<BlockPosition>> staticBlocks) {
-        replace(Source.STATIC, state.bootstrap(), staticBlocks);
-        replace(Source.SITES, sites.obstacles(), sites::obstacles);
-        replace(Source.WITHDRAWN, sites.withdrawnSupports(), sites::withdrawnSupports);
-        replace(Source.UNKNOWN, sites.unknown(), sites::unknown);
-        replace(Source.ORGANS, state.hiveColony().addedOrgans(), () -> FrontierGrayboxPlan.intactOrganOccupancy(
+        var updates = new EnumMap<Source, RegionalBlockSet>(Source.class);
+        replace(updates, Source.STATIC, state.bootstrap(), staticBlocks);
+        replace(updates, Source.SITES, sites.obstacles(), sites::obstacles);
+        replace(updates, Source.WITHDRAWN, sites.withdrawnSupports(), sites::withdrawnSupports);
+        replace(updates, Source.UNKNOWN, sites.unknown(), sites::unknown);
+        replace(updates, Source.ORGANS, state.hiveColony().addedOrgans(), () -> FrontierGrayboxPlan.intactOrganOccupancy(
                 List.copyOf(state.hiveColony().addedOrgans().values())));
-        replace(Source.PHYSICAL, state.physicalDeltas(), () -> state.physicalDeltas().keySet());
-        replace(Source.STORAGE, storage, () -> storage);
+        replace(updates, Source.PHYSICAL, state.physicalDeltas(), () -> state.physicalDeltas().keySet());
+        replace(updates, Source.STORAGE, storage, () -> storage);
+        var observed = new EnumMap<Source, RegionalBlockSet>(updates);
+        observed.keySet().retainAll(EnumSet.of(Source.PHYSICAL, Source.STORAGE));
+        physical.replaceAll(observed);
+        var grounded = new EnumMap<Source, RegionalBlockSet>(updates); grounded.remove(Source.STATIC);
+        ground.replaceAll(grounded);
+        updates.remove(Source.WITHDRAWN); complete.replaceAll(updates);
     }
-    private void replace(Source owner, Object version, Supplier<Set<BlockPosition>> project) {
+    private void replace(Map<Source, RegionalBlockSet> updates, Source owner, Object version, Supplier<Set<BlockPosition>> project) {
         if (versions.get(owner) == version) return;
         var next = RegionalBlockSet.copyOf(project.get());
         versions.put(owner, version);
-        if (owner == Source.PHYSICAL || owner == Source.STORAGE) physical.replace(owner, next);
-        if (owner != Source.STATIC) ground.replace(owner, next);
-        if (owner != Source.WITHDRAWN) complete.replace(owner, next);
+        updates.put(owner, next);
     }
     RegionalBlockSet groundChanges() { return ground.snapshot(); }
     RegionalBlockSet complete() { return complete.snapshot(); }

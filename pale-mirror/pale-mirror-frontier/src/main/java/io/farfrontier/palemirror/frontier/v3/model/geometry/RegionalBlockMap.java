@@ -29,12 +29,15 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
             return true;
         }
     }
-    private final Map<Region, Part<V>> parts;
+    private final ImmutableRegionMap<Part<V>> parts;
     private final int size, hash;
     private RegionalBlockMap(Map<Region, Part<V>> parts) {
-        this.parts = Collections.unmodifiableMap(new HashMap<>(parts));
+        this.parts = ImmutableRegionMap.copyOf(parts);
         size = parts.values().stream().mapToInt(part -> part.values.size()).sum();
         hash = parts.values().stream().mapToInt(Part::hashCode).sum();
+    }
+    private RegionalBlockMap(ImmutableRegionMap<Part<V>> parts, int size, int hash) {
+        this.parts = parts; this.size = size; this.hash = hash;
     }
     public static <V> RegionalBlockMap<V> copyOf(Map<BlockPosition, V> source) {
         if (source instanceof RegionalBlockMap<V> regional) return regional;
@@ -49,10 +52,7 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
     @SuppressWarnings("unchecked") private static <T> Part<T> emptyPart() { return (Part<T>) EMPTY; }
     public Set<Region> regions() { return parts.keySet(); }
     public Set<Region> changesFrom(RegionalBlockMap<?> previous) {
-        if (this == previous) return Set.of();
-        var result = new HashSet<>(parts.keySet()); result.addAll(previous.parts.keySet());
-        result.removeIf(region -> Objects.equals(parts.get(region), previous.parts.get(region)));
-        return Set.copyOf(result);
+        return parts.changesFrom(previous.parts);
     }
     public RegionalBlockMap<V> with(Map<BlockPosition, V> changes) {
         var updates = new HashMap<Region, Map<BlockPosition, V>>();
@@ -61,14 +61,12 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
             if (!value.equals(get(position))) updates.computeIfAbsent(Region.at(position), region -> new HashMap<>(in(region)))
                     .put(position, value);
         });
-        if (updates.isEmpty()) return this;
-        var next = new HashMap<>(parts);
-        updates.forEach((region, values) -> next.put(region, new Part<>(values)));
-        return new RegionalBlockMap<>(next);
+        return replace(updates);
     }
     /** Replace complete changed regions, including removal; preserve all other immutable parts. */
     public RegionalBlockMap<V> replace(Map<Region, Map<BlockPosition, V>> changes) {
-        Map<Region, Part<V>> next = null;
+        var next = new HashMap<Region, Optional<Part<V>>>();
+        int count = size, fingerprint = hash;
         for (var entry : changes.entrySet()) {
             var region = Objects.requireNonNull(entry.getKey()); var values = entry.getValue();
             values.forEach((position, value) -> {
@@ -76,10 +74,13 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
                 if (!Region.at(position).equals(region)) throw new IllegalArgumentException("foreign geometry region");
             });
             if (values.equals(in(region))) continue;
-            if (next == null) next = new HashMap<>(parts);
-            if (values.isEmpty()) next.remove(region); else next.put(region, new Part<>(values));
+            var old = parts.getOrDefault(region, emptyPart());
+            var replacement = values.isEmpty() ? RegionalBlockMap.<V>emptyPart() : new Part<>(values);
+            count += replacement.values.size() - old.values.size(); fingerprint += replacement.hash - old.hash;
+            next.put(region, values.isEmpty() ? Optional.empty() : Optional.of(replacement));
         }
-        return next == null ? this : new RegionalBlockMap<>(next);
+        var updated = parts.with(next);
+        return updated == parts ? this : new RegionalBlockMap<>(updated, count, fingerprint);
     }
     @Override public V get(Object key) { return key instanceof BlockPosition position ? in(Region.at(position)).get(position) : null; }
     @Override public boolean containsKey(Object key) { return get(key) != null; }

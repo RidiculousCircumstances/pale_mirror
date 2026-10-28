@@ -60,6 +60,32 @@ class KnownPedestrianGeometryScopesTest {
         assertFalse(actual.matches(oldProfile, Set.of(new PedestrianGeometryRevision.Region(0, 0))));
         assertTrue(actual.matches(oldProfile, Set.of(new PedestrianGeometryRevision.Region(1000, 1000))));
     }
+    @Test void spatialDirectoriesKeepExactContentsAndCountsAcrossLocalReplacementAndRemoval() {
+        var local = new BlockPosition(0, 64, 0); var replacement = new BlockPosition(1, 33, 0);
+        var remote = new BlockPosition(16000, 64, 16000); var region = PedestrianGeometryRevision.Region.at(local);
+        assertEquals(local.hashCode(), replacement.hashCode());
+        var blocks = RegionalBlockSet.copyOf(Set.of(local, remote));
+        var changed = blocks.replace(Map.of(region, Set.of(replacement)));
+        assertEquals(blocks.hashCode(), changed.hashCode()); assertNotEquals(blocks, changed);
+        assertEquals(Set.of(region), changed.changesFrom(blocks));
+        assertEquals(Set.of(replacement, remote), changed); assertEquals(2, changed.size());
+        assertEquals(Set.of(remote), changed.replace(Map.of(region, Set.of())));
+        var facts = RegionalBlockMap.copyOf(Map.of(local, new CollidingFact("before"), remote, new CollidingFact("remote")));
+        var next = facts.with(Map.of(local, new CollidingFact("after")));
+        assertEquals(facts.hashCode(), next.hashCode()); assertNotEquals(facts, next);
+        assertEquals(Set.of(region), next.changesFrom(facts));
+        assertEquals(Map.of(remote, new CollidingFact("remote")), next.replace(Map.of(region, Map.of())));
+        var column = new TerrainColumn(local.x(), local.z()); var remoteColumn = new TerrainColumn(remote.x(), remote.z());
+        var surfaces = RegionalSurfaceMap.copyOf(Map.of(column, List.of(new SurfaceAnchor(local)),
+                remoteColumn, List.of(new SurfaceAnchor(remote))));
+        var reduced = surfaces.replace(Map.of(region, Map.of()));
+        assertEquals(Map.of(remoteColumn, List.of(new SurfaceAnchor(remote))), reduced);
+        assertEquals(reduced.entrySet().hashCode(), reduced.hashCode()); assertEquals(1, reduced.size());
+        assertEquals(2, surfaces.size()); assertEquals(Set.of(region), reduced.changesFrom(surfaces));
+        assertSame(blocks.token(PedestrianGeometryRevision.Region.at(remote)), changed.token(PedestrianGeometryRevision.Region.at(remote)));
+        assertSame(facts.token(PedestrianGeometryRevision.Region.at(remote)), next.token(PedestrianGeometryRevision.Region.at(remote)));
+        assertSame(surfaces.token(PedestrianGeometryRevision.Region.at(remote)), reduced.token(PedestrianGeometryRevision.Region.at(remote)));
+    }
     @Test void interiorShapeChangeDoesNotInvalidateUnchangedRegionBoundary() {
         var versions = new KnownPedestrianGroundVersions(); var bootstrap = new Object();
         var interior = new BlockPosition(8, 64, 8);
@@ -105,6 +131,24 @@ class KnownPedestrianGeometryScopesTest {
         assertThrows(UnsupportedOperationException.class, () -> before.remove(wall));
         var opened = before.overlay(Set.of(wall), Set.of());
         assertFalse(opened.contains(wall)); assertTrue(before.contains(wall));
+    }
+    @Test void batchedOwnerReplacementRetainsExactRegionalPartsAndIndependentForks() {
+        var wall = new BlockPosition(2, 64, 2); var remote = new BlockPosition(160, 64, 160);
+        var terrain = RegionalBlockSet.copyOf(Set.of(wall, remote));
+        var parts = new RegionalBlockContributions<String>();
+        var before = parts.replace("terrain", terrain);
+        assertSame(terrain.token(PedestrianGeometryRevision.Region.at(remote)), before.token(PedestrianGeometryRevision.Region.at(remote)),
+                "an indexed producer part must not be enumerated and copied into another identical part");
+        var fork = parts.fork();
+        var transferred = parts.replaceAll(Map.of("terrain", RegionalBlockSet.copyOf(Set.of(remote)),
+                "physical", RegionalBlockSet.copyOf(Set.of(wall))));
+        assertSame(before, transferred, "a joint owner change has an unchanged final obstacle union");
+        var opened = parts.replaceAll(Map.of("physical", RegionalBlockSet.copyOf(Set.of())));
+        assertEquals(Set.of(remote), opened); assertEquals(Set.of(wall, remote), before);
+        assertSame(before.token(PedestrianGeometryRevision.Region.at(remote)), opened.token(PedestrianGeometryRevision.Region.at(remote)));
+        assertEquals(before, fork.snapshot(), "a private projection fork cannot mutate the published predecessor");
+        assertEquals(Set.of(wall, remote), fork.replaceAll(Map.of("physical", terrain)), "overlapping declarations retain their exact union");
+        assertThrows(UnsupportedOperationException.class, () -> opened.clear());
     }
     @Test void supportContributionsRetainMultipleLevelsAndWithdrawOnlyTheirOwnLayer() {
         var column = new TerrainColumn(-1, -1);
