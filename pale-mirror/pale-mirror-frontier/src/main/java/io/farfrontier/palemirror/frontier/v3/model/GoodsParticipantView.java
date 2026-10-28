@@ -115,8 +115,8 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
                         && containers.contains(slot.containerId())).count());
                 unclaimed = containers.stream().mapToInt(container -> GoodsParticipantStorage.individualStock(state, participant, container, commodity.itemKind()).size()).sum();
             }
-            int incoming = state.companies().goodsTrade().contracts().values().stream()
-                    .filter(contract -> !contract.terminal() && contract.buyer().equals(participant.party())
+            int incoming = state.companies().goodsTrade().purchases(participant.party()).stream()
+                    .filter(contract -> !contract.terminal()
                             && contract.itemKind().equals(commodity.itemKind()) && containers.contains(contract.receiverContainerId()))
                     .mapToInt(GoodsTradeContract::remainingQuantity).reduce(0, Math::addExact);
             for (var container : containers) incoming = Math.addExact(incoming, InternalShipmentIncomingStock.quantity(
@@ -128,7 +128,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         int residents = LivingResidentStockView.counts(state).getOrDefault(participant.settlementId(), 0);
         return new GoodsParticipantView(participant, residents,
                 state.inventory().economics().availableToReserve(participant.party().id()), result, Map.of(), Optional.empty(), Set.of(),
-                new FixedScalar(state.companies().goodsTrade().contracts().values().stream().filter(c -> !c.terminal() && c.seller().equals(participant.party()))
+                new FixedScalar(state.companies().goodsTrade().sales(participant.party()).stream().filter(c -> !c.terminal())
                         .mapToLong(c -> c.outstandingPrice().raw()).reduce(0L, Math::addExact)));
     }
     static GoodsParticipantView planned(FrontierWorldState state, GoodsParticipantView observed,

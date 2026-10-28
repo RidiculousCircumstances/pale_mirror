@@ -394,12 +394,18 @@ class InternalShipmentTest {
         var economics = state.inventory().economics();
         var sources = state.extractionSites();
         state = InternalShipmentStateSupport.dispatch(state, home.id(), new InternalShipmentDispatched(shipment, claim));
+        assertEquals(10, InternalShipmentIncomingStock.quantity(state.shipments(), home.id(), receiver.containerId(), shipment.itemKind()));
+        assertEquals(0, InternalShipmentIncomingStock.quantity(state.shipments(), home.id(), receiver.containerId(), "minecraft:bread"));
+        var dispatched = state;
         state = state.withActorBody(worker.id(), site.layout().storagePort().standingBody());
         state = ShipmentStateSupport.transferCold(state, shipmentId, shipmentId, 1, Shipment.Status.AWAITING_LOAD);
         state = state.withActorBody(worker.id(), receiver.station().standingBody());
         state = ShipmentStateSupport.transferCold(state, shipmentId, shipmentId, 2, Shipment.Status.CARRYING);
         var unloaded = state.shipments().shipments().get(shipmentId);
         assertEquals(Shipment.Status.DELIVERED, unloaded.status());
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        assertEquals(10, InternalShipmentIncomingStock.quantity(state.shipments(), home.id(), receiver.containerId(), shipment.itemKind()),
+                "unaccepted unloading remains incoming across recovery");
         assertTrue(state.inventory().fungibleResources().claims().containsKey(claimId));
         var expected = state;
         assertThrows(IllegalArgumentException.class, () -> InternalShipmentStateSupport.receive(expected, shipmentId,
@@ -411,6 +417,9 @@ class InternalShipmentTest {
         assertEquals(sources, state.extractionSites());
         assertFalse(state.inventory().fungibleResources().claims().containsKey(claimId));
         assertTrue(state.shipments().shipments().get(shipmentId).reception().isEmpty());
+        assertEquals(0, InternalShipmentIncomingStock.quantity(state.shipments(), home.id(), receiver.containerId(), shipment.itemKind()));
+        assertEquals(10, InternalShipmentIncomingStock.quantity(dispatched.shipments(), home.id(), receiver.containerId(), shipment.itemKind()),
+                "a retained predecessor has its own complete incoming obligation");
         var accepted = state;
         assertThrows(IllegalArgumentException.class, () -> InternalShipmentStateSupport.receive(accepted, shipmentId, receipt));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));

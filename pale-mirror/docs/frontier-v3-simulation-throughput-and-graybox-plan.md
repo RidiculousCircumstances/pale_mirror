@@ -4850,3 +4850,39 @@ sourcing, conditional quotes and storage adoption passed28checks in32s plus
 guardrails. No schema, recipe, business priority or compatibility path changed.
 Frozen package verification and both retained-world deployments follow; no gain
 for this cut is claimed from source-only evidence.
+
+
+### Read incoming commercial stock through exact local memberships
+
+6900b1952 frozen package/guardrails passed23s; its28focused results were reused
+from the verified task cache. Both retained worlds were verified after deployment.
+Its ordinary16cut observation304.296749s advanced253741→256859,10.246577ticks/s,
+debt508→3476. Sample towns1/35/100 completed their active meals (hungry1/3/2→0);
+town68 remained foodless and hungry1→7. No new terminal harvest or retained sales
+increment was proved in these5towns. The20tick objective remains open; different
+evolving workloads do not establish an isolated gain or regression.
+
+Saved CPU leaf samples identify GoodsParticipantView's all-contract scan inside
+each commodity projection and InternalShipmentIncomingStock's all-shipment scan
+inside each container/kind query. Both repeatedly pay world-size cost for one local
+stock fact. Extend the existing shared ImmutableGroupView with current row lists.
+A row value change invalidates old/new groups even when membership stays identical;
+order changes and failed projections retain the existing reset discipline. Unknown
+queries create no retained group, removed rows release their images, independent
+branches reconstruct from their actual source, and only one producer snapshot is
+held. This is a read model, never stock, eligibility or mutation authority.
+
+GoodsTradeState exposes read-only purchase/sale rows indexed by the contract's
+explicit nominal party. GoodsParticipantView still applies the same terminal, kind,
+receiver and outstanding-price rules, now to local rows. Internal shipment incoming
+stock indexes explicit claimant/receiver/kind for the same two existing grant kinds.
+Active and unloaded-unaccepted quantities retain checked sums; accepting reception
+removes its incoming amount. No legacy dispatch, schema or new business limit.
+
+Existing generic cases now check current values under stable memberships, foreign
+row reuse, branch restoration and removal. Real trade partial acceptance/recovery
+retains dated immutable rows; the actual internal haul case checks live incoming,
+unaccepted unloading across codec recovery, exact receipt rejection/acceptance and
+restoration of a retained predecessor. Connected verification passed79checks
+(including the architecture selection), plus guardrails. Frozen package verification
+and both retained-world deployments follow; no performance gain is claimed yet.

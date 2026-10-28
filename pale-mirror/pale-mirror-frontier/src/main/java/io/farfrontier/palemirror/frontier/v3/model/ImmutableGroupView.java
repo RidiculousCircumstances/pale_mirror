@@ -5,8 +5,8 @@ import java.util.function.Function;
 
 /** Disposable computing-thread inverse of explicitly declared row memberships.
  * Retains only the current producer registry, its memberships and queried lists
- * for actual groups. Unknown queries cannot grow it. No domain eligibility or
- * row values are cached; callers resolve candidates from their current source. */
+ * for actual groups. Unknown queries cannot grow it. Optional row images always
+ * follow changed producer rows; no domain eligibility or authority is cached. */
 final class ImmutableGroupView<K, V, G> {
     private static final class Image<K, V, G> {
         final Object epoch;
@@ -15,6 +15,7 @@ final class ImmutableGroupView<K, V, G> {
         final Map<G, Set<K>> groups = new HashMap<>();
         final Set<G> duplicates = new HashSet<>();
         final Map<G, List<K>> ordered = new HashMap<>();
+        final Map<G, List<V>> rows = new HashMap<>();
         List<K> order = List.of();
         Map<K, Integer> ranks = Map.of();
         Image(Object epoch) { this.epoch = epoch; }
@@ -48,6 +49,16 @@ final class ImmutableGroupView<K, V, G> {
         }
     }
 
+    /** Current row values in producer order, shared until that group's rows or
+     * order change. Unknown groups retain nothing; no predecessor image is kept. */
+    List<V> rows(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships, G group) {
+        var keys = keys(epoch, source, memberships, group);
+        if (keys.isEmpty()) return List.of();
+        var image = current.get();
+        return image.rows.computeIfAbsent(group, ignored -> keys.stream()
+                .map(key -> Objects.requireNonNull(image.source.get(key), "group lost its current row")).toList());
+    }
+
     /** Uniqueness of producer-declared memberships, never discovery of canonical ownership. */
     boolean uniqueMemberships(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships) {
         Objects.requireNonNull(epoch); Objects.requireNonNull(source); Objects.requireNonNull(memberships);
@@ -66,12 +77,16 @@ final class ImmutableGroupView<K, V, G> {
         if (nextOrder != image.order) {
             var ranks = new HashMap<K, Integer>();
             for (int i = 0; i < nextOrder.size(); i++) ranks.put(nextOrder.get(i), i);
-            image.ranks = ranks; image.order = nextOrder; image.ordered.clear();
+            image.ranks = ranks; image.order = nextOrder; image.ordered.clear(); image.rows.clear();
         }
         ImmutableMapChanges.forEachIdentityChangedKey(image.source, source, key -> {
             var row = source.get(key);
             var next = row == null ? Set.<G>of() : Set.copyOf(project.apply(row));
             var previous = image.memberships.getOrDefault(key, Set.of());
+            // A value replacement preserves candidate keys, but its old row
+            // image must not survive even when membership stays unchanged.
+            for (var group : previous) image.rows.remove(group);
+            for (var group : next) image.rows.remove(group);
             if (previous.equals(next)) return;
             for (var group : previous) if (!next.contains(group)) {
                 var keys = image.groups.get(group); keys.remove(key);

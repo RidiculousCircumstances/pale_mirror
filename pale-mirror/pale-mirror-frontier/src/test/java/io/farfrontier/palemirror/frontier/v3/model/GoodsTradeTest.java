@@ -536,6 +536,10 @@ class GoodsTradeTest {
 
     @Test void bothOwnersConsentAndPartialAcceptancePaysOnlyDeliveredRightsAcrossRecovery() {
         FrontierWorldState state = reserved();
+        var contract = state.companies().goodsTrade().contracts().get(CONTRACT);
+        var originalPurchases = state.companies().goodsTrade().purchases(contract.buyer());
+        assertEquals(List.of(contract), originalPurchases);
+        assertEquals(List.of(contract), state.companies().goodsTrade().sales(contract.seller()));
         FixedScalar initialBuyer = state.inventory().economics().require(BUYER).balance();
         FixedScalar initialSeller = state.inventory().economics().require(SELLER).balance();
         assertEquals(FixedScalar.whole(60), state.inventory().economics().reservations().get(HOLD).amount());
@@ -545,12 +549,16 @@ class GoodsTradeTest {
         assertEquals(initialSeller.plus(FixedScalar.whole(20)), state.inventory().economics().require(SELLER).balance());
         assertEquals(40, state.inventory().fungibleResources().claims().get(CLAIM).quantity());
         assertEquals(FixedScalar.whole(40), state.inventory().economics().reservations().get(HOLD).amount());
+        assertEquals(40, state.companies().goodsTrade().purchases(contract.buyer()).getFirst().remainingQuantity());
+        assertEquals(60, originalPurchases.getFirst().remainingQuantity(), "new receipts cannot mutate an older read image");
         assertEquals(44, state.inventory().fungibleResources().lots().get(LOT).quantity());
         assertEquals(SELLER, state.inventory().fungibleResources().lots().get(LOT).economicOwnerId());
         assertEquals(BUYER, state.inventory().fungibleResources().lots().get(id("lot:goods-one")).economicOwnerId());
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
         state = fact(state, BUYER, new GoodsTradeAccepted(receipt("receipt:goods-two", 1, 40, "lot:goods-two")));
         assertTrue(state.companies().goodsTrade().contracts().get(CONTRACT).fulfilled());
+        assertTrue(state.companies().goodsTrade().purchases(contract.buyer()).getFirst().terminal());
+        assertTrue(state.companies().goodsTrade().sales(contract.seller()).getFirst().terminal());
         assertFalse(state.inventory().economics().reservations().containsKey(HOLD));
         assertFalse(state.inventory().fungibleResources().claims().containsKey(CLAIM));
         assertEquals(4, state.inventory().fungibleResources().lots().get(LOT).quantity());

@@ -30,6 +30,15 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     Map<SubjectId, IndividualResourceAllocation> individualAllocations() {
         return INDIVIDUAL_ALLOCATIONS.project(GoodsTradeState.class, contracts, GoodsTradeContract::individualAllocations);
     }
+    private static final ImmutableGroupView<SubjectId, GoodsTradeContract, GoodsTradeParty> BUYERS = new ImmutableGroupView<>();
+    private static final ImmutableGroupView<SubjectId, GoodsTradeContract, GoodsTradeParty> SELLERS = new ImmutableGroupView<>();
+    /** Read-only inverse of explicit contract parties, including retained terminal rows. */
+    java.util.List<GoodsTradeContract> purchases(GoodsTradeParty party) {
+        return BUYERS.rows(GoodsTradeState.class, contracts, contract -> java.util.Set.of(contract.buyer()), party);
+    }
+    java.util.List<GoodsTradeContract> sales(GoodsTradeParty party) {
+        return SELLERS.rows(GoodsTradeState.class, contracts, contract -> java.util.Set.of(contract.seller()), party);
+    }
     private static final ImmutableInvariantCheck<Void> ORDER_IDENTITIES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> CONTRACT_IDENTITIES = new ImmutableInvariantCheck<>();
     public GoodsTradeState {
