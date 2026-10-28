@@ -92,6 +92,12 @@ class FrontierExecutionMetricsTest {
             throw new IllegalStateException("synthetic queue observation failure");
         }
 
+        @Override public Span action(WorldId world, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant at) {
+            throw new IllegalStateException("synthetic correlation failure");
+        }
+        @Override public void transaction(TransactionRecord transaction, boolean published) {
+            throw new IllegalStateException("synthetic transaction observation failure");
+        }
         @Override public Snapshot snapshot() { throw new IllegalStateException("synthetic snapshot failure"); }
     }
 }

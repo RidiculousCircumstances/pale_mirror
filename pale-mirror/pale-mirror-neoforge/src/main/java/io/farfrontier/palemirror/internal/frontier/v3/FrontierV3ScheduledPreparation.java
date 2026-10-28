@@ -10,6 +10,7 @@ import java.util.function.Supplier;
  * independent forecasts/checkpoints; the kernel alone owns publication. */
 final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<S>, AutoCloseable {
     private final ScheduledActionPlanner<S> delegate;
+    private final String traceWorld;
     private final java.util.concurrent.atomic.AtomicLong completed = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong totalNanos = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong maxNanos = new java.util.concurrent.atomic.AtomicLong();
@@ -19,6 +20,8 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
     private final Map<String, Long> adviceRejectionReasons = new TreeMap<>();
     private long cancelled;
     private long cancelledReady;
+    private FrontierV3DelayTrace.Task exactTrace = FrontierV3DelayTrace.Task.OFF;
+    long pendingTraceId(ScheduledAction action, long revision) { return exactTrace.matches(action, revision) ? exactTrace.id : 0; }
     private volatile Runnable ready = () -> { };
     void onReady(Runnable listener) { ready = Objects.requireNonNull(listener); }
     String diagnostic(boolean pending) {
@@ -39,13 +42,21 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                     thread.setDaemon(true); return thread;
                 });
     }
-    FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate) { this.delegate = Objects.requireNonNull(delegate); }
+    FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate) { this(delegate, "unbound"); }
+    FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate, String world) {
+        this.delegate = Objects.requireNonNull(delegate); this.traceWorld = Objects.requireNonNull(world);
+    }
     <T> java.util.Optional<java.util.concurrent.Future<T>> prepareValue(Supplier<T> value) {
-        var task = new FutureTask<T>(value::get) {
-            @Override protected void done() { if (!isCancelled()) ready.run(); }
+        var trace = FrontierV3DelayTrace.task("AUXILIARY", traceWorld); trace.mark("QUEUED");
+        var task = new FutureTask<T>(() -> {
+            trace.mark("RUNNING");
+            try { return value.get(); } finally { trace.mark("COMPUTED"); }
+        }) {
+            @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); ready.run(); } }
         };
         try { worker.execute(task); return java.util.Optional.of(task); }
         catch (java.util.concurrent.RejectedExecutionException busy) {
+            trace.mark("QUEUE_BUSY");
             if (worker.isShutdown()) throw busy;
             return java.util.Optional.empty();
         }
@@ -56,19 +67,22 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
         return beginPreparation(preparation.orElseThrow());
     }
     @Override public ScheduledCalculation beginPreparation(ScheduledPreparation preparation) {
+        var trace = FrontierV3DelayTrace.task("EXACT", traceWorld); exactTrace = trace; trace.mark("QUEUED");
         var task = new FutureTask<Supplier<List<ProposedEvent>>>(() -> {
-            long began = System.nanoTime();
+            long began = System.nanoTime(); trace.mark("RUNNING");
             try { return preparation.prepare(); }
             finally {
                 long elapsed = System.nanoTime() - began;
                 totalNanos.addAndGet(elapsed); maxNanos.accumulateAndGet(elapsed, Math::max); completed.incrementAndGet();
+                trace.mark("COMPUTED");
             }
         }) {
-            @Override protected void done() { if (!isCancelled()) ready.run(); }
+            @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); ready.run(); } }
         };
         boolean accepted;
         try { exactWorker.execute(task); accepted = true; }
         catch (RejectedExecutionException busy) {
+            trace.mark("QUEUE_BUSY");
             if (exactWorker.isShutdown()) throw busy;
             accepted = false;
         }
@@ -77,22 +91,24 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
             private boolean submitted = initiallySubmitted;
             @Override public Optional<List<ProposedEvent>> poll() {
                 if (!submitted) {
-                    try { exactWorker.execute(task); submitted = true; }
+                    try { trace.mark("QUEUED"); exactWorker.execute(task); submitted = true; }
                     catch (RejectedExecutionException busy) {
+                        trace.mark("QUEUE_BUSY");
                         if (exactWorker.isShutdown()) throw busy;
                         return Optional.empty();
                     }
                 }
                 if (!task.isDone()) return Optional.empty();
+                trace.mark("OWNER_COMPLETION_BEGIN");
                 try { return Optional.of(List.copyOf(task.get().get())); }
                 catch (InterruptedException error) {
                     Thread.currentThread().interrupt(); throw new IllegalStateException("scheduled preparation interrupted", error);
                 } catch (ExecutionException error) {
                     throw new IllegalStateException("scheduled exact preparation failed", error.getCause());
-                }
+                } finally { trace.mark("OWNER_COMPLETION_END"); }
             }
             @Override public void cancel() {
-                cancelled++;
+                trace.mark("CANCELLED"); cancelled++;
                 if (task.isDone() && !task.isCancelled()) cancelledReady++;
                 task.cancel(true); exactWorker.remove(task);
             }
@@ -102,18 +118,21 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
         return delegate.advice(state, action, instant);
     }
     @Override public Optional<ScheduledAdviceCalculation<S>> beginAdvice(ScheduledAdvisory<S> advice) {
+        var trace = FrontierV3DelayTrace.task("ADVICE", traceWorld); trace.mark("QUEUED");
         var task = new FutureTask<ScheduledAdvisory.Completion<S>>(() -> {
-            long began = System.nanoTime();
+            long began = System.nanoTime(); trace.mark("RUNNING");
             try { return advice.prepare(); }
             finally {
                 long elapsed = System.nanoTime() - began;
+                trace.mark("COMPUTED");
                 adviceNanos.addAndGet(elapsed); adviceCompleted.incrementAndGet();
                 totalNanos.addAndGet(elapsed); maxNanos.accumulateAndGet(elapsed, Math::max); completed.incrementAndGet();
             }
-        }) { @Override protected void done() { if (!isCancelled()) ready.run(); } };
-        if (worker.getQueue().remainingCapacity() <= 1) return Optional.empty();
+        }) { @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); ready.run(); } } };
+        if (worker.getQueue().remainingCapacity() <= 1) { trace.mark("QUEUE_BUSY"); return Optional.empty(); }
         try { worker.execute(task); }
         catch (RejectedExecutionException busy) {
+            trace.mark("QUEUE_BUSY");
             if (worker.isShutdown()) throw busy;
             return Optional.empty();
         }
@@ -121,13 +140,16 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
             @Override public Optional<ScheduledAdvisory.Completion<S>> poll() {
                 if (!task.isDone()) return Optional.empty();
                 try {
+                    trace.mark("OBSERVED");
                     var completion = task.get();
                     return Optional.of((current, at) -> {
+                        trace.mark("REVALIDATION_BEGIN");
                         var result = completion.revalidate(current, at);
-                        if (result.isPresent()) adviceAccepted++;
+                        if (result.isPresent()) { trace.mark("ACCEPTED"); adviceAccepted++; }
                         else {
                             adviceRejected++;
                             String reason = completion.rejectionReason();
+                            trace.mark("REJECTED", reason, 0);
                             if (reason == null || !reason.matches("[A-Z_]{1,32}")
                                     || !adviceRejectionReasons.containsKey(reason) && adviceRejectionReasons.size() >= 16)
                                 reason = "OTHER";
@@ -141,7 +163,7 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                 } catch (ExecutionException error) { throw new IllegalStateException("scheduled advice failed", error.getCause()); }
             }
             @Override public void cancel() {
-                cancelled++; if (task.isDone() && !task.isCancelled()) cancelledReady++;
+                trace.mark("CANCELLED"); cancelled++; if (task.isDone() && !task.isCancelled()) cancelledReady++;
                 task.cancel(true); worker.remove(task);
             }
         });

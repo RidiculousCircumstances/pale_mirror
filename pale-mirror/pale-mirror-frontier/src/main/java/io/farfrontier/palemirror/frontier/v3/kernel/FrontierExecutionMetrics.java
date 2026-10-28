@@ -84,6 +84,22 @@ public interface FrontierExecutionMetrics {
 
     Span begin(Stage stage, String kind, String owner);
 
+    /** Diagnostic correlation only; never identity or permission for executing an action. */
+    default Span action(io.farfrontier.palemirror.frontier.v3.api.WorldId world, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant at) {
+        return NoOp.SPAN;
+    }
+    default void transaction(TransactionRecord transaction, boolean published) { }
+    static Span safelyAction(FrontierExecutionMetrics metrics, io.farfrontier.palemirror.frontier.v3.api.WorldId world, ScheduledAction action,
+            io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant at) {
+        try {
+            var span = metrics.action(world, action, revision, at);
+            return span == null ? NoOp.SPAN : () -> { try { span.close(); } catch (RuntimeException ignored) { } };
+        } catch (RuntimeException ignored) { return NoOp.SPAN; }
+    }
+    static void safelyTransaction(FrontierExecutionMetrics metrics, TransactionRecord transaction, boolean published) {
+        try { metrics.transaction(transaction, published); } catch (RuntimeException ignored) { }
+    }
+
     /** Reports the current exact queue size and, when present, the first due action denied by budget. */
     void observeQueue(SimInstant instant, int queueDepth, Optional<ScheduledAction> deferred);
 
@@ -96,6 +112,9 @@ public interface FrontierExecutionMetrics {
     /** Audit-only evidence that an eligible owner wait lacked a matching invalidation. */
     default void observeWakeAudit(long auditReadyWithoutWake) { }
     default void observePressure(QueuePressure pressure) { }
+    default void observePressure(io.farfrontier.palemirror.frontier.v3.api.WorldId world, QueuePressure pressure) {
+        observePressure(pressure);
+    }
 
     Snapshot snapshot();
 

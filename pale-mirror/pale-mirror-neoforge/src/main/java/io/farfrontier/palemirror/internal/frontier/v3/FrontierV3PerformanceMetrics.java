@@ -31,8 +31,10 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     @Override
     public Span begin(Stage stage, String kind, String owner) {
         Key key = new Key(stage, kind, owner); long started = System.nanoTime();
+        var traced = FrontierV3DelayTrace.stage(stage, kind, owner);
         if (stage == Stage.HOST_TICK) { longestWork = null; longestWorkNanos = 0L; }
         return () -> {
+            FrontierV3DelayTrace.close(traced);
             long elapsed = Math.max(0L, System.nanoTime() - started);
             timing(key).record(elapsed);
             if (stage != Stage.HOST_TICK && stage != Stage.HOST_TURN && elapsed > longestWorkNanos) {
@@ -49,6 +51,14 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
                 io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
                         "PMV3_SLOW_READY_TURN durationNanos={} longestStage={} longestNanos={}", elapsed, longestWork, longestWorkNanos);
         };
+    }
+
+    @Override public Span action(io.farfrontier.palemirror.frontier.v3.api.WorldId world, ScheduledAction action,
+            io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant at) {
+        return FrontierV3DelayTrace.action(world, action, revision, at);
+    }
+    @Override public void transaction(io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord transaction, boolean published) {
+        FrontierV3DelayTrace.transaction(transaction, published);
     }
 
     @Override
@@ -73,6 +83,9 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     }
 
     @Override public void observePressure(QueuePressure value) { pressure = value; }
+    @Override public void observePressure(io.farfrontier.palemirror.frontier.v3.api.WorldId world, QueuePressure value) {
+        pressure = value; FrontierV3DelayTrace.pressure(world.value(), value);
+    }
 
     @Override
     public void observeWakeAudit(long count) {

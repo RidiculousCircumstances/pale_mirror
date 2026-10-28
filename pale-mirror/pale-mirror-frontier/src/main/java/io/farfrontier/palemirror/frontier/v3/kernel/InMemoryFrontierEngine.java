@@ -331,6 +331,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 SimInstant executionAt = pendingCalculation == null
                         ? laterOf(laterOf(instant, action.dueAt()), schedules.readyNotBefore(action)) : pendingCalculation.instant();
                 if (executionAt.compareTo(target) > 0) throw new IllegalStateException("ready admission lies after execution target");
+                try (var actionTrace = FrontierExecutionMetrics.safelyAction(executionMetrics, worldId, action, revision, executionAt)) {
                 try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_PLAN, action.kind(), action.subject().value())) {
                     ScheduledPreparation acceptedAdvice = null;
                     if (pendingCalculation == null) {
@@ -416,6 +417,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                     return advanceResult(completed, Optional.of(action), consumption(budget, completed.size() + preparationAttempts, weight));
                 completed.add(committed);
                 weight = Math.addExact(weight, cost);
+                }
             } catch (RuntimeException error) {
                 cancelPendingCalculation();
                 quarantine(CauseChain.root(ScheduledCauseIdentity.of(action.id())),
@@ -670,6 +672,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 confirmation = () -> true;
             } else confirmation = Objects.requireNonNull(transactionCommitter.prepare(transaction, durability));
         }
+        FrontierExecutionMetrics.safelyTransaction(executionMetrics, transaction, false);
         var previousState = state;
         var publishedState = nextState;
         boolean publishedWakeAll = wakeAll;
@@ -684,6 +687,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             if (publishedWakeAll) schedules.wakeAll(eventInstant.ticks());
             else schedules.wake(wakeKeys, eventInstant.ticks());
             transactions.add(transaction);
+            FrontierExecutionMetrics.safelyTransaction(executionMetrics, transaction, true);
             acceptedCommandReceipt.ifPresent(receipts::add);
             if (publicationObserver != null) {
                 try { publicationObserver.published(transaction, previousState, publishedState); }
@@ -708,7 +712,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         deferred = deferred.filter(schedules::containsExact);
         FrontierExecutionMetrics.safelyObserveQueue(executionMetrics, observedAt, queueDepth, parkedDepth, deferred);
         FrontierExecutionMetrics.safelyObserveWakeAudit(executionMetrics, schedules.auditReadyWithoutWake());
-        try { executionMetrics.observePressure(schedules.pressure(observedAt)); }
+        try { executionMetrics.observePressure(worldId, schedules.pressure(observedAt)); }
         catch (RuntimeException ignored) { /* Observations never determine a canonical transition. */ }
     }
 

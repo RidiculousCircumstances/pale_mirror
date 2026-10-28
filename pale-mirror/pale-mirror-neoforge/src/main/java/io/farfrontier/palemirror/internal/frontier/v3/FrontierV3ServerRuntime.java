@@ -67,7 +67,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, TransactionCommitter committer, int checkpointIntervalTicks, RecoveryImage recovered,
             RuntimeException startupFailure, DiagnosticRuntimeIdentity diagnosticRuntimeIdentity
     ) {
-        this.preparations = new FrontierV3ScheduledPreparation<>(Objects.requireNonNull(configuration, "configuration").scheduledPlanner());
+        this.preparations = new FrontierV3ScheduledPreparation<>(Objects.requireNonNull(configuration, "configuration").scheduledPlanner(), configuration.worldId().value());
         this.configuration = configuration.withScheduledPlanner(preparations)
                 .withTransactionCommitter(Objects.requireNonNull(committer, "transaction committer"));
         this.store = Objects.requireNonNull(store, "store");
@@ -151,6 +151,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     FrontierV3RuntimeStatus status() { return status; }
 
     FrontierExecutionMetrics executionMetrics() { return configuration.executionMetrics(); }
+    String traceWorld() { return configuration.worldId().value(); }
 
     /** Last authoritative instant remains readable when execution is stopped or quarantined; no snapshot encoding. */
     java.util.OptionalLong calendarInstant() {
@@ -360,10 +361,11 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
     private final java.util.Map<String, Long> ordinaryBudgetExhaustions = new java.util.TreeMap<>();
     private Long ordinaryBoundary;
+    private String lastBudgetCause = "";
     private final java.util.Map<String, Long> ordinaryYields = new java.util.TreeMap<>();
     private static final long MAX_READY_PREFIX_NANOS = 2_000_000L;
     /** One allowance per observed host tick, shared by all ready continuations. */
-    void beginOrdinaryTurn(WorkBudget budget) { ordinaryTurnBudget = Optional.of(Objects.requireNonNull(budget)); }
+    void beginOrdinaryTurn(WorkBudget budget) { ordinaryTurnBudget = Optional.of(Objects.requireNonNull(budget)); lastBudgetCause = ""; }
     void resumeOrdinaryTurn() { resumeOrdinaryTurn(System::nanoTime); }
     /** Host clock bounds only the disposable slice; canonical time still comes from observed ticks. */
     void resumeOrdinaryTurn(java.util.function.LongSupplier hostClock) {
@@ -383,6 +385,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             var used = result.orElseThrow().consumed();
             ordinaryTurnBudget = used.remaining(budget);
             if (ordinaryTurnBudget.isEmpty()) {
+                lastBudgetCause = used.actions() == budget.maxActions() ? "ACTIONS"
+                        : used.weight() == budget.maxWeight() ? "WEIGHT"
+                        : used.classifications() == budget.maxClassificationEvaluations() ? "CLASSIFICATIONS"
+                        : used.executions() == budget.maxExecutionEvaluations() ? "EXECUTIONS" : "UNKNOWN";
                 if (used.actions() == budget.maxActions()) ordinaryBudgetExhaustions.merge("ACTIONS", 1L, Long::sum);
                 if (used.weight() == budget.maxWeight()) ordinaryBudgetExhaustions.merge("WEIGHT", 1L, Long::sum);
                 if (used.classifications() == budget.maxClassificationEvaluations()) ordinaryBudgetExhaustions.merge("CLASSIFICATIONS", 1L, Long::sum);
@@ -410,6 +416,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         // never acknowledged merely because a WAL prefix was queued.
         long target = Math.addExact(instant.ticks(), Math.min(pendingOrdinaryTicks,
                 Math.max(1, checkpointIntervalTicks - ticksSinceCheckpoint)));
+        var trace = FrontierV3DelayTrace.attempt(configuration.worldId().value(), instant.ticks(), target, budget);
         AdvanceResult latest = null;
         var remaining = Optional.of(budget);
         var transactions = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.TransactionId>();
@@ -434,10 +441,14 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || latest.deferredAction().isPresent()
                     || engine.hasPendingCommit()) break;
         }
-        if (latest == null) return Optional.empty();
-        return Optional.of(new AdvanceResult(latest.revision(), latest.instant(), transactions, latest.deferredAction(),
+        if (latest == null) {
+            FrontierV3DelayTrace.close(trace, instant.ticks(), pendingOrdinaryTicks, null); return Optional.empty();
+        }
+        var combined = new AdvanceResult(latest.revision(), latest.instant(), transactions, latest.deferredAction(),
                 latest.simulationLagTicks(), latest.status(), new io.farfrontier.palemirror.frontier.v3.kernel.WorkConsumption(
-                        actions, weight, classifications, executions)));
+                        actions, weight, classifications, executions));
+        FrontierV3DelayTrace.close(trace, instant.ticks(), pendingOrdinaryTicks, combined);
+        return Optional.of(combined);
     }
 
     /** Random environmental samples have no retained player intent. Yield them before
@@ -463,6 +474,29 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     /** The runtime owns pairing and gating; host callers cannot acknowledge a queued prefix. */
     void runPersistenceTurn(Runnable turn) {
+        var trace = FrontierV3DelayTrace.turnsEnabled() ? FrontierV3DelayTrace.turn(configuration.worldId().value(),
+                engine == null ? -1 : engine.canonicalState().instant().ticks()) : null;
+        try { runPersistenceTurnOwned(turn); }
+        finally { if (trace != null) closeDelayTurn(trace); }
+    }
+    private void closeDelayTurn(FrontierV3DelayTrace.Turn trace) {
+        try {
+            var action = pendingScheduledCalculation().orElse(null);
+            String gate = status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE ? "INACTIVE"
+                    : pendingOrdinaryTicks == 0 && ordinaryBoundary == null ? "NO_DEBT"
+                    : engine.hasPendingCalculation() ? "EXACT_CALCULATION"
+                    : engine.hasPendingCommit() ? "COMMIT_CONFIRMATION"
+                    : store instanceof FrontierFileStore files && files.diagnosticTurnPending() ? "WAL_TURN"
+                    : ordinaryTurnBudget.isEmpty() ? "BUDGET" : "READY_DISPATCH";
+            long dependency = action != null ? preparations.pendingTraceId(action, engine.canonicalState().revision().value())
+                    : (gate.equals("WAL_TURN") || gate.equals("COMMIT_CONFIRMATION")) && store instanceof FrontierFileStore files
+                        ? files.diagnosticFlushId() : 0;
+            FrontierV3DelayTrace.close(trace, engine == null ? -1 : engine.canonicalState().instant().ticks(), pendingOrdinaryTicks,
+                    engine == null ? -1 : engine.canonicalState().revision().value(), gate, dependency,
+                    action, ordinaryTurnBudget.orElse(null), lastBudgetCause);
+        } catch (RuntimeException ignored) { /* Optional evidence cannot affect execution. */ }
+    }
+    private void runPersistenceTurnOwned(Runnable turn) {
         Objects.requireNonNull(turn, "persistence turn");
         if (store instanceof FrontierFileStore fileStore) {
             if (!fileStore.tryContinueTurn()) { ordinaryYields.merge("PERSISTENCE_WAIT", 1L, Long::sum); return; }

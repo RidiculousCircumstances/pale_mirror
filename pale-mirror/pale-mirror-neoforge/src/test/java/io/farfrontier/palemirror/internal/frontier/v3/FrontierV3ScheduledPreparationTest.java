@@ -75,8 +75,11 @@ class FrontierV3ScheduledPreparationTest {
                 });
             }
         };
-        try (var host = new FrontierV3ScheduledPreparation<>(planner)) {
+        var path = java.nio.file.Files.createTempFile("pm-delay-trace-", ".jfr");
+        try (var recording = new jdk.jfr.Recording(); var host = new FrontierV3ScheduledPreparation<>(planner, "frontier:trace-test")) {
+            recording.enable("pale_mirror.DelayPoint"); recording.start();
             var ready = new CountDownLatch(1); host.onReady(ready::countDown);
+            try (var correlation = FrontierV3DelayTrace.action(new WorldId("frontier:trace-test"), action, new Revision(7), new SimInstant(1))) {
             var calculation = host.begin(3, action, new SimInstant(1));
             entered.await();
             assertTrue(calculation.poll().isEmpty()); assertNull(completedOn.get());
@@ -86,6 +89,15 @@ class FrontierV3ScheduledPreparationTest {
             Optional<List<ProposedEvent>> result;
             do { result = calculation.poll(); if (result.isEmpty()) Thread.yield(); } while (result.isEmpty());
             assertEquals(1, result.orElseThrow().size()); assertSame(owner, completedOn.get());
-        } finally { release.countDown(); }
+            }
+            recording.stop(); recording.dump(path);
+            var points = jdk.jfr.consumer.RecordingFile.readAllEvents(path).stream()
+                    .filter(e -> e.getEventType().getName().equals("pale_mirror.DelayPoint") && "EXACT".equals(e.getString("type"))).toList();
+            assertEquals(Set.of("QUEUED", "RUNNING", "COMPUTED", "READY", "OWNER_COMPLETION_BEGIN", "OWNER_COMPLETION_END"),
+                    points.stream().map(e -> e.getString("phase")).collect(java.util.stream.Collectors.toSet()));
+            assertEquals(1, points.stream().map(e -> e.getLong("id")).distinct().count());
+            assertTrue(points.stream().allMatch(e -> "frontier:trace-test".equals(e.getString("world"))
+                    && action.id().value().equals(e.getString("action")) && e.getLong("revision") == 7 && e.getLong("parent") > 0));
+        } finally { release.countDown(); java.nio.file.Files.deleteIfExists(path); }
     }
 }

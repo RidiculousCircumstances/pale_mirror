@@ -2236,3 +2236,49 @@ or unpublished participant values still compute normally without entering the me
 No arbitrary cache quota, new business identity inference, policy or stale-view reuse.
 Existing participant/declaration, economic publication/recovery and procurement checks
 +guardrailsPASS24s. Native effect remains pending, G OPEN.
+
+
+### Causal clock tracing — first required step (2026-10-28)
+
+User explicitly requested goal and causal tracing BEFORE another optimization.
+Goal1793160688 is active; previous absence is no longer a blocker. No measured
+end-to-end improvement is claimed for previous leaf corrections. d9f ordinary100
+achieved1.805 canonical ticks/s with growing debt (target20); G remains FAILED.
+
+One on-demand JFR recording joins existing owner-stage metrics to scheduled
+passes (exact action/world/revision), exact/advisory worker queue/run/completion,
+owner observation/revalidation, transaction append/publication, WAL batch members
+and force completion, queued readiness callbacks, clock attempts/budgets and exact
+schedule pressure. Navigation worker slices share the same envelope; they do not
+claim a terminal route or business owner when the submitting context lacks one.
+
+No canonical state/schema, ordering, pool, budget or business policy changes.
+The pure kernel reports values through its existing failure-isolated metrics SPI;
+only the native diagnostic adapter reads wall time. JFR is bounded by recording
+size/duration and retains no game-lifetime sample registry. Disabled tracing
+performs no file writes; observers never poll a transaction or advance a route.
+Future readiness and owner publication remain separate; queued/advisory work is
+not presumed to block canonical advancement.
+
+`tools/performance/SimulationDelayReport.java` streams one recording (maximum
+1million custom events/100k tasks, fails explicitly beyond that bound), unions
+nested owner spans and partitions covered gaps by their last actual owner gate.
+Computed dependencies split queued/running time from result waiting for owner.
+Missing dependencies, data loss and recording edges remain explicit. RUNNABLE
+unattributed dispatch can include Minecraft, GC or unrelated host work; it is not
+proof of a lost wake. Inclusive nested stage costs/parallel worker durations are
+reported separately and MUST NOT be added to exclusive wall-gate totals.
+
+Next: verify/deploy diagnostic increment to retained worlds, record ordinary100
+without fast-forward/player interference, establish measured blocking map. Only
+then choose the connected optimization; terminal/HOT/COLD/restart/5footprints
+acceptance remains open. Instrumentation itself is not a product speedup.
+
+Verification: core metrics canonical-byte/noninterference2 checks and native
+preparation/readiness/runtime/WAL checks pass with guardrails. Expanded native
+navigation focus exposes an EXISTING failure: restartRebindsLostCalculationAndActualServerCompletionWakesWaitingGroup
+finishes fixture clock6004 with READY group/one zero-work route instead of
+TRAVELLING. Identical isolated failure reproduced on clean d9f297eb9 (baseline
+log delay-trace-navigation-baseline.log). It is retained OPEN, not suppressed
+or explained as product/harness without further diagnosis. This does not turn
+focused diagnostic delivery into full navigation/scale acceptance.

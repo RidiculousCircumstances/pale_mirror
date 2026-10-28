@@ -78,7 +78,7 @@ final class FrontierV3PedestrianPlanning {
                     new java.util.concurrent.ArrayBlockingQueue<>(8),
                     Thread.ofPlatform().daemon(true).name("pm-v3-navigation-", 0).factory(),
                     new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
-            var next = new CooperativePedestrianPlanner(nextWorkers);
+            var next = new CooperativePedestrianPlanner(FrontierV3DelayTrace.executor(nextWorkers, "NAVIGATION_SLICE", runtime.traceWorld()));
             var nextBinding = PedestrianRoutePlanning.bind(next);
             next.onReady(() -> { calculationReady.set(true); runtime.signalCalculationReady(); });
             owner = runtime; planner = next; workers = nextWorkers; binding = nextBinding;

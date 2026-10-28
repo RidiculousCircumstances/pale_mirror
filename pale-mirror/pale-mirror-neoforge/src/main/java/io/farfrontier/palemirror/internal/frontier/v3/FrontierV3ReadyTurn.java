@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class FrontierV3ReadyTurn implements AutoCloseable {
     private final Executor ownerQueue;
     private final Runnable resume;
+    private final String traceWorld;
     private final AtomicBoolean queued = new AtomicBoolean();
     private volatile boolean closed;
     private volatile long queuedAt, lastQueueDelayNanos, maxQueueDelayNanos, totalQueueDelayNanos, delivered;
@@ -18,22 +19,27 @@ final class FrontierV3ReadyTurn implements AutoCloseable {
                 + (queued.get() && queuedAt != 0L ? Math.max(0L, System.nanoTime() - queuedAt) : 0L) + "}";
     }
 
-    FrontierV3ReadyTurn(Executor ownerQueue, Runnable resume) {
+    FrontierV3ReadyTurn(Executor ownerQueue, Runnable resume) { this("unbound", ownerQueue, resume); }
+    FrontierV3ReadyTurn(String world, Executor ownerQueue, Runnable resume) {
+        traceWorld = Objects.requireNonNull(world);
         this.ownerQueue = Objects.requireNonNull(ownerQueue);
         this.resume = Objects.requireNonNull(resume);
     }
     void signal() {
         if (closed || !queued.compareAndSet(false, true)) return;
         long requestedAt = System.nanoTime(); queuedAt = requestedAt;
+        var trace = FrontierV3DelayTrace.task("READY_TURN", traceWorld); trace.mark("QUEUED");
         try {
             ownerQueue.execute(() -> {
                 queued.set(false);
                 lastQueueDelayNanos = Math.max(0L, System.nanoTime() - requestedAt);
                 maxQueueDelayNanos = Math.max(maxQueueDelayNanos, lastQueueDelayNanos);
                 totalQueueDelayNanos += lastQueueDelayNanos; delivered++;
-                if (!closed) resume.run();
+                trace.mark("DELIVERED");
+                try { if (!closed) resume.run(); }
+                finally { trace.mark("FINISHED"); }
             });
-        } catch (RuntimeException failure) { queued.set(false); throw failure; }
+        } catch (RuntimeException failure) { trace.mark("FAILED"); queued.set(false); throw failure; }
     }
     @Override public void close() { closed = true; }
 }

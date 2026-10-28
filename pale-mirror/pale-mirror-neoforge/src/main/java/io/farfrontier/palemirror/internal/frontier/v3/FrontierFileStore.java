@@ -55,6 +55,8 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private long pendingBytes;
     private java.util.concurrent.CompletableFuture<FlushReceipt> pendingFlush;
     private int flushingRecords;
+    private long diagnosticFlushId;
+    private boolean diagnosticTurnRefused;
     private long flushingBytes, flushGroups, lastFlushNanos, maxFlushNanos, pendingSinceNanos;
     private long batchableAppends, durableBeforeEffectAppends;
     private final Map<String, Long> effectBarrierKinds = new java.util.LinkedHashMap<>();
@@ -215,6 +217,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
             flushPendingBlocking(); head = head(worldId);
         }
         pendingRecords.add(new PendingRecord(worldId, sequence, bytes));
+        FrontierV3DelayTrace.appended(transaction, sequence);
         pendingBytes = Math.addExact(pendingBytes, bytes.length);
         DurableHead appended = head.appended(sequence, transaction.revision());
         durableHeads.put(worldId, appended);
@@ -256,6 +259,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
                         image.validateAppend(transaction);
                         sequence = Math.addExact(head.lastSequence(), 1L);
                         pendingRecords.add(new PendingRecord(transaction.worldId(), sequence, encoded));
+                        FrontierV3DelayTrace.appended(transaction, sequence);
                         pendingBytes = Math.addExact(pendingBytes, encoded.length);
                         durableHeads.put(transaction.worldId(), head.appended(sequence, transaction.revision()));
                         image.appended(transaction); observeAppend(transaction, durability);
@@ -390,11 +394,12 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
      * its complete prefix through prepareAppend before acknowledgement. */
     synchronized boolean tryContinueTurn() {
         checkHealthy();
-        if (!finishPendingFlush(false)) return false;
+        if (!finishPendingFlush(false)) { diagnosticTurnRefused = true; return false; }
         if (!pendingRecords.isEmpty() && (!cooperativeBatchOpen || cooperativeBatchDue())) {
             startPendingFlush(false);
-            if (!finishPendingFlush(false) || !pendingRecords.isEmpty()) return false;
+            if (!finishPendingFlush(false) || !pendingRecords.isEmpty()) { diagnosticTurnRefused = true; return false; }
         }
+        diagnosticTurnRefused = false;
         turnDepth = Math.addExact(turnDepth, 1); return true;
     }
     synchronized void yieldTurnAsync() {
@@ -417,6 +422,11 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     record Pressure(int bufferedRecords, long bufferedBytes, boolean awaitingDurability,
                     long pendingNanos, long forcedGroups, long lastFlushNanos, long maxFlushNanos,
                     long batchableAppends, long durableBeforeEffectAppends, Map<String, Long> effectBarrierKinds) { }
+    /** Read-only host-gate evidence; never polls or acknowledges a durable prefix. */
+    synchronized boolean diagnosticTurnPending() {
+        return pendingFlush != null ? !pendingFlush.isDone() : diagnosticTurnRefused && !pendingRecords.isEmpty();
+    }
+    synchronized long diagnosticFlushId() { return diagnosticFlushId; }
     synchronized Pressure pressure() {
         return new Pressure(pendingRecords.size() + flushingRecords, pendingBytes + flushingBytes,
                 pendingFlush != null || !pendingRecords.isEmpty(), pendingSinceNanos == 0L ? 0L
@@ -460,8 +470,10 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         if (pendingRecords.isEmpty()) return;
         var records = List.copyOf(pendingRecords);
         var future = new java.util.concurrent.CompletableFuture<FlushReceipt>();
+        var trace = FrontierV3DelayTrace.task("WAL", records.getFirst().world().value());
+        trace.mark("QUEUED", records.getFirst().world().value(), records.size());
         Runnable task = () -> {
-            long start = System.nanoTime();
+            long start = System.nanoTime(); trace.mark("RUNNING");
             try {
                 var through = new java.util.LinkedHashMap<WorldId, Long>();
                 for (var record : records) {
@@ -469,13 +481,18 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
                     through.put(record.world(), record.sequence());
                 }
                 for (var world : through.keySet()) Objects.requireNonNull(activeSegments.get(world), "active WAL prefix").force();
+                trace.mark("COMPUTED");
                 future.complete(new FlushReceipt(Map.copyOf(through), System.nanoTime() - start));
-            } catch (Throwable failure) { future.completeExceptionally(failure); }
+            } catch (Throwable failure) { trace.mark("FAILED"); future.completeExceptionally(failure); }
+            finally { trace.mark("READY"); }
         };
         if (!submitIo(task, required)) {
+            trace.mark("QUEUE_BUSY");
             if (pendingSinceNanos == 0L) pendingSinceNanos = System.nanoTime();
             return; // bounded backpressure; retain every original byte for the next turn
         }
+        for (var record : records) trace.mark("MEMBER", record.world().value(), record.sequence());
+        diagnosticFlushId = trace.id;
         pendingFlush = future; flushingRecords = records.size(); flushingBytes = pendingBytes;
         pendingRecords.clear(); pendingBytes = 0;
         cooperativeBatchOpen = false; cooperativeWakeScheduled = false;
