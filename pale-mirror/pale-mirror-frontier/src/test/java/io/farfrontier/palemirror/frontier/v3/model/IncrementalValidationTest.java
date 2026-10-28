@@ -44,6 +44,24 @@ class IncrementalValidationTest {
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
         assertDoesNotThrow(() -> ResourceSitePhysicalIntentStateSupport.validateState(recovered.resourceSites(), Map.of(), Map.of()));
     }
+    @Test void harvestAccountCustodyChangeCannotReuseAnUnchangedFieldsSuccessfulProof() {
+        var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
+        var before = fixture.state(); var job = fixture.job();
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, before));
+        var resources = before.inventory().fungibleResources();
+        var account = java.util.Objects.requireNonNull(resources.accounts().get(job.depotAccountId()));
+        var foreign = new CustodyAccount(account.id(), new ResourceCustody.Actor(job.workerId()),
+                account.lotQuantities(), account.claimQuantities());
+        var changed = new FungibleResourceLedger(resources.lots(), resources.claims(),
+                ImmutableLookupMap.withEntry(resources.accounts(), foreign.id(), foreign), resources.bindings());
+        var preview = FrontierWorldState.duringUnpublishedTransition(() -> before.withInventory(
+                before.inventory().withFungibleResources(changed)));
+        var failure = assertThrows(IllegalArgumentException.class,
+                () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, preview));
+        assertEquals("active harvest depot account has foreign custody", failure.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(preview));
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, before));
+    }
     @Test void structureMembershipCannotReuseSuccessfulEvidenceAfterEitherInsertionOrRemoval() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:structure-membership"), 125L));
         var first = state.structureConditions().keySet().iterator().next();

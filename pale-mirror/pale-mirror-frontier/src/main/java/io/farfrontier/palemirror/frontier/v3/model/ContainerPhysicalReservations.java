@@ -9,6 +9,23 @@ final class ContainerPhysicalReservations {
     private static final ImmutableInputView<List<ContainerSlotClaim>> BACKED = new ImmutableInputView<>();
     private static final ImmutableInputView<Map<SubjectId, List<ContainerSlotClaim>>> BY_CONTAINER = new ImmutableInputView<>();
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
+    private static final ImmutableInputView<Map<SubjectId, BackingView>> LOCAL_BACKING = new ImmutableInputView<>();
+    private static final ThreadLocal<List<ContainerSlotClaim>> previousDeclared = ThreadLocal.withInitial(List::of);
+    private static final ThreadLocal<List<ContainerSlotClaim>> previousBacked = ThreadLocal.withInitial(List::of);
+    /** Local capacity facts only. A claim elsewhere cannot force this container's
+     * sorted reservation admission to run again; player edits still change its budget. */
+    private static final class BackingView {
+        private List<ContainerSlotClaim> declared;
+        private ContainerSlotBudget budget;
+        private List<ContainerSlotClaim> result;
+        List<ContainerSlotClaim> get(ExactInventory inventory, List<ContainerSlotClaim> next, ContainerSlotBudget current) {
+            if (result == null || !declared.equals(next) || !budget.equals(current)) {
+                var checked = backed(inventory, next);
+                declared = next; budget = current; result = checked;
+            }
+            return result;
+        }
+    }
     private record DemandKey(SubjectId owner, SubjectId container, ContainerSectionId section, String kind, ContainerInboundCapacity.Representation representation) { }
     private record Owners(Map<SubjectId, ResourceSiteLifecycle> sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
             io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,
@@ -35,12 +52,24 @@ final class ContainerPhysicalReservations {
         return CLAIMS.get(inputs, () -> {
             var claims = contributions.stream().flatMap(List::stream).toList();
             requireExclusive(inventory, claims);
-            return claims;
+            var previous = previousDeclared.get();
+            if (previous.equals(claims)) return previous;
+            previousDeclared.set(claims); return claims;
         });
     }
+    private static List<ContainerSlotClaim> declared(FrontierWorldState state) {
+        return claims(state.inventory(), new Owners(state.resourceSites().sites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.forest(), state.physicalIntents()));
+    }
     static List<ContainerSlotClaim> claims(FrontierWorldState state) {
-        var declared = claims(state.inventory(), new Owners(state.resourceSites().sites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.forest(), state.physicalIntents()));
-        return BACKED.get(List.of(state.inventory(), declared), () -> backed(state.inventory(), declared));
+        var declared = declared(state);
+        return BACKED.get(List.of(state.inventory(), declared), () -> {
+            var grouped = byContainer(declared);
+            var result = grouped.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .flatMap(entry -> backingAt(state, entry.getKey(), entry.getValue()).stream()).toList();
+            var previous = previousBacked.get();
+            if (previous.equals(result)) return previous;
+            previousBacked.set(result); return result;
+        });
     }
     /** Prospective destinations reserve only still available capacity. External
      * edits may displace them; in-flight physical operations are separately fenced
@@ -76,16 +105,25 @@ final class ContainerPhysicalReservations {
                     + claim.slot() + " owners=" + prior + "," + claim.owner());
         }
     }
-    /** Select only this exact storage's already validated/backed claims. The list
-     * identity includes all current owner and inventory backing dependencies. */
-    private static List<ContainerSlotClaim> atContainer(FrontierWorldState state, SubjectId container) {
-        var claims = claims(state);
+    private static Map<SubjectId, List<ContainerSlotClaim>> byContainer(List<ContainerSlotClaim> claims) {
         return BY_CONTAINER.get(List.of(claims), () -> {
             var result = new HashMap<SubjectId, List<ContainerSlotClaim>>();
             for (var claim : claims) result.computeIfAbsent(claim.slot().containerId(), ignored -> new ArrayList<>()).add(claim);
             result.replaceAll((id, values) -> List.copyOf(values));
             return Collections.unmodifiableMap(result);
-        }).getOrDefault(container, List.of());
+        });
+    }
+    /** Discover this container before assessing capacity, never after a world-wide
+     * backing pass. Views are bounded by the current declared container registry. */
+    private static List<ContainerSlotClaim> atContainer(FrontierWorldState state, SubjectId container) {
+        return backingAt(state, container, byContainer(declared(state)).getOrDefault(container, List.of()));
+    }
+    private static List<ContainerSlotClaim> backingAt(FrontierWorldState state, SubjectId container, List<ContainerSlotClaim> claims) {
+        if (claims.isEmpty()) return List.of();
+        var inventory = state.inventory();
+        var budget = ContainerStockIndex.budget(inventory, container);
+        var views = LOCAL_BACKING.get(List.of(inventory.containers()), HashMap::new);
+        return views.computeIfAbsent(container, ignored -> new BackingView()).get(inventory, claims, budget);
     }
     static Set<Integer> slots(FrontierWorldState state, SubjectId container) {
         return slots(state, container, Optional.empty());

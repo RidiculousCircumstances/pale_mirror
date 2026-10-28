@@ -326,8 +326,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                     Map.of(ProductionOrderKind.STATION_WORK, StationWorkOperation.activeOrders(productionJobs))), productionStations, productionJobs);
             OwnedChecks.RESOURCE_SITES.validate(() -> resourceSites.validate(bootstrap), resourceSites,
                     bootstrap);
-            OwnedChecks.HARVEST_RESERVATIONS.validate(() -> HarvestContainerReservations.validate(inventory, resourceSites), inventory, resourceSites);
-            OwnedChecks.HARVEST_ACCOUNTS.validate(() -> HarvestContainerReservations.validateAccounts(inventory, resourceSites), inventory, resourceSites);
+            OwnedChecks.HARVEST_RESERVATIONS.validate(() -> HarvestContainerReservations.validate(inventory.containers(), resourceSites.sites()),
+                    inventory.containers(), resourceSites.sites());
+            OwnedChecks.HARVEST_ACCOUNTS.validate(() -> HarvestContainerReservations.validateAccounts(inventory.fungibleResources().accounts(), resourceSites.sites()),
+                    inventory.fungibleResources().accounts(), resourceSites.sites());
             OwnedChecks.STRATEGIC_PLANS.validate(() -> strategicPlans.validate(bootstrap, routeTopology, humanPopulation, resourceSites), strategicPlans, bootstrap,
                     routeTopology, humanPopulation, resourceSites);
             OwnedChecks.HIVE_SETTLEMENT_KNOWLEDGE.validate(() -> strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations),

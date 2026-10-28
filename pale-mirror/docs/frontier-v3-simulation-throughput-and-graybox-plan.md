@@ -4721,3 +4721,61 @@ changed lifecycle. Added the actual scan counterexample, eventual demotion/evict
 64-scope retirement and a controlled clear-before-worker-publication case.
 Initial connected focus passed before the final controlled clear case; the frozen
 union must pass before deployment. Runtime throughput benefit is unmeasured.
+
+
+### Remove measured repeated stock-backing work and transient read allocations
+
+0937bd62c frozen61checks/guardrails/package passed; both retained worlds deployed.
+Ordinary304.280583s advanced228350→231556,10.536328ticks/s,debt579→3458;
+last five intervals11.89–12.67/s. Layered graph constructions8,887/evictions8,302.
+This is not a controlled percentage gain against the earlier evolving workload.
+No new terminal harvest/accepted trade was proven in the five bounded histories.
+G remains open. Evidence: region-scan-retention-ordinary/.
+
+A separate current45sJFR has zeroDataLoss and44.799193s completed owner coverage:
+405ticks9.040341/s,debt3586→4084. Exclusive wall gates owner52.69%,exact30.40%,
+WAL8.33%,ready-exact waiting owner6.30%. Navigation workers used about0.65CPU-s
+each over47.25s,while advice workers used41.15/40.03CPU-s and server22.67CPU-s.
+Actual allocation deltas advice36.21/37.35GB,server10.17GB,exact8.67GB; navigation
+0.389/0.363GB. Weighted allocation samples are not exact bytes and some weights
+exceed thread totals. Files: scan-resistant-current-ordinary100.jfr,
+scan-resistant-current-ordinary100-{report,cpu}.txt,thread-cpu.json and
+scan-resistant-current-allocation-callers.txt.
+
+The source-confirmed next defect is the stock-backing boundary: a local slot query
+first called claims(state), which rechecked every declared container's reservations
+whenever any inventory component changed. Its sorted canReserveSlots pass repeatedly
+constructed the same empty inbound image. Discover declared claims for the requested
+container first, then assess only that container. The existing aggregate view uses
+the same local results in the original container/slot order. A local view retains
+only the complete declared claim values and ContainerStockIndex's exact immutable
+packing facts, bounded by the actual current container registry. No state-only TTL,
+new reservation authority or fixed undersized container LRU. Player occupation,
+bindings, physical stock and changed claims all change those facts and recheck.
+Complete declaration validation still precedes use; equal immutable declared/backed
+lists can reuse their value image without carrying an old world or validation proof.
+
+ContainerIncomingStock now shares its immutable empty value and validates/sums
+with checked loops instead of transient stream pipelines. GoodsTradeContract's
+quantity sum keeps Math.addExact without its repeated stream; replacement valuation
+constructs its missing-input error text only on the actual failing branch.
+The shared exact bioform resolver keeps original bootstrap-then-spawned matching
+with loops; no hive business or behavior change is introduced.
+
+Harvest slot validation receives only container records and site lifecycle rows;
+account validation receives only custody accounts and site rows. Their successful
+proofs no longer depend on unrelated inventory facets or biological cycles. The
+narrow method signatures constrain the complete read set. Full audits still rerun,
+changed inputs still reject. Extended IncrementalValidationTest warms a real harvest
+proof, forges only its depot account's custody in an unpublished preview, and checks
+failure at both transaction publication and complete ingress before restoring the
+valid predecessor. Existing player-occupied harvest slot, inbound completion,
+individual shipment and container-interference cases exercise current backing.
+
+Initial scalar/read-dependency focus passed126s, before the local-backing change.
+Local-backing connected selection passed34s with player edits, custody/recovery,
+field interference and incremental validation. Final helper cleanup avoids
+re-entering declared-owner composition per container in the aggregate pass.
+The frozen union, including inbound-negative/checked-overflow assertions added
+to the existing capacity case, remains required before deployment.
+No throughput gain for this new cut is claimed until a clean deployed observation.

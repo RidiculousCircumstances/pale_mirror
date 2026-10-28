@@ -183,5 +183,9 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
             receipts.remove(firstReceipt.id());
         } else dispositions.remove(java.util.Objects.requireNonNull(firstDisposition).id());
     }
-    private static int sum(Map<SubjectId, Integer> values) { return values.values().stream().reduce(0, Math::addExact); }
+    private static int sum(Map<SubjectId, Integer> values) {
+        int total = 0;
+        for (int quantity : values.values()) total = Math.addExact(total, quantity);
+        return total;
+    }
 }

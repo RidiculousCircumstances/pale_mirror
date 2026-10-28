@@ -50,7 +50,9 @@ public final class SourcingValuation {
     }
     private static long replacement(String item, List<ProductionCost> capacities, Map<String, Long> prices,
             Set<String> quoted, Map<String, Long> costs, Set<String> visiting, long labour) {
-        long reference = Objects.requireNonNull(prices.get(item), "missing explicit replacement estimate " + item);
+        var estimate = prices.get(item);
+        if (estimate == null) throw new NullPointerException("missing explicit replacement estimate " + item);
+        long reference = estimate;
         long result = quoted.contains(item) ? reference : Long.MAX_VALUE;
         for (var candidate : capacities) if (candidate.product().equals(item))
             result = Math.min(result, cost(candidate, capacities, prices, quoted, costs, visiting, labour));

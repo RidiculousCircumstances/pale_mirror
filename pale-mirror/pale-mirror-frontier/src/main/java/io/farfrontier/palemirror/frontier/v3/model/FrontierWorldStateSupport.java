@@ -46,8 +46,9 @@ public final class FrontierWorldStateSupport {
     }
 
     public static Bioform bioform(FrontierBootstrap bootstrap, HiveColony colony, SubjectId id) {
-        return java.util.stream.Stream.concat(bootstrap.hive().bioforms().stream(), colony.spawnedBioforms().values().stream())
-                .filter(bioform -> bioform.id().equals(id)).findFirst().orElseThrow(() -> new IllegalArgumentException("unknown hive bioform"));
+        for (var bioform : bootstrap.hive().bioforms()) if (bioform.id().equals(id)) return bioform;
+        for (var bioform : colony.spawnedBioforms().values()) if (bioform.id().equals(id)) return bioform;
+        throw new IllegalArgumentException("unknown hive bioform");
     }
 
     static Set<SubjectId> structureIds(FrontierBootstrap bootstrap) {

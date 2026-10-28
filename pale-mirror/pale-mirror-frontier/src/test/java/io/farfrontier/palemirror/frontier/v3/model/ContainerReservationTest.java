@@ -38,6 +38,10 @@ class ContainerReservationTest {
         assertThrows(IllegalArgumentException.class, () -> ContainerInboundCapacity.index(rows));
     }
     @Test void individualOutputsReserveOneSlotEachAndCannotMergeWithFungibleStock() {
+        assertThrows(IllegalArgumentException.class, () -> new ContainerIncomingStock(Map.of("minecraft:bread", -1L), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ContainerIncomingStock(Map.of(), Map.of("minecraft:iron_pickaxe", -1L)));
+        assertThrows(ArithmeticException.class, () -> new ContainerIncomingStock(Map.of(),
+                Map.of("minecraft:iron_pickaxe", Long.MAX_VALUE, "minecraft:iron_hoe", 1L)).individualSlots());
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:individual-capacity"), 41));
         var home = state.bootstrap().settlements().getFirst().id(); var depot = FrontierWorldState.depotId(home);

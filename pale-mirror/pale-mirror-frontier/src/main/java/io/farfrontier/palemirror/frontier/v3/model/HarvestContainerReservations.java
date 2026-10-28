@@ -9,16 +9,15 @@ import java.util.Set;
 final class HarvestContainerReservations {
     private HarvestContainerReservations() { }
 
-    static void validateAccounts(ExactInventory inventory, ResourceSiteState sites) {
+    static void validateAccounts(java.util.Map<SubjectId, CustodyAccount> accounts, java.util.Map<SubjectId, ResourceSiteLifecycle> sites) {
         Set<SubjectId> declared = new HashSet<>();
-        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
+        for (var site : sites.values()) for (var job : site.harvestJobs().values()) {
             if (!declared.add(job.actorAccountId()))
                 throw new IllegalArgumentException("active harvest jobs share one declared actor resource account");
-            CustodyAccount account = inventory.fungibleResources().accounts().get(job.actorAccountId());
+            CustodyAccount account = accounts.get(job.actorAccountId());
             if (account != null && !account.custody().equals(new ResourceCustody.Actor(job.workerId())))
                 throw new IllegalArgumentException("active harvest actor account has foreign custody");
-            CustodyAccount depotAccount = inventory.fungibleResources().accounts().get(job.depotAccountId());
+            CustodyAccount depotAccount = accounts.get(job.depotAccountId());
             if (depotAccount != null && !depotAccount.custody().equals(new ResourceCustody.Container(job.outputSlot().containerId())))
                 throw new IllegalArgumentException("active harvest depot account has foreign custody");
         }
@@ -35,10 +34,9 @@ final class HarvestContainerReservations {
         return java.util.List.copyOf(result);
     }
 
-    static void validate(ExactInventory inventory, ResourceSiteState sites) {
+    static void validate(java.util.Map<SubjectId, ContainerRecord> containers, java.util.Map<SubjectId, ResourceSiteLifecycle> sites) {
         Set<InventoryCustody.ContainerSlot> reserved = new HashSet<>();
-        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
+        for (var site : sites.values()) for (var job : site.harvestJobs().values()) {
             if (job.reservesOutputCapacity() && !reserved.add(job.outputSlot()) || job.batchSuccessorSlot().isPresent()
                     && !reserved.add(job.batchSuccessorSlot().orElseThrow()))
                 throw new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
@@ -47,7 +45,7 @@ final class HarvestContainerReservations {
         // Current backing is derived by ContainerPhysicalReservations; execution
         // reselects/waits if external edits consume it. Owner identity stays exact.
         for (var slot : reserved) {
-            var container = inventory.containers().get(slot.containerId());
+            var container = containers.get(slot.containerId());
             if (container == null || slot.slot() >= container.slotCount())
                 throw new IllegalArgumentException("active harvest output names an undeclared container slot");
         }
