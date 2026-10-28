@@ -5,7 +5,9 @@ import java.util.*;
 
 /** Deterministic permission producer, not an assignment, actor or resource owner. */
 public final class SettlementStaffingPolicy {
+    private record Query(SubjectId home, long tick) { }
     private final List<SettlementStaffingPort> ports;
+    private final ImmutableSnapshotView<Query, ResidentWorkPermissions> proposals = new ImmutableSnapshotView<>(4, 256);
     public SettlementStaffingPolicy(List<SettlementStaffingPort> ports) {
         this.ports = List.copyOf(ports);
         if (ports.size() != ResidentWorkKind.values().length
@@ -14,6 +16,9 @@ public final class SettlementStaffingPolicy {
             throw new IllegalArgumentException("staffing composition requires every kind exactly once");
     }
     public ResidentWorkPermissions propose(FrontierWorldState state, SubjectId home, long atTick) {
+        return proposals.get(state, new Query(home, atTick), () -> calculate(state, home, atTick));
+    }
+    private ResidentWorkPermissions calculate(FrontierWorldState state, SubjectId home, long atTick) {
         var old = SettlementWorkPolicy.permissions(state, home);
         var assignments = HumanAssignmentProjection.compile(state);
         var household = state.humanPopulation().residents().values().stream()

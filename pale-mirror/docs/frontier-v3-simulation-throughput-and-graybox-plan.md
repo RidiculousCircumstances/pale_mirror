@@ -2400,3 +2400,33 @@ remains to be measured. It does NOT fix the remaining family-wide traversals or
 change COLD group formation. No imaginary overlay-chain defect: current
 ImmutableLookupMap is a defensive LinkedHashMap snapshot with hashed lookup,
 not a64-deep persistent overlay. Keep future changes tied to actual source.
+
+
+### Shared immutable preparation results (2026-10-28)
+
+14ac76d91 deployed and verified on both retained worlds (no reset), SHA512
+5fe0e7ce3e48a3d97b1272ea2e07c11ae482700d429b9cee5d19672229193c00c5563ea519ff4e152a1a8c8a29e83dbbe4be25b52484eb03ed9feeb30a02746a.
+`snapshot-validation-ordinary100.jfr` has89816events/noDataLoss;44.824867s
+exactly accounted. Clock60001→60079=1.740106/s, debt1541→2361: G STILL FAILED.
+OWNER51.37% (validation9.491580s nested), EXACT_RUNNING44.51%, BUDGET0.10%,
+WAL2.62%. Dominant exact kind is stock_reconsider11.449246s, followed by
+movement3.693290s. Evolving workloads preclude a controlled aggregate speedup
+claim for the snapshot-validation increment. The retry fix remains effective.
+
+Source and CPU samples agree on the expensive stock path: staffing → equipment
+acquisition → sourcing offers → transport/fuel/capability valuation. Staffing is
+recomputed for the exact same state/home/instant during proposal, its projected
+reduction, and final owner reduction. Mutable thread-local planning caches cannot
+share completed results with the server owner. The current increment shares only
+completed immutable permissions, equipment requests/acquisition, equipment
+valuation and observed sourcing facts. It uses the existing thread-safe bounded
+ImmutableResultView/BoundedValueMemo via a snapshot wrapper (four exact snapshot
+identities,256queries per snapshot per producer). Mutable allocations remain local;
+changed state identity/home/tick and eviction recompute normally. Reducers still
+validate complete current declarations; there is no new economic policy, queue,
+TTL, dropped decision, altered event schema or authority bypass.
+
+Focused verification includes actual worker-prepared policy acceptance and
+rejection after living-worker facts change, existing stale/forged policy tests,
+equipment and sourcing negatives, and bounded snapshot eviction/failure coverage.
+Native throughput gain remains unmeasured until the next capture.

@@ -6,6 +6,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ImmutableInputViewTest {
+    @Test void sharedSnapshotResultCannotCrossChangedSnapshotQueryFailureOrEviction() throws Exception {
+        var view = new ImmutableSnapshotView<String, Integer>(2, 2);
+        var snapshot = new String("world"); var calls = new AtomicInteger();
+        var prepared = new java.util.concurrent.FutureTask<Integer>(() -> view.get(snapshot, "home-at-tick", calls::incrementAndGet));
+        new Thread(prepared).start();
+        assertEquals(1, prepared.get());
+        assertEquals(1, view.get(snapshot, "home-at-tick", calls::incrementAndGet));
+        assertEquals(2, view.get(snapshot, "other-home-or-tick", calls::incrementAndGet));
+        var changed = new String("world");
+        assertThrows(IllegalArgumentException.class, () -> view.get(changed, "home-at-tick",
+                () -> { throw new IllegalArgumentException("invalid changed facts"); }));
+        assertEquals(3, view.get(changed, "home-at-tick", calls::incrementAndGet));
+        assertEquals(4, view.get(new Object(), "home-at-tick", calls::incrementAndGet));
+        assertEquals(5, view.get(snapshot, "home-at-tick", calls::incrementAndGet), "old snapshot eviction must recompute");
+    }
+
     @Test void completedImmutableResultCanCrossThreadsButCannotCrossAnInputRevision() throws Exception {
         var view = new ImmutableResultView<String, Integer>(2); var calls = new AtomicInteger();
         var input = new String("basis");

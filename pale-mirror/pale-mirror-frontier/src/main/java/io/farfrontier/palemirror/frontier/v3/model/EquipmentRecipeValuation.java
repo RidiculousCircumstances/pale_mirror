@@ -7,12 +7,11 @@ import java.util.*;
 /** Equipment policy consumes the common delivered-input/labour valuation, never a second price model. */
 final class EquipmentRecipeValuation {
     private record Query(SubjectId home, long tick) { }
-    private static final ImmutableInputView<BoundedValueMemo<Query, SourcingMarket>> VIEWS = new ImmutableInputView<>();
+    private static final ImmutableSnapshotView<Query, SourcingMarket> VIEWS = new ImmutableSnapshotView<>(4, 256);
     static SourcingMarket read(FrontierWorldState state, SubjectId home, long tick) {
         // Requests and acquisition consume identical cost facts. Exact state and
         // instant retain offer expiry and draft stock/funding invalidation.
-        return VIEWS.get(List.of(state), () -> new BoundedValueMemo<Query, SourcingMarket>(256))
-                .get(new Query(home, tick), () -> project(state, home, tick));
+        return VIEWS.get(state, new Query(home, tick), () -> project(state, home, tick));
     }
     private static SourcingMarket project(FrontierWorldState state, SubjectId home, long tick) {
         var participant = state.companies().goodsTrade().participants().participants().get(home);

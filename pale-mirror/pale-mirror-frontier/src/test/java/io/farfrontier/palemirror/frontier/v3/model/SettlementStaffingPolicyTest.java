@@ -9,6 +9,22 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementStaffingPolicyTest {
+    @Test void workerPreparedPolicyStillChecksChangedLivingWorkersOnCommit() throws Exception {
+        var initial = initial(); var home = initial.bootstrap().settlements().getFirst().id();
+        var state = initial.withStrategicPlans(initial.strategicPlans().withWorkPermissions(home, ResidentWorkPermissions.none()));
+        var prepared = new java.util.concurrent.FutureTask<SettlementWorkPolicyChanged>(() ->
+                SettlementStaffingComposition.change(state, home, 200).orElseThrow());
+        new Thread(prepared).start();
+        var event = prepared.get();
+        var accepted = SettlementStaffingComposition.reduce(state, home, event);
+        assertEquals(event.next(), SettlementWorkPolicy.permissions(accepted, home));
+        var locations = new LinkedHashMap<>(state.actorLocations());
+        for (var actor : event.next().workers(ResidentWorkKind.AGRICULTURE))
+            locations.put(actor, locations.get(actor).deadAt(locations.get(actor).body()));
+        var changed = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
+        assertThrows(IllegalArgumentException.class, () -> SettlementStaffingComposition.reduce(changed, home, event));
+    }
+
     @Test void reusedInitialAuthorityImageDoesNotShareCurrentDecisionsOrWeakenValidation() {
         var state = initial();
         var bootstrap = state.bootstrap();

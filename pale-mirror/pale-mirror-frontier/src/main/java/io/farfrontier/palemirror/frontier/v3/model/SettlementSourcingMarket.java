@@ -8,7 +8,8 @@ final class SettlementSourcingMarket {
     private record Facts(Map<String, Long> references, List<SourcingMarket.Offer> offers) {
         private Facts { references = Map.copyOf(references); offers = List.copyOf(offers); }
     }
-    private static final ImmutableInputView<ImmutableResultView<Long, Facts>> FACTS = new ImmutableInputView<>();
+    private record Query(GoodsParticipant buyer, long tick) { }
+    private static final ImmutableSnapshotView<Query, Facts> FACTS = new ImmutableSnapshotView<>(4, 256);
     static SourcingMarket read(FrontierWorldState state, GoodsParticipant buyer, List<SupplyPlanner.Process> capacities, long now) {
         return costs(state, buyer, capacities.stream().map(ProductionCost::from).toList(), now);
     }
@@ -21,8 +22,7 @@ final class SettlementSourcingMarket {
         // Equipment and production compare different capacities against the same
         // current market. Share only observed offers, never their allocation or
         // the resulting make-or-buy decision. A draft reservation changes state.
-        var facts = FACTS.get(List.of(state), () -> new ImmutableResultView<Long, Facts>(256))
-                .get(List.of(buyer), now, () -> observe(state, buyer, now));
+        var facts = FACTS.get(state, new Query(buyer, now), () -> observe(state, buyer, now));
         return new SourcingMarket(state.inventory().economics().availableToReserve(buyer.party().id()).raw(),
                 policy.switchingSavingsPermille(), SourcingValuation.costs(capacities, facts.references(), facts.offers(),
                         policy.labourValuePerTick()), facts.offers());

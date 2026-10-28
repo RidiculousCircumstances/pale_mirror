@@ -10,10 +10,10 @@ public final class EquipmentProductionPlanning {
                           boolean urgent, long usefulWear, long replacementCost, long workCostPerWear) { }
     public record Ready(Request request, SettlementStructure facility, ProductionMaterialSupply.Bundle input) { }
     private record Key(SubjectId home, long tick) { }
-    private static final ImmutableInputView<Map<Key, List<Request>>> REQUESTS = new ImmutableInputView<>();
-    private static final ImmutableInputView<Map<Key, Acquisition>> PLANS = new ImmutableInputView<>();
+    private static final ImmutableSnapshotView<Key, List<Request>> REQUESTS = new ImmutableSnapshotView<>(4, 256);
+    private static final ImmutableSnapshotView<Key, Acquisition> PLANS = new ImmutableSnapshotView<>(4, 256);
     public static List<Request> requests(FrontierWorldState state, SubjectId home, long tick) {
-        return REQUESTS.get(List.of(state), HashMap::new).computeIfAbsent(new Key(home, tick), ignored -> calculateRequests(state, home, tick));
+        return REQUESTS.get(state, new Key(home, tick), () -> calculateRequests(state, home, tick));
     }
     private static List<Request> calculateRequests(FrontierWorldState state, SubjectId home, long tick) {
         var deficits = EquipmentStockProjection.deficits(state, home);
@@ -96,7 +96,7 @@ public final class EquipmentProductionPlanning {
     }
     /** One decision covers work pools, purchase funds, available offers and repair targets without double allocation. */
     public static Acquisition acquisition(FrontierWorldState state, SubjectId home, long tick) {
-        return PLANS.get(List.of(state), HashMap::new).computeIfAbsent(new Key(home, tick), ignored -> calculatePlan(state, home, tick));
+        return PLANS.get(state, new Key(home, tick), () -> calculatePlan(state, home, tick));
     }
     private static Acquisition calculatePlan(FrontierWorldState state, SubjectId home, long tick) {
         var deficits = EquipmentStockProjection.deficits(state, home);
