@@ -18,7 +18,7 @@ final class ResourceHaulingPolicy {
         var resources = state.inventory().fungibleResources();
         for (var source : ResourceSourceDiscovery.localHaulSources(state, worker.settlementId())) {
             if (source.container().filter(id -> ReferenceContainerCustody.blocksCanonicalUse(state, id)).isPresent()) continue;
-            var account = resources.accounts().values().stream().filter(value -> value.custody().equals(source.custody())).findFirst().orElse(null);
+            var account = FungibleResourceCustodySupport.accountsAt(resources, source.custody()).stream().findFirst().orElse(null);
             if (account == null) continue;
             var kinds = account.lotQuantities().keySet().stream().map(id -> resources.lots().get(id).itemKind()).distinct().sorted().toList();
             for (var kind : kinds) {

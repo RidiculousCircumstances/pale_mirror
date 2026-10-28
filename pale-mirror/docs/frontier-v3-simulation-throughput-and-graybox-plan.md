@@ -2958,3 +2958,33 @@ Main follow-up tick974305/rev2054598/statusok/debt0. Ordinary100 provisioning-fa
 capture142126events/noDataLoss44.691236s:2.685090ticks/s,debt1547→2295 STILLFAILED.
 Owner54.06%,exact36.80%,WAL3.70%;validation9.217884s. This evolving workload is
 not a controlled aggregate comparison. No performance acceptance inferred.
+
+### Share custody queries and avoid unused ground geometry (2026-10-28)
+
+The e60b17ef6 release passed1m4s, both retained deployments verified (receipts
+deploy-{scale311,r279}-owner-and-route-proof). Main follow-up988265/rev2088293,
+statusok,debt0. Ordinary100171647events/noDataLoss44.749493s:3.083834ticks/s,
+debt651→1420 STILLFAILED. Owner51.32%,exact37.24%,WAL6.11%,validation8.463810s.
+This is another evolving-workload capture, not a controlled aggregate comparison.
+Read-only JFR host-pause inspection found193GCPhasePause events summing0.002365s,
+max0.000071s; it does not attribute parallel-GC CPU cost or sum parked worker
+elapsed time into exclusive wall gates. Stop-the-world GC is not the multi-second
+blocking explanation in this specific recording.
+
+The largest exact preparation was local hauling(4.299023s), including eager
+ResourceSourceDiscovery: every worker sorted the entire account registry and
+constructed public-journey geometry even when no owned ground source existed.
+One bounded immutable custody projection now serves section/container/actor/claim
+and explicit-holder queries from the same account registry; previous separate
+actor/container/section/claim projections are removed. ResourceHaulingPolicy uses
+the explicit source custody lookup; original first-account order is retained.
+Ground discovery only inspects the sorted ground subset and defers geometry until
+at least one nonempty owned ground source exists. Current title, physical binding,
+claim, source epoch and exact logistics admission checks remain with their owners.
+No second resource authority, slot-based identity or resource-kind branch added.
+
+Connected ground hauling/withdrawal/recovery, actor custody/consumption, ledger,
+provisions/procurement and multi-input station checks plus guardrails PASS42s;
+final changed ground/actor negatives PASS10s. Changed branches, removed drops,
+foreign title and retained predecessor sources remain isolated. Clean frozen
+release/deploy/native effect pending. G remainsOPEN/FAILED.

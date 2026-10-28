@@ -9,11 +9,6 @@ public final class ActorCarriedResources {
     /** One physical stack is a carrying boundary, never a work-completion criterion. */
     public static final int MAX_STACK_ITEMS = 64;
     public static final int MAX_STACK_ACCOUNTS = 10;
-    private record AccountIndex(java.util.Map<SubjectId, CustodyAccount> source,
-                                java.util.Map<SubjectId, List<CustodyAccount>> actors) { }
-    // One immutable-account image per thread, not retained world history. No identity hashing
-    // of the whole ledger and no full-account scan for every resident's inventory query.
-    private static final ThreadLocal<AccountIndex> ACCOUNT_INDEX = new ThreadLocal<>();
     private ActorCarriedResources() { }
 
     /** The resource ledger, not the activity scene or body fence, owns this binding's epoch. */
@@ -76,21 +71,7 @@ public final class ActorCarriedResources {
 
     public static List<CustodyAccount> accounts(FungibleResourceLedger ledger, SubjectId actorId) {
         Objects.requireNonNull(ledger); Objects.requireNonNull(actorId);
-        var index = ACCOUNT_INDEX.get();
-        if (index == null || index.source() != ledger.accounts()) {
-            var grouped = new java.util.HashMap<SubjectId, java.util.ArrayList<CustodyAccount>>();
-            for (var account : ledger.accounts().values())
-                if (account.custody() instanceof ResourceCustody.Actor actor)
-                    grouped.computeIfAbsent(actor.actorId(), ignored -> new java.util.ArrayList<>()).add(account);
-            var actors = new java.util.HashMap<SubjectId, List<CustodyAccount>>();
-            grouped.forEach((actor, values) -> {
-                values.sort(java.util.Comparator.comparing(CustodyAccount::id));
-                actors.put(actor, List.copyOf(values));
-            });
-            index = new AccountIndex(ledger.accounts(), java.util.Map.copyOf(actors));
-            ACCOUNT_INDEX.set(index);
-        }
-        return index.actors().getOrDefault(actorId, List.of());
+        return FungibleResourceReadIndex.actorAccounts(ledger, actorId);
     }
 
     /** Shared admission query; personal stock is not itself an exclusive work claim. */

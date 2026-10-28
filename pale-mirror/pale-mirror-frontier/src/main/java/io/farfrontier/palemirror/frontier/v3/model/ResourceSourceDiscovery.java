@@ -11,11 +11,13 @@ public final class ResourceSourceDiscovery {
         state.inventory().containers().values().stream().filter(container -> container.ownerId().equals(home))
                 .flatMap(container -> container.storage().stream()).filter(policy -> policy.role() == ResourceStorageRole.LOCAL_BUFFER)
                 .sorted(Comparator.comparing(policy -> policy.endpoint().containerId())).forEach(policy -> result.add(policy.endpoint()));
-        var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home, List.of());
         var resources = state.inventory().fungibleResources();
-        for (var account : resources.accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
-            if (!(account.custody() instanceof ResourceCustody.Ground ground) || account.lotQuantities().isEmpty()) continue;
-            if (account.lotQuantities().keySet().stream().noneMatch(id -> resources.lots().get(id).economicOwnerId().equals(home))) continue;
+        var grounds = FungibleResourceReadIndex.groundAccounts(resources).stream().filter(account -> !account.lotQuantities().isEmpty()
+                && account.lotQuantities().keySet().stream().anyMatch(id -> resources.lots().get(id).economicOwnerId().equals(home))).toList();
+        if (grounds.isEmpty()) return List.copyOf(result);
+        var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home, List.of());
+        for (var account : grounds) {
+            var ground = (ResourceCustody.Ground) account.custody();
             var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
             if (bindings.size() != 1 || !(bindings.getFirst().address() instanceof PhysicalStackAddress.WorldEntity address)
                     || !address.entityId().equals(ground.entityId())) continue;

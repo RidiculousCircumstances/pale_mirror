@@ -70,6 +70,11 @@ class ResourceHaulingTest {
         resources = resources.rebind(account.id(), 1, FungiblePhysicalObservation.bind(resources, account.id(), 1,
                 List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.WorldEntity(entity), lot.itemKind(), 8))));
         var state = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        assertTrue(ResourceSourceDiscovery.localHaulSources(initial, home.id()).stream()
+                .noneMatch(source -> source.sourceKind() == ResourceSourceEndpoint.Kind.GROUND));
+        assertTrue(ResourceSourceDiscovery.localHaulSources(state, initial.bootstrap().settlements().get(1).id()).stream()
+                .noneMatch(source -> source.sourceKind() == ResourceSourceEndpoint.Kind.GROUND),
+                "location discovery must not turn another settlement's title into owned ground stock");
         var pickup = GroundResourcePlayerWithdrawal.prepare(state, account.id(), UUID.randomUUID(), UUID.randomUUID(), 3);
         var pickupCodecs = io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
         assertEquals(pickup, pickupCodecs.decode(pickup.type(), pickupCodecs.encode(pickup)));
@@ -135,6 +140,12 @@ class ResourceHaulingTest {
         assertEquals(Shipment.Status.ALLOCATION_WITHDRAWN, lost.shipments().shipments().get(offer.shipment().id()).status());
         assertFalse(lost.inventory().fungibleResources().lots().containsKey(lot.id()));
         assertFalse(lost.inventory().fungibleResources().claims().containsKey(offer.claim().id()));
+        assertTrue(ResourceSourceDiscovery.localHaulSources(lost, home.id()).stream()
+                .noneMatch(endpoint -> endpoint.sourceKind() == ResourceSourceEndpoint.Kind.GROUND),
+                "a removed drop must disappear from the current custody view");
+        assertTrue(ResourceSourceDiscovery.localHaulSources(state, home.id()).stream()
+                .anyMatch(endpoint -> endpoint.sourceKind() == ResourceSourceEndpoint.Kind.GROUND),
+                "independent immutable predecessor retains its observed ground source");
         assertEquals(dispatched.inventory().economics(), lost.inventory().economics());
         assertEquals(lost, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(lost)));
         assertThrows(IllegalArgumentException.class, () -> loss.apply(lost, home.id()), "a disappearance cannot be charged twice");

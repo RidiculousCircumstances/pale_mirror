@@ -11,6 +11,10 @@ import java.util.Optional;
 /** Narrow canonical queries shared by recipe and hive owners; it never infers stock from Vanilla. */
 public final class FungibleResourceCustodySupport {
     private FungibleResourceCustodySupport() { }
+    /** Discovery by explicitly declared custody; ownership/claims remain ledger checks. */
+    public static java.util.List<CustodyAccount> accountsAt(FungibleResourceLedger ledger, ResourceCustody holder) {
+        return FungibleResourceReadIndex.accountsAt(Objects.requireNonNull(ledger), holder);
+    }
     /** Shared allocation authority query; neither recipe nor commercial policy belongs here. */
     public static boolean canReserve(FrontierWorldState state, LotSelection input) {
         var resources = state.inventory().fungibleResources();

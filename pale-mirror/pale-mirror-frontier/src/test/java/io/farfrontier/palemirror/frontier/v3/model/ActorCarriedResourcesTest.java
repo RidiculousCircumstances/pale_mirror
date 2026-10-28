@@ -71,5 +71,9 @@ class ActorCarriedResourcesTest {
         assertEquals(37, ledger.totalQuantity(economy, "minecraft:iron_ingot"));
         assertEquals(6, ledger.totalQuantity(economy, "minecraft:bread"));
         assertFalse(ledger.accounts().containsKey(food));
+        assertEquals(List.of(originalCargo), ActorCarriedResources.accounts(ledger, actor),
+                "consuming the exact food account removes only that custody row from the current view");
+        assertEquals(List.of(originalCargo), ActorCarriedResources.accounts(before, actor),
+                "a predecessor query retains its own immutable custody image");
     }
 }

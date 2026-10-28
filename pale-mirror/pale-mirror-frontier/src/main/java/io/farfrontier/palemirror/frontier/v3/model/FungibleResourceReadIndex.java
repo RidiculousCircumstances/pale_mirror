@@ -10,10 +10,12 @@ final class FungibleResourceReadIndex {
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
                          Map<SubjectId, Available> available) { }
-    private static final ImmutableResultView<String, Map<ResourceCustody.Container, CustodyAccount>> SECTIONS =
-            new ImmutableResultView<>(4);
-    private static final ImmutableInputView<Map<SubjectId, List<CustodyAccount>>> CONTAINERS = new ImmutableInputView<>();
-    private static final ImmutableInputView<Set<ResourceCustody>> CLAIMED = new ImmutableInputView<>();
+    private record Custodies(Map<ResourceCustody, List<CustodyAccount>> holders,
+                             Map<SubjectId, List<CustodyAccount>> containers,
+                             Map<SubjectId, List<CustodyAccount>> actors,
+                             Map<ResourceCustody.Container, CustodyAccount> sections,
+                             List<CustodyAccount> ground, Set<ResourceCustody> claimed) { }
+    private static final ImmutableResultView<Boolean, Custodies> CUSTODIES = new ImmutableResultView<>(4);
     // Retain one immutable image per owner thread, not accumulated world revisions.
     private static final ThreadLocal<Image> CURRENT = new ThreadLocal<>();
     private FungibleResourceReadIndex() { }
@@ -48,21 +50,20 @@ final class FungibleResourceReadIndex {
 
     /** All retained accounts, not a first-account shortcut for physical capacity. */
     static List<CustodyAccount> containerAccounts(FungibleResourceLedger ledger, SubjectId container) {
-        return CONTAINERS.get(List.of(ledger.accounts()), () -> {
-            var grouped = new HashMap<SubjectId, List<CustodyAccount>>();
-            for (var account : ledger.accounts().values()) {
-                if (account.custody() instanceof ResourceCustody.Container holder)
-                    grouped.computeIfAbsent(holder.containerId(), ignored -> new ArrayList<>()).add(account);
-            }
-            grouped.replaceAll((id, accounts) -> accounts.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList());
-            return Map.copyOf(grouped);
-        }).getOrDefault(container, List.of());
+        return custodies(ledger).containers().getOrDefault(container, List.of());
     }
 
     static boolean carriesClaim(FungibleResourceLedger ledger, ResourceCustody holder) {
-        return CLAIMED.get(List.of(ledger.accounts()), () -> ledger.accounts().values().stream()
-                .filter(account -> !account.claimQuantities().isEmpty()).map(CustodyAccount::custody)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet())).contains(holder);
+        return custodies(ledger).claimed().contains(holder);
+    }
+    static List<CustodyAccount> accountsAt(FungibleResourceLedger ledger, ResourceCustody holder) {
+        return custodies(ledger).holders().getOrDefault(Objects.requireNonNull(holder), List.of());
+    }
+    static List<CustodyAccount> actorAccounts(FungibleResourceLedger ledger, SubjectId actor) {
+        return custodies(ledger).actors().getOrDefault(Objects.requireNonNull(actor), List.of());
+    }
+    static List<CustodyAccount> groundAccounts(FungibleResourceLedger ledger) {
+        return custodies(ledger).ground();
     }
 
     private static Image image(FungibleResourceLedger ledger) {
@@ -82,14 +83,34 @@ final class FungibleResourceReadIndex {
     /** Section lookup depends only on custody rows. Comparing pre/post stock
      * snapshots must not rebuild the whole ledger index for each container. */
     private static Map<ResourceCustody.Container, CustodyAccount> sections(FungibleResourceLedger ledger) {
-        return SECTIONS.get(List.of(ledger.accounts()), "sections", () -> {
-            var containers = new HashMap<ResourceCustody.Container, CustodyAccount>();
+        return custodies(ledger).sections();
+    }
+    /** One complete read-only custody image. It grants neither title nor availability.
+     * Revisions and independent immutable branches never share a mutable index. */
+    private static Custodies custodies(FungibleResourceLedger ledger) {
+        return CUSTODIES.get(List.of(ledger.accounts()), Boolean.TRUE, () -> {
+            var holders = new HashMap<ResourceCustody, List<CustodyAccount>>();
+            var containers = new HashMap<SubjectId, List<CustodyAccount>>();
+            var actors = new HashMap<SubjectId, List<CustodyAccount>>();
+            var sections = new HashMap<ResourceCustody.Container, CustodyAccount>();
+            var ground = new ArrayList<CustodyAccount>(); var claimed = new HashSet<ResourceCustody>();
             for (var account : ledger.accounts().values()) {
-                if (account.custody() instanceof ResourceCustody.Container holder)
-                    if (containers.putIfAbsent(holder, account) != null)
+                holders.computeIfAbsent(account.custody(), ignored -> new ArrayList<>()).add(account);
+                if (!account.claimQuantities().isEmpty()) claimed.add(account.custody());
+                if (account.custody() instanceof ResourceCustody.Container holder) {
+                    if (sections.putIfAbsent(holder, account) != null)
                         throw new IllegalArgumentException("container section has competing resource accounts: " + holder);
+                    containers.computeIfAbsent(holder.containerId(), ignored -> new ArrayList<>()).add(account);
+                } else if (account.custody() instanceof ResourceCustody.Actor holder)
+                    actors.computeIfAbsent(holder.actorId(), ignored -> new ArrayList<>()).add(account);
+                else if (account.custody() instanceof ResourceCustody.Ground) ground.add(account);
             }
-            return Map.copyOf(containers);
+            holders.replaceAll((holder, accounts) -> List.copyOf(accounts)); // Preserve first-at-custody query order.
+            containers.replaceAll((id, accounts) -> accounts.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList());
+            actors.replaceAll((id, accounts) -> accounts.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList());
+            ground.sort(Comparator.comparing(CustodyAccount::id));
+            return new Custodies(Map.copyOf(holders), Map.copyOf(containers), Map.copyOf(actors), Map.copyOf(sections),
+                    List.copyOf(ground), Set.copyOf(claimed));
         });
     }
 
