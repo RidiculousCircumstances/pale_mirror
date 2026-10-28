@@ -14,6 +14,24 @@ public final class ExpeditionCrewAdmission {
         private FoodStock { personal = Map.copyOf(personal); }
     }
     private static final ImmutableSnapshotView<StockScope, Map<String, FoodStock>> STOCKS = new ImmutableSnapshotView<>(4, 256);
+    private record NeedScope(StockScope people, String food, long duration, long now) { }
+    private static final ImmutableSnapshotView<NeedScope, List<SubjectId>> RANKINGS = new ImmutableSnapshotView<>(4, 256);
+    private static List<SubjectId> ranked(FrontierWorldState state, SubjectId sponsor, List<SubjectId> candidates,
+            FoodCatalog.Food food, long duration, long now, FoodStock stock) {
+        return RANKINGS.get(state, new NeedScope(new StockScope(sponsor, candidates), food.itemKind(), duration, now), () -> {
+            var life = state.bootstrap().ruleset().residentLife();
+            var missing = new HashMap<SubjectId, Long>();
+            for (var id : candidates) {
+                var resident = Objects.requireNonNull(state.humanPopulation().resident(id));
+                if (!resident.settlementId().equals(sponsor)) throw new IllegalArgumentException("foreign crew candidate");
+                int rate = resident.characteristics().effectiveMetabolismPermille(now);
+                int satiety = state.humanPopulation().nutrition(id).accrueThrough(now, life, rate).satietyUnits();
+                missing.put(id, Math.max(0, ExpeditionProvisioning.requiredFoodItems(duration, satiety, rate, food, life)
+                        - stock.personal().get(id)));
+            }
+            return candidates.stream().sorted(Comparator.comparingLong(missing::get)).toList();
+        });
+    }
     private static Map<String, FoodStock> stocks(FrontierWorldState state, SubjectId sponsor, List<SubjectId> residents) {
         return STOCKS.get(state, new StockScope(sponsor, residents), () -> {
             var resources = state.inventory().fungibleResources(); var result = new HashMap<String, FoodStock>();
@@ -94,16 +112,10 @@ public final class ExpeditionCrewAdmission {
         // and asks the caller's current labour-permission predicate.
         var availableStock = stocks(state, sponsor, candidates);
         for (var food : life.foods().foods().values().stream().sorted(Comparator.comparing(FoodCatalog.Food::itemKind)).toList()) {
-            var missing = new HashMap<SubjectId, Long>();
-            for (var id : candidates) {
-                var resident = Objects.requireNonNull(state.humanPopulation().resident(id));
-                if (!resident.settlementId().equals(sponsor)) throw new IllegalArgumentException("foreign crew candidate");
-                int rate = resident.characteristics().effectiveMetabolismPermille(now);
-                int satiety = state.humanPopulation().nutrition(id).accrueThrough(now, life, rate).satietyUnits();
-                long personal = availableStock.get(food.itemKind()).personal().get(id);
-                missing.put(id, Math.max(0, ExpeditionProvisioning.requiredFoodItems(duration, satiety, rate, food, life) - personal));
-            }
-            var ranked = candidates.stream().sorted(Comparator.comparingLong(missing::get)).toList();
+            // Crew size, asset and labour permission do not change individual food need.
+            // Reuse only its exact snapshot/time/duration ordering; permission and the
+            // selected crew's actual provisions are still checked on every call.
+            var ranked = ranked(state, sponsor, candidates, food, duration, now, availableStock.get(food.itemKind()));
             var crew = new ArrayList<SubjectId>();
             for (var id : ranked) {
                 var proposed = new ArrayList<>(crew); proposed.add(id);

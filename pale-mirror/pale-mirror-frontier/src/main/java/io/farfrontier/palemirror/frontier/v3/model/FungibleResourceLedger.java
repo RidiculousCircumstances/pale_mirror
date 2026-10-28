@@ -772,21 +772,23 @@ public final class FungibleResourceLedger {
         requireNoPhysicalBinding(account.id(), "destroy");
         requireOptionalSubset(account.claimQuantities(), claimQuantities, "destruction claims");
         if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities)) throw new IllegalArgumentException("claimed destruction must consume the same exact quantity");
-        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims);
-        lotQuantities.forEach((id, quantity) -> { ResourceLot lot = requireLot(id); int remaining = lot.quantity() - quantity; if (remaining == 0) nextLots.remove(id); else nextLots.put(id, lot.withQuantity(remaining)); });
-        claimQuantities.forEach((id, quantity) -> {
-            ClaimAllocation claim = claims.get(id); int remaining = claim.quantity() - quantity;
+        var nextLots = lots; var nextClaims = claims;
+        for (var entry : lotQuantities.entrySet()) {
+            var id = entry.getKey(); ResourceLot lot = requireLot(id); int remaining = lot.quantity() - entry.getValue();
+            nextLots = remaining == 0 ? ImmutableLookupMap.withoutEntry(nextLots, id)
+                    : ImmutableLookupMap.withEntry(nextLots, id, lot.withQuantity(remaining));
+        }
+        for (var entry : claimQuantities.entrySet()) {
+            var id = entry.getKey(); ClaimAllocation claim = claims.get(id); int remaining = claim.quantity() - entry.getValue();
             if (!claim.lotQuantities().isEmpty() && remaining != 0) throw new IllegalArgumentException("pinned claim cannot be partly destroyed");
-            if (remaining == 0) nextClaims.remove(id);
-            else nextClaims.put(id, claim.withQuantity(remaining));
-        });
+            nextClaims = remaining == 0 ? ImmutableLookupMap.withoutEntry(nextClaims, id)
+                    : ImmutableLookupMap.withEntry(nextClaims, id, claim.withQuantity(remaining));
+        }
         Map<SubjectId, Integer> nextLotsAtAccount = subtract(account.lotQuantities(), lotQuantities); Map<SubjectId, Integer> nextClaimsAtAccount = subtract(account.claimQuantities(), claimQuantities);
-        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        if (nextLotsAtAccount.isEmpty()) nextAccounts.remove(account.id());
-        else nextAccounts.put(account.id(), account.withQuantities(nextLotsAtAccount, nextClaimsAtAccount));
-        Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>(bindings);
-        bindings.values().stream().filter(binding -> binding.accountId().equals(account.id())).map(PhysicalStackBinding::id).forEach(nextBindings::remove);
-        return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, nextBindings);
+        var nextAccounts = nextLotsAtAccount.isEmpty() ? ImmutableLookupMap.withoutEntry(accounts, account.id())
+                : ImmutableLookupMap.withEntry(accounts, account.id(), account.withQuantities(nextLotsAtAccount, nextClaimsAtAccount));
+        // requireNoPhysicalBinding above proved this account has no address to remove.
+        return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
     }
 
     /** Consumes a claimed HOT portion and atomically replaces its observed remaining layout. */

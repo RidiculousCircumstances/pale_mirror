@@ -27,6 +27,13 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
         return HARVEST_DIRECTORY.project(ResourceSiteState.class, sites, ResourceSiteLifecycle::harvestJobs);
     }
 
+    private static final ImmutableGroupView<SubjectId, ResourceSiteDeclaration, SubjectId> SETTLEMENT_SITES = new ImmutableGroupView<>();
+    /** Declared membership only; callers read each current lifecycle/cycle and assess eligibility. */
+    public java.util.List<SubjectId> siteIdsIn(SubjectId settlement) {
+        return SETTLEMENT_SITES.keys(ResourceSiteState.class, declarations,
+                declaration -> java.util.Set.of(declaration.settlementId()), settlement);
+    }
+
     private static final ImmutableInvariantCheck<Void> GEOMETRY_VALIDATION = new ImmutableInvariantCheck<>();
     public ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarations, Map<SubjectId, ResourceSiteLifecycle> sites,
             Map<SubjectId, ResourceFieldCycle> cycles, Map<CellMutationKey, ResourceFieldCellObserved> pendingWorldChanges,

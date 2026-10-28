@@ -15,8 +15,7 @@ final class FieldReserveSupply implements ReserveSupplyPort {
                 state.strategicPlans().decisionAuthorities(), WorkEquipmentClaimComposition.reserved(state)), () -> project(state, home));
     }
     private static Facts project(FrontierWorldState state, SubjectId home) {
-        boolean usable = state.resourceSites().sites().values().stream()
-                .filter(site -> state.resourceSite(site.siteId()).settlementId().equals(home))
+        boolean usable = state.resourceSites().siteIdsIn(home).stream().map(state.resourceSites()::site)
                 .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)
                 .anyMatch(site -> {
                     var cycle = state.resourceSites().cycles().get(site.siteId());
@@ -31,8 +30,7 @@ final class FieldReserveSupply implements ReserveSupplyPort {
                 .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE)
                 .map(id -> state.humanPopulation().resident(id)).toList();
         var estimate = new FieldWorkForecast(state, home, workers);
-        long lead = state.resourceSites().sites().values().stream()
-                .filter(site -> state.resourceSite(site.siteId()).settlementId().equals(home))
+        long lead = state.resourceSites().siteIdsIn(home).stream().map(state.resourceSites()::site)
                 .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)
                 .flatMap(site -> state.resourceSites().cycle(site.siteId()).layout().cells().stream())
                 .mapToLong(cell -> estimate.lead(new FieldSupplyCapacity.Cell(cell.crop(),

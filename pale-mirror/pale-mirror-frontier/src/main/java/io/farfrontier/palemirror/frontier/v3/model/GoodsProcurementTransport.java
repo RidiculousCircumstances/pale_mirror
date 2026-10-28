@@ -18,6 +18,8 @@ public final class GoodsProcurementTransport {
     }
     private record Query(SubjectId source, String item, int requested, long price, long budget, long now, long deadline) { }
     private record Crew(SubjectId home, int count, Optional<TransportAsset> asset, long duration, long now) { }
+    private record People(List<SubjectId> residents, long latestNutritionTick) { }
+    private static final ImmutableSnapshotView<SubjectId, People> PEOPLE = new ImmutableSnapshotView<>(4, 128);
     /** Snapshot-local facts shared by every hypothetical parcel size, not a crew reservation. */
     private record Context(GoodsTradeFulfillment.Mode mode, GoodsParticipant organizer,
             ProcurementTravelForecast.Estimate forecast, List<SubjectId> people, long crewAt) { }
@@ -74,14 +76,18 @@ public final class GoodsProcurementTransport {
             var timing = ProcurementTravelForecast.read(state, source, item, buyer, itinerary);
             if (timing.isEmpty()) continue;
             var forecast = timing.orElseThrow();
-            var people = state.humanPopulation().residentsIn(organizer.settlementId()).stream()
-                    .filter(r -> state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
-                    .map(ResidentProfile::id).sorted().toList();
+            var roster = PEOPLE.get(state, organizer.settlementId(), () -> {
+                var residents = state.humanPopulation().residentsIn(organizer.settlementId()).stream()
+                        .filter(r -> state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
+                        .map(ResidentProfile::id).sorted().toList();
+                long latest = residents.stream().mapToLong(id -> state.humanPopulation().nutrition(id).lastEvaluatedTick()).max().orElse(0);
+                return new People(residents, latest);
+            });
             // Undated reserve projections can ask about an older planning instant.
             // This quote uses retained current people, never rewinds their nutrition;
             // exact departure admission still requires its actual canonical instant.
-            long crewAt = Math.max(now, people.stream().mapToLong(id -> state.humanPopulation().nutrition(id).lastEvaluatedTick()).max().orElse(now));
-            contexts.add(new Context(mode, organizer, forecast, people, crewAt));
+            long crewAt = Math.max(now, roster.latestNutritionTick());
+            contexts.add(new Context(mode, organizer, forecast, roster.residents(), crewAt));
         }
         return List.copyOf(contexts);
     }

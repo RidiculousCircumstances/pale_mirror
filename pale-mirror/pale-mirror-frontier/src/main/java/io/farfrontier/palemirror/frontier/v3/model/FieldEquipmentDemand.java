@@ -9,7 +9,7 @@ final class FieldEquipmentDemand implements EquipmentDemandPort {
     @Override public Key key() { return Key.FIELD; }
     private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
     @Override public List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
-        return VIEWS.get(state.bootstrap(), home, List.of(state.resourceSites().sites(), state.resourceSites().cycles(),
+        return VIEWS.get(state.bootstrap(), home, List.of(state.resourceSites().declarations(), state.resourceSites().sites(), state.resourceSites().cycles(),
                 state.humanPopulation().schedule(home), state.humanPopulation().residents(), state.actorLocations(),
                 state.strategicPlans().decisionAuthorities(), state.inventory().items(), state.inventory().containers(),
                 state.inventory().surfaces(), state.replicaCustody(), WorkEquipmentClaimComposition.reserved(state)), () -> project(state, home));
@@ -22,9 +22,9 @@ final class FieldEquipmentDemand implements EquipmentDemandPort {
         if (workers.isEmpty()) return List.of();
         var estimate = new FieldWorkForecast(state, home, workers);
         var sources = new ArrayList<io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Source>();
-        for (var site : state.resourceSites().sites().values()) {
-            if (!state.resourceSite(site.siteId()).settlementId().equals(home)
-                    || site.phase() == ResourceSitePhase.DESTROYED || site.phase() == ResourceSitePhase.CONFLICT) continue;
+        for (var id : state.resourceSites().siteIdsIn(home)) {
+            var site = state.resourceSites().site(id);
+            if (site.phase() == ResourceSitePhase.DESTROYED || site.phase() == ResourceSitePhase.CONFLICT) continue;
             var cycle = state.resourceSites().cycle(site.siteId());
             for (var cell : cycle.layout().cells()) {
                 var condition = cycle.cell(cell.id());

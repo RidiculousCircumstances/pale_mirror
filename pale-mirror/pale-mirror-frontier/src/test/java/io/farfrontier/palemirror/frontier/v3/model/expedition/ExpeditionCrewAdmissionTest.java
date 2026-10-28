@@ -56,6 +56,14 @@ class ExpeditionCrewAdmissionTest {
             var withdrawn = state.withInventory(state.inventory().withFungibleResources(FungibleResourceLedger.empty()));
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(withdrawn, home, List.of(crew.getFirst()), Optional.empty(), tick),
                     "a new stock snapshot cannot retain withdrawn personal provisions");
+            assertTrue(ExpeditionCrewAdmission.select(withdrawn, home, crew, 1, Optional.empty(), 12000, tick,
+                    ids -> true).isEmpty(), "warmed candidate rankings cannot retain removed provisions");
+            assertEquals(List.of(crew.getFirst()), ExpeditionCrewAdmission.select(withdrawn, home, crew, 1,
+                    Optional.empty(), 0, 0, ids -> true), "need ranking must use the requested nutrition instant");
+            assertTrue(ExpeditionCrewAdmission.select(state, home, List.of(crew.getFirst()), 1, Optional.empty(),
+                    longJourney, tick, ids -> true).isEmpty(), "need ranking must use the requested travel duration");
+            assertEquals(List.of(crew.getFirst()), ExpeditionCrewAdmission.select(state, home, List.of(crew.getFirst()), 1,
+                    Optional.empty(), 12000, tick, ids -> true), "rejected alternatives cannot corrupt a valid earlier projection");
         }
     }
 }

@@ -45,9 +45,9 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
     }
     private static List<Cell> cells(FrontierWorldState state, SubjectId home) {
         var cells = new ArrayList<Cell>();
-        for (var site : state.resourceSites().sites().values()) {
-            if (!state.resourceSites().declarations().get(site.siteId()).settlementId().equals(home)
-                    || site.phase() == ResourceSitePhase.DESTROYED || site.phase() == ResourceSitePhase.CONFLICT) continue;
+        for (var id : state.resourceSites().siteIdsIn(home)) {
+            var site = state.resourceSites().site(id);
+            if (site.phase() == ResourceSitePhase.DESTROYED || site.phase() == ResourceSitePhase.CONFLICT) continue;
             var cycle = state.resourceSites().cycle(site.siteId());
             for (var cell : cycle.layout().cells()) {
                 var value = cycle.cell(cell.id());

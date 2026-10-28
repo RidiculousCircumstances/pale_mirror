@@ -4525,3 +4525,58 @@ Courier-food/interruption focus PASS64 checks (including9 architecture checks),
 meal/cargo/resumption assertions; no production safety branch was weakened.
 The reviewed cut is ready for clean frozen affected verification and both retained
 world deployments. Throughput and G remain unproven at the required20ticks/sec.
+
+### Reuse complete local forecast facts without reusing authority
+
+6883f077a frozen verification PASS138checks114s, guardrails/JAR/package PASS;
+both retained terrain-r31/scale-r31 worlds verified at SHA512
+5c696ac029f38d81bfe86c1cf6e9496f5bef6180bfbf306a0cd292dd39954bf17925db96c6ebf8d07a08216011c62ed3bb51ccdf5ee3de045698f2df18f8f1de.
+Ordinary scale observation runs separately without candidate compilation/profile.
+
+Connected source audit of the existing trace's repeated nutrition/forecast reads:
+GoodsProcurementTransport rebuilt the same home roster and latest nutrition instant
+for every item/source/price proposal. Share only completed roster facts within four
+exact immutable snapshots, bounded to128 actual home queries. Crew food selection
+also recomputed and sorted every candidate's identical need for each hypothetical
+crew size/asset. The provisioning owner now shares its immutable ranking keyed by
+exact snapshot, sponsor, ordered candidate list, food, duration and nutrition tick.
+Every caller permission and selected crew/asset supply check still executes. Current
+stock/people/time changes cannot reuse the old projection. Focused need/procurement
+negative checks PASS18checks26s, including changed permission, personal-stock
+non-sharing, removed supplies, distinct journey duration/time and valid predecessor.
+
+The same trace's FieldSupplyCapacity.cells repeatedly visited all world sites to
+find one home's land. ResourceSiteState now exposes explicit declared membership
+through the existing shared ImmutableGroupView. Capacity, equipment and reserve
+owners resolve current local lifecycles/cycles from that directory; no availability,
+phase, crop or work permission is retained there. Equipment-demand inputs explicitly
+include declarations. Independent declaration forks, unknown home and codec coverage
+are part of the affected verification.
+
+Finally, ordinary ledger destruction (meals and recipe consumption included) still
+copied all world lots, claims, accounts and bindings to change one custody portion.
+Use existing sparse updates for exact affected lots/claims and source account.
+The already-required no-physical-binding proof lets this COLD sink retain the exact
+unchanged bindings root. All original subset/pinned-claim/conservation checks remain;
+HOT observed destruction still releases/checks its exact epoch through the existing
+owner before using this sink. No schema/rule change or world reset is needed.
+
+6883f077a ordinary observation complete:304.472458s,203674→205705,
+6.670554ticks/sec,debt965→5024; advice195→3766,accepted161→2935.
+No candidate builds/profile/client overlapped. This is a FAILED20ticks/sec target,
+not evidence of a measured speedup over a different evolving workload. All five
+sampled plans renewed; stocks1/7/35/68/100 were126→126/150→171/34→48/11→4/61→57,
+with zero starving in those final samples. No new terminal harvest/accepted trade
+is proved by the bounded returned histories during this window. Keep G OPEN.
+
+The connected local-field/ledger/meal/procurement focus PASS81checks68s plus
+guardrails. Source review also found HumanAssignmentProjection held its global
+cache monitor around dependency projection and full population compilation, so
+independent exact/advisory snapshot work serialized behind it. Reuse the existing
+BoundedValueMemo(128): only cache lookup/publication lock, pure dependency/projection
+work runs outside. All original exact immutable dependencies and conflicting claim
+checks remain; duplicate computations cannot install partial or failed results.
+This removes a structural cross-worker lock, not a measured end-to-end gain claim.
+
+Assignment/view focus PASS33s plus guardrails. Final clean-ref verification will
+include both connected cuts and the existing commercial courier/meal regression.

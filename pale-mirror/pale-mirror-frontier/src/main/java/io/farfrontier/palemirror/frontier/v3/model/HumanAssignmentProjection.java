@@ -8,8 +8,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork;
@@ -23,8 +21,8 @@ import io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryWork;
  */
 public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignments) {
     private static final int MAX_CACHED_REVISIONS = 128;
-    private static final Map<Dependencies, HumanAssignmentProjection> CACHE =
-            Collections.synchronizedMap(new HashMap<>());
+    private static final BoundedValueMemo<Dependencies, HumanAssignmentProjection> CACHE =
+            new BoundedValueMemo<>(MAX_CACHED_REVISIONS);
     private record Current(FrontierWorldState state, HumanAssignmentProjection projection) { }
     private static final ThreadLocal<Current> CURRENT = new ThreadLocal<>();
     private static final ImmutableRegistryView<SubjectId, ResourceSiteLifecycle, List<HumanAssignment>> FIELD_ROWS =
@@ -108,19 +106,12 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         Objects.requireNonNull(state, "assignment state");
         var current = CURRENT.get();
         if (current != null && current.state() == state) return current.projection();
-        synchronized (CACHE) {
-            Dependencies dependencies = Dependencies.of(state);
-            HumanAssignmentProjection cached = CACHE.get(dependencies);
-            if (cached != null) {
-                CURRENT.set(new Current(state, cached));
-                return cached;
-            }
-            if (CACHE.size() >= MAX_CACHED_REVISIONS) CACHE.clear();
-            HumanAssignmentProjection compiled = compileFresh(state);
-            CACHE.put(dependencies, compiled);
-            CURRENT.set(new Current(state, compiled));
-            return compiled;
-        }
+        // Both the dependency projection and a cache miss are pure snapshot
+        // computations. Do not serialize server/advisory workers while they scan
+        // independent populations; the shared memo locks only lookup/publication.
+        var compiled = CACHE.get(Dependencies.of(state), () -> compileFresh(state));
+        CURRENT.set(new Current(state, compiled));
+        return compiled;
     }
 
     private static HumanAssignmentProjection compileFresh(FrontierWorldState state) {

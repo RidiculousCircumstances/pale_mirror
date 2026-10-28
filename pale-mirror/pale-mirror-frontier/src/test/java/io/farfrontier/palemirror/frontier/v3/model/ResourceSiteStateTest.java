@@ -15,6 +15,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteStateTest {
+    @Test void declaredSettlementDirectoryKeepsForksAndCurrentMembershipSeparate() {
+        var before = initial().resourceSites(); var declaration = before.declarations().values().iterator().next();
+        var home = declaration.settlementId();
+        var foreign = before.declarations().values().stream().map(ResourceSiteDeclaration::settlementId)
+                .filter(id -> !id.equals(home)).findFirst().orElseThrow();
+        var original = before.siteIdsIn(home); var other = before.siteIdsIn(foreign);
+        assertTrue(original.contains(declaration.id()));
+        var changed = new ResourceSiteDeclaration(declaration.id(), foreign, declaration.facilityId(), declaration.kind(), declaration.land());
+        var fork = new ResourceSiteState(ImmutableLookupMap.withEntry(before.declarations(), declaration.id(), changed),
+                before.sites(), before.cycles());
+        assertEquals(original.stream().filter(id -> !id.equals(declaration.id())).toList(), fork.siteIdsIn(home));
+        assertTrue(fork.siteIdsIn(foreign).contains(declaration.id()));
+        assertEquals(original, before.siteIdsIn(home)); assertEquals(other, before.siteIdsIn(foreign));
+        assertTrue(before.siteIdsIn(new SubjectId("settlement:absent")).isEmpty());
+        assertTrue(fork.siteIdsIn(foreign).contains(declaration.id()), "querying a predecessor cannot poison the independent declaration branch");
+        var codec = new FrontierWorldStateCodec(); var state = initial();
+        assertEquals(state.resourceSites().siteIdsIn(home), codec.decode(codec.encode(state)).resourceSites().siteIdsIn(home));
+    }
+
     @Test void executionReferencesRejectJobRemovalWhileItsActorAuthorityIsUnchanged() {
         var fixture = FrontierResourceSiteHarvestFixture.create(new WorldId("frontier:harvest-reference-removal"), 125L);
         var state = fixture.state(); var sites = state.resourceSites(); var lifecycle = sites.site(fixture.siteId());
