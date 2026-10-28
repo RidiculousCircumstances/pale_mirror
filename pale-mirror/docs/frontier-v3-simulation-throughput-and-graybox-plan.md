@@ -3695,3 +3695,20 @@ removeshousehold/nutrition and proves rejection plusforcedfull/codec recovery. E
 meal admission/hot/displacement/reentry/resource-loss and population/nutrition checks
 PASS57s; connectedpopulation PASS57s; finalboth-directionUAE/death/replay/reference/
 mapbranchnegative+guardrails PASS28s. Frozenrelease/deploy/ordinaryeffect pending;GOPEN.
+
+### Retained scale-world body departure — confirmed hand acknowledgement deadlock
+
+Read-only d39fab1be actor evidence and CRC32C-checked physical journal rows establish
+resident:1-7's exact deadlock in retained schema311: UNKNOWN harvest scene, positively
+saved current body departure, 43 canonical unbound wheat, and its retained BIND_RETAINED
+hand witness. The matching FIELD_HAND_PROJECTION native operation has every participant
+APPLIED and SAVED, but no owner consequence. Release waits for witness retirement;
+ordinary hand confirmation was reachable only through HOT work on a loaded body.
+
+The harvest adapter now acknowledges this same saved native operation before the scene
+release barrier. Exact scene/job/account/lot/prefix/body/hand and saved participants remain
+mandatory. The existing canonical hand event may acknowledge retained UNKNOWN/DRAINING/
+CONFLICT scopes without resuming work or issuing resources. A crash after canonical
+binding but before witness cleanup uses that exact binding plus saved departure to retire
+only the matching witness. Ordinary work still requires HOT; no custody fence is removed.
+Focused owner/recovery/negative checks pass; retained-world terminal proof pending.

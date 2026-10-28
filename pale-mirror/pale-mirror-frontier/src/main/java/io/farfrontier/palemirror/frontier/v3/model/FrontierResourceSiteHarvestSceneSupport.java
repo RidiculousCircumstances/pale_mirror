@@ -174,12 +174,25 @@ public final class FrontierResourceSiteHarvestSceneSupport {
      * evidence for this worker's checkpoint.
      */
     public static SceneLease requireHotLease(FrontierWorldState state, ResourceSiteHarvestJob job, SceneLeaseId leaseId) {
+        return requireParticipantLease(state, job, leaseId, java.util.Set.of(SceneLeaseStatus.HOT));
+    }
+
+    /** An already applied hand acknowledgement survives loss of presentation demand.
+     * This admits no work, movement, resource issuance or body recreation. */
+    public static SceneLease requireHandAcknowledgementLease(FrontierWorldState state,
+            ResourceSiteHarvestJob job, SceneLeaseId leaseId) {
+        return requireParticipantLease(state, job, leaseId, java.util.Set.of(SceneLeaseStatus.HOT,
+                SceneLeaseStatus.DRAINING, SceneLeaseStatus.UNKNOWN_AFTER_RESTART, SceneLeaseStatus.CONFLICT));
+    }
+
+    private static SceneLease requireParticipantLease(FrontierWorldState state, ResourceSiteHarvestJob job,
+            SceneLeaseId leaseId, java.util.Set<SceneLeaseStatus> statuses) {
         SceneLease lease = state.sceneLeases().get(leaseId);
-        if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+        if (lease == null || !statuses.contains(lease.status()) || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
                 || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())) {
-            throw new IllegalArgumentException("resource-site HOT checkpoint has no matching exact farmer lease");
+            throw new IllegalArgumentException("resource-site checkpoint has no matching exact farmer lease");
         }
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {

@@ -98,7 +98,7 @@ public final class ResourceSiteHarvestProcess {
                 && intent.status() != PhysicalIntentStatus.RUNNING) {
             throw new IllegalArgumentException("field hand projection has no admitted harvest intent");
         }
-        SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, projected.leaseId());
+        SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHandAcknowledgementLease(state, job, projected.leaseId());
         PhysicalStackAddress.ActorHand address = (PhysicalStackAddress.ActorHand) projected.hand().address();
         if (projected.actorEpoch() != lease.revision() || !address.actorId().equals(job.workerId())
                 || !address.entityId().equals(lease.members().getFirst().entityId())) {

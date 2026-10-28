@@ -171,6 +171,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
         FrontierV3SceneExecutor.requireRegisteredSceneTurn(state, lease);
+        if (lease.status() != SceneLeaseStatus.CLOSED
+                && FrontierV3HarvestHandOperation.recoverDeparture(level, runtime, state, lease)) return;
         if ((lease.status() == SceneLeaseStatus.PREPARED || lease.status() == SceneLeaseStatus.HOT)
                 && state.resourceSites().site(FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId())
                         .harvestJob(FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId())
@@ -754,7 +756,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // The canonical WAL now owns this observed hand. A crash before this SavedData
         // retirement is harmless: the exact pending witness is checked on re-entry.
         FrontierV3OperationConfirmation.submit(level, runtime, result.ticket(), observed, () -> {
-            ledger.retireFieldHandProjection(expected); ledger.persist(level);
+            FrontierV3HarvestHandOperation.retireProjection(level, ledger, expected);
         });
         return true;
     }

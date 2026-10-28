@@ -281,6 +281,34 @@ class ResourceSiteHarvestSceneReconciliationTest {
                         receipt.observedBody(), new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", 2))));
     }
 
+    @Test void savedHandAcknowledgementSurvivesRestartWithoutResumingWorkOrIssuingYield() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        var accepted = oneObservedCrop(hot);
+        var job = accepted.resourceSites().site(hot.site()).harvestJob(hot.job().id()).orElseThrow();
+        var resources = accepted.inventory().fungibleResources().releaseBindings(job.actorAccountId(), hot.lease().revision());
+        var before = accepted.withInventory(accepted.inventory().withFungibleResources(resources))
+                .transitionSceneLease(hot.lease().id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        var projected = new ResourceSiteHarvestHandProjected(job.siteId(), job.id(), job.actorAccountId(), hot.lease().id(),
+                hot.lease().revision(), new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                    job.workerId(), hot.lease().members().getFirst().entityId()), "minecraft:wheat", 1));
+        var codec = new FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(before));
+        var after = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess
+                .reduceHandProjected(restored, job.siteId(), projected);
+        assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, after.sceneLeases().get(hot.lease().id()).status());
+        assertEquals(before.resourceSites(), after.resourceSites());
+        assertEquals(before.actorLocations(), after.actorLocations());
+        assertEquals(resources.accounts(), after.inventory().fungibleResources().accounts());
+        assertEquals(resources.lots(), after.inventory().fungibleResources().lots());
+        assertEquals(1, after.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(job.actorAccountId())).count());
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess
+                .reduceHandProjected(after, job.siteId(), projected));
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess
+                .reduceHandProjected(restored, job.siteId(), new ResourceSiteHarvestHandProjected(job.siteId(), job.id(),
+                    job.actorAccountId(), projected.leaseId(), projected.actorEpoch() + 1, projected.hand())));
+    }
+
     @Test void retiredProjectionBindsOnlyExistingYieldAndAllowsItsTerminalDropWithoutResumingWork() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         var accepted = oneObservedCrop(hot);
