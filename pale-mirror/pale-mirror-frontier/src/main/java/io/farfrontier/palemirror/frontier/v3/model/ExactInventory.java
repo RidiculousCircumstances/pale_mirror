@@ -10,6 +10,8 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
+import static io.farfrontier.palemirror.frontier.v3.model.ExactInventoryValidation.require;
+import static io.farfrontier.palemirror.frontier.v3.model.ExactInventoryValidation.requireDistinct;
 
 /** Immutable exact custody ledger. Any dangling, duplicate or mixed custody is rejected. */
 public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
@@ -30,75 +32,20 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Objects.requireNonNull(fungibleResources, "fungible resource ledger"); occupiedSlots = ImmutableLookupMap.copyOf(occupiedSlots);
         if (worldCarrierItems.size() > MAX_WORLD_CARRIERS) throw new IllegalArgumentException("world carrier retention limit exceeded");
         if (conflicts.size() > MAX_CONFLICTS) throw new IllegalArgumentException("inventory conflict retention limit exceeded");
-        Map<InventoryCustody.ContainerSlot, SubjectId> slots = new HashMap<>();
-        for (Map.Entry<SubjectId, ContainerRecord> entry : containers.entrySet()) {
-            if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("container map key does not match container identity");
-            economics.require(entry.getValue().ownerId());
-        }
-        if (!containers.keySet().equals(surfaces.keySet())) throw new IllegalArgumentException("every exact container requires one physical surface");
-        for (Map.Entry<SubjectId, ContainerSurface> entry : surfaces.entrySet()) {
-            if (!entry.getKey().equals(entry.getValue().containerId()) || !containers.containsKey(entry.getKey())) throw new IllegalArgumentException("container surface must own one known container");
-            var purpose = containers.get(entry.getKey()).purpose();
-            if (purpose.referenceScope() && (purpose == ContainerPurpose.MOBILE_STORAGE) != !entry.getValue().fixed())
-                throw new IllegalArgumentException("container purpose and physical attachment disagree");
-        }
-        for (Map.Entry<SubjectId, ExactItemStack> entry : items.entrySet()) {
-            if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("item map key does not match item identity");
-            economics.require(entry.getValue().economicOwnerId());
-        }
-        for (ResourceLot lot : fungibleResources.lots().values()) {
-            economics.require(lot.economicOwnerId());
-        }
-        for (Map.Entry<SubjectId, InventoryConflict> entry : conflicts.entrySet()) {
-            InventoryConflict conflict = entry.getValue();
-            if (!entry.getKey().equals(conflict.id())) {
-                throw new IllegalArgumentException("inventory conflict map key does not match conflict identity");
-            }
-            ContainerRecord container = containers.get(conflict.containerId());
-            if (container == null || conflict.slot() >= container.slotCount()) throw new IllegalArgumentException("inventory conflict targets an invalid container slot");
-            // A conflict is durable evidence rooted at the physical slot.  Its original exact
-            // subject may legitimately have been consumed, moved out of the active ledger, or
-            // destroyed after the observation; retaining the container anchor keeps that
-            // evidence restart-safe without resurrecting the item or adopting foreign state.
-        }
-        for (Map.Entry<SubjectId, CargoBatch> entry : cargo.entrySet()) {
-            if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("cargo map key does not match cargo identity");
-            economics.require(entry.getValue().ownerId());
-        }
-        for (ExactItemStack item : items.values()) switch (item.custody()) {
-            case InventoryCustody.ContainerSlot slot -> {
-                ContainerRecord container = containers.get(slot.containerId());
-                if (container == null || slot.slot() >= container.slotCount() || slots.put(slot, item.id()) != null) throw new IllegalArgumentException("invalid or duplicate container slot custody");
-            }
-            case InventoryCustody.Cargo batch -> {
-                CargoBatch value = cargo.get(batch.cargoId());
-                if (value == null || value.fungibleContents() || !value.itemIds().contains(item.id())) throw new IllegalArgumentException("dangling or conflicting cargo custody");
-                if (!value.ownerId().equals(item.economicOwnerId())) throw new IllegalArgumentException("cargo-held item claim must belong to its sender");
-            }
-            case InventoryCustody.Player player -> {
-                List<SubjectId> value = playerItems.get(player.playerId());
-                if (value == null || !value.contains(item.id())) throw new IllegalArgumentException("dangling or conflicting player custody");
-            }
-            case InventoryCustody.WorldCarrier carrier -> {
-                List<SubjectId> value = worldCarrierItems.get(carrier.carrierId());
-                if (value == null || !value.contains(item.id())) throw new IllegalArgumentException("dangling or conflicting world carrier custody");
-            }
-            case InventoryCustody.Actor ignored -> { }
-        };
-        for (CargoBatch batch : cargo.values()) {
-            if (batch.fungibleContents()) continue;
-            for (SubjectId item : batch.itemIds()) require(items.get(item), new InventoryCustody.Cargo(batch.id()), "cargo reverse custody");
-        }
-        for (Map.Entry<UUID, List<SubjectId>> player : playerItems.entrySet()) {
-            requireDistinct(player.getValue(), "player custody");
-            for (SubjectId item : player.getValue()) require(items.get(item), new InventoryCustody.Player(player.getKey()), "player reverse custody");
-        }
-        for (Map.Entry<UUID, List<SubjectId>> carrier : worldCarrierItems.entrySet()) {
-            requireDistinct(carrier.getValue(), "world carrier custody");
-            for (SubjectId item : carrier.getValue()) require(items.get(item), new InventoryCustody.WorldCarrier(carrier.getKey()), "world carrier reverse custody");
-        }
-        validateFungibleResourceCustody(containers, cargo, occupiedSlots, fungibleResources);
-        if (!slots.equals(occupiedSlots)) throw new IllegalArgumentException("container slot index must exactly match exact item custody");
+        ExactInventoryValidation.validate(containers, items, cargo, playerItems, worldCarrierItems, conflicts,
+                surfaces, economics, fungibleResources, occupiedSlots);
+    }
+
+    /** Full composed ingress/recovery audit, including intrinsic resource conservation. */
+    void validateComplete() {
+        ImmutableInvariantCheck.full(() -> {
+            if (worldCarrierItems.size() > MAX_WORLD_CARRIERS) throw new IllegalArgumentException("world carrier retention limit exceeded");
+            if (conflicts.size() > MAX_CONFLICTS) throw new IllegalArgumentException("inventory conflict retention limit exceeded");
+            fungibleResources.validateComplete();
+            ExactInventoryValidation.validate(containers, items, cargo, playerItems, worldCarrierItems, conflicts,
+                    surfaces, economics, fungibleResources, occupiedSlots);
+            return null;
+        });
     }
 
     /**
@@ -776,13 +723,6 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             carriers.computeIfAbsent(carrier.carrierId(), ignored -> new java.util.ArrayList<>()).add(itemId);
         }
     }
-    private static void require(Object value, Object expected, String label) {
-        if (value instanceof ExactItemStack item && item.custody().equals(expected)) return;
-        throw new IllegalArgumentException("dangling or conflicting " + label);
-    }
-    private static void requireDistinct(List<SubjectId> values, String label) {
-        if (values.stream().distinct().count() != values.size()) throw new IllegalArgumentException(label + " must contain distinct exact item identities");
-    }
     private static Map<InventoryCustody.ContainerSlot, SubjectId> occupiedSlots(Map<SubjectId, ExactItemStack> items) {
         Map<InventoryCustody.ContainerSlot, SubjectId> result = new HashMap<>();
         for (ExactItemStack item : items.values()) if (item.custody() instanceof InventoryCustody.ContainerSlot slot) {
@@ -798,55 +738,6 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
     }
 
-    private static void validateFungibleResourceCustody(Map<SubjectId, ContainerRecord> containers,
-                                                        Map<SubjectId, CargoBatch> cargo,
-                                                        Map<InventoryCustody.ContainerSlot, SubjectId> occupiedSlots,
-                                                        FungibleResourceLedger fungibleResources) {
-        Map<ResourceCustody, SubjectId> accountsByCustody = new HashMap<>();
-        for (CustodyAccount account : fungibleResources.accounts().values()) {
-            if (!(account.custody() instanceof ResourceCustody.Actor)
-                    && accountsByCustody.put(account.custody(), account.id()) != null) {
-                throw new IllegalArgumentException("one physical/resource location must have one fungible custody account");
-            }
-            switch (account.custody()) {
-                case ResourceCustody.Container container -> {
-                    ContainerRecord record = containers.get(container.containerId());
-                    if (record == null) throw new IllegalArgumentException("fungible account references an unknown container");
-                    record.compartmentLayout().slots(container.section());
-                    // A holder may store another registered party's goods. Custody is not
-                    // title; admission and commercial acceptance enforce their own authority.
-                }
-                case ResourceCustody.Cargo cargoCustody -> {
-                    CargoBatch batch = cargo.get(cargoCustody.cargoId());
-                    if (batch == null || !batch.fungibleContents()) throw new IllegalArgumentException("fungible account references an unknown exact cargo batch");
-                }
-                case ResourceCustody.Actor ignored -> { }
-                case ResourceCustody.Player ignored -> { }
-                case ResourceCustody.WorldCarrier ignored -> { }
-                case ResourceCustody.Ground ignored -> { }
-            }
-        }
-        for (CargoBatch batch : cargo.values()) if (batch.fungibleContents()) {
-            long matching = fungibleResources.accounts().values().stream().filter(account -> account.custody() instanceof ResourceCustody.Cargo custody
-                    && custody.cargoId().equals(batch.id())).count();
-            if (matching != 1) throw new IllegalArgumentException("fungible cargo must retain one exact custody account");
-        }
-        for (PhysicalStackBinding binding : fungibleResources.bindings().values()) {
-            CustodyAccount account = fungibleResources.accounts().get(binding.accountId());
-            if (binding.address() instanceof PhysicalStackAddress.ContainerSlot slot) {
-                ContainerRecord record = containers.get(slot.slot().containerId());
-                if (record == null || slot.slot().slot() >= record.slotCount()
-                        || !(account.custody() instanceof ResourceCustody.Container container)
-                        || !container.containerId().equals(slot.slot().containerId())
-                        || !record.compartmentLayout().slots(container.section()).contains(slot.slot().slot())) {
-                    throw new IllegalArgumentException("fungible physical binding has no matching owned container account");
-                }
-                if (occupiedSlots.containsKey(slot.slot())) {
-                    throw new IllegalArgumentException("fungible physical binding overlaps an exact-item slot");
-                }
-            }
-        }
-    }
     public ExactInventory completeCargoHandoff(SubjectId cargoId, List<CargoHandoffPlacement> placements) {
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
         if (batch == null) throw new IllegalArgumentException("completed cargo is absent: " + cargoId.value());

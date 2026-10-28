@@ -6,9 +6,10 @@ import java.util.*;
 /** Disposable queries of the sole immutable ledger; never allocation or custody authority. */
 final class FungibleResourceReadIndex {
     private record Balance(SubjectId owner, String kind) { }
+    private record Available(CustodyAccount account, ImmutableDependencies dependencies, Map<Balance, Integer> quantities) { }
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
-                         Map<SubjectId, Map<Balance, Integer>> available) { }
+                         Map<SubjectId, Available> available) { }
     private static final ImmutableResultView<String, Map<ResourceCustody.Container, CustodyAccount>> SECTIONS =
             new ImmutableResultView<>(4);
     private static final ImmutableInputView<Map<SubjectId, List<CustodyAccount>>> CONTAINERS = new ImmutableInputView<>();
@@ -21,8 +22,19 @@ final class FungibleResourceReadIndex {
         Objects.requireNonNull(owner, "resource economic owner"); Objects.requireNonNull(kind, "resource item kind");
         if (!ledger.accounts().containsKey(Objects.requireNonNull(account, "custody account")))
             throw new IllegalArgumentException("unknown custody account");
-        return image(ledger).available().computeIfAbsent(account,
-                id -> balances(ledger, ledger.accounts().get(id))).getOrDefault(new Balance(owner, kind), 0);
+        var row = ledger.accounts().get(account);
+        var views = image(ledger).available();
+        var inputs = new Object[1 + row.lotQuantities().size() + row.claimQuantities().size()];
+        int index = 0; inputs[index++] = row;
+        for (var id : row.lotQuantities().keySet()) inputs[index++] = ledger.lots().get(id);
+        for (var id : row.claimQuantities().keySet()) inputs[index++] = ledger.claims().get(id);
+        var previous = views.get(account);
+        if (previous == null || !previous.dependencies().matches(inputs)) {
+            var quantities = balances(ledger, row);
+            previous = new Available(row, ImmutableDependencies.of(inputs), quantities);
+            views.put(account, previous);
+        }
+        return previous.quantities().getOrDefault(new Balance(owner, kind), 0);
     }
 
     static Optional<CustodyAccount> container(FungibleResourceLedger ledger, SubjectId container) {
@@ -57,7 +69,12 @@ final class FungibleResourceReadIndex {
         var current = CURRENT.get();
         if (current != null && current.lots() == ledger.lots() && current.claims() == ledger.claims()
                 && current.accounts() == ledger.accounts()) return current;
-        current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), new HashMap<>());
+        // Only queried rows of the current active registry are retained. A local
+        // claim change must not discard every other account's balance. Replaced or
+        // withdrawn accounts (including a new world) release their old evidence.
+        var available = current == null ? new HashMap<SubjectId, Available>() : current.available();
+        available.entrySet().removeIf(entry -> ledger.accounts().get(entry.getKey()) != entry.getValue().account());
+        current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), available);
         CURRENT.set(current);
         return current;
     }

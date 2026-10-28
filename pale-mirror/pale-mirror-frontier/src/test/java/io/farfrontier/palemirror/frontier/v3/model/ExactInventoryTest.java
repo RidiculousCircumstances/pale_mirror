@@ -55,6 +55,15 @@ class ExactInventoryTest {
         assertEquals(0, capacity.freeCapacitySlots());
         assertTrue(inventory.availableSlots(container, reserved).isEmpty());
         assertEquals(1, inventory.containerCapacity(container, java.util.Set.of(24)).freeCapacitySlots());
+        var warmed = inventory; var resources = warmed.fungibleResources();
+        var wrongHolder = new FungibleResourceLedger(resources.lots(), resources.claims(), Map.of(account,
+                new CustodyAccount(account, new ResourceCustody.Container(new SubjectId("container:absent")),
+                        Map.of(lot, 1316), Map.of())), resources.bindings());
+        assertThrows(IllegalArgumentException.class, () -> warmed.withFungibleResources(wrongHolder),
+                "unchanged stock cannot certify a changed missing custody endpoint");
+        assertThrows(IllegalArgumentException.class, () -> warmed.withEconomics(new EconomicLedger(Map.of())),
+                "unchanged items and containers still require their current owner registry");
+        assertDoesNotThrow(warmed::validateComplete);
     }
 
     @Test

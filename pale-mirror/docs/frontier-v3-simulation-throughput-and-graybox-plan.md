@@ -1982,3 +1982,52 @@ stock remains, rejects duplicate/foreignowner claims, and leaves its predecessor
 unchanged. Existing codec, actor-pocket, bound-allocation, shipment, advice replay and
 resource-loss coverage retained. Focus62checks/10classes+guardrails PASS43s. Exact
 clean-ref release/deploy and ordinary100 measurements remain pending. G stays OPEN.
+
+
+### 2026-10-28 — inventory proofs follow their actual immutable components
+
+2b389f20e clean-ref release PASS50s (91frontier/13classes+29runtime,guardrails/package),
+both retained deployments VERIFIED. Ordinary100 observer96432 completed10samples:
+28883→29463/272.6s, debt1274→6149. Still FAIL. Host all-time max671.8ms and recent
+max21.3ms; the peak remains a recorded performance contradiction, not hidden by the
+lower recent value. Concurrent diagnostic/build phases do not establish a speed ratio.
+
+Fresh20s cold-reservation-conservation-warm.jfr confirms the full account-validation
+construction is no longer a top advisory cost. ExactInventory construction now has
+153samples on one advisory worker; canonical validation still276 server samples.
+Do not launch a speculative general ledger proof/index rewrite from the prior trace.
+The immediate connected contradiction is the enclosing inventory constructor, which
+repeats unchanged equipment/title/custody audits for resource or financial reservations.
+Read-only saved native image549701/tick28611:3029people,641meals,300shipments(299live),
+143missions/groups,446movements,1760lots,717accounts,1089claims. Counts are not terminal
+work/trade acceptance. Receipt owned-invariant-native-cardinality.txt.
+
+ExactInventory now delegates its original checks to inventory-owned
+ExactInventoryValidation. Each original invariant retains one successful image under
+its complete explicit immutable read set: container/surface declarations, item titles,
+lot titles, conflict anchors, cargo titles, exact-item forward/reverse custody and
+resource custody/binding layout. Financial reservations do not alter economic account
+membership. Resource claims do not alter custody geometry. The resource-custody check
+therefore reads the complete current account-id→typed-custody projection, plus the
+actual binding/container/cargo/occupied-slot images. Its registry uses the declared
+MAX_ACCOUNTS bound and prunes withdrawn rows; no undersized LRU or historical worlds.
+No check was removed, no claim/quantity rule was delegated to this projection, and no
+trust flag or changed-inventory constructor bypass was introduced. The same public
+constructor remains the mutation/ingress boundary. Full world ingress/recovery now
+explicitly forces BOTH intrinsic resource and composed inventory audits, bypassing
+all accepted invariant images.
+
+The common resource balance query also retains only queried unchanged active-account
+views, rather than clearing every balance after an unrelated claim. Complete exact
+read sets include account quantities and every referenced lot/claim record; changed
+metadata revalidates even when custody/account identity stays unchanged. Withdrawn or
+replaced account rows release old evidence. One thread-local active image, no per-row
+ThreadLocals, persistent state or second stock authority.
+
+Extended existing negatives reject changing an otherwise unchanged stock account to
+an absent container, reject withdrawing the owner's economic register after warming
+proofs, and verify a full original-inventory audit. Existing balance test reclassifies
+a lot while retaining the exact same account map and returns to its predecessor;
+availability follows the actual kind in both images. Focus94checks/13classes plus
+guardrails PASS48s (prior7-class balance focus PASS30s). Release/deploy and throughput
+measurements remain pending; the100town goal and terminal stories remain OPEN.

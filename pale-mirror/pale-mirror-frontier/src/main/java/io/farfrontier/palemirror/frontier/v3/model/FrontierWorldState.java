@@ -618,7 +618,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         }
     }
     void validateComplete() {
-        ImmutableInvariantCheck.full(() -> { inventory.fungibleResources().validateComplete(); validateOwnedState(); return null; });
+        ImmutableInvariantCheck.full(() -> { inventory.validateComplete(); validateOwnedState(); return null; });
     }
     private void validateOwnedState() {
         int depth = DEFERRED_FULL_VALIDATION_DEPTH.get();

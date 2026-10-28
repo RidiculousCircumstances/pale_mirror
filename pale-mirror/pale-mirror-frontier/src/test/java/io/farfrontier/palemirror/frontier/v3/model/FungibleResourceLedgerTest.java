@@ -293,6 +293,12 @@ class FungibleResourceLedgerTest {
     void reservedPortionMovesExactlyAndCannotBeDoubleAllocatedOrOverConsumed() {
         var source = issue(10);
         assertEquals(10, source.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"));
+        var reclassified = new FungibleResourceLedger(Map.of(LOT, new ResourceLot(LOT, OWNER,
+                "minecraft:wheat", 10, "test:reclassification", List.of())), source.claims(), source.accounts(), source.bindings());
+        assertEquals(0, reclassified.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"));
+        assertEquals(10, reclassified.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:wheat"));
+        assertEquals(10, source.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"),
+                "unchanged custody rows cannot conceal changed lot metadata or corrupt an earlier image");
         FungibleResourceLedger reserved = source.reserve(new ClaimAllocation(new SubjectId("claim:provision"), new SubjectId("process:provision"), OWNER,
                 "minecraft:bread", 4, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT);
         assertEquals(6, reserved.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"));
