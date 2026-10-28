@@ -6,8 +6,16 @@ import java.util.Optional;
 
 /** Fleet capability admission, not a body lifecycle or another stock reservation register. */
 public final class TransportAssetAdmission {
+    private record Query(TransportAsset asset, SubjectId home) { }
+    private static final ImmutableSnapshotView<Query, Boolean> AVAILABILITY = new ImmutableSnapshotView<>(4, 256);
     private TransportAssetAdmission() { }
     public static boolean available(FrontierWorldState state, TransportAsset asset, SubjectId home) {
+        // Every hypothetical load/duration asks the same finite fleet question.
+        // Retain only a completed answer for this exact immutable world image;
+        // departure still checks its current body, custody and mission owners.
+        return AVAILABILITY.get(state, new Query(asset, home), () -> current(state, asset, home));
+    }
+    private static boolean current(FrontierWorldState state, TransportAsset asset, SubjectId home) {
         return asset.equals(state.transportFleet().assets().get(asset.actorId())) && asset.homeSettlementId().equals(home)
                 && asset.missionId().isEmpty() && !ReferenceContainerCustody.blocksCanonicalUse(state, asset.containerId())
                 && ActorInventoryInteractionFences.pendingOwner(state, asset.actorId()).isEmpty()

@@ -32,6 +32,12 @@ class ExpeditionCrewAdmissionTest {
                             Map.of(lot, 64), Map.of(), Optional.of(UnitInventoryPresentation.slots().get(1))));
             state = state.withInventory(state.inventory().withFungibleResources(resources));
             assertTrue(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, List.of(crew.getFirst()), Optional.empty(), tick));
+            long longJourney = Math.ceilDiv(Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(),
+                    128L * food.nutritionPerItem() + life.satietyCapacityUnits()), 1000L), life.metabolismMinPermille());
+            assertTrue(ExpeditionProvisioning.requiredFoodItems(longJourney, 0,
+                    life.metabolismMinPermille(), food, life) > 64, "fixture journey must exhaust the personal stack");
+            assertFalse(ExpeditionCrewAdmission.canSupply(state, home, List.of(crew.getFirst()), Optional.empty(), longJourney, tick),
+                    "cached stock must not cache the duration-dependent food requirement");
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.empty(), tick));
             assertEquals(List.of(crew.getFirst()), ExpeditionCrewAdmission.select(state, home,
                     List.of(crew.getLast(), crew.getFirst()), 1, Optional.empty(), 12000, tick, ids -> true),
@@ -47,6 +53,9 @@ class ExpeditionCrewAdmissionTest {
             state = state.withInventory(state.inventory().withFungibleResources(resources));
             assertTrue(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.of(asset), tick));
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.empty(), tick));
+            var withdrawn = state.withInventory(state.inventory().withFungibleResources(FungibleResourceLedger.empty()));
+            assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(withdrawn, home, List.of(crew.getFirst()), Optional.empty(), tick),
+                    "a new stock snapshot cannot retain withdrawn personal provisions");
         }
     }
 }

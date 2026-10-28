@@ -53,6 +53,10 @@ class TransportFleetTest {
                         base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(),
                         java.util.List.of(), base.transactionCommitter()));
         var before = state;
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.available(
+                before, asset, asset.homeSettlementId()));
+        assertFalse(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.available(
+                before, asset, new SubjectId("settlement:foreign")), "sponsor is part of the fleet query");
         var organizer = state.companies().goodsTrade().participants().participants().get(asset.homeSettlementId());
         assertTrue(GoodsTransportOptions.forLoad(before, organizer, 12000, 1, 1, 0).stream()
                 .anyMatch(option -> option.animal().filter(asset::equals).isPresent()));
@@ -66,6 +70,10 @@ class TransportFleetTest {
         assertFalse(ReferenceContainerCustody.hasOperationalCustody(prepared, asset.containerId()));
         assertEquals(java.util.Optional.of(asset.containerId()), ActorInventoryInteractionFences.pendingOwner(prepared, asset.actorId()));
         assertTrue(ActorInventoryInteractionFences.pending(prepared, asset.actorId()));
+        assertFalse(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.available(
+                prepared, asset, asset.homeSettlementId()), "new physical fence must invalidate fleet availability");
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.available(
+                before, asset, asset.homeSettlementId()), "the predecessor retains its own body/custody facts");
         assertTrue(GoodsTransportOptions.forLoad(prepared, organizer, 12000, 1, 1, 0).stream()
                 .noneMatch(option -> option.animal().filter(asset::equals).isPresent()),
                 "a cached economic offer cannot retain an asset across its new physical inventory fence");

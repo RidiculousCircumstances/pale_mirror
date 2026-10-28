@@ -2893,5 +2893,32 @@ only equivalent local access, with no task-kind branches or guessed permission.
 No route checker/quarantine rule is weakened. The focused regression also checks
 that the changed local token differs while a remote token stays equal and the
 predecessor remains unchanged. Connected navigation/shape/meal/forestry/group and
-guardrail checks PASS1m1s. Frozen release and retained-world verification pending.
-Separate unfinished crew-stock optimization remains unstaged and is excluded.
+guardrail checks PASS1m1s. Frozen c57d3ec67 release PASS1m11s, retained-world
+deployments verified SHA51212cee7af5d5c9d642f817f3fdfbeecd2b10e64502458a63140b98074690dfbd586f1a6e5e0ebceb6fc45c3e275511bdbcda36e2dc3b12de8256019d0bdde6f5f.
+Main continued past both previous failure instants, follow-up tick946883, debt0,
+statusok. This is a bounded COLD follow-up, not full HOT/terminal acceptance.
+Geometry-permissions ordinary100:159074events/noDataLoss,44.759654s,
+4.669384ticks/s, debt1160→1853 STILLFAILED. Owner55.94%, exact36.33%, WAL4.88%;
+validation10.425323s (owned5.392025s, closure4.911536s). No aggregate improvement
+claim from these evolving loads.
+
+### Share immutable provisioning facts across hypothetical loads (2026-10-28)
+
+The same trace contains repeated personal-stock and physical fleet-admission
+scans under sourcing/crew selection across load sizes and travel durations.
+ExpeditionCrewAdmission captures only exact sponsor/candidate food quantities,
+with the same title/claim/storage-role filters. A bounded four-snapshot projection
+shares those immutable quantities; each proposal recomputes nutrition, metabolism,
+duration-dependent demand and caller work permission. No selected crew, stock
+reservation or departure is manufactured by this projection. TransportAssetAdmission
+likewise retains its completed answer only for the exact immutable world image,
+actual asset declaration and explicit sponsor; mission/body/custody changes force
+a fresh admission. No clock/TTL, relaxed funding or gameplay limit changes.
+
+Connected crew/procurement/provisioning/fleet/trade/labour checks and guardrails
+PASS1m6s, including long-trip exhaustion, stock withdrawal, wrong sponsor, new
+physical inventory fence, immutable predecessor and recovery. A first new test
+assumed that 1,000,000 ticks would exhaust 64 bread; the existing nutritional
+forecast disproved that fixture assumption. The corrected test derives a genuinely
+exhausting duration from the unchanged life/food rules; no production rule was
+changed to satisfy it. Frozen release/deploy/native effect pending; G remainsOPEN.
