@@ -162,10 +162,16 @@ class BuyerCollectionTest {
                 }
                 if (!paid && mission.stage() == TransportMission.Stage.OUTBOUND) {
                     paid = true;
-                    for (var id : originalContracts) {
-                        var contract = state.companies().goodsTrade().contracts().get(id);
-                        assertTrue(contract.fulfilled(), "ordinary pickup must accept this mission's whole allocation");
-                    }
+                    var acceptedReceipt = Objects.requireNonNull(pickup, "ordinary pickup boundary must have been observed");
+                    var sale = state.companies().goodsTrade().priceHistory().commodities().values().stream()
+                            .flatMap(List::stream).filter(value -> value.receipt().equals(acceptedReceipt.receipt().id()))
+                            .findFirst().orElseThrow(() -> new AssertionError("actual pickup has no accepted market receipt"));
+                    assertEquals(buyer.party().id(), sale.buyer());
+                    assertEquals(seller.party().id(), sale.seller());
+                    assertEquals(acceptedReceipt.receipt().title().quantity(), sale.quantity());
+                    // Fulfilled active contracts may already have retired. Their
+                    // absence is not evidence; the exact accepted receipt and
+                    // current paid cargo/hold assertions below prove the result.
                     assertTrue(Collections.disjoint(originalHolds, state.inventory().economics().reservations().keySet()),
                             "the collected contracts must be paid; other admitted trips may retain their own holds");
                     for (var id : mission.shipmentIds()) {

@@ -3638,3 +3638,21 @@ initialization/warmup. ThreadMXBean:117708800->3803136bytes,229900->7428bytes/up
 30.95x less allocation for this operation only. It verifies originalbranch andcurrent
 values; no timing assertion or serverTPS claim. Receipt partitioned-lookup-allocation.txt.
 Frozen widerverification/retaineddeployment/native aggregate pending; GOPEN.
+
+
+### Keep verification on current contracts (2026-10-28)
+
+Expanded d19a2597a frontier run found two old oracles: BuyerCollectionTest dereferenced
+an already retired fulfilled contract at167; identical untouched4d200a980 focusedrun
+fails sameNPE23s,coal4 actualbuyercollection. Its ordinarypickup/recovery/return proof
+now reads the exact accepted receipt from market history and retains paymenthold,
+ownedcargo,duplicate-rejection andterminalcrew assertions. Focused correctedbuyer flow
+passes; no business change. FrontierWorldProcessCatalogTest asserted old fullpeer-scan
+weight and equal weight for lightweight stock wake vs fullreview. That retired
+implementation oracle is removed, rather than freezing obsolete cost coefficients.
+Currentkernel budget/owner validation coverage remains. Original fullrun was deliberately
+interrupted after threadproof showed it spending minutes in inactive HiveMobilization
+return/geometry code, outside thisassignment. It is NOTgreen orcomplete;55nativeeconomy
+tests did finishgreen. Retain partitioned-lookup-release.log and progress-thread receipt.
+Use connected collection/state/service/trade/production/extraction/forest/recovery gates
+for the frozen correction; do not turn this into newhive work or another fulltestcampaign.
