@@ -37,8 +37,8 @@ final class SettlementSourcingMarket {
         });
         var offers = new TreeMap<String, SourcingMarket.Offer>();
         for (var order : GoodsSaleQuotes.forBuyer(trade, buyer.party())) {
-            if (order.expiresAtTick() <= now || order.availableQuantity() == 0 || !references.containsKey(order.itemKind())
-                    || buyer.known().stream().noneMatch(known -> known.party().equals(order.party()))) continue;
+            // forBuyer already requires both exact nominal market addresses.
+            if (order.expiresAtTick() <= now || order.availableQuantity() == 0 || !references.containsKey(order.itemKind())) continue;
             var seller = trade.participants().participants().get(order.party().id());
             if (seller == null || !GoodsParticipantStorage.eligible(state, seller, order.containerId(), order.itemKind())) continue;
             String pool = order.party().id().value() + "|" + order.containerId().value() + "|" + order.itemKind();

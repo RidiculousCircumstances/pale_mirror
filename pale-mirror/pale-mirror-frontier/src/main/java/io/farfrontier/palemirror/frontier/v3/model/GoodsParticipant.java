@@ -8,6 +8,8 @@ public record GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, Su
                                List<Counterparty> known, long reviewRevision, String decision, long reviewedAtTick,
                                Map<String, io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote> prices) {
     public static final int MAX_KNOWN = 256;
+    private static final ImmutableKeyedInputView<GoodsTradeParty, Map<GoodsTradeParty, SubjectId>> KNOWN =
+            new ImmutableKeyedInputView<>(GoodsParticipantState.MAX_PARTICIPANTS);
     public GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, SubjectId settlementId,
                              List<Counterparty> known, long reviewRevision, String decision, long reviewedAtTick) {
         this(party, policy, settlementId, known, reviewRevision, decision, reviewedAtTick, Map.of());
@@ -31,6 +33,23 @@ public record GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, Su
     public GoodsParticipant reviewed(String reason, long tick) {
         if (tick < reviewedAtTick) throw new IllegalArgumentException("participant review went backwards");
         return new GoodsParticipant(party, policy, settlementId, known, Math.addExact(reviewRevision, 1), reason, tick, prices);
+    }
+    /** Exact declared counterpart and legal home; reviews/prices do not change
+     * knowledge. The bounded derived index never supplies a missing participant. */
+    public boolean knows(GoodsTradeParty peer, SubjectId home) {
+        Objects.requireNonNull(peer); Objects.requireNonNull(home);
+        return home.equals(counterpartyHomes().get(peer));
+    }
+    /** Party-only knowledge for price advice which has not selected a legal endpoint. */
+    public boolean knows(GoodsTradeParty peer) {
+        return counterpartyHomes().containsKey(Objects.requireNonNull(peer));
+    }
+    private Map<GoodsTradeParty, SubjectId> counterpartyHomes() {
+        return KNOWN.get(KNOWN, party, List.of(known), () -> {
+            var values = new HashMap<GoodsTradeParty, SubjectId>();
+            known.forEach(value -> values.put(value.party(), value.settlementId()));
+            return Map.copyOf(values);
+        });
     }
     public GoodsParticipant withPrices(Map<String, io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote> next) {
         return new GoodsParticipant(party, policy, settlementId, known, reviewRevision, decision, reviewedAtTick, next);

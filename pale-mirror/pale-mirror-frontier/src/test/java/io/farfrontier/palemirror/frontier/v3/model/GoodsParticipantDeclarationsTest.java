@@ -7,6 +7,21 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsParticipantDeclarationsTest {
+    @Test void indexedKnowledgeRetainsNominalKindHomeAndIndependentPredecessors() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:peer-knowledge"), 41L));
+        var participant = state.companies().goodsTrade().participants().participants().values().iterator().next();
+        var address = participant.known().getFirst();
+        var peer = state.companies().goodsTrade().participants().participants().get(address.party().id());
+        assertTrue(participant.knows(peer.party()));
+        assertTrue(GoodsBuyerDemand.mutuallyKnown(participant, peer));
+        assertFalse(participant.knows(peer.party(), participant.settlementId()));
+        assertFalse(participant.knows(new GoodsTradeParty(peer.party().id(), EconomicOwnerKind.COMPANY)));
+        var unknown = new GoodsParticipant(participant.party(), participant.policy(), participant.settlementId(),
+                java.util.List.of(), participant.reviewRevision(), participant.decision(), participant.reviewedAtTick(), participant.prices());
+        assertFalse(unknown.knows(peer.party()));
+        assertFalse(GoodsBuyerDemand.mutuallyKnown(peer, unknown));
+        assertTrue(GoodsBuyerDemand.mutuallyKnown(participant, peer), "a knowledge branch cannot change its predecessor");
+    }
     @Test void economicProjectionIsReusedOnlyForTheExactImmutableState() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-view"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13")));

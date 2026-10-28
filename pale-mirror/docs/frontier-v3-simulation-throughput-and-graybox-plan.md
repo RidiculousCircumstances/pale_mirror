@@ -4204,3 +4204,31 @@ does not currently retain that portfolio. Before changing this boundary, trace
 the complete reserve/assessment/plan-publication/ready-work/dirty-wake flow;
 retain exact current stock, quality, funding and shipment admission. Do not
 replace it with stale snapshot caching, skipped feasibility or price constants.
+
+
+### Cheap production witness and indexed explicit peer knowledge
+
+The f8 JFR caller join (idle-food-delta-equipment-callers.txt) attributes most
+sampled equipment-acquisition entry work to ProductionStaffingDemand.assess
+(43+3 samples), then actual equipment admission (15+) and settlement equipment
+policy (10). Busy-forge fuel assessment was not the dominant observed entry.
+Staffing needs the same boolean OR of two existing witnesses. It now tries
+bakery stock admission first and builds the equipment make/buy portfolio only
+if still necessary. Actual work priority/recipe selection is untouched.
+
+Active market readers also checked mutual knowledge by linearly scanning up to
+256 explicit counterparties per offer. GoodsParticipant now owns a bounded
+thread-local, per-nominal-party lookup over the exact immutable known-list root.
+It preserves separate party-only advice and party-plus-legal-home predicates;
+mutual consent still checks both sides and current participant registration.
+GoodsBuyerDemand/TradeStockSupply/GoodsAcquisitionPricing reuse it. The sourcing
+reader drops its redundant unilateral scan after GoodsSaleQuotes.forBuyer has
+already established both complete nominal addresses. Constructor uniqueness,
+public records/codec/order and money/stock/funding/expiry decisions are unchanged.
+Existing participant test covers wrong nominal kind/home, withdrawn knowledge,
+mutual direction and predecessor isolation. Combined focus87PASS99s.
+
+Do not memoize generic ScheduledHold.stillHeld by canonical-state identity:
+its contract includes time/external dependencies (existing readiness tests use
+an external readiness flag). That tempting kernel shortcut was rejected.
+No compatibility or new persistence schema is needed for this cut.

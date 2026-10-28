@@ -6,7 +6,11 @@ final class ProductionStaffingDemand {
     static SettlementStaffingPort.Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
         boolean intact = state.structureConditions().get(ProductionProcess.workshop(settlement).id()) == StructureCondition.INTACT;
-        boolean input = EquipmentProductionPlanning.ready(state, home, atTick).isPresent() || intact && BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(home), atTick).isPresent();
+        // Staffing needs any executable station work, not a choice between
+        // recipes. A stock-only witness avoids building an unnecessary market
+        // acquisition portfolio; actual work selection retains its own priority.
+        boolean input = intact && BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(home), atTick).isPresent()
+                || EquipmentProductionPlanning.ready(state, home, atTick).isPresent();
         var retained = state.productionJobs().values().stream().filter(job -> job.settlementId().equals(home))
                 .map(ProductionJob::workerId).collect(java.util.stream.Collectors.toSet());
         int reserve = intact ? rules.minimumLocalStaff() : 0;

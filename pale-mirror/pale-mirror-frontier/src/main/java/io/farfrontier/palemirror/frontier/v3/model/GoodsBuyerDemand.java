@@ -43,8 +43,7 @@ final class GoodsBuyerDemand {
     }
 
     static boolean mutuallyKnown(GoodsParticipant a, GoodsParticipant b) {
-        return a.known().stream().anyMatch(k -> k.party().equals(b.party()) && k.settlementId().equals(b.settlementId()))
-                && b.known().stream().anyMatch(k -> k.party().equals(a.party()) && k.settlementId().equals(a.settlementId()));
+        return a.knows(b.party(), b.settlementId()) && b.knows(a.party(), a.settlementId());
     }
     private static int compare(GoodsTradeOrder a, GoodsTradeOrder b) {
         int price = b.unitPriceLimit().compareTo(a.unitPriceLimit());
