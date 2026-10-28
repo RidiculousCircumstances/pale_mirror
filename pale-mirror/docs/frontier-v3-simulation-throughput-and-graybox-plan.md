@@ -4779,3 +4779,47 @@ re-entering declared-owner composition per container in the aggregate pass.
 The frozen union, including inbound-negative/checked-overflow assertions added
 to the existing capacity case, remains required before deployment.
 No throughput gain for this new cut is claimed until a clean deployed observation.
+
+
+### Visit exact population deltas and retain local packing across foreign lots
+
+e9440cc5c frozen106checks/guardrails/package passed and both retained worlds are
+verified. Its short post-recovery observation60.861983s advanced240701→241276,
+9.447604ticks/s,debt452→1094. This is neither a warm sustained result nor an
+isolated gain measurement; the20tick objective remains open.
+
+Current saved JFR's owned-validation source samples identify SettlementPolicyValidation
+at validateFullState:363(25samples), harvest account/slot validation(17/9) and the
+other named validators. These sample counts are not wall durations. The harvest
+read-boundary correction was delivered in e944. The population validator's comment
+promises changed-row validation, but its implementation still scans all nutrition
+rows and all previously validated resident keys after any one-row change. It
+skips the expensive final check for unchanged rows only after that complete walk.
+
+Retain the exact resident/nutrition/health source maps in its existing thread-local
+image. Reuse ImmutableMapChanges to visit the union of changed IDs, including
+profile-only and health-only changes. Removed complete rows release cached checks;
+missing dimensions fail closed. A failed partial check clears the image and cannot
+install its source basis. A new bootstrap or explicit full audit still visits all
+rows. Only one complete input image is retained, with no world/predecessor chain.
+The existing declaration checks and semantic hunger/starvation rules are unchanged.
+Extend IncrementalValidationTest with a real valid metabolism branch, old-branch
+restoration, malformed need/health after successful evidence, failed retry and
+complete-audit rejection. No timing or benchmark test is added.
+
+ContainerStockIndex's metadata epoch includes the entire ledger.lots root. Thus a
+new lot anywhere discards every cached container budget, even if the receiver's
+stock and bindings are identical. Bound the existing directory by the current
+container registry alone. Each local input vector now includes actual exact and
+bound slots, every locally held account's quantities, and each referenced lot's
+actual itemKind. Global quantities, foreign lots, title and claim metadata do not
+feed physical packing; they remain checked by their own owners. No historical
+whole-world lot table is retained per container. The existing reclassified-lot
+negative still proves that unchanged account quantities cannot conceal a new kind
+which overfills a one-slot chest. Extend the existing stock case with a real
+foreign resource issuance and unchanged local packing identity.
+
+Connected population/need/starvation/incremental-validation/container packing focus
+passed35s plus guardrails. These are structural corrections with unchanged domain
+choices, not a claim of sustainable20 or a new terminal product proof. Frozen
+verification, both deployments and ordinary-clock observation follow.

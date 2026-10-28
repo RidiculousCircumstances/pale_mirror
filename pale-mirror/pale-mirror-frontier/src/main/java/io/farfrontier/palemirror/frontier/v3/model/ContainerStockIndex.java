@@ -25,17 +25,21 @@ final class ContainerStockIndex {
 
     static ContainerSlotBudget budget(ExactInventory inventory, SubjectId container) {
         var ledger = inventory.fungibleResources();
-        // Retain one metadata epoch, not a whole historical lot map per container.
+        // The current container registry bounds the directory. Local input vectors
+        // retain only actual stock quantities and kinds, never a historical world lot map.
         if (!inventory.containers().containsKey(container)) throw new IllegalArgumentException("unknown capacity container");
-        var views = VIEWS.get(List.of(inventory.containers(), ledger.lots()), HashMap::new);
+        var views = VIEWS.get(List.of(inventory.containers()), HashMap::new);
         var slots = SLOT_VIEW.get(List.of(inventory.occupiedSlots(), ledger.bindings()), () -> slots(inventory))
                 .getOrDefault(container, EMPTY_SLOTS);
         // A draft can replace claims/accounts without changing physical stock. Only
         // this receiver's quantities and item definitions feed its capacity view.
         var accounts = FungibleResourceReadIndex.containerAccounts(ledger, container);
         var inputs = new ArrayList<Object>();
-        inputs.add(slots.occupied()); inputs.add(slots.bound()); inputs.add(ledger.lots());
-        for (var account : accounts) { inputs.add(account.id()); inputs.add(account.lotQuantities()); }
+        inputs.add(slots.occupied()); inputs.add(slots.bound());
+        for (var account : accounts) {
+            inputs.add(account.id()); inputs.add(account.lotQuantities());
+            for (var lot : account.lotQuantities().keySet()) inputs.add(ledger.lots().get(lot).itemKind());
+        }
         // Bounded by this exact canonical container registry. A full registry
         // scan cannot cycle an undersized LRU and manufacture thousands of locals.
         return views.computeIfAbsent(container, ignored -> new BudgetView()).get(inputs, () -> {

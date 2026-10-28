@@ -38,6 +38,12 @@ class ContainerStockIndexTest {
         var budget = ContainerStockIndex.budget(stocked, container);
         assertEquals(2, budget.packedStacks()); assertEquals(Map.of("minecraft:wheat", 65L), budget.stockByKind());
         assertEquals(Set.of(26), budget.occupied());
+        var foreignLot = new ResourceLot(new SubjectId("lot:elsewhere"), owner, "minecraft:coal", 1, "test", List.of());
+        var elsewhere = stocked.withFungibleResources(ledger.issue(foreignLot,
+                new CustodyAccount(new SubjectId("custody:elsewhere"), new ResourceCustody.Actor(new SubjectId("resident:elsewhere")),
+                        Map.of(foreignLot.id(), 1), Map.of())));
+        assertSame(budget, ContainerStockIndex.budget(elsewhere, container),
+                "a resource created outside this container cannot discard its unchanged packing facts");
         // Capacity reads the account's stock, not its reservation metadata. Use an
         // actual reservation below so the ledger's exact claim relations remain valid.
         var claim = new ClaimAllocation(new SubjectId("claim:index"), owner, owner, "minecraft:wheat", 10,

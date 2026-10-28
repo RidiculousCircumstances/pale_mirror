@@ -62,6 +62,34 @@ class IncrementalValidationTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(preview));
         assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, before));
     }
+    @Test void populationPolicyRechecksChangedNeedHealthAndIndependentProfileBranches() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:policy-row-deltas"), 125L));
+        var bootstrap = state.bootstrap(); var before = state.humanPopulation(); var rules = bootstrap.ruleset().residentLife();
+        var person = before.residents().values().iterator().next();
+        SettlementPolicyValidation.validate(bootstrap, before);
+        var changedProfile = before.changeMetabolism(person.id(), person.characteristics(),
+                person.characteristics().withBaseMetabolism(500), 1, rules);
+        assertDoesNotThrow(() -> SettlementPolicyValidation.validate(bootstrap, changedProfile));
+        assertDoesNotThrow(() -> SettlementPolicyValidation.validate(bootstrap, before), "independent branches restore their exact row basis");
+        var malformedNeed = new ResidentNutrition(ResidentNutritionStatus.HUNGRY, rules.satietyCapacityUnits(), 0, 0);
+        var changedNeed = new HumanPopulation(before.households(), before.residents(), before.birthJobs(), before.health(),
+                before.quarantines(), before.migrations(), before.provisions(),
+                ImmutableLookupMap.withEntry(before.nutrition(), person.id(), malformedNeed), before.medicalOperations(),
+                before.schedules(), before.meals(), before.mealResourceObligations());
+        var changedHealth = before.withStarvation(person.id(), new ResidentStarvation(1, rules.starvation().gainTicksPerUnit(), 0));
+        for (var invalid : List.of(changedNeed, changedHealth)) {
+            assertDoesNotThrow(() -> SettlementPolicyValidation.validate(bootstrap, before));
+            assertThrows(IllegalArgumentException.class, () -> SettlementPolicyValidation.validate(bootstrap, invalid));
+            assertThrows(IllegalArgumentException.class, () -> SettlementPolicyValidation.validate(bootstrap, invalid),
+                    "a failed partial row audit cannot install its source basis");
+            assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
+                SettlementPolicyValidation.validate(bootstrap, invalid); return null;
+            }));
+        }
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> {
+            SettlementPolicyValidation.validate(bootstrap, changedProfile); return null;
+        }));
+    }
     @Test void structureMembershipCannotReuseSuccessfulEvidenceAfterEitherInsertionOrRemoval() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:structure-membership"), 125L));
         var first = state.structureConditions().keySet().iterator().next();
