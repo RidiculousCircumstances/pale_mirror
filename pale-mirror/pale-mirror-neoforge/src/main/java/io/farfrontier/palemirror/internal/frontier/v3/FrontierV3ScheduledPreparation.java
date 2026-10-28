@@ -117,6 +117,7 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
     @Override public Optional<ScheduledAdvisory<S>> advice(S state, ScheduledAction action, SimInstant instant) {
         return delegate.advice(state, action, instant);
     }
+    @Override public boolean adviceAvailable() { return worker.getQueue().remainingCapacity() > 1 && !worker.isShutdown(); }
     @Override public Optional<ScheduledAdviceCalculation<S>> beginAdvice(ScheduledAdvisory<S> advice) {
         var trace = FrontierV3DelayTrace.task("ADVICE", traceWorld); trace.mark("QUEUED");
         var task = new FutureTask<ScheduledAdvisory.Completion<S>>(() -> {
@@ -137,6 +138,7 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
             return Optional.empty();
         }
         return Optional.of(new ScheduledAdviceCalculation<>() {
+            @Override public boolean ready() { return task.isDone(); }
             @Override public Optional<ScheduledAdvisory.Completion<S>> poll() {
                 if (!task.isDone()) return Optional.empty();
                 try {

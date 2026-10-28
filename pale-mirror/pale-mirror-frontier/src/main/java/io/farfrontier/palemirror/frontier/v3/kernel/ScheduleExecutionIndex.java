@@ -13,6 +13,9 @@ final class ScheduleExecutionIndex {
     private final NavigableSet<ScheduledAction> future = new TreeSet<>();
     private final LinkedHashMap<ScheduleId, ScheduledAction> checking = new LinkedHashMap<>();
     private final NavigableSet<ScheduledAction> ready = new TreeSet<>();
+    private record CalculationWait(ScheduledAction action, boolean capacity) { }
+    // Technical waits have no domain wake keys or polling round. Membership remains canonical.
+    private final LinkedHashMap<ScheduleId, CalculationWait> calculations = new LinkedHashMap<>();
     private final Map<ScheduleId, Wait> waiting = new HashMap<>();
     private final LinkedHashMap<ScheduleId, ScheduledAction> polled = new LinkedHashMap<>();
     private final Map<SubjectId, Set<ScheduleId>> byDependency = new HashMap<>();
@@ -29,7 +32,7 @@ final class ScheduleExecutionIndex {
     }
     void removed(ScheduledAction action) {
         future.remove(action); checking.remove(action.id()); ready.remove(action);
-        removeWait(action.id()); auditCandidates.remove(action.id()); readySince.remove(action.id());
+        removeWait(action.id()); calculations.remove(action.id()); auditCandidates.remove(action.id()); readySince.remove(action.id());
     }
 
     /** Metadata promotion is bounded separately from owner business assessment. */
@@ -91,6 +94,20 @@ final class ScheduleExecutionIndex {
             audits.computeIfAbsent(auditAt, ignored -> new TreeSet<>()).add(action);
         }
     }
+    void holdCalculation(ScheduledAction action, boolean capacity) {
+        ready.remove(action); checking.remove(action.id()); future.remove(action); removeWait(action.id());
+        readySince.remove(action.id()); auditCandidates.remove(action.id());
+        calculations.put(action.id(), new CalculationWait(action, capacity));
+    }
+    ScheduledAction firstCapacityWait() {
+        for (var wait : calculations.values()) if (wait.capacity()) return wait.action();
+        return null;
+    }
+    void releaseCalculation(ScheduledAction action, SimInstant now) {
+        if (calculations.remove(action.id()) == null) return;
+        if (action.dueAt().compareTo(now) > 0) future.add(action);
+        else reconsider(action, now.ticks());
+    }
     ScheduledAction firstReady() { return ready.isEmpty() ? null : ready.first(); }
     SimInstant readyNotBefore(ScheduledAction action) {
         if (!ready.contains(action)) throw new IllegalArgumentException("action has no ready admission");
@@ -117,7 +134,7 @@ final class ScheduleExecutionIndex {
         reconsider(action, atTick);
     }
     private void reconsider(ScheduledAction action, long atTick) {
-        removeWait(action.id()); checking.put(action.id(), action);
+        removeWait(action.id()); calculations.remove(action.id()); checking.put(action.id(), action);
         auditCandidates.remove(action.id()); readySince.put(action.id(), Math.max(action.dueAt().ticks(), atTick));
     }
     private void removeWait(ScheduleId id) {
@@ -129,7 +146,7 @@ final class ScheduleExecutionIndex {
         var actions = audits.get(wait.auditAt()); actions.remove(wait.action());
         if (actions.isEmpty()) audits.remove(wait.auditAt());
     }
-    int heldCount() { return waiting.size(); }
+    int heldCount() { return waiting.size() + calculations.size(); }
     int readyCount() { return ready.size(); }
     long missedWakes() { return missedWakes; }
     long oldestReadyLag(long now) {

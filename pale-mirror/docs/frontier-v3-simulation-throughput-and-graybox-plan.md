@@ -2282,3 +2282,47 @@ TRAVELLING. Identical isolated failure reproduced on clean d9f297eb9 (baseline
 log delay-trace-navigation-baseline.log). It is retained OPEN, not suppressed
 or explained as product/harness without further diagnosis. This does not turn
 focused diagnostic delivery into full navigation/scale acceptance.
+
+
+### First measured causal map and confirmed remedy (2026-10-28)
+
+1d2b8b78f clean diagnostic release:11frontier/45native checks, guardrails/package
+PASS31s; both retained worlds verified, SHA5125acb24b66924bf7385b584e252dc125c5cb9b08edef9813e26d2b4b81dab01efbdcc539f28d045c48cab2fc86cb9c5bc837bfc8619db7523f0c6487076e71bbe.
+Source/pack tracked clean; no client update/reset/push. Existing navigation rebind
+failure reproduced unchanged on cleand9f, still OPEN.
+
+`build/simulation-throughput/delay-trace-ordinary100.jfr` (45s,47.1MB) and
+`...-report.txt`/`...-cpu.txt`:402130custom events, no JFRDataLoss event; completed
+owner interval44.784682s accounts EXACTLY to the nanosecond. Ordinary clock
+51624→51687=1.406731ticks/s; debt1511→2350. Window begins after recovery; the
+previous observer's final read overlaps its leading edge, no player/fast-forward.
+
+Exclusive wall gates: owner execution20.271566s(45.26%), exhausted work allowance
+13.460964s(30.06%), exact-worker execution8.054786s(17.99%), WALexecution1.970926s
+(4.40%), exact result waiting owner0.854955s(1.91%). Other/queue gaps<0.4%.
+These partition time; inclusive stages/parallel workers MUST NOT be added.
+Owner canonical validation8.340142s and schedule allocation2.826561s are nested
+attributions. Exact blocking includes actor movement4.252512s and resource hauling
+2.060783s. Worker CPU says reserveSelected/assembly still expensive, but is not
+itself proof of global blocking.
+
+NEW CONFIRMED structural defect:39057 advice submissions include38787 QUEUE_BUSY;
+42439 charged action passes yield only1631 transactions in advance results
+(1634 actual PUBLISHED points). Kernel parks pending/full-lane advice with empty
+domain wake keys. Any changed owner snapshot restarts the unaddressed polling
+round, reclassifies technical waits as business-ready and charges retries against
+ordinary action/execution budget. Readiness delivery itself is prompt; do not
+raise pools/budgets or optimize WAL first to hide this.
+
+Remedy underway: separate reconstructible technical computation/capacity waits
+from domain-keyed holds and their audit/poll rounds. Only bounded in-flight advice
+readiness is checked. Capacity waiters remain exact canonical members and share
+one fair admitted slot; native host supplies actual capacity/readiness, kernel
+rechecks ordinary owner permission and exact revalidation at execution. Domain
+invalidation cannot manufacture compute readiness. No timers, fake owner keys,
+retry transactions, changed deadlines or second authoritative scheduler. Recovery
+reconstructs from canonical actions; worker/ticket state is never persisted.
+A still-computing result may finish after its owner becomes held; it has no effect
+until completion rechecks that owner and releases/rejects the result. The previous
+fixture's repeated polling-charge/immediate-cancel mechanics are intentionally
+replaced by non-progress/no-budget and held-owner-before-publication obligations.

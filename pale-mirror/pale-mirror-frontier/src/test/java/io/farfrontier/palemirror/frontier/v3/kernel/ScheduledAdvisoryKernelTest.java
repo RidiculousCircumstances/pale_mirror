@@ -27,7 +27,10 @@ class ScheduledAdvisoryKernelTest {
             }
             public Optional<ScheduledAdviceCalculation<Counter>> beginAdvice(ScheduledAdvisory<Counter> advice) {
                 begun.incrementAndGet(); var result = advice.prepare();
-                return Optional.of(() -> ready.get() ? Optional.of(result) : Optional.empty());
+                return Optional.of(new ScheduledAdviceCalculation<>() {
+                    public boolean ready() { return ready.get(); }
+                    public Optional<ScheduledAdvisory.Completion<Counter>> poll() { return ready.get() ? Optional.of(result) : Optional.empty(); }
+                });
             }
         };
         var engine = schedulingEngine(planner, List.of(advisory, exact));
@@ -55,6 +58,7 @@ class ScheduledAdvisoryKernelTest {
             }
             public Optional<ScheduledAdviceCalculation<Counter>> beginAdvice(ScheduledAdvisory<Counter> advice) {
                 return Optional.of(new ScheduledAdviceCalculation<>() {
+                    public boolean ready() { return false; }
                     public Optional<ScheduledAdvisory.Completion<Counter>> poll() { return Optional.empty(); }
                     public void cancel() { cancelled.incrementAndGet(); }
                 });
@@ -65,9 +69,8 @@ class ScheduledAdvisoryKernelTest {
         assertEquals(1, waiting.consumed().actions()); assertEquals(7, waiting.consumed().weight());
         assertTrue(waiting.consumed().remaining(budget).isEmpty());
         var polled = engine.advanceTo(new SimInstant(2), budget);
-        assertEquals(1, polled.consumed().actions()); assertEquals(1, polled.consumed().weight(),
-                "polling the same retained calculation must not pay its full computation cost again");
-        assertTrue(polled.consumed().remaining(budget).isEmpty(), "waiting still respects the original action allowance");
+        assertEquals(WorkConsumption.NONE, polled.consumed(),
+                "a pending computation is not runnable work and cannot repeatedly consume the allowance");
         engine.cancelPendingCalculation();
         assertEquals(1, cancelled.get()); assertEquals(List.of(action), engine.checkpoint().schedules());
         assertEquals(new Counter(0), engine.canonicalState().state()); assertTrue(engine.transactions().isEmpty());
@@ -86,6 +89,7 @@ class ScheduledAdvisoryKernelTest {
             public Optional<ScheduledAdviceCalculation<Counter>> beginAdvice(ScheduledAdvisory<Counter> advice) {
                 begun.incrementAndGet(); var result = advice.prepare();
                 return Optional.of(new ScheduledAdviceCalculation<>() {
+                    public boolean ready() { return ready.get(); }
                     public Optional<ScheduledAdvisory.Completion<Counter>> poll() { return ready.get() ? Optional.of(result) : Optional.empty(); }
                     public void cancel() { cancelled.incrementAndGet(); }
                 });
@@ -97,16 +101,59 @@ class ScheduledAdvisoryKernelTest {
         engine.advanceTo(new SimInstant(2), budget);
         assertEquals(admitted, begun.get(), "capacity pressure must not discard existing work and recompute it");
         assertEquals(0, cancelled.get()); assertTrue(engine.transactions().isEmpty());
-        hold.set(true); engine.advanceTo(new SimInstant(3), budget);
-        assertEquals(1, cancelled.get(), "a newly held owner releases its disposable calculation slot");
-        assertEquals(admitted + 1, begun.get());
-        ready.set(true);
-        for (int i = 4; i < 12 && engine.scheduledActions().size() > 1; i++) engine.advanceTo(new SimInstant(i), budget);
+        hold.set(true); ready.set(true); engine.advanceTo(new SimInstant(3), budget);
+        assertEquals(1, cancelled.get(), "a completed calculation must recheck its actual owner and cannot grant a held owner execution");
+        for (int i = 4; i < 32 && engine.scheduledActions().size() > 1; i++) engine.advanceTo(new SimInstant(i), budget);
         assertEquals(new Counter(19), engine.canonicalState().state());
         assertEquals(List.of(actions.getFirst()), engine.scheduledActions());
         assertEquals(20, begun.get(), "every independently admissible owner computes once");
-        hold.set(false); engine.advanceTo(new SimInstant(12), budget);
+        hold.set(false); engine.advanceTo(new SimInstant(32), budget);
         assertEquals(new Counter(20), engine.canonicalState().state()); assertTrue(engine.scheduledActions().isEmpty());
+    }
+
+
+    @Test void busyHostCapacityIsNotRepolledByUnrelatedWorldMutationsAndWakeRemainsFair() {
+        var actions = List.of(scheduled("schedule:capacity-a", SUBJECT.value(), 1, 1),
+                scheduled("schedule:capacity-b", "subject:second", 1, 1));
+        var available = new AtomicBoolean(); var begun = new AtomicInteger();
+        var planner = new ScheduledActionPlanner<Counter>() {
+            public boolean adviceAvailable() { return available.get(); }
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) { throw new AssertionError("advice bypass"); }
+            public Optional<ScheduledAdvisory<Counter>> advice(Counter state, ScheduledAction action, SimInstant at) {
+                return Optional.of(() -> (current, now) -> Optional.of(() -> () -> List.of(new ProposedEvent(action.subject(), new Delta(1)))));
+            }
+            public Optional<ScheduledAdviceCalculation<Counter>> beginAdvice(ScheduledAdvisory<Counter> advice) {
+                assertTrue(available.get()); begun.incrementAndGet(); return ScheduledActionPlanner.super.beginAdvice(advice);
+            }
+        };
+        var engine = schedulingEngine(planner, actions); var budget = new WorkBudget(64, 64);
+        engine.advanceTo(new SimInstant(1), budget);
+        for (int i = 1; i <= 20; i++) {
+            var id = new CommandId("test:unrelated-" + i);
+            assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION,
+                    id, WORLD, engine.checkpoint().revision(), engine.checkpoint().instant(), SUBJECT, CauseChain.root(id), new Delta(1))));
+            assertEquals(WorkConsumption.NONE, engine.advanceTo(new SimInstant(i + 1), budget).consumed());
+        }
+        assertEquals(0, begun.get()); assertEquals(20, engine.canonicalState().state().value());
+        assertEquals(actions, engine.checkpoint().schedules());
+        // Recovery retains canonical actions, not technical wait tickets or worker results.
+        var recovered = FrontierEngines.recoverCanonicalStateAccess(new FrontierEngineConfiguration<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (Counter state, FrontierCommand command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> new Counter(state.value() + ((Delta)event.payload()).value()),
+                new StateCodec<Counter>() {
+                    public byte[] encode(Counter state) { return ByteBuffer.allocate(4).putInt(state.value()).array(); }
+                    public Counter decode(byte[] bytes) { return new Counter(ByteBuffer.wrap(bytes).getInt()); }
+                }, (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(64,100,64,64), actions, TransactionCommitter.noOp()),
+                new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(WORLD,
+                    Optional.of(new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(engine.checkpoint(),20)), List.of()));
+        available.set(true);
+        engine.advanceTo(new SimInstant(22), budget); engine.advanceTo(new SimInstant(23), budget);
+        recovered.advanceTo(new SimInstant(23), budget);
+        assertEquals(new Counter(22), engine.canonicalState().state());
+        assertEquals(engine.canonicalState().state(), recovered.canonicalState().state());
+        assertTrue(engine.scheduledActions().isEmpty());
+        assertEquals(4, begun.get(), "both original and recovered actions complete once; no hidden retry execution");
     }
 
     private static final WorldId WORLD = new WorldId("frontier:advice-kernel");

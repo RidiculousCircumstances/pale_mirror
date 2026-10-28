@@ -34,7 +34,7 @@ class FrontierV3ScheduledPreparationTest {
         try (var host = new FrontierV3ScheduledPreparation<>(planner)) {
             var ready = new CountDownLatch(2); host.onReady(ready::countDown);
             var calculation = host.beginAdvice(host.advice(3, action, new SimInstant(1)).orElseThrow()).orElseThrow();
-            entered.await(); assertTrue(calculation.poll().isEmpty()); assertNull(validated.get());
+            entered.await(); assertFalse(calculation.ready()); assertTrue(calculation.poll().isEmpty()); assertNull(validated.get());
             assertNotSame(owner, computed.get());
             var other = host.beginAdvice(host.advice(7, action, new SimInstant(1)).orElseThrow()).orElseThrow();
             otherEntered.await();
@@ -50,6 +50,7 @@ class FrontierV3ScheduledPreparationTest {
             assertEquals(1, release.getCount(), "exact preparation completes while the independent forecast is still blocked");
             host.onReady(ready::countDown);
             release.countDown(); ready.await();
+            assertTrue(calculation.ready());
             var completion = calculation.poll().orElseThrow();
             assertTrue(other.poll().orElseThrow().revalidate(4, new SimInstant(2)).isEmpty());
             assertTrue(completion.revalidate(4, new SimInstant(2)).isEmpty());

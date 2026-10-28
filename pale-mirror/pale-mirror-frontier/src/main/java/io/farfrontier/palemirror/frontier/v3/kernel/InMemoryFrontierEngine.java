@@ -52,6 +52,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private static final int MAX_PENDING_ADVICE = 8;
     private record PendingAdvice<S>(ScheduledAction action, ScheduledAdviceCalculation<S> calculation) { }
     private final java.util.Map<io.farfrontier.palemirror.frontier.v3.api.ScheduleId, PendingAdvice<S>> pendingAdvice = new java.util.LinkedHashMap<>();
+    // One admitted capacity waiter prevents later passes from waking a herd for the same host slot.
+    private ScheduledAction adviceReservation;
     private record PendingCalculation<S>(S state, Revision revision, ScheduledAction action,
             SimInstant instant, ScheduledCalculation calculation) { }
     @Override public boolean hasPendingCalculation() { requireOwnerThread(); return pendingCalculation != null; }
@@ -61,14 +63,35 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     @Override public void cancelPendingCalculation() {
         requireOwnerThread();
         cancelExactCalculation();
-        pendingAdvice.values().forEach(value -> value.calculation().cancel()); pendingAdvice.clear();
+        pendingAdvice.values().forEach(value -> { value.calculation().cancel(); schedules.releaseCalculation(value.action(), instant); });
+        pendingAdvice.clear();
+        ScheduledAction waiting;
+        while ((waiting = schedules.firstAdviceCapacityWait()) != null) schedules.releaseCalculation(waiting, instant);
+        adviceReservation = null;
     }
     private void discardAdvice(ScheduledAction action) {
+        if (action.equals(adviceReservation)) adviceReservation = null;
         var pending = pendingAdvice.remove(action.id());
         if (pending != null) pending.calculation().cancel();
     }
     private void cancelExactCalculation() {
         if (pendingCalculation != null) { pendingCalculation.calculation().cancel(); pendingCalculation = null; }
+    }
+    private void refreshAdviceWaits(SimInstant target) {
+        for (var iterator = pendingAdvice.values().iterator(); iterator.hasNext();) {
+            var value = iterator.next();
+            if (!schedules.containsExact(value.action())) { value.calculation().cancel(); iterator.remove(); }
+        }
+        // Only the bounded in-flight set is inspected. No world/input change may turn
+        // a still-running computation or a full host lane into business-ready work.
+        for (var value : pendingAdvice.values())
+            if (value.calculation().ready()) schedules.signalReadiness(value.action(), target);
+        if (adviceReservation != null && !schedules.containsExact(adviceReservation)) adviceReservation = null;
+        if (pendingCalculation == null && adviceReservation == null && pendingAdvice.size() < MAX_PENDING_ADVICE
+                && scheduledPlanner.adviceAvailable()) {
+            var waiting = schedules.firstAdviceCapacityWait();
+            if (waiting != null) { adviceReservation = waiting; schedules.signalReadiness(waiting, target); }
+        }
     }
     private final EventReducer<S> reducer;
     private final StateCodec<S> stateCodec;
@@ -281,9 +304,12 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         }
         if (pendingCommit != null) return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
-        for (var iterator = pendingAdvice.values().iterator(); iterator.hasNext();) {
-            var value = iterator.next();
-            if (!schedules.containsExact(value.action())) { value.calculation().cancel(); iterator.remove(); }
+        try { refreshAdviceWaits(target); }
+        catch (RuntimeException failure) {
+            cancelPendingCalculation();
+            quarantine(CauseChain.root(new CommandId("scheduler:advice-readiness")),
+                    KernelQuarantineReporter.Boundary.DUE_TRANSACTION, failure);
+            return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         }
         admissionIndex.begin(budget);
         schedules.beginExecutionPass(target, budget.maxClassificationEvaluations(), state);
@@ -343,7 +369,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                                 : Optional.<ScheduledAdvisory<S>>empty();
                         if (retainedAdvice != null || declared.isPresent()) {
                             boolean admittedAdvice = false;
-                            if (retainedAdvice == null && pendingAdvice.size() < MAX_PENDING_ADVICE) {
+                            boolean reserved = action.equals(adviceReservation);
+                            if (retainedAdvice == null && pendingAdvice.size() < MAX_PENDING_ADVICE
+                                    && scheduledPlanner.adviceAvailable() && (adviceReservation == null || reserved)) {
+                                if (reserved) adviceReservation = null;
                                 var started = scheduledPlanner.beginAdvice(declared.orElseThrow());
                                 if (started.isPresent()) {
                                     retainedAdvice = new PendingAdvice<>(action, started.orElseThrow());
@@ -357,13 +386,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                                 acceptedAdvice = calculated.orElseThrow().revalidate(state, executionAt).orElse(null);
                             }
                             if (acceptedAdvice == null) {
-                                // Fair volatile polling preserves the exact original due generation.
-                                // No no-op retry transaction or global pending predecessor is created.
-                                schedules.holdSelected(action, Set.of(), executionAt);
-                                // A retained/busy poll does not execute the expensive
-                                // owner calculation again. Fresh admission pays its full
-                                // declared cost; every wait still spends an action,
-                                // admission checks and one bounded polling unit.
+                                // One initial attempt is charged. Subsequent host-capacity/result
+                                // waits leave runnable admission until that exact technical condition changes.
+                                schedules.holdForCalculation(action, !pendingAdvice.containsKey(action.id()));
                                 preparationAttempts++; weight = Math.addExact(weight, admittedAdvice ? cost : 1); continue;
                             }
                         }

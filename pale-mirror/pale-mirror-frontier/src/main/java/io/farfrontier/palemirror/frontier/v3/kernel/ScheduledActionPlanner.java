@@ -31,10 +31,15 @@ public interface ScheduledActionPlanner<S> {
     default java.util.Optional<ScheduledAdvisory<S>> advice(S state, ScheduledAction action, SimInstant instant) {
         return java.util.Optional.empty();
     }
+    /** Host capacity only, never business permission. False parks an advisory admission without spending repeated work. */
+    default boolean adviceAvailable() { return true; }
     /** Empty means bounded host capacity is busy; the original action remains due. */
     default java.util.Optional<ScheduledAdviceCalculation<S>> beginAdvice(ScheduledAdvisory<S> advice) {
         var result = advice.prepare();
-        return java.util.Optional.of(() -> java.util.Optional.of(result));
+        return java.util.Optional.of(new ScheduledAdviceCalculation<>() {
+            @Override public boolean ready() { return true; }
+            @Override public java.util.Optional<ScheduledAdvisory.Completion<S>> poll() { return java.util.Optional.of(result); }
+        });
     }
     default ScheduledCalculation beginPreparation(ScheduledPreparation preparation) {
         return ScheduledCalculation.immediate(() -> preparation.prepare().get());

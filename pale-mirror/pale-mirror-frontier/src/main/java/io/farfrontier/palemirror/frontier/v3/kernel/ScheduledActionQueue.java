@@ -86,6 +86,15 @@ public final class ScheduledActionQueue {
         execution.hold(action, keys, instant);
     }
 
+    void holdForCalculation(ScheduledAction action, boolean capacity) {
+        if (!containsExact(action)) throw new IllegalArgumentException("cannot wait for an obsolete action generation");
+        execution.holdCalculation(action, capacity);
+    }
+    ScheduledAction firstAdviceCapacityWait() { return execution.firstCapacityWait(); }
+    void releaseCalculation(ScheduledAction action, SimInstant now) {
+        if (containsExact(action)) execution.releaseCalculation(action, now);
+    }
+
     /** Exact immutable membership check used by an engine-owned continuation binding. */
     public boolean containsExact(ScheduledAction action) {
         Objects.requireNonNull(action, "scheduled action");
