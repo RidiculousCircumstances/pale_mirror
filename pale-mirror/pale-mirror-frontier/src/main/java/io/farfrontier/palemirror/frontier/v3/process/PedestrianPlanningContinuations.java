@@ -97,13 +97,16 @@ public final class PedestrianPlanningContinuations {
             io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState> advice) {
         var index = current; var view = PedestrianRoutePlanning.readView();
         var reads = index == null ? PedestrianCalculationMemory.empty() : index.reads(action);
+        var snapshot = index == null ? advice : index.advice(action).orElse(advice);
         return () -> {
-            var prepared = PedestrianRoutePlanning.prepare(view, reads, advice::prepare);
+            var prepared = PedestrianRoutePlanning.prepare(view, reads, snapshot::prepare);
             return new ScheduledAdvisory.Completion<FrontierWorldState>() {
                 @Override public String rejectionReason() { return prepared.observation().result().rejectionReason(); }
                 @Override public java.util.Optional<ScheduledPreparation> revalidate(FrontierWorldState state, SimInstant at) {
                     if (current != index) throw new IllegalStateException("advice lost its planning runtime owner");
-                    return prepared.observation().result().revalidate(state, at).map(preparation -> {
+                    var accepted = prepared.observation().result().revalidate(state, at);
+                    if (accepted.isEmpty() && index != null) index.obsoleteAdvice(action);
+                    return accepted.map(preparation -> {
                         var ready = prepared.acquire(index == null ? PedestrianCalculationMemory.empty() : index.reads(action));
                         if (index != null) index.changed(ready, PedestrianRoutePlanning::readFact);
                         var exactView = PedestrianRoutePlanning.readView();
@@ -116,7 +119,7 @@ public final class PedestrianPlanningContinuations {
                                 if (index == null) return completion.result();
                                 var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
                                 requests.addAll(exact.observation().requests()); requests.addAll(completion.requests());
-                                var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)), exact.reads().merge(completion.reads()));
+                                var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)), exact.reads().merge(completion.reads()), java.util.Optional.of(snapshot));
                                 index.changed(changes, PedestrianRoutePlanning::readFact); return result;
                             };
                         };
@@ -127,6 +130,11 @@ public final class PedestrianPlanningContinuations {
     }
     private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
             PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation, PedestrianCalculationMemory reads) {
+        return publish(index, action, observation, reads, index.advice(action));
+    }
+    private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
+            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation, PedestrianCalculationMemory reads,
+            java.util.Optional<ScheduledAdvisory<FrontierWorldState>> advice) {
         // A calculation-only wait changes no business state and has no elapsed-time
         // deadline. Retain the exact due generation instead of inventing a future
         // retry which later needs a second durable command to become runnable.
@@ -150,7 +158,7 @@ public final class PedestrianPlanningContinuations {
         }
         if (successor == null) index.remove(action.id());
         else index.stage(action, successor, observation.requests(), calculationOnly
-                ? index.reads(action).merge(reads) : PedestrianCalculationMemory.empty());
+                ? index.reads(action).merge(reads) : PedestrianCalculationMemory.empty(), calculationOnly ? advice : java.util.Optional.empty());
         return result;
     }
 }

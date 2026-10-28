@@ -5,7 +5,9 @@ import java.util.Optional;
 
 /** Explicit owner capability for disposable snapshot advice, never precomputed mutations.
  * While it runs, independent canonical work may proceed. Only its owner may validate
- * dependencies and supply a fresh exact-predecessor preparation for publication. */
+ * dependencies and supply a fresh exact-predecessor preparation for publication.
+ * Preparation may resume against the same captured immutable inputs after
+ * external calculation readiness; it must have no publication side effects. */
 @FunctionalInterface
 public interface ScheduledAdvisory<S> {
     Completion<S> prepare();

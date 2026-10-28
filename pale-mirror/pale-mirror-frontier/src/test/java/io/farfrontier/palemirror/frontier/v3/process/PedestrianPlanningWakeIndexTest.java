@@ -11,6 +11,53 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void unfinishedAdviceResumesItsCapturedSnapshotInsteadOfAccumulatingNewInputEpochs() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("snapshot-owner", 20);
+        var original = new java.util.concurrent.atomic.AtomicInteger(); var changed = new java.util.concurrent.atomic.AtomicInteger();
+        var first = snapshotAdvice(owner, request(3), original, () -> true);
+        var next = snapshotAdvice(owner, request(20), changed, () -> true);
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index)) {
+            PedestrianPlanningContinuations.advisory(owner, first).prepare().revalidate(null, new SimInstant(20)).orElseThrow().prepare().get();
+            assertTrue(index.waiting(owner)); assertTrue(index.advice(owner).isPresent());
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges(), planner::readFact);
+            var terminal = PedestrianPlanningContinuations.advisory(owner, next).prepare()
+                    .revalidate(null, new SimInstant(30)).orElseThrow().prepare().get();
+            assertInstanceOf(ScheduleEffect.Cancelled.class, terminal.getFirst().payload());
+            assertEquals(2, original.get()); assertEquals(0, changed.get(), "a later world view is not the continuation's captured input");
+            assertTrue(index.advice(owner).isEmpty()); assertEquals(0, index.waitingCount());
+            PedestrianPlanningContinuations.advisory(owner, next).prepare();
+            assertEquals(1, changed.get(), "terminal retirement releases the old calculation snapshot");
+        }
+    }
+    @Test void rejectedAdviceReleasesItsSnapshotAndReadsBeforeTheNextPlanningEpoch() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("obsolete-snapshot", 20);
+        var permitted = new java.util.concurrent.atomic.AtomicBoolean(true); var calls = new java.util.concurrent.atomic.AtomicInteger();
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index)) {
+            var old = snapshotAdvice(owner, request(3), calls, permitted::get);
+            PedestrianPlanningContinuations.advisory(owner, old).prepare().revalidate(null, new SimInstant(20)).orElseThrow().prepare().get();
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges(), planner::readFact); assertTrue(index.reads(owner).holdsReadFor(request(3)));
+            permitted.set(false);
+            assertTrue(PedestrianPlanningContinuations.advisory(owner, old).prepare().revalidate(null, new SimInstant(30)).isEmpty());
+            assertEquals(0, index.waitingCount()); assertTrue(index.advice(owner).isEmpty());
+            assertFalse(index.reads(owner).holdsReadFor(request(3)));
+        }
+    }
+    private static ScheduledAdvisory<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState> snapshotAdvice(
+            ScheduledAction owner, PedestrianRouteRequest request, java.util.concurrent.atomic.AtomicInteger calls,
+            java.util.function.BooleanSupplier permitted) {
+        return () -> {
+            calls.incrementAndGet(); var result = PedestrianRoutePlanning.query(GROUND, request.start(), request.target());
+            if (result.awaitable()) PedestrianRoutePlanning.await(request);
+            return (state, at) -> permitted.getAsBoolean() ? java.util.Optional.of(() -> () -> result.awaitable()
+                    ? List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(),
+                        new ScheduledAction(owner.id(), new SimInstant(at.ticks() + 1), owner.priority(), owner.subject(), owner.kind(), owner.weight()))))
+                    : List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Cancelled(owner.id())))) : java.util.Optional.empty();
+        };
+    }
     @Test void deliveryDuringDetachedPreparationSurvivesItsOlderCompletionAndSharedEviction() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("in-flight-delivery", 20); var query = request(3);
         try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);

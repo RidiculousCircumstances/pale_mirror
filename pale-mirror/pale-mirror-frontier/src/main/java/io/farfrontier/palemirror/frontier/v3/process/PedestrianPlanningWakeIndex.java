@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAdvisory;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningChange;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianDemandKey;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteRequest;
@@ -14,7 +16,8 @@ import java.util.*;
 public final class PedestrianPlanningWakeIndex {
     private enum Origin { LIVE_CONTINUATION, RECOVERY_PREVIEW }
     private record Wait(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
-                        Optional<ScheduledAction> predecessor, PedestrianCalculationMemory reads) { }
+                        Optional<ScheduledAction> predecessor, PedestrianCalculationMemory reads,
+                        Optional<ScheduledAdvisory<FrontierWorldState>> advice) { }
     private final Map<ScheduleId, Wait> waits = new LinkedHashMap<>();
     private final Map<PedestrianDemandKey, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
@@ -40,25 +43,39 @@ public final class PedestrianPlanningWakeIndex {
     }
     void stage(ScheduledAction predecessor, ScheduledAction successor, List<PedestrianRouteRequest> requests,
                PedestrianCalculationMemory reads) {
+        stage(predecessor, successor, requests, reads, Optional.empty());
+    }
+    void stage(ScheduledAction predecessor, ScheduledAction successor, List<PedestrianRouteRequest> requests,
+               PedestrianCalculationMemory reads,
+               Optional<ScheduledAdvisory<FrontierWorldState>> advice) {
         if (!predecessor.id().equals(successor.id())) throw new IllegalArgumentException("planning successor changed its schedule identity");
-        replace(successor, requests, Origin.LIVE_CONTINUATION, Optional.of(predecessor), reads);
+        replace(successor, requests, Origin.LIVE_CONTINUATION, Optional.of(predecessor), reads, advice);
     }
     PedestrianCalculationMemory reads(ScheduledAction action) {
         var wait = waits.get(action.id());
         return wait != null && wait.action().equals(action) ? wait.reads() : PedestrianCalculationMemory.empty();
     }
-    private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
-                         Optional<ScheduledAction> predecessor) {
-        replace(action, requests, origin, predecessor, PedestrianCalculationMemory.empty());
+    Optional<ScheduledAdvisory<FrontierWorldState>> advice(ScheduledAction action) {
+        var wait = waits.get(action.id());
+        return wait != null && wait.action().equals(action) ? wait.advice() : Optional.empty();
+    }
+    void obsoleteAdvice(ScheduledAction action) {
+        var wait = waits.get(action.id());
+        if (wait != null && wait.action().equals(action)) remove(action.id());
     }
     private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
-                         Optional<ScheduledAction> predecessor, PedestrianCalculationMemory reads) {
+                         Optional<ScheduledAction> predecessor) {
+        replace(action, requests, origin, predecessor, PedestrianCalculationMemory.empty(), Optional.empty());
+    }
+    private void replace(ScheduledAction action, List<PedestrianRouteRequest> requests, Origin origin,
+                         Optional<ScheduledAction> predecessor, PedestrianCalculationMemory reads,
+                         Optional<ScheduledAdvisory<FrontierWorldState>> advice) {
         remove(action.id());
         if (requests.isEmpty()) return;
         var demands = new LinkedHashMap<PedestrianDemandKey, PedestrianRouteRequest>();
         requests.forEach(request -> demands.put(PedestrianDemandKey.of(request), request));
         var distinct = List.copyOf(demands.values());
-        waits.put(action.id(), new Wait(action, distinct, origin, predecessor, reads)); retention = null;
+        waits.put(action.id(), new Wait(action, distinct, origin, predecessor, reads, advice)); retention = null;
         for (var request : distinct) dependents.computeIfAbsent(PedestrianDemandKey.of(request), ignored -> new LinkedHashSet<>()).add(action.id());
     }
     public void remove(ScheduleId id) {
@@ -117,7 +134,13 @@ public final class PedestrianPlanningWakeIndex {
             for (var id : dependents.getOrDefault(PedestrianDemandKey.of(change.request()), Set.of())) {
                 if (read.isPresent()) {
                     var wait = waits.get(id);
-                    waits.put(id, new Wait(wait.action(), wait.requests(), wait.origin(), wait.predecessor(), wait.reads().including(read.orElseThrow())));
+                    PedestrianCalculationMemory delivered;
+                    try { delivered = wait.reads().including(read.orElseThrow()); }
+                    catch (IllegalStateException failure) {
+                        throw new IllegalStateException("pedestrian calculation delivery failed for " + wait.action().kind()
+                                + "/" + wait.action().id().value() + " owner=" + wait.action().subject().value(), failure);
+                    }
+                    waits.put(id, new Wait(wait.action(), wait.requests(), wait.origin(), wait.predecessor(), delivered, wait.advice()));
                     retention = null;
                 }
                 if (!runnable.contains(id)) ready.add(id);
@@ -133,7 +156,7 @@ public final class PedestrianPlanningWakeIndex {
                 || !expected.kind().equals(replacement.kind()) || expected.priority() != replacement.priority()
                 || expected.weight() != replacement.weight())
             throw new IllegalArgumentException("planning resume lost its exact continuation");
-        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION, Optional.empty(), wait.reads())); retention = null;
+        waits.put(expected.id(), new Wait(replacement, wait.requests(), Origin.LIVE_CONTINUATION, Optional.empty(), wait.reads(), wait.advice())); retention = null;
         makeRunnable(expected.id());
     }
     private void makeRunnable(ScheduleId id) {

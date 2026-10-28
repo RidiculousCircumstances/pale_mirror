@@ -1728,3 +1728,35 @@ can fall back into native exact execution when advice slots are busy. This is ph
 correction after an ownership move, not a larger global execution allowance.
 Wake/advice/kernel/negative focus40checks+guardrailsPASS24s; the final direct seller lookup
 was source-reviewed against current matching/consent and awaits exactref gates/runtime.
+
+
+### One immutable advisory calculation frame, with explicit rejection cleanup
+
+b51b96157 exactrelease95s225frontier+29runtime/guardrails/packagePASS. Its private
+deployment did NOT happen: preflightPASS but RCONstop refused because44f had already
+quarantined at04:53:49 with retainedfactquota133020, then completed native all-dimensions
+save and stopped. No artifact/profile/world mutation was made by that failed deploy.
+Raw44flog retained before replacement. The old delivery exception lacked exact wait
+owner, so the specific overflowing subscriber is not recoverable from that trace.
+Do not label b51runtimeaccepted or call this solely a deployment-method failure.
+
+Connected reachable cause: a parked action kept accumulated route reads, but each
+advisory retry captured a NEW world/actor-position/market snapshot under that same
+exact action. Its read set could therefore contain many unfinished input epochs,
+not one finite decision. The common continuation now retains ONE original immutable
+ScheduledAdvisory input closure beside the existing exact Wait only for a declared
+calculation-only retry. A newly supplied native view is not silently substituted for
+that computation. The world continues independently; the domain owner still validates
+current inputs/expiry and builds a fresh selected admission. Rejection/expiry releases
+the exact wait, snapshot, subscriptions and reads before a new epoch; business transitions,
+cancellation, replacement and retirement release them as well. No second snapshot registry,
+canonical writer, worker pool, generic policy inference or larger fact quota.
+
+Common regressions use real cooperative route completion: an unfinished captured
+advice resumes its original query despite a later different input capture, reaches
+terminal cancellation, and only a later new task can use the new capture. The rejection
+case releases its delivered reads and snapshot before replacement. Focus42checks+
+guardrailsPASS23s; finalclarity/diagnostic changesPASS20s. Delivery failures now add exact
+kind/schedule/subject around the original cause, without suppressing quarantine.
+Specific native failure attribution and clock closure still require the new candidate's
+runtime evidence; the source counterexample is not universal native acceptance.
