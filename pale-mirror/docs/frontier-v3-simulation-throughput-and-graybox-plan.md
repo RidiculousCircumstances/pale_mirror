@@ -3514,3 +3514,21 @@ selection and mutable calculation readiness belong to planning. If completed rou
 proof is required at admission, carry an exact immutable typed proof. Never rerun
 asynchronous selection inside a canonical validity check. Deterministic material
 and financial recomputation remains required; a stale/forged declaration fails.
+
+
+### Pilot waits for actual board render readiness (2026-10-28)
+
+Frozenef337 scoped release PASS10s with identity-bound cachedsemantic evidence;
+both retained-world deployments verified SHA512
+a9cfcaa2d94a0d3fbe561fc42b0b4ee730c4b343d26008ff302c904c2410ae00b3761123ed13855955cf34b57fcb737a04a0f9b19cdb5c9b05912c56db1a0fe1.
+Private ordinary continuation passed240484/statusok/debt657/notrecovering, beyond
+240325quarantine point, no exact historical timingreplay or fullcycle claim.
+
+Next actual fullpack ingress failed immediately at the board assertion with NPE:
+TextDisplay.textRenderState() wasnull after entityarrival. The harness dereferenced
+presentation data before its initialization, including in its timeout formatter.
+Retain refill-scale-ingress-client receipts. Bothservices remainactive; client/display
+closed. Guard nullable initialization and retry under the SAME bounded assertion;
+TEXT_NOT_READY is diagnostic text, never success. Position, text, distance and angle
+requirements unchanged. No new timingunit test or gameplaybehavior. compileJava and
+currentfocusedguardrails pass; actualframe/HOTacceptance remainsOPEN.

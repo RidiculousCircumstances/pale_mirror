@@ -20,14 +20,19 @@ final class FrontierV3PilotPresentationAssertions {
         look.accept(anchor); focus.accept(anchor);
         Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize(); Vec3 expected = Vec3.atCenterOf(anchor);
         boolean visible = minecraft.level.getEntitiesOfClass(Display.TextDisplay.class, minecraft.player.getBoundingBox().inflate(maxDistance), display -> {
-            if (!display.textRenderState().text().getString().contains(expectedText) || display.position().distanceToSqr(expected) > radius * radius) return false;
+            var rendered = display.textRenderState();
+            if (rendered == null || !rendered.text().getString().contains(expectedText)
+                    || display.position().distanceToSqr(expected) > radius * radius) return false;
             Vec3 delta = display.position().subtract(eye); double distance = delta.length();
             return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
         }).stream().findFirst().isPresent();
         if (visible) { advance.accept("assert_visible_board"); return; }
         if ((minecraft.level.getGameTime() - startedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
             String candidates = minecraft.level.getEntitiesOfClass(Display.TextDisplay.class, minecraft.player.getBoundingBox().inflate(maxDistance), display -> true).stream()
-                    .limit(12).map(display -> display.blockPosition() + ":" + display.textRenderState().text().getString().replace('\n', '/')).collect(java.util.stream.Collectors.joining(","));
+                    .limit(12).map(display -> {
+                        var rendered = display.textRenderState();
+                        return display.blockPosition() + ":" + (rendered == null ? "TEXT_NOT_READY" : rendered.text().getString().replace('\n', '/'));
+                    }).collect(java.util.stream.Collectors.joining(","));
             throw new IllegalStateException("camera never saw board text=" + expectedText + " near " + anchor + "; candidates=" + candidates);
         }
     }
