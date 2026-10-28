@@ -39,6 +39,27 @@ class GroupMovementObservationTest {
         }
         throw new AssertionError("ordinary trade did not produce a travelling group");
     }
+    @Test void warmedMovementClosureRejectsChangedMissionAndForeignCurrentResponsibility() {
+        var state = travelling();
+        ActorMovementStateSupport.validate(state);
+        var missingMission = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                FrontierWorldStateUpdate.begin().shipments(new ShipmentState(state.shipments().shipments(), Map.of()))));
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementStateSupport.validate(missingMission));
+        assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.view(missingMission));
+        ActorMovementStateSupport.validate(state);
+        var movement = state.actorMovements().values().stream().filter(m -> m.context() instanceof ActorMovementContext.GroupLeg)
+                .findFirst().orElseThrow();
+        var before = movement.executionId();
+        var vacant = state.actorExecutions().finish(before);
+        var foreign = vacant.next(before.actorId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, before.actorId());
+        var executions = vacant.begin(foreign, vacant.generation(before.actorId()));
+        var changed = new ActorMovement(movement.order(), movement.issuedAtTick(), movement.coldTravel(), movement.context(), foreign);
+        var forged = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(FrontierWorldStateUpdate.begin()
+                .actorExecutions(executions).actorMovements(ImmutableLookupMap.withEntry(state.actorMovements(), before.actorId(), changed))));
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementStateSupport.validate(forged));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> { ActorMovementStateSupport.validate(state); return null; }));
+    }
     @Test void mixedProviderStartRetainsOnlyExactHotFactsAndReplaysWithoutAPathSearch() throws Exception {
         var state = travelling();
         var group = state.unitGroups().groups().values().stream().filter(g -> g.phase() == UnitGroup.Phase.TRAVELLING).findFirst().orElseThrow();

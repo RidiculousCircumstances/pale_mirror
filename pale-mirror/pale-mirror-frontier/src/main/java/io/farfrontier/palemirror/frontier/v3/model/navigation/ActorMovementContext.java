@@ -200,7 +200,12 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
             if (groupRevision < 1) throw new IllegalArgumentException("group movement has an invalid revision");
         }
         @Override public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
-            return java.util.List.of(ActorMovementReferences.GROUPS.at(groupId));
+            var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<ActorMovementReferences>>();
+            reads.add(ActorMovementReferences.GROUPS.at(groupId));
+            var group = refs.groups().groups().get(groupId);
+            if (group != null) reads.addAll(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group)
+                    .movementValidationReads(refs, group, movement));
+            return java.util.List.copyOf(reads);
         }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var group = refs.groups().groups().get(groupId);
@@ -209,7 +214,8 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
                     || movement.order().goalRevision() != group.revision() || movement.order().goalOrdinal() != group.goalOrdinal()
                     || !movement.order().legalStations().equals(java.util.List.of(group.journey().orElseThrow().stations().get(movement.order().actorId()))))
                 throw new IllegalArgumentException("group movement lost its exact formation declaration");
-            group.member(movement.order().actorId());
+            io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group)
+                    .validateMovementExecution(refs, group, movement);
         }
     }
     record ExtractionLeg(SubjectId jobId, long jobRevision) implements ActorMovementContext {

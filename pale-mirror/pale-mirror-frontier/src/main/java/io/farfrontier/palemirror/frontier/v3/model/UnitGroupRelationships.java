@@ -1,8 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup;
-import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext;
 import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts;
 import java.util.List;
 import java.util.Optional;
@@ -11,7 +9,20 @@ import static io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelation
 /** Derived ownership edges and the publication/recovery barrier; no second persisted roster. */
 final class UnitGroupRelationships {
     private UnitGroupRelationships() { }
-    static void collect(FrontierWorldState state, List<Edge> edges) { inspect(state, edges, true); }
+    static List<Object> validationInputs(FrontierWorldState state) {
+        var inventory = state.inventory();
+        return List.of(state.bootstrap(), state.unitGroups(), state.shipments(),
+                ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations()),
+                ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()),
+                state.actorExecutions(), state.humanPopulation().residents(), inventory.fungibleResources(),
+                inventory.containers(), inventory.surfaces(), inventory.economics().accounts(), inventory.economics().reservations(),
+                state.companies().companies(), state.transportFleet(), state.extractionSites().deposits());
+    }
+    static void collect(FrontierWorldState state, List<Edge> edges) {
+        // Full diagnostic/recovery entry points delegate to the same movement owner.
+        ActorMovementStateSupport.validate(state);
+        inspect(state, edges, true);
+    }
     /** Publication needs the same owner checks, without constructing an unused diagnostic graph. */
     static void validate(FrontierWorldState state) { inspect(state, List.of(), false); }
     private static void inspect(FrontierWorldState state, List<Edge> edges, boolean project) {
@@ -97,12 +108,6 @@ final class UnitGroupRelationships {
                         new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id()),
                         shipment.terminal() ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE, "shipment:" + shipment.id().value()));
             }
-        }
-        for (var movement : state.actorMovements().values()) if (movement.context() instanceof ActorMovementContext.GroupLeg leg) {
-            var group = state.unitGroups().groups().get(leg.groupId());
-            if (group == null || !UnitGroupMissionPorts.require(group).execution(state, group, group.member(movement.order().actorId()))
-                    .equals(Optional.of(movement.executionId())))
-                throw new IllegalArgumentException("group movement lacks its nominal participant responsibility");
         }
     }
 }

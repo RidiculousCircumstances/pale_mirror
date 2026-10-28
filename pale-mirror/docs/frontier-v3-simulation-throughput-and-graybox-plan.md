@@ -2665,3 +2665,39 @@ outside the changed local halo. Focus49geometry/profile/route/cooperative checks
 and guardrails PASS28s after correcting the complete-page removal case.
 No timing threshold or extra runtime polling test was added. Aggregate effect is
 not measured yet.
+
+### Put group movement closure under its existing indexed owner (2026-10-28)
+
+1b75f42d6 cleanreleasegeometry/profile/shape/route+45runtime/guardrails/package
+PASS39s; bothretainedworld deployments verified. ordinary100 regional-hash-delta
+recording:44.769517s/noDataLoss,3.663207ticks/s,debt1276→2008; G STILLFAILED.
+Canonicalvalidation12.260786s,groups2.048876s. No aggregate acceptance established.
+
+The retained group CPU stacks show the family collector revisiting every movement
+and calling execution selection/checkpoint policy on each publication. Current
+movement responsibility now has one validator: the existing shared movement
+reference index. GroupLeg delegates its exact read declarations and current
+responsibility check to its registered mission port. Transport reads its explicit
+parent mission and named parcels; no next execution is speculatively selected.
+Alive/current authority, no competing meal, matching courier/group responsibility
+and absence of pending parcel effects remain required. Generic group code knows
+no transport job stages. Full relationship views delegate to the same movement
+owner; the ordinary family validator has no second movement scan. The technical
+64-read bound covers the existing 32-parcel manifest plus common reads; no actor,
+scene, transport or physical admission limit is raised.
+
+The family dependency audit also found omitted source roots: sponsor accounts,
+reservations, containers/surfaces, companies/residents and extractive endpoint
+declarations read by transport/supply/refill validators. The family owner now
+supplies its complete inputs, using exact declared kind/liveness projections in
+place of irrelevant poses. Four exact immutable actor-map result images prevent
+before/after comparisons from rewinding the latest projection and rescanning all
+actors. Full audit always rebuilds evidence. No inferred owner/type or second
+canonical roster is introduced.
+
+Focused50movement/group, interruption, supply/refill, reference/relationship and
+identity-index checks plus guardrails PASS1m20s. Warmed movement proofs reject a
+removed parent mission and a forged current PRESENCE responsibility; full views
+also reject the missing mission and a full audit accepts the unchanged branch.
+Existing registered travel, consumption and recovery cases remain. Native impact
+is not measured yet; terminal product/scale acceptance remains open.

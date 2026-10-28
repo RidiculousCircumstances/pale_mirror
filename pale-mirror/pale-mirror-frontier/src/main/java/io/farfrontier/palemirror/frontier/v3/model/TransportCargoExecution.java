@@ -16,11 +16,14 @@ public final class TransportCargoExecution {
             throw new IllegalArgumentException("parcel lost its exact declared mission/group execution");
     }
     public static List<Shipment> parcels(FrontierWorldState state, UnitGroup group, ActorExecutionId execution) {
+        return parcels(state.shipments(), group, execution);
+    }
+    public static List<Shipment> parcels(ShipmentState shipments, UnitGroup group, ActorExecutionId execution) {
         if (execution.activityKind() != ActorActivityKind.GROUP_MEMBER || !execution.activityOwnerId().equals(group.id()))
             throw new IllegalArgumentException("cargo execution names a foreign group");
         group.member(execution.actorId());
-        var mission = io.farfrontier.palemirror.frontier.v3.model.group.TransportGroupMissionPort.mission(state, group);
-        return mission.shipmentIds().stream().map(state.shipments().shipments()::get)
+        var mission = io.farfrontier.palemirror.frontier.v3.model.group.TransportGroupMissionPort.mission(shipments, group);
+        return mission.shipmentIds().stream().map(shipments.shipments()::get)
                 .filter(s -> shared(s) && s.execution().actorId().equals(execution.actorId())).toList();
     }
     public static Optional<Shipment> active(FrontierWorldState state, Shipment shipment) {

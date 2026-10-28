@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model.group;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementReferences;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
@@ -10,6 +12,11 @@ public interface UnitGroupMissionPort {
     boolean permitsHomeFood(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, UnitGroup group);
     UnitGroup.MissionKind kind();
     void validate(FrontierWorldState state, UnitGroup group);
+    java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> movementValidationReads(
+            ActorMovementReferences references, UnitGroup group,
+            ActorMovement movement);
+    void validateMovementExecution(ActorMovementReferences references,
+            UnitGroup group, ActorMovement movement);
     KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, UnitGroup group);
     GroupTravelPolicy travelPolicy(FrontierWorldState state, UnitGroup group);
     SurfaceAnchor destination(FrontierWorldState state, UnitGroup group, long ordinal);

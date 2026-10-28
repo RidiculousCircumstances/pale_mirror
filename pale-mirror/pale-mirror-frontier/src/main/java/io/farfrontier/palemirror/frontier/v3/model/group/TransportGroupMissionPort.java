@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model.group;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementReferences;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -24,7 +26,10 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         return mission.preparingSupplies() || mission.stage() == TransportMission.Stage.COMPLETE;
     }
     public static TransportMission mission(FrontierWorldState state, UnitGroup group) {
-        var mission = state.shipments().missions().get(group.mission().id());
+        return mission(state.shipments(), group);
+    }
+    public static TransportMission mission(ShipmentState shipments, UnitGroup group) {
+        var mission = shipments.missions().get(group.mission().id());
         if (group.mission().kind() != UnitGroup.MissionKind.TRANSPORT || mission == null || !mission.groupId().equals(group.id()))
             throw new IllegalArgumentException("group lacks its exact transport mission");
         return mission;
@@ -51,6 +56,39 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         for (var id : mission.shipmentIds()) inputs.add(state.shipments().shipments().get(id));
         inputs.add(mission.transportAssetId().map(id -> state.transportFleet().assets().get(id)).orElse(null));
         return inputs.toArray();
+    }
+    @Override public List<ImmutableReferenceIndex.Read<ActorMovementReferences>> movementValidationReads(
+            ActorMovementReferences refs, UnitGroup group,
+            ActorMovement movement) {
+        var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<ActorMovementReferences>>();
+        reads.add(ActorMovementReferences.MISSIONS.at(group.mission().id()));
+        var member = group.member(movement.order().actorId());
+        if (member.role() == UnitGroup.Role.CARRIER && member.activityKind() == ActorActivityKind.COURIER)
+            reads.add(ActorMovementReferences.SHIPMENTS.at(member.activityOwnerId()));
+        var mission = refs.shipments().missions().get(group.mission().id());
+        if (mission != null) for (var id : mission.shipmentIds())
+            reads.add(ActorMovementReferences.SHIPMENTS.at(id));
+        return List.copyOf(reads);
+    }
+    /** Current movement must retain its declared responsibility; selecting future work is a separate policy. */
+    @Override public void validateMovementExecution(ActorMovementReferences refs,
+            UnitGroup group, ActorMovement movement) {
+        var execution = movement.executionId(); var member = group.member(movement.order().actorId());
+        refs.executions().requireCurrent(execution);
+        mission(refs.shipments(), group);
+        if (refs.actors().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE
+                || refs.people().meals().containsKey(member.actorId()))
+            throw new IllegalArgumentException("group movement lacks its nominal participant responsibility");
+        var parcel = member.role() == UnitGroup.Role.CARRIER && member.activityKind() == ActorActivityKind.COURIER
+                ? refs.shipments().shipments().get(member.activityOwnerId()) : null;
+        if (member.role() == UnitGroup.Role.CARRIER && member.activityKind() == ActorActivityKind.COURIER && parcel == null)
+            throw new IllegalArgumentException("group movement lost its declared courier parcel");
+        if (parcel != null && !parcel.terminal()) {
+            if (parcel.pendingPhysicalStep().isPresent() || !parcel.execution().equals(execution))
+                throw new IllegalArgumentException("group movement lacks its nominal participant responsibility");
+        } else if (execution.activityKind() != ActorActivityKind.GROUP_MEMBER || !execution.activityOwnerId().equals(group.id())
+                || TransportCargoExecution.parcels(refs.shipments(), group, execution).stream().anyMatch(s -> s.pendingPhysicalStep().isPresent()))
+            throw new IllegalArgumentException("group movement lacks its nominal participant responsibility");
     }
     public static void validateDeclaration(FrontierWorldState state, TransportMission mission, UnitGroup group,
             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Shipment> shipments) {

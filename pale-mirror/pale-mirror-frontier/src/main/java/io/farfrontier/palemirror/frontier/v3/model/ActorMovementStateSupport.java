@@ -9,10 +9,16 @@ import java.util.Map;
 
 /** Shared identity/authority closure; nominal family contexts own their retained relationships. */
 final class ActorMovementStateSupport {
+    // One bounded manifest may declare 32 parcels in addition to the common actor/authority reads.
     private static final ImmutableReferenceIndex<ActorMovementReferences, SubjectId, ActorMovement> VALIDATION =
-            new ImmutableReferenceIndex<>(SimulationCapacity.MAX_ACTORS, 16, ActorMovementReferences.SOURCES,
+            new ImmutableReferenceIndex<>(SimulationCapacity.MAX_ACTORS, 64, ActorMovementReferences.SOURCES,
                     ActorMovementReferences::reads, ActorMovementStateSupport::validateMovement);
     private ActorMovementStateSupport() { }
+    static void validate(FrontierWorldState state) {
+        validate(state.bootstrap(), state.actorMovements(), state.actorLocations(), state.humanPopulation(), state.inventory(),
+                state.actorExecutions(), state.shipments(), state.unitGroups(), state.extractionSites(), state.strategicPlans(),
+                state.forest(), state.productionJobs());
+    }
     static void validate(FrontierBootstrap bootstrap, Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
                          HumanPopulation people, ExactInventory inventory, ActorExecutionState executions,
                          ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,

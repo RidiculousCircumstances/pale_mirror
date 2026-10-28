@@ -13,9 +13,20 @@ final class ActorIdentityDeclarations {
     private static volatile ProducerRoster cached;
     private static final ImmutableRegistryView<SubjectId, ActorLocation, ActorKind> KINDS =
             new ImmutableRegistryView<>(SimulationCapacity.MAX_ACTORS);
+    private static final ImmutableResultView<String, Map<SubjectId, ActorKind>> KIND_IMAGES = new ImmutableResultView<>(4);
     static Map<SubjectId, ActorKind> declaredKinds(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors) {
         if (ImmutableInvariantCheck.fullAudit()) return KINDS.project(bootstrap, actors, (before, after) -> false, (id, actor) -> actor.kind());
-        return KINDS.project(bootstrap, actors, (id, actor) -> actor.kind());
+        return KIND_IMAGES.get(java.util.List.of(bootstrap, actors), "declared-kinds",
+                () -> KINDS.project(bootstrap, actors, (id, actor) -> actor.kind()));
+    }
+    private static final ImmutableRegistryView<SubjectId, ActorLocation, ActorLifeStatus> LIFE_STATUSES =
+            new ImmutableRegistryView<>(SimulationCapacity.MAX_ACTORS);
+    private static final ImmutableResultView<String, Map<SubjectId, ActorLifeStatus>> LIFE_IMAGES = new ImmutableResultView<>(4);
+    static Map<SubjectId, ActorLifeStatus> lifeStatuses(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors) {
+        if (ImmutableInvariantCheck.fullAudit()) return LIFE_STATUSES.project(bootstrap, actors,
+                (before, after) -> false, (id, actor) -> actor.condition().status());
+        return LIFE_IMAGES.get(java.util.List.of(bootstrap, actors), "life-statuses",
+                () -> LIFE_STATUSES.project(bootstrap, actors, (id, actor) -> actor.condition().status()));
     }
     private static final ImmutableInvariantCheck<Void> EXECUTION_REFERENCES = new ImmutableInvariantCheck<>();
     static void validateExecutions(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
