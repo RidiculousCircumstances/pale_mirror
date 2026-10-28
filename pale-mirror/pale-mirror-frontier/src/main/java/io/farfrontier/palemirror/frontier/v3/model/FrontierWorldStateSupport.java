@@ -56,6 +56,10 @@ public final class FrontierWorldStateSupport {
         return ids;
     }
 
+    static boolean hasSettlement(FrontierBootstrap bootstrap, SubjectId settlementId) {
+        return declarations(bootstrap).settlements().containsKey(settlementId);
+    }
+
     public static Settlement settlement(FrontierBootstrap bootstrap, SubjectId settlementId) {
         var settlement = declarations(bootstrap).settlements().get(settlementId);
         if (settlement == null) throw new IllegalArgumentException("unknown production settlement: " + settlementId.value());

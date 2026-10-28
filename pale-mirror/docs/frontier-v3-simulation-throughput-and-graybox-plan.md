@@ -2590,3 +2590,29 @@ change or check bypass. The original check bodies/order and retirement constrain
 are unchanged. Focused engine, metrics, reference/relationship negatives and native
 diagnostic-budget checks PASS21s. The real nested detail callback is exercised by
 successful and deliberately failing collectors, with identical canonical bytes.
+
+### Strategic graph validation from the causal trace (2026-10-28)
+
+45eaca23e ordinary100 recording (`validation-phases-ordinary100.jfr`) accounts
+for44.827695s without dropped events:4.238451canonicalticks/s, debt1073→1780.
+G remains FAILED. Nested canonical validation11.197881s splits into owned-state
+6.518303s and reference closure4.652437s. The largest sampled owned-state caller
+is StrategicPlanState.validate; CPU samples are attribution, not wall-time sums.
+
+Confirmed connected repeated work: each authority scans all world objectives for
+its commitments; unrelated plan updates copy unchanged objective/task maps and
+recheck the same task graph; acyclicity starts with fresh visited sets per root.
+The correction retains defensively immutable graph images, builds one derived
+active-goal membership index, shares successful checks for the exact immutable
+graph pair, and walks dependencies with one visited set. Existing owner/policy,
+local-worker, commitment, decomposition, target, dependency and cycle rules remain.
+Bootstrap/recovery full audit rebuilds derived evidence. Changed maps cannot reuse
+an accepted graph proof. No schema, clock, economy policy or dispatch change.
+The bootstrap's existing declaration lookup replaces the per-objective linear
+settlement search. No hidden owner/type inference is introduced.
+
+Focused strategic, retirement, incremental-validation and graph intervention
+checks plus guardrails PASS40s. New cases cover mutable input isolation, exact field
+membership, duplicate lanes, changed dependencies/cycles/authority, terminal
+parents and changed authority commitments after a successful proof. Native
+aggregate effect is not yet measured; this is not scale acceptance.

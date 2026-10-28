@@ -18,6 +18,30 @@ public final class StrategicPlanState {
     }
     public static final int MAX_OBJECTIVES = SimulationCapacity.MAX_SETTLEMENTS * 16;
     private static final ImmutableInvariantCheck<Void> VALIDATION = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<ActiveObjectives> ACTIVE_OBJECTIVES = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> TASK_GRAPH = new ImmutableInvariantCheck<>();
+    private record OwnerLane(SubjectId owner, StrategicObjectiveLane lane) { }
+    /** Derived membership only; the retained objective remains the decision authority. */
+    private record ActiveObjectives(Map<SubjectId, Set<SubjectId>> byOwner,
+                                    Set<ObjectiveSlot> slots, Set<OwnerLane> lanes) {
+        static ActiveObjectives from(Map<SubjectId, StrategicObjective> objectives) {
+            Map<SubjectId, Set<SubjectId>> owners = new HashMap<>();
+            Set<ObjectiveSlot> slots = new HashSet<>();
+            Set<OwnerLane> lanes = new HashSet<>();
+            objectives.forEach((id, objective) -> {
+                if (!id.equals(objective.id())) throw new IllegalArgumentException("strategic objective key must match identity");
+                if (objective.status() == StrategicObjectiveStatus.ACTIVE) {
+                    if (!slots.add(slot(objective)))
+                        throw new IllegalArgumentException("objective owner has more than one active work lane entry");
+                    owners.computeIfAbsent(objective.ownerId(), ignored -> new HashSet<>()).add(id);
+                    lanes.add(new OwnerLane(objective.ownerId(), objective.lane()));
+                }
+            });
+            owners.replaceAll((owner, ids) -> Set.copyOf(ids));
+            return new ActiveObjectives(ImmutableLookupMap.copyOf(owners), Set.copyOf(slots), Set.copyOf(lanes));
+        }
+    }
+    private final ActiveObjectives activeObjectives;
     public static final int MAX_TASKS = SimulationCapacity.MAX_SETTLEMENTS * 64;
     static final int MAX_ROUTE_PATROLS = 128;
     static final int MAX_SETTLEMENT_ASSAULTS = 32;
@@ -81,7 +105,7 @@ public final class StrategicPlanState {
             HiveSettlementKnowledge hiveSettlementKnowledge, HiveDoctrineState hiveDoctrine, Map<SubjectId,
             SettlementAssault> settlementAssaults, DecisionAuthorityState decisionAuthorities, OperationFrontEffectCoordinator frontEffects,
             Map<SubjectId, ScoutPatrolJourney> scoutPatrols) {
-        this.objectives = immutable(objectives, "strategic objectives"); this.tasks = immutable(tasks, "strategic tasks");
+        this.objectives = graphImage(objectives, "strategic objectives"); this.tasks = graphImage(tasks, "strategic tasks");
         this.routePatrols = immutable(routePatrols, "route patrols");
         this.settlementAssaults = immutable(settlementAssaults, "settlement assaults");
         this.infectionKnowledge = Objects.requireNonNull(infectionKnowledge, "settlement infection knowledge");
@@ -102,14 +126,29 @@ public final class StrategicPlanState {
                 || this.settlementAssaults.size() > MAX_SETTLEMENT_ASSAULTS) {
             throw new IllegalArgumentException("strategic plan retention limit exceeded");
         }
-        this.objectives.forEach((id, objective) -> {
-            if (!id.equals(objective.id())) throw new IllegalArgumentException("strategic objective key must match identity");
+        this.activeObjectives = activeObjectives();
+        TASK_GRAPH.validate(this::validateTaskGraph, this.objectives, this.tasks);
+
+        this.routePatrols.forEach((taskId, patrol) -> validatePatrol(taskId, patrol));
+        Set<SubjectId> activeAssaultTargets = new HashSet<>(), activeAssaultAttackers = new HashSet<>();
+        this.settlementAssaults.forEach((id, assault) -> {
+            StrategicTask task = tasks.get(assault.taskId());
+            if (!id.equals(assault.id()) || task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT
+                    || !task.ownerId().equals(assault.hiveId())) {
+                throw new IllegalArgumentException("settlement assault must retain one hive assault task");
+            }
+            if (assault.status() != SettlementAssaultStatus.RESOLVED
+                    && (!activeAssaultTargets.add(assault.settlementId()) || !activeAssaultAttackers.addAll(assault.attackerIds()))) {
+                throw new IllegalArgumentException("active settlement assaults cannot share a target or attacker");
+            }
         });
-        objectives.values().stream().filter(objective -> objective.status() == StrategicObjectiveStatus.ACTIVE)
-                .collect(java.util.stream.Collectors.groupingBy(StrategicPlanState::slot))
-                .values().forEach(values -> {
-                    if (values.size() > 1) throw new IllegalArgumentException("objective owner has more than one active work lane entry");
-                });
+    }
+
+    private ActiveObjectives activeObjectives() {
+        return ACTIVE_OBJECTIVES.value(() -> ActiveObjectives.from(objectives), objectives);
+    }
+
+    private void validateTaskGraph() {
         this.tasks.forEach((id, task) -> {
             if (!id.equals(task.id()) || !this.objectives.containsKey(task.objectiveId())) {
                 throw new IllegalArgumentException("strategic task must belong to one retained objective");
@@ -180,20 +219,8 @@ public final class StrategicPlanState {
             }
         }));
 
-        this.routePatrols.forEach((taskId, patrol) -> validatePatrol(taskId, patrol));
-        Set<SubjectId> activeAssaultTargets = new HashSet<>(), activeAssaultAttackers = new HashSet<>();
-        this.settlementAssaults.forEach((id, assault) -> {
-            StrategicTask task = tasks.get(assault.taskId());
-            if (!id.equals(assault.id()) || task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT
-                    || !task.ownerId().equals(assault.hiveId())) {
-                throw new IllegalArgumentException("settlement assault must retain one hive assault task");
-            }
-            if (assault.status() != SettlementAssaultStatus.RESOLVED
-                    && (!activeAssaultTargets.add(assault.settlementId()) || !activeAssaultAttackers.addAll(assault.attackerIds()))) {
-                throw new IllegalArgumentException("active settlement assaults cannot share a target or attacker");
-            }
-        });
-        tasks.keySet().forEach(id -> requireAcyclic(id, new java.util.HashSet<>(), new java.util.HashSet<>()));
+        Set<SubjectId> visiting = new HashSet<>(), visited = new HashSet<>();
+        tasks.keySet().forEach(id -> requireAcyclic(id, visiting, visited));
     }
 
     public static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of(), Map.of()); }
@@ -281,6 +308,8 @@ public final class StrategicPlanState {
     private void validateCurrent(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation,
                                  Map<SubjectId, ResourceSiteDeclaration> resourceSites) {
         Objects.requireNonNull(routeTopology, "route topology");
+        var currentActive = activeObjectives(); // full recovery audits rebuild derived evidence
+        TASK_GRAPH.validate(this::validateTaskGraph, objectives, tasks);
         if (!decisionAuthorities.authorities().isEmpty()) {
             DecisionAuthorityState expected = DecisionAuthorityState.initial(bootstrap);
             if (!decisionAuthorities.authorities().keySet().equals(expected.authorities().keySet())) {
@@ -296,8 +325,7 @@ public final class StrategicPlanState {
                 if (authority.kind() != expectedAuthority.kind() || !authority.policy().equals(expectedAuthority.policy())) {
                     throw new IllegalArgumentException("decision authority policy is not registered for its owner");
                 }
-                java.util.Set<SubjectId> active = objectives.values().stream().filter(objective -> objective.ownerId().equals(owner))
-                        .filter(objective -> objective.status() == StrategicObjectiveStatus.ACTIVE).map(StrategicObjective::id).collect(java.util.stream.Collectors.toSet());
+                Set<SubjectId> active = currentActive.byOwner().getOrDefault(owner, Set.of());
                 if (!active.equals(java.util.Set.copyOf(authority.commitmentIds()))) {
                     throw new IllegalArgumentException("decision authority commitments must exactly reference active objectives");
                 }
@@ -306,7 +334,7 @@ public final class StrategicPlanState {
         infectionKnowledge.validate(bootstrap);
         objectives.values().forEach(objective -> {
             boolean knownOwner = bootstrap.hive().id().equals(objective.ownerId())
-                    || bootstrap.settlements().stream().anyMatch(settlement -> settlement.id().equals(objective.ownerId()));
+                    || FrontierWorldStateSupport.hasSettlement(bootstrap, objective.ownerId());
             if (!knownOwner) throw new IllegalArgumentException("strategic objective has a foreign owner");
             objective.resourceSiteTarget().ifPresent(siteId -> {
                 ResourceSiteDeclaration site = resourceSites.get(siteId);
@@ -337,14 +365,11 @@ public final class StrategicPlanState {
     }
 
     public boolean hasActiveObjective(SubjectId ownerId, StrategicObjectiveLane lane) {
-        return objectives.values().stream().anyMatch(objective -> objective.ownerId().equals(ownerId) && objective.lane() == lane
-                && objective.status() == StrategicObjectiveStatus.ACTIVE);
+        return activeObjectives.lanes().contains(new OwnerLane(ownerId, lane));
     }
 
     public boolean hasActiveObjective(SubjectId ownerId, StrategicObjectiveLane lane, java.util.Optional<SubjectId> resourceSite) {
-        return objectives.values().stream().anyMatch(objective -> objective.ownerId().equals(ownerId)
-                && objective.lane() == lane && objective.resourceSiteTarget().equals(resourceSite)
-                && objective.status() == StrategicObjectiveStatus.ACTIVE);
+        return activeObjectives.slots().contains(new ObjectiveSlot(ownerId, lane, resourceSite));
     }
 
     public StrategicPlanState addObjective(StrategicObjective objective) {
@@ -622,6 +647,12 @@ public final class StrategicPlanState {
         if (!visiting.add(id)) throw new IllegalArgumentException("strategic task dependency graph has a cycle");
         tasks.get(id).dependencies().forEach(dependency -> requireAcyclic(dependency, visiting, visited));
         visiting.remove(id); visited.add(id);
+    }
+
+    /** Keep an already immutable graph image; mutable caller maps are always copied. */
+    private static <T> Map<SubjectId, T> graphImage(Map<SubjectId, T> source, String name) {
+        Objects.requireNonNull(source, name);
+        return source instanceof ImmutableMapImage<?, ?> ? source : ImmutableLookupMap.copyOf(immutable(source, name));
     }
 
     private static <T> Map<SubjectId, T> immutable(Map<SubjectId, T> source, String name) {
