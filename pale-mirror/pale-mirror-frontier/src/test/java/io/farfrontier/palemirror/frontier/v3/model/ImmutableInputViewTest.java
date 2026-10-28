@@ -17,6 +17,30 @@ class ImmutableInputViewTest {
         assertEquals(3, view.get(List.of(input), "other-plan", calls::incrementAndGet));
         assertEquals(4, view.get(List.of(input), "plan", calls::incrementAndGet), "bounded eviction recomputes, never supplies another result");
     }
+    @Test void registeredInvariantEvidenceCannotCrossWithdrawalFailureOrFullIngress() {
+        var proof = new ImmutableInvariantRegistry<String>(2);
+        var epoch = new Object(); var declaration = new Object(); var basis = new Object();
+        var registry = java.util.Map.of("one", declaration); var calls = new AtomicInteger();
+        proof.validate(epoch, registry, "one", declaration, calls::incrementAndGet, basis);
+        proof.validate(epoch, registry, "one", declaration, calls::incrementAndGet, basis);
+        assertEquals(1, calls.get());
+        ImmutableInvariantCheck.full(() -> {
+            proof.validate(epoch, registry, "one", declaration, calls::incrementAndGet, basis); return null;
+        });
+        assertEquals(2, calls.get(), "recovery cannot reuse a warmed proof");
+        var changed = new Object();
+        assertThrows(IllegalArgumentException.class, () -> proof.validate(epoch, registry, "one", declaration,
+                () -> { throw new IllegalArgumentException("changed invalid owner fact"); }, changed));
+        proof.validate(epoch, registry, "one", declaration, calls::incrementAndGet, changed);
+        assertEquals(3, calls.get(), "a failed check cannot publish its dependency basis");
+        proof.validate(epoch, java.util.Map.of(), "one", declaration, calls::incrementAndGet, changed);
+        assertEquals(4, calls.get(), "an unregistered draft is always checked");
+        proof.validate(epoch, registry, "one", declaration, calls::incrementAndGet, changed);
+        assertEquals(5, calls.get(), "a withdrawn row no longer retains trusted inputs");
+        var replacement = new Object();
+        proof.validate(epoch, java.util.Map.of("one", replacement), "one", replacement, calls::incrementAndGet, changed);
+        assertEquals(6, calls.get(), "nominal id reuse cannot reuse the previous declaration proof");
+    }
     @Test void mutableDerivedMemoIsConfinedToItsCalculationThread() throws Exception {
         var view = new ImmutableInputView<java.util.Map<String, Integer>>(); var input = new Object();
         var main = view.get(List.of(input), java.util.HashMap::new); main.put("value", 1);

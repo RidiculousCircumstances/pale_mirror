@@ -1,0 +1,41 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import java.util.*;
+
+/** Bounded owner-local successful checks, with explicit immutable dependencies.
+ * One computing-thread image; withdrawn identities and old epochs are released.
+ * Initial/recovery audits always run the original complete check. */
+public final class ImmutableInvariantRegistry<K> {
+    private record Accepted(Object declaration, ImmutableDependencies dependencies) { }
+    private static final class Image<K> {
+        final Object epoch;
+        Map<K, ?> source;
+        final Map<K, Accepted> accepted = new HashMap<>();
+        Image(Object epoch, Map<K, ?> source) { this.epoch = epoch; this.source = source; }
+    }
+    private final int maximumEntries;
+    private final ThreadLocal<Image<K>> current = new ThreadLocal<>();
+    public ImmutableInvariantRegistry(int maximumEntries) {
+        if (maximumEntries < 1) throw new IllegalArgumentException("invariant registry needs a declared positive bound");
+        this.maximumEntries = maximumEntries;
+    }
+    public void validate(Object epoch, Map<K, ?> registry, K key, Object declaration, Runnable check, Object... dependencies) {
+        Objects.requireNonNull(epoch); Objects.requireNonNull(registry); Objects.requireNonNull(key);
+        Objects.requireNonNull(declaration); Objects.requireNonNull(check); Objects.requireNonNull(dependencies);
+        if (registry.size() > maximumEntries) throw new IllegalArgumentException("invariant registry exceeds its producer bound");
+        var image = current.get();
+        if (image == null || image.epoch != epoch) {
+            image = new Image<>(epoch, registry); current.set(image);
+        } else if (image.source != registry) {
+            image.accepted.keySet().removeIf(id -> !registry.containsKey(id));
+            image.source = registry;
+        }
+        // Unpublished candidates retain ordinary full validation, never evidence
+        // attached to another current declaration with the same identifier.
+        if (registry.get(key) != declaration) { check.run(); return; }
+        var previous = image.accepted.get(key);
+        if (!ImmutableInvariantCheck.fullAudit() && previous != null && previous.declaration() == declaration && previous.dependencies().matches(dependencies)) return;
+        check.run(); // A failed candidate never installs trusted dependency facts.
+        image.accepted.put(key, new Accepted(declaration, ImmutableDependencies.of(dependencies)));
+    }
+}

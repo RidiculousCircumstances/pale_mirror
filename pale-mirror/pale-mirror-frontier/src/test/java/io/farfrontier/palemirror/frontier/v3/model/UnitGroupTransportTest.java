@@ -452,6 +452,25 @@ class UnitGroupTransportTest {
         assertThrows(IllegalArgumentException.class, () -> UnitGroupMissionPorts.registry(List.of()));
         var port = UnitGroupMissionPorts.require(group);
         assertThrows(IllegalArgumentException.class, () -> UnitGroupMissionPorts.registry(List.of(port, port)));
+        port.validate(state, group); // Warm exactly the current transport declaration.
+        var memberId = group.members().getFirst().actorId();
+        var actualActor = state.actorLocations().get(memberId);
+        var wrongKind = new ActorLocation(actualActor.body(), actualActor.condition(), ActorKind.BIOFORM, actualActor.navigationProfile());
+        var wrongActor = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                FrontierWorldStateUpdate.begin().actorLocations(ImmutableLookupMap.withEntry(state.actorLocations(), memberId, wrongKind))));
+        assertThrows(IllegalArgumentException.class, () -> port.validate(wrongActor, group),
+                "unchanged group/shipment maps cannot hide a changed member declaration");
+        var executions = new java.util.HashMap<>(state.actorExecutions().actors());
+        var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(memberId,
+                ActorActivityKind.GROUP_MEMBER, new SubjectId("unit-group:foreign"), 1000);
+        executions.put(memberId, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecution(
+                memberId, 1000, Optional.of(foreign), Optional.empty()));
+        var wrongExecution = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                FrontierWorldStateUpdate.begin().actorExecutions(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState(executions))));
+        assertThrows(IllegalArgumentException.class, () -> port.validate(wrongExecution, group),
+                "unchanged group cannot hide competing current participant authority");
+        assertDoesNotThrow(() -> port.validate(state, group));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> { port.validate(state, group); return null; }));
         var carrier = group.members().getFirst(); var members = new ArrayList<>(group.members());
         members.set(0, new UnitGroup.Member(carrier.actorId(), UnitGroup.Role.GUIDE, ActorActivityKind.GROUP_MEMBER, group.id()));
         var forged = new UnitGroup(group.id(), group.mission(), members, group.formation(), group.phase(), group.revision(), group.goalOrdinal(), group.journey());

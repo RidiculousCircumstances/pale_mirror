@@ -2155,3 +2155,55 @@ release timing and labour envelope; invalid fuel declarations reject. Existing
 recovery test checks direct field labour against its dated-source formula, worn tools,
 destroyed land and exhausted mining equipment. Focus62checks/10classes, guardrails
 PASS27s. Native throughput effect remains unmeasured; G OPEN.
+
+
+### Bounded owner reference checks and one economic input publication (2026-10-28)
+
+6fc33b50b exact build/deploy passed on both retained worlds. Ordinary100 still FAILED:
+recovery sample0 excluded,40444→40827/242.7s, debt980→5445. Fresh production-cost-warm.jfr
+shows server transaction validation304samples, UnitGroupRelationships107; advice still
+GoodsTripPlanning.reserveSelected519 and installed valuation126 on one worker. These
+are inclusive sampled counts, not additive percentages. No allocation stalls.
+
+ImmutableInvariantRegistry retains successful structural checks only for exact current
+producer declarations plus their COMPLETE owner-declared immutable inputs. One computing
+thread image, explicit producer retention bound, withdrawal/epoch cleanup, no per-entity
+ThreadLocal, no failed-proof publication. Unpublished drafts always run their original
+check; complete initial/recovery audits bypass reuse. This is no canonical registry,
+trust flag, ownership resolver, altered event/schema or skipped changed-state invariant.
+
+TransportGroupMissionPort now owns reusable structural evidence for its actual mission,
+sponsor account/company, actual registered home endpoint inputs, exact member declared
+kinds/resident profiles/executions, manifest shipments and finite asset. Group/member
+movement callers reuse that evidence; changed group/cargo/authority still rejects through
+the original validator. Asset cargo checks visit the mission's exact manifest instead
+of every shipment in the world. Generic group coordination owns no transport internals.
+
+The same mechanism is wired into ActorMovementStateSupport. Each of ALL11 sealed
+movement contexts must declare its own exact immutable structural read set next to its
+existing validator. Common navigation composes current execution, exact actor existence,
+competing meal and the context-supplied facts without inspecting work-family jobs.
+Station/extraction/forestry work, shipments, expeditions, access exits and retained
+unsupported-family contexts keep the original nominal validations. No target movement,
+physical permission, body/cargo authority, travel speed or HOT/COLD protocol changed.
+
+SettlementEconomicInputChanges previously rebuilt the full participant/planning registry
+separately for every affected participant in one transition. It now assembles the same
+independent invalidations and publishes one immutable batch. GoodsParticipantState uses
+the common immutable map, retaining exact direct changes for singleton replacements.
+No invalidation, coalescing, revision, quote or price rule is weakened.
+
+Existing negative/recovery tests cover wrong member kind, competing group execution,
+forced full ingress after warming, failed checks, withdrawal/id reuse, exact station
+job withdrawal under an unchanged movement, batched=sequential owner changes and rejected
+unknown owners. Connected focus76checks/16classes (group, movement, interruption, station, transport,
+relationships and economic publication/participants) + guardrails PASS79s. Native
+clock/terminal acceptance remains OPEN; do not infer it from these source checks.
+
+Read-only saved-image evidence852955/tick41692 in production-cost-native-decisions.txt:
+312shipments,209missions,200travelling groups;272GROUPmovements. Many group COLD legs
+are9–16surfaces; other movement legs reach4096. SOURCE lead, not a completed diagnosis:
+GroupTravelCohesion.segment arbitrates each member's proposed path against CURRENT peer
+positions and clips the admitted individual interval. This can retain frequent COLD
+boundaries despite long-distance regional navigation. Evaluate its total live cost after
+this coherent increment; no group-clock redesign has yet been implemented or accepted.

@@ -9,8 +9,9 @@ import java.util.Map;
 
 /** Shared identity/authority closure; nominal family contexts own their retained relationships. */
 final class ActorMovementStateSupport {
+    private static final ImmutableInvariantRegistry<SubjectId> VALIDATION = new ImmutableInvariantRegistry<>(SimulationCapacity.MAX_ACTORS);
     private ActorMovementStateSupport() { }
-    static void validate(Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
+    static void validate(FrontierBootstrap bootstrap, Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
                          HumanPopulation people, ExactInventory inventory, ActorExecutionState executions,
                          ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
                          io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest, Map<SubjectId, ProductionJob> productionJobs) {
@@ -23,11 +24,18 @@ final class ActorMovementStateSupport {
         }
         for (var entry : movements.entrySet()) {
             var movement = entry.getValue();
-            executions.requireCurrent(movement.executionId());
-            if (!entry.getKey().equals(movement.order().actorId()) || !actors.containsKey(entry.getKey())
-                    || people.meals().containsKey(entry.getKey()))
-                throw new IllegalArgumentException("actor movement must bind one exact actor without a competing meal owner");
-            movement.context().validateReferences(references, movement);
+            var inputs = new java.util.ArrayList<Object>();
+            inputs.add(executions.actors().get(movement.order().actorId()));
+            inputs.add(Boolean.valueOf(actors.containsKey(entry.getKey())));
+            inputs.add(people.meals().get(entry.getKey()));
+            java.util.Collections.addAll(inputs, movement.context().validationInputs(references));
+            VALIDATION.validate(bootstrap, movements, entry.getKey(), movement, () -> {
+                executions.requireCurrent(movement.executionId());
+                if (!entry.getKey().equals(movement.order().actorId()) || !actors.containsKey(entry.getKey())
+                        || people.meals().containsKey(entry.getKey()))
+                    throw new IllegalArgumentException("actor movement must bind one exact actor without a competing meal owner");
+                movement.context().validateReferences(references, movement);
+            }, inputs.toArray());
         }
     }
 }

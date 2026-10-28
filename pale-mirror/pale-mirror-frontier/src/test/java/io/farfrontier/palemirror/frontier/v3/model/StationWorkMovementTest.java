@@ -24,6 +24,23 @@ class StationWorkMovementTest {
         return ProductionProcess.planCompletion(fixture.state(), ProductionProcess.complete(fixture.job(), 300L)).stream()
                 .map(ProposedEvent::payload).filter(ActorMovementStarted.class::isInstance).map(ActorMovementStarted.class::cast).findFirst().orElseThrow();
     }
+    @Test void warmedMovementReferencesStillRejectWithdrawalOfTheirExactJob() {
+        var fixture = started(); var job = fixture.job(); var start = order(fixture);
+        var state = ActorMovementProcess.reduceStarted(fixture.state(), job.workerId(), start);
+        ActorMovementStateSupport.validate(state.bootstrap(), state.actorMovements(), state.actorLocations(), state.humanPopulation(),
+                state.inventory(), state.actorExecutions(), state.shipments(), state.unitGroups(), state.extractionSites(),
+                state.strategicPlans(), state.forest(), state.productionJobs());
+        var jobs = new HashMap<>(state.productionJobs()); jobs.remove(job.id());
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementStateSupport.validate(state.bootstrap(), state.actorMovements(),
+                state.actorLocations(), state.humanPopulation(), state.inventory(), state.actorExecutions(), state.shipments(), state.unitGroups(),
+                state.extractionSites(), state.strategicPlans(), state.forest(), jobs),
+                "unchanged movement and execution cannot retain an absent producer job");
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> {
+            ActorMovementStateSupport.validate(state.bootstrap(), state.actorMovements(), state.actorLocations(), state.humanPopulation(),
+                    state.inventory(), state.actorExecutions(), state.shipments(), state.unitGroups(), state.extractionSites(),
+                    state.strategicPlans(), state.forest(), state.productionJobs()); return null;
+        }));
+    }
     @Test void wholeLegRetainsOneClockAndRestartsWithoutAwardingItemsOrPerCellWork() throws Exception {
         var fixture = started(); var job = fixture.job(); var start = order(fixture);
         var state = ActorMovementProcess.reduceStarted(fixture.state(), job.workerId(), start);

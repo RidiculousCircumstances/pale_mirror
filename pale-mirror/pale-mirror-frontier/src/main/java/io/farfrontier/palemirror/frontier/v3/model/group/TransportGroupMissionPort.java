@@ -11,6 +11,8 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission
 
 /** Transport policy is outside the generic roster, formation and movement algorithms. */
 public final class TransportGroupMissionPort implements UnitGroupMissionPort {
+    private static final ImmutableInvariantRegistry<io.farfrontier.palemirror.frontier.v3.api.SubjectId> VALIDATION =
+            new ImmutableInvariantRegistry<>(UnitGroupState.MAX_GROUPS);
     @Override public UnitGroup.MissionKind kind() { return UnitGroup.MissionKind.TRANSPORT; }
     @Override public GroupTravelPolicy travelPolicy(FrontierWorldState state, UnitGroup group) {
         mission(state, group);
@@ -29,8 +31,23 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public void validate(FrontierWorldState state, UnitGroup group) {
         var mission = mission(state, group);
-        validateDeclaration(state, mission, group, state.shipments().shipments());
-        validateExecutions(state.actorExecutions(), state.shipments(), group);
+        var inputs = new java.util.ArrayList<Object>();
+        inputs.add(state.bootstrap()); inputs.add(group); inputs.add(mission);
+        inputs.add(state.inventory().economics().accounts().get(mission.organization().sponsor().id()));
+        inputs.add(state.companies().companies().get(mission.organization().sponsor().id()));
+        java.util.Collections.addAll(inputs, ShipmentEndpointComposition.validationInputs(state, mission.organization().home()));
+        for (var member : group.members()) {
+            var actor = state.actorLocations().get(member.actorId());
+            inputs.add(actor == null ? null : actor.kind());
+            inputs.add(state.humanPopulation().resident(member.actorId()));
+            inputs.add(state.actorExecutions().actors().get(member.actorId()));
+        }
+        for (var id : mission.shipmentIds()) inputs.add(state.shipments().shipments().get(id));
+        inputs.add(mission.transportAssetId().map(id -> state.transportFleet().assets().get(id)).orElse(null));
+        VALIDATION.validate(state.bootstrap(), state.unitGroups().groups(), group.id(), group, () -> {
+            validateDeclaration(state, mission, group, state.shipments().shipments());
+            validateExecutions(state.actorExecutions(), state.shipments(), group);
+        }, inputs.toArray());
     }
     public static void validateDeclaration(FrontierWorldState state, TransportMission mission, UnitGroup group,
             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Shipment> shipments) {
@@ -76,7 +93,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
             var asset = state.transportFleet().require(actor);
             if (!asset.homeSettlementId().equals(mission.organization().home().settlementId())
                     || group.members().stream().noneMatch(m -> m.actorId().equals(actor))
-                    || shipments.values().stream().filter(s -> mission.shipmentIds().contains(s.id()))
+                    || mission.shipmentIds().stream().map(shipments::get)
                         .anyMatch(s -> !s.execution().actorId().equals(actor) || !s.mobileContainerId().equals(Optional.of(asset.containerId()))))
                 throw new IllegalArgumentException("transport mission does not attach its declared goods to its finite asset");
         });

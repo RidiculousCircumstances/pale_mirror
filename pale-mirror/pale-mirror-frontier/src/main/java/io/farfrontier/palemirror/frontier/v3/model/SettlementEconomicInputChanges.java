@@ -34,8 +34,10 @@ public final class SettlementEconomicInputChanges {
         };
         for (var port : PORTS) port.collect(before, after, sink);
         if (changes.isEmpty()) return after;
-        for (var entry : changes.entrySet()) registry = registry.withEconomicState(entry.getKey(),
+        var replacements = new HashMap<SubjectId, SettlementEconomicPlanningState>();
+        for (var entry : changes.entrySet()) replacements.put(entry.getKey(),
                 registry.economicState(entry.getKey()).invalidate(entry.getValue().affected));
+        registry = registry.withEconomicStates(replacements);
         return after.withCompanies(after.companies().withGoodsTrade(after.companies().goodsTrade().withParticipants(registry)));
     }
     private SettlementEconomicInputChanges() { }

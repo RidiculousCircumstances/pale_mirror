@@ -13,6 +13,20 @@ class SettlementEconomicPublicationTest {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:published-economy"),
                 126L, FrontierRulesets.dynamicFarmingGraybox()));
     }
+    @Test void batchedOwnerChangesPreserveEveryIndependentGenerationAndRejectUnknownOwners() {
+        var registry = initial().companies().goodsTrade().participants();
+        var peer = new SubjectId("settlement:2");
+        var first = registry.economicState(HOME).invalidate(Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread")));
+        var second = registry.economicState(peer).invalidate(Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of()));
+        var sequential = registry.withEconomicState(HOME, first).withEconomicState(peer, second);
+        var batched = registry.withEconomicStates(Map.of(HOME, first, peer, second));
+        assertEquals(sequential, batched);
+        assertSame(first, batched.economicState(HOME)); assertSame(second, batched.economicState(peer));
+        assertTrue(registry.planning().isEmpty(), "publication cannot mutate the original registry");
+        assertThrows(IllegalArgumentException.class, () -> registry.withEconomicStates(Map.of(HOME, first,
+                new SubjectId("settlement:unknown"), second)));
+        assertSame(registry, registry.withEconomicStates(Map.of()));
+    }
     @Test void readsAwaitPublicationAndOrdinaryBodyUpdatesKeepTheAcceptedDecision() {
         var state = initial(); var party = state.companies().goodsTrade().participants().participants().get(HOME);
         assertTrue(GoodsParticipantAssessment.read(state, party, 0).view().supplyPlan().isEmpty());

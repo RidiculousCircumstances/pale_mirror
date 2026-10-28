@@ -286,7 +286,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             EngineeringExecutionAuthority.validateReferences(routeConstructions, routeMaintenances, actorExecutions);
             SettlementServiceExecutionAuthority.validateReferences(serviceWorks, actorExecutions);
             MedicalExecutionAuthority.validateReferences(humanPopulation, actorExecutions);
-            ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions, shipments, unitGroups, extractionSites, strategicPlans, forest, productionJobs);
+            ActorMovementStateSupport.validate(bootstrap, actorMovements, actorLocations, humanPopulation, inventory, actorExecutions, shipments, unitGroups, extractionSites, strategicPlans, forest, productionJobs);
             DefenderEquipmentReturnVisitReferences.validate(strategicPlans, inventory, actorLocations, physicalIntents, actorExecutions);
             ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
             TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
