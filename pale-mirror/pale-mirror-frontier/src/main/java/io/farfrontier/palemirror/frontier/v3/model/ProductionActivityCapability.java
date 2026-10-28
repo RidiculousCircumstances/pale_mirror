@@ -5,6 +5,7 @@ import java.util.Optional;
 
 /** Production owner, not hunger or the lifecycle, decides its physical effect checkpoint. */
 final class ProductionActivityCapability implements ActorActivityCapability {
+    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
     @Override public ActorActivityKind kind() { return ActorActivityKind.PRODUCTION; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
     @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
@@ -48,6 +49,10 @@ final class ProductionActivityCapability implements ActorActivityCapability {
         return job;
     }
     static void validateReferences(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ProductionJob> jobs,
+                                    ActorExecutionState executions) {
+        REFERENCES.validate(() -> validateCurrent(jobs, executions), jobs, executions);
+    }
+    private static void validateCurrent(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ProductionJob> jobs,
                                     ActorExecutionState executions) {
         executions.current(ActorActivityKind.PRODUCTION).values().forEach(id -> job(jobs, id));
         executions.suspended().stream().filter(id -> id.activityKind() == ActorActivityKind.PRODUCTION)

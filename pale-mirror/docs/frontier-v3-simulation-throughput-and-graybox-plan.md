@@ -1910,3 +1910,34 @@ open. Separating unit-cost metadata from timed production forecasts is a possibl
 boundary improvement; do not begin that wider refactor solely because this cheaper
 source-proven churn had not yet been removed. No incremental ledger rewrite is warranted
 by this latest attribution.
+
+
+### 2026-10-28 — unchanged composed invariant evidence
+
+The dc1 retained-world ordinary100 observation still FAILS: 25680→26139 canonical
+ticks over272.5s, debt567→5559. Navigation waiting counts include owner-held work;
+they do not establish a search backlog. Both dc1 deployments were VERIFIED.
+
+A fresh owned20s JFR (`build/simulation-throughput/active-field-validation-warm.jfr`,
+with attribution/stacks alongside) shows444 server PM samples inside canonical
+transaction validation:224 in composed state validation and220 in reference closure
+(inclusive sample counts, not additive percentages). Repeated current-meal execution
+checks, shipment endpoints, and full-state owner checks are reachable consumers.
+The same trace still shows expensive private trade reservation and production-cost
+projection on advisory workers. Removing one cost is not scale acceptance.
+
+The composed full-state boundary now retains one successful exact immutable argument
+image for each existing delegated owner check using the existing
+`ImmutableInvariantCheck`. Every supplied argument remains in that check's identity
+read set; a changed argument reruns the original owner implementation. The existing
+full ingress/recovery mode bypasses every such image. No unchecked constructor,
+state authority, weaker invariant, schema change, larger budget or new cache history
+is introduced. Meal, field, production and courier execution-reference owners likewise
+retain only their last successful input image. A failed check cannot certify inputs.
+
+Existing incremental-validation coverage now independently withdraws an exact field
+job and forges its current execution owner after warming valid evidence; both fail
+before publication, and the original world passes forced full ingress validation.
+Focused79 checks across9 classes plus guardrails PASS46s; extended negative4 checks
+PASS30s. Clean-ref release, native performance and terminal scale acceptance remain
+to be recorded. G remains OPEN.

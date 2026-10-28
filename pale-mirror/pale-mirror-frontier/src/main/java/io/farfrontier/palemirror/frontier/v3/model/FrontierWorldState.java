@@ -218,6 +218,33 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         this(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, Map.of(), physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions,
                 Map.of(), routeTopology, strategicPlans, humanPopulation, companies, resourceSites, PhysicalReplicaCustodyState.empty(), DeferredAftermathState.empty(), FencedRecoveryState.empty(), DiagnosticIncidentIndex.empty());
     }
+    /** One successful image per owned check; recovery forces every check through ImmutableInvariantCheck.full. */
+    private static final class OwnedChecks {
+        private static final ImmutableInvariantCheck<Void> STATION_RELATIONS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> RESOURCE_SITES = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> HARVEST_RESERVATIONS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> HARVEST_ACCOUNTS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> STRATEGIC_PLANS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> HIVE_SETTLEMENT_KNOWLEDGE = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> HIVE_TERRITORY_KNOWLEDGE = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> ROUTE_CONSTRUCTION = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> ROUTE_MAINTENANCE = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> ASSEMBLY_LEASES = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> MEDICAL_EVACUATION = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> HIVE_STATE = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> HIVE_NUTRIENT = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> HIVE_MOBILIZATION = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> ECONOMIC_CLAIMS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> ACTOR_ITEM_CUSTODY = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> COCOON_CUSTODY = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> SETTLEMENT_POLICIES = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> PHYSICAL_DELTAS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> PRODUCTION_FACILITIES = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> SERVICE_WORK = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> SETTLEMENT_ASSAULT = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> PHYSICAL_OBSERVATIONS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> RESOURCE_PHYSICAL_STATE = new ImmutableInvariantCheck<>();
+    }
     public FrontierWorldState { Objects.requireNonNull(bootstrap, "bootstrap");
         actorLocations = FrontierWorldStateSupport.immutableMap(actorLocations, "actor locations"); structureConditions = FrontierWorldStateSupport.immutableMap(structureConditions, "structure conditions");
         infection = FrontierWorldStateSupport.immutableMap(infection, "infection"); Objects.requireNonNull(inventory, "inventory");
@@ -297,28 +324,44 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                                           ProductionStations productionStations) {
             productionJobs.values().stream().filter(job -> job.stationWork().isPresent())
                     .forEach(job -> StationWorkOperation.validate(productionStations, job));
-            ProductionOperationCompletionComposition.validateRelations(productionStations,
-                    Map.of(ProductionOrderKind.STATION_WORK, StationWorkOperation.activeOrders(productionJobs)));
-            resourceSites.validate(bootstrap); HarvestContainerReservations.validate(inventory, resourceSites);
-            HarvestContainerReservations.validateAccounts(inventory, resourceSites);
-            strategicPlans.validate(bootstrap, routeTopology, humanPopulation, resourceSites);
-            strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
-            strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
+            OwnedChecks.STATION_RELATIONS.validate(() -> ProductionOperationCompletionComposition.validateRelations(productionStations,
+                    Map.of(ProductionOrderKind.STATION_WORK, StationWorkOperation.activeOrders(productionJobs))), productionStations, productionJobs);
+            OwnedChecks.RESOURCE_SITES.validate(() -> resourceSites.validate(bootstrap), resourceSites,
+                    bootstrap);
+            OwnedChecks.HARVEST_RESERVATIONS.validate(() -> HarvestContainerReservations.validate(inventory, resourceSites), inventory, resourceSites);
+            OwnedChecks.HARVEST_ACCOUNTS.validate(() -> HarvestContainerReservations.validateAccounts(inventory, resourceSites), inventory, resourceSites);
+            OwnedChecks.STRATEGIC_PLANS.validate(() -> strategicPlans.validate(bootstrap, routeTopology, humanPopulation, resourceSites), strategicPlans, bootstrap,
+                    routeTopology, humanPopulation, resourceSites);
+            OwnedChecks.HIVE_SETTLEMENT_KNOWLEDGE.validate(() -> strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations),
+                    strategicPlans.hiveSettlementKnowledge(), bootstrap, hiveColony, actorLocations);
+            OwnedChecks.HIVE_TERRITORY_KNOWLEDGE.validate(() -> strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions),
+                    strategicPlans.hiveTerritoryKnowledge(), bootstrap, hiveColony, actorLocations, structureConditions);
         routeTopology.replacementRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSettlementWaypoints(bootstrap, settlement, route));
-        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation, productionJobs, resourceSites, strategicPlans, ambientLeases);
-        RouteMaintenanceStateSupport.validate(bootstrap, hiveColony, routeTopology, routeConstructions, routeMaintenances, physicalDeltas, actorLocations, humanPopulation, productionJobs, resourceSites, strategicPlans);
-        RouteMaintenanceStateSupport.validateAmbientAssemblyLeases(routeMaintenances, ambientLeases);
-        MedicalEvacuationStateSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, inventory, physicalIntents); Objects.requireNonNull(hiveColony, "hive colony");
-        hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
-        HiveMobilizationStateSupport.validateTaskCustody(bootstrap, hiveColony, strategicPlans);
+        OwnedChecks.ROUTE_CONSTRUCTION.validate(() -> RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation,
+                    productionJobs, resourceSites, strategicPlans, ambientLeases), bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation,
+                    productionJobs, resourceSites, strategicPlans, ambientLeases);
+        OwnedChecks.ROUTE_MAINTENANCE.validate(() -> RouteMaintenanceStateSupport.validate(bootstrap, hiveColony, routeTopology, routeConstructions, routeMaintenances,
+                    physicalDeltas, actorLocations, humanPopulation, productionJobs, resourceSites, strategicPlans), bootstrap, hiveColony, routeTopology, routeConstructions,
+                    routeMaintenances, physicalDeltas, actorLocations, humanPopulation, productionJobs, resourceSites, strategicPlans);
+        OwnedChecks.ASSEMBLY_LEASES.validate(() -> RouteMaintenanceStateSupport.validateAmbientAssemblyLeases(routeMaintenances, ambientLeases), routeMaintenances, ambientLeases);
+        OwnedChecks.MEDICAL_EVACUATION.validate(() -> MedicalEvacuationStateSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, inventory,
+                    physicalIntents), bootstrap, humanPopulation, actorLocations, structureConditions, inventory, physicalIntents);
+        Objects.requireNonNull(hiveColony, "hive colony");
+        OwnedChecks.HIVE_STATE.validate(() -> hiveColony.validateAgainst(bootstrap), hiveColony,
+                    bootstrap);
+        OwnedChecks.HIVE_NUTRIENT.validate(() -> HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans),
+                    bootstrap, inventory, hiveColony, strategicPlans);
+        OwnedChecks.HIVE_MOBILIZATION.validate(() -> HiveMobilizationStateSupport.validateTaskCustody(bootstrap, hiveColony, strategicPlans), bootstrap, hiveColony, strategicPlans);
         for (HiveGrowthJob job : hiveColony.growthJobs().values()) {
             requireJobTask(strategicPlans, job.taskId(), job.hiveId(), StrategicTaskKind.GROW_HIVE_ORGANISM, "hive growth");
         }
-        FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
+        OwnedChecks.ECONOMIC_CLAIMS.validate(() -> FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory), bootstrap, inventory);
         Set<SubjectId> expectedActors = ActorIdentityDeclarations.validate(bootstrap, hiveColony, humanPopulation, actorLocations, transportFleet);
-        FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), actorLocations, inventory, fencedRecovery);
-        HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas, actorExecutions);
-        FrontierWorldStateSupport.validateSettlementPolicies(bootstrap, humanPopulation);
+        OwnedChecks.ACTOR_ITEM_CUSTODY.validate(() -> FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), actorLocations, inventory, fencedRecovery),
+                    bootstrap.worldId(), actorLocations, inventory, fencedRecovery);
+        OwnedChecks.COCOON_CUSTODY.validate(() -> HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas,
+                    actorExecutions), bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas, actorExecutions);
+        OwnedChecks.SETTLEMENT_POLICIES.validate(() -> FrontierWorldStateSupport.validateSettlementPolicies(bootstrap, humanPopulation), bootstrap, humanPopulation);
         BOOTSTRAP_RESIDENTS.validate(() -> {
           for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
             ResidentProfile profile = humanPopulation.resident(bootstrapResident.id());
@@ -415,7 +458,8 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             }
             damageCellCount = Math.addExact(damageCellCount, damage.cells().size());
         }
-        FrontierWorldPhysicalDeltaSupport.validate(bootstrap, hiveColony, routeTopology, routeConstructions, physicalDeltas);
+        OwnedChecks.PHYSICAL_DELTAS.validate(() -> FrontierWorldPhysicalDeltaSupport.validate(bootstrap, hiveColony, routeTopology, routeConstructions, physicalDeltas),
+                    bootstrap, hiveColony, routeTopology, routeConstructions, physicalDeltas);
         if (damageCellCount > MAX_STRUCTURE_DAMAGE_CELLS) {
             throw new IllegalArgumentException("structure damage retention limit exceeded");
         }
@@ -425,7 +469,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             if (entry.getValue().equals(ZERO_INFECTION)) throw new IllegalArgumentException("sparse infection index must not retain zero cells");
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), entry.getKey().originAtY(0));
         }
-        ProductionFacilityReservations.validate(productionJobs);
+        OwnedChecks.PRODUCTION_FACILITIES.validate(() -> ProductionFacilityReservations.validate(productionJobs), productionJobs);
         for (Map.Entry<SubjectId, ProductionJob> entry : productionJobs.entrySet()) {
             ProductionJob job = entry.getValue();
             job.rights().validate(inventory, companies, job);
@@ -474,8 +518,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                         held.claimId(), true, held.authorityEpoch());
             }
         }
-        SettlementServiceWorkStateSupport.validate(bootstrap, humanPopulation, actorLocations, infection, inventory, serviceWorks, physicalIntents);
-        FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
+        OwnedChecks.SERVICE_WORK.validate(() -> SettlementServiceWorkStateSupport.validate(bootstrap, humanPopulation, actorLocations, infection, inventory, serviceWorks,
+                    physicalIntents), bootstrap, humanPopulation, actorLocations, infection, inventory, serviceWorks, physicalIntents);
+        OwnedChecks.SETTLEMENT_ASSAULT.validate(() -> FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans),
+                    bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
         var fieldReferences = ResourceSitePhysicalIntentStateSupport.referenceView(resourceSites);
         PHYSICAL_REFERENCES.validate(() -> {
         if (physicalIntents.size() > MAX_PHYSICAL_INTENTS) throw new IllegalArgumentException("physical intent retention limit exceeded");
@@ -537,8 +583,11 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                 productionJobs, serviceWorks, strategicPlans.settlementAssaults(), routeConstructions, routeMaintenances,
                 fieldReferences.subjects(), fieldReferences.conflicts());
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
-        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks, resourceSites);
-        ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations);
+        OwnedChecks.PHYSICAL_OBSERVATIONS.validate(() -> FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents,
+                    physicalObservations, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks, resourceSites), bootstrap, inventory, infection,
+                    physicalIntents, physicalObservations, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks, resourceSites);
+        OwnedChecks.RESOURCE_PHYSICAL_STATE.validate(() -> ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations),
+                    resourceSites, physicalIntents, physicalObservations);
         PHYSICAL_CONFIRMATIONS.validate(() -> {
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED

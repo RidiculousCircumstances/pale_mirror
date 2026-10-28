@@ -5,6 +5,7 @@ import java.util.Optional;
 
 /** Field owner supplies its exact checkpoint and preserves work/cargo through interruption. */
 final class HarvestActivityCapability implements ActorActivityCapability {
+    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
     @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder> navigationOrder(
             FrontierWorldState state, ActorExecutionId execution) {
         var job = job(state, execution);
@@ -50,6 +51,9 @@ final class HarvestActivityCapability implements ActorActivityCapability {
         return job;
     }
     static void validateReferences(ResourceSiteState sites, ActorExecutionState executions) {
+        REFERENCES.validate(() -> validateCurrent(sites, executions), sites, executions);
+    }
+    private static void validateCurrent(ResourceSiteState sites, ActorExecutionState executions) {
         executions.current(ActorActivityKind.FIELD_HARVEST).values().forEach(id -> job(sites, id));
         executions.suspended().stream().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST)
                 .forEach(id -> job(sites, id));

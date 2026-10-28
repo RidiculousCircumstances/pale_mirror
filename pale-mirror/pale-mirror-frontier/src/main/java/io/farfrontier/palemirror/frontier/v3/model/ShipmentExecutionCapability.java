@@ -5,6 +5,7 @@ import java.util.Optional;
 
 /** Courier owns a transport obligation, never the commercial contract or an independent body. */
 final class ShipmentExecutionCapability implements ActorActivityCapability {
+    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
     @Override public ActorActivityKind kind() { return ActorActivityKind.COURIER; }
     @Override public boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) {
         validateReference(state, execution);
@@ -44,6 +45,9 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
             throw new IllegalArgumentException("shipment presentation retains an unsettled hand/effect");
     }
     static void validateReferences(ShipmentState shipments, ActorExecutionState executions) {
+        REFERENCES.validate(() -> validateCurrent(shipments, executions), shipments, executions);
+    }
+    private static void validateCurrent(ShipmentState shipments, ActorExecutionState executions) {
         for (Shipment shipment : shipments.shipments().values()) if (!shipment.terminal()) {
             if (TransportCargoExecution.shared(shipment)) TransportCargoExecution.require(shipments, shipment);
             executions.requireRetained(shipment.execution());

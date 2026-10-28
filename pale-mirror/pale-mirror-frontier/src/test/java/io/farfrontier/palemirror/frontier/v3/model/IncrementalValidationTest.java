@@ -44,6 +44,21 @@ class IncrementalValidationTest {
                 FrontierWorldStateUpdate.begin().actorLocations(actors)));
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, preview));
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(preview));
+        // Warm successful evidence must invalidate when either endpoint changes independently.
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, before));
+        var job = before.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
+                .findFirst().orElseThrow();
+        var withdrawn = FrontierWorldState.duringUnpublishedTransition(() -> before.withChanges(
+                FrontierWorldStateUpdate.begin().resourceSites(before.resourceSites().replace(before.resourceSites().site(job.siteId()).destroyed()))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, withdrawn));
+        var current = before.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
+                .get(job.workerId());
+        var vacant = before.actorExecutions().finish(current);
+        var foreign = vacant.next(job.workerId(), current.activityKind(), new SubjectId("job:site-harvest-absent"));
+        var replaced = FrontierWorldState.duringUnpublishedTransition(() -> before.withChanges(
+                FrontierWorldStateUpdate.begin().actorExecutions(vacant.begin(foreign, current.generation()))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, replaced));
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(before));
     }
 
     @Test void retiredResourceRejectsUnchangedIncomingScheduleButAtomicCancellationIsValid() {
