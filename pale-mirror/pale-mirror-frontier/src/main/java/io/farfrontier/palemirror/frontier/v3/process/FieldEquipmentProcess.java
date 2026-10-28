@@ -40,6 +40,11 @@ public final class FieldEquipmentProcess {
         if (current == null || !current.activityOwnerId().equals(job.id()) || !current.actorId().equals(job.workerId())
                 || current.activityKind() != ActorActivityKind.FIELD_HARVEST)
             throw new IllegalArgumentException("equipment lacks exact farmer execution");
+        if (event.action() == FieldEquipmentChanged.Action.SERVICE_REQUIRED) {
+            if (!FieldEquipment.needsService(state, job))
+                throw new IllegalArgumentException("equipment service requires an unserviceable current operation at a safe work boundary");
+            return state.withResourceSites(state.resourceSites().replace(site.endHarvestOffer(job)));
+        }
         if (event.action() == FieldEquipmentChanged.Action.SELECT_RETURN) {
             var target = event.returnTarget().orElseThrow();
             if (!FieldEquipment.needsReturnStorage(state, job) || !WorkEquipmentStorage.available(state, FieldEquipment.held(state, job), target))

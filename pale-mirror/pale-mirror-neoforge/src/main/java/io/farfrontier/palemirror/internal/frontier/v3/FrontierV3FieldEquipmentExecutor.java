@@ -62,6 +62,12 @@ final class FrontierV3FieldEquipmentExecutor {
             FrontierWorldState state, ResourceSiteHarvestJob job, Villager worker) {
         var execution = state.actorExecutions().current(ActorActivityKind.FIELD_HARVEST).get(job.workerId());
         if (execution == null || !execution.activityOwnerId().equals(job.id())) return false;
+        if (FieldEquipment.needsService(state, job)) {
+            FrontierV3CommandSubmission.submit(runtime, "field-equipment-service-required", job.id().value(),
+                    new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                            FieldEquipmentChanged.Action.SERVICE_REQUIRED, Optional.empty()));
+            return true;
+        }
         if (FieldEquipment.needsReturnStorage(state, job)) {
             try { FieldEquipment.selectReturn(state, job).ifPresent(event ->
                     FrontierV3CommandSubmission.submit(runtime, "field-equipment-return-storage", job.id().value(), event)); }

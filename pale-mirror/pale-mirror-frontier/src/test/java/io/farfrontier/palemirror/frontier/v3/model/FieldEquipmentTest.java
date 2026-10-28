@@ -90,6 +90,41 @@ class FieldEquipmentTest {
         assertEquals(after, codec.decode(codec.encode(after)));
     }
 
+    @Test void changedTargetRequirementReturnsWornToolWithoutWorkingOrLosingResourcesAcrossRecovery() {
+        var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
+        var job = fixture.job(); var state = fixture.state();
+        var event = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                FieldEquipmentChanged.Action.SERVICE_REQUIRED, Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> FieldEquipmentProcess.reduce(fixture.state(), job.siteId(), event, 22_301),
+                "a healthy tool cannot falsely end a work offer");
+        var tool = state.inventory().items().get(job.equipment().itemId());
+        state = state.withInventory(state.inventory().changeCondition(tool,
+                new ItemCondition(tool.condition().maximumDamage(), tool.condition().maximumDamage() - 1)));
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        assertTrue(FieldEquipment.needsService(state, job));
+        var cells = state.resourceSites().cycle(job.siteId()); var stock = state.inventory();
+        var due = ResourceSiteHarvestProcess.coldProgress(job, 22_301);
+        var plan = ResourceSiteHarvestProcess.planColdProgress(state, due, 22_301);
+        assertTrue(plan.stream().anyMatch(e -> e.payload().equals(event)), "recovery's ordinary preview must request service, not start unsupported labour");
+        var after = FieldEquipmentProcess.reduce(state, job.siteId(), event, 22_301);
+        assertEquals(cells, after.resourceSites().cycle(job.siteId())); assertEquals(stock, after.inventory());
+        var ended = after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        assertTrue(ended.progress().complete()); assertEquals(job.harvestedYieldQuantity(), ended.harvestedYieldQuantity());
+        assertEquals(job.undeliveredYieldQuantity(), ended.undeliveredYieldQuantity());
+        var payloads = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(event, payloads.decode(event.type(), payloads.encode(event)));
+        after = codec.decode(codec.encode(after));
+        for (int step = 0; step < 256 && after.resourceSites().site(job.siteId()).harvestJob(job.id()).isPresent(); step++) {
+            var result = ResourceSiteHarvestProcessTest.stepCold(after, job.siteId(), due);
+            after = result.state(); due = result.next();
+        }
+        assertTrue(after.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
+        assertEquals(cells, after.resourceSites().cycle(job.siteId()), "service cannot consume an unworked cell");
+        var returned = after.inventory().items().get(tool.id());
+        assertInstanceOf(InventoryCustody.ContainerSlot.class, returned.custody());
+        assertEquals(1, returned.condition().remaining());
+    }
+
     @Test void finalUsefulOperationWearsOnceReturnsToolAndLeavesOtherCellsAvailable() {
         var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
         var job = fixture.job(); var state = fixture.state();

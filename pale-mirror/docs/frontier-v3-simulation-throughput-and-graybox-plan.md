@@ -2326,3 +2326,44 @@ A still-computing result may finish after its owner becomes held; it has no effe
 until completion rechecks that owner and releases/rejects the result. The previous
 fixture's repeated polling-charge/immediate-cancel mechanics are intentionally
 replaced by non-progress/no-budget and held-owner-before-publication obligations.
+
+
+### Advisory readiness result and a retained-world recovery defect (2026-10-28)
+
+0bda8df97:75frontier/45native affected checks+guardrails/package PASS36s;
+clean detached release PASS29s; retained scale deployment verified with
+SHA5126a7faf154fff038f35cbdf7461ebf9e6ed6152f67ff84060d8a1cb75f6ace0cab3719ae758f9c8f6ed881d927454c3b262ff71ebfc8f79cc685c95dbbf67892d.
+The main deploy verifier initially returned OK but the subsequent runtime check
+caught a recovery quarantine and normal save/exit. That is NOT a successful
+ongoing main deployment. No world reset or diagnostic suppression.
+
+`advice-readiness-ordinary100.jfr`/report/cpu:118087custom events, noDataLoss,
+44.840548s exactly accounted. Clock53096→53205=2.430836canonicalticks/s,
+debt1085→1875: G STILL FAILED. ADVICE QUEUE_BUSY=0 (330 actual admissions),
+charged action passes4046 vs42439 in preceding window. BUDGET wall gate0.055328s
+(0.12%) vs13.460964s(30.06%). This confirms removal of the retry storm, not full
+scale acceptance or a controlled global speed ratio between evolving workloads.
+Remaining gates: OWNER53.97% (validation11.185438s nested), EXACT_RUNNING36.17%
+(actor movement6.282856s, objective.review4.987001s, stock_reconsider2.685710s),
+WAL3.61%, runnable unattributed5.13%, exact-ready0.88%.
+
+Main failure exact chain: ScheduledPlanningRecovery restores due planning waits
+by previewing ordinary eligible planners. Harvest preview reaches ToolWorkRate
+with equipment that no longer meets maintenance reserve. Saved image1443223/
+tick698304 (`main-field-tool-startup-preimage.txt`) names field6/job190/worker6-13,
+stone_hoe damage130/131, targetHARVESTED/serviceablefalse. This is a still-existing
+tool, NOT destruction or corrupt inventory. After previous work, the selected
+operation can change through sowing, skip/retarget, regrowth or batch selection;
+checking serviceability only immediately after the previous crop receipt is
+insufficient. The ordinary labour-start path had no normal service disposition,
+so recovery legitimately hit the same missing branch. Planner/field/tool code
+is unchanged between1d2b8b78f and0bda8df97; no inference that parking introduced it.
+
+Remedy: FieldEquipment checks the CURRENT operation before work. Existing field
+equipment event gains explicit unused wire tag8 SERVICE_REQUIRED; owner validates
+current equipped item, service requirement, execution and absence of pending
+physical work, then ends this work offer while preserving cells, quantities and
+item. Existing cargo/tool return and job retirement finish normally. COLD preview
+and ordinary continuation share that transition; the HOT equipment adapter uses
+the same owner before labour. ToolWorkRate remains strict. This is not an exception
+catch, repaired inventory, skipped recovery rule or fabricated harvest.

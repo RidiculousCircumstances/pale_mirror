@@ -372,6 +372,12 @@ final class ResourceSiteHarvestPlanning {
         // one across unload/restart intervals, so elapsed zero-player time had no truthful
         // continuation.  Each step below advances one retained pedestrian edge or one exact
         // crop receipt; it still never touches an unloaded block or manufactures final output.
+        if (FieldEquipment.needsService(state, job)) {
+            var event = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                    FieldEquipmentChanged.Action.SERVICE_REQUIRED, java.util.Optional.empty());
+            FieldEquipmentProcess.reduce(state, job.siteId(), event, now);
+            return List.of(new ProposedEvent(job.siteId(), event), reschedule(action, coldProgress(job, nextDue)));
+        }
         if (FieldEquipment.needsReturnStorage(state, job)) {
             try {
                 var selected = FieldEquipment.selectReturn(state, job);

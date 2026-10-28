@@ -57,6 +57,13 @@ public final class FieldEquipment {
             throw new IllegalArgumentException("field work lacks its exact equipped tool");
         return item;
     }
+    /** Check the CURRENT selected operation; growth, skips and retargeting may change its requirement after the previous receipt. */
+    public static boolean needsService(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        if (job.progress().complete() || job.returningForBatch() || job.hasPendingPhysicalWork()
+                || job.equipment().stage() != WorkToolAssignment.Stage.EQUIPPED) return false;
+        return requirement(state.resourceSites().cycle(job.siteId()), job.target().cellId())
+                .filter(required -> !state.bootstrap().ruleset().tools().serviceable(held(state, job), required)).isPresent();
+    }
     public static Optional<ToolUse> use(FrontierWorldState state, ResourceSiteHarvestJob job, ResourceFieldCycle.WorkOutcome outcome) {
         var cycle = state.resourceSites().cycle(job.siteId()); var cell = job.target().cellId();
         if (cycle.expectedWorkOutcome(cell) != outcome) throw new IllegalArgumentException("tool use has a foreign field operation");
