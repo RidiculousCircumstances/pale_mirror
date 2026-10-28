@@ -372,6 +372,11 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_PLAN, action.kind(), action.subject().value())) {
                     ScheduledPreparation acceptedAdvice = null;
                     if (pendingCalculation == null) {
+                        // A readiness ticket is consumed when its owner gets a
+                        // planning turn, even if shared host capacity has since
+                        // disappeared. A parked action cannot keep that ticket
+                        // and prevent every later capacity wake, including its own.
+                        if (action.equals(adviceReservation)) adviceReservation = null;
                         var retainedAdvice = pendingAdvice.get(action.id());
                         if (retainedAdvice != null && !retainedAdvice.action().equals(action)) {
                             retainedAdvice.calculation().cancel(); pendingAdvice.remove(action.id()); retainedAdvice = null;
@@ -380,10 +385,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                                 : Optional.<ScheduledAdvisory<S>>empty();
                         if (retainedAdvice != null || declared.isPresent()) {
                             boolean admittedAdvice = false;
-                            boolean reserved = action.equals(adviceReservation);
                             if (retainedAdvice == null && pendingAdvice.size() < MAX_PENDING_ADVICE
-                                    && scheduledPlanner.adviceAvailable() && (adviceReservation == null || reserved)) {
-                                if (reserved) adviceReservation = null;
+                                    && scheduledPlanner.adviceAvailable() && adviceReservation == null) {
                                 var started = scheduledPlanner.beginAdvice(declared.orElseThrow());
                                 if (started.isPresent()) {
                                     retainedAdvice = new PendingAdvice<>(action, started.orElseThrow());

@@ -8,6 +8,40 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScheduledAdvisoryKernelTest {
+    @Test void capacityLostAfterReservationReleasesItsTicketAndRetriesWithoutBlockingOtherOwners() {
+        var advice = scheduled("schedule:capacity-race", "settlement:advice", 1, 1);
+        var exact = scheduled("schedule:capacity-predecessor", "settlement:exact", 2, 1);
+        var available = new AtomicBoolean(); var exactReady = new AtomicBoolean(); var begun = new AtomicInteger();
+        var planner = new ScheduledActionPlanner<Counter>() {
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) { throw new AssertionError("exact preparation bypass"); }
+            public boolean adviceAvailable() { return available.get(); }
+            public Optional<ScheduledAdvisory<Counter>> advice(Counter state, ScheduledAction action, SimInstant at) {
+                return action.equals(advice) ? Optional.of(() -> (current, now) -> Optional.of(
+                        () -> () -> List.of(new ProposedEvent(action.subject(), new Delta(10))))) : Optional.empty();
+            }
+            public Optional<ScheduledAdviceCalculation<Counter>> beginAdvice(ScheduledAdvisory<Counter> work) {
+                begun.incrementAndGet(); return ScheduledActionPlanner.super.beginAdvice(work);
+            }
+            public ScheduledCalculation begin(Counter state, ScheduledAction action, SimInstant at) {
+                return () -> exactReady.get() ? Optional.of(List.of(new ProposedEvent(action.subject(), new Delta(1)))) : Optional.empty();
+            }
+        };
+        var engine = schedulingEngine(planner, List.of(advice, exact)); var at = new SimInstant(5);
+        var budget = new WorkBudget(16, 16);
+        engine.advanceTo(at, budget);
+        available.set(true); engine.advanceTo(at, budget);
+        assertEquals(Optional.of(advice), engine.advisoryStatus().reservation());
+        // A reserved ticket is not a guaranteed worker slot. Another user of the
+        // shared host may fill it before the exact predecessor commits.
+        available.set(false); exactReady.set(true); engine.advanceTo(at, budget);
+        assertEquals(new Counter(1), engine.canonicalState().state());
+        assertEquals(0, begun.get()); assertEquals(List.of(advice), engine.checkpoint().schedules());
+        assertEquals(1, engine.advisoryStatus().capacityWaiters());
+        assertTrue(engine.advisoryStatus().reservation().isEmpty(), "a parked owner cannot retain the runnable capacity ticket");
+        available.set(true); engine.advanceTo(at, budget);
+        assertEquals(1, begun.get()); assertEquals(new Counter(11), engine.canonicalState().state());
+        assertTrue(engine.scheduledActions().isEmpty()); assertTrue(engine.advisoryStatus().reservation().isEmpty());
+    }
     @Test void freeAdviceLaneIsReservedDuringAnExactPredecessorWithoutExecutingBeforeIt() {
         var advice = scheduled("schedule:starved-advice", "settlement:advice", 1, 1);
         var first = scheduled("schedule:exact-first", "settlement:first", 2, 1);

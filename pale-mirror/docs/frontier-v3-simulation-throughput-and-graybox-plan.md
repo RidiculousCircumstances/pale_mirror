@@ -4372,3 +4372,34 @@ in20s. The connected case confirms source occupancy before exit, exact exit
 deadline and body, wake of the released point, unchanged cargo/job/goal, duplicate
 rejection, current-schema recovery and eventual arrival at the original station.
 Frozen candidate packaging and retained-world validation follow.
+
+
+### Consume advisory readiness tickets even when host capacity disappears
+
+The bounded live diagnostic caught the remaining starvation directly: at181286
+and182144, adviceCompleted stays2875, inFlight/ready are0, hostAvailable istrue,
+169 capacity waiters remain and settlement62 retains a reservation with readiness
+CALCULATION. Its dueAt173504 is thousands of ticks overdue. The earlier worker
+entry-gap correction did not close this separate lost-capacity path.
+
+Source: the reservation was cleared only inside the branch that could begin
+advice. A previously reserved action selected after shared host capacity became
+busy was parked as a capacity wait while keeping the unique readiness ticket.
+refreshAdviceWaits could then signal neither that owner nor any other waiter.
+Consume the ticket when the selected action actually enters its planning turn,
+independently of whether the host can start it. Failed admission still parks the
+canonical action, and the next available capacity wake uses the existing fair
+queue. No polling, canonical mutation, extra queue or early exact execution.
+
+Controlled ScheduledAdvisoryKernelTest reproduces this exact sequence without
+wall time: capacity busy -> exact predecessor pending -> free slot reserves advice
+-> capacity busy before predecessor commits -> parked action. RED confirms the
+old reservation remains; GREEN must release it and finish the same action when
+capacity returns. Existing stale-result/cancellation/bounded/recovery checks remain.
+
+The controlled race is RED at the exact parked-ticket assertion on the previous
+implementation (17s). The corrected kernel/queue/advice focus and guardrails PASS
+24s (37 tests). The independent frozen9ca38deb8 departure/transport candidate passes its
+complete focused union of78 tests, guardrails and packaged JAR in140s. It was not deployed
+ahead of the now-confirmed queue repair. The final ref will retain that scope and
+rerun affected kernel/adapter integration before installation.
