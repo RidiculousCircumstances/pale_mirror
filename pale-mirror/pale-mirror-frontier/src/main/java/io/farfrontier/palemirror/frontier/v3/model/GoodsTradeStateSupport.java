@@ -29,7 +29,7 @@ public final class GoodsTradeStateSupport {
     public static FrontierWorldState reserve(FrontierWorldState state, SubjectId subject, GoodsTradeContract contract,
                                              List<GoodsTradeStockAllocation> allocations, long now) {
         if (!subject.equals(contract.seller().id()) || allocations.isEmpty() && contract.individualAllocations().isEmpty()
-                || allocations.size() + contract.individualAllocations().size() > 64) {
+                || allocations.size() + contract.individualAllocations().size() > GoodsTradeContract.MAX_ALLOCATIONS) {
             throw new IllegalArgumentException("goods reservation lacks its declared seller or stock allocations");
         }
         var specification = GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), contract.itemKind());

@@ -65,9 +65,11 @@ public final class ContainerStorageAdmission {
         var record = state.inventory().containers().get(container);
         if (quantity < 1 || record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)
                 || record.storage().filter(policy -> !policy.filter().accepts(kind)).isPresent()) return false;
-        return state.inventory().availableSlots(container, ContainerPhysicalReservations.slots(state, container, completing),
-                inbound(state, container, completing)).stream()
-                .filter(slot -> ReferenceContainerCustody.expectedFungibleSlot(state, container, slot).isEmpty()).count() >= quantity;
+        var available = state.inventory().availableSlots(container, ContainerPhysicalReservations.slots(state, container, completing),
+                inbound(state, container, completing));
+        if (available.isEmpty()) return false;
+        var fungible = ReferenceContainerCustody.expectedFungibleSlots(state, container);
+        return available.stream().filter(slot -> !fungible.containsKey(slot)).count() >= quantity;
     }
     static boolean receiveCargo(FrontierWorldState state, SubjectId cargo, SubjectId container) {
         var record = state.inventory().containers().get(container);
@@ -89,10 +91,12 @@ public final class ContainerStorageAdmission {
     static OptionalInt first(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing,
                              Predicate<InventoryCustody.ContainerSlot> held) {
         if (ReferenceContainerCustody.blocksCanonicalUse(state, container)) return OptionalInt.empty();
-        for (int slot : state.inventory().availableSlots(container, ContainerPhysicalReservations.slots(state, container, completing), inbound(state, container, completing))) {
+        var available = state.inventory().availableSlots(container, ContainerPhysicalReservations.slots(state, container, completing), inbound(state, container, completing));
+        if (available.isEmpty()) return OptionalInt.empty();
+        var fungible = ReferenceContainerCustody.expectedFungibleSlots(state, container);
+        for (int slot : available) {
             var address = new InventoryCustody.ContainerSlot(container, slot);
-            if (ReferenceContainerCustody.expectedFungibleSlot(state, container, slot).isEmpty() && !held.test(address))
-                return OptionalInt.of(slot);
+            if (!fungible.containsKey(slot) && !held.test(address)) return OptionalInt.of(slot);
         }
         return OptionalInt.empty();
     }

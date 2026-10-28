@@ -43,11 +43,13 @@ final class PedestrianRegionCache {
     /** Maintain counts when entries change; a cache hit must not scan every retained region. */
     private static final class Bucket<K> {
         private final Map<K, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
+        private final Map<PedestrianRegion.Tile, Integer> tiles = new HashMap<>();
         private int slots, builders;
         Entry acquire(K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
             var entry = entries.get(key);
             if (entry == null) {
                 entry = new Entry(geometry, tile); entries.put(key, entry);
+                tiles.merge(tile, 1, Integer::sum);
                 slots += entry.accountedSize; builders++;
             }
             return entry;
@@ -66,6 +68,8 @@ final class PedestrianRegionCache {
                 var entry = iterator.next().getValue();
                 if (entry.accountedBuilding != building) continue;
                 slots -= entry.accountedSize; if (entry.accountedBuilding) builders--;
+                int versions = tiles.get(entry.tile);
+                if (versions == 1) tiles.remove(entry.tile); else tiles.put(entry.tile, versions - 1);
                 iterator.remove(); return;
             }
             throw new IllegalStateException("region cache eviction lost its counted entry");
@@ -146,20 +150,23 @@ final class PedestrianRegionCache {
         }
     }
     synchronized PedestrianRegionCacheDiagnostic diagnostic() {
-        return new PedestrianRegionCacheDiagnostic(lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs);
-    }
-    /** Detailed named inspection only: bounded by the retained cache, not a tick-path scan. */
-    synchronized Map<String, Long> retentionDiagnostic() {
-        long entries = 0, distinct = 0, slots = 0, builders = 0;
+        long entries = 0, distinct = 0, builders = 0;
         for (var bucket : scoped.values()) {
-            entries += bucket.entries.size(); slots += bucket.slots; builders += bucket.builders;
-            distinct += bucket.entries.keySet().stream().map(RegionalKey::tile).distinct().count();
+            entries += bucket.entries.size(); distinct += bucket.tiles.size(); builders += bucket.builders;
         }
         for (var bucket : views.values()) {
-            entries += bucket.entries.size(); distinct += bucket.entries.size(); slots += bucket.slots; builders += bucket.builders;
+            entries += bucket.entries.size(); distinct += bucket.tiles.size(); builders += bucket.builders;
         }
-        return Map.of("scopes", (long) scoped.size() + views.size(), "entries", entries,
-                "distinctScopedTiles", distinct, "reservedSurfaceSlots", slots, "builders", builders);
+        return new PedestrianRegionCacheDiagnostic(lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs,
+                scoped.size() + views.size(), entries, distinct, builders);
+    }
+    /** Bounded scope counters; neither ordinary diagnostics nor inspection scan regional graphs. */
+    synchronized Map<String, Long> retentionDiagnostic() {
+        var counts = diagnostic(); long slots = 0;
+        for (var bucket : scoped.values()) slots += bucket.slots;
+        for (var bucket : views.values()) slots += bucket.slots;
+        return Map.of("scopes", counts.retainedScopes(), "entries", counts.retainedEntries(),
+                "distinctScopedTiles", counts.distinctScopedTiles(), "reservedSurfaceSlots", slots, "builders", counts.retainedBuilders());
     }
     synchronized void clear() { views.clear(); scoped.clear(); lookups = buildsStarted = evictions = certifiedPlanes = layeredGraphs = 0; }
 }

@@ -24,12 +24,14 @@ class IndividualShipmentTest {
     }
     @Test void deliveryPreservesIdentityAndWearAndPaysOnlyOnAcceptanceAcrossRecovery() {
         var f = fixture(); var state = dispatch(f); var shipment = f.shipment();
+        assertTrue(WorkEquipmentClaimComposition.reserved(state).contains(f.item().id()));
         long balance = state.inventory().economics().require(f.contract().buyer().id()).balance().raw();
         state = state.withActorBody(shipment.execution().actorId(), shipment.sender().station().standingBody());
         state = transfer(state, shipment.id());
         assertEquals(new InventoryCustody.Actor(shipment.execution().actorId()), state.inventory().items().get(f.item().id()).custody());
         assertEquals(f.item().economicOwnerId(), state.inventory().items().get(f.item().id()).economicOwnerId());
         state = restored(state);
+        assertTrue(WorkEquipmentClaimComposition.reserved(state).contains(f.item().id()), "recovery must retain the actual unaccepted item claim");
         state = state.withActorBody(shipment.execution().actorId(), shipment.receiver().station().standingBody());
         state = transfer(state, shipment.id());
         var delivered = state.shipments().shipments().get(shipment.id());
@@ -44,6 +46,7 @@ class IndividualShipmentTest {
         assertEquals(f.contract().buyer().id(), state.inventory().items().get(f.item().id()).economicOwnerId());
         assertEquals(balance - f.contract().deliveredUnitPrice().raw(), state.inventory().economics().require(f.contract().buyer().id()).balance().raw());
         var accepted = state;
+        assertTrue(WorkEquipmentClaimComposition.reserved(state).contains(f.item().id()), "an accepted but unacknowledged delivery still owns its item");
         assertThrows(IllegalArgumentException.class, () -> GoodsTradeTest.fact(accepted, f.contract().buyer().id(), new GoodsTradeAccepted(receipt)));
         state = fact(state, shipment.id(), new ShipmentReceiptAcknowledged(shipment.id(), delivered.revision(), reception.id()));
         assertFalse(WorkEquipmentClaimComposition.reserved(state).contains(f.item().id()));

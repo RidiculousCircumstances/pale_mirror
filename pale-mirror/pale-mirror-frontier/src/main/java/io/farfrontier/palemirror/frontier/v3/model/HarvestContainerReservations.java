@@ -24,9 +24,9 @@ final class HarvestContainerReservations {
         }
     }
 
-    static java.util.List<ContainerSlotClaim> claims(ResourceSiteState sites) {
+    static java.util.List<ContainerSlotClaim> claims(java.util.Map<SubjectId, ResourceSiteLifecycle> sites) {
         var result = new java.util.ArrayList<ContainerSlotClaim>();
-        for (var site : sites.sites().values()) for (var job : site.harvestJobs().values()) {
+        for (var site : sites.values()) for (var job : site.harvestJobs().values()) {
             var owner = new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.HARVEST, job.id());
             if (job.reservesOutputCapacity()) result.add(new ContainerSlotClaim(owner, job.outputSlot()));
             job.batchSuccessorSlot().ifPresent(slot -> result.add(new ContainerSlotClaim(owner, slot)));

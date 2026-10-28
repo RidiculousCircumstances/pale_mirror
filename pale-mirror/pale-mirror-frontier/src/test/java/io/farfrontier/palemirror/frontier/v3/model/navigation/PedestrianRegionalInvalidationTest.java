@@ -112,6 +112,15 @@ class PedestrianRegionalInvalidationTest {
         assertNotEquals(villager.regionalRevision().orElseThrow().scope(), sameProfile.regionalRevision().orElseThrow().scope());
         var foreign = new PedestrianGeometryRevision(a.scope(), new Object(), new Object(), java.util.Map.of());
         assertNotEquals(a.geometryScope(), foreign.geometryScope());
+        var cache = new PedestrianRegionCache(); var tile = new PedestrianRegion.Tile(0, 0);
+        assertNotNull(cache.region(baseA, tile, 100_000).region());
+        assertNotNull(cache.region(baseB, tile, 100_000).region());
+        assertEquals(1, cache.diagnostic().retainedEntries(), "equal declared local facts share one graph");
+        var changed = flat(a.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))), bounds, surface -> surface.x() == 8);
+        assertNotNull(cache.region(changed, tile, 100_000).region());
+        assertEquals(2, cache.diagnostic().retainedEntries()); assertEquals(1, cache.diagnostic().distinctScopedTiles());
+        assertEquals(0, cache.diagnostic().retainedBuilders());
+        cache.clear(); assertEquals(0, cache.diagnostic().retainedEntries()); assertEquals(0, cache.diagnostic().distinctScopedTiles());
     }
 
     private static PedestrianRouteGeometry geometry(PedestrianGeometryRevision revision, WorldBounds bounds,

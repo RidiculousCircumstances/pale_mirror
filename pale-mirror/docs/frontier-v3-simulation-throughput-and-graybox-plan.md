@@ -4626,3 +4626,59 @@ collision, key-order, immutable branches, group view and ledger index checks app
 Independent page-hash focus PASS19checks22s, guardrails PASS. Final frozen
 verification includes current recovery/negative nutrition, economy, full-shaped
 wide-body navigation and resource custody coverage before both deployments.
+
+### Retain actual item-claim facts and compile one receiving image
+
+b45aafe70 frozen135PASS61s+guardrails/JAR/package; both retained worlds verified,
+SHA51221fb9b8baa09b29639a32760ecc717e08425c51d8823b57a3ee57d226d209e3860924b476aba2e4d3650cd89c65a9b9ef19d456fe6f32824a9aa881e51db578c.
+Its ordinary capacity window is separate from subsequent builds; G stays OPEN.
+
+The retained1a3bd0a06 allocation trace identifies WorkEquipmentClaimComposition's
+per-contract empty individual-allocation streams on advice and repeated physical
+slot-set reads through expectedFungibleSlot on the server. These are confirmed
+callers, not a new timing-test campaign or a forecast speedup.
+
+GoodsTradeState now exposes its exact declared individual allocations through the
+existing bounded ImmutableNestedMapView. Fungible-only contract mutations leave
+that read image unchanged, so the common equipment-claim composition need not scan
+all families again. Bound is the existing1024contracts×64allocations per contract;
+name the existing64 constant in GoodsTradeContract and reuse it at admission, no
+new rule/format/authority. Global claim uniqueness is already intrinsic and every
+individual allocation is a subset of the contract's live outstanding claims.
+The actual item remains reserved through recovery, receiving acceptance and the
+separate shipment acknowledgement; existing end-to-end assertions are extended.
+
+Shared ContainerStorageAdmission now compiles one existing fungible-slot image
+per receiving-slot search/individual admission, instead of asking again for each
+candidate slot (which re-entered current reservations before reaching its cache).
+The same slot order, held predicate, capacity, filter and physical authority checks
+remain. Empty reservation results return the immutable empty set directly.
+The harvest contribution now accepts exactly lifecycle/job rows, not the whole
+ResourceSiteState: biological cycle-only edits cannot invalidate unrelated slot
+claims, and the narrower signature prevents an undeclared cycle read. No new
+reservation cache, world-state TTL, row-selection heuristic or authority is added.
+
+b45aafe70 ordinary16cuts COMPLETE304.226573s,214137→216954=9.259546/s,
+debt883→4151,advice319→6215. No candidate build/profile/deploy/client overlapped.
+This is improved observed progression versus the earlier6.670554/s window, not an
+isolated percentage gain because canonical workload evolved. FAILED20target.
+All five sampled accepted plans renewed; final starving0 in those five only;
+food1/7/35/68/100123→138/179→194/87→84/26→21/40→42. Bounded terminal histories
+prove no new terminal harvest/accepted trade during that window. G remains OPEN.
+
+Connected claim-image/container-search focus PASS82checks136s+guardrails. The same
+retained ordinary performance data shows25,329 layered graphs built and25,311
+cache evictions over304s (certified planes are separate, cheap descriptors).
+This does not yet distinguish old-version crowding from distinct geography.
+Extend the existing regionCache diagnostic with retained scopes/entries/distinct
+scoped tiles/builders. Each bucket maintains tile multiplicities on existing
+acquire/evict; diagnostics sum only bounded scope counters, never graph entries.
+The existing detailed retention accessor now uses the same cheap counters. No
+cache policy/capacity, path choice or work scheduling changed by this diagnostic.
+Existing graph-reuse/local-revision test now also distinguishes two retained graph
+versions from one actual tile and checks clear; the real2200-graph eviction and
+unfinished-survey protection fixture remains applicable. This is a bounded named
+question for the next deployed build, not a second observability mechanism.
+
+Region retention/revision/eviction focus PASS33s+guardrails; frozen relevant union
+and both retained world deployments follow before using the new diagnostic fields.

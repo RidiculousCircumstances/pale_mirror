@@ -18,6 +18,7 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
                                 int acceptedQuantity, int disposedQuantity, FixedScalar deliveryUnitPrice,
                                 Map<SubjectId, IndividualResourceAllocation> individualAllocations) {
     public static final int MAX_RECEIPTS = 128;
+    public static final int MAX_ALLOCATIONS = 64;
     public GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId buyOrderId,
             GoodsTradeParty seller, GoodsTradeParty buyer, GoodsTradeFulfillment fulfillment,
             SubjectId sourceContainerId, SubjectId receiverContainerId, String itemKind, int quantity,
@@ -61,7 +62,7 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
                 || fulfillment.mode() == GoodsTradeFulfillment.Mode.BUYER_COLLECTION && deliveryUnitPrice.raw() != 0
                 || revision < 0 || revision > quantity
                 || acceptedQuantity < 0 || disposedQuantity < 0 || acceptedQuantity > quantity || disposedQuantity > quantity
-                || outstandingClaims.size() > 64 || acceptances.size() + dispositions.size() != Math.min(revision, MAX_RECEIPTS)
+                || outstandingClaims.size() > MAX_ALLOCATIONS || acceptances.size() + dispositions.size() != Math.min(revision, MAX_RECEIPTS)
                 || outstandingClaims.values().stream().anyMatch(q -> q < 1 || q > quantity)) {
             throw new IllegalArgumentException("invalid goods contract terms or bounded obligations");
         }

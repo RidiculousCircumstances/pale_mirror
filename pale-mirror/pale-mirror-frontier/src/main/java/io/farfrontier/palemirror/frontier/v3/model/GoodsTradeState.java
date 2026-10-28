@@ -24,6 +24,12 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     }
     public static final int MAX_CONTRACTS = 1_024;
     public static final int MAX_ORDERS = 2_048;
+    private static final ImmutableNestedMapView<SubjectId, GoodsTradeContract, SubjectId, IndividualResourceAllocation> INDIVIDUAL_ALLOCATIONS =
+            new ImmutableNestedMapView<>(MAX_CONTRACTS, MAX_CONTRACTS * GoodsTradeContract.MAX_ALLOCATIONS);
+    /** Exact declared live allocations only. Fungible contract changes carry no individual-item claim. */
+    Map<SubjectId, IndividualResourceAllocation> individualAllocations() {
+        return INDIVIDUAL_ALLOCATIONS.project(GoodsTradeState.class, contracts, GoodsTradeContract::individualAllocations);
+    }
     private static final ImmutableInvariantCheck<Void> ORDER_IDENTITIES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> CONTRACT_IDENTITIES = new ImmutableInvariantCheck<>();
     public GoodsTradeState {

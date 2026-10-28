@@ -10,7 +10,7 @@ final class ContainerPhysicalReservations {
     private static final ImmutableInputView<Map<SubjectId, List<ContainerSlotClaim>>> BY_CONTAINER = new ImmutableInputView<>();
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
     private record DemandKey(SubjectId owner, SubjectId container, ContainerSectionId section, String kind, ContainerInboundCapacity.Representation representation) { }
-    private record Owners(ResourceSiteState sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
+    private record Owners(Map<SubjectId, ResourceSiteLifecycle> sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
             io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,
             io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest,
             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> equipment) { }
@@ -39,7 +39,7 @@ final class ContainerPhysicalReservations {
         });
     }
     static List<ContainerSlotClaim> claims(FrontierWorldState state) {
-        var declared = claims(state.inventory(), new Owners(state.resourceSites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.forest(), state.physicalIntents()));
+        var declared = claims(state.inventory(), new Owners(state.resourceSites().sites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.forest(), state.physicalIntents()));
         return BACKED.get(List.of(state.inventory(), declared), () -> backed(state.inventory(), declared));
     }
     /** Prospective destinations reserve only still available capacity. External
@@ -63,7 +63,7 @@ final class ContainerPhysicalReservations {
                          ShipmentState shipments, io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,
                          io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest,
                          Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> equipment) {
-        claims(inventory, new Owners(sites, jobs, shipments, extraction, forest, equipment));
+        claims(inventory, new Owners(sites.sites(), jobs, shipments, extraction, forest, equipment));
     }
     private static void requireExclusive(ExactInventory inventory, List<ContainerSlotClaim> claims) {
         var held = new HashMap<InventoryCustody.ContainerSlot, ContainerSlotClaim.Owner>();
@@ -91,11 +91,15 @@ final class ContainerPhysicalReservations {
         return slots(state, container, Optional.empty());
     }
     static Set<Integer> slots(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
-        return atContainer(state, container).stream().filter(claim -> completing.filter(claim.owner().id()::equals).isEmpty())
+        var claims = atContainer(state, container);
+        if (claims.isEmpty()) return Set.of();
+        return claims.stream().filter(claim -> completing.filter(claim.owner().id()::equals).isEmpty())
                 .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     static Set<Integer> slotsExceptClaim(FrontierWorldState state, SubjectId container, ContainerSlotClaim.Owner current) {
-        return atContainer(state, container).stream().filter(claim -> !claim.owner().equals(current))
+        var claims = atContainer(state, container);
+        if (claims.isEmpty()) return Set.of();
+        return claims.stream().filter(claim -> !claim.owner().equals(current))
                 .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     static List<ContainerInboundCapacity.Demand> uncoveredDemands(FrontierWorldState state) {
