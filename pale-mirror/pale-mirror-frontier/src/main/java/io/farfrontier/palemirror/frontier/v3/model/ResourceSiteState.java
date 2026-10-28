@@ -15,6 +15,7 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
                                 Map<SubjectId, CultivationReview> cultivation) {
     public static final int MAX_SITES = 1024;
     private static final ImmutableResultView<String, Map<SubjectId, ResourceSiteHarvestJob>> HARVEST_DIRECTORY = new ImmutableResultView<>(4);
+    private static final ImmutableResultView<String, Map<SubjectId, ResourceSite>> DESCRIPTORS = new ImmutableResultView<>(4);
     /** Exact declared job lookup; membership validates a FIELD_HARVEST reference,
      * never discovers a job kind or assignment from an untyped identifier. */
     public java.util.Optional<ResourceSiteHarvestJob> harvestJob(SubjectId jobId) {
@@ -320,9 +321,12 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
     }
 
     public Map<SubjectId, ResourceSite> descriptors(FrontierBootstrap bootstrap) {
-        Map<SubjectId, ResourceSite> current = new LinkedHashMap<>();
-        for (SubjectId id : sites.keySet()) current.put(id, descriptor(bootstrap, id));
-        return ImmutableLookupMap.copyOf(current);
+        Objects.requireNonNull(bootstrap, "resource-site descriptor bootstrap");
+        return DESCRIPTORS.get(java.util.List.of(declarations, cycles, sites), "descriptors", () -> {
+            Map<SubjectId, ResourceSite> current = new LinkedHashMap<>();
+            for (SubjectId id : sites.keySet()) current.put(id, descriptor(bootstrap, id));
+            return ImmutableLookupMap.copyOf(current);
+        });
     }
 
     public ResourceSiteState replace(ResourceSiteLifecycle lifecycle) {

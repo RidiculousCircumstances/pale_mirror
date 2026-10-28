@@ -4,7 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Bounded derived validation, not route or actor authority. Cold replay on a miss validates every edge.
+/** Bounded derived validation, not route or actor authority. A miss proves all edges through exact cell checks or an explicit producer certificate.
  * Exact consulted regional facts (profile and permissions included) fence reuse; nonregional providers keep full-version validation. */
 public final class PedestrianPathValidation {
     private static final int MAX_PATHS = 128;
@@ -38,13 +38,50 @@ public final class PedestrianPathValidation {
         synchronized (VALIDATED) { prior = VALIDATED.get(path); }
         if (!io.farfrontier.palemirror.frontier.v3.model.ImmutableValidationScope.fullAudit()
                 && prior != null && prior.matches(geometry)) return true;
-        if (!KnownPedestrianNavigation.supportsRoute(geometry, path.surfaces())) return false;
+        if (!(io.farfrontier.palemirror.frontier.v3.model.ImmutableValidationScope.fullAudit()
+                ? KnownPedestrianNavigation.supportsRoute(geometry, path.surfaces()) : validateGeometry(geometry, path))) return false;
         var captured = capture(geometry, path);
         synchronized (VALIDATED) {
             VALIDATED.put(path, captured);
             if (VALIDATED.size() > MAX_PATHS) VALIDATED.remove(VALIDATED.keySet().iterator().next());
         }
         return true;
+    }
+    /** The same optional producer certificate used by the regional graph proves
+     * every horizontal edge in its rectangle for this exact body and permission
+     * image. Missing certificates retain the complete cell/edge checker. */
+    private static boolean validateGeometry(PedestrianRouteGeometry geometry, PedestrianPathProof path) {
+        var position = path.origin();
+        if (path.runs().isEmpty()) return validSurface(geometry, position);
+        for (var run : path.runs()) {
+            int remaining = run.edges();
+            while (remaining > 0) {
+                int edges = Math.min(remaining, PedestrianRegion.SIDE);
+                var end = run.end(position, edges);
+                boolean certified = false;
+                if (run.dy() == 0 && geometry.bounds().contains(position.support()) && geometry.bounds().contains(end.support())) {
+                    var area = new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(
+                            Math.min(position.x(), end.x()), Math.min(position.z(), end.z()),
+                            Math.abs(end.x() - position.x()) + 1, Math.abs(end.z() - position.z()) + 1);
+                    var height = geometry.uniformSupport(area);
+                    certified = height.isPresent() && height.orElseThrow() == position.y();
+                }
+                if (!certified) {
+                    if (!validSurface(geometry, position)) return false;
+                    for (int step = 0; step < edges; step++) {
+                        var next = run.end(position, 1);
+                        if (!validSurface(geometry, next) || !geometry.canTraverse(position, next)) return false;
+                        position = next;
+                    }
+                } else position = end;
+                remaining -= edges;
+            }
+        }
+        return true;
+    }
+    private static boolean validSurface(PedestrianRouteGeometry geometry,
+            io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
+        return geometry.bounds().contains(surface.support()) && geometry.knowsSupport(surface) && !geometry.blocked(surface);
     }
     private static Validation capture(PedestrianRouteGeometry geometry, PedestrianPathProof path) {
         var regional = geometry.regionalRevision();

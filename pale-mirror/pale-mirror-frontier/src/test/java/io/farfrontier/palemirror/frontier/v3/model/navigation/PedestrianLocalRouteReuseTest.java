@@ -56,4 +56,21 @@ class PedestrianLocalRouteReuseTest {
             assertTrue(planner.readView().peek(donkey, GOAL, START).isEmpty(), "a resident proof is not a wider body's result");
         }
     }
+    @Test void capturedResultsSurviveQueueMutationButFreshViewsReflectRegionalInvalidationAndShutdown() {
+        var revision = PedestrianGeometryRevision.initial("read-publication");
+        var original = ground(revision, false, false, false);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(original, START, GOAL); finish(planner);
+            var predecessor = planner.readView();
+            var changed = ground(revision.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))), true, false, false);
+            planner.query(changed, START, GOAL);
+            assertTrue(planner.readView().peek(changed, START, GOAL).isEmpty(), "invalidated completed rows are absent before replanning finishes");
+            finish(planner);
+            assertEquals(PedestrianRouteResult.Status.NO_PATH, planner.readView().query(changed, START, GOAL).status());
+            assertEquals(PedestrianRouteResult.Status.FOUND, predecessor.query(original, START, GOAL).status());
+            planner.close();
+            assertTrue(planner.readView().peek(changed, START, GOAL).isEmpty(), "closed owner publishes no retained results");
+            assertEquals(PedestrianRouteResult.Status.FOUND, predecessor.query(original, START, GOAL).status(), "closing the live queue cannot mutate a frozen read");
+        }
+    }
 }

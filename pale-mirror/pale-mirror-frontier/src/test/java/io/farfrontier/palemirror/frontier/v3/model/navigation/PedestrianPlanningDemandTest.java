@@ -135,6 +135,12 @@ class PedestrianPlanningDemandTest {
                     PedestrianPlanningChange.Kind.RESULT_AVAILABLE)), advice.acquire(), "completion before publication must not lose wake");
             var current = PedestrianRoutePlanning.readView();
             assertEquals(PedestrianRouteResult.Status.FOUND, current.query(geometry, start, goal).status());
+            var changed = ground(PedestrianGeometryRevision.initial());
+            planner.query(changed, start, goal);
+            assertEquals(PedestrianRouteResult.Status.PLANNING, planner.readView().query(changed, start, goal).status(),
+                    "a foreign geometry scope cannot inherit the old completed result");
+            assertEquals(PedestrianRouteResult.Status.FOUND, current.query(geometry, start, goal).status(),
+                    "queue changes cannot mutate previously published result snapshots");
         }
     }
     private static PedestrianRouteGeometry ground(PedestrianGeometryRevision revision) {

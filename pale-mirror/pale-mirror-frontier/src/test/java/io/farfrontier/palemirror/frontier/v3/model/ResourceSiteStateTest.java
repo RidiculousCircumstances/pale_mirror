@@ -20,6 +20,7 @@ class ResourceSiteStateTest {
         FrontierWorldState baseline = initial();
         SubjectId siteId = new SubjectId("site:1-wheat-field");
         ResourceSite bootstrapSite = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
+        var predecessor = baseline.resourceSites().descriptors(baseline.bootstrap());
         ResourceFieldCycle initial = baseline.resourceSites().cycle(siteId);
         ResourceFieldLayout revised = initial.layout().revise(2, initial.layout().nextCellId(),
                 initial.layout().cells(), initial.layout().irrigationSlots());
@@ -32,6 +33,10 @@ class ResourceSiteStateTest {
         assertEquals(bootstrapSite.facilityId(), descriptor.facilityId());
         assertEquals(revised, descriptor.layout());
         assertEquals(revised, sites.descriptors(baseline.bootstrap()).get(siteId).layout());
+        assertEquals(bootstrapSite.layout(), predecessor.get(siteId).layout(), "old read remains frozen after layout revision");
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(baseline));
+        assertEquals(predecessor, recovered.resourceSites().descriptors(recovered.bootstrap()));
+        assertThrows(UnsupportedOperationException.class, () -> predecessor.clear());
         assertEquals(1, bootstrapSite.layout().revision(), "bootstrap remains an immutable initial plan");
         assertThrows(IllegalArgumentException.class, () -> sites.descriptor(baseline.bootstrap(), new SubjectId("site:missing")));
     }

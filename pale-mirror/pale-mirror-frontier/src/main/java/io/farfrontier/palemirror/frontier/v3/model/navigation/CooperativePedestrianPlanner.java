@@ -23,6 +23,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     public void onReady(Runnable listener) { readiness = java.util.Objects.requireNonNull(listener); }
     private void signalReady() { readiness.run(); }
     private final Map<PedestrianRouteRequest, Completed> completed = new LinkedHashMap<>();
+    private PedestrianRoutePlanner completedView;
     private final Map<PedestrianRouteRequest, PedestrianRouteResult> deferred = new LinkedHashMap<>();
     private final Map<PedestrianRouteRequest, PedestrianPlanningChange.Kind> changes = new LinkedHashMap<>();
     private final ArrayDeque<PedestrianRouteRequest> ready = new ArrayDeque<>();
@@ -194,6 +195,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         completedOutcomes.merge(result.status(), 1L, Math::addExact);
         corridors.remember(request.geometry(), result, dependency);
         completed.put(request, new Completed(result, dependency, search.preparedRead())); retainedSurfaces += result.route().size();
+        completedView = null;
         knowledgeDemandCache = null;
         retainedRegions += dependency.revisions().size();
         changes.put(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE);
@@ -279,6 +281,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     private void removeCompleted(PedestrianRouteRequest request) {
         knowledgeDemandCache = null;
+        completedView = null;
         var removed = completed.remove(request);
         retainedSurfaces -= removed.result().route().size(); retainedRegions -= removed.dependencies().revisions().size();
     }
@@ -374,9 +377,10 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     /** Snapshot publication does not expose or mutate the live calculation queue. */
     @Override public synchronized PedestrianRoutePlanner readView() {
+        if (completedView != null) return completedView;
         var retained = java.util.List.copyOf(completed.entrySet().stream()
                 .map(entry -> Map.entry(entry.getKey(), entry.getValue())).toList());
-        return new PedestrianRoutePlanner() {
+        completedView = new PedestrianRoutePlanner() {
             @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
                 return query(geometry, start, target, PedestrianRouteExtent.COMPLETE);
             }
@@ -399,6 +403,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 return reverseResult(retained, geometry, start, target, extent);
             }
         };
+        return completedView;
     }
     private static java.util.Optional<PedestrianRouteResult> reverseResult(
             java.util.Collection<Map.Entry<PedestrianRouteRequest, Completed>> retained, PedestrianRouteGeometry geometry,
@@ -486,6 +491,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         inFlight.forEach(PedestrianSearchTask::cancel);
         suspended.values().forEach(PedestrianSearchTask::cancel); suspended.clear(); fairness.clear();
         pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); calculationAddresses.clear(); changes.clear();
+        completedView = null;
         awaitingPublication.clear(); retainedDemands = java.util.Set.of();
         regions.clear(); corridors.clear(); itineraries.clear(); retainedSurfaces = 0; retainedRegions = 0;
         synchronizedScopes.clear();

@@ -7,6 +7,50 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPathValidationTest {
+    @Test void certifiedRunsMatchFullReplayAndWithdrawTheirProofForLocalChanges() {
+        var reads = new AtomicInteger(); var revision = PedestrianGeometryRevision.initial();
+        var path = PedestrianPathProof.from(java.util.stream.IntStream.rangeClosed(-31, 48)
+                .mapToObj(x -> SurfaceAnchor.at(x, 0, 0)).toList());
+        var clear = certified(revision, false, reads);
+        assertTrue(PedestrianPathValidation.supports(clear, path));
+        assertEquals(0, reads.get(), "explicit horizontal-area proof supplies every support and directed edge");
+        assertTrue(ImmutableValidationScope.full(() -> PedestrianPathValidation.supports(clear, path)));
+        assertTrue(reads.get() > 0, "the independent full checker still surveys the actual path");
+        var changed = revision.changed(java.util.Set.of(new PedestrianGeometryRevision.Region(1, 0)));
+        var blocked = certified(changed, true, reads);
+        assertFalse(PedestrianPathValidation.supports(blocked, path), "a withdrawn interior certificate triggers exact obstacle checks");
+        assertFalse(ImmutableValidationScope.full(() -> PedestrianPathValidation.supports(blocked, path)));
+        var foreignHeight = PedestrianPathProof.from(List.of(SurfaceAnchor.at(0, 1, 0), SurfaceAnchor.at(1, 1, 0)));
+        assertFalse(PedestrianPathValidation.supports(clear, foreignHeight), "a certificate for one level grants no support above it");
+        var outside = PedestrianPathProof.from(List.of(SurfaceAnchor.at(63, 0, 0), SurfaceAnchor.at(64, 0, 0)));
+        assertFalse(PedestrianPathValidation.supports(clear, outside), "even a permissive area producer cannot extend world bounds");
+    }
+    @Test void slopedAndDirectedUncertifiedEdgesRetainExactPermissionChecks() {
+        var reads = new AtomicInteger();
+        PedestrianRouteGeometry slope = new PedestrianRouteGeometry() {
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 8, 8); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, x, z); }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+            public java.util.OptionalInt uniformSupport(WorldBounds area) { fail("a sloped run cannot request a horizontal-plane proof"); return java.util.OptionalInt.empty(); }
+            public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) { reads.incrementAndGet(); return false; }
+        };
+        var path = PedestrianPathProof.from(List.of(SurfaceAnchor.at(0, 0, 0), SurfaceAnchor.at(1, 1, 0)));
+        assertFalse(PedestrianPathValidation.supports(slope, path)); assertTrue(reads.get() > 0);
+        assertFalse(PedestrianPathValidation.supportsRoute(geometry(new Object(), false, reads), List.of()), "empty hints grant no path");
+    }
+    private static PedestrianRouteGeometry certified(PedestrianGeometryRevision revision, boolean blocked, AtomicInteger reads) {
+        return new PedestrianRouteGeometry() {
+            public Object version() { return revision; }
+            public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return java.util.Optional.of(revision); }
+            public WorldBounds bounds() { return new WorldBounds(-64, -4, 128, 8); }
+            public SurfaceAnchor supportAt(int x, int z) { reads.incrementAndGet(); return SurfaceAnchor.at(x, 0, z); }
+            public boolean blocked(SurfaceAnchor surface) { reads.incrementAndGet(); return blocked && surface.x() == 17; }
+            public java.util.OptionalInt uniformSupport(WorldBounds area) {
+                return blocked && area.minX() <= 17 && area.maxXExclusive() > 17
+                        ? java.util.OptionalInt.empty() : java.util.OptionalInt.of(0);
+            }
+        };
+    }
     @Test void exactVersionReusesValidationButChangedGeometryAndDifferentPathDoNot() {
         var reads = new AtomicInteger(); var version = new Object();
         var path = PedestrianPathProof.from(List.of(SurfaceAnchor.at(0, 0, 0), SurfaceAnchor.at(1, 0, 0)));

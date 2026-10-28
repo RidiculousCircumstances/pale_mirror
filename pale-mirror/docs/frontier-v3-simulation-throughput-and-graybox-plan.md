@@ -3042,5 +3042,40 @@ declaration index for expected structure/settlement IDs, instead of recollecting
 those fixed declarations on every transaction. All original existence, condition,
 damage and role validation remains. Focused shared-union overlap/retirement/bounds/
 immutability, full/predecessor field projection, negative publication and harvest
-scene/progress checks plus guardrails PASS26s. Frozen release/deploy/native effect
-pending; no HOT/terminal/scale acceptance inferred.
+scene/progress checks plus guardrails PASS26s. Frozen release PASS32s, both retained-world deployments verified261c51af6.
+After180s warm, native field-reference-deltas-ordinary100 trace171705events/
+noDataLoss44.928850s=5.275007ticks/s,debt3307→3972,owner57.67%,exact30.63%,
+WAL8.39%. Owned validation5.370946s and exact movement6.643792s remain material.
+Main follow-up1033405/rev2193258/statusok/debt0. No controlled aggregate speedup
+or HOT/terminal/scale acceptance inferred from this evolving workload.
+
+
+### Immutable read images and producer-certified path replay (2026-10-28)
+
+The warmed trace still samples whole-field descriptor rebuilding and repeated
+completed-route Map.entry snapshot allocation on the committing owner. The common
+planner now retains one frozen completed-result read image until publication,
+removal/invalidation, geometry rebasing or close changes that registry. Pending
+work is not part of that image. Earlier captured images remain frozen; neither
+querying them nor capturing a view enqueues work. The descriptor directory shares
+only the exact immutable declaration/cycle/lifecycle registry triple, bounded to
+four images, preserving lifecycle iteration order and canonical revised layouts.
+
+The exact worker also repeatedly validates a long itinerary block by block before
+formation reduces it to its next leg. PedestrianPathValidation now consumes the
+EXISTING geometry-provider uniformSupport contract: a dry, clear horizontal plane
+with every directed edge legal for that declared body/permission image. It checks
+bounded straight horizontal spans no larger than the existing regional side; no
+new tile size or cache capacity is configured. A missing/wrong-height certificate,
+a grade, or a nonuniform region retains every exact support/body/edge check. World
+bounds are checked independently before using any certificate. Regional proof
+dependencies and body/permission/version invalidation remain unchanged; explicit
+full ingress/recovery audits use the independent complete cell checker. No new
+unknown-to-clear inference, route authority, arrival or movement timing is added.
+
+Connected coverage includes independently replayed certified runs, local proof
+withdrawal, foreign height, world bounds, sloped/directed denial, full audit,
+producer task exclusions, wider bodies, immutable route-view invalidation, frozen
+predecessors, closure/recovery and current field layout recovery. Connected focused
+checks plus guardrails PASS48s. Frozen release/deploy/native effect pending.
+G remains OPEN/FAILED; no aggregate result claimed.
