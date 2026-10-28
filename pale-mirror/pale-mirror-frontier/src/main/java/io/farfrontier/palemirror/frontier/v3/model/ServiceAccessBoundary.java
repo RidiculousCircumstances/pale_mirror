@@ -33,6 +33,14 @@ public record ServiceAccessBoundary(Set<SurfaceAnchor> occupiedSurfaces) {
         return -1;
     }
 
+    /** First supported surface outside a footprint occupied at departure. */
+    public int firstExit(java.util.List<SurfaceAnchor> route) {
+        if (route.isEmpty() || !occupied(route.getFirst().standingBody())) return -1;
+        for (int index = 1; index < route.size(); index++)
+            if (cleared(route.get(index).standingBody())) return index;
+        return -1;
+    }
+
     /** An unauthorized occupant may leave the throat, but may not re-enter it en route to waiting. */
     public boolean allowsWaitingRoute(java.util.List<SurfaceAnchor> route) {
         boolean outside = false;

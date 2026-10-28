@@ -55,13 +55,6 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
-        var exit = exit(movement);
-        var boundary = ServiceAccessCoordinator.boundary(state, exit.depotId());
-        if (boundary.occupied(route.getFirst().standingBody())) {
-            for (int index = 1; index < route.size() - 1; index++) {
-                if (boundary.cleared(route.get(index).standingBody())) return List.copyOf(route.subList(0, index + 1));
-            }
-        }
         return route;
     }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {

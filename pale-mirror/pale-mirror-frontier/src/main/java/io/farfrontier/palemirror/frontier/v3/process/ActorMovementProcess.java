@@ -149,10 +149,10 @@ public final class ActorMovementProcess {
         if (movement.order().arrivedAt(actor.supportingSurface()))
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
         try {
-            var travel = segmentRoute(state, movement, now, positions);
-            if (travel.route().size() <= 1) return Optional.empty();
+            var route = segmentRoute(state, movement, now, positions);
+            if (route.size() <= 1) return Optional.empty();
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now,
-                    Optional.empty(), movement.executionId(), Optional.of(new PedestrianRouteReceipt(travel.route()))));
+                    Optional.empty(), movement.executionId(), Optional.of(new PedestrianRouteReceipt(route))));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             return Optional.empty();
         }
@@ -279,12 +279,11 @@ public final class ActorMovementProcess {
         return reduceColdAdvanced(state, subject, started.advance(), positions);
     }
 
-    private static TimedKnownRoute segmentRoute(FrontierWorldState state, ActorMovement movement, long now, ActorPositionView positions) {
+    private static List<SurfaceAnchor> segmentRoute(FrontierWorldState state, ActorMovement movement, long now, ActorPositionView positions) {
         MovementOrder order = movement.order();
         var provider = ActorMovementProviders.require(movement);
-        List<SurfaceAnchor> route = provider.coldSegment(state, movement,
+        return provider.coldSegment(state, movement,
                 provider.nextSegment(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()), now, positions);
-        return timedSegment(state, movement, route, now);
     }
 
     private static TimedKnownRoute timedSegment(FrontierWorldState state, ActorMovement movement,
@@ -292,6 +291,11 @@ public final class ActorMovementProcess {
         MovementOrder order = movement.order();
         AmbientActorLease lease = state.ambientLeases().get(order.actorId());
         long epoch = lease == null ? 1L : Math.addExact(lease.revision(), 1L);
+        // A valid owner route may cross a service exit long before its final goal.
+        // Checkpoint that real departure so the incumbent does not hold the point
+        // for the whole journey. The original route receipt still receives the
+        // provider's complete geometry, goal and task-constraint validation.
+        route = ServiceDepartureSegments.bounded(state, route);
         return new TimedKnownRoute(ActorMovement.segmentOrder(order, route.getLast()), route,
                 now, ActorMovementProviders.require(movement).ticksPerEdge(state, movement), epoch);
     }

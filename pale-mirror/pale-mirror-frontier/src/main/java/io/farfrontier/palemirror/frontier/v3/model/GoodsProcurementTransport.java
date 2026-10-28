@@ -18,6 +18,9 @@ public final class GoodsProcurementTransport {
     }
     private record Query(SubjectId source, String item, int requested, long price, long budget, long now, long deadline) { }
     private record Crew(SubjectId home, int count, Optional<TransportAsset> asset, long duration, long now) { }
+    /** Snapshot-local facts shared by every hypothetical parcel size, not a crew reservation. */
+    private record Context(GoodsTradeFulfillment.Mode mode, GoodsParticipant organizer,
+            ProcurementTravelForecast.Estimate forecast, List<SubjectId> people, long crewAt) { }
     private static final ImmutableInputView<ImmutableResultView<Query, Optional<Quote>>> QUOTES = new ImmutableInputView<>();
     private static final ImmutableInputView<BoundedValueMemo<Crew, Boolean>> CREWS = new ImmutableInputView<>();
     private GoodsProcurementTransport() { }
@@ -48,19 +51,22 @@ public final class GoodsProcurementTransport {
             String item, int requested, long price, long budget, long now, long deadline) {
         Quote best = null;
         int size = GoodsTransportOptions.parcelSize(state, item);
-        for (int quantity = Math.min(requested, GoodsTransportOptions.maximumQuantity(state, item)); quantity > 0; quantity = ((quantity - 1) / size) * size) {
-            var candidate = calculateQuantity(state, seller, source, buyer, item, quantity, price, budget, now, deadline);
+        int funded = FundedCargoLot.quantity(Math.min(requested, GoodsTransportOptions.maximumQuantity(state, item)), price, 0, budget);
+        if (funded == 0 || !GoodsParticipantStorage.eligible(state, seller, source, item)) return Optional.empty();
+        var contexts = contexts(state, seller, source, buyer, item, now);
+        // Every nominal size above the goods-only funding cap produced the same
+        // funded load. Keep that load once and all lower parcel breakpoints.
+        // Candidate quantities never exceed either requirement, so ranking is unchanged.
+        for (int quantity = funded; quantity > 0; quantity = ((quantity - 1) / size) * size) {
+            var candidate = calculateQuantity(state, contexts, item, quantity, price, budget, now, deadline);
             if (candidate.isPresent() && (best == null || preferred(state, candidate.orElseThrow(), best, item, requested, price, deadline)))
                 best = candidate.orElseThrow();
         }
         return Optional.ofNullable(best);
     }
-    private static Optional<Quote> calculateQuantity(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
-            String item, int requested, long price, long budget, long now, long deadline) {
-        int fundedQuantity = FundedCargoLot.quantity(Math.min(requested, GoodsTransportOptions.maximumQuantity(state, item)), price, 0, budget);
-        if (fundedQuantity == 0) return Optional.empty();
-        if (!GoodsParticipantStorage.eligible(state, seller, source, item)) return Optional.empty();
-        Quote best = null;
+    private static List<Context> contexts(FrontierWorldState state, GoodsParticipant seller, SubjectId source,
+            GoodsParticipant buyer, String item, long now) {
+        var contexts = new ArrayList<Context>();
         for (var mode : GoodsTradeFulfillment.Mode.values()) {
             var organizer = mode == GoodsTradeFulfillment.Mode.BUYER_COLLECTION ? buyer : seller;
             var itinerary = mode == GoodsTradeFulfillment.Mode.BUYER_COLLECTION
@@ -75,8 +81,18 @@ public final class GoodsProcurementTransport {
             // This quote uses retained current people, never rewinds their nutrition;
             // exact departure admission still requires its actual canonical instant.
             long crewAt = Math.max(now, people.stream().mapToLong(id -> state.humanPopulation().nutrition(id).lastEvaluatedTick()).max().orElse(now));
+            contexts.add(new Context(mode, organizer, forecast, people, crewAt));
+        }
+        return List.copyOf(contexts);
+    }
+    private static Optional<Quote> calculateQuantity(FrontierWorldState state, List<Context> contexts,
+            String item, int requested, long price, long budget, long now, long deadline) {
+        Quote best = null;
+        for (var context : contexts) {
+            var mode = context.mode(); var organizer = context.organizer(); var forecast = context.forecast();
+            var people = context.people(); long crewAt = context.crewAt();
             int size = GoodsTransportOptions.parcelSize(state, item);
-            int quantity = fundedQuantity;
+            int quantity = requested;
             // Shrinking an affordable lot can reduce its crew. Each iteration
             // strictly reduces the load within the declared maximum cargo size.
             while (quantity > 0) {

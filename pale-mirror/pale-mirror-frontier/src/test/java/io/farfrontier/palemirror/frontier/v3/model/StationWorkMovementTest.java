@@ -24,6 +24,70 @@ class StationWorkMovementTest {
         return ProductionProcess.planCompletion(fixture.state(), ProductionProcess.complete(fixture.job(), 300L)).stream()
                 .map(ProposedEvent::payload).filter(ActorMovementStarted.class::isInstance).map(ActorMovementStarted.class::cast).findFirst().orElseThrow();
     }
+    @Test void loadedWorkerReleasesTheSourceAtItsExitAndRetainsCargoAndStationGoalAcrossRecovery() throws Exception {
+        var fixture = started(); var job = fixture.job();
+        var state = BakeryTestClock.arrive(fixture.state(), job, 300L);
+        var pickup = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 10_000L)).stream()
+                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+        assertEquals(BakeryColdStep.Action.PICKUP, pickup.action());
+        state = ProductionProcess.reduceBakeryColdStep(state, job.settlementId(), pickup);
+        job = state.productionJobs().get(job.id());
+        assertEquals(StationWorkState.Phase.STATION_LOAD, job.stationWork().orElseThrow().phase());
+        var source = StationWorkStorage.source(job);
+        var boundary = ServiceAccessCoordinator.boundary(state, source);
+        assertTrue(boundary.occupied(state.actorLocations().get(job.workerId()).body()));
+        var start = order(new Fixture(state, job));
+        state = ActorMovementProcess.reduceStarted(state, job.workerId(), start);
+        var movement = start.movement();
+        assertTrue(movement.context().clearancePoint().isEmpty(), "ordinary station travel is not a standalone service exit");
+        var planned = ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement, 10_001L), 10_001L);
+        var receipt = planned.stream().map(ProposedEvent::payload).filter(ActorMovementColdAdvanced.class::isInstance)
+                .map(ActorMovementColdAdvanced.class::cast).findFirst().orElseThrow();
+        var fullRoute = receipt.plannedRoute().orElseThrow().route();
+        int exit = boundary.firstExit(fullRoute);
+        assertTrue(exit > 0 && exit < fullRoute.size() - 1, "the source exit precedes the station approach");
+        assertTrue(sourceOccupied(state, source, job.workerId()));
+        var prefix = fullRoute.subList(0, exit + 1);
+        var obstructed = state.recordPhysicalDelta(new PhysicalDelta(fullRoute.get(1).support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:source-exit-obstructed"));
+        var worker = job.workerId();
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceColdAdvanced(obstructed, worker, receipt),
+                "an exit checkpoint cannot bypass the owner's current geometry validation");
+        try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> { throw new AssertionError("route receipt replay searched"); })) {
+            state = ActorMovementProcess.reduceColdAdvanced(state, job.workerId(), receipt);
+        }
+        var travel = state.actorMovements().get(job.workerId()).coldTravel().orElseThrow();
+        assertEquals(prefix, travel.route());
+        assertEquals(10_001L + exit * travel.ticksPerEdge(), travel.arrivalTick());
+        assertEquals(travel.arrivalTick(), planned.stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::cast)
+                .findFirst().orElseThrow().replacement().dueAt().ticks());
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        assertTrue(boundary.occupied(state.actorLocations().get(job.workerId()).body()), "admission alone cannot release the source");
+        var moving = state.actorMovements().get(job.workerId());
+        long due = travel.arrivalTick();
+        var arrival = ActorMovementProcess.plan(state, ActorMovementProcess.progress(moving, due), due).stream()
+                .map(ProposedEvent::payload).filter(ActorMovementColdAdvanced.class::isInstance).map(ActorMovementColdAdvanced.class::cast).findFirst().orElseThrow();
+        var occupied = state;
+        state = ActorMovementProcess.reduceColdAdvanced(state, job.workerId(), arrival);
+        assertTrue(boundary.cleared(state.actorLocations().get(job.workerId()).body()));
+        assertTrue(ServiceAccessCoordinator.wakePoints(occupied, state).contains(source));
+        assertFalse(sourceOccupied(state, source, job.workerId()));
+        assertEquals(occupied.inventory(), state.inventory(), "exiting moves no goods and awards no processing");
+        assertEquals(occupied.productionJobs(), state.productionJobs());
+        assertEquals(movement.order(), state.actorMovements().get(job.workerId()).order());
+        var cleared = state; var actor = job.workerId();
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.reduceColdAdvanced(cleared, actor, arrival));
+        state = codec.decode(codec.encode(state));
+        state = BakeryTestClock.arrive(state, job, due + 1L);
+        assertFalse(state.actorMovements().containsKey(actor));
+        assertEquals(StationWorkGoal.current(state, job).station(), state.actorLocations().get(actor).supportingSurface());
+    }
+    private static boolean sourceOccupied(FrontierWorldState state, SubjectId source, SubjectId actor) {
+        return new ProductionServiceAccess().demands(state, source).stream()
+                .anyMatch(demand -> demand.identity().actorId().equals(actor) && demand.presence() == ServiceAccessDemand.Presence.OCCUPIED);
+    }
     @Test void warmedMovementReferencesStillRejectWithdrawalOfTheirExactJob() {
         var fixture = started(); var job = fixture.job(); var start = order(fixture);
         var state = ActorMovementProcess.reduceStarted(fixture.state(), job.workerId(), start);

@@ -4334,3 +4334,41 @@ kernel regression checks that the diagnostic sees a reserved CHECKING action whi
 its predecessor still owns state, then sees its release after the safe commit.
 Kernel checks+guardrails+adapter compilation PASS21s; deployment needed to identify
 the remaining exact block. No instrumentation-only completion claim.
+
+
+### Shared service departure and quote-invariant transport work
+
+Current abe7b2f84 runtime has a fresh town35 economic plan and an actual bakery
+job that reached bread delivery. The immediate observed depot wait is an
+ordinary station worker whose COLD depot-to-forge interval retains its departure
+body at the depot until the whole interval ends. Arbitration therefore correctly
+sees an incumbent long after its actual first exit. This is a common movement
+clock boundary defect, not evidence to weaken storage access or special-case food.
+
+ActorMovement validates the full provider-owned route receipt, then times only
+the prefix through the first exit from any operational service footprint occupied
+at departure. The existing progress action checkpoints that actual supported
+position, wakes the released point and continues the same semantic goal under
+the same UAE/cargo authority. No per-cell event history, fabricated completion,
+teleport, migration or family-specific dispatch is added. ServiceExit relinquishes
+its private route slicing to this common owner. Retired facilities impose no new
+exit boundary. Current-schema route recovery uses the existing codec.
+
+GoodsProcurementTransport also starts parcel evaluation at the goods-funded cap,
+removing repeated identical funded loads above it while retaining all smaller
+parcel breakpoints, both fulfillment modes and existing food/crew/asset/budget/
+deadline checks. Quote-invariant mode/forecast/resident facts are captured once
+within that calculation; no cross-state economic cache or new reservation exists.
+The connected funded lot/trade/fleet/selection/conditional quote/dispatch focus
+passed in81s before the departure change. Shared movement, negative and recovery
+verification is in progress. No live throughput or terminal food claim yet.
+
+Departure focus ran50 checks:49 passed; the new test initially assumed that every
+short route outside a destination boundary was forbidden, while the existing
+service-approach contract explicitly allows a waiting prefix. Corrected that
+fixture assertion to the actual negative contract: a newly obstructed route must
+reject the retained receipt. StationWorkMovementTest4 and guardrails then passed
+in20s. The connected case confirms source occupancy before exit, exact exit
+deadline and body, wake of the released point, unchanged cargo/job/goal, duplicate
+rejection, current-schema recovery and eventual arrival at the original station.
+Frozen candidate packaging and retained-world validation follow.

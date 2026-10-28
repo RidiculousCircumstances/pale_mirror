@@ -26,6 +26,15 @@ class GoodsProcurementTransportTest {
         assertEquals(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, quote.mode());
         assertEquals(seller, quote.organizer()); assertTrue(quote.cashFreight() > 0);
         assertTrue(quote.quantity() * 1_000_000L + quote.cashFreight() <= 100_000_000);
+        long partialBudget = Math.addExact(3_000_000L, quote.cashFreight());
+        var partial = GoodsProcurementTransport.best(stocked, seller, source, buyer, "minecraft:coal",
+                GoodsTransportOptions.maximumQuantity(stocked, "minecraft:coal"), 1_000_000, partialBudget, now).orElseThrow();
+        var capped = GoodsProcurementTransport.best(stocked, seller, source, buyer, "minecraft:coal",
+                Math.toIntExact(partialBudget / 1_000_000), 1_000_000, partialBudget, now).orElseThrow();
+        assertEquals(3, partial.quantity(), "a large request must retain the affordable small delivery including its freight");
+        assertEquals(capped.quantity(), partial.quantity()); assertEquals(capped.mode(), partial.mode());
+        assertEquals(capped.expense(), partial.expense()); assertEquals(capped.deliveryTicks(), partial.deliveryTicks());
+        assertEquals(capped.workerTicks(), partial.workerTicks());
         assertTrue(GoodsProcurementTransport.best(stocked, seller, source, buyer, "minecraft:coal", 16, 1_000_000, 1_000_000, now).isEmpty());
         assertTrue(GoodsProcurementTransport.best(stocked, seller, source, buyer, "minecraft:coal", 16, 1_000_000, 999_999, now).isEmpty(),
                 "funding below one item must not become a speculative transport offer");
