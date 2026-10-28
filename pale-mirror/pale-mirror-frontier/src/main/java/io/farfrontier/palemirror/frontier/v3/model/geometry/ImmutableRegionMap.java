@@ -12,8 +12,9 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
     private static final class Part<V> {
         final Map<Region, V> values;
         final int hash;
-        Part(Map<Region, V> values) {
-            this.values = Collections.unmodifiableMap(new HashMap<>(values)); hash = this.values.hashCode();
+        Part(Map<Region, V> values) { this(values, values.hashCode()); }
+        Part(Map<Region, V> values, int hash) {
+            this.values = Collections.unmodifiableMap(new HashMap<>(values)); this.hash = hash;
         }
     }
     private final Map<Page, Part<V>> pages;
@@ -36,16 +37,33 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
     /** Explicit replacements/removals; unchanged pages remain shared and no prior map is retained. */
     public ImmutableRegionMap<V> with(Map<Region, Optional<V>> changes) {
         var updates = new HashMap<Page, Map<Region, V>>();
+        var changedRegions = new HashMap<Page, List<Region>>();
         changes.forEach((region, value) -> {
             Objects.requireNonNull(region); Objects.requireNonNull(value);
-            if (Objects.equals(get(region), value.orElse(null))) return;
+            var previous = get(region);
+            if (Objects.equals(previous, value.orElse(null))) return;
             var page = Page.at(region);
             var part = updates.computeIfAbsent(page, ignored -> new HashMap<>(in(page)));
             if (value.isPresent()) part.put(region, value.orElseThrow()); else part.remove(region);
+            changedRegions.computeIfAbsent(page, ignored -> new ArrayList<>()).add(region);
         });
         if (updates.isEmpty()) return this;
         var next = new HashMap<>(pages);
-        updates.forEach((page, values) -> { if (values.isEmpty()) next.remove(page); else next.put(page, new Part<>(values)); });
+        updates.forEach((page, values) -> {
+            if (values.isEmpty()) next.remove(page);
+            else {
+                var previous = pages.get(page);
+                // Map hashes are sums of entry hashes. Only changed entries
+                // contribute a delta; discarded pages need no hash at all.
+                int hash = previous == null ? 0 : previous.hash;
+                for (var region : changedRegions.get(page)) {
+                    var before = get(region); var after = values.get(region);
+                    if (before != null) hash -= region.hashCode() ^ before.hashCode();
+                    if (after != null) hash += region.hashCode() ^ after.hashCode();
+                }
+                next.put(page, new Part<>(values, hash));
+            }
+        });
         return new ImmutableRegionMap<>(next);
     }
     /** Compare complete values only in pages that differ; a matching hash is never sufficient. */

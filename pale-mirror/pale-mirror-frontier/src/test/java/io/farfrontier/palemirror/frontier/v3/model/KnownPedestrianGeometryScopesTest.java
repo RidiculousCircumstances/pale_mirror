@@ -62,6 +62,8 @@ class KnownPedestrianGeometryScopesTest {
         facts.put(new PedestrianGeometryRevision.Region(0, 0), "changed");
         facts.put(new PedestrianGeometryRevision.Region(1, 0), "neighbour");
         facts.put(new PedestrianGeometryRevision.Region(1000, 1000), remoteFact);
+        // Outside the local halo, but inside the same spatial hash page as (0,0).
+        facts.put(new PedestrianGeometryRevision.Region(15, 15), remoteFact);
         var before = new PedestrianGeometryRevision(scope, baseline, facts);
         assertSame(before.revisions(), before.profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER).revisions());
         var oldProfile = before.profiled(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY);

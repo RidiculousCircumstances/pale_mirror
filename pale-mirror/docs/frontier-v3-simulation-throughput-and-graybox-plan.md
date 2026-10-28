@@ -2645,3 +2645,23 @@ actor body, retaining its stale-evidence rejection assertion. Warmed-proof negat
 cover removed actors, newly unknown executions, changed pack-animal kind and a
 missing mission reservation; existing orphan mobile-surface and recovery tests
 remain. Native aggregate impact is not yet measured.
+
+### Exact local regional hash updates (2026-10-28)
+
+159786bc7 cleanrelease64frontier+45runtime/guardrails/packagePASS31s; bothretained
+worlds deployed and verified. ordinary100 publication-identity recording accounts
+for44.844390s/noDataLoss:3.813186ticks/s,debt1082→1815,still FAILED. Owned-state
+7.158640s,reference-closure6.218878s;group checks2.187616s remain expensive even
+without graph emission. No aggregate scale success claimed.
+
+Retained JFR stacks attribute geometry CPU to ImmutableRegionMap.Part rebuilding
+hashes of unchanged deep facts when a small passage overlay changes. Regional
+replacement now updates the exact Map hash by changed-entry deltas. Whole discarded
+pages require no hash; unchanged values in a touched page are not rehashed. Page
+copies, exact full equality, collision handling, removal and immutable predecessors
+are retained. No geometry, passage, navigation-profile or knowledge rule changes.
+The existing proof fixture now includes an untouched fact in the SAME spatial page,
+outside the changed local halo. Focus49geometry/profile/route/cooperative checks
+and guardrails PASS28s after correcting the complete-page removal case.
+No timing threshold or extra runtime polling test was added. Aggregate effect is
+not measured yet.
