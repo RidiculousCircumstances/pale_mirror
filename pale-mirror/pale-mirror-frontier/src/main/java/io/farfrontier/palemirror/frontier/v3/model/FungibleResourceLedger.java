@@ -6,29 +6,64 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import static io.farfrontier.palemirror.frontier.v3.model.FungibleResourceValidation.*;
 
 /**
  * Immutable source of truth for ordinary resources.  Lots carry economic lineage, allocations
  * carry stable reservations, accounts carry custody, and bindings only describe a current HOT
  * Vanilla layout.  No map here is a derived stock counter.
  */
-public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
-                                    Map<SubjectId, CustodyAccount> accounts, Map<SubjectId, PhysicalStackBinding> bindings) {
+public final class FungibleResourceLedger {
+    private final Map<SubjectId, ResourceLot> lots;
+    private final Map<SubjectId, ClaimAllocation> claims;
+    private final Map<SubjectId, CustodyAccount> accounts;
+    private final Map<SubjectId, PhysicalStackBinding> bindings;
+    public Map<SubjectId, ResourceLot> lots() { return lots; }
+    public Map<SubjectId, ClaimAllocation> claims() { return claims; }
+    public Map<SubjectId, CustodyAccount> accounts() { return accounts; }
+    public Map<SubjectId, PhysicalStackBinding> bindings() { return bindings; }
+    @Override public boolean equals(Object other) {
+        return this == other || other instanceof FungibleResourceLedger value && lots.equals(value.lots)
+                && claims.equals(value.claims) && accounts.equals(value.accounts) && bindings.equals(value.bindings);
+    }
+    @Override public int hashCode() {
+        return ((lots.hashCode() * 31 + claims.hashCode()) * 31 + accounts.hashCode()) * 31 + bindings.hashCode();
+    }
+    @Override public String toString() {
+        return "FungibleResourceLedger[lots=" + lots + ", claims=" + claims + ", accounts=" + accounts + ", bindings=" + bindings + "]";
+    }
     public static final int MAX_LOTS = 16_384;
     public static final int MAX_CLAIMS = 16_384;
     public static final int MAX_ACCOUNTS = 16_384;
     public static final int MAX_BINDINGS = 16_384;
 
-    public FungibleResourceLedger {
-        lots = ImmutableLookupMap.copyOf(lots); claims = ImmutableLookupMap.copyOf(claims); accounts = ImmutableLookupMap.copyOf(accounts); bindings = ImmutableLookupMap.copyOf(bindings);
-        if (lots.size() > MAX_LOTS || claims.size() > MAX_CLAIMS || accounts.size() > MAX_ACCOUNTS || bindings.size() > MAX_BINDINGS) {
+    /** External/bootstrap/hydration input always receives a complete conservation audit. */
+    public FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
+                                  Map<SubjectId, CustodyAccount> accounts, Map<SubjectId, PhysicalStackBinding> bindings) {
+        this.lots = ImmutableLookupMap.copyOf(lots); this.claims = ImmutableLookupMap.copyOf(claims);
+        this.accounts = ImmutableLookupMap.copyOf(accounts); this.bindings = ImmutableLookupMap.copyOf(bindings);
+        validateComplete();
+    }
+    void validateComplete() {
+        FungibleResourceValidation.validateComplete(lots, claims, accounts, bindings);
+    }
+
+    /** Only COLD claim admission uses this operation constructor. Lots, addresses,
+     * custody placement and all other accounts are inherited unchanged from an already
+     * valid immutable predecessor. A fresh claim is allocated in full to exactly one
+     * existing unbound account, whose complete backing/pinning rules are rechecked.
+     * These facts preserve every global total without re-summing unrelated accounts. */
+    private FungibleResourceLedger(FungibleResourceLedger before, ClaimAllocation claim, SubjectId accountId) {
+        Objects.requireNonNull(claim, "claim allocation");
+        var account = before.requireAccount(accountId);
+        before.requireNoPhysicalBinding(account.id(), "reserve");
+        var reservation = before.reserve(account, claim);
+        if (reservation.claims().size() > MAX_CLAIMS)
             throw new IllegalArgumentException("fungible resource retention limit exceeded");
-        }
-        requireKeys(lots, ResourceLot::id, "resource lot"); requireKeys(claims, ClaimAllocation::id, "claim allocation");
-        requireKeys(accounts, CustodyAccount::id, "custody account"); requireKeys(bindings, PhysicalStackBinding::id, "physical stack binding");
-        ActorCarriedResources.validateCapacity(accounts.values());
-        FungibleResourceValidation.validateAccounts(lots, claims, accounts);
-        FungibleResourceValidation.validateBindings(lots, claims, accounts, bindings);
+        FungibleResourceValidation.validateAccount(before.lots, reservation.claims(), reservation.account());
+        this.lots = before.lots; this.bindings = before.bindings;
+        this.claims = ImmutableLookupMap.copyOf(reservation.claims());
+        this.accounts = ImmutableLookupMap.withEntry(before.accounts, account.id(), reservation.account());
     }
 
     public static FungibleResourceLedger empty() { return new FungibleResourceLedger(Map.of(), Map.of(), Map.of(), Map.of()); }
@@ -200,8 +235,8 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, CustodyAccount> projectedAccounts = new HashMap<>(accounts);
         projectedAccounts.remove(actorAccountId);
         projectedAccounts.put(depotAccountId, projected);
-        Map<SubjectId, PhysicalStackBinding> projectedBindings = withoutBindingsFor(actorAccountId);
-        projectedBindings = withoutBindingsFor(projectedBindings, depotAccountId);
+        Map<SubjectId, PhysicalStackBinding> projectedBindings = FungibleBindingRepartition.withoutAccount(bindings, actorAccountId);
+        projectedBindings = FungibleBindingRepartition.withoutAccount(projectedBindings, depotAccountId);
         FungibleResourceLedger projectedLedger = new FungibleResourceLedger(lots, claims, projectedAccounts, projectedBindings);
         List<PhysicalStackBinding> destinationBindings = FungiblePhysicalObservation.bind(projectedLedger,
                 depotAccountId, depotEpoch, Objects.requireNonNull(observedDepotStacks, "observed harvest chest layout"));
@@ -239,10 +274,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
 
     /** Reserves part of the already-accounted stock without creating a second resource balance. */
     public FungibleResourceLedger reserve(ClaimAllocation claim, SubjectId accountId) {
-        Objects.requireNonNull(claim, "claim allocation"); CustodyAccount account = requireAccount(accountId);
-        requireNoPhysicalBinding(account.id(), "reserve");
-        Reservation reservation = reserve(account, claim);
-        return withAccount(reservation.account(), reservation.claims(), bindings);
+        return new FungibleResourceLedger(this, claim, accountId);
     }
 
     /**
@@ -258,7 +290,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
             throw new IllegalArgumentException("bound claim does not own the current physical custody");
         }
         Reservation reservation = reserve(account, claim);
-        FungibleResourceLedger unbound = withAccount(reservation.account(), reservation.claims(), withoutBindingsFor(account.id()));
+        FungibleResourceLedger unbound = withAccount(reservation.account(), reservation.claims(), FungibleBindingRepartition.withoutAccount(bindings, account.id()));
         return unbound.rebind(account.id(), authorityEpoch,
                 FungiblePhysicalObservation.allocateClaims(unbound, account.id(), current));
     }
@@ -283,7 +315,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                 || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch))
             throw new IllegalArgumentException("bound claim release does not own the current physical custody");
         // Release commercial metadata only: preserve every stack address, lot, count and epoch.
-        var unbound = withAccount(account, claims, withoutBindingsFor(account.id())).releaseClaim(account.id(), claimId);
+        var unbound = withAccount(account, claims, FungibleBindingRepartition.withoutAccount(bindings, account.id())).releaseClaim(account.id(), claimId);
         Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>(bindings);
         for (var binding : current) {
             var nextClaims = new HashMap<>(binding.claimQuantities()); nextClaims.remove(claimId);
@@ -338,7 +370,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (remainingLots.isEmpty()) next.remove(from.id());
         else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         next.put(to.id(), accountWithAdded(to, lotQuantities, claimQuantities));
-        return new FungibleResourceLedger(lots, claims, next, withoutBindingsFor(from.id()));
+        return new FungibleResourceLedger(lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
     }
 
     /** Opens a newly observed player/container/carrier account by moving exact extant quantities into it. */
@@ -411,7 +443,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (remainingLots.isEmpty()) next.remove(from.id());
         else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         next.put(destination.id(), destination);
-        return new FungibleResourceLedger(lots, claims, next, withoutBindingsFor(from.id()));
+        return new FungibleResourceLedger(lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
     }
 
     private FungibleResourceLedger transferBetweenAccounts(CustodyAccount from, CustodyAccount to,
@@ -512,7 +544,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); cargo.claimQuantities().keySet().forEach(nextClaims::remove);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts); nextAccounts.remove(cargo.id());
         nextAccounts.put(destination.id(), accountWithAdded(destination, cargo.lotQuantities(), Map.of()));
-        FungibleResourceLedger combined = new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, withoutBindingsFor(bindings, destination.id()));
+        FungibleResourceLedger combined = new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, FungibleBindingRepartition.withoutAccount(bindings, destination.id()));
         return combined.rebind(destination.id(), authorityEpoch, FungiblePhysicalObservation.bind(combined, destination.id(), authorityEpoch, observed));
     }
 
@@ -573,7 +605,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
         else nextAccounts.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         nextAccounts.put(destination.id(), destination);
-        Map<SubjectId, PhysicalStackBinding> nextBindings = withoutBindingsFor(from.id());
+        Map<SubjectId, PhysicalStackBinding> nextBindings = FungibleBindingRepartition.withoutAccount(bindings, from.id());
         for (PhysicalStackBinding binding : remainingSource) {
             if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed cold source binding identity is already live");
         }
@@ -672,8 +704,8 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
         else nextAccounts.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
         nextAccounts.put(destination.id(), finalDestination);
-        Map<SubjectId, PhysicalStackBinding> nextBindings = withoutBindingsFor(from.id());
-        if (destinationExists) nextBindings = withoutBindingsFor(nextBindings, destination.id());
+        Map<SubjectId, PhysicalStackBinding> nextBindings = FungibleBindingRepartition.withoutAccount(bindings, from.id());
+        if (destinationExists) nextBindings = FungibleBindingRepartition.withoutAccount(nextBindings, destination.id());
         for (PhysicalStackBinding binding : remainingSource) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed source binding identity is already live");
         for (PhysicalStackBinding binding : destinationBindings) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed destination binding identity is already live");
         return new FungibleResourceLedger(lots, claims, nextAccounts, nextBindings);
@@ -733,7 +765,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch)) {
             throw new IllegalArgumentException("physical custody release does not match the current authority epoch");
         }
-        Map<SubjectId, PhysicalStackBinding> next = withoutBindingsFor(accountId);
+        Map<SubjectId, PhysicalStackBinding> next = FungibleBindingRepartition.withoutAccount(bindings, accountId);
         return new FungibleResourceLedger(lots, claims, accounts, next);
     }
 
@@ -930,7 +962,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                 || unclaimedQuantity(account, claim.economicOwnerId(), claim.itemKind()) < claim.quantity()) {
             throw new IllegalArgumentException("claim allocation is not backed by one exact account balance");
         }
-        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); nextClaims.put(claim.id(), claim);
+        Map<SubjectId, ClaimAllocation> nextClaims = ImmutableLookupMap.withEntry(claims, claim.id(), claim);
         Map<SubjectId, Integer> quantities = new HashMap<>(account.claimQuantities()); quantities.put(claim.id(), claim.quantity());
         return new Reservation(account.withQuantities(account.lotQuantities(), quantities), nextClaims);
     }
@@ -938,30 +970,10 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings, Map<SubjectId, ResourceLot> nextLots) {
         Map<SubjectId, CustodyAccount> next = new HashMap<>(accounts); next.put(account.id(), account); return new FungibleResourceLedger(nextLots, nextClaims, next, nextBindings);
     }
-    private Map<SubjectId, PhysicalStackBinding> withoutBindingsFor(SubjectId accountId) {
-        return withoutBindingsFor(bindings, accountId);
-    }
-    private static Map<SubjectId, PhysicalStackBinding> withoutBindingsFor(Map<SubjectId, PhysicalStackBinding> source,
-                                                                            SubjectId accountId) {
-        Map<SubjectId, PhysicalStackBinding> next = new HashMap<>(source);
-        source.values().stream().filter(binding -> binding.accountId().equals(accountId)).map(PhysicalStackBinding::id).forEach(next::remove);
-        return next;
-    }
     private void requireNoPhysicalBinding(SubjectId accountId, String operation) {
         if (bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId))) {
             throw new IllegalStateException("fungible " + operation + " is fenced by active physical custody");
         }
-    }
-    private static void requireBindings(List<PhysicalStackBinding> bindings, SubjectId accountId, long epoch, String label) {
-        if (bindings == null || bindings.stream().anyMatch(binding -> !binding.accountId().equals(accountId) || binding.authorityEpoch() != epoch)) {
-            throw new IllegalArgumentException(label + " does not match its custody authority");
-        }
-    }
-    private static Map<SubjectId, Integer> boundQuantities(List<PhysicalStackBinding> bindings, boolean lots) {
-        Map<SubjectId, Integer> result = new HashMap<>();
-        bindings.forEach(binding -> (lots ? binding.lotQuantities() : binding.claimQuantities())
-                .forEach((id, quantity) -> result.merge(id, quantity, Integer::sum)));
-        return ImmutableLookupMap.copyOf(result);
     }
     private static CustodyAccount accountWithAdded(CustodyAccount account, Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {
         Map<SubjectId, Integer> nextLots = new HashMap<>(account.lotQuantities()); lots.forEach((id, quantity) -> nextLots.merge(id, quantity, Integer::sum));
@@ -982,17 +994,6 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     private static Map<SubjectId, Integer> subtract(Map<SubjectId, Integer> source, Map<SubjectId, Integer> removed) {
         Map<SubjectId, Integer> next = new HashMap<>(source); removed.forEach((id, quantity) -> { int remaining = next.get(id) - quantity; if (remaining == 0) next.remove(id); else next.put(id, remaining); }); return next;
     }
-    static void requireSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
-        if (requested == null || requested.isEmpty() || requested.values().stream().anyMatch(value -> value == null || value < 1)) throw new IllegalArgumentException(label + " must name a positive exact quantity");
-        requested.forEach((id, quantity) -> { if (source.getOrDefault(id, 0) < quantity) throw new IllegalArgumentException(label + " exceeds its current custody"); });
-    }
-    static void requireOptionalSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
-        if (requested == null) throw new IllegalArgumentException(label + " is required");
-        if (!requested.isEmpty()) requireSubset(source, requested, label);
-    }
     private static int sum(Map<SubjectId, Integer> quantities) { return quantities.values().stream().mapToInt(Integer::intValue).sum(); }
     private record Reservation(CustodyAccount account, Map<SubjectId, ClaimAllocation> claims) { }
-    private static <T> void requireKeys(Map<SubjectId, T> values, java.util.function.Function<T, SubjectId> id, String label) {
-        values.forEach((key, value) -> { if (value == null || !key.equals(id.apply(value))) throw new IllegalArgumentException(label + " map key does not match identity"); });
-    }
 }

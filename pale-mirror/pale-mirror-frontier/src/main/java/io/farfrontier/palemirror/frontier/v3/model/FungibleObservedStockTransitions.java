@@ -16,8 +16,8 @@ final class FungibleObservedStockTransitions {
                                           Map<SubjectId, Integer> claimQuantities,
                                           List<FungiblePhysicalObservation.Stack> remaining) {
         CustodyAccount account = requireAccount(ledger, accountId);
-        FungibleResourceLedger.requireSubset(account.lotQuantities(), lotQuantities, "observed destruction lots");
-        FungibleResourceLedger.requireOptionalSubset(account.claimQuantities(), claimQuantities, "observed destruction claims");
+        FungibleResourceValidation.requireSubset(account.lotQuantities(), lotQuantities, "observed destruction lots");
+        FungibleResourceValidation.requireOptionalSubset(account.claimQuantities(), claimQuantities, "observed destruction claims");
         if (authorityEpoch < 1 || sum(lotQuantities) != sum(claimQuantities))
             throw new IllegalArgumentException("observed destruction must consume one claimed exact portion");
         requireCurrentBinding(ledger, account.id(), authorityEpoch, "observed destruction");
@@ -59,7 +59,7 @@ final class FungibleObservedStockTransitions {
         if (!(account.custody() instanceof ResourceCustody.Container) && !(account.custody() instanceof ResourceCustody.Ground)
                 || authorityEpoch < 1 || departedLots.isEmpty())
             throw new IllegalArgumentException("external stock exit requires a current declared physical source");
-        FungibleResourceLedger.requireSubset(account.lotQuantities(), departedLots, "external stock exit lots");
+        FungibleResourceValidation.requireSubset(account.lotQuantities(), departedLots, "external stock exit lots");
         requireCurrentBinding(ledger, account.id(), authorityEpoch, "external stock exit");
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(ledger.lots());
         departedLots.forEach((id, quantity) -> {

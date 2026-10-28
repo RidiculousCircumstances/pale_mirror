@@ -31,6 +31,12 @@ class ImmutableLookupMapTest {
         assertThrows(UnsupportedOperationException.class, () -> snapshot.keySet().remove("BB"));
         assertThrows(UnsupportedOperationException.class, () -> snapshot.entrySet().iterator().next().setValue(4));
         assertThrows(UnsupportedOperationException.class, () -> snapshot.values().clear());
+        var replaced = ImmutableLookupMap.withEntry(snapshot, "BB", 7);
+        assertEquals(List.of("BB", "Aa"), List.copyOf(replaced.keySet()));
+        assertEquals(Map.of("BB", 7, "Aa", 1), replaced);
+        assertEquals(2, snapshot.get("BB"));
+        assertThrows(UnsupportedOperationException.class, () -> replaced.entrySet().iterator().next().setValue(8));
+        assertThrows(NullPointerException.class, () -> ImmutableLookupMap.withEntry(snapshot, "x", null));
         assertSame(snapshot, ImmutableLookupMap.copyOf(snapshot));
         assertThrows(NullPointerException.class, () -> ImmutableLookupMap.copyOf(java.util.Collections.singletonMap("x", null)));
     }

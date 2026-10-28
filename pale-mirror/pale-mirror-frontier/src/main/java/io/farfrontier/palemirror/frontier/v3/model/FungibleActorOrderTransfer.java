@@ -46,7 +46,7 @@ final class FungibleActorOrderTransfer {
                     || (portion.delegation().isEmpty() && (claim.quantity() != portion.quantity()
                     || !claim.lotQuantities().equals(portion.lotQuantities()))))
                 throw new IllegalArgumentException("actor item order has no exact owner-held claim");
-            FungibleResourceLedger.requireSubset(claim.lotQuantities(), portion.lotQuantities(), "delegated claim portion");
+            FungibleResourceValidation.requireSubset(claim.lotQuantities(), portion.lotQuantities(), "delegated claim portion");
             claimed = Map.of(claimId, portion.quantity());
         } else {
             var free = new java.util.HashMap<>(source.lotQuantities());
@@ -56,8 +56,8 @@ final class FungibleActorOrderTransfer {
                 throw new IllegalArgumentException("unclaimed actor transfer consumes a reserved lot portion");
             claimed = Map.of();
         }
-        FungibleResourceLedger.requireSubset(source.lotQuantities(), portion.lotQuantities(), "actor order source lots");
-        FungibleResourceLedger.requireOptionalSubset(source.claimQuantities(), claimed, "actor order source claim");
+        FungibleResourceValidation.requireSubset(source.lotQuantities(), portion.lotQuantities(), "actor order source lots");
+        FungibleResourceValidation.requireOptionalSubset(source.claimQuantities(), claimed, "actor order source claim");
         CustodyAccount destination = existing == null
                 ? new CustodyAccount(portion.destinationAccountId(), portion.destinationCustody(), portion.lotQuantities(), claimed,
                         portion.destinationCustody() instanceof ResourceCustody.Actor ? Optional.of(order.actorSlot()) : Optional.empty())

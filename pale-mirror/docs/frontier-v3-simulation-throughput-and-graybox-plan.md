@@ -1941,3 +1941,44 @@ before publication, and the original world passes forced full ingress validation
 Focused79 checks across9 classes plus guardrails PASS46s; extended negative4 checks
 PASS30s. Clean-ref release, native performance and terminal scale acceptance remain
 to be recorded. G remains OPEN.
+
+
+### 2026-10-28 — conservation by the exact cold-reservation operation
+
+1e6c219bb clean-ref release PASS49s (79 affected frontier checks,29 runtime,
+guardrails/package), both retained worlds VERIFIED. Its ordinary100 observer8378
+completed10samples:27620→28159 over272.5s, debt1494→6406. Still FAIL, no isolated
+speed-ratio claim and no terminal scale acceptance.
+
+The fresh dc1 JFR also attributes195/268 advisory-worker samples to ledger
+construction and145/214 to account validation (inclusive sample counts). An exact
+cold reservation was rebuilding and revalidating every account's kind/backing/pin
+tables even though only a fresh claim and one existing account changed. This is now
+a scoped operation-construction proof, not a generic trusted-constructor bypass.
+
+FungibleResourceLedger is a final immutable value class retaining its four getters,
+value equality/hash and the explicit unchanged wire codec. External/bootstrap/
+hydration construction retains full identity, bounds, capacity, conservation and
+binding validation. A private cold-reservation operation constructor inherits the
+predecessor's exact lots/bindings, requires the exact unbound account, a fresh claim
+and available stock, and rechecks ALL backing/pinning rules of the changed account.
+Only the fresh claim is added, in full to that one existing account; no other custody,
+stock quantity or account can change. This preserves global conservation directly.
+There is no general unchecked factory, trust flag, ambient bypass, new schema or
+second reservation owner. Bound operations and other transformations still use the
+full construction path. Full world ingress/recovery additionally forces the ledger's
+complete audit; it cannot rely solely on an operation's previous proof.
+
+The existing validation owner now contains shared local-account and complete checks;
+quantity-subset checks moved to that same owner with all immediate consumers updated.
+Existing binding-repartition support owns binding-image removal. This keeps the
+ledger under the unchanged1000line guardrail without compressing or weakening it.
+ImmutableLookupMap.withEntry avoids a redundant mutable→immutable replacement copy;
+its result is a flat defensive snapshot, never a parent history or mutable alias.
+
+Extended existing regression: partial pinned reservation equals a fully audited
+construction, passes full audit, rejects overlapping lot pins even when aggregate
+stock remains, rejects duplicate/foreignowner claims, and leaves its predecessor
+unchanged. Existing codec, actor-pocket, bound-allocation, shipment, advice replay and
+resource-loss coverage retained. Focus62checks/10classes+guardrails PASS43s. Exact
+clean-ref release/deploy and ordinary100 measurements remain pending. G stays OPEN.

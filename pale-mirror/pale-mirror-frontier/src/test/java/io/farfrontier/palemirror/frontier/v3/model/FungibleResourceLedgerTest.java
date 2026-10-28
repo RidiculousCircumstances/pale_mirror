@@ -371,6 +371,19 @@ class FungibleResourceLedgerTest {
                 Map.of(DEPOT_ACCOUNT, new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT), portions, Map.of())), Map.of());
         ClaimAllocation pin = new ClaimAllocation(pinId, new SubjectId("job:two-source-recipe"), OWNER, "minecraft:wheat", 64,
                 portions, ClaimPurpose.EXTERNAL_RESERVATION);
+        var firstPin = new ClaimAllocation(new SubjectId("claim:first-pinned-half"), pin.claimantId(), OWNER,
+                "minecraft:wheat", 32, Map.of(first, 32), ClaimPurpose.EXTERNAL_RESERVATION);
+        var partial = source.reserve(firstPin, DEPOT_ACCOUNT);
+        var fullyAudited = new FungibleResourceLedger(partial.lots(), partial.claims(), partial.accounts(), partial.bindings());
+        assertEquals(fullyAudited, partial); assertEquals(fullyAudited.hashCode(), partial.hashCode());
+        partial.validateComplete();
+        assertThrows(IllegalArgumentException.class, () -> partial.reserve(new ClaimAllocation(new SubjectId("claim:overlap"),
+                pin.claimantId(), OWNER, "minecraft:wheat", 1, Map.of(first, 1), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT));
+        assertThrows(IllegalArgumentException.class, () -> partial.reserve(firstPin, DEPOT_ACCOUNT));
+        assertThrows(IllegalArgumentException.class, () -> source.reserve(new ClaimAllocation(new SubjectId("claim:foreign"),
+                pin.claimantId(), new SubjectId("settlement:foreign"), "minecraft:wheat", 1,
+                Map.of(first, 1), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT));
+        assertEquals(Map.of(), source.claims(), "reservation and failed successors leave the predecessor unchanged");
         FungibleResourceLedger cold = source.reserve(pin, DEPOT_ACCOUNT);
         assertEquals(portions, cold.claims().get(pinId).lotQuantities());
         assertThrows(IllegalArgumentException.class, () -> cold.destroy(DEPOT_ACCOUNT, Map.of(first, 1), Map.of()));

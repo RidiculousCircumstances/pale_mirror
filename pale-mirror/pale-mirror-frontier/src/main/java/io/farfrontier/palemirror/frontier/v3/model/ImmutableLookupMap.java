@@ -22,6 +22,18 @@ public final class ImmutableLookupMap<K, V> extends AbstractMap<K, V> {
         values = Collections.unmodifiableMap(copy);
     }
 
+    private ImmutableLookupMap(Map<? extends K, ? extends V> source, K key, V value) {
+        var copy = new LinkedHashMap<K, V>();
+        source.forEach((currentKey, currentValue) -> copy.put(Objects.requireNonNull(currentKey, "map key"),
+                Objects.requireNonNull(currentValue, "map value")));
+        copy.put(Objects.requireNonNull(key, "map key"), Objects.requireNonNull(value, "map value"));
+        values = Collections.unmodifiableMap(copy);
+    }
+    /** One defensive copy for an immutable replacement; no parent chain or escaped mutable draft. */
+    public static <K, V> Map<K, V> withEntry(Map<? extends K, ? extends V> source, K key, V value) {
+        return new ImmutableLookupMap<>(Objects.requireNonNull(source, "immutable lookup source"), key, value);
+    }
+
     public static <K, V> Map<K, V> copyOf(Map<? extends K, ? extends V> source) {
         Objects.requireNonNull(source, "immutable lookup source");
         if (source instanceof ImmutableLookupMap<?, ?>) {

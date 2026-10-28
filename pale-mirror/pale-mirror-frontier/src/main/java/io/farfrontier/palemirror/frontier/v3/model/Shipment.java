@@ -35,7 +35,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
             if (step.status() != status || step.shipmentRevision() != revision || !step.observation().actuation().execution().equals(execution)
                     || reception.isPresent())
                 throw new IllegalArgumentException("shipment retains a foreign physical step");
-            FungibleResourceLedger.requireSubset(lotQuantities, step.lotQuantities(), "shipment physical portion");
+            FungibleResourceValidation.requireSubset(lotQuantities, step.lotQuantities(), "shipment physical portion");
         }
         if (reception.isPresent() && status != Status.CARRYING && status != Status.DELIVERED)
             throw new IllegalArgumentException("unloaded reception has a foreign transport phase");
@@ -122,7 +122,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
     public SubjectId unloadingAccountId() { return status == Status.RETURNING ? sourceAccountId() : receivingAccountId(); }
     public Shipment returned(Map<SubjectId, Integer> lots) {
         if (status != Status.RETURNING || reception.isPresent()) throw new IllegalArgumentException("shipment has no declared return");
-        FungibleResourceLedger.requireSubset(portions(), lots, "returned cargo portion");
+        FungibleResourceValidation.requireSubset(portions(), lots, "returned cargo portion");
         if (lots.isEmpty()) throw new IllegalArgumentException("empty cargo return");
         var remaining = new java.util.LinkedHashMap<>(portions());
         lots.forEach((id, quantity) -> { int rest = remaining.get(id) - quantity; if (rest == 0) remaining.remove(id); else remaining.put(id, rest); });
@@ -176,7 +176,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
     public ActorResourceItemOrder itemOrder(Map<SubjectId, Integer> portionLots) {
         if (terminal()) throw new IllegalArgumentException("terminal shipment has no item authority");
         if (reception.isPresent()) throw new IllegalArgumentException("shipment awaits exact recipient acknowledgement");
-        FungibleResourceLedger.requireSubset(portions(), portionLots, "shipment declared portion");
+        FungibleResourceValidation.requireSubset(portions(), portionLots, "shipment declared portion");
         if (status == Status.AWAITING_LOAD && !portionLots.equals(portions()))
             throw new IllegalArgumentException("shipment pickup must retain its entire authorized load");
         boolean take = status == Status.AWAITING_LOAD;
@@ -196,7 +196,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
         if (status != Status.CARRYING || reception.isPresent()
                 || !ShipmentReception.unloaded(this, receipt.lotQuantities()).equals(receipt))
             throw new IllegalArgumentException("shipment unload has stale or competing reception evidence");
-        FungibleResourceLedger.requireSubset(portions(), receipt.lotQuantities(), "unloaded portion");
+        FungibleResourceValidation.requireSubset(portions(), receipt.lotQuantities(), "unloaded portion");
         var remaining = new java.util.LinkedHashMap<>(portions());
         receipt.lotQuantities().forEach((lot, quantity) -> {
             int left = remaining.get(lot) - quantity;

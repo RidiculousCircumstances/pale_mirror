@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 /** Structural custody/reservation/binding invariants, checked by the immutable ledger constructor.
  * No transitions, recipes or resource producers are owned here. */
@@ -10,46 +11,64 @@ final class FungibleResourceValidation {
     private FungibleResourceValidation() { }
     private record OwnedKind(SubjectId owner, String item) { }
 
+    static void validateComplete(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
+                                 Map<SubjectId, CustodyAccount> accounts, Map<SubjectId, PhysicalStackBinding> bindings) {
+        if (lots.size() > FungibleResourceLedger.MAX_LOTS || claims.size() > FungibleResourceLedger.MAX_CLAIMS || accounts.size() > FungibleResourceLedger.MAX_ACCOUNTS || bindings.size() > FungibleResourceLedger.MAX_BINDINGS) {
+            throw new IllegalArgumentException("fungible resource retention limit exceeded");
+        }
+        requireKeys(lots, ResourceLot::id, "resource lot"); requireKeys(claims, ClaimAllocation::id, "claim allocation");
+        requireKeys(accounts, CustodyAccount::id, "custody account"); requireKeys(bindings, PhysicalStackBinding::id, "physical stack binding");
+        ActorCarriedResources.validateCapacity(accounts.values());
+        FungibleResourceValidation.validateAccounts(lots, claims, accounts);
+        FungibleResourceValidation.validateBindings(lots, claims, accounts, bindings);
+    }
+
     static void validateAccounts(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                                          Map<SubjectId, CustodyAccount> accounts) {
         Map<SubjectId, Integer> lotTotals = new HashMap<>(); Map<SubjectId, Integer> claimTotals = new HashMap<>();
         for (CustodyAccount account : accounts.values()) {
-            Map<OwnedKind, Integer> stockByKind = new HashMap<>();
-            Map<OwnedKind, Integer> claimedByKind = new HashMap<>();
-            account.lotQuantities().forEach((id, quantity) -> {
-                ResourceLot lot = lots.get(id);
-                if (lot == null) throw new IllegalArgumentException("custody account references an unknown lot");
-                lotTotals.merge(id, quantity, Math::addExact);
-                stockByKind.merge(new OwnedKind(lot.economicOwnerId(), lot.itemKind()), quantity, Math::addExact);
-            });
-            account.claimQuantities().forEach((id, quantity) -> {
-                ClaimAllocation claim = claims.get(id);
-                if (claim == null) throw new IllegalArgumentException("custody account references an unknown claim");
-                claimTotals.merge(id, quantity, Math::addExact);
-                claimedByKind.merge(new OwnedKind(claim.economicOwnerId(), claim.itemKind()), quantity, Math::addExact);
-            });
-            claimedByKind.forEach((key, quantity) -> { if (quantity > stockByKind.getOrDefault(key, 0)) throw new IllegalArgumentException("claim allocations exceed exact account stock"); });
-            Map<SubjectId, Integer> pinnedByLot = new HashMap<>();
-            account.claimQuantities().forEach((claimId, accountQuantity) -> {
-                ClaimAllocation claim = claims.get(claimId);
-                if (claim.lotQuantities().isEmpty()) return;
-                if (accountQuantity != claim.quantity()) throw new IllegalArgumentException("pinned claim cannot split across custody accounts");
-                claim.lotQuantities().forEach((lotId, quantity) -> {
-                    ResourceLot lot = lots.get(lotId);
-                    if (lot == null || !lot.economicOwnerId().equals(claim.economicOwnerId()) || !lot.itemKind().equals(claim.itemKind())) {
-                        throw new IllegalArgumentException("pinned claim references a foreign lot");
-                    }
-                    pinnedByLot.merge(lotId, quantity, Math::addExact);
-                });
-            });
-            pinnedByLot.forEach((lotId, quantity) -> {
-                if (quantity > account.lotQuantities().getOrDefault(lotId, 0)) {
-                    throw new IllegalArgumentException("pinned claims exceed their exact account lot stock");
-                }
-            });
+            validateAccount(lots, claims, account);
+            account.lotQuantities().forEach((id, quantity) -> lotTotals.merge(id, quantity, Math::addExact));
+            account.claimQuantities().forEach((id, quantity) -> claimTotals.merge(id, quantity, Math::addExact));
         }
         lots.forEach((id, lot) -> { if (lotTotals.getOrDefault(id, 0) != lot.quantity()) throw new IllegalArgumentException("resource lot must have exact canonical custody"); });
         claims.forEach((id, claim) -> { if (claimTotals.getOrDefault(id, 0) != claim.quantity()) throw new IllegalArgumentException("claim allocation must have exact canonical custody"); });
+    }
+
+    /** Complete backing/pinning proof for one affected account; never proves global conservation alone. */
+    static void validateAccount(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
+                                CustodyAccount account) {
+        Map<OwnedKind, Integer> stockByKind = new HashMap<>();
+        Map<OwnedKind, Integer> claimedByKind = new HashMap<>();
+        account.lotQuantities().forEach((id, quantity) -> {
+            ResourceLot lot = lots.get(id);
+            if (lot == null) throw new IllegalArgumentException("custody account references an unknown lot");
+            stockByKind.merge(new OwnedKind(lot.economicOwnerId(), lot.itemKind()), quantity, Math::addExact);
+        });
+        account.claimQuantities().forEach((id, quantity) -> {
+            ClaimAllocation claim = claims.get(id);
+            if (claim == null) throw new IllegalArgumentException("custody account references an unknown claim");
+            claimedByKind.merge(new OwnedKind(claim.economicOwnerId(), claim.itemKind()), quantity, Math::addExact);
+        });
+        claimedByKind.forEach((key, quantity) -> { if (quantity > stockByKind.getOrDefault(key, 0)) throw new IllegalArgumentException("claim allocations exceed exact account stock"); });
+        Map<SubjectId, Integer> pinnedByLot = new HashMap<>();
+        account.claimQuantities().forEach((claimId, accountQuantity) -> {
+            ClaimAllocation claim = claims.get(claimId);
+            if (claim.lotQuantities().isEmpty()) return;
+            if (accountQuantity != claim.quantity()) throw new IllegalArgumentException("pinned claim cannot split across custody accounts");
+            claim.lotQuantities().forEach((lotId, quantity) -> {
+                ResourceLot lot = lots.get(lotId);
+                if (lot == null || !lot.economicOwnerId().equals(claim.economicOwnerId()) || !lot.itemKind().equals(claim.itemKind())) {
+                    throw new IllegalArgumentException("pinned claim references a foreign lot");
+                }
+                pinnedByLot.merge(lotId, quantity, Math::addExact);
+            });
+        });
+        pinnedByLot.forEach((lotId, quantity) -> {
+            if (quantity > account.lotQuantities().getOrDefault(lotId, 0)) {
+                throw new IllegalArgumentException("pinned claims exceed their exact account lot stock");
+            }
+        });
     }
 
     static void validateBindings(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
@@ -113,6 +132,29 @@ final class FungibleResourceValidation {
             case PhysicalStackAddress.ActorPocket pocket -> custody instanceof ResourceCustody.Actor owner
                     && owner.actorId().equals(pocket.actorId());
         };
+    }
+
+    static void requireBindings(List<PhysicalStackBinding> bindings, SubjectId accountId, long epoch, String label) {
+        if (bindings == null || bindings.stream().anyMatch(binding -> !binding.accountId().equals(accountId) || binding.authorityEpoch() != epoch)) {
+            throw new IllegalArgumentException(label + " does not match its custody authority");
+        }
+    }
+    static Map<SubjectId, Integer> boundQuantities(List<PhysicalStackBinding> bindings, boolean lots) {
+        Map<SubjectId, Integer> result = new HashMap<>();
+        bindings.forEach(binding -> (lots ? binding.lotQuantities() : binding.claimQuantities())
+                .forEach((id, quantity) -> result.merge(id, quantity, Integer::sum)));
+        return ImmutableLookupMap.copyOf(result);
+    }
+    static void requireSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
+        if (requested == null || requested.isEmpty() || requested.values().stream().anyMatch(value -> value == null || value < 1)) throw new IllegalArgumentException(label + " must name a positive exact quantity");
+        requested.forEach((id, quantity) -> { if (source.getOrDefault(id, 0) < quantity) throw new IllegalArgumentException(label + " exceeds its current custody"); });
+    }
+    static void requireOptionalSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
+        if (requested == null) throw new IllegalArgumentException(label + " is required");
+        if (!requested.isEmpty()) requireSubset(source, requested, label);
+    }
+    static <T> void requireKeys(Map<SubjectId, T> values, java.util.function.Function<T, SubjectId> id, String label) {
+        values.forEach((key, value) -> { if (value == null || !key.equals(id.apply(value))) throw new IllegalArgumentException(label + " map key does not match identity"); });
     }
 
 }

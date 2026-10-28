@@ -7,11 +7,16 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 /** Private ledger operation: retain physical addresses, epochs, quantities and fences while changing allocations. */
 final class FungibleBindingRepartition {
     private FungibleBindingRepartition() { }
+    static Map<SubjectId, PhysicalStackBinding> withoutAccount(Map<SubjectId, PhysicalStackBinding> source, SubjectId accountId) {
+        var next = new HashMap<>(source);
+        source.values().stream().filter(binding -> binding.accountId().equals(accountId)).map(PhysicalStackBinding::id).forEach(next::remove);
+        return next;
+    }
     static FungibleResourceLedger retainLayout(FungibleResourceLedger before,
                                                Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                                                Map<SubjectId, CustodyAccount> accounts, SubjectId accountId) {
         var current = before.bindings().values().stream().filter(b -> b.accountId().equals(accountId)).toList();
-        var bindings = new HashMap<>(before.bindings()); current.forEach(b -> bindings.remove(b.id()));
+        var bindings = withoutAccount(before.bindings(), accountId);
         // This intermediate never leaves the ledger operation and never releases physical authority.
         var unbound = new FungibleResourceLedger(lots, claims, accounts, bindings);
         if (current.isEmpty()) return unbound;

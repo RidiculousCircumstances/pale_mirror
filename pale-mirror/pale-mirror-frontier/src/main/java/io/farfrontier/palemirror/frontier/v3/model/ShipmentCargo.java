@@ -18,7 +18,7 @@ public sealed interface ShipmentCargo permits ShipmentCargo.Fungible, ShipmentCa
                     || carriedAccountId.equals(receivingAccountId)) throw new IllegalArgumentException("cargo accounts must be distinct");
         }
         @Override public ShipmentCargo without(Map<SubjectId, Integer> unloaded) {
-            FungibleResourceLedger.requireSubset(portions, unloaded, "unloaded cargo");
+            FungibleResourceValidation.requireSubset(portions, unloaded, "unloaded cargo");
             var remaining = new HashMap<>(portions);
             unloaded.forEach((id, quantity) -> { int left = remaining.get(id) - quantity; if (left == 0) remaining.remove(id); else remaining.put(id, left); });
             return new Fungible(sourceAccountId, carriedAccountId, receivingAccountId, itemKind, remaining);
