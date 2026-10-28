@@ -3166,5 +3166,45 @@ labour, group movement/delivery/payment/return/recovery, meal/activity/provision
 and projection negatives plus guardrails PASS1m19s. The new precursor test shows
 unchanged assignment under equipment progress, released assignment after field
 retirement, immutable predecessor and codec recovery; publication still rejects a
-removed job with an unresolved execution. Frozen release/deploy/native effect
-pending. G remains OPEN/FAILED.
+removed job with an unresolved execution. Frozen release PASS32s, both retained-world
+deployments verified4018aee0a. Warmed238894events/noDataLoss44.886892s=9.044957ticks/s,
+debt3988→4480,owner61.24%,exact24.69%,WAL10.24%,mealclosure0.524346s. Evolving
+workload, no controlled aggregate source comparison. G remains OPEN/FAILED.
+
+
+### Stable custody membership and current quantity reads (2026-10-28)
+
+The87 native CPU trace repeatedly enters whole custody directory grouping/sorting
+on account value changes. The common read index now separates exact account ID,
+declared custody and claim presence from current quantities and presentation. The
+existing immutable registry view retains that complete membership basis. Reusable
+ImmutableKeyOrderView independently retains exact producer iteration order, including
+reordered immutable predecessors and defensively copied unknown mutable inputs.
+Directory grouping therefore survives quantity-only changes without changing the
+original first-at-custody order or sorted actor/container/ground query order.
+
+Each exact account-root image lazily reads the current immutable account records
+for its requested holder, container, actor or ground set. A closed typed query memo
+preserves repeated list reads; missing current rows fail visibly. Container-section
+uniqueness, economic-title/claim/quantity checks and capacity/physical admission
+remain unchanged. Four input images and four layout images remain rebuildable;
+per-image lazy row memo is bounded by the existing three group-query directories
+and one ground query (3*MAX_ACCOUNTS+1). No old account quantity or personal slot
+is stored in the shared membership layout, and no canonical/schema change is made.
+
+Connected ledger/inventory/ground/carried inventory/provisioning/meal/recovery and
+negative checks plus guardrails PASS43s; final changed-presentation/read checks
+PASS10s. The initial new transfer test attempted an already-forbidden raw actor
+handoff; corrected to a lawful container source, production guard unchanged.
+Focused negatives cover fresh quantities/personal presentation under equal custody,
+registry reordering, frozen predecessor lists, ground handoff, claim release and
+bounded order reconstruction. Frozen release/deploy/native effect pending.
+
+Native CPU cross-check for401 spans47.0008s: process134.12CPU seconds, surviving
+threads76.04CPU seconds,8new/7retired. Known server28.50CPU seconds,known Z threads
+19.34,C2CompilerThread0 11.51;58.08seconds remain unattributed because those endpoints
+do not cover every new/retired thread. JFR names show new C1/C2 compiler threads
+among missing endpoint matches, not their complete CPU attribution. The earlier
+short GC-pause totals do not rule out concurrent GC work. A settled uninstrumented
+longitudinal sample and workload/population checks are still needed; no JFR-on/off
+cost or completely warmed performance claim is made. G remains OPEN/FAILED.
