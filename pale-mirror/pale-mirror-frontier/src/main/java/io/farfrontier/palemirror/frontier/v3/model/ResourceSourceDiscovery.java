@@ -8,7 +8,8 @@ import java.util.*;
 public final class ResourceSourceDiscovery {
     public static List<ResourceSourceEndpoint> localHaulSources(FrontierWorldState state, SubjectId home) {
         var result = new ArrayList<ResourceSourceEndpoint>();
-        state.inventory().containers().values().stream().filter(container -> container.ownerId().equals(home))
+        ResourceStorageSelection.declaredContainers(state.inventory(), home, Set.of(ResourceStorageRole.LOCAL_BUFFER)).stream()
+                .map(state.inventory().containers()::get)
                 .flatMap(container -> container.storage().stream()).filter(policy -> policy.role() == ResourceStorageRole.LOCAL_BUFFER)
                 .sorted(Comparator.comparing(policy -> policy.endpoint().containerId())).forEach(policy -> result.add(policy.endpoint()));
         var resources = state.inventory().fungibleResources();

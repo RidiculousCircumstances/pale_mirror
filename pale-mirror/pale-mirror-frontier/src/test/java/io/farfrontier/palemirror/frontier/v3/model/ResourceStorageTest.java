@@ -36,6 +36,17 @@ class ResourceStorageTest {
     }
     @Test void discoveryRespectsOwnershipTierFilterAndAccessibilityRatherThanTheSitesOriginalChest() {
         var state = initial(); var site = state.extractionSites().deposits().values().iterator().next().site();
+        var inventory = state.inventory(); var id = QuarryStorageFixture.container(state, site);
+        assertTrue(ResourceStorageSelection.declaredContainers(inventory, site.settlementId(), Set.of(ResourceStorageRole.LOCAL_BUFFER)).contains(id));
+        var container = inventory.containers().get(id); var policy = container.storage().orElseThrow();
+        var changed = container.withStorage(new ResourceStoragePolicy(policy.endpoint(), policy.filter(), policy.priority(), ResourceStorageRole.WAREHOUSE));
+        var reassigned = new ExactInventory(ImmutableLookupMap.withEntry(inventory.containers(), id, changed), inventory.items(),
+                inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(), inventory.conflicts(), inventory.surfaces(),
+                inventory.economics(), inventory.fungibleResources(), inventory.occupiedSlots());
+        assertFalse(ResourceStorageSelection.declaredContainers(reassigned, site.settlementId(), Set.of(ResourceStorageRole.LOCAL_BUFFER)).contains(id));
+        assertTrue(ResourceStorageSelection.declaredContainers(reassigned, site.settlementId(), Set.of(ResourceStorageRole.WAREHOUSE)).contains(id));
+        assertTrue(ResourceStorageSelection.declaredContainers(inventory, site.settlementId(), Set.of(ResourceStorageRole.LOCAL_BUFFER)).contains(id),
+                "current policy rows and independent predecessor branches survive unchanged owner memberships");
         var destination = ResourceStorageSelection.destination(state, site.settlementId(), "minecraft:cobblestone", 1,
                 site.layout().storagePort(), Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty(), endpoint -> true).orElseThrow();
         assertNotEquals(QuarryStorageFixture.container(state, site), destination.containerId());

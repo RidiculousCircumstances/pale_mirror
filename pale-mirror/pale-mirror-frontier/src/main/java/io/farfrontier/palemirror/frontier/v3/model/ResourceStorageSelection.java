@@ -6,23 +6,16 @@ import java.util.function.Predicate;
 
 /** Read-only discovery. The caller must retain the endpoint and commit its existing capacity demand. */
 public final class ResourceStorageSelection {
-    private record DeclarationImage(Map<SubjectId, ContainerRecord> source,
-                                    Map<SubjectId, List<ContainerRecord>> owners) { }
     private record Scope(SubjectId owner, String item, Set<ResourceStorageRole> roles) { }
     private static final ImmutableKeyedInputView<Scope, Set<SubjectId>> ELIGIBLE = new ImmutableKeyedInputView<>(512);
-    private static final ThreadLocal<DeclarationImage> DECLARATIONS = new ThreadLocal<>();
+    private static final ImmutableGroupView<SubjectId, ContainerRecord, SubjectId> OWNERS = new ImmutableGroupView<>();
 
     private static List<ContainerRecord> owned(ExactInventory inventory, SubjectId owner) {
-        var image = DECLARATIONS.get();
-        if (image == null || image.source() != inventory.containers()) {
-            var owners = new HashMap<SubjectId, List<ContainerRecord>>();
-            for (var record : inventory.containers().values())
-                owners.computeIfAbsent(record.ownerId(), ignored -> new ArrayList<>()).add(record);
-            owners.replaceAll((id, values) -> List.copyOf(values));
-            image = new DeclarationImage(inventory.containers(), Map.copyOf(owners));
-            DECLARATIONS.set(image);
-        }
-        return image.owners().getOrDefault(Objects.requireNonNull(owner), List.of());
+        // Slot/layout edits do not change the declaration's owner membership.
+        // Shared immutable deltas maintain candidates; current rows still supply
+        // filters, roles and endpoints, in their producer's exact iteration order.
+        return OWNERS.keys(OWNERS, inventory.containers(), record -> Set.of(record.ownerId()), Objects.requireNonNull(owner))
+                .stream().map(inventory.containers()::get).toList();
     }
 
     /** Declaration addresses only, including currently blocked custody for causal wake indexing. */

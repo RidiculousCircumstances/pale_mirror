@@ -20,8 +20,8 @@ final class InternalShipmentPlanning {
             return Optional.empty();
         ResourceSourceComposition.admit(state, source); ShipmentEndpointComposition.validate(state, destination);
         destination.receivingPort();
-        var account = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(value -> value.custody().equals(source.custody())).findFirst().orElse(null);
+        var account = FungibleResourceCustodySupport.accountsAt(state.inventory().fungibleResources(), source.custody())
+                .stream().findFirst().orElse(null);
         if (account == null) return Optional.empty();
         if (!InternalShipmentStateSupport.flowAvailable(state, account.id(), destination.containerId(), itemKind))
             return Optional.empty();

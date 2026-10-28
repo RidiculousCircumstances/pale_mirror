@@ -10,6 +10,23 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierWorldStateUpdateTest {
+    @Test void unchangedStorageProofDoesNotAcceptAChangedOutOfBoundsSurface() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:storage-bounds"), 91L));
+        var inventory = state.inventory();
+        var original = inventory.surfaces().values().stream().filter(ContainerSurface::fixed).findFirst().orElseThrow();
+        var id = original.containerId();
+        var outside = new ContainerSurface(id, new BlockPosition(state.bootstrap().bounds().maxXExclusive(),
+                original.position().y(), original.position().z()), original.status());
+        var changed = new ExactInventory(inventory.containers(), inventory.items(), inventory.cargo(), inventory.playerItems(),
+                inventory.worldCarrierItems(), inventory.conflicts(), ImmutableLookupMap.withEntry(inventory.surfaces(), id, outside),
+                inventory.economics(), inventory.fungibleResources(), inventory.occupiedSlots());
+        assertThrows(IllegalArgumentException.class, () -> state.withInventory(changed));
+        assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> state.withInventory(changed)));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> state.withInventory(inventory),
+                "a rejected fork cannot poison the valid predecessor");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        org.junit.jupiter.api.Assertions.assertEquals(state, codec.decode(codec.encode(state)));
+    }
     @Test void ownedContributionsComposeAtomicallyAndRejectCompetingWritersBeforeAddingAnything() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:update-composition"), 91L));
         var first = FrontierWorldStateUpdate.begin().inventory(state.inventory());

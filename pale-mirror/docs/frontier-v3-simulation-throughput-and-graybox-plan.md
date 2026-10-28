@@ -4403,3 +4403,49 @@ implementation (17s). The corrected kernel/queue/advice focus and guardrails PAS
 complete focused union of78 tests, guardrails and packaged JAR in140s. It was not deployed
 ahead of the now-confirmed queue repair. The final ref will retain that scope and
 rerun affected kernel/adapter integration before installation.
+
+
+### Resumed advice exposes local-query world scans
+
+bc844af0e verified on both retained worlds. Its ordinary16 cuts advance
+186532→189163 in304.3s (8.646045/s), debt969→4424. Advice131→3572, accepted75→2579;
+reservations keep moving and all five sampled accepted plans renew to current
+deadlines. Town35 still has no bread (hungry3/starving7); a prior bakery had
+delivered and meals completed before deployment. Retained trade-acceptance counts
+are unchanged across this window, so no new terminal trade is claimed. This is
+not a causal speed regression comparison against a workload with frozen advice.
+
+Afterwarm44.802973s JFR has zero data loss,245ticks=5.468387/s,debt4665→5315.
+Exclusive gates:owner50.06%,exact36.03%,WAL7.65%. Advice275completions/187accepted/
+88rejected execute real work; its concurrent worker durations are not additional
+wall gates. Owner validation5.25s and scheduling4.24s are inclusive explanatory
+stages, not additive. Exact objective/hauling reviews are the largest named waits.
+Evidence: service-departure-current-ordinary100-{report,cpu}.txt and
+service-departure-current-lookup-callers.txt (sample counts, not exact calls).
+
+Connected source correction in progress: local hauling source discovery uses the
+already-owned storage declaration index by owner/role instead of scanning every
+container; internal shipment source-account selection uses the existing exact
+custody index with preserved first-at-custody ordering. Fixed container bounds
+validation reuses successful immutable surface/bounds evidence rather than walking
+all surfaces on unrelated item/body/work changes. Changed surfaces/bounds and full
+ingress/recovery still execute the original check. No business policy, resource
+allocation, retention limit or persisted schema changes. Existing hauling ground
+loss/recovery and source/capacity checks plus a changed-out-of-bounds surface
+negative cover the actual semantic risk. No measured gain for this cut yet.
+
+The common storage declaration owner directory also used to rebuild for every
+container record replacement, including slot/layout edits. It now consumes the
+existing ImmutableGroupView delta membership owner index and always resolves
+current records for role/filter/endpoint checks. Producer order, unknown-owner
+absence, explicit ownership and independent branch recovery are preserved. An
+existing storage test now warms LOCAL_BUFFER discovery, changes only the current
+policy to WAREHOUSE under the same owner membership, and verifies both the new
+image and the untouched predecessor. Existing generic membership tests run too.
+
+Initial hauling/bounds focus34checks had33 passes and a new fixture assertion
+incorrectly assuming withInventory preserves state object identity. The actual
+bounds negative passed; corrected the assertion to require successful valid
+predecessor validation. Four state update/recovery checks PASS18s. Common storage/
+adoption/group-index focus and guardrails PASS28s. Frozen full affected focus and
+packaging follow, without a new timing-test or baseline campaign.

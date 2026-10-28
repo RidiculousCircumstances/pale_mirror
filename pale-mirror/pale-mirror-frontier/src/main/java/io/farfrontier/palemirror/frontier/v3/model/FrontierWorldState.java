@@ -238,6 +238,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         private static final ImmutableInvariantCheck<Void> COCOON_CUSTODY = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> SETTLEMENT_POLICIES = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> PHYSICAL_DELTAS = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> FIXED_CONTAINER_POSITIONS = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> PRODUCTION_FACILITIES = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> STRUCTURE_CONDITIONS = new ImmutableInvariantCheck<>();
         private static final ImmutableInvariantCheck<Void> SERVICE_WORK = new ImmutableInvariantCheck<>();
@@ -463,8 +464,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         if (damageCellCount > MAX_STRUCTURE_DAMAGE_CELLS) {
             throw new IllegalArgumentException("structure damage retention limit exceeded");
         }
-        inventory.surfaces().values().stream().filter(ContainerSurface::fixed)
-                .forEach(surface -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.position()));
+        OwnedChecks.FIXED_CONTAINER_POSITIONS.validate(() ->
+                inventory.surfaces().values().stream().filter(ContainerSurface::fixed)
+                    .forEach(surface -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.position())),
+                bootstrap.bounds(), inventory.surfaces());
         for (Map.Entry<InfectionCell, FixedRatio> entry : infection.entrySet()) {
             if (entry.getValue().equals(ZERO_INFECTION)) throw new IllegalArgumentException("sparse infection index must not retain zero cells");
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), entry.getKey().originAtY(0));
