@@ -4165,3 +4165,12 @@ Host observation during focused verification (not a clean throughput window):
 three QEMU instances and a Python process in stream_miner. They are unrelated
 and were not stopped; their contribution is not a proved cause of PM gate costs.
 G remains OPEN.
+
+
+The connected balance-read cleanup also used to scan every warmed account after
+any lot/claim/account root changed. It now evicts only exact changed account IDs
+through ImmutableMapChanges, using shared-page deltas where available and full
+comparison for unrelated images. Unchanged rows still revalidate referenced
+lots/claims once per current image. The prior invariant is preserved: every
+retained row still has the current exact account value, removed/replaced accounts
+cannot lend a balance, and thread-local views do not affect canonical data.

@@ -108,7 +108,8 @@ final class FungibleResourceReadIndex {
         // claim change must not discard every other account's balance. Replaced or
         // withdrawn accounts (including a new world) release their old evidence.
         var available = current == null ? new HashMap<SubjectId, Available>() : current.available();
-        available.entrySet().removeIf(entry -> ledger.accounts().get(entry.getKey()) != entry.getValue().account());
+        if (current != null) ImmutableMapChanges.forEachIdentityChangedKey(
+                current.accounts(), ledger.accounts(), available::remove);
         current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), available, new Object());
         CURRENT.set(current);
         return current;
