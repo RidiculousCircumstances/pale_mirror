@@ -303,6 +303,51 @@ public final class FrontierWorldStateUpdate {
         return changed(Component.EXTRACTION_SITES, extractionSites, state.extractionSites());
     }
 
+    /** A named no-op retains the validated aggregate instead of fabricating a
+     * new input revision for every derived view. Only exact component identity
+     * qualifies; a distinct equal candidate still reaches ordinary validation. */
+    boolean changes(FrontierWorldState state) {
+        for (var component : changed) {
+            boolean replaced = switch (component) {
+                case ACTOR_LOCATIONS -> actorLocations != state.actorLocations();
+                case STRUCTURE_CONDITIONS -> structureConditions != state.structureConditions();
+                case INFECTION -> infection != state.infection();
+                case INVENTORY -> inventory != state.inventory();
+                case PRODUCTION_JOBS -> productionJobs != state.productionJobs();
+                case SERVICE_WORKS -> serviceWorks != state.serviceWorks();
+                case PHYSICAL_INTENTS -> physicalIntents != state.physicalIntents();
+                case PHYSICAL_OBSERVATIONS -> physicalObservations != state.physicalObservations();
+                case SCENE_LEASES -> sceneLeases != state.sceneLeases();
+                case HIVE_COLONY -> hiveColony != state.hiveColony();
+                case STRUCTURE_DAMAGE -> structureDamage != state.structureDamage();
+                case PHYSICAL_DELTAS -> physicalDeltas != state.physicalDeltas();
+                case AMBIENT_LEASES -> ambientLeases != state.ambientLeases();
+                case ROUTE_CONSTRUCTIONS -> routeConstructions != state.routeConstructions();
+                case ROUTE_MAINTENANCES -> routeMaintenances != state.routeMaintenances();
+                case ROUTE_TOPOLOGY -> routeTopology != state.routeTopology();
+                case STRATEGIC_PLANS -> strategicPlans != state.strategicPlans();
+                case HUMAN_POPULATION -> humanPopulation != state.humanPopulation();
+                case COMPANIES -> companies != state.companies();
+                case RESOURCE_SITES -> resourceSites != state.resourceSites();
+                case REPLICA_CUSTODY -> replicaCustody != state.replicaCustody();
+                case DEFERRED_AFTERMATH -> deferredAftermath != state.deferredAftermath();
+                case FENCED_RECOVERY -> fencedRecovery != state.fencedRecovery();
+                case DIAGNOSTIC_INCIDENTS -> diagnosticIncidents != state.diagnosticIncidents();
+                case ACTOR_MOVEMENTS -> actorMovements != state.actorMovements();
+                case ACTOR_EXECUTIONS -> actorExecutions != state.actorExecutions();
+                case SHIPMENTS -> shipments != state.shipments();
+                case UNIT_GROUPS -> unitGroups != state.unitGroups();
+                case TRANSPORT_FLEET -> transportFleet != state.transportFleet();
+                case EXTRACTION_SITES -> extractionSites != state.extractionSites();
+                case PRODUCTION_STATIONS -> productionStations != state.productionStations();
+                case NAVIGATION_GEOMETRY -> navigationGeometry != state.navigationGeometry();
+                case FOREST -> forest != state.forest();
+            };
+            if (replaced) return true;
+        }
+        return false;
+    }
+
     private void mark(Component component) {
         if (!changed.add(component)) throw new IllegalStateException("state component is specified more than once: " + component);
     }

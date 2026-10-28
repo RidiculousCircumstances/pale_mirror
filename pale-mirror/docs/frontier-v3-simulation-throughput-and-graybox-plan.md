@@ -2430,3 +2430,27 @@ Focused verification includes actual worker-prepared policy acceptance and
 rejection after living-worker facts change, existing stale/forged policy tests,
 equipment and sourcing negatives, and bounded snapshot eviction/failure coverage.
 Native throughput gain remains unmeasured until the next capture.
+
+
+### Preserve unchanged aggregate identity (2026-10-28)
+
+Connected source contradiction: StrategicObjectiveProcess builds decisionState
+through withStrategicPlans even when every retained perception/doctrine component
+is unchanged. StrategicPlanState already returns itself, but WorldState.withChanges
+unconditionally constructs another full world, runs validation/input retention and
+invalidates all exact-snapshot-derived views. This defeats reuse inside a single
+review independently of cross-thread sharing.
+
+FrontierWorldStateUpdate now exhaustively compares only explicitly supplied
+components by identity. An empty patch or exact no-op returns the already validated
+world; any distinct candidate, including an equal distinct map, still goes through
+the constructor and economic-input retention. Full invariant audits always bypass
+this fast path. There is no equality scan, hash validity proof or cached authority.
+The existing patch tests cover named replacement, duplicate-writer rejection,
+retained no-op root identity and full-audit reconstruction. World/relationship/
+reference-closure and staffing affected checks plus guardrails pass in30s.
+
+ad114da60 shared-economics clean release verification passed; both retained
+worlds deployed/verified, SHA512e9a9ad45d0c22132046b6190f015974da01748d6e91ef9a95803e03a4666e5a2f7e505075140aea17eb801ddc32feae2f7d0f3bbd67951cf479c0858e876b446.
+Main follow-up tick738539/rev1529861/statusok/debt0/recoveryfalse. Private ordinary
+capture shared-economics-ordinary100 is running/completing; no measured gain yet.

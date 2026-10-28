@@ -61,6 +61,10 @@ class FrontierWorldStateUpdateTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:update-negative"), 91L));
         FrontierWorldStateUpdate duplicate = FrontierWorldStateUpdate.begin().inventory(state.inventory());
         assertThrows(IllegalStateException.class, () -> duplicate.inventory(state.inventory()));
-        assertSame(state.inventory(), state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory())).inventory());
+        assertSame(state, state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory())));
+        assertSame(state, state.withStrategicPlans(state.strategicPlans()));
+        assertSame(state, state.withChanges(FrontierWorldStateUpdate.begin()));
+        assertNotSame(state, ImmutableInvariantCheck.full(() -> state.withChanges(FrontierWorldStateUpdate.begin())),
+                "full ingress must still validate even an unchanged aggregate");
     }
 }

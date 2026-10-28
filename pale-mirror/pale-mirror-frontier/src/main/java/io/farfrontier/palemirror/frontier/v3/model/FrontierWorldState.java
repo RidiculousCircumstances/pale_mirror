@@ -739,6 +739,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     }
     public FrontierWorldState withChanges(FrontierWorldStateUpdate change) {
         change = Objects.requireNonNull(change, "state change");
+        if (!ImmutableInvariantCheck.fullAudit() && !change.changes(this)) return this;
         var next = new FrontierWorldState(bootstrap, change.actorLocations(this), change.structureConditions(this), change.infection(this),
                 change.inventory(this), change.productionJobs(this), change.serviceWorks(this),
                 change.physicalIntents(this), change.physicalObservations(this), change.sceneLeases(this), change.hiveColony(this),
