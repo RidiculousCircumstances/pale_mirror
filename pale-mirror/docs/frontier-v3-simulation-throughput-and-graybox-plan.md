@@ -1841,3 +1841,34 @@ Existing pending-choice regression now resumes after real direct route calculati
 reaches TransportMissionStarted, equals unchanged-input direct planning, preserves
 the original unmodified world and retains stale-funds/withdrawn-quote negatives.
 Guardrails+64frontier/7classes PASS83s. Exact release/runtime evidence still required.
+
+
+### Check physical capacity only where physical packing changed
+
+d1027297c exactrelease71frontier/9classes+29runtime/guardrails/packagePASS89s;
+both retained-world deployments VERIFIED. Ordinary10022665→23114/272.5s,
+debt344→5347 FAILED. Warm20s JFR resumable-trade-choice-warm.jfr/attribution.txt
+identifies GoodsTripPlanning.reserveSelected → GoodsTradeStateSupport.reserve →
+ExactInventory.withFungibleResources → admitNoNewContainerOvercommit → slotBudget /
+FungibleResourceReadIndex.containerAccounts. One advisory worker has228 capacity
+samples inside823total observed preparation samples (inclusive, not additive CPU
+percentage). All-container pre/post comparisons can alternate component images and
+rebuild whole custody indexes after the planning scope's bounded memo fills.
+
+Every existing capacity-admitting inventory transition now selects affected physical
+containers once from exact component changes. Claim-only reservations/title changes
+do not change occupied space. Actual lot quantities/custody, lot kind, individual
+slots, physical binding addresses and container declarations retain capacity checks.
+Stock conservation, owner/custody validation, physical postconditions and the prior
+no-increased-overcommit rule are unchanged. No unsafe transient inventory, skipped
+canonical audit, second stock ledger, cache increase or trade-specific exception.
+The pure immutable-map difference is shared with existing economic change ports;
+capacity projection owns no economic policy. Generic resource mutations, equipment
+moves, production and cargo handoff use the same corrected inventory admission.
+
+Focused guardrails+67frontier/9classes PASS90s: reservations change no physical
+capacity dependency; stock/equipment changes identify their actual storage; changing
+one32-item wheat lot to bread with unchanged custody quantities still rejects a
+one-slot overflow. Existing ledger, player-edit, compartment, reservation and trade
+negative coverage retained. Exact clean release, deployment and ordinary100 runtime
+measurement remain required; no measured capacity speedup or complete G claim yet.

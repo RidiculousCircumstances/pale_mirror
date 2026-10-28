@@ -14,11 +14,6 @@ interface EconomicInputChangePort {
     }
     /** Only inspect the modified immutable component. No world-state key or expensive fact assembly. */
     static <K, V> void difference(Map<K, V> before, Map<K, V> after, java.util.function.BiConsumer<V, V> change) {
-        if (before == after) return;
-        for (var entry : before.entrySet()) {
-            var next = after.get(entry.getKey());
-            if (!Objects.equals(entry.getValue(), next)) change.accept(entry.getValue(), next);
-        }
-        for (var entry : after.entrySet()) if (!before.containsKey(entry.getKey())) change.accept(null, entry.getValue());
+        ImmutableMapChanges.forEach(before, after, delta -> change.accept(delta.before(), delta.after()));
     }
 }

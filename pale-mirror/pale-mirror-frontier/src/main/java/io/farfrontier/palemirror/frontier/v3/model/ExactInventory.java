@@ -286,7 +286,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     /** Restored old overcommit may be inspected and reduced, but no transition may make it worse. */
     private ExactInventory admitNoNewContainerOvercommit(ExactInventory next) {
-        for (ContainerRecord container : containers.values()) {
+        for (var id : ContainerCapacityChanges.between(this, next)) {
+            var container = Objects.requireNonNull(containers.get(id), "capacity admission lost its declared container");
             long before = slotBudget(container.id()).requiredSlots();
             long after = next.slotBudget(container.id()).requiredSlots();
             if (after > Math.max(container.slotCount(), before)) {
