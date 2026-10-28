@@ -3764,8 +3764,10 @@ cell receipt. The site owner checks declared site/job and exclusive COLD body cu
 then applies existing preparation and settlement invariants inside that single event.
 No intermediate external preparation is published. HOT preparation still requires its
 durable-before-effect barrier, and physical hand observations are forbidden in COLD.
-The additive WAL type reuses the unchanged receipt codec; schema312 state and prior
-event grammars remain unchanged, so retain current worlds. Process event permissions,
+The additive WAL type reuses the unchanged receipt codec. Nevertheless its closed
+process event inventory changes the snapshot descriptor fingerprint: schema313 is
+required. Prior schema312 worlds are preserved for diagnosis and explicitly rejected;
+no historical-composition fallback or snapshot patching is introduced. Process event permissions,
 wake dependencies, diagnostics and causal trace include the explicit new event.
 
 Focused COLD/HOT harvest, production, process catalogue, diagnostic producer and
@@ -3774,3 +3776,10 @@ scenarios exercise the real planner. Added rejection for duplicate/foreign recei
 retained physical custody, HOT attempted as COLD and forged hand; exact receipt codec
 and pre-state recovery replay agree. Frozen checks, retained-world delivery and measured
 ordinary throughput follow; no20/s or final goal acceptance claim yet.
+
+Deployment exposed the missed inventory-version boundary:4c8a8e1a1 correctly refused
+schema312 snapshots before hydration. Both services were rolled back to the exact
+verifiededad7cf9b artifact on their retained worlds. New schema313 fresh-world delivery
+is required by the changed closed composition, not evidence that an existing world
+recovered. Added negative early-header/full-state rejection; keep historical traces
+and do not compare different-world rates as a controlled optimization gain.

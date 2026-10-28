@@ -18,7 +18,8 @@ final class FrontierStateSchema {
     // Canonical lifecycle capacity/composition includes the100settlement cohort.
     // Public market orders retain one shared remaining quantity; bilateral schema310 is rejected.
     // Compaction retains the durable epoch floor; erased history cannot be reconstructed.
-    static final int VERSION = 312;
+    // Atomic COLD cell receipts change the closed process event inventory.
+    static final int VERSION = 313;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

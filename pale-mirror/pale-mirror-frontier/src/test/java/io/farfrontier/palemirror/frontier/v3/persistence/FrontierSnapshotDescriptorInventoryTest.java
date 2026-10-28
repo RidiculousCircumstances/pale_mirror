@@ -19,6 +19,17 @@ class FrontierSnapshotDescriptorInventoryTest {
         assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
     }
 
+    @Test void previousStateVersionFailsBeforeHeaderSelectionOrHydration() {
+        var codec = new FrontierWorldStateCodec();
+        var encoded = codec.encode(FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:cold-cell-version-fence"), 91L)));
+        java.nio.ByteBuffer.wrap(encoded).putShort(4, (short) (FrontierStateSchema.VERSION - 1));
+        var header = assertThrows(IllegalArgumentException.class, () -> FrontierWorldSnapshotHeader.read(encoded));
+        var full = assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
+        assertTrue(header.getMessage().contains("fresh current-schema world required"));
+        assertEquals(header.getMessage(), full.getMessage());
+    }
+
     @Test void previousInventoryCannotAuthorizeAnUnrelatedFutureComposition() {
         assertFalse(FrontierSnapshotDescriptorInventory.accepts("5f2691f35f4efbb5b339eaa50745e945a54149126d8fd0e0b18962f33d595003"));
         assertFalse(FrontierSnapshotDescriptorInventory.accepts("0".repeat(64)));
