@@ -270,9 +270,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         if (!fullValidationDeferred()) {
             // Cross-owner checks belong to the pre-WAL publication barrier. Unpublished
             // previews must not repeatedly audit unchanged executions for a terrain fact.
-            extractionSites.validate(bootstrap);
-            ExtractionWorkAuthority.validateReferences(extractionSites, actorExecutions);
-            ForestryWorkAuthority.validateReferences(forest, actorExecutions, humanPopulation);
+            FrontierComponentValidation.validateLandAndWork(bootstrap, extractionSites, forest, actorExecutions, humanPopulation);
             TransportFleetReferences.validate(bootstrap, transportFleet, actorLocations, inventory, shipments);
             GroupMemberActivityCapability.validateReferences(unitGroups, actorExecutions);
             ShipmentExecutionCapability.validateReferences(shipments, actorExecutions);
@@ -297,7 +295,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             if (!bootstrap.ruleset().forestry().enabled() && !forest.regions().isEmpty())
                 throw new IllegalArgumentException("forest history requires its explicit content profile");
             navigationGeometry.requireWithin(bootstrap.bounds());
-            productionStations.validate(inventory, bootstrap.ruleset().production(), bootstrap.ruleset().tools());
+            FrontierComponentValidation.validateMachines(productionStations, inventory, bootstrap.ruleset().production(), bootstrap.ruleset().tools());
             ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites, forest, physicalIntents);
             ActorBodyAuthority.validate(bootstrap, actorLocations, fencedRecovery);
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
@@ -355,10 +353,11 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         for (HiveGrowthJob job : hiveColony.growthJobs().values()) {
             requireJobTask(strategicPlans, job.taskId(), job.hiveId(), StrategicTaskKind.GROW_HIVE_ORGANISM, "hive growth");
         }
-        OwnedChecks.ECONOMIC_CLAIMS.validate(() -> FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory), bootstrap, inventory);
+        OwnedChecks.ECONOMIC_CLAIMS.validate(() -> FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory), bootstrap, inventory.items());
         Set<SubjectId> expectedActors = ActorIdentityDeclarations.validate(bootstrap, hiveColony, humanPopulation, actorLocations, transportFleet);
         OwnedChecks.ACTOR_ITEM_CUSTODY.validate(() -> FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), actorLocations, inventory, fencedRecovery),
-                    bootstrap.worldId(), actorLocations, inventory, fencedRecovery);
+                    bootstrap.worldId(), ActorIdentityDeclarations.lifeStatuses(bootstrap, actorLocations), inventory.items(),
+                    inventory.fungibleResources().accounts(), inventory.fungibleResources().bindings(), fencedRecovery);
         OwnedChecks.COCOON_CUSTODY.validate(() -> HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas,
                     actorExecutions), bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas, actorExecutions);
         OwnedChecks.SETTLEMENT_POLICIES.validate(() -> FrontierWorldStateSupport.validateSettlementPolicies(bootstrap, humanPopulation), bootstrap, humanPopulation);

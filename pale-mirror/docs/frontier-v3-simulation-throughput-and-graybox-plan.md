@@ -2701,3 +2701,25 @@ removed parent mission and a forged current PRESENCE responsibility; full views
 also reject the missing mission and a full audit accepts the unchanged branch.
 Existing registered travel, consumption and recovery cases remain. Native impact
 is not measured yet; terminal product/scale acceptance remains open.
+
+### Reuse complete unchanged component checks (2026-10-28)
+
+1ec3e693a cleanrelease50frontier+45runtime/guardrails/packagePASS1m20s; bothretained
+worlddeploymentsverified. ordinary100:44.807705s/noDataLoss,3.749355ticks/s,
+debt965→1694,STILLFAILED. Group validation now123invocations/0.253979s rather
+than roughly2s in preceding windows. Full canonicalvalidation11.567777s,
+owned-state7.090505s and reference-closure4.453302s remain. These evolving windows
+are not a controlled aggregate speedup. Mainfollowupstatusok/tick835228/debt0.
+
+Owned-state CPU attribution still names unchecked installed-machine and extraction
+component calls, plus actor-item custody. Construction composition now reuses the
+existing invariant mechanism for complete immutable argument tuples of extraction
+land/work, forestry work and machines. The component owners' original checks and
+their order remain unchanged, and full bootstrap/recovery audits bypass evidence.
+Actor-item custody invalidation retains its complete actual read set: world ID,
+actor membership/liveness, exact items, resource accounts/bindings and recovery.
+Economic exact-item ownership depends on the exact-item table, rather than
+unrelated fungible/money changes. No check, policy, schema or clock rule is removed.
+Focused39station/custody/body/extraction disruption and recovery checks plus
+guardrails PASS48s. Wider release includes the existing forestry cases. No new
+microbenchmark or timing test is introduced; native effect is not measured yet.
