@@ -11,7 +11,10 @@ import static io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelation
 /** Derived ownership edges and the publication/recovery barrier; no second persisted roster. */
 final class UnitGroupRelationships {
     private UnitGroupRelationships() { }
-    static void collect(FrontierWorldState state, List<Edge> edges) {
+    static void collect(FrontierWorldState state, List<Edge> edges) { inspect(state, edges, true); }
+    /** Publication needs the same owner checks, without constructing an unused diagnostic graph. */
+    static void validate(FrontierWorldState state) { inspect(state, List.of(), false); }
+    private static void inspect(FrontierWorldState state, List<Edge> edges, boolean project) {
         for (var claim : state.inventory().fungibleResources().claims().values()) {
             if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY) continue;
             var mission = state.shipments().missions().get(claim.claimantId());
@@ -27,12 +30,14 @@ final class UnitGroupRelationships {
                         && !journey.stations().containsKey(member.actorId())))
                     throw new IllegalArgumentException("active group journey omits a surviving participant's declared station");
             });
-            var owner = new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id());
-            var life = group.phase() == UnitGroup.Phase.CLOSED ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
-            edges.add(declaredEdge(Kind.GROUP_MISSION, owner, owner,
-                    new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, group.mission().id()), life, "group:" + group.id().value()));
-            for (var member : group.members()) edges.add(declaredEdge(Kind.GROUP_MEMBER, owner, owner,
-                    new SubjectEndpoint(EntityKind.ACTOR, member.actorId()), life, "group:" + group.id().value()));
+            if (project) {
+                var owner = new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id());
+                var life = group.phase() == UnitGroup.Phase.CLOSED ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
+                edges.add(declaredEdge(Kind.GROUP_MISSION, owner, owner,
+                        new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, group.mission().id()), life, "group:" + group.id().value()));
+                for (var member : group.members()) edges.add(declaredEdge(Kind.GROUP_MEMBER, owner, owner,
+                        new SubjectEndpoint(EntityKind.ACTOR, member.actorId()), life, "group:" + group.id().value()));
+            }
         }
         for (var mission : state.shipments().missions().values()) {
             var group = state.unitGroups().groups().get(mission.groupId());
@@ -42,45 +47,56 @@ final class UnitGroupRelationships {
                         && mission.stage() != TransportMission.Stage.COMPLETE)
                 throw new IllegalArgumentException("transport mission lost its exact group or legal closing boundary");
             io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.validate(state, mission, group);
-            var owner = new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id());
-            var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
-            edges.add(declaredEdge(Kind.TRANSPORT_GROUP, owner, owner,
-                    new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id()), life, "transport:" + mission.id().value()));
-            mission.transportAssetId().ifPresent(actor -> edges.add(declaredEdge(Kind.TRANSPORT_ASSET, owner, owner,
-                    new SubjectEndpoint(EntityKind.ACTOR, actor), life, "transport:" + mission.id().value())));
+            if (project) {
+                var owner = new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id());
+                var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
+                edges.add(declaredEdge(Kind.TRANSPORT_GROUP, owner, owner,
+                        new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id()), life, "transport:" + mission.id().value()));
+                mission.transportAssetId().ifPresent(actor -> edges.add(declaredEdge(Kind.TRANSPORT_ASSET, owner, owner,
+                        new SubjectEndpoint(EntityKind.ACTOR, actor), life, "transport:" + mission.id().value())));
+            }
             for (var id : mission.shipmentIds()) {
                 var shipment = state.shipments().shipments().get(id);
                 if (shipment == null || !shipment.transportMissionId().equals(Optional.of(mission.id())))
                     throw new IllegalArgumentException("mission lost its exact shipment reference");
-                edges.add(declaredEdge(Kind.TRANSPORT_SHIPMENT, owner, owner,
-                        new SubjectEndpoint(EntityKind.SHIPMENT, id), life, "transport:" + mission.id().value()));
-            }
-            mission.supplies().ifPresent(load -> {
-                for (var a : load.allocations()) if (!a.loaded() && !a.withdrawn()) {
-                    edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_CLAIM, owner, owner,
-                            new SubjectEndpoint(EntityKind.RESOURCE_CLAIM, a.claimId()), Lifecycle.ACTIVE, "supply:" + a.claimId().value()));
-                    edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_SOURCE, owner, owner,
-                            new SubjectEndpoint(EntityKind.RESOURCE_ACCOUNT, a.sourceAccountId()), Lifecycle.ACTIVE, "supply:" + a.claimId().value()));
+                if (project) {
+                    var owner = new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id());
+                    var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
+                    edges.add(declaredEdge(Kind.TRANSPORT_SHIPMENT, owner, owner,
+                            new SubjectEndpoint(EntityKind.SHIPMENT, id), life, "transport:" + mission.id().value()));
                 }
-            });
-            mission.replenishment().ifPresent(t -> {
-                edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_CLAIM, owner, owner,
-                        new SubjectEndpoint(EntityKind.RESOURCE_CLAIM, t.claimId()), Lifecycle.ACTIVE, "refill:" + t.claimId().value()));
-                edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_SOURCE, owner, owner,
-                        new SubjectEndpoint(EntityKind.RESOURCE_ACCOUNT, t.sourceAccountId()), Lifecycle.ACTIVE, "refill:" + t.claimId().value()));
-            });
-            mission.replenishmentPurchase().ifPresent(p -> edges.add(declaredEdge(Kind.TRANSPORT_PURCHASE, owner, owner,
-                    new SubjectEndpoint(EntityKind.FINANCIAL_RESERVATION, p.payment().id()), Lifecycle.ACTIVE,
-                    "purchase:" + p.payment().id().value())));
+            }
+            if (project) {
+                var owner = new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id());
+                mission.supplies().ifPresent(load -> {
+                    for (var a : load.allocations()) if (!a.loaded() && !a.withdrawn()) {
+                        edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_CLAIM, owner, owner,
+                                new SubjectEndpoint(EntityKind.RESOURCE_CLAIM, a.claimId()), Lifecycle.ACTIVE, "supply:" + a.claimId().value()));
+                        edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_SOURCE, owner, owner,
+                                new SubjectEndpoint(EntityKind.RESOURCE_ACCOUNT, a.sourceAccountId()), Lifecycle.ACTIVE, "supply:" + a.claimId().value()));
+                    }
+                });
+                mission.replenishment().ifPresent(t -> {
+                    edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_CLAIM, owner, owner,
+                            new SubjectEndpoint(EntityKind.RESOURCE_CLAIM, t.claimId()), Lifecycle.ACTIVE, "refill:" + t.claimId().value()));
+                    edges.add(declaredEdge(Kind.TRANSPORT_SUPPLY_SOURCE, owner, owner,
+                            new SubjectEndpoint(EntityKind.RESOURCE_ACCOUNT, t.sourceAccountId()), Lifecycle.ACTIVE, "refill:" + t.claimId().value()));
+                });
+                mission.replenishmentPurchase().ifPresent(p -> edges.add(declaredEdge(Kind.TRANSPORT_PURCHASE, owner, owner,
+                        new SubjectEndpoint(EntityKind.FINANCIAL_RESERVATION, p.payment().id()), Lifecycle.ACTIVE,
+                        "purchase:" + p.payment().id().value())));
+            }
         }
         for (var shipment : state.shipments().shipments().values()) if (shipment.transportMissionId().isPresent()) {
             var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
             if (mission == null || !mission.shipmentIds().contains(shipment.id()))
                 throw new IllegalArgumentException("shipment lost its exact owning transport mission");
-            var owner = new SubjectEndpoint(EntityKind.SHIPMENT, shipment.id());
-            edges.add(declaredEdge(Kind.SHIPMENT_MISSION, owner, owner,
-                    new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id()),
-                    shipment.terminal() ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE, "shipment:" + shipment.id().value()));
+            if (project) {
+                var owner = new SubjectEndpoint(EntityKind.SHIPMENT, shipment.id());
+                edges.add(declaredEdge(Kind.SHIPMENT_MISSION, owner, owner,
+                        new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id()),
+                        shipment.terminal() ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE, "shipment:" + shipment.id().value()));
+            }
         }
         for (var movement : state.actorMovements().values()) if (movement.context() instanceof ActorMovementContext.GroupLeg leg) {
             var group = state.unitGroups().groups().get(leg.groupId());

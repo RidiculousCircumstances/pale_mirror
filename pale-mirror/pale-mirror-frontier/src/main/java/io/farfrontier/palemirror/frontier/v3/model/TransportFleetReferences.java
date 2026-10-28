@@ -6,16 +6,23 @@ import java.util.Map;
 
 /** Cross-owner closure; assets do not duplicate body condition, pose, stock or money. */
 final class TransportFleetReferences {
+    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
     private TransportFleetReferences() { }
     static void validate(FrontierBootstrap bootstrap, TransportFleet fleet, Map<SubjectId, ActorLocation> actors,
                          ExactInventory inventory, ShipmentState shipments) {
+        var kinds = ActorIdentityDeclarations.declaredKinds(bootstrap, actors);
+        REFERENCES.validate(() -> validateCurrent(bootstrap, fleet, kinds, inventory, shipments), bootstrap, fleet.assets(),
+                kinds, inventory.containers(), inventory.surfaces(), shipments.missions());
+    }
+    private static void validateCurrent(FrontierBootstrap bootstrap, TransportFleet fleet, Map<SubjectId, ActorKind> kinds,
+                                        ExactInventory inventory, ShipmentState shipments) {
         for (var asset : fleet.assets().values()) {
             FrontierWorldStateSupport.settlement(bootstrap, asset.homeSettlementId());
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), asset.homeStation().support());
-            var body = actors.get(asset.actorId());
+            var kind = kinds.get(asset.actorId());
             var container = inventory.containers().get(asset.containerId());
             var surface = inventory.surfaces().get(asset.containerId());
-            if (body == null || body.kind() != ActorKind.PACK_ANIMAL || container == null || surface == null
+            if (kind != ActorKind.PACK_ANIMAL || container == null || surface == null
                     || !container.ownerId().equals(asset.homeSettlementId()) || container.slotCount() != asset.stackSlots()
                     || !surface.location().equals(new ContainerLocation.Mobile(asset.actorId())))
                 throw new IllegalArgumentException("transport asset lost its exact actor/container declaration: " + asset.actorId());

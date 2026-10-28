@@ -489,7 +489,7 @@ public final class FrontierDomainRelationships {
             new ValidationFamily("relations-budgets", s -> List.of(s.inventory().economics(), s.shipments()),
                     (s, edges, incidents) -> FinancialBudgetRelationships.collect(s, edges)),
             new ValidationFamily("relations-groups", s -> List.of(s.unitGroups(), s.shipments(), s.actorLocations(), s.actorExecutions(), s.actorMovements(), s.bootstrap(), s.inventory().fungibleResources(), s.transportFleet()),
-                    (s, edges, incidents) -> UnitGroupRelationships.collect(s, edges)),
+                    (s, edges, incidents) -> UnitGroupRelationships.validate(s)),
             new ValidationFamily("relations-shipments", s -> List.of(s.shipments(), s.actorExecutions(), s.companies().goodsTrade(), s.inventory().containers(),
                     s.inventory().fungibleResources(), s.bootstrap(), s.transportFleet(), s.actorLocations()), (s, edges, incidents) -> ShipmentRelationships.collect(s, edges)),
             new ValidationFamily("relations-trade", s -> List.of(s.companies().goodsTrade(), s.inventory().economics(), s.inventory().containers(),

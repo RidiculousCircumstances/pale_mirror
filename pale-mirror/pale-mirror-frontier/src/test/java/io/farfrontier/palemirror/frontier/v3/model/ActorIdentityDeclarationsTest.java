@@ -8,6 +8,24 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorIdentityDeclarationsTest {
+    @Test void acceptedExecutionMembershipCannotHideRemovedActorsOrNewUnknownExecutions() {
+        var state = ResourceSiteHarvestProcessTest.initial();
+        var actor = state.humanPopulation().residents().keySet().iterator().next();
+        var empty = io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState.empty();
+        var id = empty.next(actor, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, actor);
+        var executions = empty.begin(id, 0);
+        ActorIdentityDeclarations.validateExecutions(state.bootstrap(), state.actorLocations(), executions);
+        var missing = ImmutableLookupMap.withoutEntry(state.actorLocations(), actor);
+        assertThrows(IllegalArgumentException.class, () -> ActorIdentityDeclarations.validateExecutions(state.bootstrap(), missing, executions));
+        var unknown = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("actor:unknown-execution");
+        var forged = executions.begin(executions.next(unknown,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, unknown), 0);
+        assertThrows(IllegalArgumentException.class, () -> ActorIdentityDeclarations.validateExecutions(state.bootstrap(), state.actorLocations(), forged));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> {
+            ActorIdentityDeclarations.validateExecutions(state.bootstrap(), state.actorLocations(), executions); return null;
+        }));
+    }
+
     @Test void derivedRosterIsReusedWithoutSkippingTheCurrentActorDeclarationCheck() {
         var state = ResourceSiteHarvestProcessTest.initial();
         var expected = ActorIdentityDeclarations.validate(state.bootstrap(), state.hiveColony(), state.humanPopulation(),

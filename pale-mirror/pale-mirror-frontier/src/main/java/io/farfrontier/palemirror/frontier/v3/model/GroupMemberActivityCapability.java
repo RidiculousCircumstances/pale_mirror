@@ -6,6 +6,7 @@ import java.util.Optional;
 
 /** Group participation retains purpose across self-care; individual UAE remains the sole actuator owner. */
 final class GroupMemberActivityCapability implements ActorActivityCapability {
+    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
     @Override public ActorActivityKind kind() { return ActorActivityKind.GROUP_MEMBER; }
     @Override public boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) {
         validateReference(state, execution);
@@ -75,6 +76,11 @@ final class GroupMemberActivityCapability implements ActorActivityCapability {
         throw new IllegalArgumentException("group purpose ends only through the group completion protocol");
     }
     static void validateReferences(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState groups, ActorExecutionState executions) {
+        REFERENCES.validate(() -> validateCurrentReferences(groups, executions), groups.groups(),
+                executions.current(ActorActivityKind.GROUP_MEMBER), executions.suspended());
+    }
+    private static void validateCurrentReferences(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState groups,
+                                                   ActorExecutionState executions) {
         for (var id : executions.current(ActorActivityKind.GROUP_MEMBER).values()) validateGroupReference(groups, id);
         for (var id : executions.suspended()) {
             if (id.activityKind() != ActorActivityKind.GROUP_MEMBER) continue;

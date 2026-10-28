@@ -17,6 +17,15 @@ final class ActorIdentityDeclarations {
         if (ImmutableInvariantCheck.fullAudit()) return KINDS.project(bootstrap, actors, (before, after) -> false, (id, actor) -> actor.kind());
         return KINDS.project(bootstrap, actors, (id, actor) -> actor.kind());
     }
+    private static final ImmutableInvariantCheck<Void> EXECUTION_REFERENCES = new ImmutableInvariantCheck<>();
+    static void validateExecutions(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState executions) {
+        var kinds = declaredKinds(bootstrap, actors);
+        EXECUTION_REFERENCES.validate(() -> {
+            if (!kinds.keySet().containsAll(executions.actors().keySet()))
+                throw new IllegalArgumentException("execution names unknown actor");
+        }, kinds, executions.actors());
+    }
     private static final ImmutableInvariantCheck<Set<SubjectId>> CHECK = new ImmutableInvariantCheck<>();
     private ActorIdentityDeclarations() { }
     static Set<SubjectId> validate(FrontierBootstrap bootstrap, HiveColony hive, HumanPopulation people,

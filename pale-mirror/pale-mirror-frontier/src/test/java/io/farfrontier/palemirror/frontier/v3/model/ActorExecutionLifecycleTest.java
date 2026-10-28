@@ -223,7 +223,7 @@ class ActorExecutionLifecycleTest {
                 request -> new ActorActivityBodyCheckpoint.Acknowledgement(request,
                         FrontierWorldStateUpdate.begin().actorExecutions(admitted.actorExecutions())),
                 request -> new ActorActivityBodyCheckpoint.Acknowledgement(new ActorActivityBodyCheckpoint.Request(
-                        admitted.withChanges(FrontierWorldStateUpdate.begin()), id, body, position), FrontierWorldStateUpdate.begin()),
+                        admitted.withActorBody(actor, position.offset(1, 0, 0)), id, body, position), FrontierWorldStateUpdate.begin()),
                 request -> new ActorActivityBodyCheckpoint.Acknowledgement(new ActorActivityBodyCheckpoint.Request(
                         admitted, id, new ActorBodyId(actor, body.physicalEpoch() + 1), position), FrontierWorldStateUpdate.begin()),
                 request -> new ActorActivityBodyCheckpoint.Acknowledgement(new ActorActivityBodyCheckpoint.Request(

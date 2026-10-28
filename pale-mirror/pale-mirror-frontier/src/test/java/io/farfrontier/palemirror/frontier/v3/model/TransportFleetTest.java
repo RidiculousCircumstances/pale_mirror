@@ -7,6 +7,26 @@ import java.util.LinkedHashMap;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TransportFleetTest {
+    @Test void acceptedFleetProofCannotHideChangedBodyKindOrLostMissionReservation() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fleet-proof"), 41,
+                FrontierRulesets.installed("frontier-v3-expedition-candidate-r1")));
+        var asset = state.transportFleet().assets().values().iterator().next();
+        TransportFleetReferences.validate(state.bootstrap(), state.transportFleet(), state.actorLocations(), state.inventory(), state.shipments());
+        var body = state.actorLocations().get(asset.actorId());
+        var forged = ImmutableLookupMap.withEntry(state.actorLocations(), asset.actorId(),
+                new ActorLocation(body.body(), body.condition(), ActorKind.RESIDENT,
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER));
+        assertThrows(IllegalArgumentException.class, () -> TransportFleetReferences.validate(state.bootstrap(), state.transportFleet(),
+                forged, state.inventory(), state.shipments()));
+        var reserved = state.transportFleet().reserve(asset.actorId(), new SubjectId("mission:absent"));
+        assertThrows(IllegalArgumentException.class, () -> TransportFleetReferences.validate(state.bootstrap(), reserved,
+                state.actorLocations(), state.inventory(), state.shipments()));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> {
+            TransportFleetReferences.validate(state.bootstrap(), state.transportFleet(), state.actorLocations(), state.inventory(), state.shipments());
+            return null;
+        }));
+    }
+
     @Test void mobileStorageUsesTheRegisteredProjectionLeaseAndRetainsCargoAcrossRecovery() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:mobile-storage-custody"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1")));

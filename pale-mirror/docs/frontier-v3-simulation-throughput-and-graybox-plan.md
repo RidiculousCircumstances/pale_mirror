@@ -2616,3 +2616,32 @@ checks plus guardrails PASS40s. New cases cover mutable input isolation, exact f
 membership, duplicate lanes, changed dependencies/cycles/authority, terminal
 parents and changed authority commitments after a successful proof. Native
 aggregate effect is not yet measured; this is not scale acceptance.
+
+### Remove publication work unrelated to changed identity (2026-10-28)
+
+371772fa1 ordinary100:44.981231s/noDataLoss,3.179104ticks/s,debt1060→1819.
+G STILLFAILED. Strategic validation fell from39 to2 owned-state CPU samples,
+but aggregate validation still12.957940s, including groups1.997381s. Evolving
+workloads do not establish an aggregate regression or controlled speedup.
+
+The publication barrier's group collector constructed a complete diagnostic edge
+graph which the transition validator never reads. Its separate validation entry
+now runs the SAME group/mission/supply/shipment/movement checks without emitting
+that graph. Explicit relationship views still emit their complete original graph.
+Identity-only execution membership and finite-fleet checks consume the existing
+immutable declared-kind projection rather than every actor pose change. Fleet
+proofs retain all read roots (bootstrap, assets, declared kinds, container and
+surface declarations, missions). Group-member checks retain the exact group map,
+current group executions and suspended executions. Full audits rebuild evidence;
+changed or missing declarations still fail before publication. No authority,
+economy policy, route behavior, schema or clock change.
+
+Focused group, body/execution/identity, finite-fleet, expedition supply/refill,
+reference/relationship and incremental-validation checks plus guardrails PASS52s.
+Initial broader run exposed another old fixture treating an empty world patch as
+a changed checkpoint basis; the same failure is confirmed on clean371772fa1
+(publication-identity-lifecycle-baseline.log). The fixture now changes the real
+actor body, retaining its stale-evidence rejection assertion. Warmed-proof negatives
+cover removed actors, newly unknown executions, changed pack-animal kind and a
+missing mission reservation; existing orphan mobile-surface and recovery tests
+remain. Native aggregate impact is not yet measured.

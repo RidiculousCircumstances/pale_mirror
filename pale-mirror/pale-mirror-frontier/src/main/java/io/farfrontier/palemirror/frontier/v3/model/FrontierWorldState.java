@@ -292,7 +292,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
             HarvestActivityCapability.validateReferences(resourceSites, actorExecutions);
             ProductionActivityCapability.validateReferences(productionJobs, actorExecutions);
-            if (!actorLocations.keySet().containsAll(actorExecutions.actors().keySet())) throw new IllegalArgumentException("execution names unknown actor");
+            ActorIdentityDeclarations.validateExecutions(bootstrap, actorLocations, actorExecutions);
             forest.requireWithin(bootstrap.bounds());
             if (!bootstrap.ruleset().forestry().enabled() && !forest.regions().isEmpty())
                 throw new IllegalArgumentException("forest history requires its explicit content profile");
