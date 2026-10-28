@@ -16,6 +16,22 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExactInventoryTest {
+    @Test void exactActorCustodyQueriesFollowTransferAndRetirementWithoutMutatingTheirPredecessor() {
+        var actor = new SubjectId("actor:holder"); var other = new SubjectId("resident:other");
+        var owner = new SubjectId("settlement:one");
+        var first = new ExactItemStack(new SubjectId("item:a"), owner, "minecraft:iron_pickaxe", 1, new InventoryCustody.Actor(actor));
+        var second = new ExactItemStack(new SubjectId("item:b"), owner, "minecraft:iron_hoe", 1, new InventoryCustody.Actor(actor));
+        var inventory = new ExactInventory(Map.of(), Map.of(second.id(), second, first.id(), first), Map.of(), Map.of());
+        var held = inventory.actorItems(actor);
+        assertEquals(List.of(first, second), held); assertTrue(inventory.actorItems(other).isEmpty());
+        assertThrows(UnsupportedOperationException.class, held::clear);
+        var moved = first.withCustody(new InventoryCustody.Actor(other));
+        var transferred = new ExactInventory(Map.of(), Map.of(second.id(), second, moved.id(), moved), Map.of(), Map.of());
+        assertEquals(List.of(second), transferred.actorItems(actor)); assertEquals(List.of(moved), transferred.actorItems(other));
+        assertEquals(List.of(first, second), held); assertEquals(held, inventory.actorItems(actor));
+        var retired = new ExactInventory(Map.of(), Map.of(second.id(), second), Map.of(), Map.of());
+        assertTrue(retired.actorItems(other).isEmpty()); assertEquals(List.of(second), retired.actorItems(actor));
+    }
     @Test void exactEquipmentUsesDeclaredActorsRatherThanIdentityPrefixes() {
         var actor = new SubjectId("actor:pack/settlement-1");
         var item = new SubjectId("item:animal-equipment");

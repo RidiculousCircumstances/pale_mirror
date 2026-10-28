@@ -8,8 +8,6 @@ import java.util.*;
 
 /** Supply owner retains promises and accepts resource receipts; it does not own stock or actor motion. */
 public final class ExpeditionSupplyAuthority {
-    private record SlotImage(Map<SubjectId, TransportMission> source, Map<SubjectId, Set<ActorItemSlot>> slots) { }
-    private static final ThreadLocal<SlotImage> SLOT_IMAGE = new ThreadLocal<>();
     private ExpeditionSupplyAuthority() { }
     public static Optional<ActorExecutionId> execution(FrontierWorldState state, TransportMission mission,
                                                        ExpeditionSupplyLoad.Allocation allocation) {
@@ -18,40 +16,19 @@ public final class ExpeditionSupplyAuthority {
         return UnitGroupMissionPorts.require(group).execution(state, group, group.member(allocation.actorId()));
     }
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
-        return state.shipments().missions().values().stream().anyMatch(m -> m.supplies().stream().flatMap(load -> load.allocations().stream())
-                .anyMatch(a -> a.pending().isPresent() && (a.source().containerId().equals(container)
-                    || a.slot() instanceof ActorItemSlot.AttachedStorage storage && storage.containerId().equals(container)))
-                || m.replenishment().filter(t -> t.containerId().equals(container) && t.pending().isPresent()).isPresent());
+        return ExpeditionSupplyInteractions.pendingForContainer(state, container);
     }
+
     public static boolean pendingForActor(FrontierWorldState state, SubjectId actor) {
         return pendingOwnerForActor(state, actor).isPresent();
     }
     public static Optional<SubjectId> pendingOwnerForActor(FrontierWorldState state, SubjectId actor) {
-        var owners = state.shipments().missions().values().stream().filter(mission -> mission.supplies().stream()
-                .flatMap(load -> load.allocations().stream()).anyMatch(a -> a.actorId().equals(actor) && a.pending().isPresent())
-                || mission.replenishment().filter(t -> t.pending().isPresent() && (t.actorId().equals(actor)
-                    || state.inventory().surfaces().get(t.containerId()).location().equals(new ContainerLocation.Mobile(actor)))).isPresent())
-                .map(TransportMission::id).toList();
-        if (owners.size() > 1) throw new IllegalArgumentException("actor has competing expedition load effects");
-        return owners.stream().findFirst();
+        return ExpeditionSupplyInteractions.pendingOwnerForActor(state, actor);
     }
     public static Set<ActorItemSlot> reservedSlots(FrontierWorldState state, SubjectId actor) {
-        var source = state.shipments().missions();
-        var image = SLOT_IMAGE.get();
-        if (image == null || image.source() != source) {
-            var slots = new HashMap<SubjectId, Set<ActorItemSlot>>();
-            for (var mission : source.values()) {
-                mission.supplies().ifPresent(load -> load.allocations().stream()
-                    .filter(a -> !a.loaded() && !a.withdrawn()).forEach(a ->
-                        slots.computeIfAbsent(a.actorId(), ignored -> new HashSet<>()).add(a.slot())));
-                mission.replenishment().ifPresent(t -> slots.computeIfAbsent(t.actorId(), ignored -> new HashSet<>()).add(t.slot()));
-            }
-            slots.replaceAll((id, values) -> Set.copyOf(values));
-            image = new SlotImage(source, Map.copyOf(slots));
-            SLOT_IMAGE.set(image);
-        }
-        return image.slots().getOrDefault(Objects.requireNonNull(actor), Set.of());
+        return ExpeditionSupplyInteractions.reservedSlots(state, actor);
     }
+
     public static FungibleResourceLedger reserveDeclaration(FrontierWorldState state, TransportMission mission, UnitGroup group) {
         if (mission.supplies().isEmpty()) {
             if (state.bootstrap().ruleset().schemaVersion() >= 17)

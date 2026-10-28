@@ -253,8 +253,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     /** Exact equipment/cargo retained by one actor; this is derived from single-source item custody. */
     public List<ExactItemStack> actorItems(SubjectId actorId) {
-        InventoryCustody.Actor custody = new InventoryCustody.Actor(Objects.requireNonNull(actorId, "actor id"));
-        return items.values().stream().filter(item -> item.custody().equals(custody)).sorted(java.util.Comparator.comparing(ExactItemStack::id)).toList();
+        return ExactItemCustodyView.actorItems(items, actorId);
     }
 
     /**

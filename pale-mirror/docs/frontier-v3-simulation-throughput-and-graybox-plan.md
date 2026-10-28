@@ -3108,4 +3108,34 @@ Focused index/field preparation/harvest/progress/scene/receipt/recovery/expansio
 checks plus guardrails PASS32s. New warmed-evidence negatives reject retired or
 foreign receipts, changed intent status, changed lifecycle and inserted/removed
 structure identities; full reconstruction and valid predecessors still pass.
+Frozen release PASS36s; both retained-world deployments verified29ea8979c.
+Warmed native225469events/noDataLoss44.860955s=8.849566ticks/s,debt3222→3727,
+owner62.10%,exact22.75%,WAL10.66%,canonicalvalidation10.606753s,due-actions
+5.496281s. Evolving workload, no controlled aggregate speedup. G OPEN/FAILED.
+
+
+### Addressed equipment and expedition interaction queries (2026-10-28)
+
+ScheduleAdmissionIndex.evaluate CPU stacks in the warmed certified-path trace
+identify repeated ExactInventory.actorItems full item scans and expedition pending
+interaction scans. ExactItemCustodyView now shares the exact immutable item-root
+actor grouping, retaining original item-ID sorting, immutable results and separate
+economic title. It does not supply a missing actor identity or authorize custody.
+Fungible actor accounts already had an index and are not claimed as a new fix.
+
+ExpeditionSupplyInteractions composes the existing supply-owned pending actor,
+container and reserved-slot queries into one immutable missions+container-surfaces
+read image. Pending replenishment includes its actual named actor and the explicit
+mobile-container holder; duplicate references from the same mission remain one
+owner, competing missions retain the existing visible error. Loaded/withdrawn
+allocation and replenishment slot semantics are unchanged. Actual admission,
+selection, claim release, payment and physical/canonical receipt checks still run
+under their original owners. Both projections use the common bounded immutable
+result mechanism (four exact input images), with ordinary recomputation on miss.
+No new canonical record, dispatch convention or background cleanup job is added.
+
+Exact custody transfer/retirement/sorted frozen predecessor coverage, personal
+inventory capacity/body recovery, real expedition provisioning and paid refill/
+preemption/restart, activity and group recovery checks plus guardrails PASS58s.
+Final immutable-map representation is covered again by the frozen release gate.
 Frozen release/deploy/native effect pending. G remains OPEN/FAILED.

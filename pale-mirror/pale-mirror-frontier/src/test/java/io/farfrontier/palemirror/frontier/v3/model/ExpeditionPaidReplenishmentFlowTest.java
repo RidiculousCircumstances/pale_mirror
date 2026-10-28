@@ -152,6 +152,11 @@ class ExpeditionPaidReplenishmentFlowTest {
         assertThrows(IllegalArgumentException.class, () -> prepared.resumed(transfer.execution(), successor));
         var pendingState = held.withChanges(FrontierWorldStateUpdate.begin().shipments(held.shipments()
                 .replaceReplenishment(held.shipments().missions().get(mission), Optional.of(prepared))));
+        assertEquals(Optional.of(mission), io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority
+                .pendingOwnerForActor(pendingState, transfer.actorId()));
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.pendingForContainer(pendingState, transfer.containerId()));
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority
+                .pendingOwnerForActor(held, transfer.actorId()).isEmpty(), "a pending successor cannot fence the immutable promise predecessor");
         assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.LIFECYCLE.prepareBegin(pendingState, passive, tick));
         var forgedPause = paused.withChanges(FrontierWorldStateUpdate.begin().shipments(paused.shipments()
                 .replaceReplenishment(paused.shipments().missions().get(mission), Optional.of(prepared))));
