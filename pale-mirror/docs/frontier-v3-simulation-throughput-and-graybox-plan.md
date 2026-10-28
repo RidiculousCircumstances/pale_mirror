@@ -1810,3 +1810,34 @@ focused obligations: exact size/hash/equality/removal under deliberately collidi
 facts and direct shared regional parts across a batched producer handoff/private fork.
 No timing assertion or broad native claim. Exact release/deployment and measured
 ordinary100 progress still required; this source correction alone does not closeG.
+
+
+### Resume the market decision after its suspended selected candidate
+
+60767c40f exactrelease110frontier/12classes+29runtime/guardrails/packagePASS83s;
+both retained-world deployments VERIFIED. Ordinary10021944→22286/272.6s,
+debt208→5319 FAILED: measured1.25canonicalticks/s, not20. Changed phase means no
+isolated speed ratio against earlier worlds. New20s JFR has removed regional-set
+equality from the top advisory leaves; comparison/reservation/review work now dominates.
+Actual allocations advice14.85+14.63GB, server6.60GB, exactprep3.49GB, navigation2.94+
+2.82GB. Higher totals in this busier phase are not a claimed allocation improvement.
+Evidence paged-geometry-composition-{warm.jfr,attribution.txt,native-samples.jsonl}.
+
+Connected source cause: even with fixed captured inputs, each route-readiness retry
+re-ran GoodsParticipantProcess's quote/policy/draft prefix, recreated all proposals
+and reservations, then attempted the same selected logistics candidate. f67 fixed
+input lifetime, but did not retain computation progress. Market advice now lazily owns
+one serial cooperative calculation: fixed assessment/prefix, alternatives and exact
+pair-review counters. PLANNING retains the selected private candidate and resumes it;
+completed/rejected choices release with the existing exact Wait lifecycle. Completed
+alternatives and retired obligations are not rebuilt after every route answer.
+
+Only a typed conditional choice crosses to exact admission. Current canonical stock,
+funding, consent, crew, supplies, geometry and transaction/replay validation remain
+fresh and unchanged. Private draft reservations never become actual claims; no durable
+state/schema, worker pool, budget or priority change. Both OPPORTUNITY and REVIEW use
+the same decision calculation. Synchronous planning uses the same implementation.
+Existing pending-choice regression now resumes after real direct route calculation,
+reaches TransportMissionStarted, equals unchanged-input direct planning, preserves
+the original unmodified world and retains stale-funds/withdrawn-quote negatives.
+Guardrails+64frontier/7classes PASS83s. Exact release/runtime evidence still required.

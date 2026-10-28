@@ -37,11 +37,15 @@ class GoodsParticipantOpportunityAdviceTest {
     @Test void pendingMarketChoiceNeverRestartsAlternativeSearchInTheExactPhase() throws Exception {
         var state = quoted(); var action = GoodsParticipantWakeup.action(buyer(state), 401); var at = new SimInstant(401);
         var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var waiting = new java.util.concurrent.atomic.AtomicBoolean(true);
         PedestrianRoutePlanner pending = (geometry, start, target) -> {
-            calls.incrementAndGet(); return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "PENDING_TEST_CALCULATION");
+            calls.incrementAndGet();
+            return waiting.get() ? new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "PENDING_TEST_CALCULATION")
+                    : PedestrianRoutePlanning.calculate(geometry, start, target);
         };
         try (var binding = PedestrianRoutePlanning.bind(pending)) {
-            var advice = GoodsParticipantProcess.planner().advice(state, action, at).orElseThrow().prepare();
+            var captured = GoodsParticipantProcess.planner().advice(state, action, at).orElseThrow();
+            var advice = captured.prepare();
             assertTrue(calls.get() > 0); int before = calls.get();
             var result = advice.revalidate(state, at).orElseThrow().prepare().get();
             assertEquals(before, calls.get(), "the global exact predecessor may not solve all alternatives again");
@@ -55,6 +59,12 @@ class GoodsParticipantOpportunityAdviceTest {
             assertEquals("GEOMETRY", advice.rejectionReason());
             var replacement = GoodsParticipantProcess.planner().advice(observed, action, at).orElseThrow().prepare();
             assertTrue(replacement.revalidate(observed, at).isPresent(), "a fresh capture can use the new geometry epoch");
+            waiting.set(false);
+            var resumed = captured.prepare().revalidate(state, at).orElseThrow().prepare().get();
+            assertTrue(resumed.stream().anyMatch(event -> event.payload() instanceof TransportMissionStarted),
+                    "the suspended market choice must reach an admitted successor when actual routes become available");
+            assertEquals(GoodsParticipantProcess.plan(state, action, at), resumed);
+            assertTrue(state.shipments().missions().isEmpty(), "resuming an advisory calculation never publishes its draft");
         }
     }
     private static SubjectId buyer(FrontierWorldState state) {

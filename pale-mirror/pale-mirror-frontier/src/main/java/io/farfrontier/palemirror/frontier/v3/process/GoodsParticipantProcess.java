@@ -56,6 +56,11 @@ public final class GoodsParticipantProcess {
     record PreparedDecision(java.util.function.Supplier<List<ProposedEvent>> completion, GoodsTripPlanning.Choice choice) { }
     static PreparedDecision prepareDecision(FrontierWorldState state, ScheduledAction action,
             SimInstant executionInstant, SettlementEconomicPlanPreparation.Review advice, Optional<GoodsTripPlanning.Choice> choice) {
+        return prepareDecisionCalculation(state, action, executionInstant, advice, choice).get();
+    }
+    /** Serial snapshot-local progress, with no publication or reusable authority. */
+    static java.util.function.Supplier<PreparedDecision> prepareDecisionCalculation(FrontierWorldState state, ScheduledAction action,
+            SimInstant executionInstant, SettlementEconomicPlanPreparation.Review advice, Optional<GoodsTripPlanning.Choice> choice) {
         Objects.requireNonNull(executionInstant, "goods review execution instant");
         if (executionInstant.compareTo(action.dueAt()) < 0)
             throw new IllegalArgumentException("goods participant review cannot execute before its due time");
@@ -150,21 +155,24 @@ public final class GoodsParticipantProcess {
             events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order)));
             pendingQuotes.add(key); published++;
         }
-        var trip = rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.prepare(state, participant, now, choice))
+        var trip = rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.calculation(state, participant, now, choice))
                 : Optional.<java.util.function.Supplier<GoodsTripPlanning.Result>>empty();
         var preparedState = state; int preparedPublished = published;
-        return new PreparedDecision(() -> finish(preparedState, action, participant, now, events, commitments, preparedPublished, trip),
-                trip.map(value -> value.get().choice()).orElse(GoodsTripPlanning.Disposition.NO_PURCHASE));
+        return () -> {
+            var result = trip.map(java.util.function.Supplier::get);
+            return new PreparedDecision(() -> finish(preparedState, action, participant, now, events, commitments, preparedPublished, result),
+                    result.map(GoodsTripPlanning.Result::choice).orElse(GoodsTripPlanning.Disposition.NO_PURCHASE));
+        };
     }
     private static List<ProposedEvent> finish(FrontierWorldState state, ScheduledAction action, GoodsParticipant participant,
             long now, List<ProposedEvent> preparedEvents, GoodsCommitmentReview.Result commitments, int published,
-            Optional<java.util.function.Supplier<GoodsTripPlanning.Result>> preparedTrip) {
+            Optional<GoodsTripPlanning.Result> preparedTrip) {
         var events = new ArrayList<>(preparedEvents);
         var rules = state.bootstrap().ruleset().goodsTrade();
         boolean periodic = action.kind().equals(REVIEW);
         String decision; boolean awaitingNavigation = false;
         if (rules.supplyPlanning().enabled()) {
-            var trip = preparedTrip.orElseThrow().get();
+            var trip = preparedTrip.orElseThrow();
             state = trip.state(); events.addAll(trip.events()); decision = trip.decision() + "; published=" + published;
             awaitingNavigation = trip.awaitingNavigation();
         } else {
