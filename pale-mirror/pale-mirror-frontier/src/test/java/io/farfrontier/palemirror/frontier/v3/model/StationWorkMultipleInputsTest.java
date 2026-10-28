@@ -43,6 +43,12 @@ class StationWorkMultipleInputsTest {
     @Test void oneOrderAcquiresBothMaterialsAcrossRecoveredTripsAndProducesOneTool() {
         var fixture = started(); var state = fixture.state(); var job = fixture.job(); var station = fixture.station();
         var home = state.bootstrap().settlements().getFirst();
+        long requiredBurn = state.bootstrap().ruleset().production().require(job.stationWork().orElseThrow().recipeId())
+                .nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog());
+        assertTrue(requiredBurn > 0);
+        assertEquals(requiredBurn, StationFuelDemandComposition.backedHeat(state, station));
+        assertEquals(requiredBurn, StationFuelDemandComposition.heat(state, station, 300),
+                "one admitted material bundle needs its own burn window, irrespective of a future tool fleet");
         var codec = new FrontierWorldStateCodec(); int loads = 0;
         for (long tick = 300, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 800; tick += 20, steps++) {
             var current = state.productionJobs().get(job.id()); tick = BakeryTestClock.due(state, current, tick);

@@ -3,18 +3,18 @@ import java.util.*;
 
 /** Closed demand-owner composition. Logistics only transports the requested fuel. */
 public final class StationFuelDemandComposition {
-    @FunctionalInterface private interface Demand { long heat(FrontierWorldState state, ProductionStationSpec station, long tick); }
+    @FunctionalInterface private interface Demand { long heat(FrontierWorldState state, ProductionStationSpec station, long tick, long backed); }
     @FunctionalInterface private interface Backing { long heat(FrontierWorldState state, ProductionStationSpec station); }
     private record Policy(Demand demand, Backing backing) { }
     private static final Map<ProductionStationSpec.Capability, Policy> OWNERS = Map.of(
-            ProductionStationSpec.Capability.WOODWORKING, new Policy((state, station, tick) -> 0, (state, station) -> 0),
+            ProductionStationSpec.Capability.WOODWORKING, new Policy((state, station, tick, backed) -> 0, (state, station) -> 0),
             ProductionStationSpec.Capability.BAKING, new Policy(StationFuelDemandComposition::baking, StationFuelDemandComposition::workerBacking),
             ProductionStationSpec.Capability.SMELTING, new Policy(StationFuelDemandComposition::automatic, StationFuelDemandComposition::automaticBacking),
             ProductionStationSpec.Capability.FABRICATION, new Policy(StationFuelDemandComposition::equipment, StationFuelDemandComposition::workerBacking));
     public static long heat(FrontierWorldState state, ProductionStationSpec station, long tick) {
         long backed = Math.max(backedHeat(state, station), activeBurnTicks(state, station, tick));
         return backed == 0 ? 0 : Math.max(activeBurnTicks(state, station, tick), Math.min(backed, Objects.requireNonNull(OWNERS.get(station.capability()),
-                "unregistered station fuel policy").demand().heat(state, station, tick)));
+                "unregistered station fuel policy").demand().heat(state, station, tick, backed)));
     }
     /** The production owner supplies priority; logistics never classifies bread, metal or jobs. */
     public static long deadline(FrontierWorldState state, ProductionStationSpec station, long tick) {
@@ -66,11 +66,11 @@ public final class StationFuelDemandComposition {
         }
         return heat;
     }
-    private static long baking(FrontierWorldState state, ProductionStationSpec station, long tick) {
+    private static long baking(FrontierWorldState state, ProductionStationSpec station, long tick, long backed) {
         return state.bootstrap().ruleset().production().recipes().stream().filter(recipe -> recipe.capability() == station.capability())
                 .mapToLong(recipe -> Math.multiplyExact(recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), ProductionBatchSizing.maximumRecipeBatches(recipe) * 2L)).max().orElse(0);
     }
-    private static long automatic(FrontierWorldState state, ProductionStationSpec station, long tick) {
+    private static long automatic(FrontierWorldState state, ProductionStationSpec station, long tick, long backed) {
         var policy = AutomaticStationProduction.policy(state, station);
         if (policy.isEmpty()) return 0;
         var recipe = state.bootstrap().ruleset().production().require(policy.orElseThrow().recipeId());
@@ -79,11 +79,15 @@ public final class StationFuelDemandComposition {
         return Math.multiplyExact(Math.min(ProductionBatchSizing.maximumRecipeBatches(recipe),
                 Math.ceilDiv(missing, recipe.product().quantity())), recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()));
     }
-    private static long equipment(FrontierWorldState state, ProductionStationSpec station, long tick) {
+    private static long equipment(FrontierWorldState state, ProductionStationSpec station, long tick, long backed) {
         var owner = ProductionStationEnergy.record(state, station.id()).ownerId();
         long retained = state.productionJobs().values().stream().filter(job -> job.stationWork().filter(work ->
                 work.stationId().equals(station.id()) && !StationWorkCargo.output(job)).isPresent())
                 .mapToLong(job -> state.bootstrap().ruleset().production().require(job.stationWork().orElseThrow().recipeId()).nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog())).sum();
+        // heat() clips policy demand to the actual material/active-operation
+        // backing. Admitted work already covers that bound; a market portfolio
+        // can only increase a number which the same bound will discard.
+        if (retained >= backed) return retained;
         var planned = EquipmentProductionPlanning.planned(state, owner, tick);
         // One planned operation per free station; a long forecast must not fill every fuel port.
         long next = planned.stream().filter(plan -> AutomaticStationProduction.stations(state, owner, plan.request().recipe()).stream()

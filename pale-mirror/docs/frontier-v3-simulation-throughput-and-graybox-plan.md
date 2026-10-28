@@ -5137,3 +5137,25 @@ Existing order/branch/failure cases are extended, plus one duplicate-section and
 predecessor-negative custody case. Connected custody/ledger/storage/compartment/
 shipment/unit inventory/station processing/common-group focus+guardrails passed40s.
 Final frozen combined checks and package follow; no new runtime gain claimed yet.
+
+### Do not price an irrelevant future fuel increment
+
+78afe33be frozen123tests0failures112s+guardrails/JAR/package and both retained
+deployments verified. No independent ordinary window or gain claim for that cut.
+
+Current exact trace proves resource_hauling.review repeatedly enters full equipment
+acquisition/market valuation through station fuel demand. The fuel coordinator already
+clips policy demand to actual material/admitted-operation backing. The equipment
+owner's retained job burn can already cover that complete bound. In that case a
+future nonnegative portfolio increment cannot alter the final clipped heat:
+min(backed, retained + next) = backed when retained >= backed. Pass the already
+computed backing limit into the private demand policy and return retained demand
+in this exact case. The ordinary forecast remains for an uncovered increment; no
+accepted equipment portfolio, stale-plan admission or schema change is introduced.
+
+Other policies, real input backing, active burn, fuel choice, shipment authority,
+recipe start/processing and resource ownership remain unchanged. Existing actual
+iron pickaxe multi-material journey checks its positive one-batch backing and heat,
+then acquires both materials, processes, recovers and delivers its real tool.
+Connected material-loss/replacement, equipment manufacture/repair, food interruption,
+station supply and planning focus+guardrails passed66s. Final frozen package follows.
