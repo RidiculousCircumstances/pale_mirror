@@ -132,8 +132,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     public HumanPopulation withStarvation(SubjectId residentId, ResidentStarvation condition) {
         ResidentHealth current = health.get(residentId);
         if (current == null) throw new IllegalArgumentException("unknown starvation resident");
-        Map<SubjectId, ResidentHealth> next = new LinkedHashMap<>(health);
-        next.put(residentId, current.withStarvation(condition));
+        var next = ImmutableLookupMap.withEntry(health, residentId, current.withStarvation(condition));
         return new HumanPopulation(households, residents, birthJobs, next, quarantines, migrations,
 provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligations);
     }
@@ -150,10 +149,8 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
             throw new IllegalArgumentException("metabolism edit lacks its exact previous resident state");
         int oldRate = expected.effectiveMetabolismPermille(atTick);
         ResidentNutrition integrated = nutrition(residentId).accrueThrough(atTick, rules, oldRate);
-        Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents);
-        nextResidents.put(residentId, profile.withCharacteristics(nextCharacteristics));
-        Map<SubjectId, ResidentNutrition> nextNutrition = new LinkedHashMap<>(nutrition);
-        nextNutrition.put(residentId, integrated);
+        var nextResidents = ImmutableLookupMap.withEntry(residents, residentId, profile.withCharacteristics(nextCharacteristics));
+        var nextNutrition = ImmutableLookupMap.withEntry(nutrition, residentId, integrated);
         return new HumanPopulation(households, nextResidents, birthJobs, health, quarantines,
                 migrations, provisions, nextNutrition, medicalOperations, schedules, meals, mealResourceObligations);
     }
@@ -162,8 +159,7 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
         ResidentProfile profile = resident(residentId);
         if (profile == null || !profile.characteristics().workModifiers().equals(expected))
             throw new IllegalArgumentException("work-stat edit lacks its exact previous resident state");
-        Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents);
-        nextResidents.put(residentId, profile.withCharacteristics(
+        var nextResidents = ImmutableLookupMap.withEntry(residents, residentId, profile.withCharacteristics(
                 profile.characteristics().withWorkModifiers(Objects.requireNonNull(nextModifiers))));
         return new HumanPopulation(households, nextResidents, birthJobs, health, quarantines,
                 migrations, provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligations);
@@ -175,8 +171,7 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
     }
     public HumanPopulation withSchedule(SubjectId settlementId, SettlementDailySchedule nextPolicy) {
         schedule(settlementId);
-        Map<SubjectId, SettlementDailySchedule> next = new LinkedHashMap<>(schedules);
-        next.put(settlementId, Objects.requireNonNull(nextPolicy, "new settlement schedule"));
+        var next = ImmutableLookupMap.withEntry(schedules, settlementId, Objects.requireNonNull(nextPolicy, "new settlement schedule"));
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
                 provisions, nutrition, medicalOperations, next, meals, mealResourceObligations);
     }
@@ -316,15 +311,14 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
     public HumanPopulation transitionHealth(SubjectId residentId, ResidentHealthStatus nextStatus, long tick) {
         ResidentHealth current = health.get(Objects.requireNonNull(residentId, "resident health resident"));
         if (current == null) throw new IllegalArgumentException("unknown resident health subject");
-        Map<SubjectId, ResidentHealth> next = new LinkedHashMap<>(health); next.put(residentId, current.transition(nextStatus, tick));
+        var next = ImmutableLookupMap.withEntry(health, residentId, current.transition(nextStatus, tick));
         return new HumanPopulation(households, residents, birthJobs, next, quarantines, migrations, provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligations);
     }
 
     /** Applies one exact food outcome once to one exact resident. */
     public HumanPopulation resolveNutrition(SubjectId residentId, int cycle, boolean fed) {
         ResidentNutrition current = nutrition(residentId);
-        Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(nutrition);
-        next.put(residentId, fed ? current.fed(cycle) : current.missed(cycle));
+        var next = ImmutableLookupMap.withEntry(nutrition, residentId, fed ? current.fed(cycle) : current.missed(cycle));
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, next, medicalOperations, schedules, meals, mealResourceObligations);
     }
 
@@ -339,8 +333,7 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
         ResidentNutrition advanced = current.accrueThrough(canonicalTick, rules,
                 resident(residentId).characteristics().effectiveMetabolismPermille(canonicalTick));
         if (advanced.equals(current)) return this;
-        Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(nutrition);
-        next.put(residentId, advanced);
+        var next = ImmutableLookupMap.withEntry(nutrition, residentId, advanced);
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, next, medicalOperations, schedules, meals, mealResourceObligations);
     }
 
@@ -359,8 +352,7 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
                                                 FrontierRuleset.ResidentLife rules) {
         ResidentNutrition advanced = nutrition(residentId).consumeNutritionAt(canonicalTick, nutritionUnits, rules,
                 resident(residentId).characteristics().effectiveMetabolismPermille(canonicalTick));
-        Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(nutrition);
-        next.put(residentId, advanced);
+        var next = ImmutableLookupMap.withEntry(nutrition, residentId, advanced);
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, next, medicalOperations, schedules, meals, mealResourceObligations);
     }
 

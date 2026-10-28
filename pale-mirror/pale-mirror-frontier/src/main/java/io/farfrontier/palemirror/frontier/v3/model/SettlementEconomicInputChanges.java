@@ -15,14 +15,16 @@ public final class SettlementEconomicInputChanges {
         var registry = after.companies().goodsTrade().participants();
         if (registry.participants().isEmpty() || !after.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) return after;
         var previous = before.companies().goodsTrade().participants();
-        if (previous.planning() != registry.planning()) for (var entry : previous.planning().entrySet()) {
-            if (!registry.participants().containsKey(entry.getKey())) continue;
-            var current = registry.economicState(entry.getKey()); var prior = entry.getValue();
+        var checked = registry;
+        ImmutableMapChanges.forEachIdentityChangedKey(previous.planning(), checked.planning(), owner -> {
+            var prior = previous.planning().get(owner);
+            if (prior == null || !checked.participants().containsKey(owner)) return;
+            var current = checked.economicState(owner);
             if (current.inputRevision() < prior.inputRevision()
                     || current.accepted().map(SettlementEconomicPlan::revision).orElse(0L)
                         < prior.accepted().map(SettlementEconomicPlan::revision).orElse(0L))
                 throw new IllegalArgumentException("economic input/publication generation cannot be overwritten by a stale component");
-        }
+        });
         var changes = new HashMap<SubjectId, Changed>();
         var registered = registry.participants().keySet();
         EconomicInputChangePort.Sink sink = (owner, reason, resources) -> {

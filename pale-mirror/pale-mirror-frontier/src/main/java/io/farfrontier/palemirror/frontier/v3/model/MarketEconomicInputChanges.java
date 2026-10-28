@@ -13,16 +13,18 @@ final class MarketEconomicInputChanges implements EconomicInputChangePort {
         EconomicInputChangePort.difference(a.contracts(), b.contracts(), (old, next) -> {
             if (old != null) contract(old, sink); if (next != null) contract(next, sink);
         });
-        if (a.participants().planning() != b.participants().planning()) for (var entry : b.participants().planning().entrySet()) {
-            var current = entry.getValue().accepted();
-            var prior = a.participants().planning().getOrDefault(entry.getKey(), SettlementEconomicPlanningState.empty()).accepted();
-            if (current.orElse(null) == prior.orElse(null)) continue;
+        ImmutableMapChanges.forEachIdentityChangedKey(a.participants().planning(), b.participants().planning(), owner -> {
+            var next = b.participants().planning().get(owner);
+            if (next == null) return; // As before, retirement emits no new buyer publication.
+            var current = next.accepted();
+            var prior = a.participants().planning().getOrDefault(owner, SettlementEconomicPlanningState.empty()).accepted();
+            if (current.orElse(null) == prior.orElse(null)) return;
             if (current.isPresent()) changedCounterquotes(prior.orElse(null), current.orElseThrow(), sink);
-            if (current.isEmpty() || sameBuyerDemand(prior.orElse(null), current.orElseThrow())) continue;
+            if (current.isEmpty() || sameBuyerDemand(prior.orElse(null), current.orElseThrow())) return;
             for (var order : b.orders().values()) if (order.side() == GoodsTradeOrder.Side.BUY
-                    && order.party().id().equals(entry.getKey()) && order.availableQuantity() > 0)
+                    && order.party().id().equals(owner) && order.availableQuantity() > 0)
                 quote(b, order, sink);
-        }
+        });
         if (a.priceHistory() != b.priceHistory()) {
             var changed = new HashSet<String>();
             b.priceHistory().commodities().forEach((item, history) -> {

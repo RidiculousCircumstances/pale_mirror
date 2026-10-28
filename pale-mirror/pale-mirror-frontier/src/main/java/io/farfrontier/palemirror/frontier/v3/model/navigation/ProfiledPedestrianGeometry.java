@@ -177,13 +177,6 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
                 && profile.permitsGrade(retained.y(), target.y()) && bounds().contains(target.support())
                 && knowsSupport(target) && clearStation(target);
     }
-    private java.util.List<double[]> poses(SurfaceAnchor surface) {
-        var result = new java.util.ArrayList<double[]>();
-        for (double x : poseOffsets) for (double z : poseOffsets)
-            if (clearVolume(surface.x() + x, surface.z() + z, surface.y() + 1))
-                result.add(new double[]{surface.x() + x, surface.z() + z});
-        return result;
-    }
     private boolean clearVolume(double centerX, double centerZ, int feetY) {
         // This decorator captures one immutable terrain/obstacle revision. The
         // same standing/swept volumes recur across neighbouring graph edges and
@@ -261,19 +254,28 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         if (profile.footprintRadius() == 0)
             return clearBody(from) && clearBody(to)
                     && clearVolume(from.x() + 0.5, from.z() + 0.5, feet) && clearVolume(to.x() + 0.5, to.z() + 0.5, feet);
-        // Evaluate each endpoint once. Java otherwise rebuilds every target pose for
-        // every origin, multiplying identical footprint checks in regional searches.
-        var origins = poses(from);
-        var targets = poses(to);
-        for (var origin : origins) for (var target : targets) {
-            boolean clear = true;
-            for (int sample = 0; sample <= 4; sample++) {
-                double fraction = sample / 4.0;
-                if (!clearVolume(origin[0] + (target[0] - origin[0]) * fraction,
-                        origin[1] + (target[1] - origin[1]) * fraction, feet)) { clear = false; break; }
+        // Preserve the complete ordered pose search, but read each endpoint only
+        // when reached. A clear centre pair must not eagerly survey all 18 poses.
+        // Target facts are reused across origins, never recalculated per pair.
+        var targets = new byte[poseOffsets.length * poseOffsets.length];
+        for (double x : poseOffsets) for (double z : poseOffsets) {
+            double originX = from.x() + x, originZ = from.z() + z;
+            if (!clearVolume(originX, originZ, from.y() + 1)) continue;
+            for (int index = 0; index < targets.length; index++) {
+                double targetX = to.x() + poseOffsets[index / poseOffsets.length];
+                double targetZ = to.z() + poseOffsets[index % poseOffsets.length];
+                if (targets[index] == 0) targets[index] = (byte) (clearVolume(targetX, targetZ, to.y() + 1) ? 2 : 1);
+                if (targets[index] == 2 && clearSweep(originX, originZ, targetX, targetZ, feet)) return true;
             }
-            if (clear) return true;
         }
         return false;
+    }
+    private boolean clearSweep(double originX, double originZ, double targetX, double targetZ, int feet) {
+        for (int sample = 0; sample <= 4; sample++) {
+            double fraction = sample / 4.0;
+            if (!clearVolume(originX + (targetX - originX) * fraction,
+                    originZ + (targetZ - originZ) * fraction, feet)) return false;
+        }
+        return true;
     }
 }

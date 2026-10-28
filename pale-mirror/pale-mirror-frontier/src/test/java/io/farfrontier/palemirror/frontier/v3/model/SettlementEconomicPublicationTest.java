@@ -55,6 +55,13 @@ class SettlementEconomicPublicationTest {
         assertThrows(IllegalArgumentException.class, () -> registry.withEconomicStates(Map.of(HOME, first,
                 new SubjectId("settlement:unknown"), second)));
         assertSame(registry, registry.withEconomicStates(Map.of()));
+        var state = initial();
+        var advanced = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().withParticipants(batched)));
+        var rewound = batched.withEconomicState(HOME, registry.economicState(HOME));
+        assertThrows(IllegalArgumentException.class, () -> advanced.withCompanies(advanced.companies().withGoodsTrade(
+                advanced.companies().goodsTrade().withParticipants(rewound))), "a sparse changed-row check must still reject an older owner generation");
+        assertThrows(IllegalArgumentException.class, () -> advanced.withCompanies(advanced.companies().withGoodsTrade(
+                advanced.companies().goodsTrade().withParticipants(registry))), "removing planning rows cannot erase their previous input generations");
     }
     @Test void readsAwaitPublicationAndOrdinaryBodyUpdatesKeepTheAcceptedDecision() {
         var state = initial(); var party = state.companies().goodsTrade().participants().participants().get(HOME);

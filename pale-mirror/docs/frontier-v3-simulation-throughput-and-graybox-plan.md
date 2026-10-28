@@ -4580,3 +4580,49 @@ This removes a structural cross-worker lock, not a measured end-to-end gain clai
 
 Assignment/view focus PASS33s plus guardrails. Final clean-ref verification will
 include both connected cuts and the existing commercial courier/meal regression.
+
+### Follow the current allocation and owner-turn evidence
+
+1a3bd0a06 frozen137PASS133s plus guardrails/JAR/package, deployed on both retained
+worlds; SHA51242f1702858744fb9a09ba409b58b2be9a530ed0646d53fa5475fd16f9754974ebbc8f138e64df7681a85c91aa60ff4078484453fb50ec48da3ffb495dd532002.
+Provisional60.926618s gives6.286251ticks/sec,debt460→1311,advices1→810: target
+still fails. A separate bounded45s trace has zeroDataLoss,44.814731s completed owner
+coverage,260ticks=5.801664/s,debt1501→2144; exclusive gates55.96%owner,
+30.18%exact,7.05%WAL,5.11%ready-exact awaiting owner. No build/client overlaps.
+This evolving workload/short warm interval is not a causal speed comparison.
+
+The new trace source stack identifies eager wide-body poses in
+ProfiledPedestrianGeometry: an open centre-to-centre edge still materialized all9
+origin and9 target poses. Enumerate the SAME ordered pairs lazily, retaining one
+bounded byte-state per target so each endpoint is assessed once. The common first
+pair needs only its two endpoints and original five swept samples; blocked/offset
+alternatives remain exhaustive. Existing non-flat donkey road/door/roof/unknown/
+changed-neighbour and arbitrary collision-shape checks are reused, no timing test.
+
+Source review of the same ordinary owner path found per-person nutrition/health/
+characteristic/schedule updates still copied entire population tables. Use existing
+sparse row replacement, preserving exact prior profile, integration instant, single
+consumption and all validation. Legacy birth/migration/medical bulk paths are not
+claimed migrated. Market-change discovery and stale-generation checks similarly
+visited every settlement plan after one row changed; use shared exact identity-row
+deltas, keeping all original before/after generation and current quote checks.
+Expanded existing negative rejects a one-row rewind and complete row removal.
+Personal-life/economic focus56PASS62s plus guardrails; wide-pose focus PASS23s.
+
+A directly confirmed general storage flaw explains the new trace's HashMap.TreeNode
+allocation at HumanAssignmentProjection→ImmutableLookupMap.copyOf→partitions.
+The outer64-page chooser used the SAME low spread-hash bits as Java21 HashMap's
+inner bucket. Every page therefore concentrated its entries into one bucket at
+capacity64 (or a few buckets after resize), forcing tree lookup/allocation. Inspecting
+the actual JDK21 src.zip confirms HashMap uses(n-1)&spreadHash. An untimed3000-ID
+resident-shaped arithmetic check gives old64pages/one bucket per page/max76rows,
+versus independently mixed page hash22–43inner buckets per page/max6rows. Use a
+standard two-round avalanche ONLY for outer page selection; lookup/equality,
+source iteration order, canonical schema and delta lineage stay unchanged. True
+hash collisions remain handled by HashMap. This is a structural explanation and
+fixture distribution result, not a measured live speedup claim. Existing map alias,
+collision, key-order, immutable branches, group view and ledger index checks apply.
+
+Independent page-hash focus PASS19checks22s, guardrails PASS. Final frozen
+verification includes current recovery/negative nutrition, economy, full-shaped
+wide-body navigation and resource custody coverage before both deployments.

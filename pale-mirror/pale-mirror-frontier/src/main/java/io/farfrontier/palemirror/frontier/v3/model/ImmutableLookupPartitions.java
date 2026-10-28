@@ -79,6 +79,13 @@ final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
     }
     private static int page(Object key) {
         int hash = Objects.requireNonNull(key).hashCode();
+        // HashMap also indexes by the low bits of (hash ^ hash>>>16). Using
+        // those same bits for the outer page forced every local row into one
+        // inner bucket. Avalanche independently; producer order stays separate.
+        hash ^= hash >>> 16;
+        hash *= 0x7feb352d;
+        hash ^= hash >>> 15;
+        hash *= 0x846ca68b;
         return (hash ^ (hash >>> 16)) & (PAGES - 1);
     }
     Object keyOrderIdentity() { return order; }
