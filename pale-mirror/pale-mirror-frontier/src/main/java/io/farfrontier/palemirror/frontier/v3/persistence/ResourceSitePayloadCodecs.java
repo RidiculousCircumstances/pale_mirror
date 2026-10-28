@@ -588,6 +588,18 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
+    static PayloadCodec harvestColdWorkCompleted() {
+        return new PayloadCodec() {
+            private final PayloadCodec receipt = harvestProgressed();
+            @Override public String type() { return "frontier.resource_site_harvest_cold_work_completed"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return receipt.encode(((ResourceSiteHarvestColdWorkCompleted) payload).receipt());
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return new ResourceSiteHarvestColdWorkCompleted((ResourceSiteHarvestProgressed) receipt.decode(bytes));
+            }
+        };
+    }
     static PayloadCodec harvestProgressed() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resource_site_harvest_progressed"; }

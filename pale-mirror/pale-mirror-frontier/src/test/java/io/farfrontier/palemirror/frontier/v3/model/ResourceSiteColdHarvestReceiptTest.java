@@ -435,6 +435,31 @@ class ResourceSiteColdHarvestReceiptTest {
                 if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
+                else if (event.payload() instanceof ResourceSiteHarvestColdWorkCompleted completed) {
+                    var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+                    assertFalse(completed.requiresDurableBeforeEffect(), "pure COLD work grants no external effect");
+                    assertTrue(new ResourceSiteHarvestCropPrepared(completed.receipt().jobId(),
+                            state.resourceSites().site(site).harvestJob(completed.receipt().jobId()).orElseThrow()
+                                    .progress().nextCropSlotIndex(), completed.receipt().generation()).requiresDurableBeforeEffect());
+                    assertEquals(completed, codecs.decode(completed.type(), codecs.encode(completed)));
+                    var before = state;
+                    assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceColdWorkCompleted(
+                            before, new SubjectId("site:2-wheat-field"), completed));
+                    var worker = before.resourceSites().site(site).harvestJob(completed.receipt().jobId()).orElseThrow().workerId();
+                    var leases = new java.util.LinkedHashMap<>(before.ambientLeases());
+                    var body = before.actorLocations().get(worker).body();
+                    leases.put(worker, new AmbientActorLease(worker, body, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO,
+                            1L, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART, AmbientGoalKind.WORK, body));
+                    var retained = before.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(leases));
+                    assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceColdWorkCompleted(retained, site, completed));
+                    var codec = new FrontierWorldStateCodec();
+                    state = ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, site, completed);
+                    assertEquals(state, ResourceSiteHarvestProcess.reduceColdWorkCompleted(codec.decode(codec.encode(before)), site, completed),
+                            "the exact same atomic receipt replays across recovery");
+                    var after = state;
+                    assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceColdWorkCompleted(after, site, completed),
+                            "duplicate receipt cannot issue a second yield or tool use");
+                }
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed secondProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, secondProgress);
                 else if (event.payload() instanceof FieldEquipmentChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
                         state, site, changed, action[0].dueAt().ticks());
@@ -462,6 +487,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
+                else if (event.payload() instanceof ResourceSiteHarvestColdWorkCompleted completed)
+                    state = ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, site, completed);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed continuingProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, continuingProgress);
                 else if (event.payload() instanceof FieldEquipmentChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
                         state, site, changed, action[0].dueAt().ticks());
@@ -508,6 +535,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestReturned returned) state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
+                else if (event.payload() instanceof ResourceSiteHarvestColdWorkCompleted completed)
+                    state = ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, site, completed);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed progressed) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                 else if (event.payload() instanceof FieldEquipmentChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
                         state, site, changed, action[0].dueAt().ticks());
@@ -667,6 +696,7 @@ class ResourceSiteColdHarvestReceiptTest {
                     case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                     case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
+                    case ResourceSiteHarvestColdWorkCompleted completed -> state = ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, site, completed);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                     case FieldEquipmentChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
                             state, site, changed, action.dueAt().ticks());
@@ -711,6 +741,7 @@ class ResourceSiteColdHarvestReceiptTest {
                     case ResourceSiteHarvestColdTraversalAdvanced traversal -> state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
                     case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
+                    case ResourceSiteHarvestColdWorkCompleted completed -> state = ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, site, completed);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                     case FieldEquipmentChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
                             state, site, changed, action.dueAt().ticks());

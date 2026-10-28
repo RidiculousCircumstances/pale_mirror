@@ -598,6 +598,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestBatchPrepared prepared -> ResourceSiteHarvestProcess.reduceBatchPrepared(state, event.subject(), prepared, event.instant().ticks());
             case ResourceSiteHarvestHotTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestHotGoalArrived arrived -> ResourceSiteHarvestProcess.reduceHotGoalArrived(state, event.subject(), arrived);
+            case ResourceSiteHarvestColdWorkCompleted completed -> ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, event.subject(), completed);
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);
             case HarvestRetiredEffectObserved retired -> ResourceSiteHarvestProcess.reduceRetiredEffect(state, event.subject(), retired);
             case HarvestRetiredDeliveryObserved retired -> HarvestDeathResources.settleDelivery(state, event.subject(), retired);

@@ -3756,3 +3756,21 @@ COLD crop preparation accounts for7.794655s WAL gate: preparation and completion
 already share one transaction but physical preparation requests a per-cell flush.
 Next cut must model one atomic COLD receipt while preserving HOT durable-before-effect.
 G remains OPEN.
+
+### Atomic COLD cell completion
+
+Pure COLD work now emits ResourceSiteHarvestColdWorkCompleted with its exact existing
+cell receipt. The site owner checks declared site/job and exclusive COLD body custody,
+then applies existing preparation and settlement invariants inside that single event.
+No intermediate external preparation is published. HOT preparation still requires its
+durable-before-effect barrier, and physical hand observations are forbidden in COLD.
+The additive WAL type reuses the unchanged receipt codec; schema312 state and prior
+event grammars remain unchanged, so retain current worlds. Process event permissions,
+wake dependencies, diagnostics and causal trace include the explicit new event.
+
+Focused COLD/HOT harvest, production, process catalogue, diagnostic producer and
+guardrails pass27s. Existing terminal full/partial-hand, tool/custody and restart
+scenarios exercise the real planner. Added rejection for duplicate/foreign receipt,
+retained physical custody, HOT attempted as COLD and forged hand; exact receipt codec
+and pre-state recovery replay agree. Frozen checks, retained-world delivery and measured
+ordinary throughput follow; no20/s or final goal acceptance claim yet.

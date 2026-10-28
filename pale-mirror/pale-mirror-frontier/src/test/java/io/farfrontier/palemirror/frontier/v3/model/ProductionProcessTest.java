@@ -904,6 +904,8 @@ class ProductionProcessTest {
                     harvesting = ResourceSiteHarvestProcess.reduceSegmentRenewed(harvesting, siteId, renewed);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared prepared)
                     harvesting = ResourceSiteHarvestProcess.reduceCropPrepared(harvesting, siteId, prepared);
+                else if (event.payload() instanceof ResourceSiteHarvestColdWorkCompleted completed)
+                    harvesting = ResourceSiteHarvestProcess.reduceColdWorkCompleted(harvesting, siteId, completed);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed advanced)
                     harvesting = ResourceSiteHarvestProcess.reduceProgressed(harvesting, siteId, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestReturned returned)

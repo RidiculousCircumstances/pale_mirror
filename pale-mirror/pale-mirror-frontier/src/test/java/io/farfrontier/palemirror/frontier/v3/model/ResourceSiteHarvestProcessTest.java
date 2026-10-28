@@ -548,6 +548,7 @@ class ResourceSiteHarvestProcessTest {
                 case ResourceSiteHarvestLabourChange changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 case ResourceSiteHarvestImmatureCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceCellSkipped(state, site, skipped);
                 case ResourceSiteHarvestCropPrepared prepared -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, prepared);
+                case ResourceSiteHarvestColdWorkCompleted completed -> state = ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, site, completed);
                 case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                 case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                 case ResourceSiteHarvestColdGoalHeld held -> state = ResourceSiteHarvestProcess.reduceColdGoalHeld(state, site, held);
@@ -910,6 +911,11 @@ class ResourceSiteHarvestProcessTest {
                     new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(job.workerId(),
                             hot.lease().members().getFirst().entityId()), hot.lease().revision(), 1)));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceProgressed(held, hot.site(), receipt));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteHarvestColdWorkCompleted(receipt));
+        var forgedCold = new ResourceSiteHarvestColdWorkCompleted(new ResourceSiteHarvestProgressed(
+                receipt.siteId(), receipt.epoch(), receipt.jobId(), receipt.completedCropSlots(), receipt.layoutRevision(),
+                receipt.cellId(), receipt.generation(), receipt.outcome(), receipt.coldScheduleId(), receipt.coldDueAt()));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceColdWorkCompleted(resumed, hot.site(), forgedCold));
         var finished = ResourceSiteHarvestProcess.reduceProgressed(resumed, hot.site(), receipt);
         assertEquals(1, finished.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().harvestedYieldQuantity());
         assertFalse(finished.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow().progress().hasPendingCrop());

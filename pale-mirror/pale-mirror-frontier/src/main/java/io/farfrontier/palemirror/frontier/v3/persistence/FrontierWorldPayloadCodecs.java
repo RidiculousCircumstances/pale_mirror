@@ -51,6 +51,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvestWorkChanged(),
             new ResourceSiteHarvestSuspensionCodec(), new FieldEquipmentCodec(),
             ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(),
+            ResourceSitePayloadCodecs.harvestColdWorkCompleted(),
             new ResourceSiteHarvestAcceptanceCodec(), new HarvestRetiredEffectObservedCodec(), new HarvestDeathSettledCodec(), new HarvestRetiredDeliveryObservedCodec(), new HarvestRetiredHandObservedCodec(),
             ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestColdGoalAdvanced(),
             ResourceSitePayloadCodecs.harvestColdGoalHeld(), ResourceSitePayloadCodecs.harvestReturned(),

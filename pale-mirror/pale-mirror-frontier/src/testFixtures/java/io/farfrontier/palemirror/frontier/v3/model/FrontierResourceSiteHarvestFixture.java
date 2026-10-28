@@ -195,6 +195,7 @@ final class FrontierResourceSiteHarvestFixture {
                         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, siteId, changed);
                 case ResourceSiteHarvestCropPrepared prepared ->
                         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, siteId, prepared);
+                case ResourceSiteHarvestColdWorkCompleted completed -> state = ResourceSiteHarvestProcess.reduceColdWorkCompleted(state, siteId, completed);
                 case ResourceSiteHarvestProgressed progressed ->
                         state = ResourceSiteHarvestProcess.reduceProgressed(state, siteId, progressed);
                 case ResourceSiteHarvestReturned returned ->

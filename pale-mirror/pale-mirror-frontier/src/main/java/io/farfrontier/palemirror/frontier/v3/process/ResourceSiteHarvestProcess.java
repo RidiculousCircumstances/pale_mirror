@@ -150,6 +150,21 @@ public final class ResourceSiteHarvestProcess {
                 released.sceneRelease().members(), bound.getFirst());
     }
 
+    /** Preparation and settlement share one COLD event; no prepared physical authority is published. */
+    public static FrontierWorldState reduceColdWorkCompleted(FrontierWorldState state, SubjectId subject,
+                                                            ResourceSiteHarvestColdWorkCompleted completed) {
+        var receipt = completed.receipt();
+        if (!subject.equals(receipt.siteId()))
+            throw new IllegalArgumentException("COLD field work has a foreign declared site owner");
+        var job = state.resourceSites().site(subject).harvestJob(receipt.jobId()).orElseThrow(
+                () -> new IllegalArgumentException("COLD field work has no exact active job"));
+        if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
+            throw new IllegalArgumentException("COLD field work cannot bypass physical worker custody");
+        var prepared = reduceCropPrepared(state, subject, new ResourceSiteHarvestCropPrepared(
+                job.id(), job.progress().nextCropSlotIndex(), receipt.generation()));
+        return reduceProgressed(prepared, subject, receipt);
+    }
+
     public static FrontierWorldState reduceProgressed(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestProgressed progressed) {
         return settleProgressed(state, subject, progressed, java.util.Optional.empty());
     }

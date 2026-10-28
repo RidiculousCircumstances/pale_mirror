@@ -603,9 +603,10 @@ final class ResourceSiteHarvestPlanning {
         ResourceSiteHarvestProgress progressed = job.progress().prepareNextCrop().confirmPreparedCrop(nextSelected);
         ResourceSiteHarvestJob replacement = job.withProgress(progressed).bindTarget(worked);
         List<ProposedEvent> events = new java.util.ArrayList<>(List.of(prefix));
-        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation())));
-        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), progressed.completedCropSlots(),
-                field.layout().revision(), cellId, job.target().generation(), field.expectedWorkOutcome(cellId), action.id(), action.dueAt().ticks())));
+        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestColdWorkCompleted(
+                new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), progressed.completedCropSlots(),
+                        field.layout().revision(), cellId, job.target().generation(), field.expectedWorkOutcome(cellId),
+                        action.id(), action.dueAt().ticks()))));
         events.add(reschedule(action, coldProgress(replacement, Math.addExact(now, continuationInterval(state, replacement)))));
         return List.copyOf(events);
     }

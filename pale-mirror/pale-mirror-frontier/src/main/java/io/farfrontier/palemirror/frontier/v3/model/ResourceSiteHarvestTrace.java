@@ -26,6 +26,9 @@ public final class ResourceSiteHarvestTrace {
         if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) {
             return update(state, event.subject(), advanced.jobId(), trace -> trace.cold(event));
         }
+        if (event.payload() instanceof ResourceSiteHarvestColdWorkCompleted completed) {
+            return update(state, event.subject(), completed.receipt().jobId(), trace -> trace.cold(event));
+        }
         if (event.payload() instanceof ResourceSiteHarvestProgressed progressed
                 && state.resourceSites().sites().values().stream()
                         .anyMatch(lifecycle -> lifecycle.harvestLineages().values().stream()
