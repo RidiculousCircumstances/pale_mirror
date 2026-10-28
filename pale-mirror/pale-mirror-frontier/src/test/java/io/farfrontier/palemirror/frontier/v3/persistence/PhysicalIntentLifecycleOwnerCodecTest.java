@@ -46,7 +46,10 @@ class PhysicalIntentLifecycleOwnerCodecTest {
         ByteArrayOutputStream payloadBytes = new ByteArrayOutputStream();
         try (DataOutputStream output = new DataOutputStream(payloadBytes)) { PhysicalIntentPayloadCodec.write(output, intent); }
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(payloadBytes.toByteArray()))) {
-            assertEquals(intent, PhysicalIntentPayloadCodec.read(input));
+            var recovered = PhysicalIntentPayloadCodec.read(input);
+            assertEquals(intent, recovered);
+            assertEquals(intent.subjectIds(), recovered.subjectIds(), "the wire-tag order is retained across recovery");
+            assertThrows(UnsupportedOperationException.class, () -> recovered.subjectIds().clear());
         }
 
         ByteArrayOutputStream snapshotBytes = new ByteArrayOutputStream();

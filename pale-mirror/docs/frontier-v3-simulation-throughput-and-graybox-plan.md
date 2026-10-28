@@ -3933,3 +3933,27 @@ invalidate unchanged jobs. Other production protocols keep their material checks
 audit/recovery ignores cached proof. Focused coverage compares incremental execution views with
 full reconstruction, and removes each unchanged production job's worker/task after warm reads,
 checking the same rejection during a full audit and successful reuse of its valid predecessor.
+
+
+### Avoid repeated immutable read allocation
+
+ac851163a frozen91s +55 native economy checks passed; retained313 deployments verified.
+Its ordinary observation49252→51603/333.145774s=7.056971/s,debt1698→6010 fails G.
+The last intervals remained about8/s after warmup. Concurrent45sJFR49250→49424 rate3.903241/s
+had zeroDataLoss,owner56.14%,exact23.12%,WAL7.91%. No comparative source gain is claimed.
+
+Existing JFR allocation samples identified repeated role-list construction/physical-reference
+collection in commercial counterfactual reviews, and temporary scope keys during repeated
+identical storage reads. Allocation sample weights are statistical, not exact per-call bytes.
+PhysicalIntentRoleBinding now computes its exact wire-tag-ordered immutable projection once.
+GoodsTradeRetention retains independently derived physical-reference and shipment-owner sets by
+their complete immutable source maps. Terminal/order/expiry decisions still read current commerce;
+no stale decision, owner inference, lifetime extension or accounting change is introduced.
+
+The bounded calculation scope now retains its last exact input/result alongside the existing
+branch history. Consecutive identical reads avoid constructing another hash key. Earlier branch
+images, identity distinctions, caps, thread confinement and failure cleanup remain unchanged.
+A view's prior last image must still enter a new scope's branch history: bypassing the scope
+would lose that guarantee. The connected branch/failure test now starts with a warmed last image.
+Retirement revisits a retained pre-state after its successor; codec checks preserve projection
+order and immutability. No new canonical data, schema or compatibility path is involved.

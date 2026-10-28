@@ -6,15 +6,28 @@ import java.util.*;
 /** Bounded commercial history lifecycle; unrelated public fills never form a retirement component. */
 public final class GoodsTradeRetention {
     private static final int MAX_PER_REVIEW = 32;
+    private static final ImmutableInputView<Set<SubjectId>> PHYSICAL_REFERENCES = new ImmutableInputView<>();
+    private static final ImmutableInputView<Set<SubjectId>> SHIPMENT_OWNERS = new ImmutableInputView<>();
     private GoodsTradeRetention() { }
     public static Optional<GoodsTradeRetired> collect(FrontierWorldState state, long now) {
         var trade = state.companies().goodsTrade();
-        var physical = new HashSet<SubjectId>(); state.physicalIntents().values().forEach(intent -> {
-            physical.add(intent.causeSubjectId()); physical.addAll(intent.subjectIds());
+        if (trade.orders().isEmpty() && trade.contracts().isEmpty()) return Optional.empty();
+        // Counterfactual market candidates change commercial state, not these
+        // immutable obligations. Read each complete source once per input image.
+        var physical = PHYSICAL_REFERENCES.get(List.of(state.physicalIntents()), () -> {
+            var subjects = new HashSet<SubjectId>();
+            state.physicalIntents().values().forEach(intent -> {
+                subjects.add(intent.causeSubjectId()); subjects.addAll(intent.roles().namedRoles().values());
+            });
+            return Set.copyOf(subjects);
         });
-        var shipmentOwners = new HashSet<SubjectId>(); state.shipments().shipments().values().stream()
-                .filter(shipment -> !shipment.terminal() || shipment.reception().isPresent())
-                .forEach(shipment -> shipmentOwners.add(shipment.authorization().claimantId()));
+        var shipmentOwners = SHIPMENT_OWNERS.get(List.of(state.shipments().shipments()), () -> {
+            var owners = new HashSet<SubjectId>();
+            state.shipments().shipments().values().stream()
+                    .filter(shipment -> !shipment.terminal() || shipment.reception().isPresent())
+                    .forEach(shipment -> owners.add(shipment.authorization().claimantId()));
+            return Set.copyOf(owners);
+        });
         var contracts = trade.contracts().values().stream().filter(GoodsTradeContract::terminal)
                 .filter(contract -> !physical.contains(contract.id()) && !shipmentOwners.contains(contract.id()))
                 .sorted(Comparator.comparing(GoodsTradeContract::id)).limit(MAX_PER_REVIEW)

@@ -27,7 +27,11 @@ class GoodsTradeRetirementTest {
                 new SubjectId("receipt:closed-shared-fill"), contract.id(), contract.revision(), claim, contract.quantity(),
                 GoodsTradeDisposition.Reason.CANCELLED_BEFORE_LOADING)), 1, "goods-trade");
         var before = state;
+        assertTrue(GoodsTradeRetention.collect(before, 2).orElseThrow().contractIds().contains(contract.id()));
         var after = GoodsTradeTest.factForFamily(state, GoodsTradeMarketIdentity.OWNER, retirement, 2, "goods-trade");
+        assertFalse(GoodsTradeRetention.collect(after, 2).map(value -> value.contractIds().contains(contract.id())).orElse(false));
+        assertTrue(GoodsTradeRetention.collect(before, 2).orElseThrow().contractIds().contains(contract.id()),
+                "revisiting a retained branch must use its current commercial obligations");
         assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, after));
         assertEquals(before.inventory(), after.inventory());
         var offer = after.companies().goodsTrade().orders().get(shared.id());

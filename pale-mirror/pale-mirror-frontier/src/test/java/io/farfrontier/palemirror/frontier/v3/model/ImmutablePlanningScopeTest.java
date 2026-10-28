@@ -9,6 +9,7 @@ class ImmutablePlanningScopeTest {
     @Test void branchingReusesOnlyTheExactBasisAndReleasesScopeOnFailure() {
         var view = new ImmutableInputView<Integer>(); var calls = new AtomicInteger();
         Object original = new Object(), draft = new Object();
+        assertEquals(1, view.get(List.of(original), calls::incrementAndGet), "an existing last image must also enter the new scope's branch history");
         assertThrows(IllegalArgumentException.class, () -> ImmutablePlanningScope.within(() -> {
             int first = view.get(List.of(original), calls::incrementAndGet);
             assertNotEquals(first, view.get(List.of(draft), calls::incrementAndGet));

@@ -9,6 +9,7 @@ import java.util.Objects;
 public final class PhysicalIntentRoleBinding {
     private final PhysicalIntentRoleSchema schema;
     private final Map<PhysicalIntentSubjectRole, SubjectId> roles;
+    private final List<SubjectId> orderedSubjects;
     private final java.util.Optional<PhysicalSceneBinding> scene;
 
     private PhysicalIntentRoleBinding(PhysicalIntentRoleSchema schema, Map<PhysicalIntentSubjectRole, SubjectId> roles) {
@@ -27,6 +28,8 @@ public final class PhysicalIntentRoleBinding {
         if (copy.size() != roles.size() || copy.values().stream().distinct().count() != copy.size()) throw new IllegalArgumentException("physical intent role subjects must be distinct");
         if (!copy.keySet().equals(schema.roles())) throw new IllegalArgumentException("physical intent role binding does not match " + schema);
         this.roles = Map.copyOf(copy);
+        orderedSubjects = this.roles.entrySet().stream().sorted(Map.Entry.comparingByKey(
+                java.util.Comparator.comparingInt(PhysicalIntentSubjectRole::wireTag))).map(Map.Entry::getValue).toList();
     }
 
     public PhysicalIntentRoleSchema schema() { return schema; }
@@ -35,7 +38,7 @@ public final class PhysicalIntentRoleBinding {
     public SubjectId require(PhysicalIntentSubjectRole role) { SubjectId value = roles.get(Objects.requireNonNull(role)); if (value == null) throw new IllegalArgumentException("physical intent " + schema + " lacks role " + role); return value; }
     public Map<PhysicalIntentSubjectRole, SubjectId> namedRoles() { return roles; }
     /** Read-only compatibility/index projection. Never use for behavior, custody or retirement authority. */
-    public List<SubjectId> subjectIds() { return roles.entrySet().stream().sorted(Map.Entry.comparingByKey(java.util.Comparator.comparingInt(PhysicalIntentSubjectRole::wireTag))).map(Map.Entry::getValue).toList(); }
+    public List<SubjectId> subjectIds() { return orderedSubjects; }
     public void validate(PhysicalIntentLifecycleOwner owner, PhysicalIntentKind kind) { if (schema.owner() != owner || schema.kind() != kind) throw new IllegalArgumentException("physical intent owner/kind/role-schema mismatch: " + schema); }
     @Override public boolean equals(Object other) { return other instanceof PhysicalIntentRoleBinding binding && schema == binding.schema && roles.equals(binding.roles) && scene.equals(binding.scene); }
     @Override public int hashCode() { return Objects.hash(schema, roles, scene); }
