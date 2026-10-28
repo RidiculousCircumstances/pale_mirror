@@ -3656,3 +3656,42 @@ return/geometry code, outside thisassignment. It is NOTgreen orcomplete;55native
 tests did finishgreen. Retain partitioned-lookup-release.log and progress-thread receipt.
 Use connected collection/state/service/trade/production/extraction/forest/recovery gates
 for the frozen correction; do not turn this into newhive work or another fulltestcampaign.
+
+
+### Population and meal owner validation is incremental (2026-10-28)
+
+4b8f467a6 connected frozen gates PASS153s:435frontier/81suites,44pilotschema,
+55nativeeconomy,guardrails/JAR. Bothretained VERIFIED e586efd49dd317b779ce54036919f46ef7c327174072d807a07d1da15259d476fc26085c0300623f9552915d571964a2799f5ee0da2f1dfc3cc5ff5e9fdb1a85.
+Next actual ordinary profile captured a different massfeeding workload, NOT a
+controlled sourcegain/regression comparison: partitioned-lookup-current-*44.689640s,
+noDataLoss,295310->295330=0.447531ticks/s,debt1584->2466. Owner78.13%,exact9.58%,WAL9.56%.
+Inclusive mealcoldtransaction9.703459s,mealplan7.204099s,mealstarted6.259055s,
+populationcoldreduction4.937759s,canonicalvalidation8.374288s,ownedvalidation6.183482s.
+Method samples371HumanPopulationconstructor/357advanceMeal,142mealexecutionvalidation.
+Held-callstackalso shows wholemeal-map branch comparison. These are currentcausal
+leads, not an excuse to declare earlierlocalallocationcut a totalserverimprovement.
+
+The population constructor unconditionally rescanned allhouseholds/residents/health/
+nutrition/migration/birth/medical/meal records for eachmealstep. Move its SAMEchecks
+into populationowned HumanPopulationValidation. Existing successful immutabledependency
+checks share unchanged component evidence; meal/retiredobligation checks use the common
+explicit immutable referenceindex over exactresident/migration/active-meal reads.
+New, changed and referencedchanged rows are checked; failures discard partialindex,
+fullingress/recovery validation remainsfull. No invariant/policy/schema removed.
+Meal producers use common exactsingleentryreplacement/removal instead offullmapclone.
+ResidentMealExecutionAuthority validates both directions using same sharedreference
+mechanism: meal->currentdeclaredUAE and currentMEALexecution->exactmeal. Neitherowner
+infers a role or dependency from anIDspelling, otherfamily data or missingdimensions.
+
+Planning and canonicalapplication may branch from the same publishedsource. Immutable
+lookup storage now carries an opaque constructionlineage, never parentmaps. Same-lineage
+branch comparison reads only changed immutablepages; unrelated/mutableinput uses existing
+completecomparison. This removes completefallback observed in current mealcandidate
+queries without expanding snapshotcache/history. Identitydifferences remaincomplete,
+iterationorder remains independentlychecked, no domainauthority inferred.
+
+New negativecoverage warms componentchecks then forgesmealkey, changesresidentsettlement,
+removeshousehold/nutrition and proves rejection plusforcedfull/codec recovery. Existing
+meal admission/hot/displacement/reentry/resource-loss and population/nutrition checks
+PASS57s; connectedpopulation PASS57s; finalboth-directionUAE/death/replay/reference/
+mapbranchnegative+guardrails PASS28s. Frozenrelease/deploy/ordinaryeffect pending;GOPEN.

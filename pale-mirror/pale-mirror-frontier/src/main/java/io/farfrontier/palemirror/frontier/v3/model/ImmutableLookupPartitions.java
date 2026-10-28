@@ -7,6 +7,7 @@ import java.util.*;
  * Membership edits copy order; unchanged pages carry no predecessor-map chain. */
 final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
     private static final int PAGES = 64;
+    private final Object lineage;
     private final List<Map<K, V>> pages;
     private final List<K> order;
     private final Set<K> keys;
@@ -14,6 +15,7 @@ final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
     private final Set<Entry<K, V>> entries;
 
     ImmutableLookupPartitions(Map<K, V> source) {
+        lineage = new Object();
         var mutable = new ArrayList<Map<K, V>>(PAGES);
         for (int i = 0; i < PAGES; i++) mutable.add(new HashMap<>());
         source.forEach((key, value) -> mutable.get(page(key)).put(key, value));
@@ -21,7 +23,8 @@ final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
         pages = List.copyOf(mutable); order = List.copyOf(source.keySet());
         keys = keyView(); entries = entryView(); values = valueView();
     }
-    private ImmutableLookupPartitions(List<Map<K, V>> pages, List<K> order) {
+    private ImmutableLookupPartitions(Object lineage, List<Map<K, V>> pages, List<K> order) {
+        this.lineage = lineage;
         this.pages = List.copyOf(pages); this.order = order;
         keys = keyView(); entries = entryView(); values = valueView();
     }
@@ -38,7 +41,25 @@ final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
             if (remove) changed.remove(key); else changed.add(key);
             nextOrder = List.copyOf(changed);
         }
-        return new ImmutableLookupPartitions<>(next, nextOrder);
+        return new ImmutableLookupPartitions<>(lineage, next, nextOrder);
+    }
+    /** Same-lineage branches retain exact page identities without retaining parents.
+     * An unrelated immutable map still requires ordinary complete comparison. */
+    Optional<Set<K>> changedKeysFrom(ImmutableLookupPartitions<?, ?> previous) {
+        if (lineage != previous.lineage) return Optional.empty();
+        var changed = new HashSet<K>();
+        for (int i = 0; i < PAGES; i++) {
+            var before = previous.pages.get(i); var after = pages.get(i);
+            if (before == after) continue;
+            for (var key : before.keySet()) if (before.get(key) != after.get(key)) {
+                // Shared construction lineage preserves this collection's nominal
+                // K/V schema; no domain owner or behavior is inferred here.
+                @SuppressWarnings("unchecked") K typed = (K) key;
+                changed.add(typed);
+            }
+            for (var key : after.keySet()) if (!before.containsKey(key)) changed.add(key);
+        }
+        return Optional.of(Set.copyOf(changed));
     }
     private static int page(Object key) {
         int hash = Objects.requireNonNull(key).hashCode();

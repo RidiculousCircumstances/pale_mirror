@@ -67,7 +67,12 @@ public final class ImmutableLookupMap<K, V> extends AbstractMap<K, V> implements
     }
     @Override public Optional<Set<K>> changedKeysFrom(Map<?, ?> predecessor) {
         Objects.requireNonNull(predecessor, "immutable map predecessor");
-        return change.filter(value -> value.predecessor().get() == predecessor).map(DirectChange::keys);
+        var direct = change.filter(value -> value.predecessor().get() == predecessor).map(DirectChange::keys);
+        if (direct.isPresent()) return direct;
+        if (values instanceof ImmutableLookupPartitions<K, V> partitions && predecessor instanceof ImmutableMapImage<?, ?>
+                && storage(predecessor) instanceof ImmutableLookupPartitions<?, ?> previous)
+            return partitions.changedKeysFrom(previous);
+        return Optional.empty();
     }
     /** Shares unchanged storage partitions; no parent chain or escaped mutable draft. */
     public static <K, V> Map<K, V> withEntry(Map<? extends K, ? extends V> source, K key, V value) {

@@ -7,6 +7,38 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentMealReferenceIndexTest {
+    @Test void populationValidationRejectsChangedResidentRelationsAndForgedKeysAfterWarmup() {
+        var state = meal(); var population = state.humanPopulation();
+        var meal = population.meals().values().iterator().next();
+        var actor = meal.residentId(); var resident = population.resident(actor);
+        var other = population.residents().values().stream()
+                .filter(person -> !person.settlementId().equals(resident.settlementId())).findFirst().orElseThrow();
+        assertEquals(population, populationWith(population, population.residents(), population.households(),
+                population.nutrition(), population.meals()));
+        var relocated = ImmutableLookupMap.withEntry(population.residents(), actor,
+                resident.relocated(other.settlementId(), other.householdId()));
+        assertThrows(IllegalArgumentException.class, () -> populationWith(population, relocated,
+                population.households(), population.nutrition(), population.meals()),
+                "an unchanged meal must be checked when its exact resident moves to another settlement");
+        var wrongKey = ImmutableLookupMap.withEntry(ImmutableLookupMap.withoutEntry(population.meals(), actor), other.id(), meal);
+        assertThrows(IllegalArgumentException.class, () -> populationWith(population, population.residents(),
+                population.households(), population.nutrition(), wrongKey));
+        assertThrows(IllegalArgumentException.class, () -> populationWith(population, population.residents(),
+                ImmutableLookupMap.withoutEntry(population.households(), resident.householdId()), population.nutrition(), population.meals()));
+        assertThrows(IllegalArgumentException.class, () -> populationWith(population, population.residents(),
+                population.households(), ImmutableLookupMap.withoutEntry(population.nutrition(), actor), population.meals()));
+        assertEquals(population, ImmutableInvariantCheck.full(() -> populationWith(population,
+                population.residents(), population.households(), population.nutrition(), population.meals())),
+                "failed derived updates cannot poison ordinary or forced full validation");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertEquals(state, codec.decode(codec.encode(state)));
+    }
+    private static HumanPopulation populationWith(HumanPopulation source, Map<SubjectId, ResidentProfile> residents,
+            Map<SubjectId, Household> households, Map<SubjectId, ResidentNutrition> nutrition, Map<SubjectId, ResidentMeal> meals) {
+        return new HumanPopulation(households, residents, source.birthJobs(), source.health(), source.quarantines(),
+                source.migrations(), source.provisions(), nutrition, source.medicalOperations(), source.schedules(), meals,
+                source.mealResourceObligations());
+    }
     @Test void warmedMealStillRejectsLostAllocationBodyAndEndpointAndRecoversAfterFailure() {
         var state = meal(); var meal = state.humanPopulation().meals().values().iterator().next();
         ResidentMealReferenceClosure.validateTransition(state, state);

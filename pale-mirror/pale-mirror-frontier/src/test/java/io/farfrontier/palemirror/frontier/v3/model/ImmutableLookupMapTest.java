@@ -21,6 +21,13 @@ class ImmutableLookupMapTest {
         assertTrue(hashes.get() < source.size() / 4,
                 "one row replacement through a validation wrapper cannot rehash the complete registry");
         assertEquals(0, initial.get(target)); assertEquals(-1, updated.get(target));
+        var another = source.keySet().stream().skip(1).findFirst().orElseThrow();
+        var branch = ImmutableLookupMap.withEntry(initial, another, -2);
+        hashes.set(0);
+        var changed = new java.util.HashSet<CountedKey>();
+        ImmutableMapChanges.forEachIdentityChangedKey(updated, branch, changed::add);
+        assertTrue(hashes.get() < initial.size() / 4, "two shared branches compare changed pages, not the world registry");
+        assertEquals(java.util.Set.of(target, another), changed);
         assertEquals(List.copyOf(source.keySet()), List.copyOf(updated.keySet()));
         source.clear();
         assertEquals(2048, initial.size());

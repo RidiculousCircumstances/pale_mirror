@@ -53,73 +53,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 || migrations.size() > MAX_MIGRATIONS || provisions.size() > MAX_PROVISIONS) {
             throw new IllegalArgumentException("human population retention limit exceeded");
         }
-        for (Map.Entry<SubjectId, Household> entry : households.entrySet()) {
-            if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("household map key must match identity");
-        }
-        for (Map.Entry<SubjectId, ResidentProfile> entry : residents.entrySet()) {
-            ResidentProfile resident = entry.getValue();
-            if (!entry.getKey().equals(resident.id())) throw new IllegalArgumentException("resident map key must match identity");
-            Household household = households.get(resident.householdId());
-            if (household == null || !household.settlementId().equals(resident.settlementId())) {
-                throw new IllegalArgumentException("resident must belong to a household in the same settlement");
-            }
-        }
-        if (!health.keySet().equals(residents.keySet())) throw new IllegalArgumentException("resident health must cover every and only exact resident");
-        if (!nutrition.keySet().equals(residents.keySet())) throw new IllegalArgumentException("resident nutrition must cover every and only exact resident");
-        java.util.Set<SubjectId> residentSettlements = residents.values().stream().map(ResidentProfile::settlementId).collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (!quarantines.keySet().containsAll(residentSettlements)) throw new IllegalArgumentException("settlement quarantine must cover every resident settlement");
-        // A fresh world has no settlement-wide ration owner. Older provision records can
-        // still be decoded for explicit rejection, but resident needs own current nutrition.
-        if (!schedules.keySet().containsAll(residentSettlements) || schedules.size() > MAX_HOUSEHOLDS)
-            throw new IllegalArgumentException("daily schedule must cover every inhabited settlement");
-        for (Map.Entry<SubjectId, ResidentMeal> entry : meals.entrySet()) {
-            ResidentProfile resident = residents.get(entry.getKey());
-            if (resident == null || !entry.getKey().equals(entry.getValue().residentId())
-                    || !resident.settlementId().equals(entry.getValue().settlementId())
-                    || migrations.containsKey(entry.getKey()))
-                throw new IllegalArgumentException("retained meal must belong to one current resident and settlement");
-        }
-        if (mealResourceObligations.size() > MAX_RESIDENTS)
-            throw new IllegalArgumentException("retired meal resource retention limit exceeded");
-        for (var entry : mealResourceObligations.entrySet()) {
-            var resident = residents.get(entry.getKey());
-            if (resident == null || !entry.getKey().equals(entry.getValue().residentId())
-                    || !resident.settlementId().equals(entry.getValue().settlementId())
-                    || meals.containsKey(entry.getKey()) || migrations.containsKey(entry.getKey()))
-                throw new IllegalArgumentException("retired meal resources require one separate exact resident owner");
-        }
-        for (Map.Entry<SubjectId, SettlementProvision> entry : provisions.entrySet()) {
-            if (!entry.getKey().equals(entry.getValue().settlementId())) throw new IllegalArgumentException("settlement provision map key must match identity");
-        }
-        java.util.Set<SubjectId> commitments = new java.util.HashSet<>();
-        for (Map.Entry<SubjectId, ResidentBirthJob> entry : birthJobs.entrySet()) {
-            ResidentBirthJob job = entry.getValue(); Household household = households.get(job.householdId());
-            if (!entry.getKey().equals(job.id()) || household == null || !household.settlementId().equals(job.settlementId())
-                    || residents.containsKey(job.resident().id()) || !commitments.add(job.foodCommitmentId())) {
-                throw new IllegalArgumentException("resident birth job has invalid exact identity or household");
-            }
-        }
-        for (Map.Entry<SubjectId, ResidentMigrationJourney> entry : migrations.entrySet()) {
-            ResidentMigrationJourney journey = entry.getValue(); ResidentProfile resident = residents.get(journey.residentId());
-            Household destination = households.get(journey.destinationHouseholdId());
-            if (!entry.getKey().equals(journey.residentId()) || resident == null || !resident.settlementId().equals(journey.originSettlementId())
-                    || destination == null || !destination.settlementId().equals(journey.destinationSettlementId())) {
-                throw new IllegalArgumentException("migration journey must bind one resident, origin and destination household");
-            }
-        }
-        if (medicalOperations.size() > MedicalEvacuationOperation.MAX_RETAINED) throw new IllegalArgumentException("medical operation retention limit exceeded");
-        for (Map.Entry<SubjectId, MedicalEvacuationOperation> entry : medicalOperations.entrySet()) {
-            MedicalEvacuationOperation operation = entry.getValue();
-            ResidentProfile patient = residents.get(operation.patientId());
-            boolean foreignMember = false;
-            for (SubjectId member : operation.team().memberIds()) {
-                ResidentProfile medic = residents.get(member);
-                if (medic == null || !medic.settlementId().equals(operation.settlementId())) { foreignMember = true; break; }
-            }
-            if (!entry.getKey().equals(operation.id()) || patient == null || !patient.settlementId().equals(operation.settlementId()) || foreignMember) {
-                throw new IllegalArgumentException("medical operation must retain local exact patient and team");
-            }
-        }
+        HumanPopulationValidation.validate(new HumanPopulationValidation.Inputs(households, residents, birthJobs, health,
+                quarantines, migrations, provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligations));
     }
 
     /** Constructor retained for existing fixtures and the pre-cut provision model. */
@@ -248,14 +183,14 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
     public HumanPopulation withMeal(ResidentMeal meal) {
         Objects.requireNonNull(meal, "resident meal");
         if (meals.containsKey(meal.residentId())) throw new IllegalArgumentException("resident already has a retained meal");
-        Map<SubjectId, ResidentMeal> next = new LinkedHashMap<>(meals); next.put(meal.residentId(), meal);
+        Map<SubjectId, ResidentMeal> next = ImmutableLookupMap.withEntry(meals, meal.residentId(), meal);
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
                 provisions, nutrition, medicalOperations, schedules, next, mealResourceObligations);
     }
     public HumanPopulation advanceMeal(ResidentMeal expected, ResidentMeal nextMeal) {
         if (!expected.residentId().equals(nextMeal.residentId()) || !expected.equals(meals.get(expected.residentId())))
             throw new IllegalArgumentException("meal transition lacks its exact retained predecessor");
-        Map<SubjectId, ResidentMeal> next = new LinkedHashMap<>(meals); next.put(expected.residentId(), nextMeal);
+        Map<SubjectId, ResidentMeal> next = ImmutableLookupMap.withEntry(meals, expected.residentId(), nextMeal);
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
                 provisions, nutrition, medicalOperations, schedules, next, mealResourceObligations);
     }
@@ -263,7 +198,7 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
         if (!expected.equals(meals.get(expected.residentId()))
                 || expected.phase() != ResidentMeal.Phase.CONSUME)
             throw new IllegalArgumentException("meal completion lacks its exact consumed predecessor");
-        Map<SubjectId, ResidentMeal> next = new LinkedHashMap<>(meals); next.remove(expected.residentId());
+        Map<SubjectId, ResidentMeal> next = ImmutableLookupMap.withoutEntry(meals, expected.residentId());
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
                 provisions, nutrition, medicalOperations, schedules, next, mealResourceObligations);
     }
@@ -273,7 +208,7 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
                 || expected.phase() != ResidentMeal.Phase.MOVE && expected.phase() != ResidentMeal.Phase.TAKE
                 || expected.pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("meal source loss cannot discard an in-flight or consumed hand");
-        Map<SubjectId, ResidentMeal> next = new LinkedHashMap<>(meals); next.remove(expected.residentId());
+        Map<SubjectId, ResidentMeal> next = ImmutableLookupMap.withoutEntry(meals, expected.residentId());
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
                 provisions, nutrition, medicalOperations, schedules, next, mealResourceObligations);
     }
