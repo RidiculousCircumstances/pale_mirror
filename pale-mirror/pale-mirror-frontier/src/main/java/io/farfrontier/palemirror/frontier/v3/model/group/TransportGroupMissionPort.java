@@ -31,6 +31,12 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public void validate(FrontierWorldState state, UnitGroup group) {
         var mission = mission(state, group);
+        VALIDATION.validateSnapshot(state.bootstrap(), state.unitGroups().groups(), group.id(), group, state, () -> {
+            validateDeclaration(state, mission, group, state.shipments().shipments());
+            validateExecutions(state.actorExecutions(), state.shipments(), group);
+        }, () -> validationInputs(state, mission, group));
+    }
+    private static Object[] validationInputs(FrontierWorldState state, TransportMission mission, UnitGroup group) {
         var inputs = new java.util.ArrayList<Object>();
         inputs.add(state.bootstrap()); inputs.add(group); inputs.add(mission);
         inputs.add(state.inventory().economics().accounts().get(mission.organization().sponsor().id()));
@@ -44,10 +50,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         }
         for (var id : mission.shipmentIds()) inputs.add(state.shipments().shipments().get(id));
         inputs.add(mission.transportAssetId().map(id -> state.transportFleet().assets().get(id)).orElse(null));
-        VALIDATION.validate(state.bootstrap(), state.unitGroups().groups(), group.id(), group, () -> {
-            validateDeclaration(state, mission, group, state.shipments().shipments());
-            validateExecutions(state.actorExecutions(), state.shipments(), group);
-        }, inputs.toArray());
+        return inputs.toArray();
     }
     public static void validateDeclaration(FrontierWorldState state, TransportMission mission, UnitGroup group,
             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Shipment> shipments) {

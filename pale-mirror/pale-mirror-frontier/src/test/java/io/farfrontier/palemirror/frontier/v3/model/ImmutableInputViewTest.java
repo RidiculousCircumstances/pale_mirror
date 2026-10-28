@@ -41,6 +41,32 @@ class ImmutableInputViewTest {
         proof.validate(epoch, java.util.Map.of("one", replacement), "one", replacement, calls::incrementAndGet, changed);
         assertEquals(6, calls.get(), "nominal id reuse cannot reuse the previous declaration proof");
     }
+    @Test void completeSnapshotVisitCannotReplaceChangedInputRecoveryOrWithdrawnOwnerValidation() {
+        var proof = new ImmutableInvariantRegistry<String>(2);
+        var epoch = new Object(); var row = new Object(); var input = new Object(); var snapshot = new Object();
+        var registry = java.util.Map.of("one", row); var checks = new AtomicInteger(); var reads = new AtomicInteger();
+        java.util.function.Supplier<Object[]> dependencies = () -> { reads.incrementAndGet(); return new Object[]{input}; };
+        proof.validateSnapshot(epoch, registry, "one", row, snapshot, checks::incrementAndGet, dependencies);
+        proof.validateSnapshot(epoch, registry, "one", row, snapshot, checks::incrementAndGet, dependencies);
+        assertEquals(1, reads.get()); assertEquals(1, checks.get());
+        // Another immutable root must inspect the entire SAME owner read set, even if it matches.
+        proof.validateSnapshot(epoch, registry, "one", row, new Object(), checks::incrementAndGet, dependencies);
+        assertEquals(2, reads.get()); assertEquals(1, checks.get());
+        var changedSnapshot = new Object(); var changedInput = new Object();
+        assertThrows(IllegalArgumentException.class, () -> proof.validateSnapshot(epoch, registry, "one", row,
+                changedSnapshot, () -> { throw new IllegalArgumentException("changed invalid relationship"); }, () -> new Object[]{changedInput}));
+        proof.validateSnapshot(epoch, registry, "one", row, changedSnapshot, checks::incrementAndGet, () -> new Object[]{changedInput});
+        assertEquals(2, checks.get(), "failed checks never mark a snapshot visited");
+        ImmutableInvariantCheck.full(() -> {
+            proof.validateSnapshot(epoch, registry, "one", row, changedSnapshot, checks::incrementAndGet, () -> new Object[]{changedInput}); return null;
+        });
+        assertEquals(3, checks.get(), "full ingress bypasses both successful dependency and snapshot evidence");
+        proof.validateSnapshot(epoch, java.util.Map.of(), "one", row, changedSnapshot, checks::incrementAndGet, dependencies);
+        proof.validateSnapshot(epoch, registry, "one", row, changedSnapshot, checks::incrementAndGet, () -> new Object[]{changedInput});
+        assertEquals(5, checks.get(), "withdrawal clears same-snapshot evidence as well as input proofs");
+        proof.validateSnapshot(new Object(), registry, "one", row, changedSnapshot, checks::incrementAndGet, () -> new Object[]{changedInput});
+        assertEquals(6, checks.get(), "same row/snapshot cannot cross an epoch");
+    }
     @Test void mutableDerivedMemoIsConfinedToItsCalculationThread() throws Exception {
         var view = new ImmutableInputView<java.util.Map<String, Integer>>(); var input = new Object();
         var main = view.get(List.of(input), java.util.HashMap::new); main.put("value", 1);

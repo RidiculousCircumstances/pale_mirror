@@ -2367,3 +2367,36 @@ item. Existing cargo/tool return and job retirement finish normally. COLD previe
 and ordinary continuation share that transition; the HOT equipment adapter uses
 the same owner before labour. ToolWorkRate remains strict. This is not an exception
 catch, repaired inventory, skipped recovery rule or fabricated harvest.
+
+
+### Repeated validation visits to an immutable snapshot (2026-10-28)
+
+48449362f field-service release39frontier/45native+guardrails/packagePASS30s;
+both retainedworld deployments verified, SHA512379d8026d8c2f57538767e7163b021d769deb4684a3e0d0dcb7a53e7bc3d1d7d719dbd26656c7908113090109235ef7e277e7ac9e4ba77de30ebb2ada03c4819.
+Main follow-up confirms completed recovery, ordinarytick699128/rev1444914/debt0;
+no newquarantine, hostmax50.27ms/recentmax7.05ms. No reset/client/push.
+
+Further analysis of the retained0bda recording (no new campaign):
+`advice-readiness-clock-costs.txt` shows926 exact movement preparations/6.460s;
+40objective reviews/5.022s,22stock reconsiderations/2.645s;1147canonicalvalidation
+spans/11.185s (~9.75ms each). `...-validation-stacks.txt` confirms repeated
+TransportGroupMissionPort.validate visits inside group relationship closure,
+member execution reads and movement preparation. A successful row check was
+memoized, but every repeat still constructed the same complete dependency array
+and re-read roster/account/endpoint facts within ONE immutable aggregate.
+
+The EXISTING ImmutableInvariantRegistry now accepts a complete immutable-snapshot
+visit scope with lazy dependencies. It retains only a weak snapshot reference and
+bounded current registered row declarations, not historical world roots. Another
+snapshot still checks the SAME complete declared read set; full ingress bypasses
+both layers; withdrawal/reuse/epoch and failures cannot install/reuse false proofs.
+Transport composition is the immediate production consumer, with unchanged
+validation inputs/body. No root-family check, relationship, authority, invariant,
+map/queue limit or recovery check is removed. Focus48checks (including warmed
+wrong-kind/foreign-execution/negative/recovery) and guardrails PASS53s.
+
+This removes repeated same-snapshot input construction; native aggregate gain
+remains to be measured. It does NOT fix the remaining family-wide traversals or
+change COLD group formation. No imaginary overlay-chain defect: current
+ImmutableLookupMap is a defensive LinkedHashMap snapshot with hashed lookup,
+not a64-deep persistent overlay. Keep future changes tied to actual source.
