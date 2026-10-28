@@ -192,10 +192,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 FrontierV3SceneExecutor.release(level, runtime, lease, releaseBinding(runtime, state, lease));
             }
             case UNKNOWN_AFTER_RESTART -> {
-                // Restart changes the lease status, not the fact that body admission never
-                // started. Inspect the naturally loaded exact column before generic reclaim
-                // can mistake a solid feet cell for a missing farmer.
-                if (!FrontierV3HarvestSceneStandingAdmission.abortObstructedBodyFreePreparation(level, runtime, state, lease))
+                // Resolve positively unstarted admission before generic saved-body
+                // reclaim. No-demand cancellation uses the common admission-history
+                // proof; loaded obstruction still requires its exact physical column.
+                if (!FrontierV3HarvestSceneStandingAdmission.abortUnavailableUnstartedPreparation(level, runtime, state, lease))
                     FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
             }
             case CONFLICT, CLOSED -> { }
@@ -211,7 +211,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             // has become solid while no body exists, waiting here would also suspend the only
             // COLD continuation forever. Revoke just this body-free preparation; COLD can
             // advance from its retained position through the known route on the next turn.
-            FrontierV3HarvestSceneStandingAdmission.abortObstructedBodyFreePreparation(level, runtime, state, lease);
+            FrontierV3HarvestSceneStandingAdmission.abortUnavailableUnstartedPreparation(level, runtime, state, lease);
             return;
         }
         // addFreshEntity publishes into Minecraft's UUID index after this executor turn.  A

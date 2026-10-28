@@ -30,6 +30,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDirective;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
@@ -110,6 +111,17 @@ final class FrontierV3SceneExecutor {
         Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
         for (SceneMember member : members) positions.put(member.actorId(), state.actorLocations().get(member.actorId()).body());
         return Map.copyOf(positions);
+    }
+    /** No audience can abandon only a positively unattempted body admission.
+     * The owning family still proves that it has no unresolved process effects. */
+    static boolean unstartedAdmissionsWithoutDemand(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        if (demandExists(level, lease.handoffPosition())
+                || !FrontierSceneLeaseStateSupport.canAbortPrepared(state, lease)
+                || !lease.ambientHandoffActorIds().isEmpty() || lease.recoveryEvidence().isPresent()
+                || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)) return false;
+        return lease.members().stream().allMatch(member ->
+                FrontierV3ActorBodyCustody.unstartedAbsenceProven(level, runtime, state, member.actorId()));
     }
     /** Transfers already-loaded exact ambient bodies without despawning, cloning or teleporting them. */
     /** Resumes explicitly unstarted admission, then reclaims only a complete observed body set. */

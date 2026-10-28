@@ -18,11 +18,11 @@ import net.minecraft.server.level.ServerLevel;
 
 import java.util.UUID;
 
-/** Exact-body physical gate for the harvest scene's reversible admission boundary. */
+/** Field-owned pre-effect admission boundary; body absence proof belongs to common custody. */
 final class FrontierV3HarvestSceneStandingAdmission {
     private FrontierV3HarvestSceneStandingAdmission() { }
 
-    static boolean abortObstructedBodyFreePreparation(ServerLevel level,
+    static boolean abortUnavailableUnstartedPreparation(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         if (!lease.ambientHandoffActorIds().isEmpty() || lease.members().size() != 1
                 || lease.recoveryEvidence().isPresent()) return false;
@@ -31,7 +31,8 @@ final class FrontierV3HarvestSceneStandingAdmission {
                 ActorBodyId.recoveryBindingId(member.actorId()));
         if (binding == null || binding.phase() != FencedRecoveryPhase.PREPARED) return false;
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
-        if (lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT) {
+        boolean unneeded = FrontierV3SceneExecutor.unstartedAdmissionsWithoutDemand(level, runtime, state, lease);
+        if (unneeded || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CONFLICT) {
             var job = state.resourceSites().site(cause.siteId()).harvestJob(cause.jobId()).orElse(null);
             var field = FrontierV3ResourceSiteLedger.get(level);
             var position = lease.memberBody(state.actorLocations(), member.actorId());
@@ -39,8 +40,8 @@ final class FrontierV3HarvestSceneStandingAdmission {
                     || state.resourceSites().harvestMutationPending(job)
                     || field.fieldDelivery(cause.siteId()) != null || field.fieldHandProjection(cause.siteId()) != null
                     || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
-                    || !FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(position.x(), position.y() - 1, position.z()))
-                    || !FrontierV3ActorBodyCustody.unstartedAbsenceProven(level, runtime, state, member.actorId())) return false;
+                    || !unneeded && (!FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(position.x(), position.y() - 1, position.z()))
+                        || !FrontierV3ActorBodyCustody.unstartedAbsenceProven(level, runtime, state, member.actorId()))) return false;
         } else if (!obstructedBodyFreeColumn(level, member.entityId(), lease.memberBody(state.actorLocations(), member.actorId()))) return false;
         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "resource-site-harvest-preparation-aborted",
                 lease.id().value(), new ResourceSiteHarvestScenePreparationAborted(lease.id(), cause.siteId(), cause.jobId(),

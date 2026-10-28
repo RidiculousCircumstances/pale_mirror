@@ -3980,3 +3980,31 @@ reads do not contaminate the owner's retained image. Existing contextual-shape/u
 codec/recovery/permission and replacement-storage checks passed before the final equal-basis
 acknowledgement (24s); frozen checks include that final branch. No runtime speed claim follows
 from cache identity or unit checks; the next ordinary scale trace still owns that result.
+
+
+### No-demand recovery of positively unstarted field admission
+
+b8c710d31 frozen30sPASS, both retained313 deployments verified. Ordinary333.044777s
+57911→61853=11.836246/s,debt700→3419; late intervals13–16/s. 45sJFR rate9.307219/s,
+owner51.57%,exact33.46%,WAL8.22%,zeroDataLoss. G remains open. Town7 harvest3 reached
+terminal; town35/68 active work has real cell/labour progress, not just active labels.
+
+A separate retained-world liveness defect is confirmed at town1 jobs1/2: at instant58860,
+COLD actions were still due420/360 with0harvested cells. Their leases remained UNKNOWN_AFTER_RESTART,
+while exact body diagnostics showed PREPARED epoch1, durable firstAdmission NEVER_CREATED,
+no carrier/pending/departure/effect, storedRecovery NOT_OFFERED. Generic no-audience reclaim
+waited for loaded/saved bodies that this positive admission history says never existed.
+
+The shared scene executor now exposes an activity-independent proof for abandoning unused
+body admissions with no audience: exact abortable scene, no handed-off body/recovery evidence/
+bound scene hand, and every actor passes the existing common unstartedAbsenceProven boundary.
+The field owner separately rejects pending crop/world/hand/delivery effects, then submits its
+existing typed preparation-abort receipt. Common custody releases the unstarted incarnation
+only after that command publishes. Existing loaded obstruction handling remains; created or
+ambiguous bodies keep the normal recovery protocol. No timeout, UUID-absence inference,
+teleportation, world reset, new payload/schema or compatibility path is added.
+
+Focused adapter first-admission negative/harvest-hand/release/recovery plus domain harvest-scene
+and activity lifecycle checks passed30s. An initial compile caught a missing import, corrected
+before these checks. The next frozen artifact and SAME-world before/after farmer continuation
+are required; source existence is not a terminal liveness claim.
