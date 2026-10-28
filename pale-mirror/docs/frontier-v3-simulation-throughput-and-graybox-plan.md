@@ -3867,3 +3867,22 @@ Existing full audit/recovery still runs every row. Removing a service item's exa
 role target after warming the index rejects identically to the full check, and the
 valid predecessor remains usable. Focused canonical-state/harvest/production and
 geometry unknown/permission/negative/recovery checks pass34s; frozen delivery follows.
+
+### Closed derived-registry producer boundary
+
+2a8b49bc4 frozen60sPASS incl55nativeeconomy/44pilot; bothretained313worldsverified.
+5.5minordinaryobservation advanced27758→31042, debt1345→4723:fail sustainedclock.
+Mealsdidcomplete(town35nourished16→24,town6818→31),town1harvest3becameterminal,
+town7bread163→184. These are COLD terminal effects, not HOT/M3 or clock acceptance.
+Current44.925970strace28674→29033=7.990924/s,debt2447→2989; owner59.84%,exact25.30%,
+WAL9.02%. Compilerwarmup11.47CPUseconds remainsmaterial.
+
+Leading named lookup stack now identifies the upstream issue behind the apparent
+kind-index scan: ImmutableRegistryView emitted Collections.unmodifiableMap. Its
+immutable-input consumer therefore correctly treated that result as untrusted
+ingress, defensively copied it, and compared all3000entries on every use (57leaf
+get samples+19containsKey). The common producer now emits ImmutableLookupMap for
+its value and retained-input images. No owner/type/invariant or canonical schema
+changes. Functional branch/mutability checks and a connected producer→group consumer
+hash-work discriminator pass31s together with actor/meal/field/geometry checks.
+Frozen package and runtime effect follow. G staysOPEN.

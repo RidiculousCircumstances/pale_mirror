@@ -8,6 +8,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ImmutableGroupViewTest {
     private record Row(Set<String> points, int progress) { }
+    private record CountedKey(int value, AtomicInteger hashes) {
+        @Override public int hashCode() { hashes.incrementAndGet(); return value; }
+    }
+    @Test void derivedProducerImagesDoNotRepeatWholeRegistryIngressInConsumers() {
+        var producer = new ImmutableRegistryView<CountedKey, Row, Row>(1024);
+        var consumer = new ImmutableGroupView<CountedKey, Row, String>();
+        var epoch = new Object(); var hashes = new AtomicInteger(); var source = new LinkedHashMap<CountedKey, Row>();
+        for (int i = 0; i < 512; i++) source.put(new CountedKey(i, hashes), new Row(Set.of("target"), 0));
+        var input = ImmutableLookupMap.copyOf(source);
+        var snapshot = producer.project(epoch, input, (id, row) -> row);
+        var first = consumer.keys(epoch, snapshot, Row::points, "target");
+        hashes.set(0);
+        assertSame(first, consumer.keys(epoch, producer.project(epoch, input, (id, row) -> row), Row::points, "target"));
+        assertTrue(hashes.get() < source.size() / 4, "an unchanged derived registry must not rehash the whole producer catalogue");
+    }
+
     @Test void changedProgressKeepsMembershipButCurrentRowsMovesRemovalsBranchesAndOrderRemainExact() {
         var view = new ImmutableGroupView<String, Row, String>();
         var epoch = new Object(); var calls = new AtomicInteger();

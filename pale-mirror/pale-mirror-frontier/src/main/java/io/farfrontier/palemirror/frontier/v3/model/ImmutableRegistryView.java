@@ -113,10 +113,10 @@ final class ImmutableRegistryView<K, I, V> {
             next.remove(key);
         }
         private Map<K, V> values() {
-            return next == null ? previous : Collections.unmodifiableMap(next);
+            return next == null ? previous : ImmutableLookupMap.copyOf(next);
         }
         private Map<K, I> basis() {
-            return nextInputs == null ? inputs : Collections.unmodifiableMap(nextInputs);
+            return nextInputs == null ? inputs : ImmutableLookupMap.copyOf(nextInputs);
         }
     }
 }
