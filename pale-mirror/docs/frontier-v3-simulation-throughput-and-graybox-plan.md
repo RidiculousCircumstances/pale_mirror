@@ -2454,3 +2454,28 @@ ad114da60 shared-economics clean release verification passed; both retained
 worlds deployed/verified, SHA512e9a9ad45d0c22132046b6190f015974da01748d6e91ef9a95803e03a4666e5a2f7e505075140aea17eb801ddc32feae2f7d0f3bbd67951cf479c0858e876b446.
 Main follow-up tick738539/rev1529861/statusok/debt0/recoveryfalse. Private ordinary
 capture shared-economics-ordinary100 is running/completing; no measured gain yet.
+
+
+### Subject-retirement validation without a whole-world union (2026-10-28)
+
+8529ec66f no-op identity release verification passed in38s; both retained-world
+deployments verified with SHA512e3e2f8c694bc418ac3d1b8cfa4f0d90fb7ef786d844f512486e7676d70a70ba83d48854bb6ce38cdb81d5a65ce49eb1cf67d12a50cfc5a6c9bb47e5d2595e133.
+Private no-op-world-ordinary100.jfr:137627events/noDataLoss,44.890779s exactly
+accounted,ticks63101→63294=4.299324/s,debt1010→1716. STILL FAILED20/s; evolving
+workload does not establish a controlled4.3/1.7 speedup. OWNER56.82% (validation
+12.676877s nested), EXACT_RUNNING36.35% (movement7.396031s,objective.review3.182078s,
+resource hauling2.409346s),WAL4.43%,budget0.13%.
+
+A confirmed avoidable publication cost remains at FrontierReferenceClosure:
+whenever membership changes, it builds two complete subject unions, copies the
+old union and differences them, even for a pure addition. Server CPU samples
+include this exact difference path; this is not a routing hypothesis. The
+existence-only owner now enumerates possible removals from its SAME closed
+accepted source maps, fixed bootstrap identities and nested job/operation IDs,
+then checks those candidates against every accepted current surface. Exact
+membership queries replace global union construction. Delta-aware maps use their
+changed-key witness; arbitrary/non-adjacent maps retain complete comparison.
+An ID still present on another accepted surface is not falsely retired. Actual
+removal still audits unchanged schedules, and newly retained references still
+must exist. No lifecycle/type/owner is inferred from membership. The old union
+implementation is removed, not retained as an active alternative.

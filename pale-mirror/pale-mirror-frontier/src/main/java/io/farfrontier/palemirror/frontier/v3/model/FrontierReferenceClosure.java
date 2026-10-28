@@ -49,14 +49,10 @@ final class FrontierReferenceClosure {
         ResidentMealReferenceClosure.validateTransition(before, after);
         if (before.physicalIntents() != after.physicalIntents() || before.inventory().items() != after.inventory().items())
             validateExactPhysicalCustody(after);
-        var oldSubjects = ScheduledSubjectExistence.subjects(before);
-        var subjects = ScheduledSubjectExistence.subjects(after);
-        if (oldSubjects != subjects) {
-            var removed = new java.util.HashSet<>(oldSubjects); removed.removeAll(subjects);
-            if (!removed.isEmpty()) for (var action : schedules.get()) if (removed.contains(action.subject())
-                    && !SYSTEM_SUBJECTS.contains(action.subject().value()))
-                throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
-        }
+        var removed = ScheduledSubjectExistence.removed(before, after);
+        if (!removed.isEmpty()) for (var action : schedules.get()) if (removed.contains(action.subject())
+                && !SYSTEM_SUBJECTS.contains(action.subject().value()))
+            throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
         validateScheduledSubjects(after, retainedChanges);
     }
 
@@ -90,6 +86,6 @@ final class FrontierReferenceClosure {
 
     /** Existence validation only, never owner discovery or dispatch. */
     private static boolean isLiveSubject(FrontierWorldState state, SubjectId id) {
-        return ScheduledSubjectExistence.subjects(state).contains(id);
+        return ScheduledSubjectExistence.contains(state, id);
     }
 }

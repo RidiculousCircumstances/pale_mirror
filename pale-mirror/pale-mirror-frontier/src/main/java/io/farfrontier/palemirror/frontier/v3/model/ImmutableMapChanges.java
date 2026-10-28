@@ -19,6 +19,19 @@ final class ImmutableMapChanges {
         }
         return before.keySet().equals(after.keySet());
     }
+    /** Membership-only removal delta: value changes must not compare large records. */
+    static <K> void forEachRemovedKey(Map<K, ?> before, Map<K, ?> after, Consumer<K> consume) {
+        if (before == after) return;
+        if (after instanceof ImmutableMapImage<?, ?> image) {
+            @SuppressWarnings("unchecked") var typed = (ImmutableMapImage<K, ?>) image;
+            var keys = typed.changedKeysFrom(before);
+            if (keys.isPresent()) {
+                for (var key : keys.orElseThrow()) if (before.containsKey(key) && !after.containsKey(key)) consume.accept(key);
+                return;
+            }
+        }
+        for (var key : before.keySet()) if (!after.containsKey(key)) consume.accept(key);
+    }
     static <K, V> void forEach(Map<K, V> before, Map<K, V> after, Consumer<Change<K, V>> consume) {
         if (before == after) return;
         if (after instanceof ImmutableMapImage<?, ?> image) {

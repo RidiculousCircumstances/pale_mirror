@@ -1,24 +1,54 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
-/** Rebuildable existence-only image of the scheduler's explicit accepted
- * subject surfaces. Membership never supplies a type, owner or dispatch key.
- * Values/health/positions do not retire IDs; nested operation/job IDs do. */
+/** Existence only: accepted surfaces are explicit, never inferred owners or dispatch.
+ * Publication queries exact membership and only possible removals. Ordinary changes
+ * do not build or difference a union of every subject in the world. */
 final class ScheduledSubjectExistence {
-    private record Image(FrontierWorldState state, ImmutableDependencies dependencies,
-                         List<Map<SubjectId, ?>> sources, Set<SubjectId> nested, Set<SubjectId> subjects) { }
+    private record Image(FrontierWorldState state, List<Map<SubjectId, ?>> sources,
+                         Set<SubjectId> fixed, Set<SubjectId> nested) { }
     private static final ThreadLocal<Image> IMAGE = new ThreadLocal<>();
+    private static final ImmutableInputView<Set<SubjectId>> FIXED = new ImmutableInputView<>();
+    private static final ImmutableInputView<Set<SubjectId>> NESTED = new ImmutableInputView<>();
     private ScheduledSubjectExistence() { }
-    static Set<SubjectId> subjects(FrontierWorldState state) {
+    static boolean contains(FrontierWorldState state, SubjectId id) { return contains(image(state), id); }
+    private static boolean contains(Image image, SubjectId id) {
+        if (image.fixed().contains(id) || image.nested().contains(id)) return true;
+        for (var source : image.sources()) if (source.containsKey(id)) return true;
+        return false;
+    }
+    static Set<SubjectId> removed(FrontierWorldState before, FrontierWorldState after) {
+        if (before == after) return Set.of();
+        var old = image(before); var next = image(after); var candidates = new HashSet<SubjectId>();
+        for (int index = 0; index < old.sources().size(); index++)
+            ImmutableMapChanges.forEachRemovedKey(old.sources().get(index), next.sources().get(index), candidates::add);
+        if (old.fixed() != next.fixed()) for (var id : old.fixed()) if (!next.fixed().contains(id)) candidates.add(id);
+        if (old.nested() != next.nested()) for (var id : old.nested()) if (!next.nested().contains(id)) candidates.add(id);
+        // The same spelling can remain on another accepted surface. Withdrawal
+        // from one map alone does not mean the canonical subject was retired.
+        candidates.removeIf(id -> contains(next, id));
+        return Set.copyOf(candidates);
+    }
+    private static Image image(FrontierWorldState state) {
         var old = IMAGE.get();
-        if (old != null && old.state() == state) return old.subjects();
-        List<Map<SubjectId, ?>> sources = List.of(state.actorLocations(), state.structureConditions(),
+        if (old != null && old.state() == state) return old;
+        var fixed = FIXED.get(List.of(state.bootstrap()), () -> {
+            var ids = new HashSet<SubjectId>(); var bootstrap = state.bootstrap();
+            ids.add(bootstrap.hive().id());
+            bootstrap.settlements().forEach(settlement -> {
+                ids.add(settlement.id()); settlement.residents().forEach(resident -> ids.add(resident.id()));
+            });
+            bootstrap.hive().bioforms().forEach(actor -> ids.add(actor.id()));
+            bootstrap.hive().organs().forEach(organ -> ids.add(organ.id()));
+            return Set.copyOf(ids);
+        });
+        var nested = NESTED.get(List.of(state.productionStations().machines(), state.resourceSites().sites()), () -> nestedSubjects(state));
+        var next = new Image(state, sources(state), fixed, nested); IMAGE.set(next); return next;
+    }
+    private static List<Map<SubjectId, ?>> sources(FrontierWorldState state) {
+        return List.of(state.actorLocations(), state.structureConditions(),
                 state.inventory().items(), state.inventory().cargo(), state.inventory().fungibleResources().lots(),
                 state.inventory().fungibleResources().claims(), state.productionJobs(), state.serviceWorks(),
                 state.routeConstructions(), state.routeMaintenances(), state.resourceSites().sites(),
@@ -30,41 +60,6 @@ final class ScheduledSubjectExistence {
                 state.companies().market().demands(), state.companies().market().quotes(), state.companies().market().workOrders(),
                 state.companies().goodsTrade().orders(), state.companies().goodsTrade().contracts(),
                 state.shipments().shipments(), state.shipments().missions(), state.unitGroups().groups());
-        Object[] inputs = new Object[sources.size() + 1]; inputs[0] = state.bootstrap();
-        for (int index = 0; index < sources.size(); index++) inputs[index + 1] = sources.get(index);
-        if (old != null && old.dependencies().matches(inputs)) {
-            IMAGE.set(new Image(state, old.dependencies(), old.sources(), old.nested(), old.subjects()));
-            return old.subjects();
-        }
-        var nested = old != null
-                && old.state().productionStations().machines() == state.productionStations().machines()
-                && old.state().resourceSites().sites() == state.resourceSites().sites()
-                ? old.nested() : nestedSubjects(state);
-        // Movement, hunger, stock quantities and work progress change values, not
-        // existence. Inspect only changed source keysets before allocating another
-        // whole-world union. Nested job/operation identities remain explicit inputs.
-        if (old != null && old.state().bootstrap() == state.bootstrap() && old.nested().equals(nested)
-                && sameKeys(old.sources(), sources)) {
-            IMAGE.set(new Image(state, ImmutableDependencies.of(inputs), sources, nested, old.subjects()));
-            return old.subjects();
-        }
-        var subjects = new HashSet<SubjectId>(); sources.forEach(source -> subjects.addAll(source.keySet()));
-        var bootstrap = state.bootstrap(); subjects.add(bootstrap.hive().id());
-        bootstrap.settlements().forEach(settlement -> {
-            subjects.add(settlement.id()); settlement.residents().forEach(resident -> subjects.add(resident.id()));
-        });
-        bootstrap.hive().bioforms().forEach(actor -> subjects.add(actor.id()));
-        bootstrap.hive().organs().forEach(organ -> subjects.add(organ.id()));
-        subjects.addAll(nested);
-        Set<SubjectId> result = old != null && old.subjects().equals(subjects)
-                ? old.subjects() : Collections.unmodifiableSet(subjects);
-        IMAGE.set(new Image(state, ImmutableDependencies.of(inputs), sources, nested, result));
-        return result;
-    }
-    private static boolean sameKeys(List<Map<SubjectId, ?>> before, List<Map<SubjectId, ?>> after) {
-        for (int i = 0; i < before.size(); i++) if (before.get(i) != after.get(i)
-                && !ImmutableMapChanges.sameKeys(before.get(i), after.get(i))) return false;
-        return true;
     }
     private static Set<SubjectId> nestedSubjects(FrontierWorldState state) {
         var subjects = new HashSet<SubjectId>();

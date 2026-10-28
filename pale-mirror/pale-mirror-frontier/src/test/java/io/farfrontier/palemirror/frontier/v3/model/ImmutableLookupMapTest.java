@@ -44,6 +44,22 @@ class ImmutableLookupMapTest {
         assertFalse(ImmutableMapChanges.sameKeys(mutable, snapshot));
         assertEquals(Map.of("Aa", 1, "BB", 2), before);
     }
+    @Test void membershipRemovalDistinguishesReplacedValuesAdditionsAndNonAdjacentRetirement() {
+        var before = ImmutableLookupMap.copyOf(Map.of("Aa", 1, "BB", 2));
+        var changed = ImmutableLookupMap.withEntry(before, "Aa", 3);
+        var removed = new java.util.ArrayList<String>();
+        ImmutableMapChanges.forEachRemovedKey(before, changed, removed::add);
+        assertTrue(removed.isEmpty());
+        var added = ImmutableLookupMap.withEntry(changed, "new", 4);
+        ImmutableMapChanges.forEachRemovedKey(before, added, removed::add);
+        assertTrue(removed.isEmpty());
+        var retired = ImmutableLookupMap.withoutEntry(added, "BB");
+        ImmutableMapChanges.forEachRemovedKey(before, retired, removed::add);
+        assertEquals(List.of("BB"), removed);
+        removed.clear();
+        ImmutableMapChanges.forEachRemovedKey(new LinkedHashMap<>(before), Map.of("new", 9), removed::add);
+        assertEquals(java.util.Set.of("Aa", "BB"), java.util.Set.copyOf(removed));
+    }
     @Test void snapshotIsDefensiveOrderedAndCannotBeMutatedThroughViews() {
         var source = new LinkedHashMap<String, Integer>();
         source.put("BB", 2); source.put("Aa", 1); // equal String hash, distinct identities
