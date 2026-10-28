@@ -2756,3 +2756,32 @@ isolation and changed liveness. Wider connected registry/storage/geometry/closur
 checks PASS42s; final generic/identity/index checks plus guardrails PASS17s after
 preserving the mutable-source accepted-basis behavior. No timing test is introduced.
 Native impact remains unmeasured; G remains open.
+
+
+### Addressed meal validation and endpoint-owned read declarations (2026-10-28)
+
+6736ceef5 registry-basis clean release/guardrails/native/runtime/package PASS37s;
+both retained worlds deployed and verified. Main follow-up tick878107/statusok,
+debt0, recoveryfalse. The next ordinary100 capture covers44.621650s/noDataLoss:
+1.008479ticks/s, debt1255→2114, G STILLFAILED. The workload changed to a large
+meal cohort; no aggregate speedup or regression attribution is claimed. Owner
+69.65%, exact20.14%, WAL7.93%; canonical validation11.343259s, meal closure2.119439s.
+
+Source confirms a connected quadratic cost: any fungible-ledger change caused
+all active meals to recheck their stock, even across unrelated settlements.
+The meal owner now registers its exact actor, lease, assignment, claim, source
+and carried accounts, portion lots and storage-port reads in the existing common
+immutable reference index. Unrelated stock is compared once per source; actual
+changes still run the unchanged complete meal check. Full ingress/recovery and
+retired-resource obligations retain their checks; failed index images are discarded.
+
+Endpoint providers declare their own nominal dynamic reads, reused by both the
+reverse index and the existing validation-input API. Meal code does not discover
+whether a storage port is an extraction site, ordinary warehouse or machine.
+The common index can resolve a declared read; it supplies no domain authority.
+The 80-read technical bound covers the existing maximum64-lot portion and its
+other references; no actor, portion or storage capacity is raised.
+
+Focused meal/shipment/index/recovery cases and guardrails PASS23s. New warmed
+negative coverage removes an allocation, kills the actor and moves its selected
+storage surface; each still fails, valid recovery succeeds. Native effect pending.

@@ -18,9 +18,9 @@ final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
             throw new IllegalArgumentException("storage endpoint lost its exact declared owner, policy or reachable surface");
         return storage;
     }
-    @Override public Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        return new Object[] { state.bootstrap(), state.inventory().containers().get(endpoint.containerId()),
-                state.inventory().surfaces().get(endpoint.containerId()) };
+    @Override public List<ImmutableReferenceIndex.Read<FrontierWorldState>> validationReads(ShipmentEndpoint endpoint) {
+        return List.of(ShipmentEndpointReferences.CONTAINERS.at(endpoint.containerId()),
+                ShipmentEndpointReferences.SURFACES.at(endpoint.containerId()));
     }
     @Override public void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var storage = declaration(state, endpoint);

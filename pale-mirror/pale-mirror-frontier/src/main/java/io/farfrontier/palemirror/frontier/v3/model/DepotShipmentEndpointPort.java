@@ -15,8 +15,8 @@ final class DepotShipmentEndpointPort implements ShipmentEndpointPort {
         return home.structures().stream().filter(value -> value.id().equals(declared.facilityId()) && value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("shipment declared an unknown settlement depot"));
     }
-    @Override public Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        return new Object[] { state.bootstrap(), state.inventory().containers().get(endpoint.containerId()) };
+    @Override public List<ImmutableReferenceIndex.Read<FrontierWorldState>> validationReads(ShipmentEndpoint endpoint) {
+        return List.of(ShipmentEndpointReferences.CONTAINERS.at(endpoint.containerId()));
     }
     @Override public void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var depot = facility(state, endpoint);

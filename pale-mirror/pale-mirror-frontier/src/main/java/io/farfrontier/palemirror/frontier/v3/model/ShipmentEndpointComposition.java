@@ -20,6 +20,9 @@ public final class ShipmentEndpointComposition {
     public static Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint) {
         return port(endpoint).validationInputs(state, endpoint);
     }
+    static List<ImmutableReferenceIndex.Read<FrontierWorldState>> validationReads(ShipmentEndpoint endpoint) {
+        return port(endpoint).validationReads(endpoint);
+    }
     public static void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         port(endpoint).validate(state, endpoint);
     }

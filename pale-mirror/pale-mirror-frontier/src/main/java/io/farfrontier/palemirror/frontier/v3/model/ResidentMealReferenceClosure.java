@@ -1,7 +1,48 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.ImmutableReferenceIndex.Source;
+import io.farfrontier.palemirror.frontier.v3.model.ImmutableReferenceIndex.Read;
+import java.util.ArrayList;
+import java.util.List;
+
 /** Cross-owner proof that each retained meal names its current bread and custody stage. */
 public final class ResidentMealReferenceClosure {
+    private static final Source<FrontierWorldState, SubjectId, ActorLocation> ACTORS = new Source<>(FrontierWorldState::actorLocations);
+    private static final Source<FrontierWorldState, SubjectId, AmbientActorLease> LEASES = new Source<>(FrontierWorldState::ambientLeases);
+    private static final Source<FrontierWorldState, SubjectId, HumanAssignment> ASSIGNMENTS =
+            new Source<>(state -> HumanAssignmentProjection.compile(state).assignments());
+    private static final Source<FrontierWorldState, SubjectId, CustodyAccount> ACCOUNTS =
+            new Source<>(state -> state.inventory().fungibleResources().accounts());
+    private static final Source<FrontierWorldState, SubjectId, ClaimAllocation> CLAIMS =
+            new Source<>(state -> state.inventory().fungibleResources().claims());
+    private static final Source<FrontierWorldState, SubjectId, ResourceLot> LOTS =
+            new Source<>(state -> state.inventory().fungibleResources().lots());
+    // A portion contains at most 64 lots, plus its actor/authority/storage/account reads.
+    private static final ImmutableReferenceIndex<FrontierWorldState, SubjectId, ResidentMeal> MEALS =
+            new ImmutableReferenceIndex<>(SimulationCapacity.MAX_RESIDENTS, 80, sources(),
+                    ResidentMealReferenceClosure::reads, (state, id, meal) -> {
+                        if (!id.equals(meal.residentId())) throw new IllegalArgumentException("meal key differs from resident");
+                        validateMeal(state, state.inventory().fungibleResources(), HumanAssignmentProjection.compile(state), meal);
+                    });
+    private static List<Source<FrontierWorldState, ?, ?>> sources() {
+        var result = new ArrayList<Source<FrontierWorldState, ?, ?>>(ShipmentEndpointReferences.SOURCES);
+        result.addAll(List.of(ACTORS, LEASES, ASSIGNMENTS, ACCOUNTS, CLAIMS, LOTS)); return List.copyOf(result);
+    }
+    private static List<Read<FrontierWorldState>> reads(FrontierWorldState state, ResidentMeal meal) {
+        var result = new ArrayList<Read<FrontierWorldState>>();
+        result.add(ACTORS.at(meal.residentId())); result.add(LEASES.at(meal.residentId()));
+        result.add(ASSIGNMENTS.at(meal.residentId())); result.add(CLAIMS.at(meal.claimId()));
+        result.add(ACCOUNTS.at(meal.sourceAccountId())); result.add(ACCOUNTS.at(meal.actorAccountId()));
+        meal.portion().lotQuantities().keySet().forEach(id -> result.add(LOTS.at(id)));
+        if (meal.source() instanceof ResidentFoodSource.Storage storage) {
+            result.add(ShipmentEndpointReferences.CONTAINERS.at(storage.containerId()));
+            var container = state.inventory().containers().get(storage.containerId());
+            if (container != null && container.storage().isPresent())
+                result.addAll(ShipmentEndpointComposition.validationReads(container.storage().orElseThrow().endpoint()));
+        }
+        return List.copyOf(result);
+    }
     private ResidentMealReferenceClosure() { }
 
     public static void validate(FrontierWorldState state) {
@@ -13,26 +54,11 @@ public final class ResidentMealReferenceClosure {
     }
 
     static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
-        if (before.humanPopulation().mealResourceObligations() != after.humanPopulation().mealResourceObligations()
+        if (ImmutableInvariantCheck.fullAudit() || before.humanPopulation().mealResourceObligations() != after.humanPopulation().mealResourceObligations()
                 || before.inventory().fungibleResources() != after.inventory().fungibleResources()
                 || before.actorLocations() != after.actorLocations() || before.actorExecutions() != after.actorExecutions()
                 || before.fencedRecovery() != after.fencedRecovery()) validateRetiredResources(after);
-        if (after.humanPopulation().meals().isEmpty()) return;
-        var ledger = after.inventory().fungibleResources();
-        var assignments = HumanAssignmentProjection.compile(after);
-        var previousAssignments = HumanAssignmentProjection.compile(before);
-        boolean stockChanged = before.inventory().fungibleResources() != ledger
-                || before.inventory().containers() != after.inventory().containers()
-                || before.bootstrap().ruleset().residentLife().foods() != after.bootstrap().ruleset().residentLife().foods();
-        for (ResidentMeal meal : after.humanPopulation().meals().values()) {
-            var id = meal.residentId();
-            if (!stockChanged && before.humanPopulation().meals().get(id) == meal
-                    && before.actorLocations().get(id) == after.actorLocations().get(id)
-                    && before.ambientLeases().get(id) == after.ambientLeases().get(id)
-                    && previousAssignments.assignments().get(id) != null
-                    && previousAssignments.assignment(id).equals(assignments.assignment(id))) continue;
-            validateMeal(after, ledger, assignments, meal);
-        }
+        MEALS.validate(after.bootstrap(), after.humanPopulation().meals(), after);
     }
 
     /** Retained effects have no active meal, route or current execution to drive. */

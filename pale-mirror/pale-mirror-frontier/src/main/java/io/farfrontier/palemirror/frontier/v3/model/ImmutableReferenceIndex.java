@@ -17,8 +17,11 @@ public final class ImmutableReferenceIndex<C, K, D> {
     public sealed interface Read<C> permits Binding {
         Source<C, ?, ?> source();
         Object key();
+        Object value(C context);
     }
-    private record Binding<C, I, V>(Source<C, I, V> source, I key) implements Read<C> { }
+    private record Binding<C, I, V>(Source<C, I, V> source, I key) implements Read<C> {
+        @Override public V value(C context) { return source.values(context).get(key); }
+    }
     private record Row<C>(List<Read<C>> reads) { }
     private static final class Image<C, K, D> {
         final Object epoch;
