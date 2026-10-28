@@ -6,6 +6,13 @@ import java.util.List;
 
 /** Provisioning declares access to an existing service point, never its own queue. */
 public final class ExpeditionSupplyServiceAccess implements ServiceAccessCapability {
+    private final ImmutableGroupView<SubjectId, TransportMission, SubjectId> candidates = new ImmutableGroupView<>();
+    private static java.util.Set<SubjectId> declaredPoints(TransportMission mission) {
+        var points = new java.util.HashSet<SubjectId>();
+        mission.supplies().ifPresent(load -> load.allocations().forEach(a -> points.add(a.source().containerId())));
+        mission.replenishment().ifPresent(transfer -> points.add(transfer.containerId()));
+        return java.util.Set.copyOf(points);
+    }
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.EXPEDITION_SUPPLY; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
@@ -16,14 +23,15 @@ public final class ExpeditionSupplyServiceAccess implements ServiceAccessCapabil
     }
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId point) {
         var boundary = ServiceAccessCoordinator.boundary(state, point);
-        var loading = state.shipments().missions().values().stream().filter(TransportMission::preparingSupplies)
+        var missionIds = candidates.keys(state.bootstrap(), state.shipments().missions(), ExpeditionSupplyServiceAccess::declaredPoints, point);
+        var loading = missionIds.stream().map(state.shipments().missions()::get).filter(TransportMission::preparingSupplies)
                 .flatMap(m -> m.supplies().stream().flatMap(load -> load.next().stream())
                 .filter(a -> a.source().containerId().equals(point))
                 .map(a -> new ServiceAccessDemand(identity(m, a), priority(),
                         ServiceAccessCoordinator.occupies(state, boundary, a.actorId())
                                 ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH,
                         m.supplies().orElseThrow().calculatedAtTick(), a.pending().isPresent())));
-        var replenishing = state.shipments().missions().values().stream().flatMap(m -> m.replenishment().stream()
+        var replenishing = missionIds.stream().map(state.shipments().missions()::get).flatMap(m -> m.replenishment().stream()
                 .filter(t -> t.containerId().equals(point)
                         && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.current(state, t))
                 .map(t -> new ServiceAccessDemand(identity(m, t), priority(),

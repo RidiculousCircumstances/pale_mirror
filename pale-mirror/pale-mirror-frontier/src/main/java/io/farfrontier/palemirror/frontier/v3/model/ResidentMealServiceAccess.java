@@ -5,6 +5,7 @@ import java.util.List;
 
 /** Feeding owns its entrance checkpoint and meal completion, not the shared access arbiter. */
 public final class ResidentMealServiceAccess implements ServiceAccessCapability {
+    private final ImmutableGroupView<SubjectId, ResidentMeal, SubjectId> candidates = new ImmutableGroupView<>();
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.MEAL; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.SELF_CARE; }
     @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
@@ -14,7 +15,9 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);
-        return state.humanPopulation().meals().values().stream().filter(meal -> !meal.portable() && meal.depotId().equals(pointId))
+        return candidates.keys(state.bootstrap(), state.humanPopulation().meals(),
+                meal -> meal.portable() ? java.util.Set.of() : java.util.Set.of(meal.depotId()), pointId).stream()
+                .map(state.humanPopulation().meals()::get).filter(meal -> !meal.portable() && meal.depotId().equals(pointId))
                 .map(meal -> new ServiceAccessDemand(identity(pointId, meal.residentId()), priority(),
                         ServiceAccessCoordinator.occupies(state, boundary, meal.residentId()) ? ServiceAccessDemand.Presence.OCCUPIED
                                 : committedEntrance(meal, boundary) ? ServiceAccessDemand.Presence.ENTERING

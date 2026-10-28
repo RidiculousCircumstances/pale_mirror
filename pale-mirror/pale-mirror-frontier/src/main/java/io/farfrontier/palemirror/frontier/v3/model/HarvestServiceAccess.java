@@ -7,6 +7,15 @@ import java.util.List;
 
 /** Harvest owns the distinction between its field goal and a retained delivery obligation. */
 public final class HarvestServiceAccess implements ServiceAccessCapability {
+    private final ImmutableGroupView<SubjectId, ResourceSiteLifecycle, SubjectId> candidates = new ImmutableGroupView<>();
+    private static java.util.Set<SubjectId> declaredPoints(ResourceSiteLifecycle site) {
+        var points = new java.util.HashSet<SubjectId>();
+        for (var job : site.harvestJobs().values()) {
+            points.add(job.outputSlot().containerId()); points.add(job.equipment().source().containerId());
+            job.equipment().returnTarget().ifPresent(target -> points.add(target.containerId()));
+        }
+        return java.util.Set.copyOf(points);
+    }
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.FIELD_HARVEST; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
@@ -19,7 +28,8 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         var result = new ArrayList<ServiceAccessDemand>();
-        for (var site : state.resourceSites().sites().values()) {
+        for (var id : candidates.keys(state.bootstrap(), state.resourceSites().sites(), HarvestServiceAccess::declaredPoints, pointId)) {
+            var site = state.resourceSites().sites().get(id);
             for (var job : site.harvestJobs().values()) {
                 if (state.humanPopulation().meals().containsKey(job.workerId())
                         || state.actorMovements().containsKey(job.workerId())

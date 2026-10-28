@@ -6,6 +6,7 @@ import java.util.*;
 
 /** Only exact tool/cargo interactions request storage access; logging and return travel do not. */
 public final class ForestryServiceAccess implements ServiceAccessCapability {
+    private final ImmutableGroupView<SubjectId, ForestryWork, SubjectId> candidates = new ImmutableGroupView<>();
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.FORESTRY; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     public static boolean needsAccess(ForestryWork work) {
@@ -22,7 +23,9 @@ public final class ForestryServiceAccess implements ServiceAccessCapability {
     }
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId point) {
         var boundary = ServiceAccessCoordinator.boundary(state, point);
-        return state.forest().work().values().stream().filter(ForestryServiceAccess::needsAccess)
+        return candidates.keys(state.bootstrap(), state.forest().work(), work ->
+                java.util.Set.copyOf(List.of(work.toolSource().containerId(), work.storageTarget().containerId())), point).stream()
+                .map(state.forest().work()::get).filter(ForestryServiceAccess::needsAccess)
                 .filter(work -> identity(work).pointId().equals(point))
                 .filter(work -> state.actorExecutions().actors().get(work.execution().actorId()).current().equals(Optional.of(work.execution())))
                 .map(work -> new ServiceAccessDemand(identity(work), priority(),

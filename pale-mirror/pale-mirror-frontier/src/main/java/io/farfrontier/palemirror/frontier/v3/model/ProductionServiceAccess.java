@@ -6,6 +6,19 @@ import java.util.List;
 
 /** Production-owned interpretation of pickup, delivery and witnessed departure. */
 public final class ProductionServiceAccess implements ServiceAccessCapability {
+    private final ImmutableGroupView<SubjectId, ProductionJob, SubjectId> candidates = new ImmutableGroupView<>();
+    private final ImmutableInputView<Object> candidateEpoch = new ImmutableInputView<>();
+    private static java.util.Set<SubjectId> declaredPoints(ProductionJob job,
+            java.util.Map<SubjectId, ContainerRecord> installations) {
+        if (job.stationWork().isEmpty()) return java.util.Set.of();
+        var work = job.stationWork().orElseThrow();
+        var points = new java.util.HashSet<SubjectId>();
+        points.add(StationWorkStorage.source(job)); points.add(StationWorkStorage.destination(job));
+        work.maintenanceTarget().ifPresent(target -> points.add(target.sourceContainerId()));
+        var installed = installations.get(work.stationId());
+        if (installed != null) points.add(installed.id());
+        return java.util.Set.copyOf(points);
+    }
     public sealed interface ResumeWait { String label(); }
     public enum ServiceWait implements ResumeWait {
         STATION_CUSTODY, FUEL_DELIVERY, AUTOMATIC_PROCESSING, OUTPUT_STORAGE_CAPACITY;
@@ -74,7 +87,10 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         var result = new ArrayList<ServiceAccessDemand>();
-        for (var job : state.productionJobs().values()) {
+        var installations = ProductionStationDirectory.declarations(state.inventory());
+        var epoch = candidateEpoch.get(List.of(state.bootstrap(), installations), Object::new);
+        for (var id : candidates.keys(epoch, state.productionJobs(), job -> declaredPoints(job, installations), pointId)) {
+            var job = state.productionJobs().get(id);
             if (job.stationWork().isEmpty()
                     || !state.actorExecutions().owns(job.workerId(),
                         io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())

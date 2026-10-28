@@ -3561,3 +3561,39 @@ registrynegative, expeditionwait and containerreservation checks+guardrails PASS
 Global candidate scanning inside each family still remains and is a separate next
 optimization. No claim that these local cuts alone achieve20ticks/s. Frozenrelease,
 retaineddeploy and aggregate native effect pending; G remainsOPEN.
+
+
+### Endpoint candidate directory for shared service reads (2026-10-28)
+
+Current8ae ordinary JFR, with pilot closed and no concurrent build, covers44.817361s
+and262583->262990:9.081302canonicalticks/s,debt6329->6822. Ownerturn58.92%,
+exact24.14%,WAL12.63%;inclusivecanonicalvalidation7.945648s,scheduleallocation4.679395s.
+This evolving retained workload is attribution, not a controlled before/after speedup.
+149reportedserver methodsamples include ServiceAccessCapabilities; global family
+candidate scans remain an actual connected caller. Receipts admission-reads-current-*
+under build/simulation-throughput. GOPEN.
+
+Implement one common disposable ImmutableGroupView of explicit producer memberships:
+current rowIDs by declared endpoint, exact source iteration order, current row reads;
+no cached readiness/eligibility. Exact immutable replacement metadata updates changed
+memberships; complete comparison handles branches or missing delta evidence. Unknown
+group queries retain no entries; removed groups and obsolete source images are released.
+Mutable ingress is defensively captured; failed updates discard the entire derived
+image. Producer registries and declared endpoint sets bound it; no new canonical
+admission/worker/entity limit. Families retain all original business predicates:
+meal, production, fieldharvest, shipment, expeditionsupply, extraction,forestry.
+Production explicitly includes installation bindings in its read epoch; current
+station/source/destination/maintenance targets remain familyowned. Shared wake readers
+use ImmutableMapChanges with completefallback instead of unconditional fullmap scans.
+Inactive defender/engineering behavior is unchanged. Focused directory scope/removal/
+branch/order/externalbinding/failure negatives plus actual servicebody/fence/wait,
+physicalproduction/resume, paidreplenishment and haul checks+guardrails PASS30s.
+Frozen release, retained deployment and nativeeffect pending. No20ticks/s claim.
+
+Actual8ae fullpack ingress failed step3: the server had the current board at
+(-21595.5,67,-21653.5), but the client saw two old nearby boards and did not receive
+this current one during its finite assertion. Readonly simultaneous firstvisibility
+reported STATIC_CURRENT but presentationReady=false and field_projection_or_observation
+for twofields. This is NOT a successful HOT/visual acceptance and not a renderstateNPE.
+Keep admission-reads-scale-client and admission-reads-board-probes evidence. Client,
+runner and private display exited. No timeout increase/reset/retry-as-fix.

@@ -6,6 +6,7 @@ import java.util.List;
 
 /** Only station interactions claim access. Mining and transit never reserve the site chest. */
 public final class ExtractionServiceAccess implements ServiceAccessCapability {
+    private final ImmutableGroupView<SubjectId, ExtractionWork, SubjectId> candidates = new ImmutableGroupView<>();
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.EXTRACTION; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
@@ -22,7 +23,9 @@ public final class ExtractionServiceAccess implements ServiceAccessCapability {
     }
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId point) {
         var boundary = ServiceAccessCoordinator.boundary(state, point);
-        return state.extractionSites().work().values().stream().filter(ExtractionServiceAccess::needsAccess)
+        return candidates.keys(state.bootstrap(), state.extractionSites().work(), work ->
+                java.util.Set.copyOf(List.of(work.toolSource().containerId(), work.storageTarget().containerId())), point).stream()
+                .map(state.extractionSites().work()::get).filter(ExtractionServiceAccess::needsAccess)
                 .filter(work -> identity(state, work).pointId().equals(point))
                 .filter(work -> state.actorExecutions().actors().get(work.execution().actorId()).current().equals(java.util.Optional.of(work.execution())))
                 .map(work -> new ServiceAccessDemand(identity(state, work), priority(),

@@ -6,6 +6,7 @@ import java.util.List;
 
 /** Shipment declares its access need; the existing shared coordinator arbitrates every family. */
 public final class ShipmentServiceAccess implements ServiceAccessCapability {
+    private final ImmutableGroupView<SubjectId, Shipment, SubjectId> candidates = new ImmutableGroupView<>();
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.COURIER; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
@@ -20,7 +21,9 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);
         var result = new ArrayList<ServiceAccessDemand>();
-        for (Shipment shipment : state.shipments().shipments().values()) {
+        for (var id : candidates.keys(state.bootstrap(), state.shipments().shipments(),
+                shipment -> point(shipment).map(java.util.Set::of).orElseGet(java.util.Set::of), pointId)) {
+            Shipment shipment = state.shipments().shipments().get(id);
             if (shipment.terminal() || !operationEligible(state, shipment)) continue;
             if (shipment.transportMissionId().map(state.shipments().missions()::get)
                     .flatMap(TransportMission::supplies).filter(load -> !load.complete()).isPresent()) continue;

@@ -15,15 +15,9 @@ final class ServiceAccessWakeDependencies {
                                         Function<V, Stream<SubjectId>> points) {
         if (previous == next) return Set.of();
         var result = new HashSet<SubjectId>();
-        previous.forEach((id, value) -> {
-            if (!java.util.Objects.equals(value, next.get(id))) {
-                points.apply(value).forEach(result::add);
-                V replacement = next.get(id);
-                if (replacement != null) points.apply(replacement).forEach(result::add);
-            }
-        });
-        next.forEach((id, value) -> {
-            if (!previous.containsKey(id)) points.apply(value).forEach(result::add);
+        ImmutableMapChanges.forEach(previous, next, change -> {
+            if (change.before() != null) points.apply(change.before()).forEach(result::add);
+            if (change.after() != null) points.apply(change.after()).forEach(result::add);
         });
         return Set.copyOf(result);
     }

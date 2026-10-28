@@ -39,9 +39,7 @@ public final class ServiceAccessCoordinator {
 
     private static <T> void changedActors(java.util.Map<SubjectId, T> previous,
                                          java.util.Map<SubjectId, T> next, java.util.Set<SubjectId> actors) {
-        if (previous == next) return;
-        previous.forEach((id, value) -> { if (!Objects.equals(value, next.get(id))) actors.add(id); });
-        next.forEach((id, value) -> { if (!previous.containsKey(id)) actors.add(id); });
+        ImmutableMapChanges.forEach(previous, next, change -> actors.add(change.key()));
     }
 
     /**
