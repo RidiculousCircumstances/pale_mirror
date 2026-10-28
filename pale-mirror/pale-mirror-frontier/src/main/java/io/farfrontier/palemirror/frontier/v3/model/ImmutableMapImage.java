@@ -10,4 +10,6 @@ import java.util.Set;
 sealed interface ImmutableMapImage<K, V> extends Map<K, V>
         permits ImmutableLookupMap, FrontierWorldStateSupport.ValidatedImmutableMap {
     Optional<Set<K>> changedKeysFrom(Map<?, ?> predecessor);
+    /** Closed immutable storage only, for sharing representation across validation wrappers. */
+    Map<K, V> immutableStorage();
 }

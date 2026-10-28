@@ -20,7 +20,7 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
     public ExtractionSiteState {
         Objects.requireNonNull(geologicalExclusions);
         Objects.requireNonNull(geology); Objects.requireNonNull(knowledge); knowledge.validate(geology);
-        deposits = Map.copyOf(deposits); work = Map.copyOf(work);
+        deposits = Map.copyOf(deposits); work = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.copyOf(work);
         if (deposits.size() > io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_EXTRACTION_SITES || deposits.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().site().id())))
             throw new IllegalArgumentException("invalid extraction site register");
         if (nextWorkOrdinal < 1 || work.size() > MAX_WORK || work.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().id())))
@@ -102,12 +102,12 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
         if (nextWorkOrdinal != expectedOrdinal || work.containsKey(job.id()) || job.phase() != ExtractionWork.Phase.TAKE_TOOL
                 || job.revision() != 1 || job.pending().isPresent() || job.labour().isPresent())
             throw new IllegalArgumentException("extraction admission is stale or not a fresh declared job");
-        var next = new LinkedHashMap<>(work); next.put(job.id(), job);
+        var next = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withEntry(work, job.id(), job);
         return new ExtractionSiteState(deposits, next, Math.addExact(nextWorkOrdinal, 1), geologicalExclusions, geology, knowledge);
     }
     public ExtractionSiteState replaceWork(ExtractionWork expected, ExtractionWork next) {
         requireReplacement(expected, next);
-        var jobs = new LinkedHashMap<>(work); jobs.put(next.id(), next);
+        var jobs = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withEntry(work, next.id(), next);
         return new ExtractionSiteState(deposits, jobs, nextWorkOrdinal, geologicalExclusions, geology, knowledge);
     }
     /** A named atomic boundary releases the old source claim and acquires the accepted new one. */
@@ -116,7 +116,7 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
                 || !expected.relocate(next.target().orElseThrow(), next.outputKind(), next.storageTarget()).equals(next)
                 || !deposits.get(expected.siteId()).site().settlementId().equals(deposits.get(next.siteId()).site().settlementId()))
             throw new IllegalArgumentException("mining relocation changed retained authority or settlement");
-        var jobs = new LinkedHashMap<>(work); jobs.put(next.id(), next);
+        var jobs = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withEntry(work, next.id(), next);
         return new ExtractionSiteState(deposits, jobs, nextWorkOrdinal, geologicalExclusions, geology, knowledge);
     }
     private void requireReplacement(ExtractionWork expected, ExtractionWork next) {
@@ -142,21 +142,21 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
                 || !deposits.get(deposit.site().id()).site().equals(deposit.site()))
             throw new IllegalArgumentException("extraction settlement lost its current worker/site");
         var sites = new LinkedHashMap<>(deposits); sites.put(deposit.site().id(), deposit);
-        var jobs = new LinkedHashMap<>(work); jobs.put(expected.id(), next);
+        var jobs = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withEntry(work, expected.id(), next);
         return new ExtractionSiteState(sites, jobs, nextWorkOrdinal, geologicalExclusions, geology, knowledge);
     }
     public ExtractionSiteState retire(SubjectId id, long revision) {
         var job = work.get(id);
         if (job == null || !job.terminal() || job.revision() != revision || job.pending().isPresent())
             throw new IllegalArgumentException("extraction retirement lost its exact terminal obligation");
-        var next = new LinkedHashMap<>(work); next.remove(id);
+        var next = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withoutEntry(work, id);
         return new ExtractionSiteState(deposits, next, nextWorkOrdinal, geologicalExclusions, geology, knowledge);
     }
     /** Death owner has discharged resources; this does not claim a completed delivery. */
     public ExtractionSiteState releaseDeadWork(ExtractionWork expected) {
         if (!Objects.equals(work.get(expected.id()), expected) || expected.pending().isPresent())
             throw new IllegalArgumentException("dead-work release lost its exact settled predecessor");
-        var next = new LinkedHashMap<>(work); next.remove(expected.id());
+        var next = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withoutEntry(work, expected.id());
         return new ExtractionSiteState(deposits, next, nextWorkOrdinal, geologicalExclusions, geology, knowledge);
     }
     public ExtractionSiteState invalidateGeology(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {

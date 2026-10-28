@@ -277,6 +277,7 @@ public final class FrontierWorldStateSupport {
             return Optional.empty();
         }
 
+        @Override public Map<K, V> immutableStorage() { return values; }
         @Override public Set<Entry<K, V>> entrySet() { return values.entrySet(); }
         @Override public V get(Object key) { return values.get(key); }
         @Override public boolean containsKey(Object key) { return values.containsKey(key); }

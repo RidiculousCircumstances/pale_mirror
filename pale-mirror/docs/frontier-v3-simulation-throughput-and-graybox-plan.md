@@ -3597,3 +3597,44 @@ reported STATIC_CURRENT but presentationReady=false and field_projection_or_obse
 for twofields. This is NOT a successful HOT/visual acceptance and not a renderstateNPE.
 Keep admission-reads-scale-client and admission-reads-board-probes evidence. Client,
 runner and private display exited. No timeout increase/reset/retry-as-fix.
+
+
+### Share large immutable lookup storage across exact row updates (2026-10-28)
+
+4d200a980 frozen scoped release PASS54s including55physicaleconomy tests, bothretained
+worlds VERIFIED SHA5124eba07452fe1c8dfb37f1255f6cff1585a56c63844fd69b37f32d120109c398cf2b299727a1a0d66a502d62037a6a6ca8c7756ce2373aa445a4eafdb9e4b2bed.
+New currentordinary JFR service-candidates-current-*44.879179s,noDataLoss:
+268788->269142,7.887845ticks/s,debt1052->1599. Owner60.13%,exact23.83%,WAL11.30%;
+canonicalvalidation8.453688s,scheduleallocation3.536712s,inclusive-nonadditive. Evolving
+workload, no sourcegain/regression attribution. Sharedservicefamily scans no longer
+appear among the reported50topserver methods; not proof theycostzero. Held-call
+stacks identify current worldmovement scan and defensive copies of JavaMap.copyOf
+shipment registries. Three producers still hid their immutable registries behind
+ordinaryMap; shipment/mission/extractionwork/forestrywork now publish the common
+closed immutable representation with originalvalidation. Singleentry producers retain
+exactdelta metadata. Sharedexit arbitration uses same endpointdirectory and actual
+body checks. Wake addresses use existing conservative nearbydeclaration index then
+originalexactoccupancytest. Body/foreignvisit/clearance/restart and shipmentindividual/
+death/replenishment/extractionreplay/externalchange/forestrylifecycle PASS69s.
+
+The same JFR estimates2,426,324,744allocatedbytes below ImmutableLookupMap.snapshot,
+not exact allocation accounting. Actor-body replacement copied an entire validated
+worldmap, and wrapped storage hid safe unchanged partitions. Large maps now use64
+immutable hashed pages, retaining independent source keyorder. Value replacement
+copies onepage+small directory; membership edits also copy order. Smallmaps keep the
+existing compact representation. All publicviews remain immutable; mutableingress is
+copied, equalhash keys remain distinct, removed/reinserted keys follow insertionorder,
+oldbranches remain unchanged, directdelta still names actualweakpredecessor. Closed
+ImmutableMapImage exposes immutable storage through validationwrappers without another
+copy. No parentimage chain, trustedmutableinput, changedcodec, new authority/capacity.
+Fullregistry iteration remains available, unchanged inmeaning. No rollback/durability
+barrier removed. Focused collection/order/collision/wrapper/mutableingress/branch and
+connectedservice/extraction/forestry/individualshipment/death/replenishment plus
+statechecks+guardrails PASS58s. Initialgenericcompileerrorfixedbeforepass.
+
+Controlled allocation discriminator LookupAllocationProbe.java uses isolated4d200a980
+and currentcompiled classes, same4096rows and512validated replacements, excluding
+initialization/warmup. ThreadMXBean:117708800->3803136bytes,229900->7428bytes/update,
+30.95x less allocation for this operation only. It verifies originalbranch andcurrent
+values; no timing assertion or serverTPS claim. Receipt partitioned-lookup-allocation.txt.
+Frozen widerverification/retaineddeployment/native aggregate pending; GOPEN.

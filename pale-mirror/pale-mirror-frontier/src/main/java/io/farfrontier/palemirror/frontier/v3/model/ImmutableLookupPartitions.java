@@ -1,0 +1,93 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import java.util.*;
+
+/** Immutable hashed storage pages with independent producer iteration order.
+ * Value replacement copies one page and its small directory, never all live rows.
+ * Membership edits copy order; unchanged pages carry no predecessor-map chain. */
+final class ImmutableLookupPartitions<K, V> extends AbstractMap<K, V> {
+    private static final int PAGES = 64;
+    private final List<Map<K, V>> pages;
+    private final List<K> order;
+    private final Set<K> keys;
+    private final Collection<V> values;
+    private final Set<Entry<K, V>> entries;
+
+    ImmutableLookupPartitions(Map<K, V> source) {
+        var mutable = new ArrayList<Map<K, V>>(PAGES);
+        for (int i = 0; i < PAGES; i++) mutable.add(new HashMap<>());
+        source.forEach((key, value) -> mutable.get(page(key)).put(key, value));
+        mutable.replaceAll(Collections::unmodifiableMap);
+        pages = List.copyOf(mutable); order = List.copyOf(source.keySet());
+        keys = keyView(); entries = entryView(); values = valueView();
+    }
+    private ImmutableLookupPartitions(List<Map<K, V>> pages, List<K> order) {
+        this.pages = List.copyOf(pages); this.order = order;
+        keys = keyView(); entries = entryView(); values = valueView();
+    }
+    ImmutableLookupPartitions<K, V> updated(K key, V value, boolean remove) {
+        int index = page(key); var old = pages.get(index);
+        boolean present = old.containsKey(key);
+        if (remove && !present || !remove && present && old.get(key) == value) return this;
+        var replacement = new HashMap<>(old);
+        if (remove) replacement.remove(key); else replacement.put(key, Objects.requireNonNull(value));
+        var next = new ArrayList<>(pages); next.set(index, Collections.unmodifiableMap(replacement));
+        var nextOrder = order;
+        if (remove || !present) {
+            var changed = new ArrayList<>(order);
+            if (remove) changed.remove(key); else changed.add(key);
+            nextOrder = List.copyOf(changed);
+        }
+        return new ImmutableLookupPartitions<>(next, nextOrder);
+    }
+    private static int page(Object key) {
+        int hash = Objects.requireNonNull(key).hashCode();
+        return (hash ^ (hash >>> 16)) & (PAGES - 1);
+    }
+    @Override public V get(Object key) { return pages.get(page(key)).get(key); }
+    @Override public boolean containsKey(Object key) { return pages.get(page(key)).containsKey(key); }
+    @Override public int size() { return order.size(); }
+    @Override public void forEach(java.util.function.BiConsumer<? super K, ? super V> action) {
+        Objects.requireNonNull(action);
+        for (var key : order) action.accept(key, get(key));
+    }
+    @Override public int hashCode() {
+        int hash = 0;
+        for (var key : order) hash += key.hashCode() ^ get(key).hashCode();
+        return hash;
+    }
+    @Override public Collection<V> values() { return values; }
+    private Collection<V> valueView() {
+        return Collections.unmodifiableCollection(new AbstractCollection<>() {
+            @Override public int size() { return order.size(); }
+            @Override public Iterator<V> iterator() {
+                var iterator = order.iterator();
+                return new Iterator<>() {
+                    @Override public boolean hasNext() { return iterator.hasNext(); }
+                    @Override public V next() { return get(iterator.next()); }
+                };
+            }
+        });
+    }
+    @Override public Set<K> keySet() { return keys; }
+    @Override public Set<Entry<K, V>> entrySet() { return entries; }
+    private Set<K> keyView() {
+        return Collections.unmodifiableSet(new AbstractSet<>() {
+            @Override public int size() { return order.size(); }
+            @Override public boolean contains(Object key) { return containsKey(key); }
+            @Override public Iterator<K> iterator() { return order.iterator(); }
+        });
+    }
+    private Set<Entry<K, V>> entryView() {
+        return Collections.unmodifiableSet(new AbstractSet<>() {
+            @Override public int size() { return order.size(); }
+            @Override public Iterator<Entry<K, V>> iterator() {
+                var iterator = order.iterator();
+                return new Iterator<>() {
+                    @Override public boolean hasNext() { return iterator.hasNext(); }
+                    @Override public Entry<K, V> next() { var key = iterator.next(); return new SimpleImmutableEntry<>(key, get(key)); }
+                };
+            }
+        });
+    }
+}

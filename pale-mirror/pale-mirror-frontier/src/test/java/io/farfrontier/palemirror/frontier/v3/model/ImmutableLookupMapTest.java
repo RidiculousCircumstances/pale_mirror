@@ -7,6 +7,58 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ImmutableLookupMapTest {
+    private record CountedKey(int value, java.util.concurrent.atomic.AtomicInteger hashes) {
+        @Override public int hashCode() { hashes.incrementAndGet(); return value; }
+    }
+    @Test void aValidatedLargeRegistrySharesUntouchedStorageAndKeepsPublishedBranchesExact() {
+        var hashes = new java.util.concurrent.atomic.AtomicInteger();
+        var source = new LinkedHashMap<CountedKey, Integer>();
+        for (int i = 0; i < 2048; i++) source.put(new CountedKey(i, hashes), i);
+        var initial = FrontierWorldStateSupport.immutableMap(ImmutableLookupMap.copyOf(source), "large ordered fixture");
+        var target = source.keySet().iterator().next();
+        hashes.set(0);
+        var updated = ImmutableLookupMap.withEntry(initial, target, -1);
+        assertTrue(hashes.get() < source.size() / 4,
+                "one row replacement through a validation wrapper cannot rehash the complete registry");
+        assertEquals(0, initial.get(target)); assertEquals(-1, updated.get(target));
+        assertEquals(List.copyOf(source.keySet()), List.copyOf(updated.keySet()));
+        source.clear();
+        assertEquals(2048, initial.size());
+        assertThrows(UnsupportedOperationException.class, () -> updated.keySet().remove(target));
+        assertThrows(UnsupportedOperationException.class, () -> updated.values().clear());
+        assertThrows(UnsupportedOperationException.class, () -> updated.entrySet().iterator().next().setValue(4));
+        var deleted = ImmutableLookupMap.withoutEntry(updated, target);
+        assertFalse(deleted.containsKey(target)); assertEquals(2047, deleted.size());
+        var restored = ImmutableLookupMap.withEntry(deleted, target, 17);
+        assertEquals(target, List.copyOf(restored.keySet()).getLast(), "reinsertion retains ordinary insertion order");
+        assertEquals(0, initial.get(target)); assertEquals(-1, updated.get(target));
+        assertEquals(java.util.Set.of(target), ((ImmutableMapImage<CountedKey, Integer>) updated)
+                .changedKeysFrom(initial).orElseThrow());
+    }
+    @Test void largeRegistryEditsMatchOrderedMapsAcrossCollisionsMembershipAndBranches() {
+        var expected = new LinkedHashMap<String, Integer>();
+        for (int i = 0; i < 512; i++) expected.put("key:" + i, i);
+        expected.put("Aa", 1); expected.put("BB", 2);
+        Map<String, Integer> actual = ImmutableLookupMap.copyOf(expected);
+        var branch = actual;
+        for (int i = 0; i < 200; i++) {
+            String key = i % 5 == 0 ? "new:" + i : "key:" + i;
+            if (i % 7 == 0) { actual = ImmutableLookupMap.withoutEntry(actual, key); expected.remove(key); }
+            else { actual = ImmutableLookupMap.withEntry(actual, key, -i); expected.put(key, -i); }
+        }
+        actual = ImmutableLookupMap.withEntry(actual, "Aa", 9); expected.put("Aa", 9);
+        actual = ImmutableLookupMap.withoutEntry(actual, "BB"); expected.remove("BB");
+        assertEquals(expected, actual); assertEquals(actual, expected);
+        assertEquals(expected.hashCode(), actual.hashCode());
+        assertEquals(List.copyOf(expected.keySet()), List.copyOf(actual.keySet()));
+        assertEquals(List.copyOf(expected.values()), List.copyOf(actual.values()));
+        assertEquals(1, branch.get("Aa")); assertEquals(2, branch.get("BB"));
+        var mutable = new LinkedHashMap<>(expected);
+        var defensive = ImmutableLookupMap.withEntry(mutable, "Aa", 11);
+        mutable.clear();
+        assertEquals(expected.size(), defensive.size()); assertEquals(11, defensive.get("Aa"));
+        assertThrows(NullPointerException.class, () -> ImmutableLookupMap.withEntry(branch, "bad", null));
+    }
     @Test void membershipSnapshotIsDefensiveAndImmutableIncludingAbsentMutations() {
         var source = new java.util.ArrayList<>(List.of("BB", "Aa", "BB"));
         var snapshot = ImmutableLookupSet.copyOf(source); source.clear();

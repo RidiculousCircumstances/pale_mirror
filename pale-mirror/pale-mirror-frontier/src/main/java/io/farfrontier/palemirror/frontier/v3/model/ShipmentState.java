@@ -11,8 +11,8 @@ import java.util.HashSet;
 public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, TransportMission> missions) {
     public static final int MAX_SHIPMENTS = 1024;
     public ShipmentState {
-        shipments = Map.copyOf(Objects.requireNonNull(shipments));
-        missions = Map.copyOf(Objects.requireNonNull(missions));
+        shipments = ImmutableLookupMap.copyOf(Objects.requireNonNull(shipments));
+        missions = ImmutableLookupMap.copyOf(Objects.requireNonNull(missions));
         if (missions.size() > io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS)
             throw new IllegalArgumentException("transport mission retention capacity reached");
         for (var entry : missions.entrySet()) if (!entry.getKey().equals(entry.getValue().id()))
@@ -45,7 +45,7 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         if (shipments.containsKey(shipment.id()) || shipment.status() != Shipment.Status.AWAITING_LOAD
                 || shipment.revision() != 1 || shipment.pendingPhysicalStep().isPresent() || shipment.reception().isPresent())
             throw new IllegalArgumentException("shipment admission needs one fresh declared obligation");
-        var next = new LinkedHashMap<>(shipments); next.put(shipment.id(), shipment); return new ShipmentState(next, missions);
+        var next = ImmutableLookupMap.withEntry(shipments, shipment.id(), shipment); return new ShipmentState(next, missions);
     }
     public ShipmentState replace(Shipment previous, Shipment replacement) {
         if (!previous.equals(shipments.get(previous.id())) || !replacement.id().equals(previous.id())
@@ -62,7 +62,7 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
                     ? replacement.pendingPhysicalStep().isPresent() && previous.prepare(replacement.pendingPhysicalStep().orElseThrow()).equals(replacement)
                     : previous.withStatus(replacement.status()).equals(replacement))))
             throw new IllegalArgumentException("shipment transition has a stale predecessor");
-        var next = new LinkedHashMap<>(shipments); next.put(replacement.id(), replacement); return new ShipmentState(next, missions);
+        var next = ImmutableLookupMap.withEntry(shipments, replacement.id(), replacement); return new ShipmentState(next, missions);
     }
     public ShipmentState purchased(Shipment previous, ResourceClaimDelegation grant, Map<SubjectId, Integer> lots) {
         if (!previous.equals(shipments.get(previous.id())) || previous.status() != Shipment.Status.CARRYING
@@ -94,17 +94,17 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
     }
     public ShipmentState cancelUnusedEffect(Shipment previous) {
         if (!previous.equals(shipments.get(previous.id()))) throw new IllegalArgumentException("stale shipment effect cancellation");
-        var next = new LinkedHashMap<>(shipments); next.put(previous.id(), previous.withoutUnusedEffect());
+        var next = ImmutableLookupMap.withEntry(shipments, previous.id(), previous.withoutUnusedEffect());
         return new ShipmentState(next, missions);
     }
     public ShipmentState returned(Shipment previous, Map<SubjectId, Integer> lots) {
         if (!previous.equals(shipments.get(previous.id()))) throw new IllegalArgumentException("stale returned shipment");
-        var next = new LinkedHashMap<>(shipments); next.put(previous.id(), previous.returned(lots));
+        var next = ImmutableLookupMap.withEntry(shipments, previous.id(), previous.returned(lots));
         return new ShipmentState(next, missions);
     }
     public ShipmentState recallMission(TransportMission previous) {
         if (!previous.equals(missions.get(previous.id()))) throw new IllegalArgumentException("stale mission recall");
-        var next = new LinkedHashMap<>(missions); next.put(previous.id(), previous.recallLoading());
+        var next = ImmutableLookupMap.withEntry(missions, previous.id(), previous.recallLoading());
         return new ShipmentState(shipments, next);
     }
     public ShipmentState retire(SubjectId id, long revision) {
@@ -113,11 +113,11 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
             throw new IllegalArgumentException("only an exact terminal shipment can retire");
         if (missions.values().stream().anyMatch(m -> m.shipmentIds().contains(id)))
             throw new IllegalArgumentException("shipment retirement retains a transport mission reference");
-        var next = new LinkedHashMap<>(shipments); next.remove(id); return new ShipmentState(next, missions);
+        var next = ImmutableLookupMap.withoutEntry(shipments, id); return new ShipmentState(next, missions);
     }
     public ShipmentState resume(Shipment previous, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId successor) {
         if (!previous.equals(shipments.get(previous.id()))) throw new IllegalArgumentException("shipment resumption has a stale predecessor");
-        var next = new LinkedHashMap<>(shipments); next.put(previous.id(), previous.resumed(successor)); return new ShipmentState(next, missions);
+        var next = ImmutableLookupMap.withEntry(shipments, previous.id(), previous.resumed(successor)); return new ShipmentState(next, missions);
     }
     public boolean holds(SubjectId claimId) {
         return shipments.values().stream().anyMatch(s -> !s.terminal() && s.authorization().claimId().equals(claimId));
@@ -136,31 +136,31 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
     public ShipmentState admitMission(TransportMission mission) {
         if (missions.containsKey(mission.id()) || !mission.preparingSupplies() || mission.revision() != 1)
             throw new IllegalArgumentException("mission admission requires a fresh declaration");
-        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission); return new ShipmentState(shipments, next);
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission); return new ShipmentState(shipments, next);
     }
     public ShipmentState advanceMission(TransportMission mission, TransportMission.Stage stage) {
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale mission predecessor");
-        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.advance(stage)); return new ShipmentState(shipments, next);
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.advance(stage)); return new ShipmentState(shipments, next);
     }
     public ShipmentState replaceSupplies(TransportMission mission,
             io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad supplies) {
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale provisioning predecessor");
-        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withSupplies(supplies));
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.withSupplies(supplies));
         return new ShipmentState(shipments, next);
     }
     public ShipmentState abortLoadingMission(TransportMission mission) {
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale loading-abort predecessor");
-        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.abortLoading());
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.abortLoading());
         return new ShipmentState(shipments, next);
     }
     public ShipmentState replaceReplenishment(TransportMission mission, java.util.Optional<UnitResourceTransfer> transfer) {
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale replenishment predecessor");
-        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withReplenishment(transfer));
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.withReplenishment(transfer));
         return new ShipmentState(shipments, next);
     }
     public ShipmentState replaceReplenishment(TransportMission mission, java.util.Optional<UnitResourceTransfer> transfer, java.util.Optional<GoodsSpotPurchase> purchase) {
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale replenishment predecessor");
-        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withReplenishment(transfer, purchase));
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.withReplenishment(transfer, purchase));
         return new ShipmentState(shipments, next);
     }
     public ShipmentState retireMission(TransportMission mission) {
@@ -179,7 +179,7 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
     }
     public ShipmentState fundReplenishment(TransportMission mission, UnitResourceTransfer transfer, GoodsSpotPurchase purchase) {
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale replenishment funding predecessor");
-        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withFundedReplenishment(transfer, purchase));
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.withFundedReplenishment(transfer, purchase));
         return new ShipmentState(shipments, next);
     }
 }

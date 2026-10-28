@@ -8,6 +8,8 @@ import java.util.Optional;
 
 /** Read-only shared-boundary arbitration. Registered families own business stages and access demand. */
 public final class ServiceAccessCoordinator {
+    private static final ImmutableGroupView<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement,
+            SubjectId> EXIT_CANDIDATES = new ImmutableGroupView<>();
     private ServiceAccessCoordinator() { }
 
     /** Bulk/group events can move several actors even when their subject is not an actor. */
@@ -52,7 +54,8 @@ public final class ServiceAccessCoordinator {
         var movement = state.actorMovements().get(actorId);
         if (movement != null) movement.context().clearancePoint().ifPresent(points::add);
         var actor = state.actorLocations().get(actorId);
-        if (actor != null) ServiceBoundaryComposition.operationalDeclarations(state).values().stream()
+        if (actor != null) ServiceBoundaryComposition.nearbyDeclarations(state,
+                    new TerrainColumn(actor.body().x(), actor.body().z())).stream()
                 .filter(point -> point.boundary().occupied(actor.body())).forEach(point -> points.add(point.pointId()));
         return java.util.Set.copyOf(points);
     }
@@ -83,7 +86,9 @@ public final class ServiceAccessCoordinator {
         var workers = demands.stream().filter(ServiceAccessDemand::readyToEnter).filter(demand -> demand.priority() == ServiceAccessDemand.Priority.WORK)
                 .sorted(approachOrder(state, access)).toList();
         boolean requestingSelfCare = ServiceAccessCapabilities.priority(requested) == ServiceAccessDemand.Priority.SELF_CARE;
-        boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
+        boolean departing = EXIT_CANDIDATES.keys(state.bootstrap(), state.actorMovements(), movement ->
+                movement.context().clearancePoint().map(java.util.Set::of).orElseGet(java.util.Set::of), requested.pointId())
+                .stream().map(state.actorMovements()::get).anyMatch(movement ->
                 movement.context().clearancePoint().equals(Optional.of(requested.pointId()))
                         && !awaitingBody(state, movement.order().actorId())
                         && access.occupied(currentBody(state, movement.order().actorId()))

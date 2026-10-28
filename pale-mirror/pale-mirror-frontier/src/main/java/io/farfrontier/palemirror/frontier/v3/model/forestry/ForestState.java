@@ -18,7 +18,7 @@ public final class ForestState {
     public ForestState(Map<ForestRegion, Map<TreeId, ForestTree>> regions) { this(regions, Map.of(), 1); }
     public ForestState(Map<ForestRegion, Map<TreeId, ForestTree>> regions,
                        Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ForestryWork> work, long nextWorkOrdinal) {
-        this.work = Map.copyOf(work); this.nextWorkOrdinal = nextWorkOrdinal;
+        this.work = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.copyOf(work); this.nextWorkOrdinal = nextWorkOrdinal;
         var copy = new HashMap<ForestRegion, Map<TreeId, ForestTree>>();
         var references = new HashMap<ForestRegion, Map<TreeId, ForestRegion>>();
         var ids = new HashSet<TreeId>();
@@ -49,7 +49,7 @@ public final class ForestState {
                         Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ForestryWork> work, long nextWorkOrdinal) {
         requireBounds(regions, links); this.regions = Collections.unmodifiableMap(regions); this.links = Collections.unmodifiableMap(links);
         this.addresses = Collections.unmodifiableMap(addresses);
-        this.validatedBounds = validatedBounds; this.work = work; this.nextWorkOrdinal = nextWorkOrdinal; validateWork();
+        this.validatedBounds = validatedBounds; this.work = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.copyOf(work); this.nextWorkOrdinal = nextWorkOrdinal; validateWork();
     }
     private static void requireBounds(Map<ForestRegion, Map<TreeId, ForestTree>> regions,
                                       Map<ForestRegion, Map<TreeId, ForestRegion>> links) {
@@ -76,24 +76,24 @@ public final class ForestState {
         if (nextWorkOrdinal != expectedOrdinal || work.containsKey(job.id()) || job.phase() != ForestryWork.Phase.TAKE_TOOL
                 || job.revision() != 1 || job.pending().isPresent() || job.felling().isPresent() || job.labour().isPresent())
             throw new IllegalArgumentException("stale or incomplete forestry admission");
-        var jobs = new LinkedHashMap<>(work); jobs.put(job.id(), job);
-        return new ForestState(regions, links, addresses, validatedBounds, Map.copyOf(jobs), Math.addExact(nextWorkOrdinal, 1));
+        var jobs = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withEntry(work, job.id(), job);
+        return new ForestState(regions, links, addresses, validatedBounds, jobs, Math.addExact(nextWorkOrdinal, 1));
     }
     public ForestState replaceWork(ForestryWork expected, ForestryWork next) {
         if (!Objects.equals(work.get(expected.id()), expected) || !expected.id().equals(next.id()) || !expected.home().equals(next.home())
                 || !expected.execution().actorId().equals(next.execution().actorId()) || !expected.toolId().equals(next.toolId())
                 || !expected.toolSource().equals(next.toolSource()))
             throw new IllegalArgumentException("forestry continuation changed its exact retained obligations");
-        var jobs = new LinkedHashMap<>(work);
-        if (next.terminal()) jobs.remove(next.id()); else jobs.put(next.id(), next);
-        return new ForestState(regions, links, addresses, validatedBounds, Map.copyOf(jobs), nextWorkOrdinal);
+        var jobs = next.terminal() ? io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withoutEntry(work, next.id())
+                : io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withEntry(work, next.id(), next);
+        return new ForestState(regions, links, addresses, validatedBounds, jobs, nextWorkOrdinal);
     }
     /** Exact dead-owner disposal after the common death/resource protocol has settled. */
     public ForestState releaseDeadWork(ForestryWork expected) {
         if (!expected.equals(work.get(expected.id())) || expected.pending().isPresent())
             throw new IllegalArgumentException("dead forest owner retains a stale or unresolved physical effect");
-        var next = new LinkedHashMap<>(work); next.remove(expected.id());
-        return new ForestState(regions, links, addresses, validatedBounds, Map.copyOf(next), nextWorkOrdinal);
+        var next = io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.withoutEntry(work, expected.id());
+        return new ForestState(regions, links, addresses, validatedBounds, next, nextWorkOrdinal);
     }
     public static ForestState empty() { return new ForestState(Map.of()); }
     public void requireWithin(io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) {
