@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -92,8 +91,7 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
                 || !checkpoint(state, movement, event.atTick()).equals(Optional.of(event.retainedBody())))
             throw new IllegalArgumentException("interruption has no exact safe movement checkpoint");
         state.actorExecutions().requireCurrent(movement.executionId());
-        var movements = new LinkedHashMap<>(state.actorMovements());
-        movements.remove(subject);
+        var movements = ImmutableLookupMap.withoutEntry(state.actorMovements(), subject);
         var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject, state.actorLocations().get(subject).withBody(event.retainedBody()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(movements).actorLocations(actors)
                 .actorExecutions(ActorMovementProviders.require(movement).interruptionAuthority(state, movement)));

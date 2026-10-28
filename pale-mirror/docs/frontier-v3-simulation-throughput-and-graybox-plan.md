@@ -4474,3 +4474,54 @@ permission result is cached by this shortcut. Generic regional projection, scope
 invalidation and extraction checks plus guardrails PASS34s before the extra block/
 support collision assertions; frozen final verification must execute those updated
 assertions. No live speedup is claimed before deploying the combined candidate.
+
+
+### Keep the sparse mutation evidence through movement, custody and commerce
+
+67582c0dc is verified on both retained worlds; a short provisional60.85s cut is
+8.528551ticks/sec with growing debt2485→3183 and advancing advice1312→2000. It is
+not sustained capacity acceptance or a causal comparison of the geometry cut.
+
+The next connected source audit confirms normal movement and resource paths
+still cloned full registers before changing one/two rows. Besides allocation,
+this discarded the existing ImmutableLookupMap direct/page delta evidence and
+forced generic read-index/validation comparisons back across unrelated rows.
+ActorMovementProcess now uses the existing immutable row API for start, retirement,
+COLD route planning/checkpoint/goal and HOT acknowledgement. FungibleResourceLedger
+uses it for withAccount, complete claim release and claim-owner transfer; a shared
+transferredAccounts helper updates the exact source/destination in ordinary COLD,
+actor/new-account and both observed handoff paths. Exact authority/quantity/claim/
+epoch/binding checks, actor clocks and wire formats are retained. Destruction,
+retitling and bulk-history operations are not claimed migrated by this cut.
+
+The same live trace identifies GoodsTradeState.admit/constructor in active advice.
+Even a participant/price/demand-only update rebuilt all order-key and contract
+claim/receipt/financial-hold uniqueness proofs over unchanged immutable tables.
+Separate existing ImmutableInvariantCheck owner images now reuse only identical
+order/contract roots; changed tables and full ingress/recovery execute every
+original identity/exclusivity check. Ordinary place/admit/withdraw/put use existing
+one/two-row immutable updates. Bulk retirement remains explicit and unchanged.
+A focused regression warms success before rejecting a foreign order key, duplicate
+claim and duplicate money hold, checks full audit, the valid predecessor and codec.
+
+No new cache keyed only by world state, transaction authority, generic draft API,
+pricing/eligibility policy or test timing is introduced. Existing resource ledger,
+lookup alias/branch, movement interruption, HOT/COLD arrival, food and shipment
+negative/recovery checks pass in65s (sparse-movement-custody-focus.log). Commercial
+focus is running; do not deploy until it and frozen verification pass.
+
+Commercial focus62checks has61passes including the new intrinsic negative/recovery
+case; the remaining hungry-courier fixture manually advanced200ticks past an
+uncommitted first service-exit deadline and forged an interruption still inside
+the boundary. Keep the safety refusal. The fixture now executes real due movement
+transitions until the registered owner provides a safe checkpoint, preserving its
+unfinished cargo/destination and actual meal/resumption assertions. Common movement
+interruption also uses sparse removal, closing that lifecycle path. Targeted
+courier-food/interruption focus follows; this is not evidence of a new product
+failure or permission to skip a causal boundary.
+
+Courier-food/interruption focus PASS64 checks (including9 architecture checks),
+98s, guardrails PASS. The real exit transition preserves the original terminal
+meal/cargo/resumption assertions; no production safety branch was weakened.
+The reviewed cut is ready for clean frozen affected verification and both retained
+world deployments. Throughput and G remain unproven at the required20ticks/sec.

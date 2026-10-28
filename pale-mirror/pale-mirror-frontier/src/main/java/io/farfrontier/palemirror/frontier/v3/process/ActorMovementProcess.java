@@ -10,9 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /** Canonical goal/route execution, independent of the activity that issued the order. */
@@ -35,8 +33,7 @@ public final class ActorMovementProcess {
         if (!actor.navigationProfile().capabilities().contains(movement.order().capability()))
             throw new IllegalArgumentException("movement requires a capability absent from the actor's declared navigation profile");
         ActorMovementProviders.require(movement).validate(state, movement);
-        var movements = new LinkedHashMap<>(state.actorMovements());
-        movements.put(subject, movement);
+        var movements = ImmutableLookupMap.withEntry(state.actorMovements(), subject, movement);
         return ResidentActivityProcess.retargetHotResident(ActorMovementProviders.require(movement).start(state, movement,
                 FrontierWorldStateUpdate.begin().actorMovements(movements)), subject, movement.issuedAtTick());
     }
@@ -61,7 +58,7 @@ public final class ActorMovementProcess {
             throw new IllegalArgumentException("movement retirement has a stale exact goal or clock");
         state.actorExecutions().requireCurrent(expected.executionId());
         ActorMovementProviders.require(expected).validate(state, expected);
-        var movements = new LinkedHashMap<>(state.actorMovements()); movements.remove(actorId);
+        var movements = ImmutableLookupMap.withoutEntry(state.actorMovements(), actorId);
         var actors = ImmutableLookupMap.withEntry(state.actorLocations(), actorId,
                 state.actorLocations().get(actorId).withBody(bodyAt(state, actorId, tick)));
         return state.withChanges(ownedUpdate.actorMovements(movements).actorLocations(actors));
@@ -182,20 +179,20 @@ public final class ActorMovementProcess {
                 && !movement.order().arrivedAt(actor.supportingSurface()))
                 || !step.equals(coldStep(state, movement, step.atTick()).orElse(null)))
             throw new IllegalArgumentException("COLD movement has no accepted route or causal arrival");
-        Map<SubjectId, ActorMovement> next = new LinkedHashMap<>(state.actorMovements());
         if (actor.condition().status() != ActorLifeStatus.ALIVE) {
-            next.remove(subject);
-            return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next)
+            return state.withChanges(FrontierWorldStateUpdate.begin()
+                    .actorMovements(ImmutableLookupMap.withoutEntry(state.actorMovements(), subject))
                     .actorExecutions(ActorMovementProviders.require(movement).arrivalAuthority(state, movement)));
         }
         if (movement.coldTravel().isEmpty()) {
             if (movement.order().arrivedAt(actor.supportingSurface())) {
-                next.remove(subject);
-                return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next)
+                return state.withChanges(FrontierWorldStateUpdate.begin()
+                        .actorMovements(ImmutableLookupMap.withoutEntry(state.actorMovements(), subject))
                         .actorExecutions(ActorMovementProviders.require(movement).arrivalAuthority(state, movement)));
             }
-            next.put(subject, movement.withColdTravel(timedSegment(state, movement,
-                    step.plannedRoute().orElseThrow().route(), step.atTick())));
+            var next = ImmutableLookupMap.withEntry(state.actorMovements(), subject,
+                    movement.withColdTravel(timedSegment(state, movement,
+                        step.plannedRoute().orElseThrow().route(), step.atTick())));
             return state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(next));
         }
         TimedKnownRoute travel = movement.coldTravel().orElseThrow();
@@ -208,11 +205,12 @@ public final class ActorMovementProcess {
                 : BodyPosition.above(arrived);
         var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject,
                 actor.withBody(body));
-        if (arrived != null && movement.order().arrivedAt(arrived)) next.remove(subject);
-        else next.put(subject, movement.withoutColdTravel());
+        boolean completed = arrived != null && movement.order().arrivedAt(arrived);
+        var next = completed ? ImmutableLookupMap.withoutEntry(state.actorMovements(), subject)
+                : ImmutableLookupMap.withEntry(state.actorMovements(), subject, movement.withoutColdTravel());
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).actorMovements(next)
-                .actorExecutions(next.containsKey(subject) ? state.actorExecutions()
-                        : ActorMovementProviders.require(movement).arrivalAuthority(state, movement)));
+                .actorExecutions(completed ? ActorMovementProviders.require(movement).arrivalAuthority(state, movement)
+                        : state.actorExecutions()));
     }
 
     public static FrontierWorldState reduceHotObserved(FrontierWorldState state, SubjectId subject,
@@ -233,8 +231,7 @@ public final class ActorMovementProcess {
         boolean arrived = movement.order().arrivedAt(observed.observedBody().supportingSurface());
         if (!arrived)
             throw new IllegalArgumentException("HOT movement receipt is not a semantic goal arrival");
-        Map<SubjectId, ActorMovement> movements = new LinkedHashMap<>(state.actorMovements());
-        movements.remove(subject);
+        var movements = ImmutableLookupMap.withoutEntry(state.actorMovements(), subject);
         FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin()
                 .actorMovements(movements)
                 .actorExecutions(ActorMovementProviders.require(movement).arrivalAuthority(state, movement)));

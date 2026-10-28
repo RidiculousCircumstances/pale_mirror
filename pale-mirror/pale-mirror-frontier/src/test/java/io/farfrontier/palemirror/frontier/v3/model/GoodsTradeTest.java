@@ -10,6 +10,27 @@ import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*; // Canonical ledger boundary, not native/visual acceptance.
 class GoodsTradeTest {
+    @Test void warmedCommercialTablesRejectChangedIdentitiesAndCompetingClaimsOrMoneyHolds() {
+        var state = reserved(); var trade = state.companies().goodsTrade(); var contract = trade.contracts().get(CONTRACT);
+        for (boolean duplicateClaim : List.of(false, true)) {
+            assertDoesNotThrow(() -> trade.withParticipants(trade.participants()));
+            var other = new GoodsTradeContract(id("contract:competing"), contract.sellOrderId(), contract.buyOrderId(),
+                    contract.seller(), contract.buyer(), contract.fulfillment(), contract.sourceContainerId(), contract.receiverContainerId(),
+                    contract.itemKind(), contract.quantity(), contract.goodsUnitPrice(),
+                    duplicateClaim ? id("reservation:other") : contract.financialReservationId(), 0,
+                    duplicateClaim ? contract.outstandingClaims() : Map.of(id("claim:other"), contract.quantity()), Map.of());
+            var contracts = ImmutableLookupMap.withEntry(trade.contracts(), other.id(), other);
+            assertThrows(IllegalArgumentException.class, () -> new GoodsTradeState(trade.orders(), contracts, trade.participants()));
+            assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() ->
+                    new GoodsTradeState(trade.orders(), contracts, trade.participants())));
+            assertDoesNotThrow(() -> trade.withParticipants(trade.participants()), "rejected tables cannot poison the valid immutable predecessor");
+        }
+        var orders = ImmutableLookupMap.withEntry(trade.orders(), id("order:foreign-key"), trade.orders().get(contract.sellOrderId()));
+        assertThrows(IllegalArgumentException.class, () -> new GoodsTradeState(orders, trade.contracts(), trade.participants()));
+        assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() ->
+                new GoodsTradeState(orders, trade.contracts(), trade.participants())));
+        var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
+    }
     @Test void loadedCourierCanYieldSpatiallyWithoutChangingCargoOrItsRetainedExecution() {
         var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
         state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));
@@ -61,6 +82,19 @@ class GoodsTradeTest {
         state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.plan(state,
                 io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.progress(movement, now), now), now, "actor-movement");
         now += 200;
+        // Follow real causal exits before asking to interrupt the remaining goal.
+        // Elapsed time alone cannot acknowledge an uncommitted service departure.
+        for (int boundary = 0; boundary < 8; boundary++) {
+            movement = state.actorMovements().get(actor);
+            assertNotNull(movement, "courier must retain its unfinished destination");
+            if (io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement)
+                    .interruptionCheckpoint(state, movement, now).isPresent()) break;
+            now = Math.max(now, movement.coldTravel()
+                    .map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick).orElse(now + 1));
+            state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.plan(state,
+                    io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.progress(movement, now), now), now, "actor-movement");
+        }
+        movement = state.actorMovements().get(actor);
         var checkpoint = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state, actor, now);
         assertNotEquals(BodyPosition.above(shipment.sender().station()), checkpoint);
         var preview = factForFamily(state, actor, new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted(

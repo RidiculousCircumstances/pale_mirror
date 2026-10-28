@@ -292,7 +292,7 @@ public final class FungibleResourceLedger {
         if (claim == null || account.claimQuantities().getOrDefault(claimId, 0) != claim.quantity()) {
             throw new IllegalArgumentException("claim release does not own one current complete allocation");
         }
-        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); nextClaims.remove(claimId);
+        Map<SubjectId, ClaimAllocation> nextClaims = ImmutableLookupMap.withoutEntry(claims, claimId);
         Map<SubjectId, Integer> nextQuantities = new HashMap<>(account.claimQuantities()); nextQuantities.remove(claimId);
         return withAccount(account.withQuantities(account.lotQuantities(), nextQuantities), nextClaims, bindings);
     }
@@ -321,7 +321,7 @@ public final class FungibleResourceLedger {
                 || !previous.economicOwnerId().equals(next.economicOwnerId()) || !previous.itemKind().equals(next.itemKind())
                 || previous.quantity() != next.quantity() || !previous.lotQuantities().equals(next.lotQuantities()))
             throw new IllegalArgumentException("claim-owner transfer cannot alter a resource allocation");
-        var changed = new HashMap<>(claims); changed.put(next.id(), next);
+        var changed = ImmutableLookupMap.withEntry(claims, next.id(), next);
         return new FungibleResourceLedger(lots, changed, accounts, bindings);
     }
 
@@ -354,12 +354,9 @@ public final class FungibleResourceLedger {
         if (from.id().equals(to.id())) throw new IllegalArgumentException("fungible transfer requires distinct custody accounts");
         requireSubset(from.lotQuantities(), lotQuantities, "lot transfer"); requireOptionalSubset(from.claimQuantities(), claimQuantities, "claim transfer");
         if (sum(lotQuantities) != sum(claimQuantities) && !claimQuantities.isEmpty()) throw new IllegalArgumentException("claimed transfer must preserve exact resource quantity");
-        Map<SubjectId, CustodyAccount> next = new HashMap<>(accounts);
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
-        if (remainingLots.isEmpty()) next.remove(from.id());
-        else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
-        next.put(to.id(), accountWithAdded(to, lotQuantities, claimQuantities));
+        var next = transferredAccounts(from, remainingLots, remainingClaims, accountWithAdded(to, lotQuantities, claimQuantities));
         return new FungibleResourceLedger(lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
     }
 
@@ -427,12 +424,9 @@ public final class FungibleResourceLedger {
         if (accounts.containsKey(destination.id()) || from.id().equals(destination.id())) throw new IllegalArgumentException("new custody account identity is already live");
         requireSubset(from.lotQuantities(), destination.lotQuantities(), "new custody account lots");
         requireOptionalSubset(from.claimQuantities(), destination.claimQuantities(), "new custody account claims");
-        Map<SubjectId, CustodyAccount> next = new HashMap<>(accounts);
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), destination.lotQuantities());
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), destination.claimQuantities());
-        if (remainingLots.isEmpty()) next.remove(from.id());
-        else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
-        next.put(destination.id(), destination);
+        var next = transferredAccounts(from, remainingLots, remainingClaims, destination);
         return new FungibleResourceLedger(lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
     }
 
@@ -444,12 +438,9 @@ public final class FungibleResourceLedger {
         requireOptionalSubset(from.claimQuantities(), claimQuantities, "actor transfer claims");
         if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities))
             throw new IllegalArgumentException("actor transfer claims must preserve exact resource quantity");
-        Map<SubjectId, CustodyAccount> next = new HashMap<>(accounts);
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
-        if (remainingLots.isEmpty()) next.remove(from.id());
-        else next.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
-        next.put(to.id(), accountWithAdded(to, lotQuantities, claimQuantities));
+        var next = transferredAccounts(from, remainingLots, remainingClaims, accountWithAdded(to, lotQuantities, claimQuantities));
         return new FungibleResourceLedger(lots, claims, next, bindings);
     }
 
@@ -591,10 +582,7 @@ public final class FungibleResourceLedger {
                 || !boundQuantities(remainingSource, false).equals(remainingClaims)) {
             throw new IllegalArgumentException("observed cold source layout does not exactly account for its custody");
         }
-        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
-        else nextAccounts.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
-        nextAccounts.put(destination.id(), destination);
+        var nextAccounts = transferredAccounts(from, remainingLots, remainingClaims, destination);
         Map<SubjectId, PhysicalStackBinding> nextBindings = FungibleBindingRepartition.withoutAccount(bindings, from.id());
         for (PhysicalStackBinding binding : remainingSource) {
             if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed cold source binding identity is already live");
@@ -690,10 +678,7 @@ public final class FungibleResourceLedger {
                 || !boundQuantities(destinationBindings, false).equals(finalDestination.claimQuantities())) {
             throw new IllegalArgumentException("observed handoff layout does not exactly account for its custody");
         }
-        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
-        else nextAccounts.put(from.id(), from.withQuantities(remainingLots, remainingClaims));
-        nextAccounts.put(destination.id(), finalDestination);
+        var nextAccounts = transferredAccounts(from, remainingLots, remainingClaims, finalDestination);
         Map<SubjectId, PhysicalStackBinding> nextBindings = FungibleBindingRepartition.withoutAccount(bindings, from.id());
         if (destinationExists) nextBindings = FungibleBindingRepartition.withoutAccount(nextBindings, destination.id());
         for (PhysicalStackBinding binding : remainingSource) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed source binding identity is already live");
@@ -958,7 +943,14 @@ public final class FungibleResourceLedger {
     }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings) { return withAccount(account, nextClaims, nextBindings, lots); }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings, Map<SubjectId, ResourceLot> nextLots) {
-        Map<SubjectId, CustodyAccount> next = new HashMap<>(accounts); next.put(account.id(), account); return new FungibleResourceLedger(nextLots, nextClaims, next, nextBindings);
+        return new FungibleResourceLedger(nextLots, nextClaims, ImmutableLookupMap.withEntry(accounts, account.id(), account), nextBindings);
+    }
+    /** One exact source/destination update; unchanged world accounts retain their immutable pages and delta proof. */
+    private Map<SubjectId, CustodyAccount> transferredAccounts(CustodyAccount from, Map<SubjectId, Integer> remainingLots,
+            Map<SubjectId, Integer> remainingClaims, CustodyAccount destination) {
+        var next = remainingLots.isEmpty() ? ImmutableLookupMap.withoutEntry(accounts, from.id())
+                : ImmutableLookupMap.withEntry(accounts, from.id(), from.withQuantities(remainingLots, remainingClaims));
+        return ImmutableLookupMap.withEntry(next, destination.id(), destination);
     }
     private void requireNoPhysicalBinding(SubjectId accountId, String operation) {
         if (bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId))) {

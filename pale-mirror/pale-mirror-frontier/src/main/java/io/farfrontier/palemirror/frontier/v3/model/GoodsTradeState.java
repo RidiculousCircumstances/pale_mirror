@@ -24,16 +24,31 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     }
     public static final int MAX_CONTRACTS = 1_024;
     public static final int MAX_ORDERS = 2_048;
+    private static final ImmutableInvariantCheck<Void> ORDER_IDENTITIES = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> CONTRACT_IDENTITIES = new ImmutableInvariantCheck<>();
     public GoodsTradeState {
         orders = ImmutableLookupMap.copyOf(orders);
         java.util.Objects.requireNonNull(participants);
         java.util.Objects.requireNonNull(priceHistory);
         java.util.Objects.requireNonNull(demandHistory);
         contracts = ImmutableLookupMap.copyOf(contracts);
-        if (orders.size() > MAX_ORDERS || orders.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))
-                || contracts.size() > MAX_CONTRACTS || contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))) {
+        if (orders.size() > MAX_ORDERS || contracts.size() > MAX_CONTRACTS) {
             throw new IllegalArgumentException("invalid bounded goods-trade registry");
         }
+        var checkedOrders = orders; var checkedContracts = contracts;
+        // A participant/price/demand update changes neither table. Reuse only
+        // exact immutable owner evidence; changed tables and full audits still
+        // run all original identity/exclusivity checks before publication.
+        ORDER_IDENTITIES.validate(() -> validateOrderIdentities(checkedOrders), checkedOrders);
+        CONTRACT_IDENTITIES.validate(() -> validateContractIdentities(checkedContracts), checkedContracts);
+    }
+    private static void validateOrderIdentities(Map<SubjectId, GoodsTradeOrder> orders) {
+        if (orders.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id())))
+            throw new IllegalArgumentException("invalid bounded goods-trade registry");
+    }
+    private static void validateContractIdentities(Map<SubjectId, GoodsTradeContract> contracts) {
+        if (contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id())))
+            throw new IllegalArgumentException("invalid bounded goods-trade registry");
         var claimIds = contracts.values().stream().flatMap(c -> c.outstandingClaims().keySet().stream()).toList();
         var receiptIds = contracts.values().stream().flatMap(c -> java.util.stream.Stream.concat(
                 c.acceptances().keySet().stream(), c.dispositions().keySet().stream())).toList();
@@ -54,7 +69,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         if (orders.containsKey(order.id()) || order.committedQuantity() != 0) {
             throw new IllegalArgumentException("goods order must be a fresh participant authorization");
         }
-        Map<SubjectId, GoodsTradeOrder> next = new HashMap<>(orders); next.put(order.id(), order);
+        var next = ImmutableLookupMap.withEntry(orders, order.id(), order);
         return new GoodsTradeState(next, contracts, participants, priceHistory, demandHistory);
     }
     public GoodsTradeState admit(GoodsTradeContract contract, long now) {
@@ -66,9 +81,9 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         if (now > sell.expiresAtTick() || now > buy.expiresAtTick()) {
             throw new IllegalArgumentException("goods agreement names an expired participant order");
         }
-        Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders);
-        nextOrders.put(sell.id(), sell.commit(contract.quantity())); nextOrders.put(buy.id(), buy.commit(contract.quantity()));
-        Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
+        var nextOrders = ImmutableLookupMap.replacing(orders, Map.of(sell.id(), sell.commit(contract.quantity()),
+                buy.id(), buy.commit(contract.quantity())));
+        var next = ImmutableLookupMap.withEntry(contracts, contract.id(), contract);
         return new GoodsTradeState(nextOrders, next, participants, priceHistory, demandHistory);
     }
     public GoodsTradeState withdraw(SubjectId participant, GoodsTradeOrderWithdrawn withdrawal) {
@@ -76,9 +91,8 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         if (order == null || !order.party().id().equals(participant)
                 || order.committedQuantity() != withdrawal.expectedCommittedQuantity() || order.availableQuantity() == 0)
             throw new IllegalArgumentException("stale or foreign unmatched-order withdrawal");
-        var next = new HashMap<>(orders);
-        if (order.committedQuantity() == 0) next.remove(order.id());
-        else next.put(order.id(), new GoodsTradeOrder(order.id(), order.party(), order.side(),
+        var next = order.committedQuantity() == 0 ? ImmutableLookupMap.withoutEntry(orders, order.id())
+                : ImmutableLookupMap.withEntry(orders, order.id(), new GoodsTradeOrder(order.id(), order.party(), order.side(),
                 order.containerId(), order.itemKind(), order.committedQuantity(), order.committedQuantity(),
                 order.unitPriceLimit(), order.expiresAtTick(), order.retiredCommittedQuantity()));
         return new GoodsTradeState(next, contracts, participants, priceHistory, demandHistory);
@@ -130,7 +144,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         return new GoodsTradeState(nextOrders, nextContracts, participants, priceHistory, demandHistory);
     }
     private GoodsTradeState put(GoodsTradeContract contract) {
-        Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
+        var next = ImmutableLookupMap.withEntry(contracts, contract.id(), contract);
         return new GoodsTradeState(orders, next, participants, priceHistory, demandHistory);
     }
     public GoodsTradeState withParticipants(GoodsParticipantState next) { return new GoodsTradeState(orders, contracts, next, priceHistory, demandHistory); }
