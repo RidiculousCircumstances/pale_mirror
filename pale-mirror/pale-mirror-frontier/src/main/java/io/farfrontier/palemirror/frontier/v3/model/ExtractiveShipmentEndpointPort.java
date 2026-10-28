@@ -14,6 +14,13 @@ final class ExtractiveShipmentEndpointPort implements ShipmentEndpointPort {
             throw new IllegalArgumentException("shipment endpoint differs from its declared extractive storage port");
         return deposit.site();
     }
+    @Override public Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        if (!(endpoint instanceof ShipmentEndpoint.ExtractiveSite declared))
+            throw new IllegalArgumentException("extractive endpoint has a foreign nominal schema");
+        var deposit = state.extractionSites().deposits().get(declared.siteId());
+        return new Object[] { deposit == null ? null : deposit.site(), state.inventory().containers().get(endpoint.containerId()),
+                state.inventory().surfaces().get(endpoint.containerId()) };
+    }
     @Override public void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var site = site(state, endpoint); var container = state.inventory().containers().get(endpoint.containerId());
         var surface = state.inventory().surfaces().get(endpoint.containerId());

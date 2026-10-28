@@ -2031,3 +2031,41 @@ a lot while retaining the exact same account map and returns to its predecessor;
 availability follows the actual kind in both images. Focus94checks/13classes plus
 guardrails PASS48s (prior7-class balance focus PASS30s). Release/deploy and throughput
 measurements remain pending; the100town goal and terminal stories remain OPEN.
+
+
+### 2026-10-28 — shipment proofs retain only their exact owner-declared facts
+
+6044fa728 clean-ref release123frontier/16classes+29runtime/guardrails/packagePASS57s;
+both retained deployments VERIFIED. Ordinary100 observer52350 completed:30817→31426
+in272.6s, debt4026→8870, still FAIL. Host alltimemax820.3ms remains unexplained;
+recent21.7ms does not discharge it. Fresh20s inventory-component-proofs-warm.jfr
+confirms inventory construction no longer a top advisory cost. Server335inclusive PM
+samples in canonical validation, including57ShipmentStateSupport.validate,
+46UnitGroupRelationships and36ActorMovementStateSupport; no isolated speed ratio.
+
+Shipment validation now retains successful exact immutable read sets per current
+shipment under existing MAX_SHIPMENTS and bootstrap epoch. The same original checker
+runs for changed rows; withdrawn rows disappear, failed computation publishes no
+partial accepted registry. All4 endpoint providers, both resource-source providers
+and all3 authorization providers MUST declare complete structural continuation read
+sets through their closed SPI. Shared logistics composes those declared facts with
+its own exact shipment, current cargo account/individual item and mobile asset/mission;
+it never inspects concrete issuers' price/job logic or discovers missing owner kinds.
+These are exact reference identities, not whole-world revision, deep hash or ID-prefix
+inference. Admission-only capacity policy is not reused as a continuation proof.
+Live shipment withdrawal still fails before validation; unchanged shipment maps need
+no repeated retirement scan. Execution-reference closure keeps its existing owner.
+
+Existing ImmutableRegistryView supports explicit input equivalence in addition to
+identity; exact dependency tuples compare each underlying reference. Full initial
+AND recovery composed barriers now keep ImmutableInvariantCheck.full active around
+both state and reference closure, so every row is rechecked at ingress. Normal
+durability/commit semantics and event/codec schemas remain unchanged.
+
+Existing quarry withdrawal regression warms a valid shipment, then moves its exact
+source surface without altering the shipment, stock or account: validation rejects it.
+The original full initial audit still succeeds, followed by the existing real claim
+withdrawal, replay and repeated-effect rejection assertions. Existing immutable-view
+regression checks equal read sets with fresh wrapper objects and changed source facts.
+Focus81checks/12classes plus guardrails PASS93s. Release/deploy and native throughput
+remain pending. G remains OPEN; no claim of terminal100settlement operation.

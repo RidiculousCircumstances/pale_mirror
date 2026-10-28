@@ -27,6 +27,15 @@ class ImmutableKeyedInputViewTest {
         assertTrue(view.project(world, Map.of(), compute).isEmpty());
         assertNotSame(after.get(0), view.project(new Object(), Map.of(0, inputs.get(0)), compute).get(0));
     }
+    @Test void registryReadSetsCompareTheirExactInputsRatherThanWrapperIdentity() {
+        var view = new ImmutableRegistryView<Integer, ImmutableDependencies, Object>(1);
+        var epoch = new Object(); var input = new Object();
+        var before = view.project(epoch, Map.of(1, ImmutableDependencies.of(input)), ImmutableDependencies::sameAs, (id, ignored) -> new Object());
+        assertSame(before, view.project(epoch, Map.of(1, ImmutableDependencies.of(input)), ImmutableDependencies::sameAs,
+                (id, ignored) -> { throw new AssertionError("unchanged row was recomputed"); }));
+        assertNotSame(before, view.project(epoch, Map.of(1, ImmutableDependencies.of(new Object())), ImmutableDependencies::sameAs,
+                (id, ignored) -> new Object()));
+    }
     @Test void independentSubjectsRetainExactInputsButChangesAndEvictionRecompute() {
         var view = new ImmutableKeyedInputView<String, Object>(2);
         var world = new Object(); var input = new Object(); var changed = new Object();

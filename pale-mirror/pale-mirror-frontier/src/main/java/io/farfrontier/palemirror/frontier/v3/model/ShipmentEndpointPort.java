@@ -7,6 +7,8 @@ interface ShipmentEndpointPort {
     ShipmentEndpoint.Kind kind();
     ShipmentReceiverReplacement replacementPolicy();
     void validate(FrontierWorldState state, ShipmentEndpoint endpoint);
+    /** Complete immutable inputs of validate, excluding its already declared endpoint argument. */
+    Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint);
     List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state, ShipmentEndpoint endpoint);
     SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint);
     /** Immutable declared service geometry; not stock, readiness or interaction permission. */

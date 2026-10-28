@@ -15,6 +15,9 @@ final class ProductionShipmentEndpointPort implements ShipmentEndpointPort {
         return FrontierWorldStateSupport.settlement(bootstrap, value.settlementId()).structures().stream()
                 .filter(facility -> facility.id().equals(value.spec().facilityId())).findFirst().orElseThrow();
     }
+    @Override public Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        return new Object[] { state.bootstrap(), state.inventory().containers().get(endpoint.containerId()) };
+    }
     @Override public void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var value = declaration(endpoint); var record = state.inventory().containers().get(value.containerId());
         if (record == null || !record.ownerId().equals(value.settlementId())

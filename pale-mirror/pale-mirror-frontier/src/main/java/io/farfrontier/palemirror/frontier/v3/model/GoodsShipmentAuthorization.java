@@ -102,6 +102,12 @@ final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
                 new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.GOODS_CONTRACT,
                         shipment.authorization().claimantId()), FrontierDomainRelationships.Lifecycle.ACTIVE, "shipment:" + shipment.id().value()));
     }
+    @Override public Object[] continuationValidationInputs(FrontierWorldState state, Shipment shipment) {
+        var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
+        var mission = shipment.transportMissionId().map(state.shipments().missions()::get).orElse(null);
+        var organizer = contract == null ? null : state.companies().goodsTrade().participants().participants().get(contract.fulfillment().organizer().id());
+        return new Object[] { contract, state.inventory().fungibleResources().claims().get(shipment.authorization().claimId()), mission, organizer };
+    }
     @Override public void validate(FrontierWorldState state, Shipment shipment, boolean admission) {
         ResourceClaimDelegation grant = shipment.authorization();
         GoodsTradeContract contract = state.companies().goodsTrade().contracts().get(grant.claimantId());

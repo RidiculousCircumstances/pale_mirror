@@ -4,6 +4,9 @@ import java.util.*;
 
 /** Same-owner logistics permission. Neither source commodity nor source facility defines this protocol. */
 final class InternalShipmentAuthorization extends SameOwnerShipmentAuthorization {
+    @Override public Object[] continuationValidationInputs(FrontierWorldState state, Shipment shipment) {
+        return new Object[] { state.inventory().fungibleResources().claims().get(shipment.authorization().claimId()) };
+    }
     @Override public void validate(FrontierWorldState state, Shipment shipment, boolean admission) {
         var grant = shipment.authorization();
         var claim = state.inventory().fungibleResources().claims().get(grant.claimId());

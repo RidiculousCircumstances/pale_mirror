@@ -308,6 +308,17 @@ class InternalShipmentTest {
                 Shipment.Status.AWAITING_LOAD, 1);
         state = InternalShipmentStateSupport.dispatch(state, home.id(), new InternalShipmentDispatched(shipment,
                 new ClaimAllocation(claimId, home.id(), home.id(), shipment.itemKind(), 36, Map.of(lot, 36), ClaimPurpose.INTERNAL_LOGISTICS)));
+        ShipmentStateSupport.validate(state);
+        var warmed = state; var inventory = state.inventory();
+        var surfaces = new LinkedHashMap<>(inventory.surfaces());
+        var sourceId = QuarryStorageFixture.container(state, site); var surface = surfaces.get(sourceId);
+        surfaces.put(sourceId, new ContainerSurface(sourceId, surface.position().offset(0, 0, 12), surface.status()));
+        var displaced = FrontierWorldState.duringUnpublishedTransition(() -> warmed.withInventory(new ExactInventory(
+                inventory.containers(), inventory.items(), inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(),
+                inventory.conflicts(), surfaces, inventory.economics(), inventory.fungibleResources(), inventory.occupiedSlots())));
+        assertThrows(IllegalArgumentException.class, () -> ShipmentStateSupport.validate(displaced),
+                "unchanged shipment and stock cannot conceal a changed exact source surface");
+        assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(warmed));
         var inventoryBeforeBinding = state.inventory();
         var sourceContainer = QuarryStorageFixture.container(state, site);
         int freeSlot = java.util.stream.IntStream.range(0, 27)

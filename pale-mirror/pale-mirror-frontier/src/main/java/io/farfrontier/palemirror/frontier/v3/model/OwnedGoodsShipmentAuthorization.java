@@ -7,6 +7,13 @@ final class OwnedGoodsShipmentAuthorization extends SameOwnerShipmentAuthorizati
     @Override public boolean departureReady(Shipment shipment, TransportOrganization organization) {
         return organization.itinerary() == TransportOrganization.Itinerary.DESTINATION_COLLECTION;
     }
+    @Override public Object[] continuationValidationInputs(FrontierWorldState state, Shipment shipment) {
+        var grant = shipment.authorization();
+        return new Object[] { state.inventory().fungibleResources().claims().get(grant.claimId()),
+                shipment.transportMissionId().map(state.shipments().missions()::get).orElse(null),
+                state.companies().goodsTrade().participants().participants().get(grant.claimantId()),
+                shipment.cargo() instanceof ShipmentCargo.Individual cargo ? state.inventory().items().get(cargo.itemId()) : null };
+    }
     @Override public void validate(FrontierWorldState state, Shipment shipment, boolean admission) {
         var grant = shipment.authorization();
         var claim = state.inventory().fungibleResources().claims().get(grant.claimId());

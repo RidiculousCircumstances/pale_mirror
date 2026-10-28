@@ -5,6 +5,9 @@ import java.util.List;
 
 final class ContainerResourceSourcePort implements ResourceSourcePort {
     @Override public ResourceSourceEndpoint.Kind kind() { return ResourceSourceEndpoint.Kind.CONTAINER; }
+    @Override public Object[] validationInputs(FrontierWorldState state, ResourceSourceEndpoint source) {
+        return ShipmentEndpointComposition.validationInputs(state, ResourceSourceComposition.requireContainer(source));
+    }
     @Override public void validate(FrontierWorldState state, ResourceSourceEndpoint source) {
         ShipmentEndpointComposition.validate(state, ResourceSourceComposition.requireContainer(source));
     }

@@ -11,6 +11,7 @@ public final class ImmutableDependencies {
     public static ImmutableDependencies of(Object... values) {
         return new ImmutableDependencies(Objects.requireNonNull(values, "read dependencies"));
     }
+    boolean sameAs(ImmutableDependencies other) { return matches(Objects.requireNonNull(other).values); }
     public boolean matches(Object... current) {
         Objects.requireNonNull(current, "current read dependencies");
         if (values.length != current.length) return false;

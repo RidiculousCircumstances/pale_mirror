@@ -17,6 +17,9 @@ public final class ShipmentEndpointComposition {
         if (port == null) throw new IllegalArgumentException("unregistered shipment endpoint provider");
         return port;
     }
+    static Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        return port(endpoint).validationInputs(state, endpoint);
+    }
     public static void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         port(endpoint).validate(state, endpoint);
     }

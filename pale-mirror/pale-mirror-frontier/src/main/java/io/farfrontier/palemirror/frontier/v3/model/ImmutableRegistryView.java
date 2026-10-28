@@ -15,7 +15,11 @@ final class ImmutableRegistryView<K, I, V> {
         this.maximumEntries = maximumEntries;
     }
     Map<K, V> project(Object generation, Map<K, I> inputs, BiFunction<K, I, V> compute) {
-        Objects.requireNonNull(generation); Objects.requireNonNull(compute);
+        return project(generation, inputs, (before, after) -> before == after, compute);
+    }
+    Map<K, V> project(Object generation, Map<K, I> inputs, java.util.function.BiPredicate<I, I> unchanged,
+                      BiFunction<K, I, V> compute) {
+        Objects.requireNonNull(generation); Objects.requireNonNull(unchanged); Objects.requireNonNull(compute);
         if (inputs.size() > maximumEntries) throw new IllegalArgumentException("derived registry exceeds its declared producer bound");
         var working = current.get();
         boolean sameEpoch = working != null && working.generation() == generation;
@@ -27,7 +31,7 @@ final class ImmutableRegistryView<K, I, V> {
         for (var entry : inputs.entrySet()) {
             var key = Objects.requireNonNull(entry.getKey()); var input = Objects.requireNonNull(entry.getValue());
             var prior = previous.get(key);
-            if (prior == null || prior.input() != input) {
+            if (prior == null || !unchanged.test(prior.input(), input)) {
                 var value = Objects.requireNonNull(compute.apply(key, input));
                 if (next == null) next = new HashMap<>(previous);
                 next.put(key, new Entry<>(input, value));

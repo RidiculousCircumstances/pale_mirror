@@ -7,6 +7,8 @@ public final class ShipmentStateSupport {
     public static boolean departureReady(FrontierWorldState state, Shipment shipment, TransportOrganization organization) {
         return ShipmentAuthorizationComposition.departureReady(state, shipment, organization);
     }
+    private static final ImmutableRegistryView<SubjectId, ImmutableDependencies, Boolean> VALIDATION =
+            new ImmutableRegistryView<>(ShipmentState.MAX_SHIPMENTS);
     private ShipmentStateSupport() { }
     public static boolean serviceAvailable(FrontierWorldState state, Shipment shipment) {
         return ShipmentServiceAccess.available(state, shipment);
@@ -180,28 +182,49 @@ public final class ShipmentStateSupport {
     }
     public static void validate(FrontierWorldState state) {
         ShipmentExecutionCapability.validateReferences(state.shipments(), state.actorExecutions());
-        for (Shipment shipment : state.shipments().shipments().values()) {
-            ResourceSourceComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
-            shipment.mobileContainerId().ifPresent(container -> {
-                var asset = state.transportFleet().require(shipment.execution().actorId());
-                if (!asset.containerId().equals(container) || shipment.transportMissionId().isEmpty()
-                        || !state.shipments().missions().get(shipment.transportMissionId().orElseThrow()).transportAssetId().equals(java.util.Optional.of(asset.actorId())))
-                    throw new IllegalArgumentException("mobile shipment lost its exact mission/asset/container declaration");
-            });
-            if (shipment.terminal()) continue; // Cargo declaration is historical after unload, not a live claim/account reference.
-            ShipmentAuthorizationComposition.validate(state, shipment, false);
-            if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
-                IndividualShipmentCustody.validateCustody(state, shipment, cargo);
-                continue;
-            }
-            SubjectId accountId = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sourceAccountId() : shipment.carriedAccountId();
-            CustodyAccount account = state.inventory().fungibleResources().accounts().get(accountId);
-            ResourceCustody expected = shipment.status() == Shipment.Status.AWAITING_LOAD
-                    ? shipment.sender().custody() : shipment.carriedCustody();
-            if (account == null || !account.custody().equals(expected)
-                    || account.claimQuantities().getOrDefault(shipment.authorization().claimId(), 0) != shipment.quantity())
-                throw new IllegalArgumentException("live shipment lost its exact cargo custody");
+        var inputs = new java.util.LinkedHashMap<SubjectId, ImmutableDependencies>();
+        state.shipments().shipments().forEach((id, shipment) -> inputs.put(id, validationInputs(state, shipment)));
+        VALIDATION.project(state.bootstrap(), inputs,
+                (before, after) -> !ImmutableInvariantCheck.fullAudit() && before.sameAs(after),
+                (id, ignored) -> { validateCurrent(state, state.shipments().shipments().get(id)); return Boolean.TRUE; });
+    }
+    private static ImmutableDependencies validationInputs(FrontierWorldState state, Shipment shipment) {
+        var inputs = new java.util.ArrayList<Object>(); inputs.add(shipment);
+        java.util.Collections.addAll(inputs, ResourceSourceComposition.validationInputs(state, shipment.sender()));
+        java.util.Collections.addAll(inputs, ShipmentEndpointComposition.validationInputs(state, shipment.receiver()));
+        if (shipment.mobileContainerId().isPresent()) {
+            inputs.add(state.transportFleet().assets().get(shipment.execution().actorId()));
+            inputs.add(shipment.transportMissionId().map(state.shipments().missions()::get).orElse(null));
         }
+        if (!shipment.terminal()) {
+            java.util.Collections.addAll(inputs, ShipmentAuthorizationComposition.continuationValidationInputs(state, shipment));
+            if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) inputs.add(state.inventory().items().get(cargo.itemId()));
+            else inputs.add(state.inventory().fungibleResources().accounts().get(shipment.status() == Shipment.Status.AWAITING_LOAD
+                    ? shipment.sourceAccountId() : shipment.carriedAccountId()));
+        }
+        return ImmutableDependencies.of(inputs.toArray());
+    }
+    private static void validateCurrent(FrontierWorldState state, Shipment shipment) {
+        ResourceSourceComposition.validate(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
+        shipment.mobileContainerId().ifPresent(container -> {
+            var asset = state.transportFleet().require(shipment.execution().actorId());
+            if (!asset.containerId().equals(container) || shipment.transportMissionId().isEmpty()
+                    || !state.shipments().missions().get(shipment.transportMissionId().orElseThrow()).transportAssetId().equals(java.util.Optional.of(asset.actorId())))
+                throw new IllegalArgumentException("mobile shipment lost its exact mission/asset/container declaration");
+        });
+        if (shipment.terminal()) return; // Cargo declaration is historical after unload, not a live claim/account reference.
+        ShipmentAuthorizationComposition.validate(state, shipment, false);
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+            IndividualShipmentCustody.validateCustody(state, shipment, cargo);
+            return;
+        }
+        SubjectId accountId = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sourceAccountId() : shipment.carriedAccountId();
+        CustodyAccount account = state.inventory().fungibleResources().accounts().get(accountId);
+        ResourceCustody expected = shipment.status() == Shipment.Status.AWAITING_LOAD
+                ? shipment.sender().custody() : shipment.carriedCustody();
+        if (account == null || !account.custody().equals(expected)
+                || account.claimQuantities().getOrDefault(shipment.authorization().claimId(), 0) != shipment.quantity())
+            throw new IllegalArgumentException("live shipment lost its exact cargo custody");
     }
     /** A source promise may be withdrawn before pickup, or an exact dead attached carrier's load may be disposed.
      * Living in-flight cargo and possibly applied endpoint effects keep their own receipt authority. */
@@ -258,7 +281,7 @@ public final class ShipmentStateSupport {
         return changed ? transaction.withShipments(shipments, executions, movements) : transaction;
     }
     static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
-        for (Shipment shipment : before.shipments().shipments().values()) {
+        if (before.shipments().shipments() != after.shipments().shipments()) for (Shipment shipment : before.shipments().shipments().values()) {
             if (!shipment.terminal() && !after.shipments().shipments().containsKey(shipment.id()))
                 throw new IllegalArgumentException("live shipment cannot disappear before its cargo disposition");
         }

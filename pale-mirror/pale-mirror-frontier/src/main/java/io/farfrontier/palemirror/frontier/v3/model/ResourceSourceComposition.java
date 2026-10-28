@@ -18,6 +18,9 @@ public final class ResourceSourceComposition {
         if (port == null) throw new IllegalArgumentException("unknown declared resource source capability");
         return port;
     }
+    static Object[] validationInputs(FrontierWorldState state, ResourceSourceEndpoint source) {
+        return port(source).validationInputs(state, source);
+    }
     public static void validate(FrontierWorldState state, ResourceSourceEndpoint source) {
         port(source).validate(state, source);
     }

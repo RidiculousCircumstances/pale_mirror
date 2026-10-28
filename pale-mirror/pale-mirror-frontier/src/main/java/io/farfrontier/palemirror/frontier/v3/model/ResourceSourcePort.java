@@ -7,6 +7,7 @@ import java.util.List;
 interface ResourceSourcePort {
     ResourceSourceEndpoint.Kind kind();
     void validate(FrontierWorldState state, ResourceSourceEndpoint source);
+    Object[] validationInputs(FrontierWorldState state, ResourceSourceEndpoint source);
     void admit(FrontierWorldState state, ResourceSourceEndpoint source);
     List<ShipmentEndpoint> journeyEndpoints(ResourceSourceEndpoint source, ShipmentEndpoint receiver);
     default KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, ResourceSourceEndpoint source, ShipmentEndpoint receiver) {

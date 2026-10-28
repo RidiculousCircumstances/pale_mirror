@@ -15,11 +15,11 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
     private FrontierWorldStateTransitionValidator() { }
 
     @Override public void validateInitial(FrontierWorldState state) {
-        state.validateComplete(); FrontierReferenceClosure.validate(state, List.of());
+        ImmutableInvariantCheck.full(() -> { state.validateComplete(); FrontierReferenceClosure.validate(state, List.of()); return null; });
     }
 
     @Override public void validateRecoveryInitial(FrontierWorldState state, List<ScheduledAction> schedules) {
-        state.validateComplete(); FrontierReferenceClosure.validate(state, schedules);
+        ImmutableInvariantCheck.full(() -> { state.validateComplete(); FrontierReferenceClosure.validate(state, schedules); return null; });
     }
 
     @Override public void validateTransition(FrontierWorldState previous, FrontierWorldState next) {
