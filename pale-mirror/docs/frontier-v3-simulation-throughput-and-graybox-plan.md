@@ -3138,4 +3138,33 @@ Exact custody transfer/retirement/sorted frozen predecessor coverage, personal
 inventory capacity/body recovery, real expedition provisioning and paid refill/
 preemption/restart, activity and group recovery checks plus guardrails PASS58s.
 Final immutable-map representation is covered again by the frozen release gate.
-Frozen release/deploy/native effect pending. G remains OPEN/FAILED.
+Frozen release PASS1m1s; both retained-world deployments verified87f3d6637.
+Warmed native199692events/noDataLoss44.831375s=6.602519ticks/s,debt4609→5212,
+owner63.27%,exact22.60%,WAL9.87%,canonicalvalidation11.818149s,due-actions
+3.895726s. Main follow-up1066993/rev2270837/statusok/debt0. No controlled
+aggregate improvement/regression comparison. G remains OPEN/FAILED.
+
+
+### Assignment read sets follow declarations, not execution progress (2026-10-28)
+
+The warmed field-physical-read-closure-assignment-callers trace identifies whole
+resident assignment rebuilding/sorting from meal reference closure. The existing
+HumanAssignmentProjection now captures field job/worker bindings and active group
+rosters through the existing computing-thread immutable registry/input views. Its
+field comparator covers each site ID, job key, declared job ID and worker ID;
+equipment phase, crop progress and navigation blocks cannot change that assignment.
+Closed groups project no members; unchanged retained roster lists survive journey
+progress. Both dependency declaration and complete projection consume those same
+read images. Shipment dependency is the actual shipment rows, not unrelated mission
+progress, and the existing actor-kind projection explicitly fences human/animal
+filtering. Remaining family read inputs and assignment conflict rules are unchanged.
+
+No new assignment authority, family dispatch, cache retention bound or mutable
+canonical state is introduced. Changed worker/job/roster/terminal membership still
+rebuilds the full exclusive assignment result. Focused registry snapshots, field
+labour, group movement/delivery/payment/return/recovery, meal/activity/provisioning
+and projection negatives plus guardrails PASS1m19s. The new precursor test shows
+unchanged assignment under equipment progress, released assignment after field
+retirement, immutable predecessor and codec recovery; publication still rejects a
+removed job with an unresolved execution. Frozen release/deploy/native effect
+pending. G remains OPEN/FAILED.

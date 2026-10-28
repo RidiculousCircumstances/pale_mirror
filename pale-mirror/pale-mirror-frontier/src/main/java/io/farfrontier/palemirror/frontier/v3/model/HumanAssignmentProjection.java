@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup;
+import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -21,13 +23,42 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
             Collections.synchronizedMap(new HashMap<>());
     private record Current(FrontierWorldState state, HumanAssignmentProjection projection) { }
     private static final ThreadLocal<Current> CURRENT = new ThreadLocal<>();
+    private static final ImmutableRegistryView<SubjectId, ResourceSiteLifecycle, List<HumanAssignment>> FIELD_ROWS =
+            new ImmutableRegistryView<>(ResourceSiteState.MAX_SITES);
+    private static final ImmutableInputView<Map<SubjectId, List<HumanAssignment>>> FIELDS = new ImmutableInputView<>();
+    private static Map<SubjectId, List<HumanAssignment>> fieldAssignments(FrontierWorldState state) {
+        return FIELDS.get(List.of(state.bootstrap(), state.resourceSites().sites()), () -> FIELD_ROWS.project(
+                state.bootstrap(), state.resourceSites().sites(), HumanAssignmentProjection::sameFieldAssignments,
+                (id, field) -> field.harvestJobs().values().stream().map(job -> new HumanAssignment(
+                        job.workerId(), HumanAssignmentKind.FIELD_HARVEST, java.util.Optional.of(job.id()))).toList()));
+    }
+    private static boolean sameFieldAssignments(ResourceSiteLifecycle before, ResourceSiteLifecycle after) {
+        if (before == after) return true;
+        if (before == null || !before.siteId().equals(after.siteId())
+                || !before.harvestJobs().keySet().equals(after.harvestJobs().keySet())) return false;
+        for (var entry : before.harvestJobs().entrySet()) {
+            var next = after.harvestJobs().get(entry.getKey());
+            if (!entry.getValue().id().equals(next.id()) || !entry.getValue().workerId().equals(next.workerId())) return false;
+        }
+        return true;
+    }
+    private static final ImmutableRegistryView<SubjectId, UnitGroup, List<UnitGroup.Member>> GROUP_ROWS =
+            new ImmutableRegistryView<>(UnitGroupState.MAX_GROUPS);
+    private static final ImmutableInputView<Map<SubjectId, List<UnitGroup.Member>>> GROUPS = new ImmutableInputView<>();
+    private static Map<SubjectId, List<UnitGroup.Member>> groupMembers(FrontierWorldState state) {
+        return GROUPS.get(List.of(state.bootstrap(), state.unitGroups().groups()), () -> GROUP_ROWS.project(
+                state.bootstrap(), state.unitGroups().groups(), (id, group) ->
+                        group.phase() == UnitGroup.Phase.CLOSED ? List.of() : group.members()));
+    }
     /** Identity comparisons of exactly the immutable sources read by compileFresh; no world-state hashing. */
     private record Dependencies(List<Object> sources) {
         static Dependencies of(FrontierWorldState state) {
             return new Dependencies(List.of(state.humanPopulation().residents(), state.productionJobs(),
-                    state.resourceSites().sites(), state.strategicPlans().routePatrols(),
+                    fieldAssignments(state), state.strategicPlans().routePatrols(),
                     state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
-                    state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(), state.shipments(), state.unitGroups(), state.extractionSites().work(), state.forest().work()));
+                    state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(),
+                    state.shipments().shipments(), groupMembers(state), ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations()),
+                    state.extractionSites().work(), state.forest().work()));
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof Dependencies value) || sources.size() != value.sources.size()) return false;
@@ -81,9 +112,9 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                 io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryWork::id))
                 .forEach(job -> claim(values, job.execution().actorId(), HumanAssignmentKind.FORESTRY, job.id()));
         // A conflict suspends execution, not the retained job's exclusive worker claim.
-        state.resourceSites().sites().values().stream().sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
-                .flatMap(site -> site.harvestJobs().values().stream())
-                .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.FIELD_HARVEST, job.id()));
+        fieldAssignments(state).entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .flatMap(site -> site.getValue().stream())
+                .forEach(assignment -> claim(values, assignment.residentId(), assignment.kind(), assignment.ownerId().orElseThrow()));
         state.strategicPlans().routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId))
                 .filter(RoutePatrol::active)
                 .forEach(patrol -> patrol.memberIds().forEach(member -> claim(values, member, HumanAssignmentKind.ROUTE_PATROL, patrol.taskId())));
@@ -114,13 +145,13 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                 .filter(shipment -> state.actorLocations().get(shipment.execution().actorId()).kind() == ActorKind.RESIDENT)
                 .sorted(Comparator.comparing(Shipment::id))
                 .forEach(shipment -> claim(values, shipment.execution().actorId(), HumanAssignmentKind.COURIER, shipment.id()));
-        for (var group : state.unitGroups().groups().values()) if (group.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED)
-            for (var member : group.members()) {
+        for (var group : groupMembers(state).entrySet())
+            for (var member : group.getValue()) {
                 if (state.actorLocations().get(member.actorId()).kind() != ActorKind.RESIDENT) continue;
                 var assigned = values.get(member.actorId());
                 if (assigned != null && assigned.kind() == HumanAssignmentKind.COURIER
                         && assigned.ownerId().equals(java.util.Optional.of(member.activityOwnerId()))) continue;
-                claim(values, member.actorId(), HumanAssignmentKind.GROUP_MEMBER, group.id());
+                claim(values, member.actorId(), HumanAssignmentKind.GROUP_MEMBER, group.getKey());
             }
         return new HumanAssignmentProjection(values);
     }

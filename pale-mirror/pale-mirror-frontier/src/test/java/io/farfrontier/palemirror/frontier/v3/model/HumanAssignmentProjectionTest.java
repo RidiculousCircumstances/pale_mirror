@@ -16,7 +16,25 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HumanAssignmentProjectionTest {
-
+    @Test void fieldProgressDoesNotChangeAssignmentsButRetirementCannotRetainTheWorker() {
+        var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
+        var state = fixture.state(); var job = fixture.job();
+        var before = HumanAssignmentProjection.compile(state);
+        var refreshed = state.resourceSites().replace(state.resourceSites().site(job.siteId())
+                .withHarvestEquipment(job, job.equipment().transferred()));
+        // Read-only precursor fixture: no physical tool transfer or publication is claimed.
+        var progress = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                FrontierWorldStateUpdate.begin().resourceSites(refreshed)));
+        assertEquals(before, HumanAssignmentProjection.compile(progress));
+        var retired = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                FrontierWorldStateUpdate.begin().resourceSites(state.resourceSites().replace(state.resourceSites().site(job.siteId()).destroyed()))));
+        org.junit.jupiter.api.Assertions.assertTrue(HumanAssignmentProjection.compile(retired).idle(job.workerId()));
+        assertFalse(HumanAssignmentProjection.compile(state).idle(job.workerId()), "a later read cannot change the predecessor's worker claim");
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(state, retired),
+                "an assignment read cannot bless a removed job whose execution still exists");
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(before, HumanAssignmentProjection.compile(restored));
+    }
 
     @Test
     void idleAssignmentCannotClaimAnOwner() {
