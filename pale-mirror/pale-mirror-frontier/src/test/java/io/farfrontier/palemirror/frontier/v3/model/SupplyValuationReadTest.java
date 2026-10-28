@@ -17,17 +17,31 @@ class SupplyValuationReadTest {
         var field = state.resourceSite(id); var port = new FieldSupplyCapacity();
         var costs = port.valuation(state, field.settlementId(), Map.of());
         assertFalse(costs.isEmpty());
+        var wearOwner = new FieldEquipmentDemand(); var wear = wearOwner.read(state, field.settlementId());
+        var reserveOwner = new FieldReserveSupply(); var reserve = reserveOwner.read(state, field.settlementId());
+        assertFalse(wear.isEmpty()); assertFalse(reserve.timing().isEmpty());
         var foreign = state.bootstrap().settlements().stream().filter(home -> !home.id().equals(field.settlementId()))
                 .findFirst().orElseThrow().residents().getFirst().id();
         var body = state.actorLocations().get(foreign).body();
         var moved = state.withActorBody(foreign, body.offset(1, 0, 0));
         assertSame(costs, port.valuation(moved, field.settlementId(), Map.of()),
                 "another resident's walk cannot reprice unchanged local fields and warehouse positions");
+        assertSame(wear, wearOwner.read(moved, field.settlementId()));
+        assertSame(reserve, reserveOwner.read(moved, field.settlementId()));
+        var otherField = state.resourceSiteDescriptors().values().stream()
+                .filter(candidate -> !candidate.settlementId().equals(field.settlementId())).findFirst().orElseThrow();
+        var foreignDamage = state.withStructureCondition(otherField.facilityId(), StructureCondition.DESTROYED);
+        assertSame(wear, wearOwner.read(foreignDamage, field.settlementId()));
+        assertSame(reserve, reserveOwner.read(foreignDamage, field.settlementId()));
         var destroyed = state.withStructureCondition(field.facilityId(), StructureCondition.DESTROYED);
         assertTrue(port.valuation(destroyed, field.settlementId(), Map.of()).isEmpty());
+        assertTrue(wearOwner.read(destroyed, field.settlementId()).isEmpty());
+        assertTrue(reserveOwner.read(destroyed, field.settlementId()).timing().isEmpty());
         assertEquals(costs, port.valuation(state, field.settlementId(), Map.of()));
         var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(state));
         assertEquals(costs, port.valuation(recovered, field.settlementId(), Map.of()));
+        assertEquals(wear, wearOwner.read(recovered, field.settlementId()));
+        assertEquals(reserve, reserveOwner.read(recovered, field.settlementId()));
     }
 
     @Test void extractionCostTracksProductScopeDepletionAndLivingWorkforce() {

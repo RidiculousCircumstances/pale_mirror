@@ -82,7 +82,8 @@ public final class ResourceStorageSelection {
     public static Set<SubjectId> containers(FrontierWorldState state, SubjectId owner, String kind, Set<ResourceStorageRole> roles) {
         var scope = new Scope(owner, kind, Set.copyOf(roles));
         return ELIGIBLE.get(state.bootstrap(), scope, List.of(state.inventory().containers(), state.inventory().surfaces(),
-                state.replicaCustody(), state.actorLocations()), () -> declared(state, owner, kind, scope.roles())
+                state.replicaCustody(), ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations())),
+                () -> declared(state, owner, kind, scope.roles())
                     .filter(policy -> !ReferenceContainerCustody.blocksCanonicalUse(state, policy.endpoint().containerId()))
                     .map(policy -> policy.endpoint().containerId()).collect(java.util.stream.Collectors.toUnmodifiableSet()));
     }

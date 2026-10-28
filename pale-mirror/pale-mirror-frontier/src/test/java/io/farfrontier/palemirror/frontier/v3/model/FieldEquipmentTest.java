@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -88,6 +89,16 @@ class FieldEquipmentTest {
         assertEquals(new InventoryCustody.Actor(job.workerId()), held.custody());
         assertEquals(before.inventory().items().get(held.id()).condition(), held.condition());
         assertEquals(WorkToolAssignment.Stage.EQUIPPED, after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow().equipment().stage());
+        var productive = EquipmentProductiveCapacity.items(after, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements());
+        assertTrue(productive.stream().anyMatch(tool -> tool.id().equals(held.id())));
+        var demand = new FieldEquipmentDemand(); var needs = demand.read(after, held.economicOwnerId());
+        assertFalse(needs.isEmpty());
+        var other = after.humanPopulation().residents().keySet().stream().filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
+        var moved = after.withActorBody(other, after.actorLocations().get(other).body().offset(1, 0, 0));
+        assertSame(productive, EquipmentProductiveCapacity.items(moved, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements()),
+                "another person's walk cannot change actual usable equipment");
+        assertSame(needs, demand.read(moved, held.economicOwnerId()),
+                "unchanged local crops, workers, equipment and storage cannot gain a new wear forecast from foreign movement");
         assertThrows(IllegalArgumentException.class, () -> FieldEquipmentProcess.reduce(after, job.siteId(), event, 22_100));
         var codec = new FrontierWorldStateCodec();
         assertEquals(after, codec.decode(codec.encode(after)));

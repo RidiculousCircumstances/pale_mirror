@@ -9,18 +9,15 @@ final class FieldEquipmentDemand implements EquipmentDemandPort {
     @Override public Key key() { return Key.FIELD; }
     private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
     @Override public List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
-        return VIEWS.get(state.bootstrap(), home, List.of(state.resourceSites().declarations(), state.resourceSites().sites(), state.resourceSites().cycles(),
-                state.humanPopulation().schedule(home), state.humanPopulation().residents(), state.actorLocations(),
-                state.strategicPlans().decisionAuthorities(), state.inventory().items(), state.inventory().containers(),
-                state.inventory().surfaces(), state.replicaCustody(), WorkEquipmentClaimComposition.reserved(state)), () -> project(state, home));
+        var inputs = FieldWorkForecast.permittedInputs(state, home);
+        if (inputs.workers().isEmpty()) return List.of();
+        return VIEWS.get(state.bootstrap(), home, inputs.keys(), () -> project(state, home, inputs.workers(), inputs.stores()));
     }
-    private static List<EquipmentWorkDemand> project(FrontierWorldState state, SubjectId home) {
+    private static List<EquipmentWorkDemand> project(FrontierWorldState state, SubjectId home,
+            List<ResidentProfile> workers, List<BlockPosition> stores) {
         long tilling = 0; long cells = 0;
-        var workers = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.AGRICULTURE).stream()
-                .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE)
-                .map(id -> state.humanPopulation().resident(id)).toList();
         if (workers.isEmpty()) return List.of();
-        var estimate = new FieldWorkForecast(state, home, workers);
+        var estimate = new FieldWorkForecast(state, home, workers, true, stores);
         var sources = new ArrayList<io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Source>();
         for (var id : state.resourceSites().siteIdsIn(home)) {
             var site = state.resourceSites().site(id);

@@ -48,7 +48,12 @@ class ResourceStorageAdoptionTest {
         state = state.withInventory(state.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var buy = new GoodsParticipantPolicy.Intent("minecraft:bread", GoodsTradeOrder.Side.BUY, 64, FixedScalar.whole(1));
-        assertEquals(Set.of(id, FrontierWorldState.depotId(home)), Set.copyOf(GoodsParticipantStorage.containers(state, participant, "minecraft:bread")));
+        var scope = GoodsParticipantStorage.containers(state, participant, "minecraft:bread");
+        assertEquals(Set.of(id, FrontierWorldState.depotId(home)), scope);
+        var walker = state.humanPopulation().residents().keySet().iterator().next();
+        var moved = state.withActorBody(walker, state.actorLocations().get(walker).body().offset(1, 0, 0));
+        assertSame(scope, GoodsParticipantStorage.containers(moved, participant, "minecraft:bread"),
+                "walking does not change warehouse ownership, filters or physical availability");
         var allocations = GoodsParticipantStorage.quoteEndpoints(state, participant, buy);
         assertEquals(64, allocations.stream().mapToInt(GoodsParticipantStorage.QuoteEndpoint::quantity).sum(),
                 "alternative warehouses partition one intention rather than publishing a copy at each point");

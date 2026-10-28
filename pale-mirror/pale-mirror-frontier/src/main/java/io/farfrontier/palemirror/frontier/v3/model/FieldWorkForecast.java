@@ -51,6 +51,30 @@ final class FieldWorkForecast {
                 .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
         return candidates.stream().limit(equipment.size()).toList();
     }
+    /** Shared read boundary for permitted-field wear and renewal timing. No
+     * current task, body writer or production commitment is granted here. */
+    record PlanningInputs(List<ResidentProfile> workers, List<BlockPosition> stores, List<Object> keys) {
+        PlanningInputs { workers = List.copyOf(workers); stores = List.copyOf(stores); keys = List.copyOf(keys); }
+    }
+    static PlanningInputs permittedInputs(FrontierWorldState state, SubjectId home) {
+        var permissions = SettlementWorkPolicy.permissions(state, home);
+        var workers = permissions.workers(ResidentWorkKind.AGRICULTURE).stream()
+                .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE)
+                .map(id -> state.humanPopulation().resident(id)).toList();
+        var stores = storagePositions(state, home);
+        var equipment = workers.isEmpty() ? List.<ExactItemStack>of() : EquipmentProductiveCapacity.items(state, home,
+                workers.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+        var sites = state.resourceSites(); var local = sites.siteIdsIn(home);
+        var keys = new ArrayList<Object>();
+        Collections.addAll(keys, permissions, state.humanPopulation().schedule(home), local);
+        for (var id : local) {
+            var site = sites.site(id);
+            // Renewal treats unknown initial soil differently from an established field.
+            keys.add(site.phase()); keys.add(site.growthEpoch() == 0); keys.add(sites.cycle(id));
+        }
+        keys.addAll(workers); keys.addAll(stores); keys.addAll(equipment);
+        return new PlanningInputs(workers, stores, keys);
+    }
     static List<BlockPosition> storagePositions(FrontierWorldState state, SubjectId home) {
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         return GoodsParticipantStorage.positions(state, participant, FieldHarvestExtraction.ITEM);

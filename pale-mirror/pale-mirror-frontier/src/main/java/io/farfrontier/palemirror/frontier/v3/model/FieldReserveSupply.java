@@ -9,12 +9,10 @@ final class FieldReserveSupply implements ReserveSupplyPort {
     @Override public Key key() { return Key.FIELD; }
     private static final ImmutableKeyedInputView<SubjectId, Facts> VIEWS = new ImmutableKeyedInputView<>(256);
     @Override public Facts read(FrontierWorldState state, SubjectId home) {
-        return VIEWS.get(state.bootstrap(), home, List.of(state.resourceSites(), state.inventory().items(), state.inventory().containers(),
-                state.inventory().surfaces(), state.replicaCustody(), state.actorLocations(),
-                state.humanPopulation().residents(), state.humanPopulation().schedule(home),
-                state.strategicPlans().decisionAuthorities(), WorkEquipmentClaimComposition.reserved(state)), () -> project(state, home));
+        var inputs = FieldWorkForecast.permittedInputs(state, home);
+        return VIEWS.get(state.bootstrap(), home, inputs.keys(), () -> project(state, home, inputs));
     }
-    private static Facts project(FrontierWorldState state, SubjectId home) {
+    private static Facts project(FrontierWorldState state, SubjectId home, FieldWorkForecast.PlanningInputs inputs) {
         boolean usable = state.resourceSites().siteIdsIn(home).stream().map(state.resourceSites()::site)
                 .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)
                 .anyMatch(site -> {
@@ -26,10 +24,7 @@ final class FieldReserveSupply implements ReserveSupplyPort {
                     });
                 });
         if (!usable) return new Facts(Map.of(), List.of(), Map.of());
-        var workers = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.AGRICULTURE).stream()
-                .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE)
-                .map(id -> state.humanPopulation().resident(id)).toList();
-        var estimate = new FieldWorkForecast(state, home, workers);
+        var estimate = new FieldWorkForecast(state, home, inputs.workers(), true, inputs.stores());
         long lead = state.resourceSites().siteIdsIn(home).stream().map(state.resourceSites()::site)
                 .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)
                 .flatMap(site -> state.resourceSites().cycle(site.siteId()).layout().cells().stream())

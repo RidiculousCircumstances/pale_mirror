@@ -5002,3 +5002,40 @@ Connected participant/funding/advice/trade/recovery focus passed57checks69s+guar
 Targeted field/shipment/common-set selection passed21checks29s after the image change
 (overlapping selections, not78unique checks). Frozen combined union/package and both
 deployments follow. No schema, business rules or compatibility path changed.
+
+
+### Share complete local field forecast inputs
+
+a4fa78722 frozen64checks51s+guardrails/JAR/package and both retained deployments
+verified. Ten-minute31cut ordinary observation608.457244s277709→286505=14.456234ticks/s,
+debt924→4297. Lastfive minutes14.495822/s; last202.828274s14.514742/s. This is a
+steady subtarget result, not sustainable20. New terminal harvests town1-field-15
+and35-field-13; town100 accepted stick quantity grew by6 (buyer OR seller).
+Town68 hungry14→1 with bread12→7; all5returned samples starving0, not a100towncensus.
+No overlapping build/profile/client. Evidence local-participant-funding-ordinary/.
+
+Connected source review found FieldEquipmentDemand and FieldReserveSupply independently
+invalidated their whole crop/work forecasts on every actor's walk and foreign field
+update. Both estimate permitted agricultural work from the SAME local fields, live
+permitted workforce, actual usable equipment, schedule and eligible warehouse positions.
+FieldWorkForecast now supplies one immutable permitted PlanningInputs boundary for
+those two consumers. It captures home membership, each site's phase and initial-soil
+flag, current cycle, worker profile rows, actual storage coordinates and actual tool
+rows. No current execution or ownership authority is granted. Formulae, growth,
+sowing, tool wear, concurrency and horizon arithmetic are unchanged.
+
+Shared EquipmentProductiveCapacity reads the existing owner item index instead of
+scanning every world's item; eligibility depends on life statuses rather than body
+coordinates. Shared ResourceStorageSelection makes the same life/status correction:
+its cached discovery reads filters/roles/container custody and mobile carrier life,
+not a walk. Position/ranking consumers still resolve actual current geometry. No
+cache size, route capability, stock claim, physical boundary or schema is changed.
+
+Existing real equipment acquisition checks a nonempty productive tool image and
+wear forecast surviving another actor's movement. Existing valuation case checks
+foreign walking/foreign field destruction leave local wear and renewal facts intact,
+while destroying the own field empties both forecasts and codec recovery rebuilds
+them. Existing storage-adoption case checks unchanged discovery under walking and
+retains actual warehouse retirement rejection. Connected field/equipment purchase/
+cultivation/storage/transport-death selection passed39checks43s+guardrails. Frozen
+package and both deployments follow; no gain for this cut is claimed yet.
