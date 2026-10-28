@@ -39,7 +39,8 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     java.util.List<GoodsTradeContract> sales(GoodsTradeParty party) {
         return SELLERS.rows(GoodsTradeState.class, contracts, contract -> java.util.Set.of(contract.seller()), party);
     }
-    private static final ImmutableInvariantCheck<Void> ORDER_IDENTITIES = new ImmutableInvariantCheck<>();
+    private static final ImmutableEntryInvariantCheck<SubjectId, GoodsTradeOrder> ORDER_IDENTITIES =
+            new ImmutableEntryInvariantCheck<>(MAX_ORDERS);
     private static final ImmutableInvariantCheck<Void> CONTRACT_IDENTITIES = new ImmutableInvariantCheck<>();
     public GoodsTradeState {
         orders = ImmutableLookupMap.copyOf(orders);
@@ -53,13 +54,12 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         var checkedOrders = orders; var checkedContracts = contracts;
         // A participant/price/demand update changes neither table. Reuse only
         // exact immutable owner evidence; changed tables and full audits still
-        // run all original identity/exclusivity checks before publication.
-        ORDER_IDENTITIES.validate(() -> validateOrderIdentities(checkedOrders), checkedOrders);
+        // check changed order pairs and all original contract exclusivity rules.
+        // Full audits still visit every order before publication.
+        ORDER_IDENTITIES.validate(GoodsTradeState.class, checkedOrders, (id, order) -> {
+            if (!id.equals(order.id())) throw new IllegalArgumentException("invalid bounded goods-trade registry");
+        });
         CONTRACT_IDENTITIES.validate(() -> validateContractIdentities(checkedContracts), checkedContracts);
-    }
-    private static void validateOrderIdentities(Map<SubjectId, GoodsTradeOrder> orders) {
-        if (orders.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id())))
-            throw new IllegalArgumentException("invalid bounded goods-trade registry");
     }
     private static void validateContractIdentities(Map<SubjectId, GoodsTradeContract> contracts) {
         if (contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id())))

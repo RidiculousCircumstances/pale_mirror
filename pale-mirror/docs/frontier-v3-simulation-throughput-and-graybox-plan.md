@@ -4886,3 +4886,47 @@ unaccepted unloading across codec recovery, exact receipt rejection/acceptance a
 restoration of a retained predecessor. Connected verification passed79checks
 (including the architecture selection), plus guardrails. Frozen package verification
 and both retained-world deployments follow; no performance gain is claimed yet.
+
+
+### Reuse checked immutable inputs and shared receiver rows
+
+28fcc52ee frozen package/guardrails passed27s with79focused results FROM-CACHE;
+both retained deployments verified. Its current45sJFR has zeroDataLoss and
+44.780576s completed-owner coverage:258861→259185=7.235280ticks/s,debt687→1260.
+Exclusive wall gates:owner52.19%,exact32.50%,WAL6.99%,ready-exact waitingowner5.06%.
+This immediate post-restart trace is attribution, not a warmed isolated speed
+comparison. Matched47.846795s CPU:advice37.49/37.30s,server21.72s,exact14.87s,
+navigation14.20/13.98s,C2compiler18.85s. Navigation workload is now substantial;
+do not carry forward the older tiny-nav fraction as current truth.
+
+Offline lookup-callsite attribution from that recording shows repeated full
+order-identity validation after single-row drafts, ContainerStockIndex.budget
+rebuilding local per-lot input vectors during repeated reads of the SAME immutable
+inventory, ProductionIngredientAvailability scanning all shipments per ingredient,
+and FieldEquipment.pendingOwnerForActor scanning all fields despite having the
+explicit current FIELD_HARVEST activity owner.
+
+Add shared ImmutableEntryInvariantCheck only for predicates whose complete input is
+one key/value pair. Exact changed-key deltas check replacements and removals; full
+ingress still visits every row, mutable ingress is defensively copied, failed
+partial checks clear evidence, epoch/independent branches use their actual basis.
+GoodsTradeState uses it for key/order identity only; contract cross-row exclusivity
+is unchanged. No type or dispatch authority is inferred.
+
+Container packing retains a weak successful inventory snapshot per existing local
+budget. Repeated reads reuse its complete pure result. Any changed inventory still
+reconstructs the original exact stock/kind/slot dependency tuple before reuse, so
+reclassified lots and player slot edits remain fenced. No time-dependent hold,
+permission, history chain or stock ledger is cached.
+
+ShipmentState supplies common read-only receiver/kind row discovery. Internal
+incoming accounting and station material backing both use it, preserving their
+separate grant/title/status/port rules. Remove the private incoming-only directory.
+Field equipment uses ResourceSiteState's existing exact harvest-job directory, with
+its original worker/pending checks; no all-field scan and no second registry.
+
+Connected key/delta/full-audit, real trade/shipment receipt/recovery, packing
+reclassification/player-edit and fuel checks passed65checks59s+guardrails before
+the final direct field lookup. Existing field equipment fence/abort/wear checks
+join the frozen union before deployment. No schema/business/backward-compatibility
+path changed. Target20 and HOT/five-footprint acceptance remain open.

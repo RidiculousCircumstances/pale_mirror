@@ -18,10 +18,9 @@ public final class FieldEquipment {
         if (authority == null) return Optional.empty();
         var execution = authority.current().filter(id -> id.activityKind() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
                 .or(() -> authority.suspended().filter(id -> id.activityKind() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST));
-        return execution.flatMap(id -> state.resourceSites().sites().values().stream()
-                .flatMap(site -> site.harvestJob(id.activityOwnerId()).stream())
+        return execution.flatMap(id -> state.resourceSites().harvestJob(id.activityOwnerId())
                 .filter(job -> job.workerId().equals(actor) && job.equipment().pending().isPresent())
-                .map(ResourceSiteHarvestJob::id).findFirst());
+                .map(ResourceSiteHarvestJob::id));
     }
     public static boolean pendingForContainer(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId container) {
         return PENDING_CONTAINERS.get(List.of(state.resourceSites().sites()), () -> {

@@ -10,6 +10,14 @@ import java.util.HashSet;
 /** Bounded live/terminal transport records; no resource totals, wallets or actor poses. */
 public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, TransportMission> missions) {
     public static final int MAX_SHIPMENTS = 1024;
+    private record ReceiptScope(SubjectId container, String itemKind) { }
+    private static final ImmutableGroupView<SubjectId, Shipment, ReceiptScope> RECEIVERS = new ImmutableGroupView<>();
+    /** Current declarations only; each consumer owns its status, title and port rules. */
+    java.util.List<Shipment> receiving(SubjectId container, String itemKind) {
+        return RECEIVERS.rows(ShipmentState.class, shipments, shipment -> java.util.Set.of(
+                new ReceiptScope(shipment.receiver().containerId(), shipment.itemKind())),
+                new ReceiptScope(Objects.requireNonNull(container), Objects.requireNonNull(itemKind)));
+    }
     public ShipmentState {
         shipments = ImmutableLookupMap.copyOf(Objects.requireNonNull(shipments));
         missions = ImmutableLookupMap.copyOf(Objects.requireNonNull(missions));

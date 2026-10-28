@@ -14,6 +14,7 @@ final class ContainerStockIndex {
     private static final class BudgetView {
         private List<Object> inputs = List.of();
         private ContainerSlotBudget value;
+        private java.lang.ref.WeakReference<ExactInventory> checked = new java.lang.ref.WeakReference<>(null);
         ContainerSlotBudget get(List<Object> next, java.util.function.Supplier<ContainerSlotBudget> compute) {
             if (value == null || !ImmutablePlanningScope.same(inputs, next)) {
                 value = compute.get(); inputs = List.copyOf(next);
@@ -29,6 +30,10 @@ final class ContainerStockIndex {
         // retain only actual stock quantities and kinds, never a historical world lot map.
         if (!inventory.containers().containsKey(container)) throw new IllegalArgumentException("unknown capacity container");
         var views = VIEWS.get(List.of(inventory.containers()), HashMap::new);
+        var view = views.computeIfAbsent(container, ignored -> new BudgetView());
+        // Packing is pure over this complete immutable inventory. Repeated reads
+        // need no new per-lot dependency vector; a changed snapshot rechecks it.
+        if (view.checked.get() == inventory) return view.value;
         var slots = SLOT_VIEW.get(List.of(inventory.occupiedSlots(), ledger.bindings()), () -> slots(inventory))
                 .getOrDefault(container, EMPTY_SLOTS);
         // A draft can replace claims/accounts without changing physical stock. Only
@@ -42,13 +47,15 @@ final class ContainerStockIndex {
         }
         // Bounded by this exact canonical container registry. A full registry
         // scan cannot cycle an undersized LRU and manufacture thousands of locals.
-        return views.computeIfAbsent(container, ignored -> new BudgetView()).get(inputs, () -> {
+        var value = view.get(inputs, () -> {
             var stock = new HashMap<String, Long>();
             for (var account : accounts) account.lotQuantities().forEach((lot, quantity) ->
                     stock.merge(ledger.lots().get(lot).itemKind(), quantity.longValue(), Math::addExact));
             long packed = stock.values().stream().mapToLong(quantity -> (quantity + 63) / 64).sum();
             return new ContainerSlotBudget(slots.occupied(), slots.bound(), packed, stock);
         });
+        view.checked = new java.lang.ref.WeakReference<>(inventory);
+        return value;
     }
 
     private static Map<SubjectId, Slots> slots(ExactInventory inventory) {

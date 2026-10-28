@@ -17,10 +17,9 @@ final class ProductionIngredientAvailability {
                             .map(account -> ledger.unclaimedQuantity(account.id(), owner, kind)).orElse(0));
             quantity = Math.addExact(quantity, FungibleResourceCustodySupport.accountAtContainer(state, station.containerId(), ContainerSectionId.INPUT)
                     .map(account -> ledger.unclaimedQuantity(account.id(), owner, kind)).orElse(0));
-            for (var shipment : state.shipments().shipments().values())
-                if (!shipment.terminal() && shipment.receiver().containerId().equals(station.containerId())
-                        && shipment.receiver() instanceof ShipmentEndpoint.ProductionPort port
-                        && port.port() == ActorContainerItemOrder.StationPort.INPUT && shipment.itemKind().equals(kind))
+            for (var shipment : state.shipments().receiving(station.containerId(), kind))
+                if (!shipment.terminal() && shipment.receiver() instanceof ShipmentEndpoint.ProductionPort port
+                        && port.port() == ActorContainerItemOrder.StationPort.INPUT)
                     quantity = Math.addExact(quantity, shipment.quantity());
             available.put(kind, quantity);
         }
