@@ -1,0 +1,63 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.*;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
+import java.util.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+class SupplyValuationReadTest {
+    @Test void fieldCostCannotSurviveLossOfItsProductiveFieldAndRecoveryRebuildsIt() {
+        var state = initial(); var id = state.resourceSites().sites().keySet().iterator().next();
+        var events = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(id, 4000));
+        state = ResourceSiteProcess.reducePreparationStarted(state, id, (ResourceSitePreparationStarted) events.getFirst().payload());
+        state = ResourceSiteProcess.reducePrepared(state, id, (ResourceSitePrepared) events.get(1).payload());
+        var field = state.resourceSite(id); var port = new FieldSupplyCapacity();
+        var costs = port.valuation(state, field.settlementId(), Map.of());
+        assertFalse(costs.isEmpty());
+        var destroyed = state.withStructureCondition(field.facilityId(), StructureCondition.DESTROYED);
+        assertTrue(port.valuation(destroyed, field.settlementId(), Map.of()).isEmpty());
+        assertEquals(costs, port.valuation(state, field.settlementId(), Map.of()));
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(state));
+        assertEquals(costs, port.valuation(recovered, field.settlementId(), Map.of()));
+    }
+
+    @Test void extractionCostTracksProductScopeDepletionAndLivingWorkforce() {
+        var state = initial(); var home = state.extractionSites().deposits().values().iterator().next().site().settlementId();
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        var participant = state.companies().goodsTrade().participants().participants().get(home);
+        var stocks = new TreeMap<String, SupplyPlanner.Stock>();
+        rules.policies().get(participant.policy()).forEach(c -> stocks.put(c.itemKind(),
+                new SupplyPlanner.Stock(0, 0, 0, 0, 0, 0, 1, rules.supplyPlanning().require(c.itemKind()))));
+        var port = new ExtractionSupplyCapacity(); var costs = port.valuation(state, home, stocks);
+        assertFalse(costs.isEmpty());
+        assertTrue(port.valuation(state, home, Map.of()).isEmpty());
+        assertEquals(costs, port.valuation(state, home, stocks));
+        var sites = state.extractionSites();
+        for (var deposit : state.extractionSites().deposits().values()) if (deposit.site().settlementId().equals(home)) {
+            var depleted = deposit;
+            for (var cell : deposit.site().layout().cells())
+                depleted = depleted.observe(cell.id(), depleted.cells().get(cell.id()).revision(), cell.definition().after());
+            sites = sites.replace(depleted);
+        }
+        var depleted = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(sites));
+        assertTrue(port.valuation(depleted, home, stocks).isEmpty(), "external source removal cannot retain its former production cost");
+        assertEquals(costs, port.valuation(state, home, stocks));
+        var actors = new LinkedHashMap<>(state.actorLocations());
+        state.humanPopulation().residentsIn(home).forEach(person -> {
+            var actor = actors.get(person.id()); actors.put(person.id(), actor.deadAt(actor.body()));
+        });
+        // Read-model adversarial fixture, not an authorized native death transition.
+        var unavailable = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
+                FrontierWorldStateUpdate.begin().actorLocations(actors)));
+        assertTrue(port.valuation(unavailable, home, stocks).isEmpty());
+        assertEquals(costs, port.valuation(state, home, stocks));
+    }
+
+    private static FrontierWorldState initial() {
+        return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:valuation-reads"),
+                125, FrontierRulesets.marketQuarryGraybox()));
+    }
+}

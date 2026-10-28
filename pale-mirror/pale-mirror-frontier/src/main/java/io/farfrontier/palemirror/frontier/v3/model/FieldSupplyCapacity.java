@@ -8,6 +8,8 @@ import java.util.*;
 
 /** Field owner supplies finite biological capacity and labour separately; never starts work or routes. */
 final class FieldSupplyCapacity implements SupplyCapacityPort {
+    private static final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> VALUATIONS =
+            new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     private static final ImmutableKeyedInputView<SubjectId, io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Memo>
             FORECASTS = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     /** A considered cultivation option is not admitted land, incoming stock or a production commitment. */
@@ -20,6 +22,14 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
         return assess(state, home, stocks, window, cells(state, home));
     }
     @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
+        Collections.addAll(inputs, state.resourceSites(), state.inventory().containers(), state.inventory().surfaces(),
+                state.replicaCustody(), state.actorLocations(), state.companies().goodsTrade().participants().participants());
+        // Haul cost reads storage position (including a declared mobile surface);
+        // the current actor map remains an explicit conservative dependency.
+        return VALUATIONS.get(state.bootstrap(), home, inputs, () -> valueInstalled(state, home));
+    }
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home) {
         if (state.bootstrap().ruleset().fields().agriculture().isEmpty()
                 || SupplyPlanningWindow.dailyWork(state.humanPopulation().schedule(home)) == 0) return List.of();
         if (state.bootstrap().ruleset().tools().definitions().values().stream().noneMatch(tool ->

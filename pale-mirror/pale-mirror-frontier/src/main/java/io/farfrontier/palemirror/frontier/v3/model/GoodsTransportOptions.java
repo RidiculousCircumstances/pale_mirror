@@ -33,7 +33,7 @@ public final class GoodsTransportOptions {
         var options = new ArrayList<Option>();
         if (parcels <= availableWorkers) options.add(new Option(parcels, Optional.empty(),
                 GoodsTransportValuation.estimate(state, organizer, duration, parcels, now)));
-        for (var asset : state.transportFleet().assets().values()) {
+        for (var asset : state.transportFleet().assetsAt(organizer.settlementId())) {
             if (parcels <= Math.min(asset.stackSlots(), state.bootstrap().ruleset().expedition().packAnimalStackSlots())
                     && TransportAssetAdmission.available(state, asset, organizer.settlementId()))
                 options.add(new Option(1, Optional.of(asset), GoodsTransportValuation.estimate(state, organizer, duration, 1, now)));

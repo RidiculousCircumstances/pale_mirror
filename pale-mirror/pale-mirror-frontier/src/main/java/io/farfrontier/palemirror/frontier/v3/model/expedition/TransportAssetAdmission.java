@@ -10,6 +10,11 @@ public final class TransportAssetAdmission {
     private static final ImmutableSnapshotView<Query, Boolean> AVAILABILITY = new ImmutableSnapshotView<>(4, 256);
     private TransportAssetAdmission() { }
     public static boolean available(FrontierWorldState state, TransportAsset asset, SubjectId home) {
+        java.util.Objects.requireNonNull(state); java.util.Objects.requireNonNull(asset);
+        // An asset's declared home and mission already rule out foreign/busy
+        // offers. Do not fill the bounded exact-state memo with every town's
+        // negative cross-product before checking an eligible local asset.
+        if (!asset.homeSettlementId().equals(home) || asset.missionId().isPresent()) return false;
         // Every hypothetical load/duration asks the same finite fleet question.
         // Retain only a completed answer for this exact immutable world image;
         // departure still checks its current body, custody and mission owners.

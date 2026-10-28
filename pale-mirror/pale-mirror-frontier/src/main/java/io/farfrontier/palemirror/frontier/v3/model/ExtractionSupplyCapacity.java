@@ -8,19 +8,29 @@ import java.util.*;
 
 /** Sequential declared sources are conditional production capacity, never available stock. */
 final class ExtractionSupplyCapacity implements SupplyCapacityPort {
+    private record ValuationQuery(SubjectId home, Set<String> products) {
+        private ValuationQuery { products = Set.copyOf(products); }
+    }
+    private static final ImmutableKeyedInputView<ValuationQuery, List<ProductionCost>> VALUATIONS = new ImmutableKeyedInputView<>(256);
     @Override public Key key() { return Key.EXTRACTION; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
         return assess(state, home, stocks, window);
     }
     @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        var query = new ValuationQuery(home, stocks.keySet());
+        var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
+        inputs.add(state.extractionSites().deposits());
+        return VALUATIONS.get(state.bootstrap(), query, inputs, () -> valueInstalled(state, home, query.products()));
+    }
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home, Set<String> products) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isEmpty()
                 || SupplyPlanningWindow.dailyWork(state.humanPopulation().schedule(home)) == 0) return List.of();
         var result = new ArrayList<ProductionCost>();
         for (var material : materials(state, home)) {
             if (material.coldOutput().size() != 1) continue;
             var product = material.coldOutput().getFirst();
-            if (!stocks.containsKey(product.itemKind())) continue;
+            if (!products.contains(product.itemKind())) continue;
             var definition = state.bootstrap().ruleset().workCatalog().require(material.before().kind(), WorkOperation.EXTRACT);
             var workers = SupplyLabourCapacity.potential(state, home, ResidentWorkKind.EXTRACTION, definition.capability());
             if (workers.isEmpty()) continue;

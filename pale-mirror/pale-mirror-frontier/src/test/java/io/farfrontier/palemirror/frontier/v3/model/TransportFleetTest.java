@@ -11,6 +11,9 @@ class TransportFleetTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fleet-proof"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1")));
         var asset = state.transportFleet().assets().values().iterator().next();
+        var local = state.transportFleet().assetsAt(asset.homeSettlementId());
+        assertTrue(local.contains(asset));
+        assertTrue(state.transportFleet().assetsAt(new SubjectId("settlement:foreign")).isEmpty());
         TransportFleetReferences.validate(state.bootstrap(), state.transportFleet(), state.actorLocations(), state.inventory(), state.shipments());
         var body = state.actorLocations().get(asset.actorId());
         var forged = ImmutableLookupMap.withEntry(state.actorLocations(), asset.actorId(),
@@ -19,6 +22,10 @@ class TransportFleetTest {
         assertThrows(IllegalArgumentException.class, () -> TransportFleetReferences.validate(state.bootstrap(), state.transportFleet(),
                 forged, state.inventory(), state.shipments()));
         var reserved = state.transportFleet().reserve(asset.actorId(), new SubjectId("mission:absent"));
+        assertEquals(java.util.Optional.of(new SubjectId("mission:absent")), reserved.assetsAt(asset.homeSettlementId()).stream()
+                .filter(value -> value.actorId().equals(asset.actorId())).findFirst().orElseThrow().missionId());
+        assertTrue(local.stream().filter(value -> value.actorId().equals(asset.actorId())).findFirst().orElseThrow().missionId().isEmpty(),
+                "a retained home directory must not acquire a later mission reservation");
         assertThrows(IllegalArgumentException.class, () -> TransportFleetReferences.validate(state.bootstrap(), reserved,
                 state.actorLocations(), state.inventory(), state.shipments()));
         assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> {

@@ -3269,3 +3269,54 @@ validation and reference-index checks plus guardrails PASS26s. Initial relocated
 fixture targeted an already occupied storage account; corrected to a vacant actor
 custody, keeping the one-account-per-location invariant unchanged. Combined frozen
 release/deployment/native effect pending.
+
+Combined6c/0f frozen release PASS53s; both retained worlds verified0f6be59b2,
+SHA51241c31b1962cc9f7da15f70131708f213716cba8667957d8505542ec9fd8a892004cf36422a7b6c44269e0b67bc89a4a5c79787e5a060c337a0bd29ab83f7aa7d.
+Warmed native198613events/noDataLoss44.979106s=5.580369ticks/s,debt3285→3937;
+owner59.53%,exact26.89%,WAL9.27%; validation9.101665s inclusive. Main follow-up
+1128489/rev2404873/statusok/debt0. Evolving workload: no controlled source speedup
+or regression inference. G remains OPEN/FAILED.
+
+### Cheap declared fleet refusals and shared storage scope (2026-10-28)
+
+The0f native advice workers consume39.21/38.96CPU seconds in a47.219141s
+endpoint probe and allocate34.18/34.98GB during the JFR interval. Targeted CPU
+callers enter repeated local-capacity valuation and fleet memo lookup from trade
+transport alternatives. All-world asset iteration submits foreign-home negatives
+to a256-query exact-state memo before the existing check rejects their declared
+home; that creates the cross-product of towns and assets in a local fleet query.
+The fleet owner now supplies an immutable directory by declared home, bounded
+by its existing128asset registry, and transport alternatives enumerate only that
+home. The owner also rejects foreign-home or already-mission-bound assets before
+memoization. Eligible assets retain the exact state/asset/home query and current
+body, inventory-interaction, custody and execution admission checks.
+
+GoodsParticipantStorage's municipal case copied an already immutable eligible
+set into a HashSet and back into another immutable set on every repeated read.
+It now returns the shared storage selector's set directly. Company participants
+retain the exact municipality-plus-own-storage union. Filters, custody eligibility,
+retired declarations and explicit admitted endpoints remain under their owners.
+No cache capacity increase, policy/price/limit change or new authority. Existing
+fleet wrong-sponsor/physical fence/codec and storage ownership/filter/recovery
+checks plus immutable predecessor/home-directory reservation coverage selected;
+connected fleet/storage/custody/recovery checks+guardrails PASS1m24s. Frozen
+release/deployment and native effect pending.
+
+The source review follows the sampled transport estimate into physical capacity:
+SupplyCapacityComposition keys its full valuation on the exact world aggregate.
+Field and extraction valuation now retain owner-local completed costs under their
+complete actual immutable reads. Common labour potential exposes its population,
+migration, exact home schedule and projected life-status reads. Field additionally
+retains current resource sites, containers/surfaces, replica custody, actor positions
+(for even mobile haul surfaces) and participant declarations. It does not consume
+the supplied stocks or private cash/claims. Extraction additionally retains deposits
+and the exact product-key scope; quantities and temporary reservations are not inputs
+of its existing long-run valuation. Original valuation algorithms remain unchanged.
+Existing computing-thread immutable views bound field rows by MAX_SETTLEMENTS and
+extraction queries by its existing forecast256query convention; misses recompute.
+No price/production promise, retained economic-plan revision shortcut or extra
+admission authority is introduced. Added semantic warm-read negatives for destroyed
+fields, depleted sources, changed product scope and unavailable living workforce,
+plus immutable predecessor and field codec recovery. Focused valuation, actual
+procurement, territorial agriculture, extraction forecast and architecture checks
+plus guardrails PASS15s. Frozen combined release/deployment/native effect pending.

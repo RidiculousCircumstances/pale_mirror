@@ -6,6 +6,12 @@ import java.util.*;
 /** A common finite planning horizon; capability owners alone select eligible workers. */
 final class SupplyLabourCapacity {
     private record Candidate(ResidentProfile resident, boolean permitted, int skill) { }
+    /** Complete dynamic reads of long-run potential. Current assignment, hunger
+     * and feet position do not change a person's declared productive capacity. */
+    static List<Object> potentialInputs(FrontierWorldState state, SubjectId home) {
+        return List.of(state.humanPopulation().residents(), state.humanPopulation().migrations(),
+                state.humanPopulation().schedule(home), ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()));
+    }
     /** Long-run workforce potential ignores temporary activity/assignment. */
     static List<ResidentProfile> potential(FrontierWorldState state, SubjectId home, ResidentWorkKind work, HumanCapability capability) {
         var rule = state.bootstrap().ruleset().labour().entries().get(work);
