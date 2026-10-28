@@ -2785,3 +2785,34 @@ other references; no actor, portion or storage capacity is raised.
 Focused meal/shipment/index/recovery cases and guardrails PASS23s. New warmed
 negative coverage removes an allocation, kills the actor and moves its selected
 storage surface; each still fails, valid recovery succeeds. Native effect pending.
+
+
+### Retain stable read links and directed geometry facts (2026-10-28)
+
+3af0b1911 cleanrelease122frontier+45runtime/guardrails/packagePASS1m37s, both
+retained worlds verified. Mainfollowup tick892850/rev1866992/statusok/debt0,
+recoveryfalse. Native meal-closure44.974790s/noDataLoss:3.446375ticks/s,
+debt1734→2478 STILLFAILED. Owner54.56%,exact33.71%,WAL6.76%; validation9.607343s,
+meal closure2.148058s. Workload is evolving, no controlled aggregate gain claimed.
+
+Causal CPU stacks still show reference-index unlink/rebind and fresh assignment
+objects, despite unchanged resident/kind/owner values. The common index retains
+existing reverse links after a successful check when exact read addresses match.
+An explicit source comparator is available for complete small immutable projections;
+only the meal assignment projection opts into full record equality. All canonical
+aggregate sources retain identity comparison. Changed owners, missing rows,
+failures, epoch replacement and full audit still invalidate ordinary evidence.
+No reflection, partial-owner inference, time-based validity or canonical mutation.
+
+The same capture identifies repeated profiled directed-edge sweeping under shared
+group itinerary hints (181 exact-worker samples include canTraverse). The immutable
+profiled geometry now retains bounded directed-edge facts using its existing
+remembered-result mechanism. New geometry/profile instances own separate positive
+and negative results. Search budgets, terrain knowledge, collision shape tests,
+movement/arrival authority and actual edge rules are unchanged. Direction matters:
+no-step/drop-only fixtures reject ascent while accepting descent; an obstructed new
+view cannot inherit a predecessor's accepted edge. Existing layered and detailed
+shape/regional invalidation fixtures remain included.
+
+Connected index/meal/movement/group/shape checks and guardrails PASS46s. No timing
+assertions or microbenchmark campaign introduced. Native effect remains pending.

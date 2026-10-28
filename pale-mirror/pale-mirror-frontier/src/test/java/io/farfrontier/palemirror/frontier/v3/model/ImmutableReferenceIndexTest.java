@@ -33,6 +33,24 @@ class ImmutableReferenceIndexTest {
         index.validate(new Object(), rows, replaced); assertEquals(9, calls.get(), "epochs never share checks");
     }
 
+    @Test void exactProjectionEqualitySkipsEquivalentImagesButStillChecksChangedValuesAndFullAudit() {
+        var values = new ImmutableReferenceIndex.Source<Facts, Integer, String>(Facts::values, Objects::equals);
+        var calls = new AtomicInteger(); var epoch = new Object(); var rows = Map.of("row", new Declaration(1));
+        var index = new ImmutableReferenceIndex<Facts, String, Declaration>(2, 2, List.of(values),
+                (facts, row) -> List.of(values.at(row.source())), (facts, key, row) -> {
+                    if (!"accepted".equals(facts.values().get(row.source()))) throw new IllegalArgumentException("changed declared projection");
+                    calls.incrementAndGet();
+                });
+        var first = new Facts(Map.of(1, new String("accepted")), Map.of());
+        var equivalent = new Facts(Map.of(1, new String("accepted")), Map.of());
+        index.validate(epoch, rows, first); index.validate(epoch, rows, equivalent); assertEquals(1, calls.get());
+        assertEquals("accepted", values.at(1).value(equivalent));
+        assertThrows(IllegalArgumentException.class, () -> index.validate(epoch, rows, new Facts(Map.of(1, "foreign"), Map.of())));
+        index.validate(epoch, rows, equivalent); assertEquals(2, calls.get());
+        ImmutableInvariantCheck.full(() -> { index.validate(epoch, rows, equivalent); return null; });
+        assertEquals(3, calls.get());
+    }
+
     @Test void dynamicReferencesRebindBeforeValidationAndWithdrawnRowsLeaveNoStaleReader() {
         var epoch = new Object(); var rows = Map.of("one", new Declaration(10)); var calls = new AtomicInteger();
         var index = new ImmutableReferenceIndex<Facts, String, Declaration>(2, 4, List.of(VALUES, LINKS),

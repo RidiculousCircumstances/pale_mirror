@@ -10,7 +10,15 @@ public final class ImmutableReferenceIndex<C, K, D> {
     /** Nominal read source; the producer declares its map and exact key type. */
     public static final class Source<C, I, V> {
         private final Function<C, Map<I, V>> values;
-        public Source(Function<C, Map<I, V>> values) { this.values = Objects.requireNonNull(values); }
+        private final BiPredicate<V, V> unchanged;
+        public Source(Function<C, Map<I, V>> values) { this(values, (before, after) -> before == after); }
+        /** A producer may declare exact equality for a complete small immutable
+         * projection. Canonical aggregate sources retain identity comparison. */
+        public Source(Function<C, Map<I, V>> values, BiPredicate<V, V> unchanged) {
+            this.values = Objects.requireNonNull(values); this.unchanged = Objects.requireNonNull(unchanged);
+        }
+        @SuppressWarnings("unchecked")
+        private boolean sameValue(Object before, Object after) { return unchanged.test((V) before, (V) after); }
         public Read<C> at(I key) { return new Binding<>(this, Objects.requireNonNull(key)); }
         private Map<I, V> values(C context) { return Objects.requireNonNull(values.apply(context)); }
     }
@@ -61,7 +69,9 @@ public final class ImmutableReferenceIndex<C, K, D> {
         // Each used source is compared once, not once per registered consumer.
         for (var source : List.copyOf(image.roots.keySet())) {
             var next = source.values(context);
-            changedKeys(image.roots.get(source), next, key -> {
+            var prior = image.roots.get(source);
+            changedKeys(prior, next, key -> {
+                if (source.sameValue(prior.get(key), next.get(key))) return;
                 var readers = image.readers.get(source).get(key);
                 if (readers != null) dirty.addAll(readers);
             });
@@ -76,6 +86,9 @@ public final class ImmutableReferenceIndex<C, K, D> {
             for (var read : retained) if (!sources.contains(read.source()))
                 throw new IllegalArgumentException("unregistered immutable reference source");
             check.validate(context, key, declaration); // No successful index evidence is installed before the real owner check.
+            // A changed value still runs its check, but unchanged read addresses
+            // already have the exact reverse links. No unlink/rebind is needed.
+            if (previous != null && previous.reads().equals(retained)) continue;
             unlink(image, key, previous);
             for (var read : retained) {
                 image.roots.putIfAbsent(read.source(), read.source().values(context));

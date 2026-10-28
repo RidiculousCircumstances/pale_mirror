@@ -11,7 +11,7 @@ public final class ResidentMealReferenceClosure {
     private static final Source<FrontierWorldState, SubjectId, ActorLocation> ACTORS = new Source<>(FrontierWorldState::actorLocations);
     private static final Source<FrontierWorldState, SubjectId, AmbientActorLease> LEASES = new Source<>(FrontierWorldState::ambientLeases);
     private static final Source<FrontierWorldState, SubjectId, HumanAssignment> ASSIGNMENTS =
-            new Source<>(state -> HumanAssignmentProjection.compile(state).assignments());
+            new Source<>(state -> HumanAssignmentProjection.compile(state).assignments(), java.util.Objects::equals);
     private static final Source<FrontierWorldState, SubjectId, CustodyAccount> ACCOUNTS =
             new Source<>(state -> state.inventory().fungibleResources().accounts());
     private static final Source<FrontierWorldState, SubjectId, ClaimAllocation> CLAIMS =

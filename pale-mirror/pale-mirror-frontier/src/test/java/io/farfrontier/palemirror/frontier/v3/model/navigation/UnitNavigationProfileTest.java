@@ -105,7 +105,16 @@ class UnitNavigationProfileTest {
         assertFalse(animal.clearStation(floor(0, 0)), "the centred body would intersect the rise");
         assertTrue(animal.canTraverse(floor(0, 0), SurfaceAnchor.at(1, 65, 0)));
         var noStep = new UnitNavigationProfile(1_396_485, 1_500_000, 0, 1, Set.of(TraversalCapability.PEDESTRIAN));
-        assertFalse(new ProfiledPedestrianGeometry(raw, noStep, ignored -> false).canTraverse(floor(0, 0), SurfaceAnchor.at(1, 65, 0)));
+        var dropOnly = new ProfiledPedestrianGeometry(raw, noStep, ignored -> false);
+        for (int repeat = 0; repeat < 2; repeat++) {
+            assertFalse(dropOnly.canTraverse(floor(0, 0), SurfaceAnchor.at(1, 65, 0)));
+            assertTrue(dropOnly.canTraverse(SurfaceAnchor.at(1, 65, 0), floor(0, 0)), "the reverse edge has its own drop policy");
+        }
+        var wall = Set.of(new BlockPosition(1, 66, 0), new BlockPosition(1, 67, 0));
+        var changed = new ProfiledPedestrianGeometry(terrain(wall, PedestrianGeometryRevision.initial(),
+                (x, z) -> SurfaceAnchor.at(x, x >= 1 ? 65 : 64, z)), UnitNavigationProfile.DONKEY, wall::contains);
+        assertFalse(changed.canTraverse(floor(0, 0), SurfaceAnchor.at(1, 65, 0)), "a newly obstructed geometry cannot reuse an accepted edge");
+        assertTrue(animal.canTraverse(floor(0, 0), SurfaceAnchor.at(1, 65, 0)), "the predecessor remains immutable");
     }
     @Test void heightUnknownFootprintAndNeighbourRegionChangesAreNotSilentlyIgnored() {
         var roof = Set.of(new BlockPosition(0, 66, 0));

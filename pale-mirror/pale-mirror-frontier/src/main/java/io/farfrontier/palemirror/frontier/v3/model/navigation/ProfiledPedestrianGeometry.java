@@ -12,6 +12,8 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     /** Rebuildable geometry-only retention ceiling, not actor positions or route authority. */
     private static final int MAX_VOLUME_RESULTS = 8_192;
     private record Volume(double x, double z, int feetY) { }
+    private record DirectedEdge(SurfaceAnchor from, SurfaceAnchor to) { }
+    private final java.util.Map<DirectedEdge, Boolean> edges = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<io.farfrontier.palemirror.frontier.v3.model.TerrainColumn, Boolean> detailedColumns = new java.util.LinkedHashMap<>(128, 0.75f, true);
@@ -189,6 +191,12 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return true;
     }
     @Override public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
+        // A captured geometry/profile is immutable. Route hints, validation and
+        // neighbouring searches share the same directed swept-body fact; a new
+        // geometry instance cannot inherit even a negative edge result.
+        return remembered(edges, new DirectedEdge(from, to), () -> traverse(from, to));
+    }
+    private boolean traverse(SurfaceAnchor from, SurfaceAnchor to) {
         if (detailed(from) || detailed(to)) {
             if (Math.abs((long) from.x() - to.x()) + Math.abs((long) from.z() - to.z()) != 1
                     || !terrain.supportAvailable(from) || !terrain.supportAvailable(to)) return false;
