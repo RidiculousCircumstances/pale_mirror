@@ -19,6 +19,11 @@ class ImmutablePlanningScopeTest {
         Map<Integer, String> a = ImmutableLookupMap.copyOf(Map.of(1, "a"));
         var b = ImmutableLookupMap.withEntry(a, 1, "b"); var c = ImmutableLookupMap.withEntry(a, 2, "c");
         ImmutablePlanningScope.within(() -> {
+            // A busy decision may already have filled its ordinary work-view
+            // allowance before a producer is read. Both histories remain useful.
+            var work = new ImmutableInputView<Integer>(); var workCalls = new AtomicInteger();
+            work.get(List.of(a), workCalls::incrementAndGet); work.get(List.of(b), workCalls::incrementAndGet);
+            for (int i = 0; i < 80; i++) new ImmutableInputView<>().get(List.of(a), Object::new);
             var first = view.project(epoch, declarations, a); assertEquals(2, calls.get());
             assertEquals("b", view.project(epoch, declarations, b).get("one")); assertEquals(3, calls.get());
             assertSame(first, view.project(epoch, declarations, a)); assertEquals(3, calls.get());
@@ -33,6 +38,7 @@ class ImmutablePlanningScopeTest {
             int before = calls.get();
             ImmutableInvariantCheck.full(() -> view.project(epoch, declarations, a));
             assertEquals(before + 2, calls.get(), "full ingress rechecks despite an exact scoped result");
+            assertEquals(1, work.get(List.of(a), workCalls::incrementAndGet)); assertEquals(2, workCalls.get());
             before = calls.get(); view.project(new Object(), declarations, a); assertEquals(before + 2, calls.get());
             for (int i = 0; i < 100; i++) assertEquals("value:" + i,
                     view.project(epoch, declarations, ImmutableLookupMap.withEntry(a, 1, "value:" + i)).get("one"));

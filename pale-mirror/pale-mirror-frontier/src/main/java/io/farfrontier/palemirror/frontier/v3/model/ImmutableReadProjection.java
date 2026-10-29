@@ -39,7 +39,7 @@ public final class ImmutableReadProjection<C, K, D, V> {
             if (ImmutableInvariantCheck.fullAudit() || !ImmutablePlanningScope.active())
                 return projectCurrent(epoch, declarations, context, inputs, null);
             var basis = matches(ready, epoch, declarations, inputs.roots) ? ready.basis() : basis(epoch, declarations, inputs.roots);
-            return ImmutablePlanningScope.get(this, basis, () -> projectCurrent(epoch, declarations, context, inputs, basis));
+            return ImmutablePlanningScope.publication(this, basis, () -> projectCurrent(epoch, declarations, context, inputs, basis));
         }
         catch (RuntimeException | Error failed) { current.remove(); published = null; throw failed; }
     }

@@ -145,8 +145,9 @@ The read-only follow-up identified233 exact repeated account read bases within
 100 actual trade decisions. `ImmutableReadProjection` retained only its current
 working image, so an A→B→A reservation comparison could recalculate A. The common
 projection and nested producer directory now reuse completed immutable outputs
-through the existing `ImmutablePlanningScope`. Its64-view/64-basis bounds are
-unchanged; nested calls share the lexical scope and outer exit releases history.
+through the existing `ImmutablePlanningScope`. Its ordinary64-view/64-basis allowance is
+unchanged; producer publications have a separate16-view/64-basis allowance so
+they cannot consume ordinary work-view slots; nested calls share the lexical scope and outer exit releases history.
 Saturation takes the ordinary calculation path. No persistent/global branch cache,
 reactive library, trade-specific helper logic or new scheduler is added.
 
@@ -161,26 +162,37 @@ Stable published keys are reused rather than allocated on each cache hit.
 
 The existing scope/reference/nested-index tests cover branching A→B→A→C, appearance,
 removal, failures, epoch separation, full audit, saturation and scope exit. Final
-`branch-publications/final-gates.log`:66Java tests in16classes and55native economy
-GameTests PASS, with guardrails, build and packaged-JAR verification (57s). This
+`branch-publications/isolated-gates.log`:66Java tests in16classes and55native economy
+GameTests PASS, with guardrails, build and packaged-JAR verification (83s). This
 reuses unchanged boundaries from the previous acceptance; the previously disclosed
 unrelated full-suite failures remain outside this cut, not reported green.
 
 Diagnostic evidence is under `build/simulation-throughput/branch-publications/`.
-Untimed callbacks show1487→1260 stock/account row computations and233→10 exact
-repeated bases (95.7% fewer). Storage/workforce/station recomputations remain zero.
-Ten repeated account bases remain; whole-publication granularity and bounded
+Untimed final callbacks show1487→1255 stock/account row computations and233→5
+exact repeated bases (97.85% fewer). Storage/workforce/station recomputations remain
+zero. Five repeated account bases remain; whole-publication granularity and bounded
 history are not a promise to eliminate every row-level repeat. Neither percentage
-is a percentage of total CPU or TPS. The final key-reuse edit changes metadata
-allocation only; a final counter receipt is recorded before deployment.
+is a percentage of total CPU or TPS.
+
+The initial shared-allowance prototype427663aa3 occupied3–9 of64ordinary view
+slots (usually7–9) during real trade admission. Its sampled stock-view admission
+fell27/29→26/29 and workforce-view admission2/29→1/29. Its ordinary SCALE window
+was9.5766ticks/s against9.9111baseline; it was not installed on MAIN. The final
+publication-specific allowance restores those ordinary admissions to baseline,
+while retaining8–9producer publications independently. This is an explicit
+infrastructure allowance, not domain selection by an inferred type or another
+calculation framework. Both allowances use the same cache machinery and lifetime.
+The final test also fills the ordinary allowance before producer reads and proves
+that both branch histories remain effective. Pilot receipts are retained separately.
 
 The same baseline-compiled actual trade driver runs against the frozen current
 baseline JAR and candidate classes. It executes100participant decisions up to
 explicit absent route evidence, with one warm-up and three measured passes/JVM,
 Java21/G1/Xms1G/Xmx4G. All300decision/await/event/demand rows agree exactly:
 SHA256`dea5bf2cf03f0a7f84f835180d69cec4441323b5486c4b9fc59157fd70b98e86`.
-Final median threadCPU1527.604→1532.623ms; allocated811.773→799.446MB. CPU ranges
-overlap: no demonstrated CPU gain. Allocation falls1.52%. Earlier key-allocation
+Final median threadCPU2467.312→2415.486ms; allocated808.269→785.953MB. CPU ranges
+overlap (2384–2561ms versus2326–2573ms), so no stable CPU gain is established by
+this single pair. Allocation falls2.76%. Prior shared-pool and key-allocation
 pilots are retained separately, not relabelled as final measurements.
 
 Native ordinary baseline/candidate comparison and verified deployment receipts

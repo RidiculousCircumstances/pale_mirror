@@ -5,7 +5,7 @@ import java.util.function.Supplier;
 
 /** Bounded disposable memoization for branching immutable plans, never canonical authority. */
 public final class ImmutablePlanningScope {
-    private static final int MAX_VIEWS = 64, MAX_BASES_PER_VIEW = 64;
+    private static final int MAX_VIEWS = 64, MAX_PUBLICATIONS = 16, MAX_BASES_PER_VIEW = 64;
     private static final ThreadLocal<ImmutablePlanningScope> ACTIVE = new ThreadLocal<>();
     private static final class View {
         final Map<Basis, Object> bases = new HashMap<>();
@@ -16,6 +16,7 @@ public final class ImmutablePlanningScope {
         }
     }
     private final Map<Object, View> views = new IdentityHashMap<>();
+    private Map<Object, View> publications;
     /** Hash selects a bucket only; every input still matches by exact identity. */
     private static final class Basis {
         private final List<Object> inputs;
@@ -45,7 +46,18 @@ public final class ImmutablePlanningScope {
     static <T> T get(Object view, List<Object> inputs, Supplier<T> compute) {
         var scope = ACTIVE.get();
         if (scope == null) return compute.get();
-        var entries = scope.views.get(view);
+        return get(scope.views, MAX_VIEWS, view, inputs, compute);
+    }
+    /** Complete producer facts have their own bounded allowance. Registering
+     * them cannot crowd the pre-existing mutable planning views out of history. */
+    static <T> T publication(Object view, List<Object> inputs, Supplier<T> compute) {
+        var scope = ACTIVE.get();
+        if (scope == null) return compute.get();
+        if (scope.publications == null) scope.publications = new IdentityHashMap<>();
+        return get(scope.publications, MAX_PUBLICATIONS, view, inputs, compute);
+    }
+    private static <T> T get(Map<Object, View> views, int maximumViews, Object view, List<Object> inputs, Supplier<T> compute) {
+        var entries = views.get(view);
         // Preserve the complete bounded branch history, but the common repeated
         // read needs only pointer comparisons, not another temporary hash key.
         if (entries != null && entries.lastValue != null && same(entries.lastInputs, inputs)) {
@@ -62,8 +74,8 @@ public final class ImmutablePlanningScope {
             }
         }
         T value = Objects.requireNonNull(compute.get());
-        if (entries == null && scope.views.size() < MAX_VIEWS) {
-            entries = new View(); scope.views.put(view, entries);
+        if (entries == null && views.size() < maximumViews) {
+            entries = new View(); views.put(view, entries);
         }
         if (entries != null && entries.bases.size() < MAX_BASES_PER_VIEW) {
             var retained = new Basis(List.copyOf(inputs));

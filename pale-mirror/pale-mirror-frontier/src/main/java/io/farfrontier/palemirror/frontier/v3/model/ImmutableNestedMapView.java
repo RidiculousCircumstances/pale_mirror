@@ -29,7 +29,7 @@ final class ImmutableNestedMapView<K, I, J, V> {
         var image = current.get();
         var basis = image != null && image.epoch == epoch && image.source == input && image.basis != null
                 ? image.basis : List.of(epoch, input);
-        return ImmutablePlanningScope.get(this, basis, () -> projectCurrent(epoch, input, project));
+        return ImmutablePlanningScope.publication(this, basis, () -> projectCurrent(epoch, input, project));
     }
     private Map<J, V> projectCurrent(Object epoch, Map<K, I> input, Function<I, Map<J, V>> project) {
         var image = current.get();
