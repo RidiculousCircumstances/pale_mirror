@@ -393,13 +393,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             }
             if (contract.status() == EmploymentContractStatus.ACTIVE) employer.validate(inventory.economics(), companies.companies());
         }
-        for (EconomicAccount account : inventory.economics().accounts().values()) {
-            if (account.ownerKind() == EconomicOwnerKind.COMPANY && !companies.companies().containsKey(account.ownerId())) {
-                throw new IllegalArgumentException("company account must have one registered legal company");
-            }
-            if (account.ownerKind() == EconomicOwnerKind.RESIDENT && humanPopulation.resident(account.ownerId()) == null)
-                throw new IllegalArgumentException("resident resource-title registration must name a known person");
-        }
+        EconomicAccountReferences.validate(bootstrap, inventory.economics().accounts(), companies.companies(), humanPopulation.residents());
         ActorLocationBounds.validate(bootstrap.bounds(), actorLocations);
         StrategicPlanState validatedPlans = strategicPlans;
         for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {

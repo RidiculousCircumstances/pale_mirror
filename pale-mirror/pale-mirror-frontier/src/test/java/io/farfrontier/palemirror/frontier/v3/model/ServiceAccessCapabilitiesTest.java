@@ -26,6 +26,14 @@ class ServiceAccessCapabilitiesTest {
         assertEquals(before, retained, "a published read view cannot follow later canonical input");
         assertFalse(ServiceDestinationClaims.excludedFor(next, occupant).contains(to),
                 "an actor's own body never reserves its target against itself");
+        var shared = next.withActorBody(observer, to.standingBody());
+        assertTrue(ServiceDestinationClaims.excludedFor(shared, occupant).contains(to),
+                "another actor at the same surface must remain a claim after a membership update");
+        assertTrue(ServiceDestinationClaims.excludedFor(state, observer).contains(from),
+                "branch rollback restores the earlier occupancy");
+        assertFalse(ServiceDestinationClaims.excludedFor(state, observer).contains(to));
+        assertTrue(ServiceDestinationClaims.excludedFor(next, observer).contains(to),
+                "a later branch cannot reuse the rollback's membership image");
     }
     @Test void aRemoteRequestCannotBlockAWaitingVisitor() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(

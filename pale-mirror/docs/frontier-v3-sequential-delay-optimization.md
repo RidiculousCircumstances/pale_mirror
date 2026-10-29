@@ -37,3 +37,41 @@ remaining cause. Instrumentation alone is not this task's delivered product resu
 Commit and deploy the verified final candidate through existing root scripts.
 
 Receipts: `build/simulation-throughput/causal-sequential-optimization/`.
+
+## Detailed attribution and first connected fixes
+
+Existing optional producer expanded in6e05ab181.57 focused Frontier cases and one
+NeoForge trace case, guardrails and frozen JAR/package checks passed. No business
+change in that diagnostic build; MAIN remainedcbeb. Same mature SCALE world retained.
+30s detailed capture:6.215444ticks/s in-profile, unexplained6.8045% (still not full
+causal closure). Largest detailed costs include COLD-harvest admission.554s,
+resident-activity admission.506s, extraction admission.406s; navigation host
+retention/advance/wake .298/.646/.249s; transaction wake-key compilation.601s;
+owned-state remainder1.210s; scheduled-reference checking.536s.
+
+Source-proven repeated work repaired next:
+
+- Scheduled-subject existence joined all machine operations and all field jobs
+  whenever either machine or site state changed. Separate complete station-ID
+  publication and per-site immutable registry declarations now retain the union
+  through progress-only changes; actual birth/removal still invalidates references.
+- Service destination claims rebuilt whole actor, movement and meal directories
+  when one source row changed. Existing immutable registry/group views now update
+  changed spatial memberships and retain immutable read images. Another actor on
+  the same surface remains a blocker; incoming COLD arrivals and preferred meal
+  spots retain their original distinct semantics.
+- Economic account identity existence was scanned unconditionally by every world
+  validation. Existing reverse-reference checks now follow each account's explicitly
+  declared legal kind and the corresponding company/resident membership. This
+  does not add personal money/accounts; absent/new/removed identities still fail.
+
+The first two paths passed66 focused semantic cases and55 native economy cases;
+subsequent account-reference change passed24 focused composed/negative cases.
+The new account fixture initially assumed every resident starts with a financial
+account; corrected to explicitly declare a zero-money title account in the test.
+Production creates no such accounts. Full-audit/failed-predecessor and removal/
+branch-rollback behavior remain covered. No timing assertions or new client harness.
+
+A new complete109-file native-saved mature checkpoint, source6e05ab181, is hashed
+with JVM/config identity under this task's receipts. Ordinary baseline and candidate
+will start from that same checkpoint, without profiling/build/client overlap.

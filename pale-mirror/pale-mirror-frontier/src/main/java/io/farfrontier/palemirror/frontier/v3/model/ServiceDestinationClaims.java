@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.*;
+import java.util.function.BiFunction;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
 
 /** Read-only final-position claims, not terrain obstacles or another movement owner. */
 public final class ServiceDestinationClaims {
@@ -33,50 +35,49 @@ public final class ServiceDestinationClaims {
         return exclusions(state, actorId, incoming, false);
     }
 
-    private record MealClaims(Map<SurfaceAnchor, List<SubjectId>> destinations,
-                              Map<SurfaceAnchor, List<SubjectId>> preferred) { }
-    private static final ImmutableInputView<Map<SurfaceAnchor, List<SubjectId>>> BODIES = new ImmutableInputView<>();
-    private static final ImmutableInputView<Map<SurfaceAnchor, List<SubjectId>>> MOVES = new ImmutableInputView<>();
-    private static final ImmutableInputView<MealClaims> MEALS = new ImmutableInputView<>();
+    private record Destination(SubjectId actor, Set<SurfaceAnchor> surfaces) {
+        private Destination { Objects.requireNonNull(actor); surfaces = Set.copyOf(surfaces); }
+    }
+    /** Shared registry/group machinery updates only changed declarations. Neither
+     * actor motion within one support cell nor meal progress renews spatial facts. */
+    private static final class Destinations<I> {
+        private final ImmutableRegistryView<SubjectId, I, Destination> declarations;
+        private final ImmutableGroupView<SubjectId, Destination, SurfaceAnchor> groups = new ImmutableGroupView<>();
+        Destinations(int maximumRows) { declarations = new ImmutableRegistryView<>(maximumRows, Objects::equals); }
+        Map<SurfaceAnchor, List<Destination>> read(Object epoch, Map<SubjectId, I> source,
+                                                  BiFunction<SubjectId, I, Destination> project) {
+            return groups.groupedRows(epoch, declarations.project(epoch, source, project), Destination::surfaces);
+        }
+    }
+    private static final Destinations<ActorLocation> BODIES = new Destinations<>(SimulationCapacity.MAX_ACTORS);
+    private static final Destinations<ActorMovement> MOVES = new Destinations<>(SimulationCapacity.MAX_ACTORS);
+    private static final Destinations<ResidentMeal> MEAL_DESTINATIONS = new Destinations<>(HumanPopulation.MAX_RESIDENTS);
+    private static final Destinations<ResidentMeal> MEAL_PREFERRED = new Destinations<>(HumanPopulation.MAX_RESIDENTS);
 
     private static Set<SurfaceAnchor> exclusions(FrontierWorldState state, SubjectId actorId,
                                                 Set<SubjectId> incoming, boolean includePreferred) {
         Objects.requireNonNull(actorId);
-        var bodies = BODIES.get(List.of(state.actorLocations()), () -> {
-            Map<SurfaceAnchor, List<SubjectId>> index = new HashMap<>();
-            state.actorLocations().forEach((id, actor) -> {
-                if (actor.condition().status() == ActorLifeStatus.ALIVE) add(index, actor.supportingSurface(), id);
-            });
-            return freeze(index);
-        });
-        var moves = MOVES.get(List.of(state.actorMovements()), () -> {
-            Map<SurfaceAnchor, List<SubjectId>> index = new HashMap<>();
-            state.actorMovements().values().forEach(movement -> movement.order().legalStations()
-                    .forEach(surface -> add(index, surface, movement.order().actorId())));
-            return freeze(index);
-        });
-        var meals = MEALS.get(List.of(state.humanPopulation().meals()), () -> {
-            Map<SurfaceAnchor, List<SubjectId>> destinations = new HashMap<>(), preferred = new HashMap<>();
-            state.humanPopulation().meals().values().forEach(meal -> {
-                add(preferred, meal.clearingSurface(), meal.residentId());
-                meal.coldTravel().ifPresent(travel -> travel.order().legalStations()
-                        .forEach(surface -> add(destinations, surface, meal.residentId())));
-            });
-            return new MealClaims(freeze(destinations), freeze(preferred));
-        });
+        var bodies = BODIES.read(state.bootstrap(), state.actorLocations(), (id, actor) -> new Destination(id,
+                actor.condition().status() == ActorLifeStatus.ALIVE ? Set.of(actor.supportingSurface()) : Set.of()));
+        var moves = MOVES.read(state.bootstrap(), state.actorMovements(), (id, movement) ->
+                new Destination(movement.order().actorId(), Set.copyOf(movement.order().legalStations())));
+        var mealDestinations = MEAL_DESTINATIONS.read(state.bootstrap(), state.humanPopulation().meals(), (id, meal) ->
+                new Destination(meal.residentId(), meal.coldTravel().map(travel -> Set.copyOf(travel.order().legalStations())).orElse(Set.of())));
+        var mealPreferred = MEAL_PREFERRED.read(state.bootstrap(), state.humanPopulation().meals(), (id, meal) ->
+                new Destination(meal.residentId(), Set.of(meal.clearingSurface())));
         // Consumers ask about a bounded set of local candidates. Retain exact global
         // claims without rebuilding a world-sized excluded set for each resident/check.
-        // Views bind immutable inputs; a changed body, meal or movement rebuilds its own index.
-        List<Map<SurfaceAnchor, List<SubjectId>>> destinations = includePreferred
-                ? List.of(moves, meals.destinations(), meals.preferred()) : List.of(moves, meals.destinations());
+        // Views bind immutable inputs; only changed spatial memberships update their groups.
+        List<Map<SurfaceAnchor, List<Destination>>> destinations = includePreferred
+                ? List.of(moves, mealDestinations, mealPreferred) : List.of(moves, mealDestinations);
         return Collections.unmodifiableSet(new AbstractSet<>() {
             @Override public boolean contains(Object value) {
                 Objects.requireNonNull(value);
                 if (!(value instanceof SurfaceAnchor surface)) return false;
                 if (bodies.getOrDefault(surface, List.of()).stream()
-                        .anyMatch(id -> !id.equals(actorId) && !incoming.contains(id))) return true;
+                        .anyMatch(claim -> !claim.actor().equals(actorId) && !incoming.contains(claim.actor()))) return true;
                 return destinations.stream().anyMatch(index -> index.getOrDefault(surface, List.of()).stream()
-                        .anyMatch(id -> !id.equals(actorId)));
+                        .anyMatch(claim -> !claim.actor().equals(actorId)));
             }
             @Override public Iterator<SurfaceAnchor> iterator() {
                 Set<SurfaceAnchor> keys = new HashSet<>(bodies.keySet());
@@ -89,12 +90,5 @@ public final class ServiceDestinationClaims {
                 return count;
             }
         });
-    }
-    private static void add(Map<SurfaceAnchor, List<SubjectId>> index, SurfaceAnchor surface, SubjectId actor) {
-        index.computeIfAbsent(surface, ignored -> new ArrayList<>()).add(actor);
-    }
-    private static Map<SurfaceAnchor, List<SubjectId>> freeze(Map<SurfaceAnchor, List<SubjectId>> index) {
-        index.replaceAll((surface, actors) -> List.copyOf(actors));
-        return ImmutableLookupMap.copyOf(index);
     }
 }

@@ -12,6 +12,9 @@ final class ScheduledSubjectExistence {
     private static final ThreadLocal<Image> IMAGE = new ThreadLocal<>();
     private static final ImmutableInputView<Set<SubjectId>> FIXED = new ImmutableInputView<>();
     private static final ImmutableInputView<Set<SubjectId>> NESTED = new ImmutableInputView<>();
+    private static final ImmutableInputView<Set<SubjectId>> STATION_OPERATIONS = new ImmutableInputView<>();
+    private static final ImmutableRegistryView<SubjectId, ResourceSiteLifecycle, Set<SubjectId>> SITE_SUBJECTS =
+            new ImmutableRegistryView<>(ResourceSiteState.MAX_SITES, Objects::equals);
     private ScheduledSubjectExistence() { }
     static boolean contains(FrontierWorldState state, SubjectId id) { return contains(image(state), id); }
     private static boolean contains(Image image, SubjectId id) {
@@ -44,7 +47,21 @@ final class ScheduledSubjectExistence {
             bootstrap.hive().organs().forEach(organ -> ids.add(organ.id()));
             return Set.copyOf(ids);
         });
-        var nested = NESTED.get(List.of(state.productionStations().machines(), state.resourceSites().sites()), () -> nestedSubjects(state));
+        var operations = STATION_OPERATIONS.getPublished(List.of(state.productionStations().machines()), () -> {
+            var ids = new HashSet<SubjectId>();
+            state.productionStations().machines().values().forEach(machine ->
+                    machine.operation().ifPresent(operation -> ids.add(operation.id().value())));
+            return Set.copyOf(ids);
+        });
+        var siteSubjects = SITE_SUBJECTS.project(state.bootstrap(), state.resourceSites().sites(), (id, site) -> {
+            var ids = new HashSet<>(site.harvestJobs().keySet());
+            site.preparationWork().ifPresent(work -> ids.add(work.id()));
+            return Set.copyOf(ids);
+        });
+        var nested = NESTED.get(List.of(operations, siteSubjects), () -> {
+            var ids = new HashSet<>(operations); siteSubjects.values().forEach(ids::addAll);
+            return Set.copyOf(ids);
+        });
         var next = new Image(state, sources(state), fixed, nested); IMAGE.set(next); return next;
     }
     private static List<Map<SubjectId, ?>> sources(FrontierWorldState state) {
@@ -61,14 +78,4 @@ final class ScheduledSubjectExistence {
                 state.companies().goodsTrade().orders(), state.companies().goodsTrade().contracts(),
                 state.shipments().shipments(), state.shipments().missions(), state.unitGroups().groups());
     }
-    private static Set<SubjectId> nestedSubjects(FrontierWorldState state) {
-        var subjects = new HashSet<SubjectId>();
-        state.productionStations().machines().values().forEach(machine ->
-                machine.operation().ifPresent(operation -> subjects.add(operation.id().value())));
-        state.resourceSites().sites().values().forEach(site -> {
-            subjects.addAll(site.harvestJobs().keySet()); site.preparationWork().ifPresent(work -> subjects.add(work.id()));
-        });
-        return Set.copyOf(subjects);
-    }
-
 }
