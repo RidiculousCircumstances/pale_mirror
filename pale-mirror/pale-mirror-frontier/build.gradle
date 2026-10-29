@@ -16,6 +16,45 @@ sourceSets {
         compileClasspath += sourceSets.main.output + sourceSets.testFixtures.output
         runtimeClasspath += sourceSets.main.output + sourceSets.testFixtures.output
     }
+    tradeCostDiagnostic {
+        compileClasspath += sourceSets.main.output + sourceSets.testFixtures.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.testFixtures.output
+    }
+}
+// Offline attribution reuses the accepted-WAL reader, without a Reactor dependency.
+tasks.named('compileTradeCostDiagnosticJava', JavaCompile) {
+    source('src/reactorExperiment/java/io/farfrontier/palemirror/frontier/v3/process/CommittedTradeCorpus.java')
+    source('src/reactorExperiment/java/io/farfrontier/palemirror/internal/frontier/v3/ExperimentSealedWalReader.java')
+    source(project(':pale-mirror-neoforge').file('src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierWalSegment.java'))
+}
+def tradeOverlaySources = layout.buildDirectory.dir('trade-cost-attribution/sources')
+def tradeOverlayClasses = layout.buildDirectory.dir('trade-cost-attribution/classes')
+tasks.register('prepareTradeCostOverlay', Exec) {
+    commandLine 'python3', rootProject.file('tools/performance/trade_cost_overlay.py'),
+            file('src/main/java'), tradeOverlaySources.get().asFile
+    inputs.dir('src/main/java')
+    inputs.file(rootProject.file('tools/performance/trade_cost_overlay.py'))
+    outputs.dir(tradeOverlaySources)
+}
+tasks.register('compileTradeCostOverlay', JavaCompile) {
+    dependsOn tasks.named('prepareTradeCostOverlay'), tasks.named('tradeCostDiagnosticClasses')
+    source(tradeOverlaySources)
+    classpath = sourceSets.tradeCostDiagnostic.runtimeClasspath
+    destinationDirectory = tradeOverlayClasses
+}
+tasks.register('frontierV3TradeCostAttribution', JavaExec) {
+    group = 'verification'
+    description = 'Offline method/phase CPU and allocation attribution; no live instrumentation.'
+    def overlay = providers.gradleProperty('tradeCostOverlay').getOrElse('false').toBoolean()
+    if (overlay) dependsOn tasks.named('compileTradeCostOverlay')
+    classpath = overlay ? files(tradeOverlayClasses) + sourceSets.tradeCostDiagnostic.runtimeClasspath : sourceSets.tradeCostDiagnostic.runtimeClasspath
+    mainClass = 'io.farfrontier.palemirror.frontier.v3.process.TradeCostAttribution'
+    maxHeapSize = '4g'
+    workingDir = rootProject.layout.projectDirectory.asFile
+    systemProperty 'pale_mirror.tradeCost.overlay', overlay
+    def corpus = providers.gradleProperty('tradeCostCorpus')
+    def output = providers.gradleProperty('tradeCostOutput')
+    doFirst { args(corpus.get(), output.get()) }
 }
 tasks.register('frontierV3OwnerFactsDiagnostic', JavaExec) {
     group = 'verification'
