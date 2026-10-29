@@ -56,6 +56,10 @@ class FungibleCustodyReadTest {
         var task = new java.util.concurrent.FutureTask<Integer>(() -> reserved.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
         new Thread(task).start(); assertEquals(2, task.get());
         assertEquals(2, reserved.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(4, FungibleResourceReadIndex.held(reserved, FIRST, OWNER, "minecraft:bread"),
+                "a reservation changes availability without consuming held stock");
+        assertEquals(0, FungibleResourceReadIndex.held(titled, FIRST, OWNER, "minecraft:bread"));
+        assertEquals(4, FungibleResourceReadIndex.held(titled, FIRST, other, "minecraft:bread"));
         assertTrue(FungibleResourceReadIndex.carriesClaim(reserved, HOLDER), "one holder may retain several current accounts");
         assertFalse(FungibleResourceReadIndex.carriesClaim(original, HOLDER), "placement reuse is not a retained claim");
         assertTrue(FungibleResourceReadIndex.carriesClaim(reserved, HOLDER));
@@ -77,6 +81,8 @@ class FungibleCustodyReadTest {
         assertSame(original.accounts(), changed.accounts(), "reservation metadata alone changes the available kinds");
         assertEquals(4, changed.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
         assertEquals(1, changed.unclaimedQuantity(FIRST, OWNER, "minecraft:wheat"));
+        assertEquals(4, FungibleResourceReadIndex.held(changed, FIRST, OWNER, "minecraft:bread"));
+        assertEquals(3, FungibleResourceReadIndex.held(changed, FIRST, OWNER, "minecraft:wheat"));
         var foreignLot = new ResourceLot(new SubjectId("lot:unrelated"), OWNER, "minecraft:coal", 7, "fixture:read", List.of());
         var extended = changed.issue(foreignLot, new CustodyAccount(SECOND, new ResourceCustody.Container(new SubjectId("container:other")),
                 Map.of(foreignLot.id(), 7), Map.of()));

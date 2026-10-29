@@ -7,6 +7,11 @@ import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.List;
+import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup;
+import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,6 +85,31 @@ class ActorExecutionCoordinatorTest {
         assertFalse(ActorExecutionCoordinator.coldAvailable(state, resident.id()));
     }
 
+    @Test void activeGroupMembershipIncludesDeclaredActorsAndReleasesOnlyClosedOrRetiredRosters() {
+        var actor = new SubjectId("actor:declared-group-asset");
+        var id = new SubjectId("group:admission");
+        var mission = new UnitGroup.Mission(
+                UnitGroup.MissionKind.TRANSPORT, new SubjectId("mission:admission"));
+        var member = new UnitGroup.Member(actor,
+                UnitGroup.Role.CARRIER,
+                ActorActivityKind.GROUP_MEMBER, id);
+        var group = new UnitGroup(id, mission, List.of(member),
+                UnitGroup.Formation.COLUMN,
+                UnitGroup.Phase.READY, 1, 0, Optional.empty());
+        var empty = UnitGroupState.empty();
+        var active = empty.admit(group);
+        assertTrue(UnitGroupMembership.active(active, actor));
+        assertFalse(UnitGroupMembership.active(active, new SubjectId("actor:unrelated")));
+        var closed = group.close(); var released = active.replace(group, closed);
+        assertFalse(UnitGroupMembership.active(released, actor));
+        assertTrue(UnitGroupMembership.active(active, actor), "a later phase cannot release an earlier roster");
+        assertFalse(UnitGroupMembership.active(released.retire(closed), actor));
+        assertFalse(UnitGroupMembership.active(empty, actor));
+        var competing = new UnitGroup(new SubjectId("group:competing"),
+                mission, List.of(member), group.formation(), group.phase(), 1, 0, Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> active.admit(competing));
+        assertTrue(UnitGroupMembership.active(active, actor));
+    }
     @Test void existingAssignmentCannotBeReplacedByAnotherJob() {
         var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
         assertEquals(new ActorExecutionCoordinator.Waiting(ActorExecutionCoordinator.Wait.ASSIGNED_WORK),
@@ -94,7 +124,7 @@ class ActorExecutionCoordinatorTest {
                 new SimInstant(22_000L), 1, AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL, observed);
         var state = fixture.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor, ambient)));
         var incoming = ResourceSiteHarvestProcessTest.newHarvestLease(state, fixture.site(), fixture.job(), "execution-transfer");
-        var handoff = new SceneLeaseHandoff(incoming, java.util.List.of(new SceneMemberPosition(actor, observed,
+        var handoff = new SceneLeaseHandoff(incoming, List.of(new SceneMemberPosition(actor, observed,
                 state.actorLocations().get(actor).condition().health())));
         var transferred = ActorExecutionCoordinator.transferToScene(state, handoff);
         assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(actor).status());
@@ -122,8 +152,8 @@ class ActorExecutionCoordinatorTest {
         var drift = new SceneMemberPosition(actor,
                 new BodyPosition(observed.body().x() + 1, observed.body().y(), observed.body().z()), observed.condition().health());
         var injury = new SceneMemberPosition(actor, observed.body(), new FixedScalar(observed.condition().health().raw() - 1));
-        for (var capture : java.util.List.of(drift, injury)) {
-            var handoff = new SceneLeaseHandoff(incoming, java.util.List.of(capture));
+        for (var capture : List.of(drift, injury)) {
+            var handoff = new SceneLeaseHandoff(incoming, List.of(capture));
             var rejected = assertThrows(IllegalArgumentException.class,
                     () -> ActorExecutionCoordinator.transferToScene(state, handoff));
             assertTrue(rejected.getMessage().contains("independently recorded common body observation"));

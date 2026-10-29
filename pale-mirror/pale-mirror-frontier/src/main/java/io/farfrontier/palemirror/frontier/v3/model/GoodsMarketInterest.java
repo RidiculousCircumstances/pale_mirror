@@ -12,7 +12,7 @@ public final class GoodsMarketInterest {
         if (owner == null || !owner.party().equals(quote.party())) throw new IllegalArgumentException("quote lost its declared participant");
         var opposite = quote.side() == GoodsTradeOrder.Side.BUY ? GoodsTradeOrder.Side.SELL : GoodsTradeOrder.Side.BUY;
         var grouped = new HashMap<GoodsTradeParty, Long>();
-        for (var order : ORDERS.rows(GoodsMarketInterest.class, trade.orders(),
+        for (var order : ORDERS.unorderedRows(GoodsMarketInterest.class, trade.orders(),
                 order -> Set.of(new Key(order.itemKind(), order.side())), new Key(quote.itemKind(), opposite)))
             if (order.availableQuantity() > 0) grouped.merge(order.party(), order.expiresAtTick(), Math::max);
         return grouped.entrySet().stream().sorted(Comparator.comparing(entry -> entry.getKey().id()))

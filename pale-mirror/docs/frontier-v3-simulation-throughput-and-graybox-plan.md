@@ -5517,3 +5517,47 @@ ledger transitions, field stock, internal and consolidated commercial shipments,
 player edits. No new timing or cache-identity acceptance tests. Receipt
 local-resource-balance-focus.log and frontier XML reports. Review/commit/frozen
 packaging and both deployments follow; overall throughput criterion stays OPEN.
+
+### Shared held/available balances for economic stock projection
+
+9c51761a5 frozen13s and both retained-world deployments verified. Current45s light
+CPU76819COMPLETE, custom lifecycle eventsdisabled,47.153662s nativeCPU interval,
+process303.33s/matched244.89s(8new/18retired). Advice34.15/33.04s,server23.11s,
+exact12.68s,nav20.76/20.56s,C2JIT18.62s. Underprofile363075->363403,debt450->1065,
+fastForward0,statusok; NOT ordinary capacity or an isolated before/after comparison.
+No complete-ledger validation among leading owner stacks after its affected-scope
+cut. Current leading lookup now GoodsParticipantView.project manual held-stock
+regroup15samples(10/5), while shared balances already visit the same referenced
+lots for available stock. GoodsMarketInterest rows projection8samples(5/3), with
+rows62/55inclusive advisory samples and marketquote fan-out81/77inclusive samples.
+Receipts local-resource-balance-light-current-*; lookup caller expansion reads the
+existing recording and does not require another runtime attach.
+
+Extend the existing current-account balance projection to retain held AND available
+quantities keyed by actual lot economic owner and item kind. Same complete local
+invalidation of account/lot/claim changes; no authoritative stock counter. Trade
+participant view reads both from that projection instead of rewalking every lot
+for every commodity. Preserve exact-item overrides, storage eligibility, claims,
+title changes and negative/current-custody behavior. Change market-interest member
+lookup to unorderedRows because max-expiry grouping is commutative and the final
+party list is explicitly ID-sorted. No notification suppression, absence-proof
+weakening, price change, reserve cutoff, schema or new cache limit.
+
+Current profile also identifies ActorExecutionCoordinator.workAdmission lambdas
+(17+16 /19 leaf samples on advice threads). Source69 performs a world-wide active
+group/roster scan for every non-resident actor admission, including repeated animal
+transport forecasts. Replace that scan with the same shared current-row inverse
+primitive over explicit active group members, in a group-owned read helper. All
+lifecycle, life, meal, motion, resident assignment, scene, held-resource and ambient
+checks stay in their existing owners. GroupWorkAdmission still verifies its exact
+retained group; an inverse membership does not select or grant an activity. Test
+active/closed/retired roster and earlier branch, retain constructor competing-group
+rejection and existing actual transport/recovery checks. No animal-specific shortcut.
+
+Connected economic-stock focus102PASS99s+guardrails, followed by the added generic
+membership cut's focused32PASS32s+guardrails (shared architecture checks overlap,
+so do not add these as a unique test count). Stock/pricing/opportunity negatives,
+actual consolidated trade, equipment purchasing, declared group competing-roster
+rejection, transport completion and recovery retained. Existing stock source/test
+bytes stayed unchanged during the second focus. Logs shared-economic-stock-focus.log
+and local-group-membership-focus.log. No per-edit client campaign or timing tests.

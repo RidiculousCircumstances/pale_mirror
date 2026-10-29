@@ -6,7 +6,10 @@ import java.util.*;
 /** Disposable queries of the sole immutable ledger; never allocation or custody authority. */
 final class FungibleResourceReadIndex {
     private record Balance(SubjectId owner, String kind) { }
-    private record Available(Map<Balance, Integer> quantities) { }
+    private record Quantities(int held, int available) {
+        private static final Quantities ZERO = new Quantities(0, 0);
+    }
+    private record Available(Map<Balance, Quantities> quantities) { }
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
                          Map<SubjectId, Available> available) { }
@@ -22,6 +25,12 @@ final class FungibleResourceReadIndex {
     private FungibleResourceReadIndex() { }
 
     static int available(FungibleResourceLedger ledger, SubjectId account, SubjectId owner, String kind) {
+        return quantities(ledger, account, owner, kind).available();
+    }
+    static int held(FungibleResourceLedger ledger, SubjectId account, SubjectId owner, String kind) {
+        return quantities(ledger, account, owner, kind).held();
+    }
+    private static Quantities quantities(FungibleResourceLedger ledger, SubjectId account, SubjectId owner, String kind) {
         Objects.requireNonNull(owner, "resource economic owner"); Objects.requireNonNull(kind, "resource item kind");
         if (!ledger.accounts().containsKey(Objects.requireNonNull(account, "custody account")))
             throw new IllegalArgumentException("unknown custody account");
@@ -31,7 +40,7 @@ final class FungibleResourceReadIndex {
         // balance at image advancement. Unrelated world churn cannot require
         // another complete dependency vector for this unchanged account.
         var available = views.computeIfAbsent(account, ignored -> new Available(balances(ledger, row)));
-        return available.quantities().getOrDefault(new Balance(owner, kind), 0);
+        return available.quantities().getOrDefault(new Balance(owner, kind), Quantities.ZERO);
     }
 
     static Optional<CustodyAccount> container(FungibleResourceLedger ledger, SubjectId container) {
@@ -113,15 +122,19 @@ final class FungibleResourceReadIndex {
         return rows.size() < 2 ? rows : rows.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList();
     }
 
-    private static Map<Balance, Integer> balances(FungibleResourceLedger ledger, CustodyAccount account) {
-        var balances = new HashMap<Balance, Integer>();
+    private static Map<Balance, Quantities> balances(FungibleResourceLedger ledger, CustodyAccount account) {
+        var balances = new HashMap<Balance, Quantities>();
         for (var entry : account.lotQuantities().entrySet()) {
-            var lot = ledger.lots().get(entry.getKey());
-            balances.merge(new Balance(lot.economicOwnerId(), lot.itemKind()), entry.getValue(), Math::addExact);
+            var lot = ledger.lots().get(entry.getKey()); int quantity = entry.getValue();
+            balances.merge(new Balance(lot.economicOwnerId(), lot.itemKind()), new Quantities(quantity, quantity),
+                    (a, b) -> new Quantities(Math.addExact(a.held(), b.held()), Math.addExact(a.available(), b.available())));
         }
         for (var entry : account.claimQuantities().entrySet()) {
             var claim = ledger.claims().get(entry.getKey());
-            balances.merge(new Balance(claim.economicOwnerId(), claim.itemKind()), -entry.getValue(), Math::addExact);
+            balances.compute(new Balance(claim.economicOwnerId(), claim.itemKind()), (key, value) -> {
+                var stock = value == null ? Quantities.ZERO : value;
+                return new Quantities(stock.held(), Math.subtractExact(stock.available(), entry.getValue()));
+            });
         }
         return Map.copyOf(balances);
     }

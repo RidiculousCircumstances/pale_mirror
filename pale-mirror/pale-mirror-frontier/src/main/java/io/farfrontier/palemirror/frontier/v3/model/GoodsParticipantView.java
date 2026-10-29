@@ -106,10 +106,8 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         for (var commodity : state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy())) {
             var containers = GoodsParticipantStorage.containers(state, participant, commodity.itemKind());
             var accounts = containers.stream().flatMap(container -> FungibleResourceCustodySupport.accountAtContainer(state, container).stream()).toList();
-            int owned = accounts.stream().flatMap(value -> value.lotQuantities().entrySet().stream()).filter(entry -> {
-                var lot = ledger.lots().get(entry.getKey());
-                return lot.economicOwnerId().equals(participant.party().id()) && lot.itemKind().equals(commodity.itemKind());
-            }).mapToInt(Map.Entry::getValue).reduce(0, Math::addExact);
+            int owned = accounts.stream().mapToInt(value -> FungibleResourceReadIndex.held(
+                    ledger, value.id(), participant.party().id(), commodity.itemKind())).reduce(0, Math::addExact);
             int unclaimed = accounts.stream().mapToInt(value -> ledger.unclaimedQuantity(value.id(), participant.party().id(), commodity.itemKind())).reduce(0, Math::addExact);
             if (commodity.stock().representation() == GoodsStockSpecification.Representation.INDIVIDUAL) {
                 owned = Math.toIntExact(ExactItemReadIndex.owned(state.inventory(), participant.party().id(), commodity.itemKind()).stream().filter(item ->

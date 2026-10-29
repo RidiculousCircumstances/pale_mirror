@@ -65,8 +65,7 @@ public final class ActorExecutionCoordinator {
         if (state.humanPopulation().meals().containsKey(actorId)
                 || state.actorMovements().containsKey(actorId)) return new Waiting(Wait.SELF_CARE);
         if (!groupMember && (actor.kind() == ActorKind.RESIDENT ? !HumanAssignmentProjection.compile(state).idle(actorId)
-                : state.unitGroups().groups().values().stream().anyMatch(g -> g.phase() != io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.CLOSED
-                    && g.members().stream().anyMatch(m -> m.actorId().equals(actorId))))) return new Waiting(Wait.ASSIGNED_WORK);
+                : UnitGroupMembership.active(state.unitGroups(), actorId))) return new Waiting(Wait.ASSIGNED_WORK);
         if (sceneOwns(state, actorId)) return new Waiting(Wait.SCENE_AUTHORITY);
         if (carriesResource(state, actorId)) return new Waiting(Wait.RESOURCE_IN_HAND);
         AmbientActorLease ambient = state.ambientLeases().get(actorId);
