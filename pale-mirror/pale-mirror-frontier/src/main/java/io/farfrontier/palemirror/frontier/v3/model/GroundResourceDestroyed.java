@@ -18,7 +18,7 @@ public record GroundResourceDestroyed(SubjectId sourceAccountId, ResourceCustody
     @Override public boolean requiresDurableBeforeEffect() { return true; }
     public FrontierWorldState apply(FrontierWorldState state, SubjectId owner) {
         var ledger = state.inventory().fungibleResources(); var account = ledger.accounts().get(sourceAccountId);
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(sourceAccountId)).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, sourceAccountId);
         if (!owner.equals(economicOwner) || account == null || !account.custody().equals(source) || !account.lotQuantities().equals(lots)
                 || !account.claimQuantities().keySet().equals(forfeitedClaims) || bindings.size() != 1 || bindings.getFirst().authorityEpoch() != epoch
                 || !bindings.getFirst().address().equals(new PhysicalStackAddress.WorldEntity(source.entityId()))

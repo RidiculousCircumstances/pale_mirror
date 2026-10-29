@@ -17,7 +17,7 @@ public final class ActorCarriedResources {
         Objects.requireNonNull(ledger); Objects.requireNonNull(actorId); Objects.requireNonNull(accountId);
         Objects.requireNonNull(observed);
         CustodyAccount account = ledger.accounts().get(accountId);
-        var bindings = ledger.bindings().values().stream().filter(value -> value.accountId().equals(accountId)).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, accountId);
         if (!(observed.address() instanceof PhysicalStackAddress.ActorStack stack) || !stack.actorId().equals(actorId)
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(actorId))
                 || bindings.size() != 1)

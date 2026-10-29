@@ -230,7 +230,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
         var portion = (Portion.Fungible) this.portion;
         var allowed = endpoint.spec().slots(endpoint.port());
         var layout = direction == Direction.PLACE ? destinationBindings
-                : ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(source.id())).toList();
+                : FungibleBindingReadIndex.forAccount(ledger, source.id());
         var received = new java.util.HashMap<SubjectId, Integer>();
         for (var binding : layout) {
             if (!(binding.address() instanceof PhysicalStackAddress.ContainerSlot slot)

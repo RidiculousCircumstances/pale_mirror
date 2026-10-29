@@ -41,7 +41,7 @@ public final class ShipmentPhysicalStateSupport {
                 || observed.hand().quantity() != shipment.quantity())
             throw new IllegalArgumentException("shipment hand boundary names a foreign body/stack");
         var ledger = state.inventory().fungibleResources();
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(shipment.carriedAccountId())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, shipment.carriedAccountId());
         FungibleResourceLedger replacement;
         switch (observed.boundary()) {
             case MATERIALIZED -> {

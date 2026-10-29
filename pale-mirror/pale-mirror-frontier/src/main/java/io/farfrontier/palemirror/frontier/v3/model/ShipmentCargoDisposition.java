@@ -19,7 +19,7 @@ public final class ShipmentCargoDisposition {
         state.actorExecutions().requireRetained(shipment.execution());
         ShipmentAuthorizationComposition.validate(state, shipment, false);
         var resources = state.inventory().fungibleResources();
-        var bindings = resources.bindings().values().stream().filter(b -> b.accountId().equals(shipment.carriedAccountId())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, shipment.carriedAccountId());
         var body = ActorBodyId.entityId(state.bootstrap().worldId(), shipment.execution().actorId());
         if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != observed.identity().body().physicalEpoch()
                 || !bindings.getFirst().address().equals(new PhysicalStackAddress.ActorHand(shipment.execution().actorId(), body, ActorContainerItemOrder.Hand.MAIN))

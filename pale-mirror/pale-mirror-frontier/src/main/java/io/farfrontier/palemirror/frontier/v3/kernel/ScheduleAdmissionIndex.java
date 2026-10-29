@@ -13,7 +13,12 @@ final class ScheduleAdmissionIndex<S> {
     private final ScheduledActionPlanner<S> planner;
     private final int capacity;
     private final Map<io.farfrontier.palemirror.frontier.v3.api.ScheduleId, ScheduledHold<S>> holds = new HashMap<>();
-    private record AssessedHold<S>(ScheduledAction action, S state) { }
+    private static final class AssessedHold<S> {
+        final ScheduledAction action;
+        final S state;
+        Set<SubjectId> keys;
+        AssessedHold(ScheduledAction action, S state, Set<SubjectId> keys) { this.action = action; this.state = state; this.keys = keys; }
+    }
     /** One allocation/commit pass, not reusable knowledge across host turns. */
     private final Map<io.farfrontier.palemirror.frontier.v3.api.ScheduleId, AssessedHold<S>> passHolds = new HashMap<>();
     private int remaining;
@@ -44,22 +49,24 @@ final class ScheduleAdmissionIndex<S> {
     }
     private Decision evaluate(S state, ScheduledAction action) {
         var assessed = passHolds.get(action.id());
-        if (assessed != null && assessed.action().equals(action) && assessed.state() == state) return Decision.HELD;
+        if (assessed != null && assessed.action.equals(action) && assessed.state == state) return Decision.HELD;
         var retained = holds.get(action.id());
-        if (retained != null && retained.action().equals(action) && retained.stillHeld().test(state)) return Decision.HELD;
+        if (retained != null && retained.action().equals(action) && retained.stillHeld().test(state)) {
+            remember(state, action, retained.wakeKeys()); return Decision.HELD;
+        }
         holds.remove(action.id());
         if (!planner.held(state, action)) return Decision.READY;
         // Pure refusal was already checked in this exact pass/state. Commit
         // reconciliation must not charge the same held prefix over and over.
         // A new aggregate or schedule generation requires a fresh assessment;
         // a new host turn still requires its owner proof or ordinary reevaluation.
-        if (passHolds.size() >= capacity) passHolds.clear();
-        passHolds.put(action.id(), new AssessedHold<>(action, state));
+        remember(state, action, null);
         planner.holdProof(state, action).ifPresent(proof -> {
             if (!action.equals(proof.action()) || !proof.stillHeld().test(state))
                 throw new IllegalArgumentException("scheduled hold proof is stale or addresses another action");
             if (holds.size() >= capacity) holds.clear();
             holds.put(action.id(), proof);
+            passHolds.get(action.id()).keys = proof.wakeKeys();
         });
         return Decision.HELD;
     }
@@ -76,7 +83,16 @@ final class ScheduleAdmissionIndex<S> {
         };
         if (id != null) { holds.remove(id); passHolds.remove(id); }
     }
+    private void remember(S state, ScheduledAction action, Set<SubjectId> keys) {
+        if (passHolds.size() >= capacity) passHolds.clear();
+        passHolds.put(action.id(), new AssessedHold<>(action, state, keys));
+    }
     Set<SubjectId> wakeKeys(S state, ScheduledAction action) {
+        var assessed = passHolds.get(action.id());
+        if (assessed != null && assessed.action.equals(action) && assessed.state == state) {
+            if (assessed.keys == null) assessed.keys = Set.copyOf(planner.holdWakeKeys(state, action));
+            return assessed.keys;
+        }
         var retained = holds.get(action.id());
         return retained != null && retained.action().equals(action) && retained.stillHeld().test(state)
                 ? retained.wakeKeys() : planner.holdWakeKeys(state, action);

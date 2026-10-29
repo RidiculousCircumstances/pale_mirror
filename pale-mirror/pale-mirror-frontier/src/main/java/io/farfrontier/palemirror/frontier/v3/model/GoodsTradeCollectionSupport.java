@@ -40,7 +40,7 @@ public final class GoodsTradeCollectionSupport {
         var ownedClaimId = new SubjectId("claim:collected/" + UUID.nameUUIDFromBytes(
                 receipt.id().value().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         var owned = new ClaimAllocation(ownedClaimId, buyer, buyer, shipment.itemKind(), title.quantity(), ownedLots, ClaimPurpose.INTERNAL_LOGISTICS);
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, account.id());
         ledger = bindings.isEmpty() ? ledger.reserve(owned, account.id())
                 : ledger.reserveBound(owned, account.id(), bindings.getFirst().authorityEpoch());
         var economics = state.inventory().economics().settlePortion(contract.financialReservationId(),

@@ -34,6 +34,9 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
             throw new IllegalArgumentException("group lacks its exact transport mission");
         return mission;
     }
+    @Override public List<ImmutableReferenceIndex.Read<FrontierWorldState>> validationReads(FrontierWorldState state, UnitGroup group) {
+        return UnitGroupValidationReads.transport(state, group);
+    }
     @Override public void validate(FrontierWorldState state, UnitGroup group) {
         var mission = mission(state, group);
         VALIDATION.validateSnapshot(state.bootstrap(), state.unitGroups().groups(), group.id(), group, state, () -> {

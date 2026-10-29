@@ -38,7 +38,7 @@ public final class MaterialSourcePreparation {
         } else if (account.custody() instanceof ResourceCustody.Actor actor) {
             epoch = ActorBodyAuthority.current(state, actor.actorId()).physicalEpoch();
         } else if (account.custody() instanceof ResourceCustody.Ground) {
-            var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+            var bindings = FungibleBindingReadIndex.forAccount(ledger, account.id());
             if (bindings.isEmpty()) return new Review(Status.WAITING_FOR_LAYOUT, account.id(), 0, List.of());
             epoch = bindings.getFirst().authorityEpoch();
         } else throw new IllegalStateException("material order has unsupported physical source: " + account.custody());
@@ -49,7 +49,7 @@ public final class MaterialSourcePreparation {
     public static Review review(FungibleResourceLedger ledger, ActorResourceItemOrder order, long expectedEpoch) {
         if (expectedEpoch < 1) throw new IllegalArgumentException("material preparation requires a current authority epoch");
         var account = requireAccount(ledger, order);
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, account.id());
         if (bindings.isEmpty()) return new Review(Status.WAITING_FOR_LAYOUT, account.id(), expectedEpoch, List.of());
         if (bindings.stream().anyMatch(binding -> binding.authorityEpoch() != expectedEpoch))
             throw new IllegalStateException("material source layout has a foreign authority epoch;"

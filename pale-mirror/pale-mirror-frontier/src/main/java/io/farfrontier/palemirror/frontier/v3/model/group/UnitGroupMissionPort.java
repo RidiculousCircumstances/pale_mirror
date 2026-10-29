@@ -12,6 +12,7 @@ public interface UnitGroupMissionPort {
     boolean permitsHomeFood(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, UnitGroup group);
     UnitGroup.MissionKind kind();
     void validate(FrontierWorldState state, UnitGroup group);
+    java.util.List<ImmutableReferenceIndex.Read<FrontierWorldState>> validationReads(FrontierWorldState state, UnitGroup group);
     java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> movementValidationReads(
             ActorMovementReferences references, UnitGroup group,
             ActorMovement movement);

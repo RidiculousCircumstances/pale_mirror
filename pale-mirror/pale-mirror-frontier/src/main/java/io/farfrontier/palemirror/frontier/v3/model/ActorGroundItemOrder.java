@@ -38,7 +38,7 @@ public record ActorGroundItemOrder(SubjectId ownerId, SubjectId actorId,
         requireSourceEvidence(ledger);
     }
     @Override public void requireSourceEvidence(FungibleResourceLedger ledger) {
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(portion.sourceAccountId())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, portion.sourceAccountId());
         if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != sourceEpoch
                 || !bindings.getFirst().address().equals(new PhysicalStackAddress.WorldEntity(entityId)))
             throw new IllegalArgumentException("ground pickup lost its exact current item entity witness");

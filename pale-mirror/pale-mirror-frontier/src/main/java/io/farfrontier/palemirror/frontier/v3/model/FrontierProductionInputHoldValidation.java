@@ -32,7 +32,7 @@ final class FrontierProductionInputHoldValidation {
                 || account.claimQuantities().getOrDefault(claim.id(), 0) != claim.quantity()) {
             throw new IllegalArgumentException("fungible production job must retain its exact depot lot allocation");
         }
-        var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accountId)).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, accountId);
         boolean hasEpoch = !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch);
         if (bound && !hasEpoch) {
             throw new IllegalArgumentException("fungible production job does not match its current physical custody epoch");

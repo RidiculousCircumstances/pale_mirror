@@ -25,7 +25,7 @@ public final class InternalShipmentStateSupport {
         // Flow admission belongs to the serialized planner. Already accepted events
         // replay as facts, including batches admitted before the current policy.
         var ledger = state.inventory().fungibleResources();
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(shipment.sourceAccountId())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, shipment.sourceAccountId());
         ledger = bindings.isEmpty() ? ledger.reserve(claim, shipment.sourceAccountId())
                 : ledger.reserveBound(claim, shipment.sourceAccountId(), bindings.getFirst().authorityEpoch());
         var allocated = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(ledger)));
@@ -56,7 +56,7 @@ public final class InternalShipmentStateSupport {
                 || account == null || !account.custody().equals(shipment.receiver().custody())
                 || account.claimQuantities().getOrDefault(claim.id(), 0) != receipt.quantity())
             throw new IllegalArgumentException("internal stock receipt lost its retained owner, allocation or receiving custody");
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, account.id());
         ledger = bindings.isEmpty() ? ledger.releaseClaim(account.id(), claim.id())
                 : ledger.releaseBoundClaim(account.id(), claim.id(), bindings.getFirst().authorityEpoch());
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(ledger))

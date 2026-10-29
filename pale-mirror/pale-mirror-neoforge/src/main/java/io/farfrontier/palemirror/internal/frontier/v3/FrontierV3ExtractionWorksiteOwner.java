@@ -34,8 +34,9 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     private Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ExtractionDeposit> geometryDeposits;
     private static final class DeparturePass {
         final ExtractionGeometryIndex geometry;
+        final List<ExtractionRegion> obligations;
         final FrontierV3CooperativeStageCursor cursor = new FrontierV3CooperativeStageCursor();
-        DeparturePass(ExtractionGeometryIndex geometry) { this.geometry = geometry; }
+        DeparturePass(ExtractionGeometryIndex geometry, List<ExtractionRegion> obligations) { this.geometry = geometry; this.obligations = obligations; }
     }
     private final Map<ServerLevel, DeparturePass> departurePasses = new WeakHashMap<>();
     private ExtractionGeometryIndex geometry(FrontierWorldState state) {
@@ -46,6 +47,11 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         geometryDeposits = deposits;
         return geometry;
     }
+    private final FrontierV3WorksiteCustodyIndex<ExtractionRegion> custody = new FrontierV3WorksiteCustodyIndex<>();
+    private FrontierV3WorksiteCustodyIndex.Selection<ExtractionRegion> custody(FrontierWorldState state) {
+        var declared = geometry(state);
+        return custody.update(declared, declared::regions, ExtractionRegion::scopeId, state.replicaCustody().custodyByScope());
+    }
     @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.EXTRACTIVE_SITE; }
     @Override public void beforeTurn(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierV3ExtractionBlockWrites.reconcile(level, runtime);
@@ -53,9 +59,10 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         // A cached loaded chunk is not an active physical custodian. Reuse the same
         // positive current-block departure proof when its natural ticking demand ends.
         var index = geometry(runtime.decodedState().orElseThrow());
+        var obligations = custody(runtime.decodedState().orElseThrow()).live();
         var pass = departurePasses.get(level);
-        if (pass == null || pass.geometry != index) {
-            pass = new DeparturePass(index); departurePasses.put(level, pass);
+        if (pass == null || pass.geometry != index || pass.obligations != obligations) {
+            pass = new DeparturePass(index, obligations); departurePasses.put(level, pass);
         }
         var budget = new FrontierV3FirstVisibilityBudget(
                 io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get(), 1,
@@ -65,8 +72,8 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         // write is pending thrashes the bounded physical-record cache on HOT exit.
         // A region remains exclusively physical until its complete exact proof
         // and durability gate pass; yielding grants no COLD permission.
-        pass.cursor.run(index.regions().size(), budget::takeRead, offset -> {
-            var region = index.regions().get(offset);
+        pass.cursor.run(obligations.size(), budget::takeRead, offset -> {
+            var region = obligations.get(offset);
             var state = runtime.decodedState().orElseThrow();
             var chunk = level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ());
             if (chunk == null) {
@@ -162,7 +169,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
         if (!ledger.prepareDurable(level)) return; // Never publish custody from a submitted-but-unforced image.
         var index = geometry(state);
-        for (var region : index.regions()) {
+        for (var region : custody(state).preparing()) {
             var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING) continue;
             boolean complete = index.cells(region).stream().allMatch(cell -> {

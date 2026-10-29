@@ -15,7 +15,7 @@ final class FungibleBindingRepartition {
     static FungibleResourceLedger retainLayout(FungibleResourceLedger before,
                                                Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                                                Map<SubjectId, CustodyAccount> accounts, SubjectId accountId) {
-        var current = before.bindings().values().stream().filter(b -> b.accountId().equals(accountId)).toList();
+        var current = FungibleBindingReadIndex.forAccount(before, accountId);
         var bindings = withoutAccount(before.bindings(), accountId);
         // This intermediate never leaves the ledger operation and never releases physical authority.
         var unbound = new FungibleResourceLedger(lots, claims, accounts, bindings);

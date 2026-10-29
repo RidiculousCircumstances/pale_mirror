@@ -113,7 +113,7 @@ public final class ResourceSiteHarvestCargo {
                                                          java.util.UUID entityId, long actorEpoch, long depotEpoch,
                                                          List<FungiblePhysicalObservation.Stack> depotStacks) {
         var resources = state.inventory().fungibleResources();
-        var bindings = resources.bindings().values().stream().filter(value -> value.accountId().equals(job.actorAccountId())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, job.actorAccountId());
         if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != actorEpoch
                 || !bindings.getFirst().address().equals(new PhysicalStackAddress.ActorHand(job.workerId(), entityId)))
             throw new IllegalArgumentException("harvest transfer has a foreign physical body or hand epoch");

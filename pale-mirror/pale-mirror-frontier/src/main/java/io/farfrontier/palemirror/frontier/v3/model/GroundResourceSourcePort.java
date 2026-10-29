@@ -21,7 +21,7 @@ final class GroundResourceSourcePort implements ResourceSourcePort {
         var ground = declared(source); var resources = state.inventory().fungibleResources();
         var accounts = resources.accounts().values().stream().filter(account -> account.custody().equals(ground.custody())).toList();
         if (accounts.size() != 1) throw new IllegalArgumentException("ground admission requires its one current exact custody account");
-        var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accounts.getFirst().id())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, accounts.getFirst().id());
         if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != ground.epoch()
                 || !bindings.getFirst().address().equals(new PhysicalStackAddress.WorldEntity(ground.custody().entityId())))
             throw new IllegalArgumentException("ground admission has stale or foreign entity binding evidence");

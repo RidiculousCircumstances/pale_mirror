@@ -24,23 +24,13 @@ final class UnitGroupRelationships {
         inspect(state, edges, true);
     }
     /** Publication needs the same owner checks, without constructing an unused diagnostic graph. */
-    static void validate(FrontierWorldState state) { inspect(state, List.of(), false); }
+    static void validate(FrontierWorldState state) { UnitGroupRelationshipChecks.validate(state); }
     private static void inspect(FrontierWorldState state, List<Edge> edges, boolean project) {
         for (var claim : state.inventory().fungibleResources().claims().values()) {
-            if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY) continue;
-            var mission = state.shipments().missions().get(claim.claimantId());
-            if (mission == null || mission.supplies().stream().flatMap(load -> load.allocations().stream())
-                    .noneMatch(a -> !a.loaded() && !a.withdrawn() && a.claimId().equals(claim.id()))
-                        && mission.replenishment().filter(t -> t.claimId().equals(claim.id())).isEmpty())
-                throw new IllegalArgumentException("provisioning claim has no exact retained loading obligation");
+            validateClaim(state, claim);
         }
         for (var group : state.unitGroups().groups().values()) {
-            var port = UnitGroupMissionPorts.require(group); port.validate(state, group);
-            group.journey().ifPresent(journey -> {
-                if (group.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE
-                        && !journey.stations().containsKey(member.actorId())))
-                    throw new IllegalArgumentException("active group journey omits a surviving participant's declared station");
-            });
+            validateGroup(state, group);
             if (project) {
                 var owner = new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id());
                 var life = group.phase() == UnitGroup.Phase.CLOSED ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
@@ -51,25 +41,16 @@ final class UnitGroupRelationships {
             }
         }
         for (var mission : state.shipments().missions().values()) {
-            var group = state.unitGroups().groups().get(mission.groupId());
-            if (group == null || !group.mission().equals(new UnitGroup.Mission(UnitGroup.MissionKind.TRANSPORT, mission.id()))
-                    || mission.stage() == TransportMission.Stage.COMPLETE && group.phase() != UnitGroup.Phase.CLOSED
-                    || group.phase() == UnitGroup.Phase.CLOSED && mission.stage() != TransportMission.Stage.RETURNING
-                        && mission.stage() != TransportMission.Stage.COMPLETE)
-                throw new IllegalArgumentException("transport mission lost its exact group or legal closing boundary");
-            io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.validate(state, mission, group);
+            validateMission(state, mission);
             if (project) {
                 var owner = new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id());
                 var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
                 edges.add(declaredEdge(Kind.TRANSPORT_GROUP, owner, owner,
-                        new SubjectEndpoint(EntityKind.UNIT_GROUP, group.id()), life, "transport:" + mission.id().value()));
+                        new SubjectEndpoint(EntityKind.UNIT_GROUP, mission.groupId()), life, "transport:" + mission.id().value()));
                 mission.transportAssetId().ifPresent(actor -> edges.add(declaredEdge(Kind.TRANSPORT_ASSET, owner, owner,
                         new SubjectEndpoint(EntityKind.ACTOR, actor), life, "transport:" + mission.id().value())));
             }
             for (var id : mission.shipmentIds()) {
-                var shipment = state.shipments().shipments().get(id);
-                if (shipment == null || !shipment.transportMissionId().equals(Optional.of(mission.id())))
-                    throw new IllegalArgumentException("mission lost its exact shipment reference");
                 if (project) {
                     var owner = new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id());
                     var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
@@ -99,15 +80,50 @@ final class UnitGroupRelationships {
             }
         }
         for (var shipment : state.shipments().shipments().values()) if (shipment.transportMissionId().isPresent()) {
-            var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
-            if (mission == null || !mission.shipmentIds().contains(shipment.id()))
-                throw new IllegalArgumentException("shipment lost its exact owning transport mission");
+            validateShipment(state, shipment);
             if (project) {
                 var owner = new SubjectEndpoint(EntityKind.SHIPMENT, shipment.id());
                 edges.add(declaredEdge(Kind.SHIPMENT_MISSION, owner, owner,
-                        new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, mission.id()),
+                        new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, shipment.transportMissionId().orElseThrow()),
                         shipment.terminal() ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE, "shipment:" + shipment.id().value()));
             }
         }
     }
+    static void validateClaim(FrontierWorldState state, ClaimAllocation claim) {
+            if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY) return;
+            var mission = state.shipments().missions().get(claim.claimantId());
+            if (mission == null || mission.supplies().stream().flatMap(load -> load.allocations().stream())
+                    .noneMatch(a -> !a.loaded() && !a.withdrawn() && a.claimId().equals(claim.id()))
+                        && mission.replenishment().filter(t -> t.claimId().equals(claim.id())).isEmpty())
+                throw new IllegalArgumentException("provisioning claim has no exact retained loading obligation");
+    }
+    static void validateGroup(FrontierWorldState state, UnitGroup group) {
+            var port = UnitGroupMissionPorts.require(group); port.validate(state, group);
+            group.journey().ifPresent(journey -> {
+                if (group.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE
+                        && !journey.stations().containsKey(member.actorId())))
+                    throw new IllegalArgumentException("active group journey omits a surviving participant's declared station");
+            });
+    }
+    static void validateMission(FrontierWorldState state, TransportMission mission) {
+            var group = state.unitGroups().groups().get(mission.groupId());
+            if (group == null || !group.mission().equals(new UnitGroup.Mission(UnitGroup.MissionKind.TRANSPORT, mission.id()))
+                    || mission.stage() == TransportMission.Stage.COMPLETE && group.phase() != UnitGroup.Phase.CLOSED
+                    || group.phase() == UnitGroup.Phase.CLOSED && mission.stage() != TransportMission.Stage.RETURNING
+                        && mission.stage() != TransportMission.Stage.COMPLETE)
+                throw new IllegalArgumentException("transport mission lost its exact group or legal closing boundary");
+            io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.validate(state, mission, group);
+        for (var id : mission.shipmentIds()) {
+            var shipment = state.shipments().shipments().get(id);
+            if (shipment == null || !shipment.transportMissionId().equals(Optional.of(mission.id())))
+                throw new IllegalArgumentException("mission lost its exact shipment reference");
+        }
+    }
+    static void validateShipment(FrontierWorldState state, Shipment shipment) {
+        if (shipment.transportMissionId().isEmpty()) return;
+            var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
+            if (mission == null || !mission.shipmentIds().contains(shipment.id()))
+                throw new IllegalArgumentException("shipment lost its exact owning transport mission");
+    }
+
 }

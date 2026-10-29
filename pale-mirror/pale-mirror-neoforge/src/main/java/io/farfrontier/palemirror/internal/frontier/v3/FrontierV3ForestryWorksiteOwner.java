@@ -21,6 +21,12 @@ final class FrontierV3ForestryWorksiteOwner implements FrontierV3WorksiteProject
     private Map<Region, List<List<WorksiteBlock>>> inputs = Map.of();
     private Map<Region, List<WorksiteBlock>> regions = Map.of();
     private List<WorksiteBlock> declarations = List.of();
+    private final FrontierV3WorksiteCustodyIndex<ForestTree> custody = new FrontierV3WorksiteCustodyIndex<>();
+    private FrontierV3WorksiteCustodyIndex.Selection<ForestTree> custody(FrontierWorldState state) {
+        return custody.update(state.forest().regions(), () -> state.forest().regions().values().stream()
+                .flatMap(part -> part.values().stream()).toList(), tree -> ForestrySourceCustody.scope(tree.reference()),
+                state.replicaCustody().custodyByScope());
+    }
     @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.FOREST_TREE; }
     @Override public List<WorksiteBlock> declarations(FrontierWorldState state) { currentRegions(state); return declarations; }
     @Override public Map<Region, List<WorksiteBlock>> currentRegions(FrontierWorldState state) {
@@ -113,7 +119,7 @@ final class FrontierV3ForestryWorksiteOwner implements FrontierV3WorksiteProject
     @Override public void beforeTurn(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierV3ForestryBlockWrites.reconcile(level, runtime); afterProjection(level, runtime);
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
-        for (var part : state.forest().regions().values()) for (var tree : part.values()) {
+        for (var tree : custody(state).live()) {
             var lease = state.replicaCustody().custodyByScope().get(ForestrySourceCustody.scope(tree.reference()));
             if (lease == null || !lease.live()) continue;
             boolean hot = !cells(tree).isEmpty() && tree.declaration().footprint().stream().anyMatch(region -> level.shouldTickBlocksAt(new BlockPos(region.x()*16, tree.declaration().origin().y(), region.z()*16)));
@@ -137,7 +143,7 @@ final class FrontierV3ForestryWorksiteOwner implements FrontierV3WorksiteProject
     @Override public void afterProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
         if (!ledger.prepareDurable(level)) return;
-        for (var part : state.forest().regions().values()) for (var tree : part.values()) {
+        for (var tree : custody(state).preparing()) {
             var lease = state.replicaCustody().custodyByScope().get(ForestrySourceCustody.scope(tree.reference()));
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING) continue;
             boolean complete = cells(tree).stream().allMatch(cell -> {

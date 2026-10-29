@@ -61,4 +61,26 @@ class ScheduleAdmissionIndexTest {
         assertEquals(ScheduleAdmissionIndex.Decision.READY, index.recheckSelected(new State(new Object(), true, new Object()), FIRST));
         assertEquals(2, checks.get());
     }
+    @Test void confirmedRefusalSharesItsWakeKeysWithinOneExactPassButChangedStateIsReevaluated() {
+        var validity = new AtomicInteger(); var keys = new AtomicInteger();
+        var index = new ScheduleAdmissionIndex<State>(new ScheduledActionPlanner<>() {
+            public List<ProposedEvent> plan(State s, ScheduledAction a) { return List.of(); }
+            public boolean held(State s, ScheduledAction a) { return !s.hasStock(); }
+            public Optional<ScheduledHold<State>> holdProof(State s, ScheduledAction a) {
+                return Optional.of(new ScheduledHold<>(a, Set.of(a.subject()), next -> { validity.incrementAndGet(); return next.stock() == s.stock(); }));
+            }
+            public Set<SubjectId> holdWakeKeys(State s, ScheduledAction a) { keys.incrementAndGet(); return Set.of(SECOND.subject()); }
+        }, 8);
+        var state = new State(new Object(), false, new Object()); index.begin(new WorkBudget(4, 4));
+        assertEquals(ScheduleAdmissionIndex.Decision.HELD, index.assess(state, FIRST));
+        assertEquals(Set.of(FIRST.subject()), index.wakeKeys(state, FIRST));
+        assertEquals(Set.of(FIRST.subject()), index.wakeKeys(state, FIRST));
+        assertEquals(1, validity.get()); assertEquals(0, keys.get());
+        index.begin(new WorkBudget(4, 4)); index.assess(state, FIRST); index.wakeKeys(state, FIRST);
+        assertEquals(2, validity.get(), "a new pass revalidates owner proof");
+        var changed = new State(new Object(), true, new Object());
+        assertEquals(ScheduleAdmissionIndex.Decision.READY, index.recheckSelected(changed, FIRST));
+        assertEquals(Set.of(SECOND.subject()), index.wakeKeys(changed, FIRST)); assertEquals(1, keys.get());
+    }
+
 }

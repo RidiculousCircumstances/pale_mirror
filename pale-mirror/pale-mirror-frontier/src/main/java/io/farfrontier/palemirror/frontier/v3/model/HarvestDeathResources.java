@@ -77,7 +77,7 @@ public final class HarvestDeathResources {
                 || !lease.members().getFirst().entityId().equals(receipt.entityId()))
             throw new IllegalArgumentException("retired delivery lost its exact retained scene/body");
         var resources = state.inventory().fungibleResources();
-        var bindings = resources.bindings().values().stream().filter(value -> value.accountId().equals(job.actorAccountId())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, job.actorAccountId());
         if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != receipt.actorEpoch()
                 || !bindings.getFirst().address().equals(new PhysicalStackAddress.ActorHand(job.workerId(), receipt.entityId())))
             throw new IllegalArgumentException("retired delivery has a foreign resource epoch or body");

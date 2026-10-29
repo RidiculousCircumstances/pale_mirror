@@ -49,7 +49,7 @@ public final class FungibleResourceCustodySupport {
                     .mapToInt(claim -> claim.lotQuantities().getOrDefault(entry.getKey(), 0)).sum();
             if (entry.getValue() > account.lotQuantities().getOrDefault(entry.getKey(), 0) - pinned) return false;
         }
-        var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(input.accountId())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, input.accountId());
         if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) return bindings.isEmpty();
         if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())) return false;
         return hasCurrentPhysicalPortion(state, input.accountId(), input.lotQuantities());
@@ -64,7 +64,7 @@ public final class FungibleResourceCustodySupport {
         if (account == null || !(account.custody() instanceof ResourceCustody.Container container)
                 || portion.isEmpty() || !ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())) return false;
-        var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accountId)).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, accountId);
         long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId())).authorityEpoch();
         return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch)
                 && portion.entrySet().stream().allMatch(entry -> entry.getValue() > 0

@@ -43,7 +43,7 @@ public final class UnitInventoryBodyCustody {
         for (var account : UnitInventory.accounts(resources, body.actorId())) {
             // A reservation survives HOT/COLD; it is not an independent physical body.
             // Registered activity checkpoints have already settled their pending effects.
-            var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+            var bindings = FungibleBindingReadIndex.forAccount(resources, account.id());
             if (bindings.isEmpty()) continue;
             var presentation = UnitInventoryPresentation.inventory(state, body.actorId()).get(account.id());
             if (bindings.size() != 1 || !bindings.getFirst().address().equals(address(state, presentation)))

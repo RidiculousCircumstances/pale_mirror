@@ -453,6 +453,7 @@ class UnitGroupTransportTest {
         var port = UnitGroupMissionPorts.require(group);
         assertThrows(IllegalArgumentException.class, () -> UnitGroupMissionPorts.registry(List.of(port, port)));
         port.validate(state, group); // Warm exactly the current transport declaration.
+        UnitGroupRelationships.validate(state); // Warm publication index, not only the port-local cache.
         var memberId = group.members().getFirst().actorId();
         var actualActor = state.actorLocations().get(memberId);
         var wrongKind = new ActorLocation(actualActor.body(), actualActor.condition(), ActorKind.BIOFORM, actualActor.navigationProfile());
@@ -460,6 +461,8 @@ class UnitGroupTransportTest {
                 FrontierWorldStateUpdate.begin().actorLocations(ImmutableLookupMap.withEntry(state.actorLocations(), memberId, wrongKind))));
         assertThrows(IllegalArgumentException.class, () -> port.validate(wrongActor, group),
                 "unchanged group/shipment maps cannot hide a changed member declaration");
+        assertThrows(IllegalArgumentException.class, () -> UnitGroupRelationships.validate(wrongActor));
+        UnitGroupRelationships.validate(state);
         var executions = new java.util.HashMap<>(state.actorExecutions().actors());
         var foreign = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(memberId,
                 ActorActivityKind.GROUP_MEMBER, new SubjectId("unit-group:foreign"), 1000);
@@ -469,6 +472,9 @@ class UnitGroupTransportTest {
                 FrontierWorldStateUpdate.begin().actorExecutions(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState(executions))));
         assertThrows(IllegalArgumentException.class, () -> port.validate(wrongExecution, group),
                 "unchanged group cannot hide competing current participant authority");
+        assertThrows(IllegalArgumentException.class, () -> UnitGroupRelationships.validate(wrongExecution));
+        assertDoesNotThrow(() -> UnitGroupRelationships.validate(state));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> { UnitGroupRelationships.validate(state); return null; }));
         assertDoesNotThrow(() -> port.validate(state, group));
         assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> { port.validate(state, group); return null; }));
         var carrier = group.members().getFirst(); var members = new ArrayList<>(group.members());

@@ -19,7 +19,7 @@ public final class ResourceSourceDiscovery {
         var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home, List.of());
         for (var account : grounds) {
             var ground = (ResourceCustody.Ground) account.custody();
-            var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+            var bindings = FungibleBindingReadIndex.forAccount(resources, account.id());
             if (bindings.size() != 1 || !(bindings.getFirst().address() instanceof PhysicalStackAddress.WorldEntity address)
                     || !address.entityId().equals(ground.entityId())) continue;
             var stations = new ArrayList<SurfaceAnchor>();

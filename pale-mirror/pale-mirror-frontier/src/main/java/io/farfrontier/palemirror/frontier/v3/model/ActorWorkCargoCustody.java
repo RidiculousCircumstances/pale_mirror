@@ -14,7 +14,7 @@ public final class ActorWorkCargoCustody {
         state.actorExecutions().requireRetained(execution);
         var body = identity.body(); var fence = ActorBodyAuthority.require(state, body);
         var ledger = state.inventory().fungibleResources();
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account)).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, account);
         switch (boundary) {
             case MATERIALIZED -> {
                 if (!bindings.isEmpty()) throw new IllegalArgumentException("work cargo materialization already owns a binding");

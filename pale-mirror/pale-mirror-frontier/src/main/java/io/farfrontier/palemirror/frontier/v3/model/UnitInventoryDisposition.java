@@ -17,7 +17,7 @@ public final class UnitInventoryDisposition {
         var account = resources.accounts().get(receipt.accountId());
         if (account == null || !account.custody().equals(new ResourceCustody.Actor(subject)) || !account.claimQuantities().isEmpty())
             throw new IllegalArgumentException("inventory disposition lacks exact free actor-held stock");
-        var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(resources, account.id());
         var entityId = ActorBodyId.entityId(state.bootstrap().worldId(), subject);
         if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != receipt.sourceEpoch()
                 || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())

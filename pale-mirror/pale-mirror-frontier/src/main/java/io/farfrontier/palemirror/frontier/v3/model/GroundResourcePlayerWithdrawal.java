@@ -28,7 +28,7 @@ public record GroundResourcePlayerWithdrawal(SubjectId sourceAccountId, Resource
         var ledger = state.inventory().fungibleResources(); var account = ledger.accounts().get(accountId);
         if (account == null || !(account.custody() instanceof ResourceCustody.Ground ground))
             throw new IllegalArgumentException("player pickup requires exact ground custody");
-        var bindings = ledger.bindings().values().stream().filter(b -> b.accountId().equals(accountId)).toList();
+        var bindings = FungibleBindingReadIndex.forAccount(ledger, accountId);
         if (bindings.size() != 1 || !bindings.getFirst().address().equals(new PhysicalStackAddress.WorldEntity(ground.entityId()))
                 || amount < 1 || amount > bindings.getFirst().quantity())
             throw new IllegalArgumentException("player pickup requires exact bound stock");
