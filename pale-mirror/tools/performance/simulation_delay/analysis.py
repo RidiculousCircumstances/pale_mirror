@@ -16,13 +16,17 @@ def analyze_world(trace, world, data):
         f=e["fields"]
         observations.extend([(e["start"],f["beforeTick"],f.get("beforeDebt",f.get("debt"))), (e["end"],f["afterTick"],f.get("debt"))])
     for e in data["states"]: observations.append((e["start"],e["fields"].get("tick",0),e["fields"].get("debt")))
-    if len(observations)<2:
-        return {"world":world,"status":"trace_incomplete","issues":["NO_CLOCK_COVERAGE"],"partition":[]}
-    observations.sort(); observed_start, first_tick, before_debt = observations[0]
-    observed_end, last_tick, last_debt = observations[-1]
     metadata=getattr(trace,"metadata",{})
-    start=min(observed_start,metadata.get("recordingFirstNs",observed_start))
-    end=max(observed_end,metadata.get("recordingLastNs",observed_end))
+    start=metadata.get("recordingFirstNs",min((o[0] for o in observations),default=0))
+    end=metadata.get("recordingLastNs",max((o[0] for o in observations),default=start))
+    observations=sorted(o for o in observations if start<=o[0]<=end)
+    if len(observations)<2:
+        return {"world":world,"status":"trace_incomplete","issues":["NO_CLOCK_COVERAGE"],"partition":[],
+                "start":start,"end":end,"windowNs":end-start,"accountedNs":0,"unexplainedNs":end-start,
+                "unexplainedFraction":1,"ticksPerSecond":0,"firstDebt":None,"lastDebt":None,
+                "ownerCpuNs":None,"exclusiveWallNs":{},"blockingTasksNs":{}}
+    observed_start, first_tick, before_debt = observations[0]
+    observed_end, last_tick, last_debt = observations[-1]
     tids = {e["tid"] for e in turns} | {e["tid"] for e in data["states"]}
     changes = defaultdict(list)
     def span(e, kind):
@@ -110,7 +114,8 @@ def analyze_world(trace, world, data):
     for row in partition:
         ns=row["end"]-row["start"];buckets[row["category"]]+=ns
         if any(k in row["category"] for k in ("UNKNOWN","UNRESOLVED","UNATTRIBUTED","UNINSTRUMENTED","INCOMPLETE")): unknown+=ns
-        if row["cause"]["dependency"]!="0": blocking[row["cause"]["dependency"]]+=ns
+        if not row["owner"] and row["cause"]["dependency"]!="0" and row["category"].startswith(("EXACT_","WAL_")):
+            blocking[row["cause"]["dependency"]]+=ns
 
     issues=[]
     if trace.loss: issues.append("JFR_DATA_LOSS")
@@ -119,6 +124,8 @@ def analyze_world(trace, world, data):
     if not data["states"]: issues.append("NO_EXPLICIT_CLOCK_STATE_CHANGES")
     owner_cpu=0; cpu_complete=True; covered_end=start
     for e in sorted(turns,key=lambda e:(e["start"],-e["end"])):
+        if e["end"]<=start or e["start"]>=end: continue
+        if e["start"]<start or e["end"]>end: cpu_complete=False; continue
         if e["end"]<=covered_end: continue
         f=e["fields"]; a=f.get("startedCpuNanos",-1);b=f.get("endedCpuNanos",-1)
         if e["start"]<covered_end or a<0 or b<a: cpu_complete=False
@@ -135,5 +142,5 @@ def analyze_world(trace, world, data):
             "firstTick":first_tick,"lastTick":last_tick,"observedClockStart":observed_start,"observedClockEnd":observed_end,
             "ticksPerSecond":(last_tick-first_tick)/((observed_end-observed_start)/1e9) if observed_end>observed_start else 0,
             "firstDebt":before_debt,"lastDebt":last_debt,"hostTickArrivals":arrivals,"debtBalanceDifferenceTicks":balance,
-            "ownerCpuNs":owner_cpu if cpu_complete else None,"ownerCpuComplete":cpu_complete,
+            "ownerCpuNs":owner_cpu if cpu_complete else None,"ownerCpuMeasuredNs":owner_cpu,"ownerCpuComplete":cpu_complete,
             "exclusiveWallNs":dict(buckets),"blockingTasksNs":dict(blocking),"partition":partition}

@@ -46,7 +46,9 @@ def main():
         return {"monotonicNs":time.monotonic_ns(),"cpuTicks":int(t[11])+int(t[12]),"birthTicks":int(t[19])}
     before=cpu();identity={"schema":2,"service":a.service,"runtime":str(runtime),"pid":pid,
         "sourceRef":ref,"artifactSha512":sha(a.artifact,"sha512"),"configSha256":sha(config),
-        "requestedSeconds":a.seconds,"before":before,"cpuTicksPerSecond":os.sysconf("SC_CLK_TCK")}
+        "requestedSeconds":a.seconds,"before":before,"cpuTicksPerSecond":os.sysconf("SC_CLK_TCK"),
+        "javaExecutable":str((Path("/proc")/pid/"exe").resolve()),
+        "runtimeInputSha256":{str(f.relative_to(runtime)):sha(f) for f in [runtime/"user_jvm_args.txt",runtime/"server.properties",runtime/"config/pale-mirror-server.toml"] if f.is_file()}}
     (out/"capture.json").write_text(json.dumps(identity,indent=2)+"\n")
     try:
         name="pm_causal_"+str(time.time_ns())

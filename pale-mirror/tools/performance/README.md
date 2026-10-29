@@ -34,7 +34,8 @@ python3 -m unittest discover -s tools/performance -p test_simulation_delay.py
 Open `timeline.html` locally; it embeds its data and needs no network service.
 Zoom/pan the timeline, choose a world and click/search task IDs to follow exact
 parent and consumer links. `report.json`, `status.json`, normalized `trace.ndjson`
-and `timeline.perfetto.json` retain machine-readable evidence. `reported` means
+and `timeline.perfetto.json` retain machine-readable evidence. The analyzer records
+its source-file hashes separately from the producer artifact identity. `reported` means
 the tool ran, not that every causal dependency is known. Errors write failed
 status and never silently truncate or reuse earlier success. Reader bounds are
 256 MiB JFR, two million scanned events, one million retained events / 150,000
@@ -49,7 +50,9 @@ nodes and 512 MiB normalized input; shorten a capture on capacity failure.
 - Host tick arrival, budget refill and each turn exit record actual current
   clock gates and secondary pending conditions. Exclusive wall time follows the
   actual barrier order. Nested turns are unioned; overlapping workers are not
-  summed into clock waiting. Unknown time and recording edges remain explicit.
+  summed into clock waiting. Closed JFR chunk headers define the recording window;
+  an event that started earlier cannot expand it. Partial/live/unknown chunk
+  formats fail explicitly. Unknown time and recording edges remain explicit.
 - Wall duration, per-thread CPU counter deltas, statistical stack samples and
   canonical ticks/debt are distinct quantities. CPU is unavailable explicitly
   when JVM counters are unsupported/disabled. Queue spans identify an emitter,

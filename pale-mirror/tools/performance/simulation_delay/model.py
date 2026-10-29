@@ -6,7 +6,7 @@ MAX_EVENTS, MAX_NODES = 1_000_000, 150_000
 
 class Trace:
     def __init__(self, records):
-        self.nodes, self.edges, self.events = {}, set(), []
+        self.nodes, self.edges, self.events, self.references = {}, set(), [], set()
         self.worlds = defaultdict(lambda: {"turns": [], "attempts": [], "states": [], "stages": []})
         self.loss = 0
         self.wal = {"missingAppends": [], "transactions": []}
@@ -20,7 +20,7 @@ class Trace:
                 raise ValueError("negative event duration")
             self.events.append(event)
             self.add(event)
-        self.missing = sorted({n for a, b, _ in self.edges for n in (a,b) if n not in self.nodes})
+        self.missing = sorted((self.references | {n for a,b,_ in self.edges for n in (a,b)}) - self.nodes.keys())
 
     def node(self, key, kind, event):
         if key not in self.nodes:
@@ -51,6 +51,8 @@ class Trace:
             self.worlds[world]["attempts"].append(event)
         elif kind == "ClockState":
             self.worlds[world]["states"].append(event)
+            if f.get("dependency"): self.references.add(str(f["dependency"]))
+            self.edge(f.get("turn"),f.get("dependency"),"blocked_on")
         elif kind == "ExecutionStage":
             self.worlds[world]["stages"].append(event)
         identifier = f.get("id",0)
@@ -94,4 +96,4 @@ class Trace:
                         self.wal["transactions"].append({"transaction":source,"flush":node["id"],"world":f.get("reference"),"sequence":f.get("value"),"receiptObserved":observed})
                     else:
                         self.wal["missingAppends"].append({"flush":node["id"],"world":f.get("reference"),"sequence":f.get("value")})
-        self.missing = sorted({n for a,b,_ in self.edges for n in (a,b) if n not in self.nodes})
+        self.missing = sorted((self.references | {n for a,b,_ in self.edges for n in (a,b)}) - self.nodes.keys())

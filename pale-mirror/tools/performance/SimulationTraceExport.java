@@ -32,17 +32,41 @@ public class SimulationTraceExport {
         throw new IllegalArgumentException("unsupported normalized value " + v.getClass());
     }
     static long number(RecordedEvent e, String key, long fallback) { return e.hasField(key) ? e.getLong(key) : fallback; }
+    /** Closed JFR v1/v2 chunk headers: OpenJDK ChunkHeader (68 bytes).
+     * Event start times can predate recording (e.g. a long ThreadPark).
+     * Reject live/partial/unknown files instead of expanding the capture window. */
+    static long[] bounds(Path input) throws IOException {
+        long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
+        try (var file = new RandomAccessFile(input.toFile(), "r")) {
+            long offset = 0, length = file.length();
+            while (offset < length) {
+                if (length - offset < 68) throw new IOException("partial JFR chunk header");
+                file.seek(offset);
+                if (file.readInt() != 0x464c5200) throw new IOException("invalid JFR chunk magic");
+                int major = file.readUnsignedShort(); file.readUnsignedShort();
+                if (major != 1 && major != 2) throw new IOException("unsupported JFR chunk version");
+                long size = file.readLong();
+                if (size < 68 || size > length - offset) throw new IOException("incomplete JFR chunk");
+                file.seek(offset + 32); long start = file.readLong(), duration = file.readLong();
+                file.seek(offset + 64);
+                if (file.readUnsignedByte() != 0 || duration < 0) throw new IOException("JFR chunk is not closed");
+                first = Math.min(first, start); last = Math.max(last, Math.addExact(start, duration));
+                offset += size;
+            }
+        }
+        if (first == Long.MAX_VALUE) throw new IOException("empty JFR recording");
+        return new long[] {first, last};
+    }
     public static void main(String[] args) throws Exception {
         if (args.length != 2) throw new IllegalArgumentException("Usage: java SimulationTraceExport.java recording.jfr trace.ndjson");
         Path input = Path.of(args[0]), output = Path.of(args[1]);
         if (Files.size(input) > MAX_BYTES) throw new IllegalArgumentException("Recording exceeds256MiB; shorten capture, no silent truncation");
         Long anchor = null, anchorEpoch = null;
-        long firstEpoch = Long.MAX_VALUE, lastEpoch = Long.MIN_VALUE; int scanned = 0;
+        long[] bounds = bounds(input); int scanned = 0;
         try (var r = new RecordingFile(input)) {
             while (r.hasMoreEvents()) {
                 var e = r.readEvent(); String type = e.getEventType().getName();
                 if (++scanned > 2_000_000) throw new IllegalArgumentException("recording scan capacity exceeded");
-                firstEpoch = Math.min(firstEpoch,epoch(e.getStartTime())); lastEpoch = Math.max(lastEpoch,epoch(e.getEndTime()));
                 if (!type.startsWith("pale_mirror.") || anchor != null) continue;
                 long mono = number(e,"startedNanos",number(e,"monotonicNanos",0));
                 if (mono > 0) { anchor = mono; anchorEpoch = epoch(e.getStartTime()); }
@@ -51,7 +75,7 @@ public class SimulationTraceExport {
         if (anchor == null) throw new IllegalArgumentException("No simulation monotonic anchor; enable causal JFR events");
         Files.createDirectories(output.toAbsolutePath().getParent()); int count = 0;
         try (var writer = Files.newBufferedWriter(output); var r = new RecordingFile(input)) {
-            writer.write(json(Map.of("event","trace.metadata","schema",2,"anchorMonotonicNanos",anchor,"anchorEpochNanos",anchorEpoch,"inputBytes",Files.size(input),"recordingFirstNs",firstEpoch-anchorEpoch,"recordingLastNs",lastEpoch-anchorEpoch))); writer.newLine();
+            writer.write(json(Map.of("event","trace.metadata","schema",2,"anchorMonotonicNanos",anchor,"anchorEpochNanos",anchorEpoch,"inputBytes",Files.size(input),"recordingFirstNs",bounds[0]-anchorEpoch,"recordingLastNs",bounds[1]-anchorEpoch,"boundsSource","closed_jfr_chunks"))); writer.newLine();
             while (r.hasMoreEvents()) {
                 var e = r.readEvent(); String type = e.getEventType().getName();
                 if (!type.startsWith("pale_mirror.") && !JDK.contains(type)) continue;

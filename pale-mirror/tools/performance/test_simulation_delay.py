@@ -79,9 +79,27 @@ class DelayAnalysisTest(unittest.TestCase):
               point(8,60,"COMPUTED",cpuNanos=15)]
         rows[0]["fields"].update(startedCpuNanos=10,endedCpuNanos=40)
         rows[1]["fields"].update(startedCpuNanos=15,endedCpuNanos=20)
+        rows.extend([event("jdk.ExecutionSample",35),event("jdk.NativeMethodSample",50)])
+        for e in rows[-2:]: e["stack"]=["example.frame"]
         result=build(Trace(rows));self.assertEqual(30,result["worlds"][0]["ownerCpuNs"])
+        self.assertEqual({"jdk.ExecutionSample":1,"jdk.NativeMethodSample":1},result["stackSamples"]["byThread"]["owner"]["eventCounts"])
         node=next(n for n in result["graph"]["nodes"] if n["id"]=="8")
         self.assertEqual(10,node["workerCpuNs"])
+
+    def test_long_park_before_recording_does_not_expand_the_closed_capture_window(self):
+        rows=[{"event":"trace.metadata","recordingFirstNs":0,"recordingLastNs":100},
+              turn(1,10,20),turn(2,80,90),event("jdk.ThreadPark",-1000,5)]
+        w=build(Trace(rows))["worlds"][0]
+        self.assertEqual(100,w["windowNs"]);self.assertEqual(100,w["accountedNs"])
+        self.assertEqual(10,w["exclusiveWallNs"]["UNKNOWN_CLOCK_STATE"])
+        self.assertEqual(10,w["exclusiveWallNs"]["UNKNOWN_CAPTURE_EDGE"])
+
+    def test_missing_dependency_on_a_stalled_clock_is_not_causally_complete(self):
+        rows=[event("ClockState",at,world="w",tick=10,debt=1,gate="EXACT_CALCULATION",dependency=999) for at in (0,100)]
+        result=build(Trace(rows))
+        self.assertIn("999",result["graph"]["missingNodes"])
+        self.assertFalse(result["quality"]["causalClosureComplete"])
+        self.assertFalse(result["quality"]["clockCorrelationsPresent"])
 
     def test_wal_members_use_world_and_sequence_and_require_observed_receipt(self):
         rows=[point(0,0,"APPENDED","TRANSACTION",reference="tx:a",value=17),

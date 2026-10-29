@@ -32,6 +32,9 @@ def main():
         result=build(trace)
         with args.recording.open("rb") as f: digest=hashlib.file_digest(f,"sha256").hexdigest()
         result["input"]={"path":str(args.recording.resolve()),"sha256":digest}
+        base=Path(__file__).parent
+        sources=[base/"simulation-delay-report.py",base/"SimulationTraceExport.java",*sorted((base/"simulation_delay").glob("*.py")),base/"simulation_delay/timeline.html"]
+        result["analyzer"]={"schema":2,"sourceSha256":{str(p.relative_to(base)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}}
         capture=args.recording.parent/"capture.json"
         if capture.exists():
             evidence=json.loads(capture.read_text())
