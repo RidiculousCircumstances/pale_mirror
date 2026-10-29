@@ -5253,3 +5253,46 @@ individual/internal transport, external stock loss, compartment/capacity and
 storage replacement/recovery. guardrails passed. Evidence local-inbound-demand-
 focus.log and corresponding frontier XML reports. Frozen packaging and retained
 server deployments follow; no runtime gain is claimed from tests.
+
+
+### Current47e4c0dc7 attribution and owner-local productive stock
+
+47e4c0dc7 packaged from clean detached source in14s; both retained deployments
+verified (local-inbound-demand-{frozen-package,deploy} receipts). Current45s JFR
+local-inbound-demand-current-ordinary100.jfr has0data-loss events.44.905589s completed
+owner coverage323501->323831=7.348751/s UNDER profiling, debt375->948; this is not
+ordinary sustainable capacity and includes current post-startup JIT work.
+Exclusive gates: owner55.56%, exact28.80%, WAL7.60%, ready-exact-waiting-owner6.25%.
+Exact blocking resource_hauling.review2.997236s leads. Native47.587044s CPU sample:
+advice38.25/37.17s, server24.33s, exact13.40s, navigation16.76/16.72s; C2compiler18.98s.
+Thread allocation deltas advice23.07/21.29GB, server14.56GB, nav11.84/11.34GB.
+Weighted allocation samples are NOT exact byte totals. The former selected-book,
+all-receiver demand and delivery forecast scans are absent from leading lookup
+callers. New dominant raw stock caller ProductiveResourceStock reads ALL items and
+accounts to answer ONE owner's kind (42/58 advice lookup samples, plus exact15);
+crew reserve still rebuilds all-away membership per proposed participant group.
+
+Replace the raw-stock regroup with shared current-row memberships: lots by their
+explicit title+kind, and eligible accounts by their declared lot IDs. Read current
+lot title and current account quantities separately: title can change without an
+account replacement. Exact items reuse their existing owner+kind read index.
+Keep original player/world-carrier/ground exclusions and positive exact totals;
+claims are still included as actual held stock. No incoming promises or supply
+policy enters this read model. An order-independent shared group query avoids
+ranking every world key for a local commutative aggregate, retains only actual
+groups and still invalidates changed local row images. Ordered queries preserve
+their original producer order even after an unordered visit. No bound increase.
+
+The staffing policy memoizes only the immutable set compiled from current group
+and shipment declarations. It still checks current permissions, resident life,
+assignments, execution admission and local reserve for every proposed crew. No
+candidate permission or staffing result is cached; unrelated funds/stock drafts
+cannot force another world roster scan. Existing real consolidation/expedition/
+local-staffing negatives and recovery remain applicable.
+
+Connected focus ran69tests:68passed; the new raw-stock fixture incorrectly called
+ExactInventory.store with Actor custody, which that API correctly rejects. Corrected
+the fixture to a real free container slot, preserving production admission. Corrected
+stock/group focus passed14tests (including9architecture) in14s+guardrails. No product
+source changed after the connected focus and no unrelated confidence rerun was made.
+Receipts local-productive-stock-{focus,corrected-focus}.log. Frozen packaging follows.

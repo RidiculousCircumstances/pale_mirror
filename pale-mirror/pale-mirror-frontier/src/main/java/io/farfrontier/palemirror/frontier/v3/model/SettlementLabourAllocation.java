@@ -8,6 +8,18 @@ import java.util.Set;
 /** Read-only allocation policy. Retained family jobs and groups remain the only assignment truth. */
 public final class SettlementLabourAllocation {
     private SettlementLabourAllocation() { }
+    private static final ImmutableInputView<Set<SubjectId>> AWAY = new ImmutableInputView<>();
+    private static Set<SubjectId> away(FrontierWorldState state) {
+        return AWAY.get(List.of(state.unitGroups().groups(), state.shipments().shipments()), () -> {
+            var actors = state.unitGroups().groups().values().stream()
+                    .filter(group -> group.phase() != UnitGroup.Phase.CLOSED)
+                    .flatMap(group -> group.members().stream()).map(UnitGroup.Member::actorId)
+                    .collect(java.util.stream.Collectors.toSet());
+            state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
+                    .map(shipment -> shipment.execution().actorId()).forEach(actors::add);
+            return Set.copyOf(actors);
+        });
+    }
 
     public static boolean canCommitToMission(FrontierWorldState state, SubjectId settlementId,
                                              ResidentWorkKind kind, List<SubjectId> participants) {
@@ -22,12 +34,7 @@ public final class SettlementLabourAllocation {
                     || !SettlementWorkforce.availableForNewAssignment(state, resident)
                     || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, actor).permitted()) return false;
         }
-        Set<SubjectId> away = state.unitGroups().groups().values().stream()
-                .filter(group -> group.phase() != UnitGroup.Phase.CLOSED)
-                .flatMap(group -> group.members().stream()).map(UnitGroup.Member::actorId)
-                .collect(java.util.stream.Collectors.toSet());
-        state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
-                .map(shipment -> shipment.execution().actorId()).forEach(away::add);
+        Set<SubjectId> away = away(state);
         for (var reserve : policy.minimumLocalStaff().entrySet()) {
             long before = policy.workers(reserve.getKey()).stream().filter(id -> !away.contains(id))
                     .filter(id -> state.actorLocations().containsKey(id)

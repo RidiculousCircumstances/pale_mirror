@@ -16,6 +16,7 @@ final class ImmutableGroupView<K, V, G> {
         final Set<G> duplicates = new HashSet<>();
         final Map<G, List<K>> ordered = new HashMap<>();
         final Map<G, List<V>> rows = new HashMap<>();
+        final Map<G, List<V>> unordered = new HashMap<>();
         List<K> order = List.of();
         Map<K, Integer> ranks = Map.of();
         Image(Object epoch) { this.epoch = epoch; }
@@ -60,6 +61,25 @@ final class ImmutableGroupView<K, V, G> {
                 .map(key -> Objects.requireNonNull(image.source.get(key), "group lost its current row")).toList());
     }
 
+    /** Current rows for an order-independent aggregate. No whole-registry key
+     * ranking is needed, and a foreign key insertion cannot invalidate this
+     * group's values. Consumers must not use this order to select a winner. */
+    List<V> unorderedRows(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships, G group) {
+        Objects.requireNonNull(epoch); Objects.requireNonNull(source);
+        Objects.requireNonNull(memberships); Objects.requireNonNull(group);
+        Map<K, V> snapshot = source instanceof ImmutableMapImage<?, ?> ? source : ImmutableLookupMap.copyOf(source);
+        var image = current.get();
+        if (image == null || image.epoch != epoch) image = new Image<>(epoch);
+        try {
+            update(image, snapshot, memberships); current.set(image);
+            var keys = image.groups.get(group);
+            if (keys == null) return List.of();
+            var selected = image;
+            return image.unordered.computeIfAbsent(group, ignored -> keys.stream()
+                    .map(key -> Objects.requireNonNull(selected.source.get(key), "group lost its current row")).toList());
+        } catch (RuntimeException | Error failed) { current.remove(); throw failed; }
+    }
+
     /** Uniqueness of producer-declared memberships, never discovery of canonical ownership. */
     boolean uniqueMemberships(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships) {
         Objects.requireNonNull(epoch); Objects.requireNonNull(source); Objects.requireNonNull(memberships);
@@ -91,8 +111,8 @@ final class ImmutableGroupView<K, V, G> {
             var previous = image.memberships.getOrDefault(key, Set.of());
             // A value replacement preserves candidate keys, but its old row
             // image must not survive even when membership stays unchanged.
-            for (var group : previous) image.rows.remove(group);
-            for (var group : next) image.rows.remove(group);
+            for (var group : previous) { image.rows.remove(group); image.unordered.remove(group); }
+            for (var group : next) { image.rows.remove(group); image.unordered.remove(group); }
             if (previous.equals(next)) return;
             for (var group : previous) if (!next.contains(group)) {
                 var keys = image.groups.get(group); keys.remove(key);

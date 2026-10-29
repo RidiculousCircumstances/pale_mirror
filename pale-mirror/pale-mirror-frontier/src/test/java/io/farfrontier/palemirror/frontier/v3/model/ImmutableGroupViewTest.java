@@ -79,6 +79,31 @@ class ImmutableGroupViewTest {
         assertEquals(List.of("a", "b"), original, "published candidate lists never follow later updates");
         assertThrows(UnsupportedOperationException.class, () -> original.add("c"));
     }
+    @Test void orderIndependentRowsTrackQuantityTitleAndRemovalWithoutRankingForeignKeys() {
+        var view = new ImmutableGroupView<String, Row, String>(); var epoch = new Object();
+        var first = new Row(Set.of("local"), 2); var second = new Row(Set.of("local"), 3);
+        var source = ImmutableLookupMap.copyOf(Map.of("a", first, "b", second));
+        var original = view.unorderedRows(epoch, source, Row::points, "local");
+        assertEquals(Set.of(first, second), Set.copyOf(original));
+        var foreign = ImmutableLookupMap.withEntry(source, "c", new Row(Set.of("foreign"), 5));
+        assertSame(original, view.unorderedRows(epoch, foreign, Row::points, "local"));
+        var replacement = new Row(Set.of("local"), 7);
+        var changed = ImmutableLookupMap.withEntry(foreign, "a", replacement);
+        assertEquals(Set.of(replacement, second), Set.copyOf(view.unorderedRows(epoch, changed, Row::points, "local")));
+        assertEquals(Set.of(first, second), Set.copyOf(original));
+        var moved = ImmutableLookupMap.withEntry(changed, "a", new Row(Set.of("foreign"), 7));
+        assertEquals(List.of(second), view.unorderedRows(epoch, moved, Row::points, "local"));
+        var removed = ImmutableLookupMap.withoutEntry(moved, "b");
+        assertTrue(view.unorderedRows(epoch, removed, Row::points, "local").isEmpty());
+        assertEquals(Set.of(first, second), Set.copyOf(view.unorderedRows(epoch, source, Row::points, "local")));
+        var reversed = new LinkedHashMap<String, Row>(); reversed.put("b", second); reversed.put("a", first);
+        var reverseImage = ImmutableLookupMap.copyOf(reversed);
+        view.unorderedRows(epoch, reverseImage, Row::points, "local");
+        assertEquals(List.of("b", "a"), view.keys(epoch, reverseImage, Row::points, "local"),
+                "a membership-only visit cannot supply a stale order to an ordered consumer");
+        assertTrue(view.unorderedRows(new Object(), source, row -> Set.of("rebound"), "local").isEmpty());
+    }
+
     @Test void externalBindingEpochMutableIngressAndFailedProjectionCannotReuseStaleMembership() {
         var view = new ImmutableGroupView<String, Row, String>();
         var epoch = new Object();
