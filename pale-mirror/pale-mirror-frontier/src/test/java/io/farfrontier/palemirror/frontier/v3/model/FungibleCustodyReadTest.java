@@ -62,6 +62,29 @@ class FungibleCustodyReadTest {
         assertEquals(4, original.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
         assertEquals(0, titled.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
     }
+    @Test void unchangedCustodyReadsCurrentClaimKindAcrossOtherEditsAndEarlierBranches() {
+        var base = ledger(4, false); var claimId = new SubjectId("claim:kind-change");
+        var wheat = new ResourceLot(LOT_B, OWNER, "minecraft:wheat", 3, "fixture:read", List.of());
+        var claim = new ClaimAllocation(claimId, ACTOR, OWNER, "minecraft:bread", 2, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION);
+        var account = new CustodyAccount(FIRST, HOLDER, Map.of(LOT_A, 4, LOT_B, 3), Map.of(claimId, 2));
+        var original = new FungibleResourceLedger(ImmutableLookupMap.withEntry(base.lots(), LOT_B, wheat),
+                Map.of(claimId, claim), Map.of(FIRST, account), Map.of());
+        assertEquals(2, original.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(3, original.unclaimedQuantity(FIRST, OWNER, "minecraft:wheat"));
+        var movedClaim = new ClaimAllocation(claimId, ACTOR, OWNER, "minecraft:wheat", 2, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION);
+        var changed = new FungibleResourceLedger(original.lots(), ImmutableLookupMap.withEntry(original.claims(), claimId, movedClaim),
+                original.accounts(), original.bindings());
+        assertSame(original.accounts(), changed.accounts(), "reservation metadata alone changes the available kinds");
+        assertEquals(4, changed.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(1, changed.unclaimedQuantity(FIRST, OWNER, "minecraft:wheat"));
+        var foreignLot = new ResourceLot(new SubjectId("lot:unrelated"), OWNER, "minecraft:coal", 7, "fixture:read", List.of());
+        var extended = changed.issue(foreignLot, new CustodyAccount(SECOND, new ResourceCustody.Container(new SubjectId("container:other")),
+                Map.of(foreignLot.id(), 7), Map.of()));
+        assertEquals(1, extended.unclaimedQuantity(FIRST, OWNER, "minecraft:wheat"));
+        assertEquals(3, original.unclaimedQuantity(FIRST, OWNER, "minecraft:wheat"));
+        assertEquals(2, original.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+        assertEquals(4, extended.unclaimedQuantity(FIRST, OWNER, "minecraft:bread"));
+    }
     @Test void transfersAndClaimReleaseRebuildOnlyReadFactsWithoutLosingTheCurrentHolder() {
         var actors = ledger(4, false); var container = new SubjectId("container:source");
         var source = new CustodyAccount(FIRST, new ResourceCustody.Container(container), Map.of(LOT_A, 4), Map.of());

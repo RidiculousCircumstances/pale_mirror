@@ -8,11 +8,6 @@ import java.util.function.Function;
  * No allocation, custody authority or successful-validation cache lives here.
  * External ingress and explicit audits always use the independent full validator. */
 final class FungibleResourceDeltaValidation {
-    private sealed interface Membership permits Lot, Claim, Actor { }
-    private record Lot(SubjectId id) implements Membership { }
-    private record Claim(SubjectId id) implements Membership { }
-    private record Actor(SubjectId id) implements Membership { }
-    private static final ImmutableGroupView<SubjectId, CustodyAccount, Membership> HOLDERS = new ImmutableGroupView<>();
     private static final ImmutableGroupView<SubjectId, PhysicalStackBinding, SubjectId> BINDINGS = new ImmutableGroupView<>();
     private static final ImmutableGroupView<SubjectId, PhysicalStackBinding, PhysicalStackAddress> ADDRESSES = new ImmutableGroupView<>();
     private FungibleResourceDeltaValidation() { }
@@ -43,7 +38,7 @@ final class FungibleResourceDeltaValidation {
         // declarations still require a zero total, rather than disappearing
         // from the conservation proof. No cached balance is authoritative.
         for (var id : lotIds) {
-            var holders = holders(accounts, new Lot(id)); int total = 0;
+            var holders = FungibleAccountReferences.lotHolders(accounts, id); int total = 0;
             for (var account : holders) {
                 total = Math.addExact(total, account.lotQuantities().get(id)); accountIds.add(account.id());
             }
@@ -52,7 +47,7 @@ final class FungibleResourceDeltaValidation {
                 throw new IllegalArgumentException("resource lot must have exact canonical custody");
         }
         for (var id : claimIds) {
-            var holders = holders(accounts, new Claim(id)); int total = 0;
+            var holders = FungibleAccountReferences.claimHolders(accounts, id); int total = 0;
             for (var account : holders) {
                 total = Math.addExact(total, account.claimQuantities().get(id)); accountIds.add(account.id());
             }
@@ -60,7 +55,7 @@ final class FungibleResourceDeltaValidation {
             if (total != (claim == null ? 0 : claim.quantity()))
                 throw new IllegalArgumentException("claim allocation must have exact canonical custody");
         }
-        for (var id : actorIds) ActorCarriedResources.validateCapacity(holders(accounts, new Actor(id)));
+        for (var id : actorIds) ActorCarriedResources.validateCapacity(FungibleAccountReferences.actorAccounts(accounts, id));
         if (before.bindings() != bindings && !ADDRESSES.uniqueMemberships(
                 FungibleResourceDeltaValidation.class, bindings, binding -> Set.of(binding.address())))
             throw new IllegalArgumentException("physical stack binding is not one unique current stack");
@@ -93,16 +88,5 @@ final class FungibleResourceDeltaValidation {
         if (account == null) return;
         lots.addAll(account.lotQuantities().keySet()); claims.addAll(account.claimQuantities().keySet());
         if (account.custody() instanceof ResourceCustody.Actor actor) actors.add(actor.actorId());
-    }
-    private static List<CustodyAccount> holders(Map<SubjectId, CustodyAccount> accounts, Membership group) {
-        return HOLDERS.unorderedRows(FungibleResourceDeltaValidation.class, accounts,
-                FungibleResourceDeltaValidation::memberships, group);
-    }
-    private static Set<Membership> memberships(CustodyAccount account) {
-        var groups = new HashSet<Membership>();
-        account.lotQuantities().keySet().forEach(id -> groups.add(new Lot(id)));
-        account.claimQuantities().keySet().forEach(id -> groups.add(new Claim(id)));
-        if (account.custody() instanceof ResourceCustody.Actor actor) groups.add(new Actor(actor.actorId()));
-        return groups;
     }
 }

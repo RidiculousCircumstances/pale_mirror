@@ -6,11 +6,10 @@ import java.util.*;
 /** Disposable queries of the sole immutable ledger; never allocation or custody authority. */
 final class FungibleResourceReadIndex {
     private record Balance(SubjectId owner, String kind) { }
-    private record Available(CustodyAccount account, ImmutableDependencies dependencies,
-                             Map<Balance, Integer> quantities, Object checkedIn) { }
+    private record Available(Map<Balance, Integer> quantities) { }
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
-                         Map<SubjectId, Available> available, Object token) { }
+                         Map<SubjectId, Available> available) { }
     private sealed interface Query permits HolderQuery, ContainerQuery, ActorQuery, GroundQuery { }
     private record HolderQuery(ResourceCustody custody) implements Query { }
     private record ContainerQuery(SubjectId container) implements Query { }
@@ -28,24 +27,11 @@ final class FungibleResourceReadIndex {
             throw new IllegalArgumentException("unknown custody account");
         var row = ledger.accounts().get(account);
         var image = image(ledger); var views = image.available();
-        var previous = views.get(account);
-        // Every queried account was checked against these exact immutable roots.
-        // Many residents can ask about one warehouse without rebuilding its lot
-        // and claim dependency vector for each read. A new image still checks it.
-        if (previous != null && previous.checkedIn() == image.token())
-            return previous.quantities().getOrDefault(new Balance(owner, kind), 0);
-        var inputs = new Object[1 + row.lotQuantities().size() + row.claimQuantities().size()];
-        int index = 0; inputs[index++] = row;
-        for (var id : row.lotQuantities().keySet()) inputs[index++] = ledger.lots().get(id);
-        for (var id : row.claimQuantities().keySet()) inputs[index++] = ledger.claims().get(id);
-        if (previous == null || !previous.dependencies().matches(inputs)) {
-            var quantities = balances(ledger, row);
-            previous = new Available(row, ImmutableDependencies.of(inputs), quantities, image.token());
-        } else {
-            previous = new Available(row, previous.dependencies(), previous.quantities(), image.token());
-        }
-        views.put(account, previous);
-        return previous.quantities().getOrDefault(new Balance(owner, kind), 0);
+        // Every changed account or referenced lot/claim retires its derived
+        // balance at image advancement. Unrelated world churn cannot require
+        // another complete dependency vector for this unchanged account.
+        var available = views.computeIfAbsent(account, ignored -> new Available(balances(ledger, row)));
+        return available.quantities().getOrDefault(new Balance(owner, kind), 0);
     }
 
     static Optional<CustodyAccount> container(FungibleResourceLedger ledger, SubjectId container) {
@@ -83,9 +69,16 @@ final class FungibleResourceReadIndex {
         // claim change must not discard every other account's balance. Replaced or
         // withdrawn accounts (including a new world) release their old evidence.
         var available = current == null ? new HashMap<SubjectId, Available>() : current.available();
-        if (current != null) ImmutableMapChanges.forEachIdentityChangedKey(
-                current.accounts(), ledger.accounts(), available::remove);
-        current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), available, new Object());
+        if (current != null) {
+            ImmutableMapChanges.forEachIdentityChangedKey(current.accounts(), ledger.accounts(), available::remove);
+            // Changed records can alter owner/kind/reservation with an entirely
+            // unchanged custody row. ALL current declared holders are affected.
+            ImmutableMapChanges.forEachIdentityChangedKey(current.lots(), ledger.lots(), id ->
+                    FungibleAccountReferences.lotHolders(ledger.accounts(), id).forEach(row -> available.remove(row.id())));
+            ImmutableMapChanges.forEachIdentityChangedKey(current.claims(), ledger.claims(), id ->
+                    FungibleAccountReferences.claimHolders(ledger.accounts(), id).forEach(row -> available.remove(row.id())));
+        }
+        current = new Image(ledger.lots(), ledger.claims(), ledger.accounts(), available);
         CURRENT.set(current);
         return current;
     }

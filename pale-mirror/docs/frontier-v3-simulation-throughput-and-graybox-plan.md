@@ -5474,3 +5474,46 @@ consumption and station material transfer; indexed-group-route-light-current-res
 callers.txt includes all constructor samples (not only complete-audit samples), so
 its raw counts must not be interpreted as an isolated full-validation cost.
 Frozen packaging, retained-world deployments and ordinary capacity measurement follow.
+
+### Local invalidation of fungible availability
+
+The same current bf0 CPU map shows read-index availability dependency-vector
+construction among leading advice lookups (11/10 samples). Source confirms every
+world lot/claim root change forces each queried account to rebuild its entire
+referenced-record vector, even for an unrelated meal/transfer. The calculation is
+read-only but scales with unrelated economic churn.
+
+Share declared lot/claim/actor account memberships between intrinsic validation
+and availability reads. On immutable root change, retire cached balances for
+changed accounts and ALL current holders of changed lots/claims. Both old and
+new account changes are covered by direct account invalidation; an unchanged
+account's references are complete after-state memberships. Include all referenced
+record metadata, not only quantity or a selective economic reason. Cache only
+queried accounts of the current image; no authority, stale result, parent history,
+TTL or capacity increase. Unchanged scope requires no repeated dependency vector.
+Public ledger ingress still validates in full; mutable input maps are defensively
+captured before any derived image sees them. Revisit earlier branches and change
+claim kind with unchanged account to verify absence of stale balance facts.
+
+d73a115ac frozen18s+guardrails/JAR/package; both retained-world deployments verified,
+resource-ledger-delta receipts. Ordinary100town window304.233239s357985->361051=
+10.077794/s,debt546->3565. No build/profile/clientoverlap,all16samplesstatusok,
+fastForward0,notrecovering. No newterminalharvest/retainedfulfilledcontracts in5towns;
+hungry1:0->1,7:0->1,35:1->1,68:20->14,100:0->0,all5starving0.
+resource-ledger-delta-ordinary/summary.json + before/after-domain.json.
+Still NOT20/no-debt. Changing workload and restart/JIT/cache warm-up prevent an
+isolated gain/regression claim against prior windows. Current lead remains actual
+repeated scope work; no acceptance declared from successful constructor tests.
+
+Local availability changes now reuse one FungibleAccountReferences view across
+validation, productive stock and unclaimed reads. Original productive-custody
+exclusions remain in the productive-stock owner. No business ownership enters
+the inverse index. Existing branch/thread/title/duplicate-section checks plus one
+claim-kind-only metadata test with the exact same account image cover stale facts.
+
+Local-balance connected focus passed78tests0failures85s+guardrails: custody/title/
+claim-kind/branch/thread reads, complete delta invariant oracle, productive stock,
+ledger transitions, field stock, internal and consolidated commercial shipments,
+player edits. No new timing or cache-identity acceptance tests. Receipt
+local-resource-balance-focus.log and frontier XML reports. Review/commit/frozen
+packaging and both deployments follow; overall throughput criterion stays OPEN.
