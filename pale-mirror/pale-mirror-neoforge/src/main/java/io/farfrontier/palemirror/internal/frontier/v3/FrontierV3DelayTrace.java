@@ -7,9 +7,18 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Optional bounded JFR evidence. No canonical state, retention store, scheduling or repair authority. */
 final class FrontierV3DelayTrace {
+    private static final java.lang.management.ThreadMXBean CPU = java.lang.management.ManagementFactory.getThreadMXBean();
+    private static long cpu() {
+        try { return CPU.isCurrentThreadCpuTimeSupported() && CPU.isThreadCpuTimeEnabled() ? CPU.getCurrentThreadCpuTime() : -1; }
+        catch (RuntimeException unavailable) { return -1; }
+    }
     private static final AtomicLong IDS = new AtomicLong();
     private static final AtomicLong EVENTS = new AtomicLong();
-    private static final ThreadLocal<Context> CURRENT = new ThreadLocal<>();
+    private static final class Local {
+        Context action;
+        long cause, turn, advance;
+    }
+    private static final ThreadLocal<Local> CURRENT = ThreadLocal.withInitial(Local::new);
     private static final EventType POINTS = EventType.getEventType(Point.class);
     private static final EventType TURNS = EventType.getEventType(Turn.class);
     private static final EventType ATTEMPTS = EventType.getEventType(Attempt.class);
@@ -18,25 +27,25 @@ final class FrontierV3DelayTrace {
 
     @Name("pale_mirror.DelayPoint") @Label("Simulation dependency lifecycle") @Category("Pale Mirror") @StackTrace(false)
     static final class Point extends Event {
-        long sequence, monotonicNanos, id, parent, observedBy, revision, tick, value;
+        long sequence, monotonicNanos, cpuNanos, id, parent, observedBy, causedBy, turn, advance, observedTurn, observedAdvance, revision, tick, value;
         String world, action, kind, subject, type, phase, reference, detail;
     }
     @Name("pale_mirror.ClockTurn") @Label("Simulation owner turn and following gate") @Category("Pale Mirror") @StackTrace(false)
     static final class Turn extends Event {
-        long sequence, startedNanos, endedNanos, beforeTick, afterTick, debt, revision, dependency;
+        long sequence, id, parent, previousTurn, previousAdvance, previousCause, startedNanos, endedNanos, startedCpuNanos, endedCpuNanos, beforeTick, afterTick, beforeDebt, debt, revision, dependency;
         int actionsLeft, weightLeft, classificationsLeft, executionsLeft;
         String world, gate, action, budgetCause;
     }
     @Name("pale_mirror.ClockAttempt") @Label("Requested and achieved simulation advance") @Category("Pale Mirror") @StackTrace(false)
     static final class Attempt extends Event {
-        long sequence, startedNanos, endedNanos, beforeTick, afterTick, targetTick, debt;
+        long sequence, id, parent, turn, previousAdvance, previousCause, startedNanos, endedNanos, startedCpuNanos, endedCpuNanos, beforeTick, afterTick, targetTick, debt;
         int actions, weight, classifications, executions, transactions;
         int actionsLimit, weightLimit, classificationsLimit, executionsLimit;
         String world, deferred;
     }
     @Name("pale_mirror.ExecutionStage") @Label("Correlated simulation execution stage") @Category("Pale Mirror") @StackTrace(false)
     static final class Stage extends Event {
-        long sequence, startedNanos, endedNanos, attempt, revision, tick;
+        long sequence, startedNanos, endedNanos, startedCpuNanos, endedCpuNanos, attempt, turn, advance, revision, tick;
         String action, world, stage, kind, subject;
     }
     @Name("pale_mirror.SchedulePressure") @Label("Exact schedule pressure") @Category("Pale Mirror") @StackTrace(false)
@@ -61,6 +70,8 @@ final class FrontierV3DelayTrace {
             var event = new Point(); event.sequence = EVENTS.incrementAndGet(); event.monotonicNanos = System.nanoTime();
             event.type = "TRANSACTION"; event.phase = "APPENDED"; event.world = record.worldId().value();
             event.revision = record.revision().value(); event.tick = record.instant().ticks();
+            var local = CURRENT.get(); event.parent = local.cause; event.causedBy = local.cause;
+            event.turn = local.turn; event.advance = local.advance;
             event.reference = record.id().value(); event.value = sequence; event.commit();
         } catch (RuntimeException ignored) { }
     }
@@ -68,21 +79,22 @@ final class FrontierV3DelayTrace {
 
     static FrontierExecutionMetrics.Span action(WorldId world, ScheduledAction action, Revision revision, SimInstant at) {
         if (!POINTS.isEnabled() && !STAGES.isEnabled()) return () -> { };
-        var previous = CURRENT.get();
-        // Caller supplies the nominal scheduled action. Nothing is decoded from its ID.
+        var local = CURRENT.get(); var previous = local.action; long previousCause = local.cause;
         var context = new Context(IDS.incrementAndGet(), world.value(), action, revision.value(), at.ticks());
-        CURRENT.set(context);
-        point(context, context.attempt(), 0, "ACTION", "BEGIN", "", 0);
+        local.action = context; local.cause = context.attempt();
+        point(context, context.attempt(), previousCause, "ACTION", "BEGIN", "", 0);
         return () -> {
-            try { point(context, context.attempt(), 0, "ACTION", "END", "", 0); }
-            finally { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); }
+            try { point(context, context.attempt(), previousCause, "ACTION", "END", "", 0); }
+            finally { local.action = previous; local.cause = previousCause; }
         };
     }
+
     static Stage stage(FrontierExecutionMetrics.Stage stage, String kind, String subject) {
         if (!STAGES.isEnabled()) return null;
-        var event = new Stage(); var context = CURRENT.get();
+        var event = new Stage(); var local = CURRENT.get(); var context = local.action;
+        event.turn = local.turn; event.advance = local.advance;
         event.sequence = EVENTS.incrementAndGet(); event.startedNanos = System.nanoTime();
-        event.stage = stage.name(); event.kind = kind; event.subject = subject;
+        event.stage = stage.name(); event.kind = kind; event.subject = subject; event.startedCpuNanos = cpu();
         if (context != null) {
             event.attempt = context.attempt(); event.action = context.action().id().value();
             event.revision = context.revision(); event.tick = context.tick(); event.world = context.world();
@@ -91,7 +103,7 @@ final class FrontierV3DelayTrace {
     }
     static void close(Stage event) {
         if (event == null) return;
-        try { event.endedNanos = System.nanoTime(); event.end(); event.commit(); } catch (RuntimeException ignored) { }
+        try { event.endedNanos = System.nanoTime(); event.endedCpuNanos = cpu(); event.end(); event.commit(); } catch (RuntimeException ignored) { }
     }
     /** Adapter-only worker envelope; no knowledge of navigation or scheduling policy. */
     static java.util.concurrent.Executor executor(java.util.concurrent.Executor delegate, String type, String world) {
@@ -101,25 +113,51 @@ final class FrontierV3DelayTrace {
             trace.mark("QUEUED");
             try {
                 delegate.execute(() -> {
-                    trace.mark("RUNNING");
-                    try { work.run(); } finally { trace.mark("COMPUTED"); }
+                    trace.run(() -> {
+                        trace.mark("RUNNING");
+                        try { work.run(); trace.mark("COMPUTED"); }
+                        catch (RuntimeException | Error failure) { trace.mark("FAILED"); throw failure; }
+                    });
                 });
             } catch (RuntimeException failure) { trace.mark("QUEUE_BUSY"); throw failure; }
         };
     }
     static Task task(String type, String world) {
-        try { return POINTS.isEnabled() ? new Task(IDS.incrementAndGet(), type, CURRENT.get(), world) : Task.OFF; }
+        try { if (!POINTS.isEnabled()) return Task.OFF;
+            var local = CURRENT.get();
+            return new Task(IDS.incrementAndGet(), type, local.action, world, local.cause, local.turn, local.advance); }
         catch (RuntimeException ignored) { return Task.OFF; }
     }
     static final class Task {
-        static final Task OFF = new Task(0, "", null, "");
+        static final Task OFF = new Task(0, "", null, "", 0, 0, 0);
         final long id;
         final String type, world;
         final Context context;
-        Task(long id, String type, Context context, String world) { this.id = id; this.type = type; this.context = context; this.world = world; }
+        final long parent, turn, advance;
+        Task(long id, String type, Context context, String world, long parent, long turn, long advance) {
+            this.id = id; this.type = type; this.context = context; this.world = world;
+            this.parent = parent; this.turn = turn; this.advance = advance;
+        }
+        void run(Runnable action) {
+            if (id == 0) { action.run(); return; }
+            var local = CURRENT.get(); var oldAction = local.action;
+            long oldCause = local.cause, oldTurn = local.turn, oldAdvance = local.advance;
+            local.action = context; local.cause = id; local.turn = turn; local.advance = advance;
+            try { action.run(); }
+            finally { local.action = oldAction; local.cause = oldCause; local.turn = oldTurn; local.advance = oldAdvance; }
+        }
+        void deliver(Runnable action) {
+            if (id == 0) { action.run(); return; }
+            var local = CURRENT.get(); var oldAction = local.action;
+            long oldCause = local.cause, oldTurn = local.turn, oldAdvance = local.advance;
+            local.action = null; local.cause = id; local.turn = 0; local.advance = 0;
+            try { action.run(); }
+            finally { local.action = oldAction; local.cause = oldCause; local.turn = oldTurn; local.advance = oldAdvance; }
+        }
+        void notifyReady(Runnable ready) { run(() -> { mark("NOTIFY_BEGIN"); ready.run(); }); }
         void mark(String phase) { mark(phase, "", 0); }
         void mark(String phase, String reference, long value) {
-            if (id != 0) point(context, id, context == null ? 0 : context.attempt(), type, phase, reference, value, world);
+            if (id != 0) point(context, id, parent, type, phase, reference, value, world, turn, advance);
         }
         boolean matches(ScheduledAction action, long revision) {
             return context != null && context.action().equals(action) && context.revision() == revision;
@@ -129,11 +167,20 @@ final class FrontierV3DelayTrace {
         point(context, id, parent, type, phase, reference, value, "unbound");
     }
     private static void point(Context context, long id, long parent, String type, String phase, String reference, long value, String world) {
+        if (!POINTS.isEnabled()) return;
+        var local = CURRENT.get();
+        point(context, id, parent, type, phase, reference, value, world, local.turn, local.advance);
+    }
+    private static void point(Context context, long id, long parent, String type, String phase, String reference, long value, String world, long turn, long advance) {
         try {
             if (!POINTS.isEnabled()) return;
             var event = new Point(); event.sequence = EVENTS.incrementAndGet(); event.monotonicNanos = System.nanoTime();
+            event.cpuNanos = phase.equals("RUNNING") || phase.equals("COMPUTED") || phase.equals("FAILED")
+                    || phase.startsWith("OWNER_COMPLETION_") ? cpu() : -1;
             event.world = world; event.id = id; event.parent = parent; event.type = type; event.phase = phase; event.reference = reference; event.value = value;
-            var observer = CURRENT.get(); event.observedBy = observer == null ? 0 : observer.attempt();
+            var local = CURRENT.get(); var observer = local.action;
+            event.observedBy = observer == null ? 0 : observer.attempt(); event.causedBy = local.cause;
+            event.turn = turn; event.advance = advance; event.observedTurn = local.turn; event.observedAdvance = local.advance;
             if (context != null) {
                 event.world = context.world(); event.action = context.action().id().value(); event.kind = context.action().kind();
                 event.subject = context.action().subject().value(); event.revision = context.revision(); event.tick = context.tick();
@@ -144,7 +191,8 @@ final class FrontierV3DelayTrace {
     static void transaction(TransactionRecord record, boolean published) {
         try {
             if (!POINTS.isEnabled()) return;
-            var event = new Point(); var context = CURRENT.get();
+            var event = new Point(); var local = CURRENT.get(); var context = local.action;
+            event.causedBy = local.cause; event.turn = local.turn; event.advance = local.advance;
             event.sequence = EVENTS.incrementAndGet(); event.monotonicNanos = System.nanoTime();
             event.type = "TRANSACTION"; event.phase = published ? "PUBLISHED" : "PREPARED";
             event.world = record.worldId().value(); event.revision = record.revision().value(); event.tick = record.instant().ticks();
@@ -157,19 +205,47 @@ final class FrontierV3DelayTrace {
             event.commit();
         } catch (RuntimeException ignored) { }
     }
+    @Name("pale_mirror.ClockState") @Label("Observed clock gate change") @Category("Pale Mirror") @StackTrace(false)
+    static final class State extends Event {
+        long sequence, monotonicNanos, tick, debt, dependency, turn, advance;
+        boolean allowance, conditionsKnown, exactPending, commitPending, walPending;
+        String world, gate, budgetCause, reason;
+    }
+    private static final EventType STATES = EventType.getEventType(State.class);
+    static boolean statesEnabled() { return STATES.isEnabled(); }
+    static void state(String world, long tick, long debt, String gate, long dependency, String budgetCause, boolean allowance, String reason, boolean exact, boolean commit, boolean wal) {
+        try {
+            if (!STATES.isEnabled()) return;
+            var e = new State(); var local = CURRENT.get();
+            e.sequence = EVENTS.incrementAndGet(); e.monotonicNanos = System.nanoTime();
+            e.world = world; e.tick = tick; e.debt = debt; e.gate = gate; e.dependency = dependency;
+            e.turn = local.turn; e.advance = local.advance; e.budgetCause = budgetCause; e.allowance = allowance; e.reason = reason;
+            e.conditionsKnown = !reason.equals("TURN_BEGIN"); e.exactPending = exact; e.commitPending = commit; e.walPending = wal; e.commit();
+        } catch (RuntimeException ignored) { }
+    }
+    static void walObserved(long task, String world, long through) {
+        point(null, task, 0, "WAL", "RECEIPT_OBSERVED", world, through, world);
+    }
     static boolean turnsEnabled() { try { return TURNS.isEnabled(); } catch (RuntimeException ignored) { return false; } }
-    static Turn turn(String world, long tick) {
+    static Turn turn(String world, long tick) { return turn(world, tick, -1); }
+    static Turn turn(String world, long tick, long debt) {
         try {
             if (!TURNS.isEnabled()) return null;
-            var event = new Turn(); event.sequence = EVENTS.incrementAndGet(); event.startedNanos = System.nanoTime();
-            event.world = world; event.beforeTick = tick; event.begin(); return event;
+            var event = new Turn(); var local = CURRENT.get();
+            event.id = IDS.incrementAndGet(); event.parent = local.cause;
+            event.previousTurn = local.turn; event.previousAdvance = local.advance; event.previousCause = local.cause;
+            local.turn = event.id; local.advance = 0; local.cause = event.id;
+            event.sequence = EVENTS.incrementAndGet(); event.startedNanos = System.nanoTime();
+            event.world = world; event.beforeTick = tick; event.beforeDebt = debt; event.startedCpuNanos = cpu();
+            state(world, tick, debt, "OWNER_RUNNING", 0, "", false, "TURN_BEGIN", false, false, false);
+            event.begin(); return event;
         } catch (RuntimeException ignored) { return null; }
     }
     static void close(Turn event, long tick, long debt, long revision, String gate, long dependency,
                       ScheduledAction action, WorkBudget budget, String budgetCause) {
         if (event == null) return;
         try {
-            event.endedNanos = System.nanoTime(); event.afterTick = tick; event.debt = debt; event.revision = revision;
+            event.endedNanos = System.nanoTime(); event.endedCpuNanos = cpu(); event.afterTick = tick; event.debt = debt; event.revision = revision;
             event.gate = gate; event.dependency = dependency; event.action = action == null ? "" : action.id().value();
             event.budgetCause = budgetCause;
             if (budget != null) {
@@ -178,12 +254,17 @@ final class FrontierV3DelayTrace {
             }
             event.end(); event.commit();
         } catch (RuntimeException ignored) { }
+        finally { var local = CURRENT.get(); local.turn = event.previousTurn; local.advance = event.previousAdvance; local.cause = event.previousCause; }
     }
     static Attempt attempt(String world, long tick, long target, WorkBudget budget) {
         try {
         if (!ATTEMPTS.isEnabled()) return null;
-        var event = new Attempt(); event.sequence = EVENTS.incrementAndGet(); event.startedNanos = System.nanoTime();
-        event.world = world; event.beforeTick = tick; event.targetTick = target;
+        var event = new Attempt(); var local = CURRENT.get();
+        event.id = IDS.incrementAndGet(); event.parent = local.cause; event.turn = local.turn;
+        event.previousAdvance = local.advance; event.previousCause = local.cause;
+        local.advance = event.id; local.cause = event.id;
+        event.sequence = EVENTS.incrementAndGet(); event.startedNanos = System.nanoTime();
+        event.world = world; event.beforeTick = tick; event.targetTick = target; event.startedCpuNanos = cpu();
         event.actionsLimit = budget.maxActions(); event.weightLimit = budget.maxWeight();
         event.classificationsLimit = budget.maxClassificationEvaluations(); event.executionsLimit = budget.maxExecutionEvaluations();
         event.begin(); return event;
@@ -192,7 +273,7 @@ final class FrontierV3DelayTrace {
     static void close(Attempt event, long tick, long debt, AdvanceResult result) {
         if (event == null) return;
         try {
-            event.endedNanos = System.nanoTime(); event.afterTick = tick; event.debt = debt;
+            event.endedNanos = System.nanoTime(); event.endedCpuNanos = cpu(); event.afterTick = tick; event.debt = debt;
             if (result != null) {
                 event.transactions = result.transactions().size();
                 var used = result.consumed(); event.actions = used.actions(); event.weight = used.weight();
@@ -201,5 +282,6 @@ final class FrontierV3DelayTrace {
             }
             event.end(); event.commit();
         } catch (RuntimeException ignored) { }
+        finally { var local = CURRENT.get(); local.advance = event.previousAdvance; local.cause = event.previousCause; }
     }
 }

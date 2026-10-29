@@ -105,7 +105,7 @@ class FrontierV3ScheduledPreparationTest {
             recording.stop(); recording.dump(path);
             var points = jdk.jfr.consumer.RecordingFile.readAllEvents(path).stream()
                     .filter(e -> e.getEventType().getName().equals("pale_mirror.DelayPoint") && "EXACT".equals(e.getString("type"))).toList();
-            assertEquals(Set.of("QUEUED", "RUNNING", "COMPUTED", "READY", "OWNER_COMPLETION_BEGIN", "OWNER_COMPLETION_END"),
+            assertEquals(Set.of("QUEUED", "RUNNING", "COMPUTED", "READY", "NOTIFY_BEGIN", "OWNER_COMPLETION_BEGIN", "OWNER_COMPLETION_END"),
                     points.stream().map(e -> e.getString("phase")).collect(java.util.stream.Collectors.toSet()));
             assertEquals(1, points.stream().map(e -> e.getLong("id")).distinct().count());
             assertTrue(points.stream().allMatch(e -> "frontier:trace-test".equals(e.getString("world"))

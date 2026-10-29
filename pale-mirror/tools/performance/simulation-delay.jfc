@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration version="2.0" label="Pale Mirror causal delay trace" description="Bounded causal timing; no allocation sampling or exception stream" provider="Pale Mirror">
+  <event name="pale_mirror.ClockTurn"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting><setting name="stackTrace">false</setting></event>
+  <event name="pale_mirror.ClockAttempt"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting><setting name="stackTrace">false</setting></event>
+  <event name="pale_mirror.ClockState"><setting name="enabled">true</setting><setting name="stackTrace">false</setting></event>
+  <event name="pale_mirror.DelayPoint"><setting name="enabled">true</setting><setting name="stackTrace">false</setting></event>
+  <event name="pale_mirror.ExecutionStage"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting><setting name="stackTrace">false</setting></event>
+  <event name="pale_mirror.SchedulePressure"><setting name="enabled">true</setting><setting name="stackTrace">false</setting></event>
+  <event name="jdk.ExecutionSample"><setting name="enabled">true</setting><setting name="period">20 ms</setting><setting name="stackTrace">true</setting></event>
+  <event name="jdk.NativeMethodSample"><setting name="enabled">true</setting><setting name="period">20 ms</setting><setting name="stackTrace">true</setting></event>
+  <event name="jdk.GCPhasePause"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting></event>
+  <event name="jdk.ZAllocationStall"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting><setting name="stackTrace">true</setting></event>
+  <event name="jdk.ThreadPark"><setting name="enabled">true</setting><setting name="threshold">1 ms</setting><setting name="stackTrace">true</setting></event>
+  <event name="jdk.JavaMonitorEnter"><setting name="enabled">true</setting><setting name="threshold">1 ms</setting><setting name="stackTrace">true</setting></event>
+  <event name="jdk.ThreadSleep"><setting name="enabled">true</setting><setting name="threshold">1 ms</setting><setting name="stackTrace">true</setting></event>
+  <event name="jdk.DataLoss"><setting name="enabled">true</setting></event>
+</configuration>

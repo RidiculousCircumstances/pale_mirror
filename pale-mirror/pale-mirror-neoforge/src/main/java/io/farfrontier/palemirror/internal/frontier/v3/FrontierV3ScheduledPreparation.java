@@ -56,9 +56,10 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
         var trace = FrontierV3DelayTrace.task("AUXILIARY", traceWorld); trace.mark("QUEUED");
         var task = new FutureTask<T>(() -> {
             trace.mark("RUNNING");
-            try { return value.get(); } finally { trace.mark("COMPUTED"); }
+            try { var result = value.get(); trace.mark("COMPUTED"); return result; }
+            catch (RuntimeException | Error failure) { trace.mark("FAILED"); throw failure; }
         }) {
-            @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); ready.run(); } }
+            @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); trace.notifyReady(ready); } }
         };
         try { worker.execute(task); return java.util.Optional.of(task); }
         catch (java.util.concurrent.RejectedExecutionException busy) {
@@ -76,14 +77,14 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
         var trace = FrontierV3DelayTrace.task("EXACT", traceWorld); exactTrace = trace; trace.mark("QUEUED");
         var task = new FutureTask<Supplier<List<ProposedEvent>>>(() -> {
             long began = System.nanoTime(); trace.mark("RUNNING");
-            try { return preparation.prepare(); }
+            try { var result = preparation.prepare(); trace.mark("COMPUTED"); return result; }
+            catch (RuntimeException | Error failure) { trace.mark("FAILED"); throw failure; }
             finally {
                 long elapsed = System.nanoTime() - began;
                 totalNanos.addAndGet(elapsed); maxNanos.accumulateAndGet(elapsed, Math::max); completed.incrementAndGet();
-                trace.mark("COMPUTED");
             }
         }) {
-            @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); ready.run(); } }
+            @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); trace.notifyReady(ready); } }
         };
         boolean accepted;
         try { exactWorker.execute(task); accepted = true; }
@@ -128,14 +129,14 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
         var trace = FrontierV3DelayTrace.task("ADVICE", traceWorld); trace.mark("QUEUED");
         var task = new FutureTask<ScheduledAdvisory.Completion<S>>(() -> {
             long began = System.nanoTime(); trace.mark("RUNNING");
-            try { return advice.prepare(); }
+            try { var result = advice.prepare(); trace.mark("COMPUTED"); return result; }
+            catch (RuntimeException | Error failure) { trace.mark("FAILED"); throw failure; }
             finally {
                 long elapsed = System.nanoTime() - began;
-                trace.mark("COMPUTED");
                 adviceNanos.addAndGet(elapsed); adviceCompleted.incrementAndGet();
                 totalNanos.addAndGet(elapsed); maxNanos.accumulateAndGet(elapsed, Math::max); completed.incrementAndGet();
             }
-        }) { @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); ready.run(); } } };
+        }) { @Override protected void done() { if (!isCancelled()) { trace.mark("READY"); trace.notifyReady(ready); } } };
         if (worker.getQueue().remainingCapacity() <= 1) { trace.mark("QUEUE_BUSY"); return Optional.empty(); }
         try { worker.execute(task); }
         catch (RejectedExecutionException busy) {

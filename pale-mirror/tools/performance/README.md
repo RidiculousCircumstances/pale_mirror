@@ -1,40 +1,66 @@
-# Simulation delay tracing
+# Causal simulation delay tracing
 
-`FrontierV3DelayTrace` contributes read-only JFR events while recording is enabled.
-It adds no world file, canonical field, timer, worker pool or lifetime sample registry.
-The existing `scripts/capture-runtime-jfr.sh` starts a bounded profile recording.
-First resolve the actual task-owned Java PID from the selected service cgroup and
-verify `/proc/PID/exe`, cwd and service; never attach using a wrapper's MainPID.
-Keep recordings bounded (for example 60 seconds and 128 MiB).
+`FrontierV3DelayTrace` extends the existing optional JFR evidence boundary. It has
+no canonical state, world file, queue, worker pool, simulation timer or repair
+permission. There is no runtime telemetry collector. Without an enabled recording,
+events/counters are not produced; current trace scope is thread-local and restored
+on exit. The existing cooperative WAL wake is observed, never replaced.
 
-Custom events: `pale_mirror.ClockTurn`, `ClockAttempt`, `DelayPoint`,
-`ExecutionStage`, `SchedulePressure`. Enable them explicitly in a JFR configuration
-if the chosen recording profile disables custom events. Each invocation of a
-scheduled owner has an action-pass ID; it is diagnostic correlation, not another
-business identity. Async tasks retain that context across threads. A computed
-result, notification, owner observation, transaction publication and durable WAL
-confirmation are distinct boundaries. Navigation slices include their readiness
-notification, and do not identify an entire route or make a global-blocking claim.
+## Capture and inspect
 
-Consume a recording with Java 21 or newer:
+Use Java 21+, Python 3.11+, and one exact task-owned user service. Capture resolves
+the Java PID from its service cgroup and verifies cwd, process birth, clean frozen
+source ref and installed JAR digest. It does not read RCON credentials or issue
+simulation commands. The source artifact must live in the frozen checkout.
 
 ```sh
-java tools/performance/SimulationDelayReport.java /absolute/path/recording.jfr
+python3 tools/performance/capture-simulation-delay.py \
+  --service SELECTED.service --runtime /absolute/runtime \
+  --source-repo /absolute/frozen-source --source-ref EXACT_COMMIT \
+  --artifact /absolute/frozen-source/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar \
+  --jdk /absolute/java21 --seconds 30 --output /absolute/new-capture-directory
 ```
 
-The analyzer streams JFR and retains at most one million custom events / 100,000
-tasks; exceeding that bound fails explicitly. Shorten the recording rather than
-claiming a truncated result. Reports partition wall time between the first and
-last completed owner turns for each world. Nested owner spans are unioned.
-Exact calculation and WAL gates are split at observed worker phase boundaries.
-A dependency already in flight when recording starts can remain unresolved.
-Missing coverage and JFR data loss are reported; zero data-loss events alone is
-not proof that a trace has every required subject or boundary.
+Capture is bounded to 10–120 seconds / 128 MiB. Preserve provenance and raw JFR.
+The capture CLI runs the analyzer. For an existing recording, enable the six PM
+events using `simulation-delay.jfc`, then run:
 
-`RUNNABLE_UNATTRIBUTED_DISPATCH` includes possible Minecraft/GC/other host work,
-not proof of a missed wake. Stage spans nest and workers overlap: do not add those
-inclusive costs to the exclusive wall-time table. JFR execution/GC/park samples
-can resolve that remainder. Queue/budget consumption is not committed work;
-committed transaction count is reported separately. Batchable publication is not
-proof of a forced WAL prefix: join transaction APPENDED world/sequence to WAL
-MEMBER and COMPUTED records before making a durability claim.
+```sh
+python3 tools/performance/simulation-delay-report.py /absolute/recording.jfr \
+  --java /absolute/java21/bin/java --output /absolute/new-report-directory
+python3 -m unittest discover -s tools/performance -p test_simulation_delay.py
+```
+
+Open `timeline.html` locally; it embeds its data and needs no network service.
+Zoom/pan the timeline, choose a world and click/search task IDs to follow exact
+parent and consumer links. `report.json`, `status.json`, normalized `trace.ndjson`
+and `timeline.perfetto.json` retain machine-readable evidence. `reported` means
+the tool ran, not that every causal dependency is known. Errors write failed
+status and never silently truncate or reuse earlier success. Reader bounds are
+256 MiB JFR, two million scanned events, one million retained events / 150,000
+nodes and 512 MiB normalized input; shorten a capture on capacity failure.
+
+## Meaning and limits
+
+- Clock turn → advance attempt → action pass → worker → ready notification →
+  coalesced owner delivery uses producer-supplied IDs. Repeated observation can
+  connect a shared result to multiple consumers. Scope/observation edges are not
+  all precedence edges; this graph is not a longest-path DAG.
+- Host tick arrival, budget refill and each turn exit record actual current
+  clock gates and secondary pending conditions. Exclusive wall time follows the
+  actual barrier order. Nested turns are unioned; overlapping workers are not
+  summed into clock waiting. Unknown time and recording edges remain explicit.
+- Wall duration, per-thread CPU counter deltas, statistical stack samples and
+  canonical ticks/debt are distinct quantities. CPU is unavailable explicitly
+  when JVM counters are unsupported/disabled. Queue spans identify an emitter,
+  not that emitter's CPU occupancy. GCPhasePause is a pause; concurrent GC is not.
+- Transaction APPENDED world/sequence joins exact WAL MEMBER records and the
+  owner's RECEIPT_OBSERVED boundary. Publication alone is not durability proof.
+- Navigation events identify executor slices and their notification cause,
+  not a durable whole-route identity. Ordinary game holds/future deadlines do
+  not become global clock blockers without an observed clock gate.
+- A capture can begin inside an earlier task, lack producer boundaries, or lose
+  events. Missing IDs, WAL appends, data loss and unknown wall remainder are
+  reported independently. Arithmetic balance does not prove causal completeness.
+- Recording and CPU counters have overhead. A traced interval measures that
+  instrumented run; it is not an untraced TPS baseline or an optimization result.

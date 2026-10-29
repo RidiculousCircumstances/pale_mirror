@@ -412,7 +412,9 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
             cooperativeWakeScheduled = true;
             long remaining = Math.max(0L, MAX_COOPERATIVE_BATCH_NANOS - (cooperativeClock.getAsLong() - cooperativeBatchStarted));
             // Timer signals the owner only. It cannot append, force or publish state.
-            cooperativeWake.accept(remaining, () -> ready.run());
+            var trace = FrontierV3DelayTrace.task("WAL_BATCH_TIMER", "");
+            trace.mark("ARMED");
+            cooperativeWake.accept(remaining, () -> { trace.mark("READY"); trace.notifyReady(ready); });
         }
     }
     private boolean cooperativeBatchDue() {
@@ -455,6 +457,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
             receipt.sequences().forEach((world, sequence) -> {
                 var head = durableHeads.get(world);
                 durableHeads.put(world, head.flushedThrough(sequence));
+                FrontierV3DelayTrace.walObserved(diagnosticFlushId, world.value(), sequence);
             });
             flushGroups++; lastFlushNanos = receipt.elapsedNanos(); maxFlushNanos = Math.max(maxFlushNanos, lastFlushNanos);
             pendingFlush = null; flushingRecords = 0; flushingBytes = 0; pendingSinceNanos = 0;
@@ -497,7 +500,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         pendingRecords.clear(); pendingBytes = 0;
         cooperativeBatchOpen = false; cooperativeWakeScheduled = false;
         if (pendingSinceNanos == 0L) pendingSinceNanos = System.nanoTime();
-        future.whenComplete((ignored, failure) -> ready.run());
+        future.whenComplete((ignored, failure) -> trace.notifyReady(ready));
     }
     private boolean submitIo(Runnable task, boolean required) {
         try { writer.execute(task); return true; }
