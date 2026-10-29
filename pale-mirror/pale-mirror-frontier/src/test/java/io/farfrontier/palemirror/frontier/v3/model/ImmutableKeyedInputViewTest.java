@@ -60,4 +60,33 @@ class ImmutableKeyedInputViewTest {
         var fresh = view.get(new Object(), "b", List.of(input), Object::new);
         assertNotSame(b, fresh, "another generation cannot inherit evidence");
     }
+    @Test void keyedRowsKeepBranchIdentityFailureIsolationAndThreadIsolation() throws Exception {
+        var view = new ImmutableKeyedInputView<String, Object>(2);
+        var epoch = new Object(); var a = new Object(); var b = new Object();
+        var original = view.get(epoch, "one", List.of(a), Object::new);
+        ImmutablePlanningScope.within(() -> {
+            assertSame(original, view.get(epoch, "one", List.of(a), Object::new));
+            var other = view.get(epoch, "one", List.of(b), Object::new);
+            assertNotSame(original, other);
+            assertSame(original, view.get(epoch, "one", List.of(a), Object::new));
+            assertThrows(IllegalArgumentException.class, () -> view.get(epoch, "one", List.of(new Object()),
+                    () -> { throw new IllegalArgumentException("invalid facts"); }));
+            assertSame(other, view.get(epoch, "one", List.of(b), Object::new));
+            return null;
+        });
+        var worker = new java.util.concurrent.FutureTask<>(() -> view.get(epoch, "one", List.of(b), Object::new));
+        var thread = new Thread(worker); thread.start();
+        assertNotSame(worker.get(), view.get(epoch, "one", List.of(b), Object::new), "mutable rows never cross threads");
+        thread.join();
+    }
+    @Test void publishedKeyedRowsRetainEqualValuesOnlyAfterSuccessfulNewInputEvaluation() {
+        var view = new ImmutableKeyedInputView<String, String>(2);
+        var epoch = new Object(); var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var first = view.getPublished(epoch, "one", List.of(new Object()), () -> { calls.incrementAndGet(); return new String("same"); });
+        var changed = new Object();
+        assertSame(first, view.getPublished(epoch, "one", List.of(changed), () -> { calls.incrementAndGet(); return new String("same"); }));
+        assertSame(first, view.getPublished(epoch, "one", List.of(changed), () -> { throw new AssertionError("unchanged input recomputed"); }));
+        assertEquals(2, calls.get());
+    }
+
 }

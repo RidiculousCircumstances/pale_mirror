@@ -7,8 +7,19 @@ import java.util.function.Supplier;
 /** One bounded disposable derived view, keyed by exact immutable input identities.
  * Never persisted, never authoritative; changed inputs are recomputed before use. */
 public final class ImmutableInputView<T> {
-    private static final class Entry<T> {
-        List<Object> inputs = List.of(); T value;
+    /** Plain thread-confined row; a keyed directory owns its isolation and lifetime. */
+    static final class Entry<T> {
+        private List<Object> inputs = List.of();
+        private T value;
+        T get(List<Object> current, Supplier<T> compute, boolean shareEqualValue) {
+            if (value == null || !ImmutablePlanningScope.same(inputs, current)) {
+                T next = Objects.requireNonNull(compute.get());
+                T accepted = shareEqualValue && Objects.equals(value, next) ? value : next;
+                var acceptedInputs = List.copyOf(current);
+                inputs = acceptedInputs; value = accepted;
+            }
+            return value;
+        }
     }
     private final ThreadLocal<Entry<T>> local = ThreadLocal.withInitial(Entry::new);
     public T get(List<Object> current, Supplier<T> compute) {
@@ -19,14 +30,6 @@ public final class ImmutableInputView<T> {
         return get(current, compute, true);
     }
     private T get(List<Object> current, Supplier<T> compute, boolean shareEqualValue) {
-        return ImmutablePlanningScope.get(this, current, () -> {
-            var entry = local.get();
-            if (entry.value == null || !ImmutablePlanningScope.same(entry.inputs, current)) {
-                T next = Objects.requireNonNull(compute.get());
-                entry.inputs = List.copyOf(current);
-                if (!shareEqualValue || !Objects.equals(entry.value, next)) entry.value = next;
-            }
-            return entry.value;
-        });
+        return ImmutablePlanningScope.get(this, current, () -> local.get().get(current, compute, shareEqualValue));
     }
 }

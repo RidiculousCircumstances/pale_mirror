@@ -15,12 +15,11 @@ public final class ExtractionWorkSafety {
             return surfaces.contains(lower) && WorkingSurfaceTransition.preservesAccess(lower, current, ignored -> true, held);
         }
     }
-    private static final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ImmutableInputView<View>> VIEWS = new LinkedHashMap<>();
+    private static final ImmutableKeyedInputView<io.farfrontier.palemirror.frontier.v3.api.SubjectId, View> VIEWS =
+            new ImmutableKeyedInputView<>(ExtractionSiteState.MAX_WORK);
     private ExtractionWorkSafety() { }
-    public static synchronized boolean available(FrontierWorldState state, ExtractionDeposit deposit, ExtractionLayout.Cell cell) {
-        if (!VIEWS.containsKey(deposit.site().id()) && VIEWS.size() >= ExtractionSiteState.MAX_WORK) VIEWS.clear();
-        var view = VIEWS.computeIfAbsent(deposit.site().id(), ignored -> new ImmutableInputView<>());
-        return view.get(List.of(state.bootstrap(), state.actorLocations(), deposit.site().layout(), deposit.cells(),
+    public static boolean available(FrontierWorldState state, ExtractionDeposit deposit, ExtractionLayout.Cell cell) {
+        return VIEWS.get(state.bootstrap(), deposit.site().id(), List.of(state.bootstrap(), state.actorLocations(), deposit.site().layout(), deposit.cells(),
                 deposit.geometry(), state.extractionSites().geologicalExclusions()), () -> read(state, deposit)).available(cell);
     }
     private static View read(FrontierWorldState state, ExtractionDeposit deposit) {

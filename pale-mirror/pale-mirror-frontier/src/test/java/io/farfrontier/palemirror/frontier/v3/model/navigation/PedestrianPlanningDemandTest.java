@@ -200,4 +200,32 @@ class PedestrianPlanningDemandTest {
             assertEquals(1, planner.serviceDiagnostics().stream().filter(value -> value.service().equals("LOCAL")).findFirst().orElseThrow().active());
         }
     }
+    @Test void failedDependencyCleanupRestoresObservationAndServiceContexts() throws Exception {
+        var geometry = ground(PedestrianGeometryRevision.initial());
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(3, 63, 1);
+        var services = new ArrayList<PedestrianPlanningService>();
+        var discards = new java.util.concurrent.atomic.AtomicInteger();
+        var planner = new PedestrianRoutePlanner() {
+            public PedestrianRouteResult query(PedestrianRouteGeometry g, SurfaceAnchor from, SurfaceAnchor to) {
+                return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "PENDING");
+            }
+            public PedestrianRouteResult query(PedestrianRouteGeometry g, SurfaceAnchor from, SurfaceAnchor to,
+                    PedestrianRouteExtent extent, PedestrianPlanningService service) {
+                services.add(service); return query(g, from, to);
+            }
+            public boolean hasCalculation(PedestrianRouteGeometry g, SurfaceAnchor from, SurfaceAnchor to, PedestrianRouteExtent extent) { return false; }
+            public void discardUnobserved(PedestrianRouteRequest request) {
+                discards.incrementAndGet(); throw new IllegalArgumentException("cleanup failed");
+            }
+        };
+        try (var binding = PedestrianRoutePlanning.bind(planner)) {
+            assertThrows(IllegalArgumentException.class, () -> PedestrianRoutePlanning.withService(PedestrianPlanningService.PASSAGE_CLEARANCE,
+                    () -> PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.query(geometry, start, goal))));
+            assertEquals(1, discards.get());
+            assertTrue(PedestrianRoutePlanning.observe(() -> true).requests().isEmpty());
+            PedestrianRoutePlanning.query(geometry, start, goal);
+            assertEquals(List.of(PedestrianPlanningService.PASSAGE_CLEARANCE, PedestrianPlanningService.ORDINARY), services);
+        }
+    }
+
 }
