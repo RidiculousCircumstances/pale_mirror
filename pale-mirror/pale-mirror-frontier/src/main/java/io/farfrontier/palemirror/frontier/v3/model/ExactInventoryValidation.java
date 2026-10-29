@@ -14,8 +14,36 @@ final class ExactInventoryValidation {
     private static final ImmutableInvariantCheck<Void> CARGO_TITLES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> EXACT_CUSTODY = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> FUNGIBLE_CUSTODY = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> FUNGIBLE_CARGO = new ImmutableInvariantCheck<>();
     private static final ImmutableRegistryView<SubjectId, CustodyAccount, ResourceCustody> HOLDERS =
-            new ImmutableRegistryView<>(FungibleResourceLedger.MAX_ACCOUNTS);
+            new ImmutableRegistryView<>(FungibleResourceLedger.MAX_ACCOUNTS, Objects::equals);
+    private record FungibleContext(Map<SubjectId, ContainerRecord> containers,
+                                    Map<SubjectId, CargoBatch> cargo,
+                                    Map<InventoryCustody.ContainerSlot, SubjectId> occupied,
+                                    Map<SubjectId, ResourceCustody> holders) { }
+    private static final ImmutableReferenceIndex.Source<FungibleContext, SubjectId, ContainerRecord> HOLDER_CONTAINERS =
+            new ImmutableReferenceIndex.Source<>(FungibleContext::containers);
+    private static final ImmutableReferenceIndex.Source<FungibleContext, SubjectId, CargoBatch> HOLDER_CARGO =
+            new ImmutableReferenceIndex.Source<>(FungibleContext::cargo);
+    private static final ImmutableReferenceIndex.Source<FungibleContext, SubjectId, ResourceCustody> HOLDER_ACCOUNTS =
+            new ImmutableReferenceIndex.Source<>(FungibleContext::holders);
+    private static final ImmutableReferenceIndex.Source<FungibleContext, InventoryCustody.ContainerSlot, SubjectId> EXACT_SLOTS =
+            new ImmutableReferenceIndex.Source<>(FungibleContext::occupied);
+    private static final ImmutableGroupView<SubjectId, ResourceCustody, ResourceCustody> LOCATIONS = new ImmutableGroupView<>();
+    private static final ImmutableReferenceIndex<FungibleContext, SubjectId, ResourceCustody> HOLDER_REFERENCES =
+            new ImmutableReferenceIndex<>(FungibleResourceLedger.MAX_ACCOUNTS, 1,
+                    List.of(HOLDER_CONTAINERS, HOLDER_CARGO), (context, custody) -> switch (custody) {
+                        case ResourceCustody.Container container -> List.of(HOLDER_CONTAINERS.at(container.containerId()));
+                        case ResourceCustody.Cargo cargo -> List.of(HOLDER_CARGO.at(cargo.cargoId()));
+                        default -> List.of();
+                    }, (context, id, custody) -> validateHolder(context.containers(), context.cargo(), custody));
+    private static final ImmutableReferenceIndex<FungibleContext, SubjectId, PhysicalStackBinding> BINDING_REFERENCES =
+            new ImmutableReferenceIndex<>(FungibleResourceLedger.MAX_BINDINGS, 3,
+                    List.of(HOLDER_CONTAINERS, HOLDER_ACCOUNTS, EXACT_SLOTS), (context, binding) ->
+                        binding.address() instanceof PhysicalStackAddress.ContainerSlot slot
+                                ? List.of(HOLDER_CONTAINERS.at(slot.slot().containerId()), HOLDER_ACCOUNTS.at(binding.accountId()), EXACT_SLOTS.at(slot.slot()))
+                                : List.of(),
+                    (context, id, binding) -> validateBinding(context.containers(), context.occupied(), context.holders(), binding));
     static void validate(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
                          Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems,
                          Map<UUID, List<SubjectId>> worldCarrierItems, Map<SubjectId, InventoryConflict> conflicts,
@@ -102,9 +130,13 @@ final class ExactInventoryValidation {
             if (!slots.equals(occupiedSlots)) throw new IllegalArgumentException("container slot index must exactly match exact item custody");
         }, items, cargo, playerItems, worldCarrierItems, containers, occupiedSlots);
         var holders = ImmutableInvariantCheck.fullAudit()
-                ? HOLDERS.project(containers, fungibleResources.accounts(), (before, after) -> false, (id, account) -> account.custody())
-                : HOLDERS.project(containers, fungibleResources.accounts(), (id, account) -> account.custody());
-        FUNGIBLE_CUSTODY.validate(() -> validateFungibleResourceCustody(containers, cargo, occupiedSlots, holders, fungibleResources.bindings()),
+                ? HOLDERS.project(ExactInventoryValidation.class, fungibleResources.accounts(), (before, after) -> false, (id, account) -> account.custody())
+                : HOLDERS.project(ExactInventoryValidation.class, fungibleResources.accounts(), (id, account) -> account.custody());
+        FUNGIBLE_CUSTODY.validate(() -> {
+            if (ImmutableInvariantCheck.fullAudit())
+                validateFungibleResourceCustody(containers, cargo, occupiedSlots, holders, fungibleResources.bindings());
+            else validateFungibleReferences(containers, cargo, occupiedSlots, holders, fungibleResources.bindings());
+        },
                 containers, cargo, occupiedSlots, holders, fungibleResources.bindings());
     }
     private static void validateFungibleResourceCustody(Map<SubjectId, ContainerRecord> containers,
@@ -118,44 +150,71 @@ final class ExactInventoryValidation {
                     && accountsByCustody.put(custody, entry.getKey()) != null) {
                 throw new IllegalArgumentException("one physical/resource location must have one fungible custody account");
             }
-            switch (custody) {
-                case ResourceCustody.Container container -> {
-                    ContainerRecord record = containers.get(container.containerId());
-                    if (record == null) throw new IllegalArgumentException("fungible account references an unknown container");
-                    record.compartmentLayout().slots(container.section());
-                    // A holder may store another registered party's goods. Custody is not
-                    // title; admission and commercial acceptance enforce their own authority.
-                }
-                case ResourceCustody.Cargo cargoCustody -> {
-                    CargoBatch batch = cargo.get(cargoCustody.cargoId());
-                    if (batch == null || !batch.fungibleContents()) throw new IllegalArgumentException("fungible account references an unknown exact cargo batch");
-                }
-                case ResourceCustody.Actor ignored -> { }
-                case ResourceCustody.Player ignored -> { }
-                case ResourceCustody.WorldCarrier ignored -> { }
-                case ResourceCustody.Ground ignored -> { }
-            }
+            validateHolder(containers, cargo, custody);
         }
+
         for (CargoBatch batch : cargo.values()) if (batch.fungibleContents()) {
             long matching = accounts.values().stream().filter(value -> value instanceof ResourceCustody.Cargo holder
                     && holder.cargoId().equals(batch.id())).count();
             if (matching != 1) throw new IllegalArgumentException("fungible cargo must retain one exact custody account");
         }
-        for (PhysicalStackBinding binding : bindings.values()) {
-            ResourceCustody custody = accounts.get(binding.accountId());
-            if (binding.address() instanceof PhysicalStackAddress.ContainerSlot slot) {
-                ContainerRecord record = containers.get(slot.slot().containerId());
-                if (record == null || slot.slot().slot() >= record.slotCount()
-                        || !(custody instanceof ResourceCustody.Container container)
-                        || !container.containerId().equals(slot.slot().containerId())
-                        || !record.compartmentLayout().slots(container.section()).contains(slot.slot().slot())) {
-                    throw new IllegalArgumentException("fungible physical binding has no matching owned container account");
-                }
-                if (occupiedSlots.containsKey(slot.slot())) {
-                    throw new IllegalArgumentException("fungible physical binding overlaps an exact-item slot");
-                }
+        for (PhysicalStackBinding binding : bindings.values()) validateBinding(containers, occupiedSlots, accounts, binding);
+    }
+    private static void validateHolder(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, CargoBatch> cargo,
+                                       ResourceCustody custody) {
+        switch (custody) {
+            case ResourceCustody.Container container -> {
+                ContainerRecord record = containers.get(container.containerId());
+                if (record == null) throw new IllegalArgumentException("fungible account references an unknown container");
+                record.compartmentLayout().slots(container.section());
+                // A holder may store another registered party's goods. Custody is not
+                // title; admission and commercial acceptance enforce their own authority.
+            }
+            case ResourceCustody.Cargo cargoCustody -> {
+                CargoBatch batch = cargo.get(cargoCustody.cargoId());
+                if (batch == null || !batch.fungibleContents()) throw new IllegalArgumentException("fungible account references an unknown exact cargo batch");
+            }
+            case ResourceCustody.Actor ignored -> { }
+            case ResourceCustody.Player ignored -> { }
+            case ResourceCustody.WorldCarrier ignored -> { }
+            case ResourceCustody.Ground ignored -> { }
+        }
+    }
+    private static void validateBinding(Map<SubjectId, ContainerRecord> containers,
+                                    Map<InventoryCustody.ContainerSlot, SubjectId> occupiedSlots,
+                                    Map<SubjectId, ResourceCustody> accounts, PhysicalStackBinding binding) {
+        ResourceCustody custody = accounts.get(binding.accountId());
+        if (binding.address() instanceof PhysicalStackAddress.ContainerSlot slot) {
+            ContainerRecord record = containers.get(slot.slot().containerId());
+            if (record == null || slot.slot().slot() >= record.slotCount()
+                    || !(custody instanceof ResourceCustody.Container container)
+                    || !container.containerId().equals(slot.slot().containerId())
+                    || !record.compartmentLayout().slots(container.section()).contains(slot.slot().slot())) {
+                throw new IllegalArgumentException("fungible physical binding has no matching owned container account");
+            }
+            if (occupiedSlots.containsKey(slot.slot())) {
+                throw new IllegalArgumentException("fungible physical binding overlaps an exact-item slot");
             }
         }
+    }
+    private static Set<ResourceCustody> exclusiveLocation(ResourceCustody custody) {
+        return custody instanceof ResourceCustody.Actor ? Set.of() : Set.of(custody);
+    }
+    private static void validateFungibleReferences(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, CargoBatch> cargo,
+                                                  Map<InventoryCustody.ContainerSlot, SubjectId> occupied,
+                                                  Map<SubjectId, ResourceCustody> holders, Map<SubjectId, PhysicalStackBinding> bindings) {
+        if (!LOCATIONS.uniqueMemberships(ExactInventoryValidation.class, holders, ExactInventoryValidation::exclusiveLocation))
+            throw new IllegalArgumentException("one physical/resource location must have one fungible custody account");
+        var context = new FungibleContext(containers, cargo, occupied, holders);
+        HOLDER_REFERENCES.validate(ExactInventoryValidation.class, holders, context);
+        FUNGIBLE_CARGO.validate(() -> {
+            for (CargoBatch batch : cargo.values()) if (batch.fungibleContents()) {
+                var matching = LOCATIONS.unorderedRows(ExactInventoryValidation.class, holders,
+                        ExactInventoryValidation::exclusiveLocation, new ResourceCustody.Cargo(batch.id()));
+                if (matching.size() != 1) throw new IllegalArgumentException("fungible cargo must retain one exact custody account");
+            }
+        }, cargo, holders);
+        BINDING_REFERENCES.validate(ExactInventoryValidation.class, bindings, context);
     }
     static void require(Object value, Object expected, String label) {
         if (value instanceof ExactItemStack item && item.custody().equals(expected)) return;

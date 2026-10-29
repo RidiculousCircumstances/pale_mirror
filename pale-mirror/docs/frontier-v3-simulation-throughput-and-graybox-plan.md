@@ -5606,3 +5606,42 @@ A changed sale bucket/horizon is a different input; an old branch keeps its own 
 Connected owner/market focus:68testsPASS,0fail/error/skip,95s wall; guardrailsPASS.
 Existing real transport/expedition, mining external changes/replay, forestry lifecycle,
 reference manifest and completed-price histories covered. No schema/reset required.
+
+### Inventory-owned local custody references
+
+The a5 allocation trace repeatedly samples the server constructing ordinary stock
+compartment layouts beneath ExactInventoryValidation.validateFungibleResourceCustody
+(4 stock-builder and3 constructor samples after first-thread samples are excluded).
+The source explains the repeated work: every binding/container change reruns all
+holder and binding checks; each fungible cargo additionally scans all holders.
+The custody projection itself uses the entire container registry as its epoch,
+so an unrelated placement change reconstructs all projected account locations.
+
+Keep this responsibility in ExactInventoryValidation. Reuse the existing typed
+ImmutableReferenceIndex for holder->container/cargo and binding->holder/container/
+exact-slot dependencies. Missing/deleted targets remain registered reads and fail
+the same owning assertions. Shared ImmutableGroupView indexes the declared exclusive
+non-actor locations and cargo cardinality; this never discovers title or selects
+an owner. Actor custody retains its existing multiple-account allowance. Cargo
+reverse checks depend on cargo+projected holders, not unrelated binding changes.
+The immutable custody projection uses exact complete ResourceCustody equality and
+one computing-thread scope, not whole containers. No cross-world authority lives
+there: changed maps/rows still invalidate their own declared reads. Full ingress/
+recovery keeps the exhaustive original location/backlink/binding audit, invoking
+the same extracted row checks. Intrinsic conservation/address uniqueness/complete
+binding coverage remain in FungibleResourceLedger. No new mutable ingress path,
+unchecked constructor, cache bound, rule, schema or compatibility mode.
+
+Focused negative coverage targets unchanged bindings after container removal,
+capacity shrink, station-port swap, account-section change and new exact occupancy;
+non-actor duplicate locations, cargo loss/backlink loss, mutable caller maps and
+valid earlier branches after rejected candidates. Compare rejection with the
+exhaustive full audit; retain real player/storage/compartment/ledger/trade coverage.
+
+Connected focus75562:128 existing tests passed; the3 new tests initially failed
+before exercising custody because their arbitrary owner ID used the fixture-only
+prefix-inference economic constructor. Registered that owner's SETTLEMENT_TREASURY
+account explicitly; focused30646 then3PASS9s. Production bytes unchanged between
+runs. All131 affected tests pass,0 skipped; guardrailsPASS. No new timing tests,
+full-suite/physical/throughput acceptance claim. Logs inventory-custody-reference-
+focus.log and inventory-custody-reference-fixture-focus.log.
