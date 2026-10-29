@@ -10,13 +10,22 @@ import java.util.HashSet;
 /** Bounded live/terminal transport records; no resource totals, wallets or actor poses. */
 public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, TransportMission> missions) {
     public static final int MAX_SHIPMENTS = 1024;
-    private record ReceiptScope(SubjectId container, String itemKind) { }
-    private static final ImmutableGroupView<SubjectId, Shipment, ReceiptScope> RECEIVERS = new ImmutableGroupView<>();
+    private sealed interface ReceiveScope permits ReceiptScope, ContainerScope { }
+    private record ReceiptScope(SubjectId container, String itemKind) implements ReceiveScope { }
+    private record ContainerScope(SubjectId container) implements ReceiveScope { }
+    private static final ImmutableGroupView<SubjectId, Shipment, ReceiveScope> RECEIVERS = new ImmutableGroupView<>();
+    private static java.util.Set<ReceiveScope> receiveScopes(Shipment shipment) {
+        return java.util.Set.of(new ReceiptScope(shipment.receiver().containerId(), shipment.itemKind()),
+                new ContainerScope(shipment.receiver().containerId()));
+    }
     /** Current declarations only; each consumer owns its status, title and port rules. */
     java.util.List<Shipment> receiving(SubjectId container, String itemKind) {
-        return RECEIVERS.rows(ShipmentState.class, shipments, shipment -> java.util.Set.of(
-                new ReceiptScope(shipment.receiver().containerId(), shipment.itemKind())),
+        return RECEIVERS.rows(ShipmentState.class, shipments, ShipmentState::receiveScopes,
                 new ReceiptScope(Objects.requireNonNull(container), Objects.requireNonNull(itemKind)));
+    }
+    java.util.List<Shipment> receiving(SubjectId container) {
+        return RECEIVERS.rows(ShipmentState.class, shipments, ShipmentState::receiveScopes,
+                new ContainerScope(Objects.requireNonNull(container)));
     }
     public ShipmentState {
         shipments = ImmutableLookupMap.copyOf(Objects.requireNonNull(shipments));

@@ -100,6 +100,10 @@ class InternalShipmentTest {
         var fixture = machineSupplyFixture(); var state = fixture.state(); var fuel = fixture.shipment();
         var receiver = (ShipmentEndpoint.ProductionPort) fuel.receiver();
         assertEquals(4800, ProductionStationEnergy.unlitFuelTicks(state, receiver.spec().id()));
+        var before = state;
+        var promised = InternalShipmentStorageDemand.pending(state, receiver.containerId()).getFirst();
+        assertEquals(ContainerSectionId.FUEL, promised.section());
+        assertTrue(InternalShipmentStorageDemand.pending(state, fuel.sender().container().orElseThrow()).isEmpty());
         var input = new ShipmentEndpoint.ProductionPort(receiver.settlementId(), receiver.spec(),
                 ActorContainerItemOrder.StationPort.INPUT, receiver.exteriorApproach());
         var material = new Shipment(fuel.id(), fuel.authorization(), fuel.execution(), fuel.sender(), input,
@@ -109,6 +113,8 @@ class InternalShipmentTest {
                 new ShipmentState(Map.of(material.id(), material), state.shipments().missions())));
         assertEquals(0, ProductionStationEnergy.unlitFuelTicks(state, receiver.spec().id()),
                 "combustible cargo addressed to INPUT must never back FUEL");
+        assertEquals(ContainerSectionId.INPUT, InternalShipmentStorageDemand.pending(state, receiver.containerId()).getFirst().section());
+        assertEquals(List.of(promised), InternalShipmentStorageDemand.pending(before, receiver.containerId()), "receiver index follows each immutable branch");
     }
 
     private RetargetFixture machineSupplyFixture() {

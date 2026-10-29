@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /** Read-only storage admission shared by bakery execution and player-facing explanation. */
 public final class ProductionOutputCapacity {
+    private static final ImmutableGroupView<SubjectId, ProductionJob, SubjectId> DESTINATIONS = new ImmutableGroupView<>();
+    private static final ImmutableKeyedInputView<SubjectId, java.util.List<ContainerInboundCapacity.Demand>> INBOUND = new ImmutableKeyedInputView<>(512);
     private ProductionOutputCapacity() { }
     /** Admission only: later execution retains the selected destination in ProductionRights. */
     public static java.util.Optional<ProductionRights> selectDestination(FrontierWorldState state, ProductionRights rights, int quantity, SubjectId source) {
@@ -79,9 +81,14 @@ public final class ProductionOutputCapacity {
     }
 
     /** The recipe owner declares its retained inbound demand after input has left storage. */
-    public static java.util.List<ContainerInboundCapacity.Demand> pendingInbound(java.util.Map<SubjectId, ProductionJob> jobs) {
+    public static java.util.List<ContainerInboundCapacity.Demand> pendingInbound(java.util.Map<SubjectId, ProductionJob> jobs, SubjectId container) {
+        var selected = DESTINATIONS.rows(ProductionOutputCapacity.class, jobs, job -> job.stationWork().isEmpty()
+                ? java.util.Set.of() : java.util.Set.of(StationWorkStorage.destination(job)), container);
+        return INBOUND.get(ProductionOutputCapacity.class, container, java.util.List.of(selected), () -> pendingInbound(selected));
+    }
+    private static java.util.List<ContainerInboundCapacity.Demand> pendingInbound(java.util.List<ProductionJob> jobs) {
         var incoming = new java.util.ArrayList<ContainerInboundCapacity.Demand>();
-        for (ProductionJob job : jobs.values()) {
+        for (ProductionJob job : jobs) {
             if (job.stationWork().isEmpty()) continue;
             var phase = job.stationWork().orElseThrow().phase();
             boolean retainedTargetOccupiesDestination = phase == StationWorkState.Phase.TARGET_PICKUP

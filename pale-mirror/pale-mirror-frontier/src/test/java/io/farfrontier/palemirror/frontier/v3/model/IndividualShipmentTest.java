@@ -26,16 +26,25 @@ class IndividualShipmentTest {
         var f = fixture(); var state = dispatch(f); var shipment = f.shipment();
         assertTrue(WorkEquipmentClaimComposition.reserved(state).contains(f.item().id()));
         long balance = state.inventory().economics().require(f.contract().buyer().id()).balance().raw();
+        var promised = List.of(new ContainerInboundCapacity.Demand(f.contract().id(), shipment.receiver().containerId(),
+                f.item().itemKind(), 1, ContainerInboundCapacity.Representation.INDIVIDUAL));
+        assertEquals(promised, GoodsTradeStorageDemand.pending(state, shipment.receiver().containerId()));
+        assertTrue(GoodsTradeStorageDemand.pending(state, shipment.sender().container().orElseThrow()).isEmpty());
         state = state.withActorBody(shipment.execution().actorId(), shipment.sender().station().standingBody());
         state = transfer(state, shipment.id());
         assertEquals(new InventoryCustody.Actor(shipment.execution().actorId()), state.inventory().items().get(f.item().id()).custody());
         assertEquals(f.item().economicOwnerId(), state.inventory().items().get(f.item().id()).economicOwnerId());
         state = restored(state);
+        var carrying = state;
+        assertEquals(promised, GoodsTradeStorageDemand.pending(carrying, shipment.receiver().containerId()));
         assertTrue(WorkEquipmentClaimComposition.reserved(state).contains(f.item().id()), "recovery must retain the actual unaccepted item claim");
         state = state.withActorBody(shipment.execution().actorId(), shipment.receiver().station().standingBody());
         state = transfer(state, shipment.id());
         var delivered = state.shipments().shipments().get(shipment.id());
         assertEquals(Shipment.Status.DELIVERED, delivered.status());
+        assertTrue(GoodsTradeStorageDemand.pending(state, shipment.receiver().containerId()).isEmpty(), "received stock is not promised twice");
+        assertEquals(promised, GoodsTradeStorageDemand.pending(carrying, shipment.receiver().containerId()), "the predecessor still carries the item");
+        assertTrue(GoodsTradeStorageDemand.pending(restored(state), shipment.receiver().containerId()).isEmpty());
         assertEquals(f.item().condition(), state.inventory().items().get(f.item().id()).condition());
         assertEquals(f.item().economicOwnerId(), state.inventory().items().get(f.item().id()).economicOwnerId());
         assertEquals(balance, state.inventory().economics().require(f.contract().buyer().id()).balance().raw());

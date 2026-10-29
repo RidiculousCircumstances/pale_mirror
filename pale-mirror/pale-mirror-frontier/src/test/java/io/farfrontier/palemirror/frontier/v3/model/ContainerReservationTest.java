@@ -103,6 +103,12 @@ class ContainerReservationTest {
                 depot, java.util.Optional.of(new SubjectId("job:foreign-output"))));
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(Map.of("minecraft:bread", 64L), recovered.pendingContainerInbound(depot).quantities());
+        var foreignDepot = FrontierWorldState.depotId(state.bootstrap().settlements().stream()
+                .filter(home -> !home.id().equals(task.ownerId())).findFirst().orElseThrow().id());
+        assertEquals(ContainerIncomingStock.empty(), recovered.pendingContainerInbound(foreignDepot));
+        assertThrows(IllegalArgumentException.class, () -> ContainerStorageAdmission.inbound(recovered, foreignDepot,
+                java.util.Optional.of(started.job().id())), "another receiver cannot complete this output");
+        assertEquals(Map.of("minecraft:bread", 64L), recovered.pendingContainerInbound(depot).quantities());
         assertTrue(recovered.firstFreeContainerSlot(depot).isEmpty());
         assertTrue(recovered.firstFreeContainerSlotForOutput(depot, started.job().id()).isPresent());
     }

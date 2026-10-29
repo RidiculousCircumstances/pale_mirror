@@ -5204,3 +5204,52 @@ the complete allocation, preserving the strict production guard. Extracted regis
 negative focus passed18s. Final frozen focus also covers the selected envelope with
 an unrelated cheaper foreign ask and the original expiry/rewind checks. No runtime
 gain claimed for this cut.
+
+
+### Receiver-local inbound demand and delivery forecasts
+
+c3f1ce475 retained deployments both verified. Ordinary window304.311699s:
+317493->321156=12.037000/s, debt1223->3646, no build/client/profiler overlap.
+New terminal harvest town68cycle13; no increase in retained accepted quantities
+for5sampled towns. Hungry1:1->0,7:2->1,35:1->1,68:1->4,100:2->0; all5starving0.
+Evidence selected-market-book-ordinary/. Not20; no isolated evolving-workload A/B.
+
+The retained89b JFR identifies GoodsTradeStorageDemand.compute and
+SettlementDeliveryForecast.read as repeated all-world lookup callers during a
+selected local trade draft. ContainerStorageDemandSources formerly gathered every
+production output, commercial receiver/account and internal shipment before local
+capacity filtered its holder. Pass one explicit receiver through every provider
+and every caller. Shared incremental current-row groups select declared production
+destinations, contract receivers and shipment receivers. The latter supports both
+container-only and existing container+kind queries under nominal query types.
+
+Commercial demand depends on actual local contract rows, ALL current receiver
+custody accounts (all sections, matching the former container-level subtraction),
+and referenced individual items or an explicit missing-item singleton. No global
+inventory generation, old quantity, title or dispatch inference supplies these
+inputs. Providers preserve their existing phase, representation, section, claim
+subtraction and delivered-stock rules. Composition rejects a foreign receiver;
+local completion still requires its exact declared owner and section, including
+slot-backed output. Existing physical reservations and capacity fences remain.
+No schema, ruleset, price, scheduling cadence or custody-authority change.
+
+Delivery forecasting uses these same receiver indices over the participant's
+current declared warehouses. It still checks exact current eligibility and buyer,
+authorization, terminal/reception status and actual ShipmentDeliveryForecast.
+Declaration is only a candidate scope, never permission or an arrival guarantee.
+Shipment IDs retain the original deterministic sort. There is no second shipment
+registry, forecast cache, stale time estimate or full-world delivery scan.
+
+Existing individual delivery checks promise->carried->received, predecessor and
+codec; real partial fungible receipt checks43pending after17received before/after
+acceptance; production recovery checks a foreign completion cannot consume local
+output; compartment rerouting checks INPUT/FUEL and earlier branch. The actual
+consolidated trade/return journey compares dynamic-warehouse arrivals after codec.
+Verification and deployment receipts follow once the source cut passes.
+
+Connected local-inbound/delivery focus passed99tests0failures in125s, including9
+architecture tests, actual autonomous/consolidated trade, partial receipts,
+individual/internal transport, external stock loss, compartment/capacity and
+storage replacement/recovery. guardrails passed. Evidence local-inbound-demand-
+focus.log and corresponding frontier XML reports. Frozen packaging and retained
+server deployments follow; no runtime gain is claimed from tests.

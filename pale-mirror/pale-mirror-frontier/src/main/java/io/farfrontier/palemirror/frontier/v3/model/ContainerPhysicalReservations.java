@@ -131,12 +131,12 @@ final class ContainerPhysicalReservations {
         // Capacity belongs to the queried receiver. Backing every other store's
         // reservations here turns each local admission into a world stock scan.
         var physicalClaims = atContainer(state, container);
-        var demands = ContainerStorageDemandSources.demands(state);
+        var demands = ContainerStorageDemandSources.demands(state, container);
         return DEMANDS.get(state.bootstrap(), container, List.of(physicalClaims, demands), () -> {
             var covered = new HashMap<DemandKey, Integer>();
             physicalClaims.stream().flatMap(claim -> claim.coveredDemand().stream()).forEach(physical ->
                     covered.merge(new DemandKey(physical.owner(), physical.container(), physical.section(), physical.itemKind(), physical.representation()), physical.quantity(), Math::addExact));
-            return demands.stream().filter(demand -> demand.container().equals(container)).map(demand -> {
+            return demands.stream().map(demand -> {
             int remaining = Math.subtractExact(demand.quantity(), covered.getOrDefault(
                     new DemandKey(demand.owner(), demand.container(), demand.section(), demand.itemKind(), demand.representation()), 0));
             if (remaining < 0) throw new IllegalArgumentException("physical claims exceed inbound demand");

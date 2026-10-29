@@ -31,7 +31,7 @@ public final class ContainerStorageAdmission {
     }
     static ContainerIncomingStock inbound(FrontierWorldState state, ResourceCustody.Container holder, Optional<SubjectId> completing) {
         var container = holder.containerId();
-        var demands = ContainerStorageDemandSources.demands(state);
+        var demands = ContainerStorageDemandSources.demands(state, container);
         var uncovered = ContainerPhysicalReservations.uncoveredDemands(state, container);
         return INCOMING.get(state.bootstrap(), new IncomingQuery(container, holder.section(), completing), List.of(demands, uncovered), () -> {
             // Prove the completion's declared owner even when its entire demand is slot-backed.

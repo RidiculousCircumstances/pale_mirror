@@ -365,6 +365,9 @@ class ConsolidatedGoodsTradeTest {
                                 "a materialized body needs fresh progress evidence, not its stale COLD pose");
                         var incoming = SettlementDeliveryForecast.read(state,
                                 state.companies().goodsTrade().participants().participants().get(mission.receiver().settlementId()));
+                        assertEquals(incoming, SettlementDeliveryForecast.read(restored,
+                                restored.companies().goodsTrade().participants().participants().get(mission.receiver().settlementId())),
+                                "dynamic replacement warehouses retain the same incoming obligations after recovery");
                         assertTrue(incoming.getOrDefault(parcel.itemKind(), List.of()).stream().mapToLong(
                                 io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Arrival::quantity).sum() >= parcel.quantity());
                     }

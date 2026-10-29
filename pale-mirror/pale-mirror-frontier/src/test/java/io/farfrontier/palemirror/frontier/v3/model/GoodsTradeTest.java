@@ -218,6 +218,8 @@ class GoodsTradeTest {
         var partial = state.shipments().shipments().get(shipment.id());
         assertEquals(Shipment.Status.CARRYING, partial.status()); assertEquals(43, partial.quantity());
         assertEquals(17, partial.reception().orElseThrow().quantity());
+        assertEquals(43, GoodsTradeStorageDemand.pending(state, RECEIVER).getFirst().quantity(), "unaccepted received claims already occupy storage");
+        assertTrue(GoodsTradeStorageDemand.pending(state, SOURCE).isEmpty());
         assertNotEquals(CLAIM, partial.reception().orElseThrow().claimId());
         state.actorExecutions().requireCurrent(shipment.execution());
         assertEquals(beforeBuyer, state.inventory().economics().require(BUYER).balance());
@@ -230,6 +232,8 @@ class GoodsTradeTest {
                 io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT, state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), 10), new SimInstant(10)), 10, "goods-trade");
         assertEquals(beforeBuyer.minus(FixedScalar.whole(17)), state.inventory().economics().require(BUYER).balance());
         assertEquals(43, state.inventory().fungibleResources().claims().get(CLAIM).quantity());
+        assertEquals(43, GoodsTradeStorageDemand.pending(state, RECEIVER).getFirst().quantity());
+        assertEquals(43, GoodsTradeStorageDemand.pending(waiting, RECEIVER).getFirst().quantity(), "acceptance cannot change earlier receiver stock");
         assertTrue(state.shipments().shipments().get(shipment.id()).reception().isEmpty());
         assertFalse(ShipmentStateSupport.coldTransferAvailable(state, state.shipments().shipments().get(shipment.id())));
         var waitingAccess = new ShipmentServiceAccess().demands(state, RECEIVER).stream()

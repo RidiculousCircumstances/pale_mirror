@@ -32,6 +32,10 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     }
     private static final ImmutableGroupView<SubjectId, GoodsTradeContract, GoodsTradeParty> BUYERS = new ImmutableGroupView<>();
     private static final ImmutableGroupView<SubjectId, GoodsTradeContract, GoodsTradeParty> SELLERS = new ImmutableGroupView<>();
+    private static final ImmutableGroupView<SubjectId, GoodsTradeContract, SubjectId> RECEIVERS = new ImmutableGroupView<>();
+    java.util.List<GoodsTradeContract> receivables(SubjectId container) {
+        return RECEIVERS.rows(GoodsTradeState.class, contracts, contract -> java.util.Set.of(contract.receiverContainerId()), container);
+    }
     private record OrderScope(GoodsTradeParty party, GoodsTradeOrder.Side side) { }
     private static final ImmutableGroupView<SubjectId, GoodsTradeOrder, OrderScope> PARTY_ORDERS = new ImmutableGroupView<>();
     /** Declared authorizations only; matching still owns time, price and current admission. */

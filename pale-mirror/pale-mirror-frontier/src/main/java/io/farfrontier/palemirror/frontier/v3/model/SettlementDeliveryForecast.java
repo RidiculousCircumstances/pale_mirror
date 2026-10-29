@@ -9,15 +9,21 @@ final class SettlementDeliveryForecast {
     private SettlementDeliveryForecast() { }
     static Map<String, List<SupplyPlanner.Arrival>> read(FrontierWorldState state, GoodsParticipant participant) {
         var owner = participant.party().id();
+        // Every eligible warehouse is declared, but declaration alone grants no
+        // use. Recheck current policy/custody for each local retained obligation.
+        var containers = GoodsParticipantStorage.declared(state, participant);
+        var contracts = containers.stream().flatMap(container -> state.companies().goodsTrade().receivables(container).stream());
         var claims = new HashMap<SubjectId, Integer>();
-        for (var contract : state.companies().goodsTrade().contracts().values())
+        for (var contract : contracts.toList())
             if (!contract.terminal() && contract.buyer().id().equals(owner)
                     && GoodsParticipantStorage.eligible(state, participant, contract.receiverContainerId(), contract.itemKind()))
                 contract.outstandingClaims().forEach((id, quantity) -> {
                     if (claims.put(id, quantity) != null) throw new IllegalArgumentException("duplicate incoming trade claim");
                 });
         var result = new TreeMap<String, List<SupplyPlanner.Arrival>>();
-        for (var shipment : state.shipments().shipments().values().stream().sorted(Comparator.comparing(Shipment::id)).toList()) {
+        var shipments = containers.stream().flatMap(container -> state.shipments().receiving(container).stream())
+                .sorted(Comparator.comparing(Shipment::id)).toList();
+        for (var shipment : shipments) {
             if (shipment.terminal() || shipment.reception().isPresent()
                     || !GoodsParticipantStorage.eligible(state, participant, shipment.receiver().containerId(), shipment.itemKind())) continue;
             int quantity = switch (shipment.authorization().kind()) {
