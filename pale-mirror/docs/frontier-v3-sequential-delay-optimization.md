@@ -320,3 +320,80 @@ warmed60s, then advanced588ticks/61.845627s =9.507544/s; debt1454→2103.
 11539 revisions,840 WAL groups,11536 BATCHABLE appends and3 required-effect appends
 in the measured window. No build, profiler or task client overlapped that window.
 Candidate results follow from the same restored checkpoint and configuration.
+
+### Delivered result: cab6e1a23
+
+Clean detached source `cab6e1a23d268f9f1f80b82c209a5035bf50aaaa`, frozen guardrails/
+JAR/package verification passed17s. Both SCALE and MAIN installed/verified SHA512:
+`3457d17ee601694601d4a03257d94c3a9ccb4d2e64395baf38a6dcb7e40a72ec653ff82ec045b54340d6fcf21e1be6dfd405c9d93babdcebd80ad9b727c2b2b0`.
+Normal Minecraft saves/exits preceded installation; MAIN's existing world was
+retained. SCALE alone restored the same hashed109-file checkpoint for both legs.
+
+| Ordinary SCALE leg | Canonical ticks | Seconds | Ticks/s | Debt before → after | Revisions/tick |
+| --- | ---: | ---: | ---: | --- | ---: |
+| Baseline260f | 588 | 61.846 | 9.507544 | 1454 → 2103 | 19.624 |
+| Candidatecab6 | 874 | 61.745 | 14.154971 | 882 → 1243 | 20.005 |
+
+Observed throughput +48.881%; growing debt649→361ticks per measured window.
+Candidate did more state-changing work per tick, not less. Both legs recovered,
+warmed60s and used seven10s-spaced samples, unchanged two advice/two navigation
+workers and hashed ruleset. No task build, profiler or client overlapped either
+ordinary window. Different advancing start instants, asynchronous work mix, JIT
+warmth and shared host remain comparison limits. This does not establish a
+constant speedup, isolated contribution per fix or sustained20ticks/s.
+
+Candidate performed17484 revisions,17479 BATCHABLE/5 required-effect appends and
+1025 forces. More absolute forces than baseline840 accompany substantially more
+work; groups/1000 revisions fell72.80→58.63. Execution-budget exhaustions64→27,
+but candidate also exhausted actions19 times, classification2 and weight1; quotas
+were not raised. `comparison-summary.json` retains the exact ordinary samples.
+
+Separate30s candidate JFR is attribution only:5.582029ticks/s inside the capture,
+165 advanced ticks, debt1451→1896. It must not replace the ordinary14.154971/s.
+This phase has a different workload and substantially greater worker CPU than the
+previous advancing-world profile; do not treat the following wall rows as a
+controlled component-speedup experiment.
+
+| Exclusive clock category | Prior fresh260f capture, s | Candidate capture, s |
+| --- | ---: | ---: |
+| Instrumented owner stages | 12.376 | 16.799 |
+| Exact calculation wait, all phases | 7.951 | 9.185 |
+| WAL wait, all phases | 5.352 | 0.070 |
+| Budget gate | 2.502 | 0.000325 |
+
+The two observed waiting gates became very small; the remaining computation
+categories did NOT all become cheaper. Candidate owner CPU10.150s is separate
+from owner wall intervals. Process CPU273.31s over the34.90s capture envelope,
+versus54.05s in the previous fresh260f capture envelope, is another clear warning
+against declaring those different phase windows equivalent.
+
+Current worker task CPU counters identify navigation slices35.091s, trade
+opportunity16.102s and economic review9.224s. Exact clock blockers include trade
+opportunity2.213s, movement1.470s, hauling1.288s, objectives1.279s and cultivation
+0.945s. Navigation worker stacks include layered-region edge construction;
+trade workers include selected trip preparation and comparison. These remaining
+paths need connected input/reuse/invalidations analysis, not larger execution
+quotas or a claim that queues are now solved. Thread CPU/heap evidence is retained
+in `scale-thread-cpu.txt`; the one snapshot does not establish a GC leak or JIT
+regression. The existing trace configuration does not record GC-cycle/allocation
+counters, so its negligible stop-the-world pauses do not measure concurrent GC CPU.
+
+312626 events, zero JFR data-loss events, unexplained10.1125%, four missing graph
+nodes and no missing WAL append members. Causal closure remains INCOMPLETE.
+`candidate-profile-summary.json` and `candidate-trace/report/` preserve the gaps.
+
+Final ordinary three-sample checks after MAIN deployment: both runtimes statusOK,
+explicitly no recovery/fast-forward, no fresh ERROR/quarantine. MAIN advanced
+2080230→2080655 with debt0; SCALE459596→459823 with debt3342→3539. Thus a later
+work phase still accumulates debt; the paired14.15/s is not a universal rate.
+Five sampled SCALE towns had zero starving residents before/after both legs,
+with some hungry residents/active meals. This is not an entire economic-cycle,
+HOT/five-player, caravan-terminal or human visual acceptance claim.
+
+No task client, profiler, build or observer remains active. IMPL task changes
+committed, RELEASE clean at exact production source; PACK tracked files unchanged,
+unrelated `.f0v-baseline/` preserved. Canonical governance amendments are kept with
+its preexisting WIP. No push. Receipt groups include `deploy-{baseline,candidate,main}`,
+`native-{baseline,candidate}`, `final-verification.log`, `frozen-build.log`,
+`candidate-trace.log` and `final-runtime-check.log`. Sustained SCALE20/no growing
+debt remains OPEN; no old paused goal is marked achieved by this increment.
