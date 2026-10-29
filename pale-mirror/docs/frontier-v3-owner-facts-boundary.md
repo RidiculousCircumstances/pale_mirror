@@ -195,6 +195,35 @@ overlap (2384–2561ms versus2326–2573ms), so no stable CPU gain is establishe
 this single pair. Allocation falls2.76%. Prior shared-pool and key-allocation
 pilots are retained separately, not relabelled as final measurements.
 
-Native ordinary baseline/candidate comparison and verified deployment receipts
-are recorded after the final scale observation; the overall20/no-debt goal stays
-open. No client update or new world schema is needed.
+Final ordinary SCALE comparison restores the same109-file checkpoint and keeps
+seed126,100towns,2adviceworkers,8G/ZGC/configuration identical. Each leg has60s
+warm-up and16samples over five minutes; no own build/profile/client/deployment
+runs during either observation. Baseline59b8 is reused unchanged for the final
+candidate00e148f34; the intervening shared-pool prototype has its own receipts.
+
+| Final ordinary comparison | Baseline59b8 | Candidate00e148 |
+| --- | ---: | ---: |
+| Seconds | 304.306 | 304.443 |
+| Canonical interval | 440028–443044 | 439840–442804 |
+| Canonical ticks/s | 9.911 | 9.736 |
+| Ordinary debt, start → end | 1023 → 4093 | 1330 → 4455 |
+
+Observed throughput falls1.77%; debt growth rate rises1.75%. There is no demonstrated
+whole-simulation acceleration. This sequential pair uses an evolving shared host
+and asynchronous execution; equal wall warm-up produced different canonical start
+instants/work mixes. Neither a universal regression nor noise as its cause has
+been established. The original20/no-growing-debt goal remains OPEN and unmet.
+All32samples areOK/no fast-forward/recovery; five sampled towns end with zero
+starving residents, but no new retained terminal harvest/fulfilled contract IDs
+were observed. These short windows are not whole-economy or graphical acceptance.
+
+Code commits427663aa3 and00e148f34 are retained. Final clean detached00e148f34
+build/guardrails/packaged-JAR check PASS18s. Both SCALE and MAIN are verified on
+SHA512`c9669f7b7aefd00c5e786af8b5528a7f7c3831938e3b857e20cabc62f33c7b9a1e41bc413bc57857c3567e4aad19ffda7a6deeb666dad484090601f9cff19ee1`.
+MAIN retains `frontier-v3-r281-cold-atomic-20261028`; no client update/schema change
+is needed. Actual pinned install, native stop/save/exit, fresh start and status
+receipts are `isolated-main.log`, `isolated-scale.log`, corresponding
+`isolated-deploy-{main,scale}/verify.log`, and `isolated-{main,scale}-final.txt`.
+`isolated-native-summary.json` and `isolated-trade-summary.json` retain results;
+`isolated-publication-counts.csv` and `isolated-capacity.csv` retain the causal
+counters. No automatic push.
