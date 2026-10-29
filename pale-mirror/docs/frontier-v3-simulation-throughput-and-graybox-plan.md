@@ -5757,3 +5757,17 @@ memo identity/failure/eviction/thread checks and actual production, expedition,
 economic review/publication/recovery consumers passed. Source selection is an
 internal memory-lifetime correction, not a measured bytes/speed improvement orG
 acceptance. No new test class or performance/time/GC-dependent test was added.
+
+The first focus actually ran40tests across ImmutableInputView, ReviewAdvice,
+ExpeditionSupplyFlow, Publication and shared architecture. Two initially selected
+equipment names did not match existing classes. The corrected, additional unchanged-
+production focus2254 ran EquipmentSettlementPlanningTest, EquipmentPurchasePlanningTest,
+StationEquipmentWorkerTest and shared architecture PASS24s. Actual tool production,
+repair target intervention, held-tool hunger, funded import and codec/recovery are
+covered. The common memo eviction test now explicitly keeps its changed input alive
+through its assertion, so it tests bounded eviction independently of GC retirement;
+there is no forced GC, wall-clock assertion or new confidence campaign.
+
+Corrected equipment focus:18testsPASS24s(4suites; shared architecture overlaps the
+prior40). The live-input eviction correction92456PASS20s+guardrails, production
+source unchanged. No inference from a passing test to20/s or reduced retained bytes.

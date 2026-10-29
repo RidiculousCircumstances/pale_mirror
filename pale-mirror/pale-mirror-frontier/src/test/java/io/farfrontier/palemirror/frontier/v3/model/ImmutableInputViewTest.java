@@ -20,6 +20,8 @@ class ImmutableInputViewTest {
         assertEquals(3, view.get(changed, "home-at-tick", calls::incrementAndGet));
         assertEquals(4, view.get(new Object(), "home-at-tick", calls::incrementAndGet));
         assertEquals(5, view.get(snapshot, "home-at-tick", calls::incrementAndGet), "old snapshot eviction must recompute");
+        // Exercise capacity eviction with two live inputs; GC retirement is a different cause.
+        java.lang.ref.Reference.reachabilityFence(changed);
     }
 
     @Test void completedImmutableResultCanCrossThreadsButCannotCrossAnInputRevision() throws Exception {
