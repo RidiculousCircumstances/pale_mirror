@@ -7,15 +7,19 @@ import java.util.*;
 /** Replacement advice from declared local capabilities. No recursive market plan,
  * production authorization or claim that the resources are already available. */
 public final class GoodsResourceValuation {
-    private static final ImmutableInputView<ImmutableResultView<Long, Map<String, FixedScalar>>> VALUES = new ImmutableInputView<>();
+    private static final ImmutableInputView<ImmutableResultView<io.farfrontier.palemirror.frontier.v3.api.SubjectId,
+            Map<String, FixedScalar>>> VALUES = new ImmutableInputView<>();
     private GoodsResourceValuation() { }
 
     public static FixedScalar replacement(FrontierWorldState state, GoodsParticipant participant, String item, long atTick) {
         if (atTick < 0) throw new IllegalArgumentException("negative valuation instant");
-        return Objects.requireNonNull(VALUES.get(List.of(state), () -> new ImmutableResultView<Long, Map<String, FixedScalar>>(256))
-                .get(List.of(participant), atTick, () -> assess(state, participant, atTick)).get(item), "undeclared valued resource");
+        // Installed capability and retained price history belong to the exact
+        // snapshot. Passage of query time alone changes neither input; dated
+        // provisions, consent and deadlines remain the calling owners' facts.
+        return Objects.requireNonNull(VALUES.get(List.of(state), () -> new ImmutableResultView<>(256))
+                .get(List.of(participant), participant.party().id(), () -> assess(state, participant)).get(item), "undeclared valued resource");
     }
-    private static Map<String, FixedScalar> assess(FrontierWorldState state, GoodsParticipant participant, long atTick) {
+    private static Map<String, FixedScalar> assess(FrontierWorldState state, GoodsParticipant participant) {
         var rules = state.bootstrap().ruleset().goodsTrade();
         var prices = new TreeMap<String, Long>();
         rules.policies().get(participant.policy()).forEach(commodity -> prices.put(commodity.itemKind(),

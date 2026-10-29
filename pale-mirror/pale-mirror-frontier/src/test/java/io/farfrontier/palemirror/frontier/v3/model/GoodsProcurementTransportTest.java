@@ -8,6 +8,26 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsProcurementTransportTest {
+    @Test void replacementUsesCurrentCapabilityAndPriceHistoryRatherThanTheQueryDateAcrossRecovery() {
+        var state = GoodsTradeTest.initial(); var trade = state.companies().goodsTrade();
+        var owner = trade.participants().participants().get(new SubjectId("settlement:1"));
+        var original = GoodsResourceValuation.replacement(state, owner, "minecraft:bread", 0);
+        assertEquals(original, GoodsResourceValuation.replacement(state, owner, "minecraft:bread", Long.MAX_VALUE));
+        var history = MarketPriceHistory.empty().record("minecraft:bread", new MarketPriceHistory.Sale(
+                new SubjectId("receipt:replacement-history"), new SubjectId("settlement:2"), owner.party().id(),
+                100, 1, FixedScalar.whole(17)));
+        var changed = state.withCompanies(state.companies().withGoodsTrade(new GoodsTradeState(trade.orders(),
+                trade.contracts(), trade.participants(), history, trade.demandHistory())));
+        assertEquals(FixedScalar.whole(17), GoodsResourceValuation.replacement(changed, owner, "minecraft:bread", 0),
+                "a changed history on a profile without local sourcing must supply the new reference");
+        assertEquals(original, GoodsResourceValuation.replacement(state, owner, "minecraft:bread", 100),
+                "a later immutable branch cannot alter the earlier cost basis");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(changed));
+        var recoveredOwner = restored.companies().goodsTrade().participants().participants().get(owner.party().id());
+        assertEquals(FixedScalar.whole(17), GoodsResourceValuation.replacement(restored, recoveredOwner, "minecraft:bread", 100));
+        assertThrows(IllegalArgumentException.class, () -> GoodsResourceValuation.replacement(state, owner, "minecraft:bread", -1));
+    }
     @Test void hungryBuyerCanQuoteProvisionedSellerButCannotInventItsOwnProvisionsOrUnfundedFreight() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:funded-delivery"),
                 125L, FrontierRulesets.marketQuarryGraybox()));

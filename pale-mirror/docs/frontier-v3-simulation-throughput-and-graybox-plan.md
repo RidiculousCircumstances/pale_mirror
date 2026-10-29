@@ -5812,3 +5812,22 @@ continuation, full trade/partial receipt and codec/recovery tests passed in the
 first run. New cases also retain duplicate expiry, fully committed orders,
 withdrawn/older branches and equal-price boundary behavior. No timing test added.
 Runtime speed benefit for this cut is not yet measured.
+
+### Reuse undated replacement value over its actual inputs
+
+The 6f24 CPU capture includes 141 inclusive replacement/assessment samples in one
+advice thread. Source confirms assess and all seven installed-capability valuation
+ports have no query-time dependency. Nevertheless the existing result memo keys
+identical world/participant inputs by atTick, including the zero versus current-time
+queries made during transport and equipment appraisal. Key its bounded 256-result
+memo by the exact participant declaration instead. Retain the exact immutable world
+identity, participant identity and negative-time rejection; remove only the unused
+private assess parameter. Every replacement, history, recipe, fuel and labour formula
+is unchanged. Stock, claim, deadline, metabolic and admission owners stay dated.
+
+undated-replacement-value-focus passed in 75s plus guardrails. Existing actual tool
+manufacture/repair/import, provisioned transport, expedition and review-advice paths
+are covered. Extend the existing procurement test with changed external history,
+older immutable branch, current-format codec recovery and negative input. Query-time
+independence is checked by values; no elapsed/counter/cache-identity assertion.
+No standalone speed gain is claimed for this cache correction.
