@@ -49,7 +49,8 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private final java.util.Map<DirectedEdge, Boolean> edges = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
-    private final java.util.Map<io.farfrontier.palemirror.frontier.v3.model.TerrainColumn, ColumnFacts> columns = new java.util.LinkedHashMap<>(128, 0.75f, true);
+    private final io.farfrontier.palemirror.frontier.v3.model.BoundedLongMemo<ColumnFacts> columns =
+            new io.farfrontier.palemirror.frontier.v3.model.BoundedLongMemo<>(MAX_VOLUME_RESULTS);
     private record Version(Object terrain, UnitNavigationProfile profile) { }
     private final PedestrianRouteGeometry terrain;
     private final UnitNavigationProfile profile;
@@ -89,8 +90,14 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
      * levels. Neighbouring standing/swept poses reuse the same immutable facts,
      * within the existing column-entry bound and this view's lifetime only. */
     private ColumnFacts column(int x, int z) {
-        return remembered(columns, new io.farfrontier.palemirror.frontier.v3.model.TerrainColumn(x, z),
-                () -> new ColumnFacts(collisions().filter(view -> view.detailedAt(x, z)).isPresent(), terrain.surfacesAt(x, z)));
+        // Lossless for both full signed int coordinates; no Minecraft height or
+        // world-size assumption and no object key on a repeated body/edge read.
+        long key = ((long) x << 32) | (z & 0xffffffffL);
+        var retained = columns.get(key);
+        if (retained != null) return retained;
+        var facts = new ColumnFacts(collisions().filter(view -> view.detailedAt(x, z)).isPresent(), terrain.surfacesAt(x, z));
+        columns.put(key, facts);
+        return facts;
     }
     /** Both positive and missing knowledge belong only to this captured immutable geometry. */
     private static <K, V> V remembered(java.util.Map<K, V> cache, K key, java.util.function.Supplier<V> read) {
