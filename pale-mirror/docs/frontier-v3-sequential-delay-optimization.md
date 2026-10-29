@@ -158,3 +158,108 @@ IMPL committed; RELEASE clean at exact production ref. PACK tracked files remain
 unchanged at f727133, unrelated `.f0v-baseline/` preserved; governance WIP separate.
 No automatic push. Deployment/final checks are in `deploy-main/`, `deploy-final/`,
 `installed-identity.json` and `final-runtime-check-typed.log` under this task's receipts.
+
+## Fresh read-only analysis, 2026-10-30
+
+User requested new latency analytics, without another implementation increment.
+Installed production remains260f61a5b, with the same frozen SHA512 above on MAIN
+and SCALE. No restart, checkpoint restore, fast-forward, client, build, code or
+configuration change during this observation. Both service JVM identities were
+checked before and after the ordinary window. Use the existing capture/analyzer;
+this section introduces no second tracing system.
+
+Receipts: `build/simulation-throughput/delay-refresh-20261030/`, including
+`identity.json`, seven raw samples per server, `ordinary-summary.json`,
+`profile-summary.json`, `extra-summary.json`, `span-summary.json`, and
+`scale-trace/report/timeline.html`. Ordinary observation began01:26:25 UTC+05.
+The separate30s SCALE profile followed that ordinary window.
+
+| Runtime | Ordinary seconds | Canonical ticks | Ticks/s | Debt before → after |
+| --- | ---: | ---: | ---: | --- |
+| MAIN,12 settlements | 63.285 | 1265 | 19.989059 | 0 → 0 |
+| SCALE,100 settlements | 63.284 | 1034 | 16.339049 | 6614 → 6846 |
+
+All fourteen diagnostic samples statusOK, explicitly not recovering, no
+fast-forward. No ERROR/quarantine or logged PM slow-tick/ready-turn span above80ms
+in this bounded ordinary window. This does not prove a universal80ms maximum or
+HOT/player/chunk latency. SCALE debt grows3.666ticks/s: about11seconds of canonical
+time lost per wall minute at this observed rate. Revisions/tick1.935 on MAIN versus
+23.821 on SCALE; scale work intensity must not be inferred from town count alone.
+
+The old11.296376/s and fresh16.339049/s use the SAME binary but different advancing
+world states and work mixes. This is not a new optimization gain or a controlled
+before/after result. The earlier same-checkpoint +18.479% result remains separate.
+
+### Exclusive clock-blocking partition
+
+Inside the fresh profile:469ticks,15.637855ticks/s; debt6852→6982,599 observed host
+ticks, exact debt-balance difference0. Owner CPU13.096s. The following rows account
+for disjoint portions of30.002s elapsed time; background CPU is reported separately.
+
+| Gate/activity | Seconds | Window share |
+| --- | ---: | ---: |
+| Instrumented owner/server-thread stages | 12.376 | 41.25% |
+| Waiting on exact calculations, all phases | 7.951 | 26.50% |
+| Waiting on WAL confirmation, all phases | 5.352 | 17.84% |
+| No ordinary execution allowance, BUDGET | 2.502 | 8.34% |
+| Ready-dispatch thread park/sleep | 0.993 | 3.31% |
+| Unexplained, including uninstrumented owner work | 0.808 | 2.69% |
+
+Small remaining host/park/GC intervals complete the partition. Exact work is mostly
+RUNNING7.758s; QUEUED only0.039s, result-ready waiting for owner0.131s. WAL RUNNING
+5.319s, queued0.004s, result-ready waiting0.022s. Thus a long queue before starting
+these exact tasks is not the dominant gate in this window. WAL worker CPU is only
+0.117s;65 native samples point to `UnixFileDispatcherImpl.force0`. This supports
+durability-confirmation/I/O waiting, not five seconds of serialization CPU. It does
+not isolate physical-device latency from scheduling or other storage contention.
+
+BUDGET cause is EXECUTIONS2.421s, CLASSIFICATIONS0.078s, WEIGHT0.003s. Runtime
+`clockTraceGate()` checks allowance before pending calculation; this is the observed
+active guard, not proof that all this time would disappear after raising limits.
+Preserve host responsiveness and canonical order when assessing this cost.
+
+Largest owner stage groups: validation3.169s, allocation/admission2.506s,
+planning2.474s, transactions1.611s, reduction1.319s, physical observation1.104s.
+Within them, exclusive detail includes owned-state remainder1.132s, transaction
+wake-key compilation0.835s, COLD harvest planning0.812s, harvest admission0.661s,
+resident activity admission0.484s, meal planning0.480s, due-action allocation
+remainder0.443s, trade relation validation0.429s and scheduled references0.384s.
+These details are subsets of the group totals, not additional elapsed time.
+
+### Background CPU versus actual clock blockers
+
+Measured task CPU counters: goods participant review13.273s, trade opportunity
+3.817s, local hauling1.805s, navigation slices1.451s and objective review1.137s.
+Parallel CPU seconds cannot be added to the exclusive wall table. In particular,
+13.273s review CPU does not mean the clock waited13.273s for that review.
+
+Largest exact blocking-task contributions: hauling1.651s/228 distinct blocked
+tasks; trade opportunity1.388s/1402; objective review1.037s/125; cultivation
+0.786s/231; movement progress0.740s/2673. Counts are task IDs, not complete routes
+or total work invocations. Navigation is not the largest measured CPU consumer.
+Worker stack samples additionally identify field-cell reads, agricultural yield,
+renewable capacity forecasting and procurement travel forecasting. They are leads
+to connected economic calculation inputs, not quantified costs of those helpers.
+
+Existing named stage counters give mean inclusive CPU/call: scheduled references
+81.18µs/4718 calls, harvest admission63.96µs/10339, activity admission68.43µs/7041,
+extraction admission12.37µs/28873, wake keys152.67µs/5461. Nested spans cannot be
+summed. Against the previous capture these figures also show why total duration
+alone cannot distinguish per-call cost from changing call volume/world state.
+
+### Conclusions and limits
+
+MAIN currently sustains20ticks/s in this sample; SCALE does not. The largest
+remaining connected areas are server-side validation/admission/wake maintenance,
+economic forecasting and hauling calculations, and the durability gate. Merely
+splitting queues or increasing worker count does not address the measured mix.
+Next source investigation should quantify repeated input construction/cross-owner
+invalidation in those economic paths, then assess safe WAL batching and the
+execution allowance separately. No speculative repair was made in this analysis.
+
+819971 events, zero JFR data-loss events. Unexplained2.694%, two absent graph nodes
+and19 absent append records for the first observed flush remain explicit. Causal
+closure is INCOMPLETE; do not call this a fully closed dependency trace or interpret
+missing trace records as missing durable game writes. The analyzer and HTML retain
+these limitations. Both services remain active; no observer/profiler/client remains
+running. Source changes are documentation only, so no new binary is deployed.
