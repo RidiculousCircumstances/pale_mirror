@@ -5,6 +5,12 @@ Baseline source `3d6f14756`, active disposable r276/r30 world. The system goal
 tracks this entire plan, not a source-only checkpoint. Scoped commits and verified
 deployment are authorized; push is not. Preserve the separate pack/source histories.
 
+The 2026-10-29 follow-up is a planning-only
+[Reactor evaluation](frontier-v3-reactor-evaluation-plan.md) against the measured
+repeated economic calculations. Its A/B/C comparison separates dependency-scope
+improvements from library overhead. No Reactor adoption or new deployment is
+claimed by that plan.
+
 ## Outcome and scale
 
 Remove sustained canonical-time debt under ordinary server time while preserving
