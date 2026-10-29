@@ -13,14 +13,19 @@ final class FungibleResourceValidation {
 
     static void validateComplete(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                                  Map<SubjectId, CustodyAccount> accounts, Map<SubjectId, PhysicalStackBinding> bindings) {
-        if (lots.size() > FungibleResourceLedger.MAX_LOTS || claims.size() > FungibleResourceLedger.MAX_CLAIMS || accounts.size() > FungibleResourceLedger.MAX_ACCOUNTS || bindings.size() > FungibleResourceLedger.MAX_BINDINGS) {
-            throw new IllegalArgumentException("fungible resource retention limit exceeded");
-        }
+        requireBounds(lots, claims, accounts, bindings);
         requireKeys(lots, ResourceLot::id, "resource lot"); requireKeys(claims, ClaimAllocation::id, "claim allocation");
         requireKeys(accounts, CustodyAccount::id, "custody account"); requireKeys(bindings, PhysicalStackBinding::id, "physical stack binding");
         ActorCarriedResources.validateCapacity(accounts.values());
         FungibleResourceValidation.validateAccounts(lots, claims, accounts);
         FungibleResourceValidation.validateBindings(lots, claims, accounts, bindings);
+    }
+
+    static void requireBounds(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
+                              Map<SubjectId, CustodyAccount> accounts, Map<SubjectId, PhysicalStackBinding> bindings) {
+        if (lots.size() > FungibleResourceLedger.MAX_LOTS || claims.size() > FungibleResourceLedger.MAX_CLAIMS || accounts.size() > FungibleResourceLedger.MAX_ACCOUNTS || bindings.size() > FungibleResourceLedger.MAX_BINDINGS) {
+            throw new IllegalArgumentException("fungible resource retention limit exceeded");
+        }
     }
 
     static void validateAccounts(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,

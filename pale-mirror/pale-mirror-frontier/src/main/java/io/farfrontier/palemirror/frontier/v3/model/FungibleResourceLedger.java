@@ -44,6 +44,14 @@ public final class FungibleResourceLedger {
         this.accounts = ImmutableLookupMap.copyOf(accounts); this.bindings = ImmutableLookupMap.copyOf(bindings);
         validateComplete();
     }
+    /** Internal successors close every invariant over exact changes from a valid immutable image. */
+    private FungibleResourceLedger(FungibleResourceLedger before, Map<SubjectId, ResourceLot> lots,
+                                  Map<SubjectId, ClaimAllocation> claims, Map<SubjectId, CustodyAccount> accounts,
+                                  Map<SubjectId, PhysicalStackBinding> bindings) {
+        this.lots = ImmutableLookupMap.copyOf(lots); this.claims = ImmutableLookupMap.copyOf(claims);
+        this.accounts = ImmutableLookupMap.copyOf(accounts); this.bindings = ImmutableLookupMap.copyOf(bindings);
+        FungibleResourceDeltaValidation.validate(before, this.lots, this.claims, this.accounts, this.bindings);
+    }
     void validateComplete() {
         FungibleResourceValidation.validateComplete(lots, claims, accounts, bindings);
     }
@@ -168,7 +176,7 @@ public final class FungibleResourceLedger {
         nextAccounts.put(accountId, account.withQuantities(Map.of(next.id(), next.quantity()), Map.of()));
         Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>(bindings);
         nextBindings.put(old.id(), replacement);
-        return new FungibleResourceLedger(nextLots, claims, nextAccounts, nextBindings);
+        return new FungibleResourceLedger(this, nextLots, claims, nextAccounts, nextBindings);
     }
 
     /** Delivers one completed COLD field part only after its exact cell prefix made that part ready. */
@@ -184,7 +192,7 @@ public final class FungibleResourceLedger {
         next.remove(source.id());
         CustodyAccount existing = accounts.get(destination.id());
         next.put(destination.id(), existing == null ? destination : accountWithAdded(existing, Map.of(part.id(), part.quantity()), Map.of()));
-        return new FungibleResourceLedger(lots, claims, next, bindings);
+        return new FungibleResourceLedger(this, lots, claims, next, bindings);
     }
 
     /** HOT counterpart: one exact actor hand becomes a fenced depot layout in the same transaction. */
@@ -227,7 +235,7 @@ public final class FungibleResourceLedger {
         projectedAccounts.put(depotAccountId, projected);
         Map<SubjectId, PhysicalStackBinding> projectedBindings = FungibleBindingRepartition.withoutAccount(bindings, actorAccountId);
         projectedBindings = FungibleBindingRepartition.withoutAccount(projectedBindings, depotAccountId);
-        FungibleResourceLedger projectedLedger = new FungibleResourceLedger(lots, claims, projectedAccounts, projectedBindings);
+        FungibleResourceLedger projectedLedger = new FungibleResourceLedger(this, lots, claims, projectedAccounts, projectedBindings);
         List<PhysicalStackBinding> destinationBindings = FungiblePhysicalObservation.bind(projectedLedger,
                 depotAccountId, depotEpoch, Objects.requireNonNull(observedDepotStacks, "observed harvest chest layout"));
         return deliverObservedActorHarvestPart(cycle, economicOwnerId, issuedQuantityBefore, actorAccountId,
@@ -312,7 +320,7 @@ public final class FungibleResourceLedger {
             nextBindings.put(binding.id(), new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(),
                     binding.authorityEpoch(), binding.itemKind(), binding.lotQuantities(), nextClaims, binding.playerSaveFence()));
         }
-        return new FungibleResourceLedger(unbound.lots, unbound.claims, unbound.accounts, nextBindings);
+        return new FungibleResourceLedger(unbound, unbound.lots, unbound.claims, unbound.accounts, nextBindings);
     }
 
     /** Releases named allocations across their current HOT layout after an observed physical loss. */
@@ -322,7 +330,7 @@ public final class FungibleResourceLedger {
                 || previous.quantity() != next.quantity() || !previous.lotQuantities().equals(next.lotQuantities()))
             throw new IllegalArgumentException("claim-owner transfer cannot alter a resource allocation");
         var changed = ImmutableLookupMap.withEntry(claims, next.id(), next);
-        return new FungibleResourceLedger(lots, changed, accounts, bindings);
+        return new FungibleResourceLedger(this, lots, changed, accounts, bindings);
     }
 
     public FungibleResourceLedger releaseClaims(java.util.Set<SubjectId> claimIds) {
@@ -342,7 +350,7 @@ public final class FungibleResourceLedger {
             nextBindings.put(id, new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
                     binding.itemKind(), binding.lotQuantities(), bindingClaims, binding.playerSaveFence()));
         });
-        return new FungibleResourceLedger(lots, nextClaims, nextAccounts, nextBindings);
+        return new FungibleResourceLedger(this, lots, nextClaims, nextAccounts, nextBindings);
     }
 
     /** Exact zero-sum custody transfer; the caller names both lot and claim portions. */
@@ -357,7 +365,7 @@ public final class FungibleResourceLedger {
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
         var next = transferredAccounts(from, remainingLots, remainingClaims, accountWithAdded(to, lotQuantities, claimQuantities));
-        return new FungibleResourceLedger(lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
+        return new FungibleResourceLedger(this, lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
     }
 
     /** Opens a newly observed player/container/carrier account by moving exact extant quantities into it. */
@@ -427,7 +435,7 @@ public final class FungibleResourceLedger {
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), destination.lotQuantities());
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), destination.claimQuantities());
         var next = transferredAccounts(from, remainingLots, remainingClaims, destination);
-        return new FungibleResourceLedger(lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
+        return new FungibleResourceLedger(this, lots, claims, next, FungibleBindingRepartition.withoutAccount(bindings, from.id()));
     }
 
     private FungibleResourceLedger transferBetweenAccounts(CustodyAccount from, CustodyAccount to,
@@ -441,7 +449,7 @@ public final class FungibleResourceLedger {
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
         var next = transferredAccounts(from, remainingLots, remainingClaims, accountWithAdded(to, lotQuantities, claimQuantities));
-        return new FungibleResourceLedger(lots, claims, next, bindings);
+        return new FungibleResourceLedger(this, lots, claims, next, bindings);
     }
 
     /** Reserves one COLD contract portion and immediately gives that same portion to a new owner. */
@@ -488,7 +496,7 @@ public final class FungibleResourceLedger {
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         nextAccounts.remove(cargo.id());
         nextAccounts.put(destination.id(), currentDestination == null ? destination : accountWithAdded(currentDestination, cargo.lotQuantities(), Map.of()));
-        return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
+        return new FungibleResourceLedger(this, nextLots, nextClaims, nextAccounts, bindings);
     }
 
     /**
@@ -525,7 +533,7 @@ public final class FungibleResourceLedger {
         Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); cargo.claimQuantities().keySet().forEach(nextClaims::remove);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts); nextAccounts.remove(cargo.id());
         nextAccounts.put(destination.id(), accountWithAdded(destination, cargo.lotQuantities(), Map.of()));
-        FungibleResourceLedger combined = new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, FungibleBindingRepartition.withoutAccount(bindings, destination.id()));
+        FungibleResourceLedger combined = new FungibleResourceLedger(this, nextLots, nextClaims, nextAccounts, FungibleBindingRepartition.withoutAccount(bindings, destination.id()));
         return combined.rebind(destination.id(), authorityEpoch, FungiblePhysicalObservation.bind(combined, destination.id(), authorityEpoch, observed));
     }
 
@@ -587,7 +595,7 @@ public final class FungibleResourceLedger {
         for (PhysicalStackBinding binding : remainingSource) {
             if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed cold source binding identity is already live");
         }
-        return new FungibleResourceLedger(lots, claims, nextAccounts, nextBindings);
+        return new FungibleResourceLedger(this, lots, claims, nextAccounts, nextBindings);
     }
 
     /**
@@ -683,7 +691,7 @@ public final class FungibleResourceLedger {
         if (destinationExists) nextBindings = FungibleBindingRepartition.withoutAccount(nextBindings, destination.id());
         for (PhysicalStackBinding binding : remainingSource) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed source binding identity is already live");
         for (PhysicalStackBinding binding : destinationBindings) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed destination binding identity is already live");
-        return new FungibleResourceLedger(lots, claims, nextAccounts, nextBindings);
+        return new FungibleResourceLedger(this, lots, claims, nextAccounts, nextBindings);
     }
 
     /** Changes canonical lot lineage while retaining total resource quantity and all reservations. */
@@ -730,7 +738,7 @@ public final class FungibleResourceLedger {
         for (PhysicalStackBinding binding : replacements) {
             if (next.put(binding.id(), binding) != null) throw new IllegalArgumentException("physical stack binding identity is already live");
         }
-        return new FungibleResourceLedger(lots, claims, accounts, next);
+        return new FungibleResourceLedger(this, lots, claims, accounts, next);
     }
 
     /** Releases only the current epoch after its durable physical checkpoint; a stale lease cannot reopen COLD spending. */
@@ -741,7 +749,7 @@ public final class FungibleResourceLedger {
             throw new IllegalArgumentException("physical custody release does not match the current authority epoch");
         }
         Map<SubjectId, PhysicalStackBinding> next = FungibleBindingRepartition.withoutAccount(bindings, accountId);
-        return new FungibleResourceLedger(lots, claims, accounts, next);
+        return new FungibleResourceLedger(this, lots, claims, accounts, next);
     }
 
     /**
@@ -763,7 +771,7 @@ public final class FungibleResourceLedger {
         PhysicalStackBinding fenced = new PhysicalStackBinding(prior.id(), prior.accountId(), prior.address(), prior.authorityEpoch(),
                 prior.itemKind(), prior.lotQuantities(), prior.claimQuantities(), fence);
         Map<SubjectId, PhysicalStackBinding> next = new HashMap<>(bindings); next.put(fenced.id(), fenced);
-        return new FungibleResourceLedger(lots, claims, accounts, next);
+        return new FungibleResourceLedger(this, lots, claims, accounts, next);
     }
 
     /** A typed destruction sink removes only the named custody portions; nothing is rolled back or minted. */
@@ -788,7 +796,7 @@ public final class FungibleResourceLedger {
         var nextAccounts = nextLotsAtAccount.isEmpty() ? ImmutableLookupMap.withoutEntry(accounts, account.id())
                 : ImmutableLookupMap.withEntry(accounts, account.id(), account.withQuantities(nextLotsAtAccount, nextClaimsAtAccount));
         // requireNoPhysicalBinding above proved this account has no address to remove.
-        return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
+        return new FungibleResourceLedger(this, nextLots, nextClaims, nextAccounts, bindings);
     }
 
     /** Consumes a claimed HOT portion and atomically replaces its observed remaining layout. */
@@ -891,7 +899,7 @@ public final class FungibleResourceLedger {
         Map<SubjectId, Integer> nextAccountClaims = subtract(account.claimQuantities(), inputClaims);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         nextAccounts.put(account.id(), account.withQuantities(nextAccountLots, nextAccountClaims));
-        return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
+        return new FungibleResourceLedger(this, nextLots, nextClaims, nextAccounts, bindings);
     }
 
     /** Different logical compartments may share a physical machine; stock and title still have one ledger. */
@@ -945,7 +953,7 @@ public final class FungibleResourceLedger {
     }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings) { return withAccount(account, nextClaims, nextBindings, lots); }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings, Map<SubjectId, ResourceLot> nextLots) {
-        return new FungibleResourceLedger(nextLots, nextClaims, ImmutableLookupMap.withEntry(accounts, account.id(), account), nextBindings);
+        return new FungibleResourceLedger(this, nextLots, nextClaims, ImmutableLookupMap.withEntry(accounts, account.id(), account), nextBindings);
     }
     /** One exact source/destination update; unchanged world accounts retain their immutable pages and delta proof. */
     private Map<SubjectId, CustodyAccount> transferredAccounts(CustodyAccount from, Map<SubjectId, Integer> remainingLots,

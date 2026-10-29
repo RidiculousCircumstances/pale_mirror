@@ -5410,3 +5410,67 @@ expedition provisions, consolidation/return and recovery. No timing threshold te
 Receipt indexed-group-route-focus.log and corresponding frontier XML reports.
 Frozen packaging/deployment and fresh current attribution follow. Do not reuse the
 old47e4 stage proportions as the current cost map after these connected cuts.
+
+
+### Complete incremental resource-ledger invariant closure
+
+bf0f2d1fe both deployments verified (indexed-group-route receipts). Current CPU-only
+45s JFR uses explicit disabled custom lifecycle events,20ms execution samples and
+thread allocation counters. No current lifecycle-wall-gate attribution is claimed.
+47.140326s nativeCPU interval: advice35.20/33.80s,server21.03s,exact10.83s,nav12.04/11.77s,
+C2compiler17.23s. Process291.49s versus214.74s matched threadCPU (8new/1retired thread,
+so matched rows do not cover all CPU). Counter346820->347178,debt1661->2246 UNDER
+profiling; not ordinary capacity. Actual recorded allocation deltas advice21.68/
+20.94GB,server7.21GB,exact5.44GB,nav7.89/8.20GB. Different settings/workloads are not
+isolated A/B; no gain percentage. Earlier rawstock,worldranks,station-input scans and
+linear group-route projection are absent from leading current stacks.
+
+Bounded10s exception query found1113throws,738server,0captured commitWakeStacks,
+623server stacks truncated,0data-loss. Only RouteUnavailable381/KnowledgeUnavailable357
+server types. This does NOT fully exclude silent wake fallback; no speculative
+kernel behavior change. Receipts indexed-group-route-{light-current,current-wake-
+exceptions}*. Current intrinsic resource validation is a leading owner lookup:
+validateComplete->validateAccounts->validateAccount12lookup samples; complete ledger
+validation49inclusive owner CPU samples. Source confirms public full-ingress
+constructor is still used by internal transfer/destruction/transformation/binding
+successors. Cold issue/accrual/reserve already have narrower checked constructors.
+
+Implement one private ledger-successor validation boundary, using a valid immutable
+predecessor and exact changes of all4maps. Public/bootstrap/hydration constructor
+and explicit full audit remain the original complete audit. No public unchecked
+constructor, validation flag, caller-asserted conservation or second stock ledger.
+
+Changed lot/claim totals include resource IDs referenced by both old/new changed
+accounts. Shared current-row inverse memberships find ALL after-state holders of
+those exact IDs; sums must equal current declarations, including deleted/unknown
+IDs. Changed target metadata also adds all its unchanged holder accounts to the
+backing/pinning checks. Changed accounts include old/new affected actors; validate
+complete after-state carrying/presentation groups. Changed bindings add both old/new
+account IDs. Reuse original per-account backing and complete binding validation,
+with ALL remaining bindings for each affected account. Global address uniqueness
+uses shared current-row memberships whenever bindings change. Key/ID and retention
+limits remain. Full audit mode ignores the incremental path. Derived views contain
+no authoritative totals, ignore no metadata, retain only current inputs and cannot
+turn a failed candidate into evidence about another immutable predecessor.
+
+Apply only to internal ledger operations initially; external owner/bootstrap calls
+stay full audit. Review every changed constructor use and its original authority/
+physical binding preconditions. Reuse meaningful ledger, observed transfer, player
+intervention, claims, capacity, shipment, food/station/harvest recovery. Add focused
+negatives for untouched references to changed/deleted lots/claims, global custody
+conservation, dangling/duplicate physical bindings and cross-account actor capacity/
+presentation. Compare rejection with the original full audit and revisit predecessor.
+No timers, perf thresholds, schema or business-rule changes.
+
+Implemented the private successor boundary for all19 internal four-map constructor
+sites. External/bootstrap/hydration remain full ingress; separately proven reservation/
+accrual boundaries unchanged. Shared bounds and original complete account/binding/
+actor checks retained. Connected focus passed144tests0failures154s+guardrails,
+including7 new full-audit equivalence/negative/branch-revisit tests and existing
+observed transfer, player edits, production, field and expedition/transport flows.
+Receipt resource-ledger-delta-focus.log and frontier XML reports. No new timing tests.
+Offline current-JFR caller expansion confirms the hot path includes meal transfer/
+consumption and station material transfer; indexed-group-route-light-current-resource-
+callers.txt includes all constructor samples (not only complete-audit samples), so
+its raw counts must not be interpreted as an isolated full-validation cost.
+Frozen packaging, retained-world deployments and ordinary capacity measurement follow.
