@@ -13,6 +13,16 @@ public final class PedestrianGeometryRevision {
     private volatile Integer hash;
     private record ProfileExpansion(ImmutableRegionMap<Object> terrain, ProfileSeed seed) { }
     private final ProfileExpansion expansion;
+    private static final Object ABSENT = new Object();
+    private volatile io.farfrontier.palemirror.frontier.v3.model.BoundedLongMemo<Object> expandedReads;
+    private io.farfrontier.palemirror.frontier.v3.model.BoundedLongMemo<Object> expansionReads() {
+        var ready = expandedReads;
+        if (ready != null) return ready;
+        synchronized (this) {
+            if (expandedReads == null) expandedReads = new io.farfrontier.palemirror.frontier.v3.model.BoundedLongMemo<>(256);
+            return expandedReads;
+        }
+    }
     private record ProfileSeed(ImmutableRegionMap<Object> terrain, ImmutableRegionMap<Object> envelope) { }
     private final Map<UnitNavigationProfile, ProfileSeed> profileSeeds;
     private record ProfileScope(Object terrain, UnitNavigationProfile profile) { }
@@ -65,17 +75,25 @@ public final class PedestrianGeometryRevision {
     }
     /** Exact neighbour tuple, in the same lexical order as the complete projection.
      * A local read does not allocate, hash or retain remote expanded regions. */
-    private static Object expandedToken(ImmutableRegionMap<Object> terrain, Region target) {
+    private static Object expandedToken(ImmutableRegionMap<Object> terrain, int regionX, int regionZ) {
         Object token = null;
         for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) {
-            var source = terrain.get(new Region(target.x() + x, target.z() + z));
+            var source = terrain.get(regionX + x, regionZ + z);
             if (source != null) token = token == null ? source : java.util.List.of(token, source);
         }
         return token;
     }
-    private Object token(Region region) {
+    private Object token(int x, int z) {
         var current = revisions;
-        return current != null ? current.get(region) : expandedToken(expansion.terrain(), region);
+        if (current != null) return current.get(x, z);
+        // Complete local neighbour tuples belong to this immutable terrain
+        // capture. Absence is reusable knowledge too, never a traversable cell.
+        var reads = expansionReads(); long key = ((long) x << 32) | (z & 0xffffffffL);
+        var retained = reads.get(key);
+        if (retained != null) return retained == ABSENT ? null : retained;
+        var value = expandedToken(expansion.terrain(), x, z);
+        reads.put(key, value == null ? ABSENT : value);
+        return value;
     }
     /** Complete map/hash requests remain exact and bounded. Normal route proofs
      * use at/restrictedTo and never request this whole-world representation. */
@@ -90,10 +108,10 @@ public final class PedestrianGeometryRevision {
             for (var region : changed) for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++)
                 affected.add(new Region(region.x() + x, region.z() + z));
             var updates = new java.util.HashMap<Region, java.util.Optional<Object>>();
-            for (var target : affected) updates.put(target, java.util.Optional.ofNullable(expandedToken(terrain, target)));
+            for (var target : affected) updates.put(target, java.util.Optional.ofNullable(expandedToken(terrain, target.x(), target.z())));
             var complete = (seed == null ? ImmutableRegionMap.<Object>copyOf(Map.of()) : seed.envelope()).with(updates);
             if (complete.size() > MAX_REGIONS) throw new IllegalArgumentException("regional knowledge exceeds its safety bound");
-            revisions = complete; return complete;
+            revisions = complete; expandedReads = null; return complete;
         }
     }
     /** Successor facts share unchanged pages and bounded profile seeds, never a chain
@@ -141,14 +159,14 @@ public final class PedestrianGeometryRevision {
     }
     public static PedestrianGeometryRevision initial(Object scope) { return new PedestrianGeometryRevision(scope, new Object(), Map.of()); }
     public Object at(int regionX, int regionZ) {
-        var value = token(new Region(regionX, regionZ)); return value == null ? baseline : value;
+        var value = token(regionX, regionZ); return value == null ? baseline : value;
     }
     /** A completed local reader retains only the facts it consulted, not every
      * remote region and its historical block sets. No parent snapshot is kept. */
     public PedestrianGeometryRevision restrictedTo(Set<Region> dependencies) {
         var local = new java.util.HashMap<Region, Object>();
         for (var region : dependencies) {
-            var value = token(region); if (value != null) local.put(region, value);
+            var value = token(region.x(), region.z()); if (value != null) local.put(region, value);
         }
         return new PedestrianGeometryRevision(scope, geometryScope, baseline, local);
     }

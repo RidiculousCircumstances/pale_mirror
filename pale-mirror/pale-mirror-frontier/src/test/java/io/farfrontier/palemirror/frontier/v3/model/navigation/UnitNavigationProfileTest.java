@@ -26,6 +26,19 @@ class UnitNavigationProfileTest {
             assertEquals(first, reads.get(), "edge expansion must not reread the same captured footprint");
         }
     }
+    @Test void cachedWideNeighbourFactsAndAbsenceRemainExactAcrossEvictionDamageAndMaterialization() {
+        var raw = PedestrianGeometryRevision.initial().changed(Set.of(new PedestrianGeometryRevision.Region(0, 0),
+                new PedestrianGeometryRevision.Region(1, 0)));
+        var wide = raw.profiled(UnitNavigationProfile.DONKEY);
+        var original = wide.at(0, 0); var absent = wide.at(-20, -20);
+        for (int i = 0; i < 300; i++) assertEquals(absent, wide.at(100 + i, -100));
+        assertEquals(original, wide.at(0, 0), "eviction only recomputes the same complete neighbour tuple");
+        var changed = raw.changed(Set.of(new PedestrianGeometryRevision.Region(-19, -19))).profiled(UnitNavigationProfile.DONKEY);
+        assertNotEquals(absent, changed.at(-20, -20), "new knowledge in the footprint cannot inherit cached absence");
+        assertEquals(absent, wide.at(-20, -20), "the predecessor stays immutable");
+        assertEquals(original, wide.revisions().get(new PedestrianGeometryRevision.Region(0, 0)), "full hash/ingress and lazy reads describe the same facts");
+        assertEquals(original, wide.at(0, 0));
+    }
     @Test void rebuildingWideFootprintTokensCannotDiscardAnUnchangedAcceptedRouteButRealLocalDamageDoes() {
         var source = PedestrianGeometryRevision.initial().changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)))
                 .changed(Set.of(new PedestrianGeometryRevision.Region(1, 0)));

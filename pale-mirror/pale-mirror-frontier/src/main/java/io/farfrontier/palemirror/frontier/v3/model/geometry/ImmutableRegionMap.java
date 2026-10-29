@@ -68,8 +68,17 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
     private final Map<Page, Part<V>> pages;
     private final int size, hash, keyHash;
     private record ReadPage<V>(int x, int z, PageValues<V> values) { }
-    /** One exact immutable page, not a world/route result or an accumulated cache. */
-    private volatile ReadPage<V> lastRead;
+    /** Small shared read window; neighbouring probes and independent workers
+     * cannot repeatedly replace one global last-page slot. No ThreadLocal keys. */
+    private volatile java.util.concurrent.atomic.AtomicReferenceArray<ReadPage<V>> recentReads;
+    private java.util.concurrent.atomic.AtomicReferenceArray<ReadPage<V>> readWindow() {
+        var ready = recentReads;
+        if (ready != null) return ready;
+        synchronized (this) {
+            if (recentReads == null) recentReads = new java.util.concurrent.atomic.AtomicReferenceArray<>(8);
+            return recentReads;
+        }
+    }
     /** Read-only membership capability; never a route or permission certificate. */
     public interface RegionKeys extends Set<Region> { boolean containsRegion(int x, int z); }
     private final RegionKeys keys = new Keys();
@@ -154,11 +163,13 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
     /** Exact point lookup without allocating a coordinate key. */
     public V get(int regionX, int regionZ) {
         int x = regionX >> 4, z = regionZ >> 4;
-        var read = lastRead;
+        var window = readWindow();
+        int slot = (x ^ Integer.rotateLeft(z, 1)) & 7;
+        var read = window.get(slot);
         if (read == null || read.x() != x || read.z() != z) {
             var part = pages.get(new Page(x, z));
             read = new ReadPage<>(x, z, part == null ? null : part.values);
-            lastRead = read;
+            window.set(slot, read);
         }
         return read.values() == null ? null : read.values().get(regionX, regionZ);
     }
