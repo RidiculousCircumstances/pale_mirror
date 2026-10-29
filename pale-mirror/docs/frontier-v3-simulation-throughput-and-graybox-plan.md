@@ -5727,3 +5727,33 @@ market-interest recipients, full trade lifecycle and codec/recovery retained.
 The extended semantic negative verifies defensive scopes, absorbing whole-owner
 scope, new revision/lineage despite an already-covered cause, invalid and oversized
 input rejection. No timing/GC-forcing/implementation-identity assertion added.
+
+### Snapshot-result cache lifetime
+
+83c0675fd owner-scope cut:82affectedtestsPASS106s+guardrails, frozen15s and both
+retained deployments verified at2workers. No measured gain claimed for that cut.
+The memory investigation also establishes an avoidable retention boundary in
+ImmutableSnapshotView: its nested strong-identity result keys retain up to four
+whole FrontierWorldState roots per producer after their calculation has ended.
+The nine active uses store immutable facts (equipment costs/requests/acquisition,
+market offers, workforce/food/asset projections), not resumable working allocations.
+The exact number of additionally retained bytes is UNMEASURED; shared immutable
+subgraphs mean root count cannot be converted into a memory estimate.
+
+Make only this existing snapshot-key cache weak by exact identity, retaining the
+same producer-supplied snapshot/query bounds and LRU behavior. A caller's live
+snapshot is fenced throughout lookup/computation; domain calculations run outside
+the short cache lock. ReferenceQueue cleanup retires dead snapshot entries, with
+no thread/timer, expiry, forced GC or persistent state. Matching does not invoke
+WorldState.equals/hashCode. Unchanged active snapshot/query reuse, changed identity,
+failed computations, bounded eviction and cross-thread use retain the existing
+ImmutableInputViewTest checks. Validate actual equipment/expedition/publication/
+review consumers too. Mutable working views and invariant/read dependency indices
+keep their existing different lifetimes. Do not weakify all caches or claim that
+this alone removes GC/throughput debt. No schema/backward-compatibility layer.
+
+Connected weak-snapshot-retention-focus78347PASS71s+guardrails. Existing shared
+memo identity/failure/eviction/thread checks and actual production, expedition,
+economic review/publication/recovery consumers passed. Source selection is an
+internal memory-lifetime correction, not a measured bytes/speed improvement orG
+acceptance. No new test class or performance/time/GC-dependent test was added.
