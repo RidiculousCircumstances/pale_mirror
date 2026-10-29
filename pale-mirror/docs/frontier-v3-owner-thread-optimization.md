@@ -29,12 +29,11 @@ and bounded comparable measurement. No claim of20TPS or savedseconds from source
   transfers, ground recovery and cargo paths now use it. Exact producer order,
   epochs and immutable branch history remain observable; mutable inputs are
   defensively captured. Mutational ledger passes are outside this read change.
-- Transport mission continuation uses the existing exact preparation capability.
-  The canonical predecessor barrier remains. Cheap harvest COLD progress stays
-  direct: the first native comparison showed that offloading these tiny steps
-  added worker round trips without improving total throughput. Expensive harvest
-  start/navigation retain their existing preparation boundary. Worker waits are
-  included in the measurements, rather than counting relocated work as savings.
+- Expensive planning retains the existing preparation boundary (harvest start,
+  extraction, resident activity and navigation). Additional exact offload of
+  harvest COLD progress and transport continuation was tested and withdrawn:
+  reduced owner planning time did not improve the whole clock, while adding
+  worker handoffs. Canonical predecessor/order and publication checks remain.
 - Worksite custody selection is a shared read-only join over declared scopes
   and current live/preparing leases. Families retain native support, witness and
   durability checks. Stable selections retain declaration order/identity; a
@@ -51,6 +50,14 @@ and bounded comparable measurement. No claim of20TPS or savedseconds from source
   immutable images. Producer lineage remains the first path; mutable maps never
   use the memo. A bounded 32-pair per-thread window holds weak image references,
   preserves traversal order and carries no validation or mutation authority.
+- Commercial participant legal identities/peer homes and economic account kinds
+  are projected independently of quote reviews and balance changes. The existing
+  reverse index rechecks addressed participants/peers, missing accounts and company
+  homes; full audit runs the same owner checks. This removes the repeated whole
+  known-peer network traversal during unrelated resource/account changes.
+- The engineering crew distinctness owner avoids assembling unrelated worker sets
+  when there are no engineering or active medical crews. Every original assertion
+  still executes when such a crew exists, including retained ready projects.
 - Admission retains confirmed HELD wake addresses within the exact immutable
   state/action/pass. Cross-pass reuse still requires owner proof. READY selection
   still rechecks permission; all deterministic budget charges remain unchanged.
@@ -65,3 +72,10 @@ The corrected second candidate additionally passed186 focused Frontier cases
 (including immutable collections and harvest interference),23 native field-turn
 cases and guardrails. Native economy55 passed before the shared map-difference
 follow-up; this is not a claim of rerunning that lane on the final source.
+
+The third candidate passed117 focused trade/engineering cases across the main run
+and the corrected registry fixture rerun, plus55 native economy cases. The new
+negative fixture initially expected an ordinary immutable value update to run the
+publication audit; it now invokes the actual participant validation boundary,
+checks full audit too, and verifies recovery of the valid predecessor. Production
+checks were not weakened. Frozen package verification is recorded with delivery.

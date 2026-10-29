@@ -110,27 +110,7 @@ public final class GoodsTradeStateSupport {
     /** Full recovery and publication audit; receipts are historical, never live lot/account claims. */
     public static void validate(FrontierWorldState state) {
         GoodsTradeState trade = state.companies().goodsTrade();
-        for (var participant : trade.participants().participants().values()) {
-            participant.policy().validate(participant.party());
-            var account = state.inventory().economics().require(participant.party().id());
-            if (account.ownerKind() != participant.party().kind()) throw new IllegalArgumentException("participant lost its nominal economic owner");
-            FrontierWorldStateSupport.settlement(state.bootstrap(), participant.settlementId());
-            if (participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
-                    && !participant.party().id().equals(participant.settlementId()))
-                throw new IllegalArgumentException("public goods policy declared another settlement endpoint");
-            if (participant.policy() == GoodsPolicyKind.OWN_ACCOUNT_COMPANY) {
-                var company = state.companies().companies().get(participant.party().id());
-                if (company == null || !company.settlementId().equals(participant.settlementId()))
-                    throw new IllegalArgumentException("company policy lost its exact legal home");
-            }
-            for (var peer : participant.known()) {
-                if (state.inventory().economics().require(peer.party().id()).ownerKind() != peer.party().kind())
-                    throw new IllegalArgumentException("known goods peer has forged nominal economic identity");
-                var known = trade.participants().participants().get(peer.party().id());
-                if (known == null || !known.party().equals(peer.party()) || !known.settlementId().equals(peer.settlementId()))
-                    throw new IllegalArgumentException("known peer has a foreign legal home");
-            }
-        }
+        GoodsTradeParticipantValidation.validate(state);
         Map<SubjectId, Integer> orderTotals = new java.util.HashMap<>();
         for (GoodsTradeOrder order : trade.orders().values()) {
             if (state.inventory().economics().require(order.party().id()).ownerKind() != order.party().kind()) {

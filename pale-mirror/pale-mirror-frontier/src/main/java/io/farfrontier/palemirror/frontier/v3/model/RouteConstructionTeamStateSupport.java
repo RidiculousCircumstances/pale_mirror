@@ -14,6 +14,10 @@ final class RouteConstructionTeamStateSupport {
                          Map<SubjectId, RouteMaintenance> maintenances,
                          Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites,
                          StrategicPlanState plans) {
+        // Without an engineering or medical crew there is no distinctness
+        // assertion below. Do not gather every unrelated worker on each update.
+        if (maintenances.isEmpty() && constructions.values().stream().noneMatch(project -> project.team().isPresent())
+                && population.medicalOperations().values().stream().noneMatch(MedicalEvacuationOperation::active)) return;
         Set<SubjectId> assigned = new HashSet<>();
         jobs.values().forEach(job -> assigned.add(job.workerId()));
         sites.sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).flatMap(site -> site.harvestJobs().values().stream())

@@ -45,5 +45,24 @@ class GoodsTradeRegistryValidationTest {
                 new GoodsTradeState(orders, trade.contracts(), trade.participants())));
         var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
     }
+    @Test void reviewedParticipantsStillRejectRemovalOfAKnownPeerAndRecoverTheirValidBasis() {
+        var state = reserved();
+        GoodsTradeParticipantValidation.validate(state);
+        var trade = state.companies().goodsTrade();
+        var registry = trade.participants();
+        var participant = registry.participants().get(SELLER);
+        var reviewed = registry.reviewed(SELLER, participant.reviewRevision(), "unchanged-legal-identity", participant.reviewedAtTick());
+        var next = state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(reviewed)));
+        GoodsTradeParticipantValidation.validate(next);
+        var withoutPeer = trade.withParticipants(new GoodsParticipantState(ImmutableLookupMap.withoutEntry(reviewed.participants(), BUYER)));
+        var missing = next.withCompanies(next.companies().withGoodsTrade(withoutPeer));
+        assertThrows(IllegalArgumentException.class, () -> GoodsTradeParticipantValidation.validate(missing),
+                "review-only reuse must not hide a subsequently removed legal peer");
+        assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
+            GoodsTradeParticipantValidation.validate(missing); return null;
+        }));
+        assertDoesNotThrow(() -> GoodsTradeParticipantValidation.validate(next));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> { GoodsTradeParticipantValidation.validate(next); return null; }));
+    }
     private static SubjectId id(String value) { return new SubjectId(value); }
 }

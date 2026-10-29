@@ -309,7 +309,7 @@ public final class FrontierWorldProcessCatalog {
                 @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return ShipmentProcess.wakeDependencies(state, action); }
             })),
             Map.entry(UnitGroupProcess.PROGRESS, withPlanningRecovery(atExecutionTime((state, action, instant) -> UnitGroupProcess.plan(state, action, instant.ticks())))),
-            Map.entry(TransportMissionProcess.PROGRESS, detached(withPlanningRecovery(new FrontierScheduledPlanner() {
+            Map.entry(TransportMissionProcess.PROGRESS, withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return TransportMissionProcess.plan(state, action, action.dueAt().ticks());
                 }
@@ -323,7 +323,7 @@ public final class FrontierWorldProcessCatalog {
                 @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
                     return TransportMissionProcess.wakeDependencies(state, action);
                 }
-            }))),
+            })),
             Map.entry(ActorMovementProcess.PROGRESS, detached(withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ActorMovementProcess.plan(state, action, action.dueAt().ticks());
