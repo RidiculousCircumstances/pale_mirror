@@ -92,7 +92,48 @@ that the full suite passed or that inactive hive behavior was fixed.
 
 ## Runtime result
 
-Pending paired ordinary scale observation and verified deployment. The target
-of20 canonical ticks/s without accumulating debt remains open until measured.
+Both ordinary COLD legs restored the same complete native-saved109-file
+checkpoint (manifest checked), with100 towns, seed126, two advice workers,
+Xms2G/Xmx8G and GenerationalZGC. Each used60s warm-up and16 samples over five
+minutes. No own build, profiling, deployment or client overlapped either window.
+Baseline isfb488779f; candidate is59b8e1b63.
+
+| Ordinary scale observation | Baseline | Candidate |
+| --- | ---: | ---: |
+| Elapsed seconds | 304.463 | 304.408 |
+| Canonical interval | 440059–443206 | 440016–442898 |
+| Canonical ticks/s | 10.336 | 9.468 |
+| Pending ordinary ticks, start → end | 1000 → 3942 | 1046 → 4253 |
+| Completed advice | 13,156 | 10,974 |
+| Navigation edge queries | 78,335,731 | 58,016,579 |
+
+The new leg was8.40% slower and accumulated debt9.03% faster. Overall acceleration
+is **not established**. This one sequential pair has an evolving shared host and
+asynchronous execution; neither identical work mix nor the cause of the difference
+has been established. The difference must not be dismissed as host noise or called
+an improvement. The offline valuation gain remains a narrower measured result.
+All32 samples were statusOK with no recovery/fast-forward. Five sampled towns had
+no starving residents at the end; no new retained completed harvest/contract IDs
+were observed in this short window. This is not whole-economy acceptance.
+
+A separate guarded45s JFR after the candidate window retains actual process/thread
+CPU, allocations and method stacks in `candidate-profile-*`. It still shows
+substantial trip preparation, navigation and immutable-index work. It is not a
+paired causal attribution of the8.40% difference and does not authorize deleting
+freshness checks. Raw observations and `native-summary.json` retain both legs.
+An initial receipt-path pilot was stopped during recovery before ordinary samples;
+its receipts are separate and it is excluded from this comparison.
+
+The verified clean detached artifact was built with guardrails and packaged-JAR
+verification (15s). SHA512:
+`37d2abc74b373272b3f49d161851bc8864efcfb5bc640003121c972053e0d9363537bc2355b842372c4eddccbe025ce3865c73f19ef5dbcce0c38a9a94e5b738`.
+Both deployments are verified. Main retains its existing world and uses
+the same artifact; its final receipt is `main-deploy.log` and
+`deploy-owner-facts-candidate-main/verify.log`. Client update is unnecessary for
+this server-only change. The final MAIN diagnostic is statusOK, instant1151368,
+pending ordinary ticks0, no recovery/fast-forward. SCALE statusOK, instant444290,
+debt7208 after its additional profiling window. No automatic push.
+
+The target of20 canonical ticks/s without accumulating debt remains OPEN and unmet.
 No five-player, graphical product acceptance or whole-economy balance claim is
-made by the offline replay or the focused gates.
+made by the offline replay, focused gates or short ordinary windows.
