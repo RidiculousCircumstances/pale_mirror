@@ -63,10 +63,10 @@ final class FungibleResourceReadIndex {
     }
 
     static boolean carriesClaim(FungibleResourceLedger ledger, ResourceCustody holder) {
-        return accountsAt(ledger, holder).stream().anyMatch(account -> !account.claimQuantities().isEmpty());
+        return at(ledger, new HolderQuery(Objects.requireNonNull(holder))).stream().anyMatch(account -> !account.claimQuantities().isEmpty());
     }
     static List<CustodyAccount> accountsAt(FungibleResourceLedger ledger, ResourceCustody holder) {
-        return at(ledger, new HolderQuery(Objects.requireNonNull(holder)));
+        return at(ledger, new HolderQuery(Objects.requireNonNull(holder)), true);
     }
     static List<CustodyAccount> actorAccounts(FungibleResourceLedger ledger, SubjectId actor) {
         return sorted(at(ledger, new ActorQuery(Objects.requireNonNull(actor))));
@@ -93,16 +93,25 @@ final class FungibleResourceReadIndex {
     /** Current rows from declared custody. Membership/value changes update only
      * affected groups; no account edit rebuilds every holder's placement directory. */
     private static List<CustodyAccount> at(FungibleResourceLedger ledger, Query query) {
+        return at(ledger, query, false);
+    }
+    private static List<CustodyAccount> at(FungibleResourceLedger ledger, Query query, boolean producerOrder) {
         if (!SECTIONS.uniqueMemberships(FungibleResourceReadIndex.class, ledger.accounts(), account ->
                 account.custody() instanceof ResourceCustody.Container holder ? Set.of(holder) : Set.of()))
             throw new IllegalArgumentException("container section has competing resource accounts");
-        return CUSTODIES.rows(FungibleResourceReadIndex.class, ledger.accounts(), account -> {
-            var groups = new HashSet<Query>(); groups.add(new HolderQuery(account.custody()));
-            if (account.custody() instanceof ResourceCustody.Container holder) groups.add(new ContainerQuery(holder.containerId()));
-            else if (account.custody() instanceof ResourceCustody.Actor holder) groups.add(new ActorQuery(holder.actorId()));
-            else if (account.custody() instanceof ResourceCustody.Ground) groups.add(GroundQuery.INSTANCE);
-            return groups;
-        }, query);
+        // A unique container account and ID-sorted aggregate reads do not need
+        // ranks for every other world account. accountsAt alone promises the
+        // producer's order; it must retain that explicit ordered query.
+        return producerOrder
+                ? CUSTODIES.rows(FungibleResourceReadIndex.class, ledger.accounts(), FungibleResourceReadIndex::memberships, query)
+                : CUSTODIES.unorderedRows(FungibleResourceReadIndex.class, ledger.accounts(), FungibleResourceReadIndex::memberships, query);
+    }
+    private static Set<Query> memberships(CustodyAccount account) {
+        var groups = new HashSet<Query>(); groups.add(new HolderQuery(account.custody()));
+        if (account.custody() instanceof ResourceCustody.Container holder) groups.add(new ContainerQuery(holder.containerId()));
+        else if (account.custody() instanceof ResourceCustody.Actor holder) groups.add(new ActorQuery(holder.actorId()));
+        else if (account.custody() instanceof ResourceCustody.Ground) groups.add(GroundQuery.INSTANCE);
+        return groups;
     }
     private static List<CustodyAccount> sorted(List<CustodyAccount> rows) {
         return rows.size() < 2 ? rows : rows.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList();

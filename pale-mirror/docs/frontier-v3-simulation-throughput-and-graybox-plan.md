@@ -5296,3 +5296,31 @@ the fixture to a real free container slot, preserving production admission. Corr
 stock/group focus passed14tests (including9architecture) in14s+guardrails. No product
 source changed after the connected focus and no unrelated confidence rerun was made.
 Receipts local-productive-stock-{focus,corrected-focus}.log. Frozen packaging follows.
+
+
+### Avoid world account ranks for uniquely addressed or explicitly sorted reads
+
+fd7e782bd frozenpackage passed12s+guardrails/JAR/package; retained deployments underway.
+Further analysis of the SAME47e4JFR found the largest owner allocation stack:
+ImmutableGroupView.refreshOrder under FungibleResourceReadIndex.container (821allocation
+samples, plus162 in copying the complete key order; weights are not exact bytes).
+A new/removed account reranks ALL world accounts even for a unique addressed
+container section. This is independent of actual stock or custody validation.
+
+Use the shared order-independent row primitive for the uniquely validated container
+query, carriesClaim's any-match and container/actor/ground reads that already sort
+by natural account ID. Keep accountsAt explicitly ordered: that API's producer
+order remains a contract and its existing reordered/predecessor test covers it.
+Global section uniqueness still runs before either path; duplicate sections fail
+closed even through an unrelated actor read. Current quantity, claim, presentation,
+removal, membership and full-recovery semantics stay unchanged. No bound increase,
+new cache, timeout or weakened evidence. Existing FungibleCustodyRead/stock/ledger/
+compartment/capacity/internal+individual trade recovery cases are the affected gate.
+
+Connected custody-query focus passed117tests0failures100s+guardrails, including
+existing exact producer order/reordered predecessor, duplicate sections, actual
+stock, compartment/capacity, individual/internal/autonomous trade and stock-loss
+recovery. No new tests or product semantics were added for this query correction.
+Evidence local-custody-order-focus.log and corresponding frontier XML reports.
+fd7e782bd both retained deployments verified; no independent capacity window was
+claimed between these connected source-locality cuts. Frozen package follows.
