@@ -397,3 +397,44 @@ its preexisting WIP. No push. Receipt groups include `deploy-{baseline,candidate
 `native-{baseline,candidate}`, `final-verification.log`, `frozen-build.log`,
 `candidate-trace.log` and `final-runtime-check.log`. Sustained SCALE20/no growing
 debt remains OPEN; no old paused goal is marked achieved by this increment.
+
+
+## Addressed delivery facts and wake deltas (October30 follow-up)
+
+The next source-proven costs were global invalidation of provisional delivery
+lengths on every actor/missions/groups/surfaces edit, sorting and scanning all
+missions for each endpoint pair, and scanning every actor execution and every
+settlement to derive local wake aliases. These are preparation/maintenance costs,
+not evidence that Reactor or more worker threads are required.
+
+Delivery advice now consumes existing immutable read/group projections: a
+container's declared position reads only its mobile actor's supporting surface;
+a retained mission length reads its own mission and exact group's existence.
+The pair lookup preserves the former smallest-mission-ID selection and outward/
+return direction rules. Complete value inputs use the existing bounded256-entry
+memo. Inventory admission and identical-draft quote memoization remain current;
+this change does not reuse stale receiving capacity, authorize a trip from an
+estimated length or waive current provisioning/geometry checks. Hydration and
+alternative immutable planning branches have independent source epochs.
+
+Wake maintenance reuses ImmutableMapChanges for execution, storage policy,
+surface, stock-account and custody changes. Bootstrap settlement aliases are
+prepared once, then only changed addressed records are inspected. Removed
+storage/surfaces and the previous storage owner now receive wake keys as well.
+This does not remove the conservative all-settlement geometry wake or the
+existing resource-site first-match hint scan. These hints grant no owner,
+behavior, stock, movement or execution authority.
+
+Navigation retention policy/capacity is unchanged. New bounded diagnostic
+history (at most512 exact evicted bucket/version keys, cleared on scope retirement)
+reports completed hits, layered misses, overlapping new-version misses and
+recent exact-version evicted rebuilds. It does not drive retention or traversal.
+Recent rebuilds are a lower bound: older evictions fall outside the history;
+absence from it does not prove previously unseen geography. Native measurements
+below decide whether actual repeated-key pressure warrants a separate policy
+change. Certified analytical planes remain deliberately outside graph retention.
+
+Verification and deployment/measurement receipts are retained under
+`build/simulation-throughput/addressed-forecast-wake-optimization/`.
+The existing cab6 same-checkpoint ordinary leg is the unchanged baseline;
+no numerical improvement is claimed before the candidate is measured.

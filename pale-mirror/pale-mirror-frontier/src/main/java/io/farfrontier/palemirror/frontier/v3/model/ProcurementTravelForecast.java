@@ -8,9 +8,11 @@ import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming;
 public final class ProcurementTravelForecast {
     private record Query(SubjectId source, String item, TransportOrganization.Itinerary itinerary) { }
     private record Endpoints(SubjectId source, SubjectId receiver, TransportOrganization.Itinerary itinerary) { }
+    private record Positions(BlockPosition source, BlockPosition receiver) { }
+    private record JourneyInput(Endpoints endpoints, Optional<TransportJourneyForecastFacts.Journey> retained,
+                                Optional<Positions> positions) { }
     private static final ImmutableInputView<ImmutableResultView<Query, Optional<Estimate>>> QUOTES = new ImmutableInputView<>();
-    private static final ImmutableInputView<BoundedValueMemo<Endpoints, Estimate>> JOURNEYS = new ImmutableInputView<>();
-    private static final ImmutableInputView<List<TransportMission>> ORDERED = new ImmutableInputView<>();
+    private static final ImmutableInputView<BoundedValueMemo<JourneyInput, Estimate>> JOURNEYS = new ImmutableInputView<>();
     public record Estimate(long deliveryTicks, long labourTicks, long journeyTicks) { }
     static Optional<Estimate> read(FrontierWorldState state, GoodsTradeOrder offer, GoodsParticipant buyer) {
         return read(state, offer.containerId(), offer.itemKind(), buyer);
@@ -20,6 +22,8 @@ public final class ProcurementTravelForecast {
     }
     static Optional<Estimate> read(FrontierWorldState state, SubjectId source, String item, GoodsParticipant buyer,
                                    TransportOrganization.Itinerary itinerary) {
+        // Keep identical-draft quotation hits cheap; only journey cost facts
+        // cross state boundaries. Receiving permission always uses the current draft.
         return QUOTES.get(List.of(state), () -> new ImmutableResultView<Query, Optional<Estimate>>(256))
                 .get(List.of(buyer), new Query(source, item, itinerary), () -> select(state, source, item, buyer, itinerary));
     }
@@ -37,26 +41,28 @@ public final class ProcurementTravelForecast {
         // Reservations and quote drafts change stock/funding, not journey length.
         // Mobile surfaces still invalidate on the exact actor locations; retained
         // mission proof remains conditional on its live group and immutable rules.
-        return JOURNEYS.get(List.of(state.bootstrap(), state.shipments().missions(), state.unitGroups().groups(),
-                        state.inventory().surfaces(), state.actorLocations()), () -> new BoundedValueMemo<Endpoints, Estimate>(256))
-                .get(new Endpoints(source, receiver, itinerary), () -> calculate(state, source, receiver, itinerary));
-    }
-    private static Estimate calculate(FrontierWorldState state, SubjectId source, SubjectId receiver,
-            TransportOrganization.Itinerary itinerary) {
-        var ordered = ORDERED.get(List.of(state.shipments().missions()), () -> state.shipments().missions().values().stream()
-                .sorted(Comparator.comparing(TransportMission::id)).toList());
-        for (var mission : ordered) {
-            if (!mission.sender().containerId().equals(source) || !mission.receiver().containerId().equals(receiver)
-                    || mission.supplies().isEmpty() || mission.supplies().orElseThrow().needsReplan()
-                    || !state.unitGroups().groups().containsKey(mission.groupId())) continue;
-            var proof = mission.supplies().orElseThrow().journey();
-            // Retained length is cost advice, not fresh traversability evidence.
-            boolean sameDirection = mission.organization().itinerary() == itinerary;
-            return estimate(state, sameDirection ? proof.outward().edges() : proof.returning().edges(),
-                    sameDirection ? proof.returning().edges() : proof.outward().edges(), itinerary);
+        var retained = TransportJourneyForecastFacts.between(state, source, receiver);
+        Optional<Positions> positions = Optional.empty();
+        if (retained.isEmpty()) {
+            var current = ContainerPositionFacts.all(state);
+            positions = Optional.of(new Positions(Objects.requireNonNull(current.get(source), "forecast source position"),
+                    Objects.requireNonNull(current.get(receiver), "forecast receiver position")));
         }
-        var origin = state.inventory().surfaces().get(source).position(state);
-        var target = state.inventory().surfaces().get(receiver).position(state);
+        var input = new JourneyInput(new Endpoints(source, receiver, itinerary), retained, positions);
+        return JOURNEYS.get(List.of(state.bootstrap()), () -> new BoundedValueMemo<>(256))
+                .get(input, () -> calculate(state, input));
+    }
+    private static Estimate calculate(FrontierWorldState state, JourneyInput input) {
+        var itinerary = input.endpoints().itinerary();
+        if (input.retained().isPresent()) {
+            var proof = input.retained().orElseThrow();
+            // Retained length is cost advice, not fresh traversability evidence.
+            boolean sameDirection = proof.itinerary() == itinerary;
+            return estimate(state, sameDirection ? proof.outward() : proof.returning(),
+                    sameDirection ? proof.returning() : proof.outward(), itinerary);
+        }
+        var origin = input.positions().orElseThrow().source();
+        var target = input.positions().orElseThrow().receiver();
         long distance = Math.abs((long) target.x() - origin.x()) + Math.abs((long) target.y() - origin.y())
                 + Math.abs((long) target.z() - origin.z());
         long edges = Math.max(1, Math.ceilDiv(Math.multiplyExact(distance,

@@ -53,6 +53,12 @@ class PedestrianCertifiedRegionTest {
         for (int x = 1; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 100_000).region());
         assertTrue(cache.diagnostic().evictions() > 0, "real layered graphs still obey the unchanged retention bound");
         assertNotNull(cache.region(geometry, first, 100_000).region());
+        assertEquals(0, cache.diagnostic().recentEvictedRebuilds(), "one-use geography is not a repeated-key rebuild");
+        assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(1, 0), 100_000).region());
+        assertEquals(1, cache.diagnostic().recentEvictedRebuilds(), "exact evicted version is distinguished from new geography");
+        long hits = cache.diagnostic().completedHits();
+        assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(1, 0), 1).region());
+        assertEquals(hits + 1, cache.diagnostic().completedHits());
         long evictions = cache.diagnostic().evictions();
         for (int x = 2201; x <= 4400; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 1).region());
         assertEquals(evictions, cache.diagnostic().evictions(), "plane certificates cannot evict a graph even when the cache is full");

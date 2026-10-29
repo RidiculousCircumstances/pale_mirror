@@ -46,6 +46,23 @@ class UnitGroupTransportTest {
         assertNotNull(ready, "must stop after actual goods/food loading and assembly, before departure");
         assertUnavailableProvisioningReturnsCargo(engine.canonicalState().state(), ready.mission().id(), engine.checkpoint().instant().ticks());
         var groupId = ready.id(); var missionId = ready.mission().id();
+        var forecastState = engine.canonicalState().state();
+        var forecastMission = forecastState.shipments().missions().get(missionId);
+        var retainedJourney = forecastMission.supplies().orElseThrow().journey();
+        for (var itinerary : TransportOrganization.Itinerary.values()) {
+            boolean same = forecastMission.organization().itinerary() == itinerary;
+            var timing = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming.assess(
+                    forecastState.bootstrap().ruleset().expedition(),
+                    same ? retainedJourney.outward().edges() : retainedJourney.returning().edges(),
+                    same ? retainedJourney.returning().edges() : retainedJourney.outward().edges(), itinerary);
+            var forecast = ProcurementTravelForecast.between(forecastState, forecastMission.sender().containerId(),
+                    forecastMission.receiver().containerId(), itinerary);
+            assertEquals(timing.deliveryTicks(), forecast.deliveryTicks());
+            assertEquals(timing.durationTicks(), forecast.journeyTicks());
+            var codec = new FrontierWorldStateCodec(); var recoveredForecast = codec.decode(codec.encode(forecastState));
+            assertEquals(forecast, ProcurementTravelForecast.between(recoveredForecast, forecastMission.sender().containerId(),
+                    forecastMission.receiver().containerId(), itinerary), "retained lengths must survive hydration without live cache evidence");
+        }
         long loadedAt = engine.checkpoint().instant().ticks();
         assertEquals(loadedAt + 1, engine.checkpoint().schedules().stream()
                 .filter(action -> action.subject().equals(missionId)).findFirst().orElseThrow().dueAt().ticks());

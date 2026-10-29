@@ -119,6 +119,8 @@ class PedestrianRegionalInvalidationTest {
         var changed = flat(a.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))), bounds, surface -> surface.x() == 8);
         assertNotNull(cache.region(changed, tile, 100_000).region());
         assertEquals(2, cache.diagnostic().retainedEntries()); assertEquals(1, cache.diagnostic().distinctScopedTiles());
+        assertEquals(1, cache.diagnostic().newVersionMisses());
+        assertEquals(0, cache.diagnostic().recentEvictedRebuilds());
         assertEquals(0, cache.diagnostic().retainedBuilders());
         cache.clear(); assertEquals(0, cache.diagnostic().retainedEntries()); assertEquals(0, cache.diagnostic().distinctScopedTiles());
     }

@@ -644,55 +644,19 @@ public final class FrontierWorldProcessCatalog {
         boolean sceneChanged = previous.sceneLeases() != next.sceneLeases();
         if (accessChanged || stockChanged || custodyChanged || sceneChanged || surfaceChanged || policyChanged) keys.add(event.subject());
         if (previous.actorExecutions() != next.actorExecutions()) {
-            previous.actorExecutions().actors().forEach((actor, execution) -> {
-                if (!execution.equals(next.actorExecutions().actors().get(actor))) keys.add(actor);
-            });
-            next.actorExecutions().actors().keySet().stream()
-                    .filter(actor -> !previous.actorExecutions().actors().containsKey(actor)).forEach(keys::add);
+            ImmutableMapChanges.forEach(previous.actorExecutions().actors(), next.actorExecutions().actors(),
+                    change -> keys.add(change.key()));
         }
         if (policyChanged) keys.addAll(StoragePolicyWakeKeys.changed(previous.inventory(), next.inventory()));
         if (accessChanged || sceneChanged || custodyChanged || stockChanged) {
             keys.addAll(ServiceAccessCoordinator.wakePoints(previous, next));
         }
-        if (surfaceChanged) next.inventory().surfaces().forEach((id, surface) -> {
-            if (!surface.equals(previous.inventory().surfaces().get(id))) keys.add(id);
-        });
+        if (surfaceChanged) ImmutableMapChanges.forEach(previous.inventory().surfaces(), next.inventory().surfaces(),
+                change -> keys.add(change.key()));
         if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged && !surfaceChanged && !policyChanged)
             return Set.copyOf(keys);
         if (sceneChanged) keys.addAll(SceneLeaseWakeKeys.changed(previous, next));
-        io.farfrontier.palemirror.frontier.v3.api.SubjectId siteId = null;
-        if (accessChanged) {
-            if (next.resourceSites().sites().containsKey(event.subject())) siteId = event.subject();
-            else {
-                for (ResourceSiteLifecycle lifecycle : next.resourceSites().sites().values()) {
-                    if (lifecycle.harvestJobs().containsKey(event.subject())
-                            || lifecycle.preparationWork().filter(work -> work.id().equals(event.subject())).isPresent()) {
-                        siteId = lifecycle.siteId();
-                        break;
-                    }
-                }
-            }
-        }
-        ResourceSite affectedSite = siteId == null ? null
-                : next.resourceSite(siteId);
-        for (Settlement settlement : next.bootstrap().settlements()) {
-            var depot = FrontierWorldState.depotId(settlement.id());
-            boolean localAccess = accessChanged && (event.subject().equals(settlement.id())
-                    || resident != null && resident.settlementId().equals(settlement.id())
-                    || previous.productionJobs().containsKey(event.subject())
-                        && previous.productionJobs().get(event.subject()).settlementId().equals(settlement.id())
-                    || next.productionJobs().containsKey(event.subject())
-                        && next.productionJobs().get(event.subject()).settlementId().equals(settlement.id())
-                    || affectedSite != null && affectedSite.settlementId().equals(settlement.id()));
-            boolean localStock = stockChanged && !java.util.Objects.equals(
-                    FungibleResourceCustodySupport.accountAtContainer(previous, depot),
-                    FungibleResourceCustodySupport.accountAtContainer(next, depot));
-            boolean localCustody = custodyChanged && (ReferenceContainerCustody.blocksCanonicalUse(previous, depot)
-                    != ReferenceContainerCustody.blocksCanonicalUse(next, depot)
-                    || ReferenceContainerCustody.hasLiveCustody(previous, depot)
-                    != ReferenceContainerCustody.hasLiveCustody(next, depot));
-            if (localAccess || localStock || localCustody) keys.add(depot);
-        }
+        keys.addAll(SettlementWakeAliases.changed(previous, next, event.subject(), resident, accessChanged, stockChanged, custodyChanged));
         return Set.copyOf(keys);
     }
 

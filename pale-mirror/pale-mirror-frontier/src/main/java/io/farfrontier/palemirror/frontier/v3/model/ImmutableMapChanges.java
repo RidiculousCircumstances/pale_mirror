@@ -4,8 +4,8 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /** Exact changes between immutable component images; no domain dispatch or mutation. */
-final class ImmutableMapChanges {
-    record Change<K, V>(K key, V before, V after) { }
+public final class ImmutableMapChanges {
+    public record Change<K, V>(K key, V before, V after) { }
     private ImmutableMapChanges() { }
     static boolean sameKeys(Map<?, ?> before, Map<?, ?> after) {
         if (before == after) return true;
@@ -38,7 +38,7 @@ final class ImmutableMapChanges {
         }
         for (var key : before.keySet()) if (!after.containsKey(key)) consume.accept(key);
     }
-    static <K, V> void forEach(Map<K, V> before, Map<K, V> after, Consumer<Change<K, V>> consume) {
+    public static <K, V> void forEach(Map<K, V> before, Map<K, V> after, Consumer<Change<K, V>> consume) {
         if (before == after) return;
         var keys = ImmutableMapDifferences.keys(before, after);
         if (keys.isPresent()) {

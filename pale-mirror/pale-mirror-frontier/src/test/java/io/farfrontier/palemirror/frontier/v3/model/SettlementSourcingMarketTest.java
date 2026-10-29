@@ -19,6 +19,13 @@ class SettlementSourcingMarketTest {
         actors.put(asset.actorId(), location.withBody(new BodyPosition(bounds.minX() + 1, location.body().y(), bounds.minZ() + 1)));
         var moved = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         ImmutablePlanningScope.within(() -> {
+            var fixedSource = state.inventory().surfaces().values().stream()
+                    .filter(surface -> surface.location() instanceof ContainerLocation.Fixed && !surface.containerId().equals(target))
+                    .map(ContainerSurface::containerId).sorted().findFirst().orElseThrow();
+            var fixed = ProcurementTravelForecast.between(state, fixedSource, target,
+                    TransportOrganization.Itinerary.SOURCE_DELIVERY);
+            assertSame(fixed, ProcurementTravelForecast.between(moved, fixedSource, target,
+                    TransportOrganization.Itinerary.SOURCE_DELIVERY), "foreign mobile bodies cannot invalidate fixed journey facts");
             var initial = ProcurementTravelForecast.between(state, asset.containerId(), target,
                     TransportOrganization.Itinerary.DESTINATION_COLLECTION);
             var later = ProcurementTravelForecast.between(moved, asset.containerId(), target,

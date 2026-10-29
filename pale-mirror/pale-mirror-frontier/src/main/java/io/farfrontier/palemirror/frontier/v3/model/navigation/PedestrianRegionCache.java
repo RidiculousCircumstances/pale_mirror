@@ -7,6 +7,11 @@ final class PedestrianRegionCache {
     private static final int MAX_REGIONS = 2_048, MAX_SURFACES = MAX_REGIONS * PedestrianRegion.CELLS;
     private static final int MAX_BUILDERS = 64;
     private long lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs;
+    private long completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds;
+    private static final int MAX_RECENT_EVICTIONS = 512;
+    private record Evicted(Object bucket, Object key) { }
+    // Diagnostic history only: never consulted for retention, traversal or admission.
+    private final Map<Evicted, Boolean> recentEvictions = new LinkedHashMap<>();
     private final Map<PedestrianRouteGeometry, Bucket<PedestrianRegion.Tile>> views = new WeakHashMap<>();
     private record RegionalKey(PedestrianRegion.Tile tile, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) { }
     // Reconstructible terrain/profile value keys must not disappear while an equal
@@ -100,7 +105,10 @@ final class PedestrianRegionCache {
     private <K> Lookup advance(Bucket<K> bucket, K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile,
                                 int budget, java.util.function.BooleanSupplier mayContinue) {
         Entry entry;
-        synchronized (this) { lookups++; entry = bucket.entries.get(key); if (entry != null) touch(entry); }
+        synchronized (this) {
+            lookups++; entry = bucket.entries.get(key);
+            if (entry != null) { if (entry.region != null) completedHits++; touch(entry); }
+        }
         if (entry == null) {
             var plane = PedestrianRegionBuild.uniformSupport(geometry, tile);
             if (plane.isPresent()) {
@@ -111,6 +119,9 @@ final class PedestrianRegionCache {
                 entry = bucket.entries.get(key);
                 if (entry == null) {
                     buildsStarted++;
+                    layeredCacheMisses++;
+                    if (bucket.tiles.containsKey(tile)) newVersionMisses++;
+                    if (recentEvictions.remove(new Evicted(bucket, key)) != null) recentEvictedRebuilds++;
                     if (bucket.retired) entry = new Entry(geometry, tile, bucket, key);
                     else {
                         entry = bucket.acquire(key, geometry, tile);
@@ -156,6 +167,10 @@ final class PedestrianRegionCache {
         }
     }
     private void evict(Entry entry) {
+        var history = new Evicted(entry.bucket, entry.key);
+        if (!recentEvictions.containsKey(history) && recentEvictions.size() >= MAX_RECENT_EVICTIONS)
+            recentEvictions.remove(recentEvictions.keySet().iterator().next());
+        recentEvictions.put(history, Boolean.TRUE);
         entry.bucket.remove(entry); slots -= entry.accountedSize;
         probation.remove(entry); building.remove(entry);
         if (reused.remove(entry)) reusedSlots -= entry.accountedSize;
@@ -164,6 +179,7 @@ final class PedestrianRegionCache {
     private void forget(Bucket<?> bucket) {
         bucket.retired = true;
         for (var entry : new ArrayList<>(bucket.entries.values())) evict(entry);
+        recentEvictions.keySet().removeIf(history -> history.bucket() == bucket);
     }
     private void retireCollectedViews() {
         var live = new HashSet<>(views.values());
@@ -183,7 +199,8 @@ final class PedestrianRegionCache {
             entries += bucket.entries.size(); distinct += bucket.tiles.size(); builders += bucket.builders;
         }
         return new PedestrianRegionCacheDiagnostic(lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs,
-                scoped.size() + views.size(), entries, distinct, builders);
+                scoped.size() + views.size(), entries, distinct, builders,
+                completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds);
     }
     /** Bounded scope counters; neither ordinary diagnostics nor inspection scan regional graphs. */
     synchronized Map<String, Long> retentionDiagnostic() {
@@ -198,5 +215,6 @@ final class PedestrianRegionCache {
         for (var bucket : unversionedBuckets) forget(bucket);
         views.clear(); unversionedBuckets.clear(); scoped.clear(); probation.clear(); reused.clear(); building.clear(); slots = reusedSlots = 0;
         lookups = buildsStarted = evictions = certifiedPlanes = layeredGraphs = 0;
+        completedHits = layeredCacheMisses = newVersionMisses = recentEvictedRebuilds = 0; recentEvictions.clear();
     }
 }

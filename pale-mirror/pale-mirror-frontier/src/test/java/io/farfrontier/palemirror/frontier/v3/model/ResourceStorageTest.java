@@ -130,6 +130,9 @@ class ResourceStorageTest {
         var wake = io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.wakeKeys(declared, changed, accepted);
         assertTrue(wake.contains(id), "changed eligibility must wake requests waiting on this storage");
         assertTrue(wake.contains(site.settlementId()), "new storage policy must wake its settlement's work selection");
+        var withdrawnWake = io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.wakeKeys(changed, state, accepted);
+        assertTrue(withdrawnWake.contains(id), "removed storage and surface must wake their exact waiters too");
+        assertTrue(withdrawnWake.contains(site.settlementId()), "withdrawal wakes the previous storage owner");
         assertEquals(state.inventory().fungibleResources(), changed.inventory().fungibleResources());
         assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
         assertThrows(IllegalArgumentException.class, () -> change.apply(changed, site.settlementId()));
