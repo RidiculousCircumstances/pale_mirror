@@ -24,6 +24,26 @@ class SettlementEconomicPublicationTest {
         assertFalse(rebuilt.invalidate(market).onlyMarketChangesSince(captured));
         assertTrue(rebuilt.invalidate(market).onlyMarketChangesSince(rebuilt));
     }
+    @Test void causeScopesRemainDefensiveAndWholeParticipantChangesAbsorbSubsetsWithoutLosingHistory() {
+        var stock = SettlementEconomicPlanningState.Change.STOCK; var market = SettlementEconomicPlanningState.Change.MARKET;
+        var resources = new HashSet<>(Set.of("minecraft:bread"));
+        var before = new SettlementEconomicPlanningState(1, Optional.empty(), Map.of(stock, resources));
+        resources.add("minecraft:coal");
+        assertEquals(Set.of("minecraft:bread"), before.affected().get(stock));
+        var changed = before.invalidate(Map.of(market, resources)); resources.add("minecraft:wheat");
+        assertEquals(Set.of("minecraft:bread", "minecraft:coal"), changed.affected().get(market));
+        assertThrows(UnsupportedOperationException.class, () -> changed.affected().get(stock).clear());
+        var whole = changed.invalidate(Map.of(stock, Set.of()));
+        var again = whole.invalidate(Map.of(stock, Set.of("minecraft:wheat")));
+        assertEquals(Set.of(), again.affected().get(stock), "participant-wide scope cannot shrink to the last resource");
+        assertEquals(whole.inputRevision() + 1, again.inputRevision(), "covered flags still represent a new factual change");
+        assertFalse(again.invalidate(Map.of(market, Set.of("minecraft:bread"))).onlyMarketChangesSince(whole));
+        assertThrows(IllegalArgumentException.class, () -> before.invalidate(Map.of(stock, Set.of(" "))));
+        var oversized = java.util.stream.IntStream.range(0, 257).mapToObj(n -> "minecraft:resource-" + n)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThrows(IllegalArgumentException.class, () -> before.invalidate(Map.of(market, oversized)));
+        assertEquals(Set.of("minecraft:bread"), before.affected().get(stock), "rejected candidates cannot mutate earlier cause scopes");
+    }
     @Test void recoveryKeepsCanonicalInputsButStartsAFreshMarketEvidenceBoundary() {
         var state = initial();
         var captured = SettlementEconomicPlanningState.empty().invalidate(

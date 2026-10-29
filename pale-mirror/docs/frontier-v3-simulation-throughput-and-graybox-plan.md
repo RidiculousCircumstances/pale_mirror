@@ -5675,3 +5675,55 @@ backpressure/owner fences, current predecessor runtime/recovery, operation
 confirmation and calendar behavior. Compilation confirms the loaded-config path
 against the actual NeoForge API. Source defaults remain2; explicit scale-only4
 configuration and retained-world ordinary comparison follow verified deployment.
+
+### Allocation pressure and immutable economic invalidation scopes
+
+6d74ef2e1 both retained deployments verified; main2adviceworkers, scale explicitly4.
+Ordinary38212 at4:304.499075s388690->390857=7.116606/s,debt707->4630,16statusok,
+no recovery/fast-forward/build/profile/client. No new terminal harvest or retained
+fulfilled contracts in5towns; hungry1:0->0,7:1->0,35:0->0,68:8->8,100:1->0,
+all5starving0. This is not an isolated percentage comparison across evolving work.
+Four workers did NOT demonstrate a throughput improvement. Restore scale2 on the
+same verified artifact; primary12-town stand was never changed from2.
+
+The20.003404s passive/proc sample attributes~60CPU-s to matched ZGC workers;
+process156.06CPU-s,matched154.99CPU-s,0new/3retired threads. No VM attach or code
+instrumentation during that ordinary window. Separate45s54913 profile completed,
+actualref/JAR/cgroup/PIDguards,allcustomlifecycleeventsDISABLED,CPU20ms,allocation50/s,
+threadallocation1s,GCHeapSummary and ZAllocationStall enabled.47.615787s native
+process404.16CPU-s,matched310.87,10new/1retired. Full/matchedCPU differ.107GC events:
+103minor+4major,all Allocation Rate.215heap summaries:after-GC minimum5.222GB,
+maximum7.520GB,mean6.498GB on8.590GBheap. No recorded allocation-stall event;
+this does not mean the collector's concurrent CPU work is free. Actual thread
+allocation deltas:4advice11.312/11.062/11.050/10.774GB,nav14.371/14.062GB,
+owner4.492GB,exact3.761GB,journal0.450GB.2160samples,251truncated,0DataLoss,
+14first-thread boundary samples excluded from supplemental producer report.
+Sample weights remain estimates, not exact producer bytes. All receipts under
+forecast-worker-{four, memory-current} in build/simulation-throughput.
+
+Repeated current stacks identify EconomicInputChanges.retain -> PlanningState.
+invalidate: every quote/parcel recreates cause-scope unions and constructor maps/
+validation streams, even when the dirty scope already covers the change. Introduce
+one inventory-independent economic value, EconomicInputInvalidations: defensive
+bounded cause scopes, with an absorbing whole-participant empty scope. Covered
+unions reuse this immutable value; genuine new scope entries rebuild and validate.
+Both the fact-change collector and retained planning state use its same scope
+algebra. Input revision STILL increments for every factual invalidation; every
+non-market change STILL starts a fresh lineage, including an already-covered flag.
+No coalesced economic generations, notification suppression, stale-advice weakening,
+pricing/planning-policy change or schema change. Public/bootstrap/hydration copies
+all input maps/sets; recovery starts its fresh non-market proof as before.
+
+Config-only2-worker retained restart68713verified the same clean6d74 artifact
+without republishing/reinstalling. Repeat ordinary50884COMPLETE304.259174s
+391433->394519=10.142669/s,debt680->3680,16statusok,notrecovering,fastForward0,
+no ownbuild/profile/client. Source remains identical to the4-worker run. The
+sequential evolving-world observation supports keeping2 as the actual scale
+configuration; it does not isolate a universal speed ratio.20/s stillFAIL.
+
+Connected economic-invalidation-scope-focus54825PASS106s+guardrails. Current
+publication/input/market-only lineage, actual stale opportunity/review advice,
+market-interest recipients, full trade lifecycle and codec/recovery retained.
+The extended semantic negative verifies defensive scopes, absorbing whole-owner
+scope, new revision/lineage despite an already-covered cause, invalid and oversized
+input rejection. No timing/GC-forcing/implementation-identity assertion added.

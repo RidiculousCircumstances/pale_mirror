@@ -29,10 +29,7 @@ public final class SettlementEconomicInputChanges {
         var registered = registry.participants().keySet();
         EconomicInputChangePort.Sink sink = (owner, reason, resources) -> {
             if (!registered.contains(owner)) return;
-            var value = changes.computeIfAbsent(owner, ignored -> new Changed()); value.affected.merge(reason, Set.copyOf(resources), (old, added) -> {
-                if (old.isEmpty() || added.isEmpty()) return Set.of();
-                var union = new HashSet<>(old); union.addAll(added); return Set.copyOf(union);
-            });
+            var value = changes.computeIfAbsent(owner, ignored -> new Changed()); value.affected.merge(reason, Set.copyOf(resources), EconomicInputInvalidations::unionScopes);
         };
         for (var port : PORTS) port.collect(before, after, sink);
         if (changes.isEmpty()) return after;

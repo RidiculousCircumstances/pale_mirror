@@ -8,6 +8,7 @@ public final class SettlementEconomicPlanningState {
     private final long inputRevision;
     private final Optional<SettlementEconomicPlan> accepted;
     private final Map<Change, Set<String>> affected;
+    private final EconomicInputInvalidations invalidations;
     /** Rebuildable same-process evidence, not a canonical revision or history.
      * Only MARKET invalidations inherit it. No predecessor state is retained. */
     private final Object nonMarketBasis;
@@ -39,18 +40,15 @@ public final class SettlementEconomicPlanningState {
     /** External/bootstrap/hydration input starts a fresh proof boundary. */
     public SettlementEconomicPlanningState(long inputRevision, Optional<SettlementEconomicPlan> accepted,
             Map<Change, Set<String>> affected) {
-        this(inputRevision, accepted, affected, new Object());
+        this(inputRevision, accepted, EconomicInputInvalidations.copyOf(affected), new Object());
     }
     private SettlementEconomicPlanningState(long inputRevision, Optional<SettlementEconomicPlan> accepted,
-            Map<Change, Set<String>> affected, Object nonMarketBasis) {
+            EconomicInputInvalidations invalidations, Object nonMarketBasis) {
         accepted = Objects.requireNonNull(accepted);
-        var copy = new EnumMap<Change, Set<String>>(Change.class);
-        affected.forEach((reason, resources) -> copy.put(Objects.requireNonNull(reason), Set.copyOf(resources)));
-        affected = Map.copyOf(copy);
-        if (inputRevision < 0 || accepted.filter(plan -> plan.inputRevision() > inputRevision).isPresent()
-                || affected.values().stream().anyMatch(items -> items.size() > 256 || items.stream().anyMatch(String::isBlank)))
+        if (inputRevision < 0 || accepted.filter(plan -> plan.inputRevision() > inputRevision).isPresent())
             throw new IllegalArgumentException("invalid economic input generation");
-        this.inputRevision = inputRevision; this.accepted = accepted; this.affected = affected;
+        this.inputRevision = inputRevision; this.accepted = accepted;
+        this.invalidations = Objects.requireNonNull(invalidations); this.affected = invalidations.affected();
         this.nonMarketBasis = Objects.requireNonNull(nonMarketBasis);
     }
     public static SettlementEconomicPlanningState empty() {
@@ -91,12 +89,7 @@ public final class SettlementEconomicPlanningState {
     }
     public SettlementEconomicPlanningState invalidate(Map<Change, Set<String>> changes) {
         if (changes.isEmpty()) throw new IllegalArgumentException("economic invalidation requires its cause");
-        var next = new EnumMap<Change, Set<String>>(Change.class); next.putAll(affected);
-        changes.forEach((reason, items) -> next.merge(reason, Set.copyOf(items), (prior, added) -> {
-            if (prior.isEmpty() || added.isEmpty()) return Set.of();
-            var union = new HashSet<>(prior); union.addAll(added); return Set.copyOf(union);
-        }));
-        return new SettlementEconomicPlanningState(Math.incrementExact(inputRevision), accepted, next,
+        return new SettlementEconomicPlanningState(Math.incrementExact(inputRevision), accepted, invalidations.with(changes),
                 changes.keySet().equals(Set.of(Change.MARKET)) ? nonMarketBasis : new Object());
     }
     /** Market notifications are dated observations. A closed inherited basis
