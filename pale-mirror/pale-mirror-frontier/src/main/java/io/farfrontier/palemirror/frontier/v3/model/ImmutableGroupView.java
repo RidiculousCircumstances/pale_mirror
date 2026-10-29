@@ -7,7 +7,7 @@ import java.util.function.Function;
  * Retains only the current producer registry, its memberships and queried lists
  * for actual groups. Unknown queries cannot grow it. Optional row images always
  * follow changed producer rows; no domain eligibility or authority is cached. */
-final class ImmutableGroupView<K, V, G> {
+public final class ImmutableGroupView<K, V, G> {
     private static final class Image<K, V, G> {
         final Object epoch;
         Map<K, V> source = Map.of();
@@ -19,6 +19,9 @@ final class ImmutableGroupView<K, V, G> {
         final Map<G, List<V>> unordered = new HashMap<>();
         List<K> order = List.of();
         Map<K, Integer> ranks = Map.of();
+        final Set<G> publicationChanges = new HashSet<>();
+        Map<G, List<V>> publication = ImmutableLookupMap.copyOf(Map.of());
+        boolean publishing;
         Image(Object epoch) { this.epoch = epoch; }
     }
     private final ThreadLocal<Image<K, V, G>> current = new ThreadLocal<>();
@@ -64,7 +67,7 @@ final class ImmutableGroupView<K, V, G> {
     /** Current rows for an order-independent aggregate. No whole-registry key
      * ranking is needed, and a foreign key insertion cannot invalidate this
      * group's values. Consumers must not use this order to select a winner. */
-    List<V> unorderedRows(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships, G group) {
+    public List<V> unorderedRows(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships, G group) {
         Objects.requireNonNull(epoch); Objects.requireNonNull(source);
         Objects.requireNonNull(memberships); Objects.requireNonNull(group);
         Map<K, V> snapshot = source instanceof ImmutableMapImage<?, ?> ? source : ImmutableLookupMap.copyOf(source);
@@ -77,6 +80,29 @@ final class ImmutableGroupView<K, V, G> {
             var selected = image;
             return image.unordered.computeIfAbsent(group, ignored -> keys.stream()
                     .map(key -> Objects.requireNonNull(selected.source.get(key), "group lost its current row")).toList());
+        } catch (RuntimeException | Error failed) { current.remove(); throw failed; }
+    }
+
+    /** Complete immutable group directory. Only changed declared groups get new
+     * rows; unchanged groups remain the same inputs for their local consumers. */
+    public Map<G, List<V>> groupedRows(Object epoch, Map<K, V> source, Function<V, Set<G>> memberships) {
+        Objects.requireNonNull(epoch); Objects.requireNonNull(source); Objects.requireNonNull(memberships);
+        Map<K, V> input = source instanceof ImmutableMapImage<?, ?> ? source : ImmutableLookupMap.copyOf(source);
+        var image = current.get();
+        if (image == null || image.epoch != epoch) image = new Image<>(epoch);
+        try {
+            if (!image.publishing) { image.publicationChanges.addAll(image.groups.keySet()); image.publishing = true; }
+            update(image, input, memberships); var next = image.publication;
+            for (var group : image.publicationChanges) {
+                var keys = image.groups.get(group);
+                if (keys == null) next = ImmutableLookupMap.withoutEntry(next, group);
+                else {
+                    var selected = image;
+                    var rows = image.unordered.computeIfAbsent(group, ignored -> keys.stream().map(selected.source::get).toList());
+                    if (!Objects.equals(next.get(group), rows)) next = ImmutableLookupMap.withEntry(next, group, rows);
+                }
+            }
+            image.publication = next; image.publicationChanges.clear(); current.set(image); return next;
         } catch (RuntimeException | Error failed) { current.remove(); throw failed; }
     }
 
@@ -109,6 +135,7 @@ final class ImmutableGroupView<K, V, G> {
             var row = source.get(key);
             var next = row == null ? Set.<G>of() : Set.copyOf(project.apply(row));
             var previous = image.memberships.getOrDefault(key, Set.of());
+            if (image.publishing) { image.publicationChanges.addAll(previous); image.publicationChanges.addAll(next); }
             // A value replacement preserves candidate keys, but its old row
             // image must not survive even when membership stays unchanged.
             for (var group : previous) { image.rows.remove(group); image.unordered.remove(group); }
@@ -117,6 +144,7 @@ final class ImmutableGroupView<K, V, G> {
             for (var group : previous) if (!next.contains(group)) {
                 var keys = image.groups.get(group); keys.remove(key);
                 if (keys.isEmpty()) image.groups.remove(group);
+                if (keys.isEmpty() && !image.publication.containsKey(group)) image.publicationChanges.remove(group);
                 if (keys.size() < 2) image.duplicates.remove(group);
                 image.ordered.remove(group);
             }

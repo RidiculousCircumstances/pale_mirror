@@ -32,14 +32,13 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
         var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
         var sites = state.resourceSites(); var local = sites.siteIdsIn(home);
         inputs.add(local);
-        for (var id : local) { inputs.add(sites.site(id)); inputs.add(sites.cycle(id)); }
-        // Mutation presence affects which cells are usable. Keep both complete
-        // pending maps conservative until their owner supplies a local directory.
-        inputs.add(sites.pendingWorldChanges()); inputs.add(sites.pendingForeignChanges());
+        for (var id : local) {
+            inputs.add(sites.site(id)); inputs.add(sites.cycle(id)); inputs.addAll(sites.cellMutationInputs(id));
+        }
         // The provider resolves current fixed/mobile positions and eligibility.
         // Other residents' movement and foreign market prices are not travel costs.
         inputs.addAll(stores);
-        return VALUATIONS.get(state.bootstrap(), home, inputs, () -> valueInstalled(state, home, workers, stores));
+        return VALUATIONS.getPublished(state.bootstrap(), home, inputs, () -> valueInstalled(state, home, workers, stores));
     }
     private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home,
             List<ResidentProfile> workers, List<BlockPosition> stores) {

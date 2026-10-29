@@ -7,6 +7,16 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ImmutableGroupViewTest {
+    @Test void groupedPublicationsPreserveUnchangedHomesAndWithdrawRemovedSources() {
+        var view = new ImmutableGroupView<String, Row, String>(); var epoch = new Object();
+        var input = ImmutableLookupMap.copyOf(Map.of("a", new Row(Set.of("home-a"), 1), "b", new Row(Set.of("home-b"), 2)));
+        var first = view.groupedRows(epoch, input, Row::points);
+        var second = view.groupedRows(epoch, ImmutableLookupMap.withEntry(input, "b", new Row(Set.of("home-b"), 3)), Row::points);
+        assertSame(first.get("home-a"), second.get("home-a")); assertEquals(3, second.get("home-b").getFirst().progress());
+        var removed = view.groupedRows(epoch, ImmutableLookupMap.withoutEntry(input, "a"), Row::points);
+        assertFalse(removed.containsKey("home-a")); assertEquals(1, first.get("home-a").getFirst().progress());
+        assertEquals(first, view.groupedRows(epoch, input, Row::points));
+    }
     private record Row(Set<String> points, int progress) { }
     private record CountedKey(int value, AtomicInteger hashes) {
         @Override public int hashCode() { hashes.incrementAndGet(); return value; }

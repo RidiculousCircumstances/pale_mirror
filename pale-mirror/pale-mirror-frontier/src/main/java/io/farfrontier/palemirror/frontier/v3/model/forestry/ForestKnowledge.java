@@ -8,9 +8,18 @@ import java.util.*;
  * This index owns no navigation, work admission, inventory or physical authority. */
 public final class ForestKnowledge {
     private static final ImmutableKeyedInputView<ForestRegion, List<ForestTree>> REGIONS = new ImmutableKeyedInputView<>(256);
-    private static final ImmutableKeyedInputView<SubjectId, List<GrayboxForestPlan.Header>> KNOWN = new ImmutableKeyedInputView<>(32);
-    private record Stock(SubjectId home, String species) { }
-    private static final ImmutableResultView<Stock, Long> STOCKS = new ImmutableResultView<>(256);
+    private static final ImmutableKeyedInputView<SubjectId, List<GrayboxForestPlan.Header>> KNOWN = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
+    private static final ImmutableInputView<Map<SubjectId, List<GrayboxForestPlan.Header>>> KNOWN_HOMES = new ImmutableInputView<>();
+    private static final ImmutableReferenceIndex.Source<FrontierWorldState, ForestRegion, Map<TreeId, ForestTree>> SOURCES =
+            new ImmutableReferenceIndex.Source<>(s -> s.forest().regions());
+    private static final ImmutableReadProjection<FrontierWorldState, SubjectId, List<GrayboxForestPlan.Header>, Map<String, Long>> AVAILABLE =
+            new ImmutableReadProjection<>(SimulationCapacity.MAX_SETTLEMENTS, ForestState.MAX_REGIONS, List.of(SOURCES),
+                    (state, headers) -> headers.stream().map(header -> header.tree().region()).distinct()
+                            .map(SOURCES::at).toList(), (state, headers) -> {
+                        var result = new TreeMap<String, Long>();
+                        headers.forEach(header -> result.merge(header.species(), (long) remaining(state, header), Math::addExact));
+                        return Map.copyOf(result);
+                    });
     public record Log(TreeReference tree, long revision, int index) { }
     private ForestKnowledge() { }
     /** Cheap source availability only; routes and economic decisions have different owners. */
@@ -33,7 +42,7 @@ public final class ForestKnowledge {
     /** Discovery under explicitly declared forest-knowledge patches, separate from economic title.
      * Current losses do not invalidate the origin directory or trigger a whole-forest rebuild. */
     public static List<GrayboxForestPlan.Header> knownBy(FrontierWorldState state, SubjectId home) {
-        return KNOWN.get(state.bootstrap(), home, List.of(state.forest().treeDirectory()), () -> {
+        return KNOWN.getPublished(state.bootstrap(), home, List.of(state.forest().treeDirectory()), () -> {
             var result = new TreeMap<TreeId, GrayboxForestPlan.Header>();
             GrayboxForestPlan.compile(state.bootstrap()).knownBy(home).forEach(header -> result.put(header.tree().id(), header));
             var settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(home)).findFirst().orElseThrow();
@@ -57,9 +66,16 @@ public final class ForestKnowledge {
     /** Source quantity depends on forest generations/losses and declared knowledge,
      * not on another market draft's inventory, price or provisional reservation. */
     public static long remaining(FrontierWorldState state, SubjectId home, String species) {
-        return STOCKS.get(List.of(state.bootstrap(), state.forest().regions()), new Stock(home, species), () ->
-                knownBy(state, home).stream().filter(header -> header.species().equals(species))
-                        .mapToLong(header -> remaining(state, header)).sum());
+        return remainingBySpecies(state, home).getOrDefault(species, 0L);
+    }
+    /** Declared local forest amounts, updated only by knowledge or intersecting source regions. */
+    public static Map<String, Long> remainingBySpecies(FrontierWorldState state, SubjectId home) {
+        var homes = KNOWN_HOMES.getPublished(List.of(state.bootstrap(), state.forest().treeDirectory()), () -> {
+            var result = new HashMap<SubjectId, List<GrayboxForestPlan.Header>>();
+            state.bootstrap().settlements().forEach(settlement -> result.put(settlement.id(), knownBy(state, settlement.id())));
+            return ImmutableLookupMap.copyOf(result);
+        });
+        return AVAILABLE.project(state.bootstrap(), homes, state).getOrDefault(home, Map.of());
     }
     public static Optional<Log> at(FrontierWorldState state, BlockPosition position) {
         Log found = null;

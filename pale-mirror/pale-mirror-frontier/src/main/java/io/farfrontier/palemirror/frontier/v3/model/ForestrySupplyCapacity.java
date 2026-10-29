@@ -8,11 +8,18 @@ import java.util.*;
 
 /** Forestry-owned finite source and labour projection, backed by declared trees and tools. */
 final class ForestrySupplyCapacity implements SupplyCapacityPort {
+    private final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> valuations = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     public Key key() { return Key.FORESTRY; }
     public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window) {
         return assess(state, home, stocks, window);
     }
     public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        if (!ForestryStockDemand.enabled(state, home)) return List.of();
+        var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
+        inputs.add(stocks); inputs.add(ForestKnowledge.remainingBySpecies(state, home));
+        return valuations.getPublished(state.bootstrap(), home, inputs, () -> valueInstalled(state, home, stocks));
+    }
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
         if (!ForestryStockDemand.enabled(state, home)
                 || SupplyLabourCapacity.potential(state, home, ResidentWorkKind.FORESTRY, HumanCapability.EXTRACTION).isEmpty()) return List.of();
         var result = new ArrayList<ProductionCost>();

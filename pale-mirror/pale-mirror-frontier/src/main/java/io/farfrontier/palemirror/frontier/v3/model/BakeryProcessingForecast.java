@@ -6,13 +6,20 @@ import java.util.OptionalLong;
 /** Bakery-owned processing estimate for a complete operation. Transport/service latency is separate.
  * No route search, assignment mutation or market recursion. */
 final class BakeryProcessingForecast {
+    private static final ImmutableKeyedInputView<SubjectId, java.util.Optional<Capacity>> VALUATIONS = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     record Capacity(SubjectId station, long firstOutputDelay, long batchTicks, long labourTicks,
                     java.util.Map<String, Long> labourCapacity) { }
     static java.util.Optional<Capacity> valuation(FrontierWorldState state, SubjectId home) {
         var recipe = BakeryRecipes.bread(state);
-        var stations = AutomaticStationProduction.stations(state, home, recipe);
+        var stations = InstalledStationFacts.forRecipe(state, home, recipe);
+        var inputs = new java.util.ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home)); inputs.add(stations);
+        return VALUATIONS.getPublished(state.bootstrap(), home, inputs, () -> valueInstalled(state, home));
+    }
+    private static java.util.Optional<Capacity> valueInstalled(FrontierWorldState state, SubjectId home) {
+        var recipe = BakeryRecipes.bread(state);
+        var stations = InstalledStationFacts.forRecipe(state, home, recipe);
         if (stations.isEmpty()) return java.util.Optional.empty();
-        var station = stations.getFirst().productionStation().orElseThrow();
+        var station = stations.getFirst().station();
         var definition = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
         long operationWork = operationWork(recipe, definition);
         if (recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)

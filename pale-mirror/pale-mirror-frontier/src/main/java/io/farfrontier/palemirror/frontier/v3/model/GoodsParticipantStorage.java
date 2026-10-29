@@ -25,8 +25,7 @@ public final class GoodsParticipantStorage {
     /** Actual positions of the current eligible warehouse scope. Cost estimates
      * consume these values; they never acquire storage or movement authority. */
     public static List<BlockPosition> positions(FrontierWorldState state, GoodsParticipant participant, String kind) {
-        return containers(state, participant, kind).stream()
-                .map(id -> state.inventory().surfaces().get(id).position(state)).toList();
+        return GoodsStorageFacts.positions(state, participant, kind);
     }
     /** Resolve an exact previously selected container declaration, including a retired one needed for disposition. */
     public static ShipmentEndpoint endpoint(FrontierWorldState state, SubjectId container) {
@@ -40,11 +39,7 @@ public final class GoodsParticipantStorage {
         return containers(state, participant, kind).contains(container);
     }
     public static int unclaimed(FrontierWorldState state, GoodsParticipant participant, SubjectId container, String kind) {
-        if (GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), kind).representation()
-                == GoodsStockSpecification.Representation.INDIVIDUAL)
-            return individualStock(state, participant, container, kind).size();
-        return FungibleResourceCustodySupport.accountAtContainer(state, container).map(account ->
-                state.inventory().fungibleResources().unclaimedQuantity(account.id(), participant.party().id(), kind)).orElse(0);
+        return GoodsStorageFacts.at(state, participant, container, kind);
     }
     public static List<ExactItemStack> individualStock(FrontierWorldState state, GoodsParticipant participant, SubjectId container, String kind) {
         var specification = GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), kind);
@@ -55,8 +50,12 @@ public final class GoodsParticipantStorage {
                 .sorted(Comparator.comparingInt((ExactItemStack item) -> item.condition().damage()).thenComparing(ExactItemStack::id)).toList();
     }
     public static int unclaimed(FrontierWorldState state, GoodsParticipant participant, String kind) {
-        return containers(state, participant, kind).stream().mapToInt(container -> unclaimed(state, participant, container, kind))
-                .reduce(0, Math::addExact);
+        GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), kind);
+        return unclaimed(state, participant).getOrDefault(kind, 0);
+    }
+    /** Published owner-local amounts; no per-read commodity/container traversal. */
+    static Map<String, Integer> unclaimed(FrontierWorldState state, GoodsParticipant participant) {
+        return GoodsStorageFacts.stock(state, participant);
     }
     /** Alternative exact quote locations, not independent stock budgets. Matching rechecks the shared intent. */
     public record QuoteEndpoint(ShipmentEndpoint endpoint, int quantity) {

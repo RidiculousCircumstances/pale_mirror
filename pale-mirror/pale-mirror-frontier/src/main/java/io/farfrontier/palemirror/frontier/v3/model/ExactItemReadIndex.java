@@ -9,6 +9,11 @@ final class ExactItemReadIndex {
     private record Owner(SubjectId id) implements Scope { }
     private record Kind(SubjectId owner, String kind) implements Scope { }
     private static final ImmutableGroupView<SubjectId, ExactItemStack, Scope> ITEMS = new ImmutableGroupView<>();
+    private static final ImmutableGroupView<SubjectId, ExactItemStack, SubjectId> CONTAINERS = new ImmutableGroupView<>();
+    static Map<SubjectId, List<ExactItemStack>> containers(ExactInventory inventory) {
+        return CONTAINERS.groupedRows(CONTAINERS, inventory.items(), item ->
+                item.custody() instanceof InventoryCustody.ContainerSlot slot ? Set.of(slot.containerId()) : Set.of());
+    }
     static List<ExactItemStack> owned(ExactInventory inventory, SubjectId owner) {
         return rows(inventory, new Owner(owner));
     }

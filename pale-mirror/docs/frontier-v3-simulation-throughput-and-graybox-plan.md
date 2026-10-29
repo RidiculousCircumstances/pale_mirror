@@ -5947,3 +5947,12 @@ A bounded separate CPU/allocation capture can establish the affected producer co
 Deploy the verified candidate to both runtimes and report throughput/debt alongside
 measurement limits. Neither a paired gain nor a source-only bound closes G or
 five-player/HOT acceptance. No further optimization breadth in this delivery.
+
+## Owner-published economic inputs — 2026-10-29
+
+The approved follow-up replaces whole-world valuation invalidation with immutable
+producer-local facts across all seven existing supply valuation ports. Design,
+equivalence results, verification limits and paired runtime receipts are in
+[Owner facts at the economic input boundary](frontier-v3-owner-facts-boundary.md).
+No Reactor runtime adoption, persistence schema or admission-owner change.
+The overall canonical20/no-debt goal remains open pending actual native evidence.

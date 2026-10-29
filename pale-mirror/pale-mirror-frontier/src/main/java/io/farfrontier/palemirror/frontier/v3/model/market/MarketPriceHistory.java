@@ -11,6 +11,18 @@ public record MarketPriceHistory(Map<String, List<Sale>> commodities) {
     public static final int MAX_SALES = 32;
     private static final io.farfrontier.palemirror.frontier.v3.model.ImmutableResultView<Long, Optional<FixedScalar>> REFERENCES =
             new io.farfrontier.palemirror.frontier.v3.model.ImmutableResultView<>(MAX_COMMODITIES);
+    private static final io.farfrontier.palemirror.frontier.v3.model.ImmutableKeyedInputView<Long, Map<String, FixedScalar>> REFERENCE_IMAGES =
+            new io.farfrontier.palemirror.frontier.v3.model.ImmutableKeyedInputView<>(16);
+    /** Current completed-sale value image. Equal price references keep their identity
+     * even when a new observation arrives; this is not an executable market quote. */
+    public Map<String, FixedScalar> references(long recencyTicks) {
+        if (recencyTicks < 1) throw new IllegalArgumentException("invalid market recency horizon");
+        return REFERENCE_IMAGES.getPublished(MarketPriceHistory.class, recencyTicks, List.of(commodities), () -> {
+            var result = new HashMap<String, FixedScalar>();
+            commodities.keySet().forEach(kind -> reference(kind, recencyTicks).ifPresent(price -> result.put(kind, price)));
+            return Map.copyOf(result);
+        });
+    }
     public record Sale(SubjectId receipt, SubjectId seller, SubjectId buyer, long atTick,
                        int quantity, FixedScalar unitPrice, FixedScalar deliveryUnitPrice) {
         public Sale(SubjectId receipt, SubjectId seller, SubjectId buyer, long atTick, int quantity, FixedScalar unitPrice) {

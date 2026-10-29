@@ -7,19 +7,24 @@ import java.util.*;
 
 /** Installed automatic equipment advertises finite throughput and actual stored energy to the common planner. */
 final class AutomaticStationSupplyCapacity implements SupplyCapacityPort {
+    private final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> valuations = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     @Override public Key key() { return Key.AUTOMATIC_STATIONS; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
         return assess(state, home, stocks, window);
     }
     @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        return valuations.getPublished(state.bootstrap(), home, List.of(stocks, InstalledStationFacts.in(state, home)),
+                () -> valueInstalled(state, home, stocks));
+    }
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
         var result = new ArrayList<ProductionCost>(); var catalog = state.bootstrap().ruleset().production();
         var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.burnTicks()));
         for (var policy : catalog.automaticPolicies()) {
             var recipe = catalog.require(policy.recipeId());
-            for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
+            for (var record : InstalledStationFacts.forRecipe(state, home, recipe)) {
                 var inputs = ProductionRecipeInputs.select(recipe, kind -> -(stocks.containsKey(kind) ? stocks.get(kind).covered() : 0L));
-                result.add(new ProductionCost(recipe.id().value() + "/" + record.productionStation().orElseThrow().id().value(),
+                result.add(new ProductionCost(recipe.id().value() + "/" + record.station().id().value(),
                         recipe.product().itemKind(), recipe.product().quantity(), inputs,
                         recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), fuels, 0, 1));
             }

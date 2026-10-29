@@ -7,11 +7,17 @@ import java.util.*;
 
 /** Stock recipe capacity uses the shared finite labour envelope; a machine is not a worker. */
 final class AttendedStockSupplyCapacity implements SupplyCapacityPort {
+    private final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> valuations = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     public Key key() { return Key.ATTENDED_STOCK; }
     public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window) {
         return assess(state, home, stocks, window);
     }
     public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
+        inputs.add(stocks); inputs.add(InstalledStationFacts.in(state, home));
+        return valuations.getPublished(state.bootstrap(), home, inputs, () -> valueInstalled(state, home, stocks));
+    }
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
         var workers = SupplyLabourCapacity.potential(state, home, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY);
         if (workers.isEmpty()) return List.of();
         var result = new ArrayList<ProductionCost>();
@@ -21,8 +27,8 @@ final class AttendedStockSupplyCapacity implements SupplyCapacityPort {
             int speed = workers.stream().mapToInt(worker -> ResidentWorkStatistics.speedPermille(worker, definition, state.bootstrap().ruleset().workCatalog())).min().orElseThrow();
             long duration = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
             var inputs = ProductionRecipeInputs.select(recipe, kind -> -(stocks.containsKey(kind) ? stocks.get(kind).covered() : 0L));
-            for (var record : AutomaticStationProduction.stations(state, home, recipe))
-                result.add(new ProductionCost(recipe.id().value() + "/" + record.productionStation().orElseThrow().id().value(),
+            for (var record : InstalledStationFacts.forRecipe(state, home, recipe))
+                result.add(new ProductionCost(recipe.id().value() + "/" + record.station().id().value(),
                         recipe.product().itemKind(), recipe.product().quantity(), inputs,
                         recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), Map.of(), duration, 1));
         }

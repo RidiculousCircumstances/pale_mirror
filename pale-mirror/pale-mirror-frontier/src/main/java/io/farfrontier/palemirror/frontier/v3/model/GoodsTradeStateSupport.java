@@ -198,10 +198,12 @@ public final class GoodsTradeStateSupport {
 
     public static FrontierWorldState retire(FrontierWorldState state, SubjectId subject, GoodsTradeRetired retired, long now) {
         if (!subject.equals(GoodsTradeMarketIdentity.OWNER) || state.physicalIntents().values().stream()
-                .anyMatch(i -> retired.contractIds().contains(i.causeSubjectId()) || retired.orderIds().contains(i.causeSubjectId())
-                        || i.subjectIds().stream().anyMatch(id -> retired.contractIds().contains(id) || retired.orderIds().contains(id)))) {
+                .anyMatch(i -> retired.contractIds().contains(i.causeSubjectId()) || retired.orderIds().contains(i.causeSubjectId()))) {
             throw new IllegalArgumentException("goods retirement lacks the process owner or retains a physical effect");
         }
+        // No registered physical role schema carries an order/contract role.
+        // Commercial effects retain shipment authorization below; typed relation
+        // closure guards the transition. Never mine compatibility subject lists.
         var trade = state.companies().goodsTrade().retire(retired, now);
         if (state.shipments().shipments().values().stream().anyMatch(s -> (!s.terminal() || s.reception().isPresent())
                 && retired.contractIds().contains(s.authorization().claimantId())))

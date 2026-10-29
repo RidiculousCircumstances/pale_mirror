@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 
 /** Bounded canonical register for every deterministic renewable site in one Frontier v3 world. */
@@ -13,6 +14,25 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
                                 Map<CellMutationKey, ResourceFieldCellObserved> pendingWorldChanges,
                                 Map<CellMutationKey, ResourceFieldForeignChangeHeld> pendingForeignChanges,
                                 Map<SubjectId, CultivationReview> cultivation) {
+    private static final ImmutableInputView<Map<CellMutationKey, CellMutationKey>> WORLD_PENDING = new ImmutableInputView<>();
+    private static final ImmutableInputView<Map<CellMutationKey, CellMutationKey>> FOREIGN_PENDING = new ImmutableInputView<>();
+    private static final ImmutableGroupView<CellMutationKey, CellMutationKey, SubjectId> WORLD_BY_SITE = new ImmutableGroupView<>();
+    private static final ImmutableGroupView<CellMutationKey, CellMutationKey, SubjectId> FOREIGN_BY_SITE = new ImmutableGroupView<>();
+    /** Presence is the field capacity dependency; changed observation details and
+     * another field's mutations do not change these local address facts. */
+    List<Object> cellMutationInputs(SubjectId site) {
+        var world = pendingKeys(pendingWorldChanges, WORLD_PENDING);
+        var foreign = pendingKeys(pendingForeignChanges, FOREIGN_PENDING);
+        return java.util.List.of(WORLD_BY_SITE.unorderedRows(ResourceSiteState.class, world, key -> java.util.Set.of(key.owner()), site),
+                FOREIGN_BY_SITE.unorderedRows(ResourceSiteState.class, foreign, key -> java.util.Set.of(key.owner()), site));
+    }
+    private static Map<CellMutationKey, CellMutationKey> pendingKeys(Map<CellMutationKey, ?> source,
+            ImmutableInputView<Map<CellMutationKey, CellMutationKey>> view) {
+        return view.getPublished(java.util.List.of(source), () -> {
+            var result = new java.util.HashMap<CellMutationKey, CellMutationKey>(); source.keySet().forEach(key -> result.put(key, key));
+            return ImmutableLookupMap.copyOf(result);
+        });
+    }
     public static final int MAX_SITES = 1024;
     private static final ImmutableNestedMapView<SubjectId, ResourceSiteLifecycle, SubjectId, ResourceSiteHarvestJob> HARVEST_DIRECTORY =
             new ImmutableNestedMapView<>(MAX_SITES, MAX_SITES * ResourceSiteLifecycle.MAX_HARVEST_WORKERS);

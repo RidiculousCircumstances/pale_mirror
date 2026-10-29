@@ -8,6 +8,15 @@ import java.util.*;
 public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Map<SubjectId, ExtractionWork> work, long nextWorkOrdinal,
         io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions geologicalExclusions,
         MineralGeology geology, GeologicalKnowledge knowledge) {
+    private static final io.farfrontier.palemirror.frontier.v3.model.ImmutableInputView<Map<SubjectId, ExtractionDeposit>> DEPOSIT_IMAGE =
+            new io.farfrontier.palemirror.frontier.v3.model.ImmutableInputView<>();
+    private static final io.farfrontier.palemirror.frontier.v3.model.ImmutableGroupView<SubjectId, ExtractionDeposit, SubjectId> LOCAL_DEPOSITS =
+            new io.farfrontier.palemirror.frontier.v3.model.ImmutableGroupView<>();
+    /** Read-only local worksite declarations; no planner or worker allocation. */
+    public List<ExtractionDeposit> depositsIn(SubjectId home) {
+        var image = DEPOSIT_IMAGE.get(List.of(deposits), () -> io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap.copyOf(deposits));
+        return LOCAL_DEPOSITS.unorderedRows(ExtractionSiteState.class, image, deposit -> Set.of(deposit.site().settlementId()), home);
+    }
     public static final int MAX_WORK = io.farfrontier.palemirror.frontier.v3.model.SimulationCapacity.MAX_EXTRACTION_WORK;
     public ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits) { this(deposits, Map.of(), 1); }
     public ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Map<SubjectId, ExtractionWork> work, long nextWorkOrdinal) {

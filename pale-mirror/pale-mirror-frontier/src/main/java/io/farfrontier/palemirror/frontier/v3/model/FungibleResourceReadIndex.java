@@ -9,7 +9,37 @@ final class FungibleResourceReadIndex {
     private record Quantities(int held, int available) {
         private static final Quantities ZERO = new Quantities(0, 0);
     }
-    private record Available(Map<Balance, Quantities> quantities) { }
+    record Available(Map<Balance, Quantities> quantities) {
+        Map<SubjectId, Map<String, Integer>> unclaimed() {
+            var result = new HashMap<SubjectId, Map<String, Integer>>();
+            quantities.forEach((key, value) -> result.computeIfAbsent(key.owner(), ignored -> new HashMap<>())
+                    .put(key.kind(), value.available()));
+            result.replaceAll((owner, values) -> Map.copyOf(values)); return Map.copyOf(result);
+        }
+    }
+    private static final ImmutableNestedMapView<SubjectId, CustodyAccount, SubjectId, CustodyAccount> STOCK_ACCOUNTS =
+            new ImmutableNestedMapView<>(FungibleResourceLedger.MAX_ACCOUNTS, FungibleResourceLedger.MAX_ACCOUNTS);
+    private static final ImmutableReferenceIndex.Source<FungibleResourceLedger, SubjectId, ResourceLot> LOTS =
+            new ImmutableReferenceIndex.Source<>(FungibleResourceLedger::lots);
+    private static final ImmutableReferenceIndex.Source<FungibleResourceLedger, SubjectId, ClaimAllocation> CLAIMS =
+            new ImmutableReferenceIndex.Source<>(FungibleResourceLedger::claims);
+    private static final ImmutableReadProjection<FungibleResourceLedger, SubjectId, CustodyAccount, Available> STOCKS =
+            new ImmutableReadProjection<>(FungibleResourceLedger.MAX_ACCOUNTS,
+                    FungibleResourceLedger.MAX_LOTS + FungibleResourceLedger.MAX_CLAIMS, List.of(LOTS, CLAIMS),
+                    (ledger, account) -> {
+                        var reads = new ArrayList<ImmutableReferenceIndex.Read<FungibleResourceLedger>>();
+                        account.lotQuantities().keySet().forEach(id -> reads.add(LOTS.at(id)));
+                        account.claimQuantities().keySet().forEach(id -> reads.add(CLAIMS.at(id))); return reads;
+                    }, (ledger, account) -> new Available(balances(ledger, account)));
+    /** Container-addressed absence and amounts, shared by inventory consumers.
+     * Lot title/quality and claims update only their declared account readers. */
+    static Map<SubjectId, Available> stockAvailability(FungibleResourceLedger ledger) {
+        requireUniqueContainerSections(ledger);
+        var accounts = STOCK_ACCOUNTS.project(STOCK_ACCOUNTS, ledger.accounts(), account ->
+                account.custody() instanceof ResourceCustody.Container holder && holder.section().equals(ContainerSectionId.STOCK)
+                        ? Map.of(holder.containerId(), account) : Map.of());
+        return STOCKS.project(STOCKS, accounts, ledger);
+    }
     private record Image(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                          Map<SubjectId, CustodyAccount> accounts,
                          Map<SubjectId, Available> available) { }

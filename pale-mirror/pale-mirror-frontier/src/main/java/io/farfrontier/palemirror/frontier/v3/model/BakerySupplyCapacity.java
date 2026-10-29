@@ -7,6 +7,7 @@ import java.util.*;
 
 /** Bakery-owned capability/timing adapter; neither reserves fuel nor grants machine custody. */
 final class BakerySupplyCapacity implements SupplyCapacityPort {
+    private final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> valuations = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     @Override public Key key() { return Key.BAKERY; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
@@ -14,6 +15,10 @@ final class BakerySupplyCapacity implements SupplyCapacityPort {
     }
     @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
         var capacity = BakeryProcessingForecast.valuation(state, home);
+        return valuations.getPublished(state.bootstrap(), home, List.of(capacity, stocks), () -> valueInstalled(state, home, stocks, capacity));
+    }
+    private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+            Optional<BakeryProcessingForecast.Capacity> capacity) {
         if (capacity.isEmpty()) return List.of();
         var recipe = BakeryRecipes.bread(state);
         return List.of(new ProductionCost(recipe.id().value(), recipe.product().itemKind(), recipe.product().quantity(),

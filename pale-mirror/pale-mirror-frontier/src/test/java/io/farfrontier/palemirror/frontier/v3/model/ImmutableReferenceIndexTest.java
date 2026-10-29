@@ -11,6 +11,33 @@ class ImmutableReferenceIndexTest {
     private static final ImmutableReferenceIndex.Source<Facts, Integer, String> VALUES = new ImmutableReferenceIndex.Source<>(Facts::values);
     private static final ImmutableReferenceIndex.Source<Facts, Integer, Integer> LINKS = new ImmutableReferenceIndex.Source<>(Facts::links);
 
+    @Test void publishedReadsTrackAbsenceCutOffEqualValuesAndRecoverAfterFailedProjection() {
+        var epoch = new Object(); var calls = new AtomicInteger();
+        var view = new ImmutableReadProjection<Facts, String, Declaration, String>(4, 1, List.of(VALUES),
+                (facts, row) -> List.of(VALUES.at(row.source())), (facts, row) -> {
+                    calls.incrementAndGet(); var value = facts.values().get(row.source());
+                    if ("broken".equals(value)) throw new IllegalArgumentException("invalid producer fact");
+                    return value == null ? "absent" : value;
+                });
+        var rows = ImmutableLookupMap.copyOf(Map.of("one", new Declaration(1), "two", new Declaration(2)));
+        var first = new Facts(ImmutableLookupMap.copyOf(Map.of(1, "a")), Map.of());
+        var published = view.project(epoch, rows, first); assertEquals(Map.of("one", "a", "two", "absent"), published);
+        var unrelated = new Facts(ImmutableLookupMap.withEntry(first.values(), 3, "foreign"), Map.of());
+        assertSame(published, view.project(epoch, rows, unrelated)); assertEquals(2, calls.get());
+        var equal = new Facts(ImmutableLookupMap.withEntry(unrelated.values(), 1, new String("a")), Map.of());
+        assertSame(published, view.project(epoch, rows, equal)); assertEquals(3, calls.get(), "new evidence is checked even if the value stays equal");
+        var inserted = new Facts(ImmutableLookupMap.withEntry(equal.values(), 2, "b"), Map.of());
+        assertEquals(Map.of("one", "a", "two", "b"), view.project(epoch, rows, inserted)); assertEquals(4, calls.get());
+        var removed = ImmutableLookupMap.withoutEntry(rows, "one");
+        assertEquals(Map.of("two", "b"), view.project(epoch, removed, inserted));
+        assertEquals(Map.of("one", "a", "two", "absent"), view.project(epoch, rows, first), "retained branches have their own complete read basis");
+        var broken = new Facts(ImmutableLookupMap.withEntry(first.values(), 1, "broken"), Map.of());
+        assertThrows(IllegalArgumentException.class, () -> view.project(epoch, rows, broken));
+        assertEquals(published, view.project(epoch, rows, first), "failure cannot poison a later valid image");
+        int before = calls.get(); view.project(new Object(), rows, first); assertEquals(before + 2, calls.get());
+        assertThrows(UnsupportedOperationException.class, () -> published.put("forged", "value"));
+    }
+
     @Test void exactReadsInvalidateOnRemovalReplacementFailureAndRecoveryWithoutTrustingOtherRows() {
         var epoch = new Object(); var calls = new AtomicInteger();
         var index = new ImmutableReferenceIndex<Facts, String, Declaration>(4, 4, List.of(VALUES),

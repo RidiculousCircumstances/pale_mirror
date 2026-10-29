@@ -13,7 +13,7 @@ final class StationRecipeValuation {
         var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.burnTicks()));
         for (var recipe : catalog.recipes()) {
             if (!selected.test(recipe) || recipe.processingMode() != ProductionRecipe.ProcessingMode.ATTENDED
-                    || AutomaticStationProduction.stations(state, home, recipe).isEmpty()) continue;
+                    || InstalledStationFacts.forRecipe(state, home, recipe).isEmpty()) continue;
             var definition = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
             var workers = SupplyLabourCapacity.potential(state, home, ResidentWorkKind.PRODUCTION, definition.capability());
             int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition,

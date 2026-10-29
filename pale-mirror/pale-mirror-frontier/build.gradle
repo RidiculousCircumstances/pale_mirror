@@ -13,9 +13,20 @@ dependencies {
 // Library-selection experiment only: absent from main, test and packaged runtime.
 sourceSets {
     reactorExperiment {
-        compileClasspath += sourceSets.main.output
-        runtimeClasspath += sourceSets.main.output
+        compileClasspath += sourceSets.main.output + sourceSets.testFixtures.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.testFixtures.output
     }
+}
+tasks.register('frontierV3OwnerFactsDiagnostic', JavaExec) {
+    group = 'verification'
+    description = 'Measures actual public valuation reads and exports exact answers on a retained checkpoint.'
+    classpath = sourceSets.testFixtures.runtimeClasspath
+    mainClass = 'io.farfrontier.palemirror.frontier.v3.model.FrontierV3OwnerFactsDiagnostic'
+    maxHeapSize = '4g'
+    workingDir = rootProject.layout.projectDirectory.asFile
+    def snapshot = providers.gradleProperty('ownerFactsSnapshot')
+    def output = providers.gradleProperty('ownerFactsOutput')
+    doFirst { args(snapshot.get(), output.get()) }
 }
 configurations.reactorExperimentImplementation.extendsFrom(configurations.implementation)
 dependencies {

@@ -12,6 +12,13 @@ public final class ImmutableKeyedInputView<K, V> {
         this.capacity = capacity;
     }
     public V get(Object generation, K key, List<Object> inputs, Supplier<V> compute) {
+        return get(generation, key, inputs, compute, false);
+    }
+    /** Producer-owned immutable publication: update evidence, retain equal value identity. */
+    public V getPublished(Object generation, K key, List<Object> inputs, Supplier<V> compute) {
+        return get(generation, key, inputs, compute, true);
+    }
+    private V get(Object generation, K key, List<Object> inputs, Supplier<V> compute, boolean publish) {
         Objects.requireNonNull(generation); Objects.requireNonNull(key); Objects.requireNonNull(compute);
         var views = generations.get(List.of(generation), () -> new LinkedHashMap<>(16, 0.75f, true));
         var view = views.get(key);
@@ -19,6 +26,6 @@ public final class ImmutableKeyedInputView<K, V> {
             if (views.size() >= capacity) views.remove(views.keySet().iterator().next());
             view = new ImmutableInputView<>(); views.put(key, view);
         }
-        return view.get(inputs, compute);
+        return publish ? view.getPublished(inputs, compute) : view.get(inputs, compute);
     }
 }

@@ -12,11 +12,19 @@ public final class ImmutableInputView<T> {
     }
     private final ThreadLocal<Entry<T>> local = ThreadLocal.withInitial(Entry::new);
     public T get(List<Object> current, Supplier<T> compute) {
+        return get(current, compute, false);
+    }
+    /** Only complete immutable values may cut off downstream invalidation by equality. */
+    public T getPublished(List<Object> current, Supplier<T> compute) {
+        return get(current, compute, true);
+    }
+    private T get(List<Object> current, Supplier<T> compute, boolean shareEqualValue) {
         return ImmutablePlanningScope.get(this, current, () -> {
             var entry = local.get();
             if (entry.value == null || !ImmutablePlanningScope.same(entry.inputs, current)) {
                 T next = Objects.requireNonNull(compute.get());
-                entry.inputs = List.copyOf(current); entry.value = next;
+                entry.inputs = List.copyOf(current);
+                if (!shareEqualValue || !Objects.equals(entry.value, next)) entry.value = next;
             }
             return entry.value;
         });

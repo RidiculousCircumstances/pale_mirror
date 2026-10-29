@@ -20,8 +20,8 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
     @Override public List<ProductionCost> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
         var query = new ValuationQuery(home, stocks.keySet());
         var inputs = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home));
-        inputs.add(state.extractionSites().deposits());
-        return VALUATIONS.get(state.bootstrap(), query, inputs, () -> valueInstalled(state, home, query.products()));
+        inputs.add(state.extractionSites().depositsIn(home));
+        return VALUATIONS.getPublished(state.bootstrap(), query, inputs, () -> valueInstalled(state, home, query.products()));
     }
     private static List<ProductionCost> valueInstalled(FrontierWorldState state, SubjectId home, Set<String> products) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isEmpty()
@@ -34,7 +34,7 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
             var definition = state.bootstrap().ruleset().workCatalog().require(material.before().kind(), WorkOperation.EXTRACT);
             var workers = SupplyLabourCapacity.potential(state, home, ResidentWorkKind.EXTRACTION, definition.capability());
             if (workers.isEmpty()) continue;
-            var forecasts = state.extractionSites().deposits().values().stream().filter(d -> d.site().settlementId().equals(home))
+            var forecasts = state.extractionSites().depositsIn(home).stream()
                     .map(d -> ExtractionProductionForecast.valuation(state, d, material, workers)).filter(f -> f.outputs() > 0).toList();
             long reachable = forecasts.stream().mapToLong(f -> f.outputs()).sum();
             if (reachable == 0) continue;
@@ -46,7 +46,7 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
     }
     private static List<BlockExtraction.Definition> materials(FrontierWorldState state, SubjectId home) {
         var materials = new HashSet<BlockExtraction.Definition>();
-        for (var deposit : state.extractionSites().deposits().values()) if (deposit.site().settlementId().equals(home))
+        for (var deposit : state.extractionSites().depositsIn(home))
             materials.addAll(deposit.presentMaterials());
         return materials.stream().sorted(Comparator.comparing(BlockExtraction.Definition::id)).toList();
     }
@@ -71,7 +71,7 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
                     io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentRequirements.allOf(Set.of(material.toolRequirement())));
             var workers = candidates.stream().limit(equipment.size()).toList();
             if (workers.isEmpty()) continue;
-            var forecasts = state.extractionSites().deposits().values().stream().filter(d -> d.site().settlementId().equals(home))
+            var forecasts = state.extractionSites().depositsIn(home).stream()
                     .map(d -> ExtractionProductionForecast.assess(state, d, material, workers)).filter(f -> f.outputs() > 0).toList();
             if (forecasts.isEmpty()) continue;
             long reachable = forecasts.stream().mapToLong(f -> f.outputs()).sum();

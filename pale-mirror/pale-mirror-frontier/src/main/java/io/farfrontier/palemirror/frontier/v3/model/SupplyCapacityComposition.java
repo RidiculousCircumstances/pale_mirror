@@ -14,7 +14,8 @@ public final class SupplyCapacityComposition {
     private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(
             new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity(), new AutomaticStationSupplyCapacity(),
             new IndividualStationSupplyCapacity(), new AttendedStockSupplyCapacity(), new ForestrySupplyCapacity()));
-    private static final ImmutableInputView<ImmutableResultView<SubjectId, List<ProductionCost>>> VALUATIONS = new ImmutableInputView<>();
+    private static final ImmutableKeyedInputView<GoodsParticipantScope, Map<String, SupplyPlanner.Stock>> STOCKS = new ImmutableKeyedInputView<>(GoodsParticipantState.MAX_PARTICIPANTS);
+    private static final ImmutableKeyedInputView<GoodsParticipantScope, List<ProductionCost>> VALUATIONS = new ImmutableKeyedInputView<>(GoodsParticipantState.MAX_PARTICIPANTS);
     private SupplyCapacityComposition() { }
     public static Map<SupplyCapacityPort.Key, SupplyCapacityPort> register(List<SupplyCapacityPort> ports) {
         var result = new EnumMap<SupplyCapacityPort.Key, SupplyCapacityPort>(SupplyCapacityPort.Key.class);
@@ -25,24 +26,27 @@ public final class SupplyCapacityComposition {
     /** Local replacement costs need physical capabilities, not a reserve or market plan.
      * No target/incoming promise is manufactured by this valuation-only projection. */
     static List<ProductionCost> forValuation(FrontierWorldState state, GoodsParticipant participant) {
-        // A changed whole-world input already invalidates every subject's prior
-        // entry. Keep one current image per computing thread, rather than pinning
-        // a different obsolete world root for each subject under the bootstrap.
-        return VALUATIONS.get(List.of(state), () -> new ImmutableResultView<>(256))
-                .get(List.of(participant), participant.party().id(), () -> valueInstalled(state, participant));
+        if (!state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) return List.of();
+        var scope = GoodsParticipantScope.of(participant);
+        var amounts = GoodsParticipantStorage.unclaimed(state, participant);
+        var stocks = STOCKS.getPublished(state.bootstrap(), scope, List.of(amounts), () -> stocks(state, participant, amounts));
+        var declarations = new ArrayList<List<ProductionCost>>(PORTS.size());
+        for (var key : SupplyCapacityPort.Key.values()) declarations.add(PORTS.get(key).valuation(state, participant.settlementId(), stocks));
+        return VALUATIONS.getPublished(state.bootstrap(), scope, new ArrayList<>(declarations), () -> {
+            var result = new ArrayList<ProductionCost>();
+            declarations.forEach(result::addAll);
+            return List.copyOf(result);
+        });
     }
-    private static List<ProductionCost> valueInstalled(FrontierWorldState state, GoodsParticipant participant) {
+    private static Map<String, SupplyPlanner.Stock> stocks(FrontierWorldState state, GoodsParticipant participant, Map<String, Integer> amounts) {
         var stocks = new TreeMap<String, SupplyPlanner.Stock>();
         var rules = state.bootstrap().ruleset().goodsTrade();
-        if (!rules.supplyPlanning().enabled()) return List.of(); // This content declares no supply/cost model.
         for (var commodity : rules.policies().get(participant.policy())) {
             var kind = commodity.itemKind();
-            stocks.put(kind, new SupplyPlanner.Stock(GoodsParticipantStorage.unclaimed(state, participant, kind),
+            stocks.put(kind, new SupplyPlanner.Stock(amounts.getOrDefault(kind, 0),
                     0, 0, 0, 0, 0, 1, rules.supplyPlanning().require(kind)));
         }
-        var result = new ArrayList<ProductionCost>();
-        for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).valuation(state, participant.settlementId(), stocks));
-        return List.copyOf(result);
+        return Map.copyOf(stocks);
     }
     public static List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                   SupplyPlanningWindow window) {

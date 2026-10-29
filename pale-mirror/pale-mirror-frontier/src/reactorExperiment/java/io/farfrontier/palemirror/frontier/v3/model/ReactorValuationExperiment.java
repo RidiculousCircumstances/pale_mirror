@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import reactor.core.scheduler.Schedulers;
+import io.farfrontier.palemirror.frontier.v3.model.ValuationProbeScenarios.Sample;
+import static io.farfrontier.palemirror.frontier.v3.model.ValuationProbeScenarios.*;
 import java.lang.invoke.*;
 import java.lang.management.ManagementFactory;
 import java.nio.file.*;
@@ -14,19 +16,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * No engine, WAL replay, native acceptance, world writes or production cache replacement. */
 public final class ReactorValuationExperiment {
     private static final MethodHandle ASSESS;
-    private static final ImmutableInputView<ImmutableResultView<SubjectId, Map<String, FixedScalar>>> CURRENT_VALUES;
     private static final com.sun.management.ThreadMXBean THREADS =
             (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
     static {
         try {
             ASSESS = MethodHandles.privateLookupIn(GoodsResourceValuation.class, MethodHandles.lookup())
                     .findStatic(GoodsResourceValuation.class, "assess", MethodType.methodType(Map.class, FrontierWorldState.class, GoodsParticipant.class));
-            CURRENT_VALUES = (ImmutableInputView<ImmutableResultView<SubjectId, Map<String, FixedScalar>>>)
-                    MethodHandles.privateLookupIn(GoodsResourceValuation.class, MethodHandles.lookup())
-                            .findStaticVarHandle(GoodsResourceValuation.class, "VALUES", ImmutableInputView.class).get();
         } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
     }
-    record Sample(String name, FrontierWorldState state) { }
     record Stored(ValuationExperimentInputs.Basis basis, Map<String, FixedScalar> value) { }
     record Prepared(FrontierWorldState state, GoodsParticipant participant, ValuationExperimentInputs.Basis basis) { }
     private static Map<String, FixedScalar> compute(FrontierWorldState state, GoodsParticipant participant) {
@@ -35,11 +32,9 @@ public final class ReactorValuationExperiment {
     }
     private static Map<String, FixedScalar> current(FrontierWorldState state, GoodsParticipant participant, long tick) {
         if (tick < 0) throw new IllegalArgumentException("negative valuation instant");
-        // The unmodified CURRENT production memo and function. Read its whole vector
-        // in the same one lookup as replacement(), excluding an artificial per-item
-        // API loop/map reconstruction from A's measured cost. No production API edit.
-        return CURRENT_VALUES.get(List.of(state), () -> new ImmutableResultView<>(256))
-                .get(List.of(participant), participant.party().id(), () -> compute(state, participant));
+        // Current whole-vector owner boundary. Historical A is retained at d6e0c9603;
+        // a current rerun must not require the retired whole-world private cache.
+        return GoodsResourceValuation.values(state, participant, tick);
     }
     public static void main(String[] args) throws Exception {
         if (args.length != 2) throw new IllegalArgumentException("usage: <immutable snapshot.bin> <output directory>");
@@ -155,7 +150,7 @@ public final class ReactorValuationExperiment {
                 var state = sample.state(); var query = ValuationExperimentInputs.Query.of(p);
                 Map<String, FixedScalar> value;
                 if (mode.equals("A")) {
-                    value = current(state, p, tick); calls++; // one current-snapshot top-level memo miss per unique sample/party
+                    value = current(state, p, tick); calls++; // vector requests; the current production boundary can reuse values across snapshots
                 } else {
                     long before = System.nanoTime(); var basis = projection.capture(state, p);
                     projectionTime += System.nanoTime() - before;
@@ -188,48 +183,6 @@ public final class ReactorValuationExperiment {
                     + "," + calls + "," + changes + "," + wall + "," + cpuNanos + "," + bytes + "," + projectionTime + "," + equalityTime;
             if (round >= 0) System.out.println(row); return row;
         }
-    }
-    private static List<Sample> scenarios(FrontierWorldState state, GoodsParticipant home, GoodsParticipant foreign) {
-        var samples = new ArrayList<Sample>(); samples.add(new Sample("base", state));
-        samples.add(new Sample("irrelevant-resident-movement", move(state, foreign.settlementId())));
-        samples.add(new Sample("irrelevant-foreign-stock", removeOne(state, foreign)));
-        samples.add(new Sample("local-stock", removeOne(state, home)));
-        var resident = state.humanPopulation().residentsIn(home.settlementId()).getFirst();
-        var modifiers = resident.characteristics().workModifiers();
-        var changed = modifiers.with(new ResidentWorkModifiers.Modifier(new SubjectId("modifier:reactor-experiment"), HumanCapability.INDUSTRY, 500));
-        samples.add(new Sample("local-workforce", state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(
-                state.humanPopulation().changeWorkModifiers(resident.id(), modifiers, changed)))));
-        int day = state.humanPopulation().schedule(home.settlementId()).dayTicks();
-        var schedule = new SettlementDailySchedule(day, List.of(new SettlementDailySchedule.Segment(0, 1, SettlementDailySchedule.Window.WORK),
-                new SettlementDailySchedule.Segment(1, day, SettlementDailySchedule.Window.FREE)));
-        samples.add(new Sample("local-schedule", state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(
-                state.humanPopulation().withSchedule(home.settlementId(), schedule)))));
-        var station = state.inventory().containers().values().stream().filter(c -> c.ownerId().equals(home.settlementId())
-                && c.productionStation().isPresent()).findFirst().orElseThrow();
-        var conditions = ImmutableLookupMap.withEntry(state.structureConditions(), station.productionStation().orElseThrow().facilityId(), StructureCondition.DAMAGED);
-        samples.add(new Sample("local-station-unavailable", state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(conditions))));
-        return List.copyOf(samples);
-    }
-    private static FrontierWorldState move(FrontierWorldState state, SubjectId home) {
-        var id = state.humanPopulation().residentsIn(home).getFirst().id(); var old = state.actorLocations().get(id);
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(ImmutableLookupMap.withEntry(state.actorLocations(), id,
-                old.withBody(old.body().offset(1, 0, 0)))));
-    }
-    private static FrontierWorldState removeOne(FrontierWorldState state, GoodsParticipant p) {
-        var ledger = state.inventory().fungibleResources();
-        for (var kind : state.bootstrap().ruleset().goodsTrade().policies().get(p.policy())) {
-            for (var id : GoodsParticipantStorage.containers(state, p, kind.itemKind())) {
-                var account = FungibleResourceCustodySupport.accountAtContainer(state, id).orElse(null);
-                if (account == null || !account.claimQuantities().isEmpty()
-                        || ledger.bindings().values().stream().anyMatch(b -> b.accountId().equals(account.id()))) continue;
-                for (var entry : account.lotQuantities().entrySet()) {
-                    if (!ledger.lots().get(entry.getKey()).economicOwnerId().equals(p.party().id())) continue;
-                    return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory()
-                            .withFungibleResources(ledger.destroy(account.id(), Map.of(entry.getKey(), 1), Map.of()))));
-                }
-            }
-        }
-        throw new IllegalStateException("checkpoint has no unbound unclaimed local stock for actual removal");
     }
     private static void concurrency(FrontierWorldState state, GoodsParticipant p, List<Sample> samples, List<String> checks) throws Exception {
         var projection = new ValuationExperimentInputs(); var base = projection.capture(state, p);

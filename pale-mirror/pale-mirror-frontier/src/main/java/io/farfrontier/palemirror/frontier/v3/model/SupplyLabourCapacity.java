@@ -11,8 +11,7 @@ final class SupplyLabourCapacity {
     /** Complete dynamic reads of long-run potential. Current assignment, hunger
      * and feet position do not change a person's declared productive capacity. */
     static List<Object> potentialInputs(FrontierWorldState state, SubjectId home) {
-        return List.of(state.humanPopulation().residents(), state.humanPopulation().migrations(),
-                state.humanPopulation().schedule(home), ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()));
+        return List.of(ResidentWorkforceFacts.available(state, home), state.humanPopulation().schedule(home));
     }
     /** Long-run workforce potential ignores temporary activity/assignment. */
     static List<ResidentProfile> potential(FrontierWorldState state, SubjectId home, ResidentWorkKind work, HumanCapability capability) {
@@ -21,14 +20,11 @@ final class SupplyLabourCapacity {
         // Installed recipes repeatedly ask for the same long-run workforce.
         // Retain only its complete declared population/migration/life read set;
         // current body movement, stock reservations and market drafts are not it.
-        return POTENTIALS.get(state.bootstrap(), new Potential(home, work, capability), potentialInputs(state, home),
+        return POTENTIALS.getPublished(state.bootstrap(), new Potential(home, work, capability), potentialInputs(state, home),
                 () -> potential(state, home, capability, rule.targetWorkers()));
     }
     private static List<ResidentProfile> potential(FrontierWorldState state, SubjectId home, HumanCapability capability, int limit) {
-        return state.humanPopulation().residentsIn(home).stream()
-                .filter(r -> r.capability(capability) > 0
-                        && !state.humanPopulation().migrations().containsKey(r.id())
-                        && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
+        return ResidentWorkforceFacts.available(state, home).stream().filter(r -> r.capability(capability) > 0)
                 .sorted(Comparator.comparingInt((ResidentProfile r) -> r.capability(capability)).reversed().thenComparing(ResidentProfile::id))
                 .limit(limit).toList();
     }

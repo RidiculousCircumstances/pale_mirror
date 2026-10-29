@@ -6,14 +6,13 @@ import java.util.stream.Stream;
 /** Individual order commitments before machine admission and after transformation. */
 public final class StationWorkItemDeparture {
     public static Stream<SubjectId> reserved(FrontierWorldState state) {
-        return state.productionJobs().values().stream().filter(job -> job.stationWork().isPresent())
-                .filter(job -> job.stationWork().orElseThrow().phase() != StationWorkState.Phase.DELIVERED)
-                .flatMap(job -> {
-                    var work = job.stationWork().orElseThrow();
-                    if (work.maintenanceTarget().isPresent()) return Stream.of(work.maintenanceTarget().orElseThrow().itemId());
-                    return StationWorkCargo.output(job) && StationWorkProduct.individual(state, job)
-                            ? Stream.of(job.outputItemId()) : Stream.empty();
-                });
+        return state.productionJobs().values().stream().flatMap(job -> reserved(state, job).stream());
+    }
+    static java.util.Set<SubjectId> reserved(FrontierWorldState state, ProductionJob job) {
+        if (job.stationWork().isEmpty() || job.stationWork().orElseThrow().phase() == StationWorkState.Phase.DELIVERED) return java.util.Set.of();
+        var work = job.stationWork().orElseThrow();
+        if (work.maintenanceTarget().isPresent()) return java.util.Set.of(work.maintenanceTarget().orElseThrow().itemId());
+        return StationWorkCargo.output(job) && StationWorkProduct.individual(state, job) ? java.util.Set.of(job.outputItemId()) : java.util.Set.of();
     }
     public static boolean committed(FrontierWorldState state, SubjectId item) {
         return !StationExactItemDeparture.committed(state, item) && job(state, item) != null;

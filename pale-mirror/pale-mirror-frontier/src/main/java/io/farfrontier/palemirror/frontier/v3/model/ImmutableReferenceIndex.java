@@ -20,7 +20,7 @@ public final class ImmutableReferenceIndex<C, K, D> {
         @SuppressWarnings("unchecked")
         private boolean sameValue(Object before, Object after) { return unchanged.test((V) before, (V) after); }
         public Read<C> at(I key) { return new Binding<>(this, Objects.requireNonNull(key)); }
-        private Map<I, V> values(C context) { return Objects.requireNonNull(values.apply(context)); }
+        Map<I, V> values(C context) { return Objects.requireNonNull(values.apply(context)); }
     }
     public sealed interface Read<C> permits Binding {
         Source<C, ?, ?> source();

@@ -9,6 +9,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SupplyValuationReadTest {
+    @Test void ownerPublicationsSurviveForeignMovementAndStockButLocalWithdrawalUpdatesRealAmounts() {
+        var state = ConsolidatedTradeFixture.initial(new WorldId("frontier:published-valuation"), 126, false);
+        var p = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var peer = state.companies().goodsTrade().participants().participants().get(p.known().getFirst().party().id());
+        var stock = GoodsParticipantStorage.unclaimed(state, p);
+        assertEquals(0, GoodsParticipantStorage.unclaimed(state, p, new SubjectId("container:withdrawn-storage"), "minecraft:bread"));
+        var capacities = SupplyCapacityComposition.forValuation(state, p);
+        var prices = GoodsResourceValuation.values(state, p, 0);
+        var moving = ValuationProbeScenarios.move(state, peer.settlementId());
+        assertSame(stock, GoodsParticipantStorage.unclaimed(moving, p));
+        assertSame(capacities, SupplyCapacityComposition.forValuation(moving, p));
+        assertSame(prices, GoodsResourceValuation.values(moving, p, 1));
+        var foreignWithdrawal = ValuationProbeScenarios.removeOne(state, peer);
+        assertSame(stock, GoodsParticipantStorage.unclaimed(foreignWithdrawal, p));
+        assertSame(capacities, SupplyCapacityComposition.forValuation(foreignWithdrawal, p));
+        assertSame(prices, GoodsResourceValuation.values(foreignWithdrawal, p, 2));
+        var localWithdrawal = ValuationProbeScenarios.removeOne(state, p);
+        var updated = GoodsParticipantStorage.unclaimed(localWithdrawal, p);
+        assertEquals(stock.values().stream().mapToInt(Integer::intValue).sum() - 1, updated.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(stock, GoodsParticipantStorage.unclaimed(state, p), "counterfactual stock must not contaminate the base");
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(localWithdrawal));
+        var rp = recovered.companies().goodsTrade().participants().participants().get(p.party().id());
+        assertEquals(updated, GoodsParticipantStorage.unclaimed(recovered, rp));
+        assertEquals(GoodsResourceValuation.values(localWithdrawal, p, 3), GoodsResourceValuation.values(recovered, rp, 3));
+    }
     @Test void fieldCostCannotSurviveLossOfItsProductiveFieldAndRecoveryRebuildsIt() {
         var state = initial(); var id = state.resourceSites().sites().keySet().iterator().next();
         var events = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(id, 4000));

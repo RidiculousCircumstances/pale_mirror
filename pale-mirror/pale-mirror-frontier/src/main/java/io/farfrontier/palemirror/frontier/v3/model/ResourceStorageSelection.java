@@ -14,8 +14,7 @@ public final class ResourceStorageSelection {
         // Slot/layout edits do not change the declaration's owner membership.
         // Shared immutable deltas maintain candidates; current rows still supply
         // filters, roles and endpoints, in their producer's exact iteration order.
-        return OWNERS.keys(OWNERS, inventory.containers(), record -> Set.of(record.ownerId()), Objects.requireNonNull(owner))
-                .stream().map(inventory.containers()::get).toList();
+        return OWNERS.rows(OWNERS, inventory.containers(), record -> Set.of(record.ownerId()), Objects.requireNonNull(owner));
     }
 
     /** Declaration addresses only, including currently blocked custody for causal wake indexing. */
@@ -81,11 +80,11 @@ public final class ResourceStorageSelection {
     /** Read-only stock scope uses the same declared ownership/filter/tier as admission. */
     public static Set<SubjectId> containers(FrontierWorldState state, SubjectId owner, String kind, Set<ResourceStorageRole> roles) {
         var scope = new Scope(owner, kind, Set.copyOf(roles));
-        return ELIGIBLE.get(state.bootstrap(), scope, List.of(state.inventory().containers(), state.inventory().surfaces(),
-                state.replicaCustody(), ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations())),
-                () -> declared(state, owner, kind, scope.roles())
-                    .filter(policy -> !ReferenceContainerCustody.blocksCanonicalUse(state, policy.endpoint().containerId()))
-                    .map(policy -> policy.endpoint().containerId()).collect(java.util.stream.Collectors.toUnmodifiableSet()));
+        var facts = ResourceStorageFacts.owned(state, owner);
+        return ELIGIBLE.getPublished(state.bootstrap(), scope, List.of(facts), () -> facts.stream()
+                .filter(ResourceStorageFacts.Fact::usable).filter(row -> row.policy().filter(policy ->
+                        scope.roles().contains(policy.role()) && policy.filter().accepts(kind)).isPresent())
+                .map(ResourceStorageFacts.Fact::id).collect(java.util.stream.Collectors.toUnmodifiableSet()));
     }
     public static List<ShipmentEndpoint> declaredCandidates(FrontierWorldState state, SubjectId owner, String kind,
             SurfaceAnchor origin, Set<ResourceStorageRole> roles) {

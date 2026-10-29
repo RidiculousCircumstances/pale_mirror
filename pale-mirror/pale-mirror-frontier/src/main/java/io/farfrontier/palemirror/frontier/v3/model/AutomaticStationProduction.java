@@ -7,21 +7,12 @@ import java.util.*;
 public final class AutomaticStationProduction {
     public record Offer(ProductionOperation operation, List<ClaimAllocation> claims, long epoch) { }
     private record StationKey(SubjectId home, ProductionStationSpec.Capability capability) { }
-    private static final ImmutableInputView<Map<StationKey, List<ContainerRecord>>> INSTALLED = new ImmutableInputView<>();
+    private static final ImmutableKeyedInputView<StationKey, List<ContainerRecord>> INSTALLED = new ImmutableKeyedInputView<>(512);
     public static List<ContainerRecord> stations(FrontierWorldState state, SubjectId home, ProductionRecipe recipe) {
-        return INSTALLED.get(List.of(state.inventory().containers(), state.inventory().surfaces(), state.structureConditions()), () -> {
-            var grouped = new HashMap<StationKey, List<ContainerRecord>>();
-            for (var record : state.inventory().containers().values()) {
-                if (record.productionStation().isEmpty()) continue;
-                var spec = record.productionStation().orElseThrow();
-                var status = state.inventory().surfaces().get(record.id()).status();
-                if (status == ContainerSurfaceStatus.RETIRED || status == ContainerSurfaceStatus.CONFLICT
-                        || state.structureConditions().get(spec.facilityId()) != StructureCondition.INTACT) continue;
-                grouped.computeIfAbsent(new StationKey(record.ownerId(), spec.capability()), ignored -> new ArrayList<>()).add(record);
-            }
-            grouped.replaceAll((key, records) -> records.stream().sorted(Comparator.comparing(ContainerRecord::id)).toList());
-            return Map.copyOf(grouped);
-        }).getOrDefault(new StationKey(home, recipe.capability()), List.of());
+        var installed = InstalledStationFacts.forRecipe(state, home, recipe);
+        return INSTALLED.getPublished(state.bootstrap(), new StationKey(home, recipe.capability()),
+                List.of(installed, state.inventory().containers()), () -> installed.stream()
+                        .map(value -> state.inventory().containers().get(value.container())).toList());
     }
     public static Optional<ProductionCatalog.AutomaticPolicy> policy(FrontierWorldState state, ProductionStationSpec spec) {
         return state.bootstrap().ruleset().production().automaticPolicies().stream()
