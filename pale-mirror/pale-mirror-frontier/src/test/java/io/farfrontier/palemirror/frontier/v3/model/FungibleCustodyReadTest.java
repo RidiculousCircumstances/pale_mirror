@@ -100,6 +100,7 @@ class FungibleCustodyReadTest {
                 account.lotQuantities(), account.claimQuantities())));
         var duplicate = new FungibleResourceLedger(original.lots(), original.claims(), rows, original.bindings());
         assertThrows(IllegalArgumentException.class, () -> FungibleResourceReadIndex.actorAccounts(duplicate, ACTOR));
+        assertThrows(IllegalArgumentException.class, () -> FungibleResourceCustodySupport.changedContainerHolders(original, duplicate));
         assertEquals(before, FungibleResourceReadIndex.actorAccounts(original, ACTOR));
     }
 }

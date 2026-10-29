@@ -96,15 +96,18 @@ final class FungibleResourceReadIndex {
         return at(ledger, query, false);
     }
     private static List<CustodyAccount> at(FungibleResourceLedger ledger, Query query, boolean producerOrder) {
-        if (!SECTIONS.uniqueMemberships(FungibleResourceReadIndex.class, ledger.accounts(), account ->
-                account.custody() instanceof ResourceCustody.Container holder ? Set.of(holder) : Set.of()))
-            throw new IllegalArgumentException("container section has competing resource accounts");
+        requireUniqueContainerSections(ledger);
         // A unique container account and ID-sorted aggregate reads do not need
         // ranks for every other world account. accountsAt alone promises the
         // producer's order; it must retain that explicit ordered query.
         return producerOrder
                 ? CUSTODIES.rows(FungibleResourceReadIndex.class, ledger.accounts(), FungibleResourceReadIndex::memberships, query)
                 : CUSTODIES.unorderedRows(FungibleResourceReadIndex.class, ledger.accounts(), FungibleResourceReadIndex::memberships, query);
+    }
+    static void requireUniqueContainerSections(FungibleResourceLedger ledger) {
+        if (!SECTIONS.uniqueMemberships(FungibleResourceReadIndex.class, ledger.accounts(), account ->
+                account.custody() instanceof ResourceCustody.Container holder ? Set.of(holder) : Set.of()))
+            throw new IllegalArgumentException("container section has competing resource accounts");
     }
     private static Set<Query> memberships(CustodyAccount account) {
         var groups = new HashSet<Query>(); groups.add(new HolderQuery(account.custody()));

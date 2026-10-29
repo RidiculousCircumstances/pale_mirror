@@ -76,11 +76,15 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
             before.forEach((id, machine) -> { if (!Objects.equals(machine, after.get(id))) keys.add(id); });
             after.forEach((id, machine) -> { if (!before.containsKey(id)) keys.add(id); });
         }
-        if (previous.inventory().fungibleResources().accounts() != next.inventory().fungibleResources().accounts())
-            after.forEach((id, machine) -> {
-                var container = ProductionStationEnergy.record(next, id).id();
-                if (inputAccount(previous, container) != inputAccount(next, container)) keys.add(id);
-            });
+        for (var holder : FungibleResourceCustodySupport.changedContainerHolders(
+                previous.inventory().fungibleResources(), next.inventory().fungibleResources())) {
+            if (!holder.section().equals(ContainerSectionId.INPUT)) continue;
+            var record = next.inventory().containers().get(holder.containerId());
+            if (record == null || record.productionStation().isEmpty()) continue;
+            var station = record.productionStation().orElseThrow().id();
+            if (after.containsKey(station) && inputAccount(previous, holder.containerId()) != inputAccount(next, holder.containerId()))
+                keys.add(station);
+        }
         return Set.copyOf(keys);
     }
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant now) {

@@ -5324,3 +5324,39 @@ recovery. No new tests or product semantics were added for this query correction
 Evidence local-custody-order-focus.log and corresponding frontier XML reports.
 fd7e782bd both retained deployments verified; no independent capacity window was
 claimed between these connected source-locality cuts. Frozen package follows.
+
+
+### Station wake notifications from exact changed container holders
+
+cf0147138 both retained deployments verified. Its ordinary16cut window is running;
+no build/profile/client overlaps it. The same47e4JFR shows ProductionStationProcessModule
+wakeKeys108 inclusive owner CPU samples, inputAccount102. Source confirms that every
+resource-account edit scans ALL installed stations and alternates old/new input
+lookups for each one. An actor pickup or meal therefore rereads station inputs
+around the entire world although none changed. Repeated old/new reads also churn
+the shared current-registry inverse even after removing key ranks.
+
+Add a shared read-only exact changed-container-holder query over immutable account
+deltas. Include old and new holders/sections on a move and the old holder on removal;
+claim/presentation-only row replacements still count. Preserve global container-section
+uniqueness before querying either changed ledger, including unrelated holders. The
+station owner selects only its INPUT holders, resolves their explicit installed
+station declaration, and retains the original actual old/new input-row comparison.
+Machine mutation wake detection and per-station hold proof remain unchanged. This
+is the common inventory delta feeding its registered domain owner, not event-kind
+inference, actor/recipe dispatch, new work authority or a timer-based retry.
+
+Existing real input/codec journey adds non-input fuel (no spurious station wake),
+input transfer between two stations (both wake), removal (old recipient wakes), and
+predecessor re-read. Existing duplicate-section negative also exercises the delta
+query; no query is allowed to hide globally competing container accounts. Focus
+will start only after the running ordinary observation completes.
+
+cf0147138 ordinary window304.259926s330648->334498=12.653655/s,debt1559->3794,
+no build/profile/client overlap. New town35terminalharvest14; retained accepted
+quantities unchanged in5samples. Hungry1:0->1,7:0->0,35:1->0,68:3->9,100:2->1;
+all5starving0. This remains sub20, not an isolated A/B gain claim. Evidence
+local-custody-order-ordinary/. Connected station-wake focus passed50tests0failures72s
++guardrails, including actual automatic feed/processing, attendance, fuel, lifecycle,
+multiple material/recipe work, transport, holder order and global duplicate-section
+negative. No extra timer/retry/cache was introduced. Receipt local-station-wake-focus.log.

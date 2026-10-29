@@ -15,6 +15,25 @@ public final class FungibleResourceCustodySupport {
     public static java.util.List<CustodyAccount> accountsAt(FungibleResourceLedger ledger, ResourceCustody holder) {
         return FungibleResourceReadIndex.accountsAt(Objects.requireNonNull(ledger), holder);
     }
+    /** Exact changed account holders, including both ends of a move and the
+     * previous holder of a removed account. Claim/presentation row changes also
+     * count; this delta supplies no resource, process or interaction authority. */
+    public static java.util.Set<ResourceCustody.Container> changedContainerHolders(
+            FungibleResourceLedger before, FungibleResourceLedger after) {
+        Objects.requireNonNull(before); Objects.requireNonNull(after);
+        if (before.accounts() == after.accounts()) return java.util.Set.of();
+        // A delta query must preserve the ordinary ledger read's global
+        // container-section uniqueness, including an unrelated changed holder.
+        FungibleResourceReadIndex.requireUniqueContainerSections(before);
+        FungibleResourceReadIndex.requireUniqueContainerSections(after);
+        var holders = new java.util.HashSet<ResourceCustody.Container>();
+        ImmutableMapChanges.forEachIdentityChangedKey(before.accounts(), after.accounts(), id -> {
+            var old = before.accounts().get(id); var next = after.accounts().get(id);
+            if (old != null && old.custody() instanceof ResourceCustody.Container holder) holders.add(holder);
+            if (next != null && next.custody() instanceof ResourceCustody.Container holder) holders.add(holder);
+        });
+        return java.util.Set.copyOf(holders);
+    }
     /** Shared allocation authority query; neither recipe nor commercial policy belongs here. */
     public static boolean canReserve(FrontierWorldState state, LotSelection input) {
         var resources = state.inventory().fungibleResources();
