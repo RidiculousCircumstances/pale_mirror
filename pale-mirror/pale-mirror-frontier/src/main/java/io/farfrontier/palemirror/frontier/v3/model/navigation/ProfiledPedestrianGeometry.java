@@ -25,6 +25,9 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     }
     private record Volume(double x, double z, int feetY) { }
     private record DirectedEdge(SurfaceAnchor from, SurfaceAnchor to) { }
+    private record ColumnFacts(boolean detailed, java.util.List<SurfaceAnchor> surfaces) {
+        ColumnFacts { surfaces = java.util.List.copyOf(surfaces); }
+    }
     /** Exact local facts plus a bounded declared geometry epoch; no world-state or actor snapshot. */
     private record RegionalEdge(Object geometryScope, Object baseline, UnitNavigationProfile profile,
                                 WorldBounds bounds, DirectedEdge edge, Object originFacts, Object targetFacts) {
@@ -46,7 +49,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private final java.util.Map<DirectedEdge, Boolean> edges = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
-    private final java.util.Map<io.farfrontier.palemirror.frontier.v3.model.TerrainColumn, Boolean> detailedColumns = new java.util.LinkedHashMap<>(128, 0.75f, true);
+    private final java.util.Map<io.farfrontier.palemirror.frontier.v3.model.TerrainColumn, ColumnFacts> columns = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private record Version(Object terrain, UnitNavigationProfile profile) { }
     private final PedestrianRouteGeometry terrain;
     private final UnitNavigationProfile profile;
@@ -75,18 +78,24 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return occupied.emptyArea(envelope) ? terrain.uniformSupport(envelope) : java.util.OptionalInt.empty();
     }
     @Override public SurfaceAnchor supportAt(int x, int z) { return terrain.supportAt(x, z); }
-    @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return terrain.surfacesAt(x, z); }
+    @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return column(x, z).surfaces(); }
     @Override public boolean supportExcluded(SurfaceAnchor surface) { return terrain.supportExcluded(surface); }
     @Override public boolean blockKnown(BlockPosition position) { return terrain.blockKnown(position); }
     @Override public Optional<NavigationCollisionView> collisions() { return terrain.collisions(); }
     private boolean detailed(SurfaceAnchor surface) {
-        return remembered(detailedColumns, new io.farfrontier.palemirror.frontier.v3.model.TerrainColumn(surface.x(), surface.z()),
-                () -> collisions().filter(view -> view.detailedAt(surface.x(), surface.z())).isPresent());
+        return column(surface.x(), surface.z()).detailed();
+    }
+    /** One captured column owns both its collision mode and complete vertical
+     * levels. Neighbouring standing/swept poses reuse the same immutable facts,
+     * within the existing column-entry bound and this view's lifetime only. */
+    private ColumnFacts column(int x, int z) {
+        return remembered(columns, new io.farfrontier.palemirror.frontier.v3.model.TerrainColumn(x, z),
+                () -> new ColumnFacts(collisions().filter(view -> view.detailedAt(x, z)).isPresent(), terrain.surfacesAt(x, z)));
     }
     /** Both positive and missing knowledge belong only to this captured immutable geometry. */
-    private static <K> boolean remembered(java.util.Map<K, Boolean> cache, K key, java.util.function.BooleanSupplier read) {
+    private static <K, V> V remembered(java.util.Map<K, V> cache, K key, java.util.function.Supplier<V> read) {
         synchronized (cache) { var prior = cache.get(key); if (prior != null) return prior; }
-        boolean result = read.getAsBoolean();
+        V result = read.get();
         synchronized (cache) {
             if (cache.size() >= MAX_VOLUME_RESULTS && !cache.containsKey(key)) cache.remove(cache.keySet().iterator().next());
             cache.put(key, result);
@@ -199,7 +208,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         int minZ = (int) Math.floor(centerZ - half + 0.0000001), maxZ = (int) Math.ceil(centerZ + half - 0.0000001) - 1;
         int topY = feetY + profile.bodyLayers();
         for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
-            var levels = terrain.surfacesAt(x, z);
+            var levels = surfacesAt(x, z);
             // An upper floor is solid only where it intersects this body, not an
             // obstacle stretching down through every lower floor in the column.
             boolean supported = false;

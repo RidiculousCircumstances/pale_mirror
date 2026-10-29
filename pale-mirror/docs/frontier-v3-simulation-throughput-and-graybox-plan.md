@@ -5831,3 +5831,24 @@ are covered. Extend the existing procurement test with changed external history,
 older immutable branch, current-format codec recovery and negative input. Query-time
 independence is checked by values; no elapsed/counter/cache-identity assertion.
 No standalone speed gain is claimed for this cache correction.
+
+### Reuse complete captured column facts in the body-profile geometry
+
+The existing 6f24 navigation capture repeatedly samples layered surface lookup,
+TerrainSurfacePlan.supportYAt, SurfaceAnchor creation and swept clearance. Source
+confirms that ProfiledPedestrianGeometry retained only each column's detailed-mode
+boolean while every standing/swept pose reread the same complete support levels.
+Enrich that existing column entry with the immutable list of levels and use it for
+surfacesAt and clear-volume checks. Retain the same 8192-entry ceiling, captured-view
+lifetime and all other memo bounds. This adds no global cache or cross-world proof.
+Retained value size is larger than a boolean; its memory/CPU tradeoff is not yet
+measured. List.copyOf defends the captured levels and shares already immutable lists.
+
+Every original known-body, support, swept volume, collision shape, profile, grade,
+permission and unknown-fact check remains. No assumed clear plane, layer truncation,
+new route or actor authority. Existing layered bridge/tunnel, damaged step, asymmetric
+drop, wide donkey, detailed shape, changed local/neighbour region, world/profile
+separation, real meal access and admitted trade-advice cases passed in
+profiled-column-facts-focus (34s) plus guardrails. No new test or timing assertion.
+The preceding undated-replacement-value focus ran 30 tests across seven suites;
+shared architecture overlaps other focus runs and must not be counted twice.
