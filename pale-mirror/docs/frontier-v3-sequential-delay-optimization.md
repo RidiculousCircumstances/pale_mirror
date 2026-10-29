@@ -263,3 +263,60 @@ closure is INCOMPLETE; do not call this a fully closed dependency trace or inter
 missing trace records as missing durable game writes. The analyzer and HTML retain
 these limitations. Both services remain active; no observer/profiler/client remains
 running. Source changes are documentation only, so no new binary is deployed.
+
+## Four-category optimization following the fresh trace
+
+User authorized actual optimization of all four measured cost groups. Preserve
+canonical order/detail, physical custody, exact write-before-effect and the
+persisted execution quotas. No new scheduler, worker pool or reactive framework.
+
+Source-proven work and the connected implementation:
+
+- Harvest stock commitments reread every active field after any site change.
+  Existing immutable read projections now select only changed site/job/cycle and
+  declaration readers. Per-site mature yield is reused across job-only changes;
+  flattening retains the original producer order. Field capacity separately
+  retains local cell facts across foreign edits and economic drafts.
+- Hauling's winning destination called the complete shipment preparation twice.
+  The common ordered storage selection now carries its successful producer result
+  instead of discarding it after a predicate. Rejected/pending routes and partial
+  quantities retain the same selection behavior.
+- Every complete state audit called geometry bounds traversal even when its cell
+  image was unchanged. The existing invariant mechanism now retains the exact
+  bounds + cells success; changed cells and full ingress still run the check.
+- Exact calculation resumption repeated business admission and spent another
+  execution slot for the same retained predecessor. It now polls under its
+  original admission, while accepted commands still cancel the old calculation.
+  Classification exhaustion no longer discards the independent execution budget;
+  after the admitted calculation completes, an exhausted execution budget cannot
+  keep rescheduling classifications. Host signals never renew the original quota.
+- WAL admission globally stopped even for BATCHABLE work while another immutable
+  group was being forced. One ordered writer now permits a BATCHABLE memory tail
+  within the SAME combined 64-record/64MiB bounds. Tail expiry/capacity still yields;
+  a critical effect waits for its own complete prefix, never an earlier receipt.
+  Durable progress renews the no-progress watchdog even with a continuous tail.
+
+The WAL scheduling amendment is explicit in canonical execution semantics and
+architecture. Focused checks cover independent budgets, stale command cancellation,
+changed geometry rejection, immutable forecast branches/recovery, pipelined prefix
+limits, writer failure and a critical effect waiting for both groups. Existing
+native economy coverage and a same-checkpoint ordinary scale comparison follow.
+Receipts: `build/simulation-throughput/four-gate-optimization/`. Implementation
+and measured results are not claimed complete until the source-bound checks and
+deployment results below are recorded.
+
+Initial kernel/model selection passed89 tests. The first adapter run exposed one
+obsolete expectation that every queued group blocks all BATCHABLE continuation,
+and two controlled-writer cleanup timeouts (the test held its own close task).
+Updated the expectation to assert actual pipelined progression/recovery and made
+the controlled lane release before store close. No production timeout was raised.
+Final selected checks passed:4 field/valuation cases,9 architecture cases,
+22 adapter durability/store/runtime/readiness cases;55 required native economy
+cases; guardrails and packaged-JAR verification. Final command completed94s.
+The earlier unaffected kernel/cancellation/order checks remain retained evidence.
+
+Fresh baseline260f61a5b restored the identical109-file checkpoint, recovered,
+warmed60s, then advanced588ticks/61.845627s =9.507544/s; debt1454→2103.
+11539 revisions,840 WAL groups,11536 BATCHABLE appends and3 required-effect appends
+in the measured window. No build, profiler or task client overlapped that window.
+Candidate results follow from the same restored checkpoint and configuration.

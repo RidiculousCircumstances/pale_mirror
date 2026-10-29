@@ -246,11 +246,14 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
             @Override public java.util.Optional<AppendReceipt> poll() {
                 synchronized (FrontierFileStore.this) {
                     checkHealthy();
-                    if (!finishPendingFlush(false)) return java.util.Optional.empty();
+                    finishPendingFlush(false);
                     if (sequence == 0L) {
-                        if (pendingRecords.size() >= MAX_BATCHABLE_WAL_RECORDS
-                                || pendingBytes + encoded.length > MAX_BUFFERED_WAL_BYTES) {
-                            startPendingFlush(false); return java.util.Optional.empty();
+                        // Both the immutable writing prefix and the next memory
+                        // prefix share the original total retention ceiling.
+                        if (pendingRecords.size() + flushingRecords >= MAX_BATCHABLE_WAL_RECORDS
+                                || pendingBytes + flushingBytes + encoded.length > MAX_BUFFERED_WAL_BYTES) {
+                            if (pendingFlush == null) startPendingFlush(false);
+                            return java.util.Optional.empty();
                         }
                         var head = head(transaction.worldId());
                         if (!transaction.revision().equals(head.revision().next()))
@@ -265,7 +268,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
                         image.appended(transaction); observeAppend(transaction, durability);
                     }
                     if (durability == Durability.DURABLE_BEFORE_EFFECT && head(transaction.worldId()).flushedSequence() < sequence) {
-                        startPendingFlush(false);
+                        if (pendingFlush == null) startPendingFlush(false);
                         if (!finishPendingFlush(false) || head(transaction.worldId()).flushedSequence() < sequence)
                             return java.util.Optional.empty();
                     }
@@ -394,20 +397,30 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
      * its complete prefix through prepareAppend before acknowledgement. */
     synchronized boolean tryContinueTurn() {
         checkHealthy();
-        if (!finishPendingFlush(false)) { diagnosticTurnRefused = true; return false; }
+        finishPendingFlush(false);
+        if (pendingFlush != null && (pendingRecords.size() + flushingRecords >= MAX_BATCHABLE_WAL_RECORDS
+                || pendingBytes + flushingBytes >= MAX_BUFFERED_WAL_BYTES
+                || !pendingRecords.isEmpty() && cooperativeBatchDue())) {
+            diagnosticTurnRefused = true; return false;
+        }
         if (!pendingRecords.isEmpty() && (!cooperativeBatchOpen || cooperativeBatchDue())) {
-            startPendingFlush(false);
-            if (!finishPendingFlush(false) || !pendingRecords.isEmpty()) { diagnosticTurnRefused = true; return false; }
+            if (pendingFlush == null) startPendingFlush(false);
+            finishPendingFlush(false);
+            if (!pendingRecords.isEmpty() || flushingRecords >= MAX_BATCHABLE_WAL_RECORDS
+                    || flushingBytes >= MAX_BUFFERED_WAL_BYTES) { diagnosticTurnRefused = true; return false; }
         }
         diagnosticTurnRefused = false;
         turnDepth = Math.addExact(turnDepth, 1); return true;
     }
     synchronized void yieldTurnAsync() {
         if (turnDepth < 1) throw new IllegalStateException("unbalanced persistence turn");
-        if (--turnDepth != 0 || pendingFlush != null || pendingRecords.isEmpty()) return;
+        if (--turnDepth != 0 || pendingRecords.isEmpty()) return;
         if (!cooperativeBatchOpen) { cooperativeBatchStarted = cooperativeClock.getAsLong(); cooperativeBatchOpen = true; }
-        if (cooperativeBatchDue() || pendingRecords.size() >= MAX_BATCHABLE_WAL_RECORDS
-                || pendingBytes >= MAX_BUFFERED_WAL_BYTES) { startPendingFlush(false); return; }
+        if (cooperativeBatchDue() || pendingRecords.size() + flushingRecords >= MAX_BATCHABLE_WAL_RECORDS
+                || pendingBytes + flushingBytes >= MAX_BUFFERED_WAL_BYTES) {
+            if (pendingFlush == null) startPendingFlush(false);
+            return;
+        }
         if (!cooperativeWakeScheduled) {
             cooperativeWakeScheduled = true;
             long remaining = Math.max(0L, MAX_COOPERATIVE_BATCH_NANOS - (cooperativeClock.getAsLong() - cooperativeBatchStarted));
@@ -426,7 +439,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
                     long batchableAppends, long durableBeforeEffectAppends, Map<String, Long> effectBarrierKinds) { }
     /** Read-only host-gate evidence; never polls or acknowledges a durable prefix. */
     synchronized boolean diagnosticTurnPending() {
-        return pendingFlush != null ? !pendingFlush.isDone() : diagnosticTurnRefused && !pendingRecords.isEmpty();
+        return diagnosticTurnRefused && (pendingFlush != null && !pendingFlush.isDone() || !pendingRecords.isEmpty());
     }
     synchronized long diagnosticFlushId() { return diagnosticFlushId; }
     synchronized Pressure pressure() {
@@ -460,7 +473,11 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
                 FrontierV3DelayTrace.walObserved(diagnosticFlushId, world.value(), sequence);
             });
             flushGroups++; lastFlushNanos = receipt.elapsedNanos(); maxFlushNanos = Math.max(maxFlushNanos, lastFlushNanos);
-            pendingFlush = null; flushingRecords = 0; flushingBytes = 0; pendingSinceNanos = 0;
+            pendingFlush = null; flushingRecords = 0; flushingBytes = 0;
+            // A pipelined tail can stay nonempty across many successful forces.
+            // The safety watchdog measures missing durable progress, not the
+            // lifetime of the first group in a continuously progressing lane.
+            pendingSinceNanos = pendingRecords.isEmpty() ? 0L : System.nanoTime();
             return true;
         } catch (java.util.concurrent.CompletionException failure) {
             ioFailure = new IllegalStateException("ordered Frontier WAL writer failed", failure.getCause());

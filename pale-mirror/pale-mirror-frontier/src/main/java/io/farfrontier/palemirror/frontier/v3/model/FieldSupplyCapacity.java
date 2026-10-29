@@ -8,6 +8,8 @@ import java.util.*;
 
 /** Field owner supplies finite biological capacity and labour separately; never starts work or routes. */
 final class FieldSupplyCapacity implements SupplyCapacityPort {
+    private static final ImmutableKeyedInputView<SubjectId, List<Cell>> CELLS =
+            new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     private static final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> VALUATIONS =
             new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     private static final ImmutableKeyedInputView<SubjectId, io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.Memo>
@@ -50,6 +52,14 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
                 Map.of(), 0, Map.of(), labour.getAsLong(), 1));
     }
     private static List<Cell> cells(FrontierWorldState state, SubjectId home) {
+        var sites = state.resourceSites(); var local = sites.siteIdsIn(home);
+        var inputs = new ArrayList<Object>(); inputs.add(local);
+        for (var id : local) {
+            inputs.add(sites.site(id).phase()); inputs.add(sites.cycle(id)); inputs.addAll(sites.cellMutationInputs(id));
+        }
+        return CELLS.get(state.bootstrap(), home, inputs, () -> readCells(state, home));
+    }
+    private static List<Cell> readCells(FrontierWorldState state, SubjectId home) {
         var cells = new ArrayList<Cell>();
         for (var id : state.resourceSites().siteIdsIn(home)) {
             var site = state.resourceSites().site(id);

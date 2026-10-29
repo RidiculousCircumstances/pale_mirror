@@ -352,7 +352,14 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 if (cost < 1 || cost > budget.maxActionWeight())
                     throw new IllegalStateException("declared action cost cannot fit its execution budget: " + cost);
                 if (cost > budget.maxWeight() - weight) { blocked = action; break; }
-                var decision = admissionIndex.recheckSelected(state, action);
+                // A retained calculation already passed admission and owns this
+                // exact immutable predecessor. Polling readiness is not another
+                // execution admission. Accepted commands cancel it before mutation.
+                if (pendingCalculation != null && (pendingCalculation.state() != state
+                        || !pendingCalculation.revision().equals(revision) || !pendingCalculation.action().equals(action)))
+                    throw new IllegalStateException("scheduled preparation lost its exact canonical predecessor");
+                var decision = pendingCalculation == null ? admissionIndex.recheckSelected(state, action)
+                        : ScheduleAdmissionIndex.Decision.READY;
                 if (decision == ScheduleAdmissionIndex.Decision.DEFERRED) { blocked = action; break; }
                 if (decision == ScheduleAdmissionIndex.Decision.HELD) {
                     cancelExactCalculation(); discardAdvice(action);

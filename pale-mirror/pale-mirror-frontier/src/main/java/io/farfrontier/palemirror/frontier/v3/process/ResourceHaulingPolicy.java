@@ -24,11 +24,11 @@ final class ResourceHaulingPolicy {
             for (var kind : kinds) {
                 int quantity = Math.min(64, resources.unclaimedQuantity(account.id(), worker.settlementId(), kind));
                 if (quantity == 0) continue;
-                var placement = ResourceStorageSelection.destinationUpTo(state, worker.settlementId(), kind, quantity, source.station(),
-                        Set.of(ResourceStorageRole.WAREHOUSE), candidate -> source.container().filter(candidate.endpoint().containerId()::equals).isEmpty()
-                                && InternalShipmentPlanning.prepare(state, worker, source, candidate.endpoint(), kind, candidate.quantity(), tick).isPresent());
-                if (placement.isPresent()) return InternalShipmentPlanning.prepare(state, worker, source, placement.orElseThrow().endpoint(),
-                        kind, placement.orElseThrow().quantity(), tick);
+                var prepared = ResourceStorageSelection.prepareDestinationUpTo(state, worker.settlementId(), kind, quantity, source.station(),
+                        Set.of(ResourceStorageRole.WAREHOUSE), candidate -> source.container().filter(candidate.endpoint().containerId()::equals).isPresent()
+                                ? Optional.<InternalShipmentDispatched>empty()
+                                : InternalShipmentPlanning.prepare(state, worker, source, candidate.endpoint(), kind, candidate.quantity(), tick));
+                if (prepared.isPresent()) return prepared;
             }
         }
         return Optional.empty();

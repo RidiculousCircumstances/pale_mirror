@@ -119,7 +119,10 @@ class FrontierV3ServerRuntimeTest {
             assertTrue(writes.isEmpty(), "a cooperative yield keeps batchable facts in its bounded group");
             batchClock.addAndGet(java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(50));
             batchWakes.remove().run();
-            runtime.runPersistenceTurn(() -> { throw new AssertionError("expired unconfirmed prefix must hold new work"); });
+            int writingPrefix = committed;
+            runtime.runPersistenceTurn(() -> runtime.resumeOrdinaryTurn(() -> hostClock.getAndAdd(500_000L)));
+            committed = runtime.decodedState().orElseThrow().value();
+            assertTrue(committed > writingPrefix, "bounded BATCHABLE work may overlap its preceding immutable write");
             assertEquals(1, writes.size(), "the complete prefix shares one queued durable group");
             assertEquals(committed, disk.pressure().bufferedRecords());
             assertEquals(0, disk.pressure().forcedGroups());

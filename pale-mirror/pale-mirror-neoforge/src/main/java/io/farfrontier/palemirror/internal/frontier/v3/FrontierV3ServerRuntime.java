@@ -390,6 +390,13 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             if (result.isEmpty()) { ordinaryYields.merge("NO_RESULT", 1L, Long::sum); break; }
             var used = result.orElseThrow().consumed();
             ordinaryTurnBudget = used.remaining(budget);
+            // A retained exact calculation may finish under its original
+            // admission even after the last execution check was spent. Once
+            // it finishes, do not spin through classifications without a slot
+            // for another action; only an observed host tick renews admission.
+            if (!engine.hasPendingCalculation() && ordinaryTurnBudget
+                    .filter(left -> left.maxExecutionEvaluations() == 0).isPresent())
+                ordinaryTurnBudget = Optional.empty();
             if (ordinaryTurnBudget.isEmpty()) {
                 lastBudgetCause = used.actions() == budget.maxActions() ? "ACTIONS"
                         : used.weight() == budget.maxWeight() ? "WEIGHT"

@@ -79,6 +79,25 @@ class ScheduledCalculationTest {
         assertEquals(new SimInstant(8), completed.instant());
     }
 
+    @Test void retainedCalculationPollsDoNotSpendAnotherExecutionAdmission() {
+        var ready = new java.util.concurrent.atomic.AtomicBoolean(); var starts = new AtomicInteger();
+        var action = scheduled("schedule:one-admission", SUBJECT.value(), 1, 1);
+        var engine = preparingEngine(action, ready, starts, new AtomicInteger());
+        var budget = new WorkBudget(2, 10, 8, 1, 10);
+        var admitted = engine.advanceTo(new SimInstant(1), budget);
+        assertEquals(1, admitted.consumed().executions());
+        var remainder = admitted.consumed().remaining(budget).orElseThrow();
+        assertEquals(0, remainder.maxExecutionEvaluations());
+        var waiting = engine.advanceTo(new SimInstant(1), remainder);
+        assertEquals(WorkConsumption.NONE, waiting.consumed());
+        assertEquals(SimInstant.ZERO, waiting.instant()); assertTrue(waiting.transactions().isEmpty());
+        ready.set(true);
+        var completed = engine.advanceTo(new SimInstant(1), remainder);
+        assertEquals(0, completed.consumed().executions());
+        assertEquals(1, completed.consumed().actions()); assertEquals(1, completed.transactions().size());
+        assertEquals(1, starts.get()); assertEquals(1, engine.canonicalState().state().value());
+    }
+
     @Test void externalCommandDiscardsUnpublishedCalculationAndRecomputesFromNewFacts() {
         var ready = new java.util.concurrent.atomic.AtomicBoolean();
         var starts = new AtomicInteger(); var cancelled = new AtomicInteger();

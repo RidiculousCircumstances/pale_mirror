@@ -15,6 +15,8 @@ class HarvestStockSupplyTest {
         assertTrue(after.stream().mapToLong(StockSupplyPort.Commitment::incoming).sum()
                 < original.stream().mapToLong(StockSupplyPort.Commitment::incoming).sum());
         assertEquals(original, port.pending(before), "branching immutable drafts cannot reuse changed crop facts");
+        assertEquals(after, ImmutableInvariantCheck.full(() -> port.pending(changed)),
+                "the incremental owner projection must agree with a fresh complete read");
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         assertEquals(after, port.pending(codec.decode(codec.encode(changed))));
     }

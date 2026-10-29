@@ -148,14 +148,21 @@ public final class ResourceStorageSelection {
     /** Hauling may fill available capacity with a real partial batch, rather than waiting for a full stack. */
     public static Optional<Placement> destinationUpTo(FrontierWorldState state, SubjectId owner, String kind, int maximum,
             SurfaceAnchor origin, Set<ResourceStorageRole> roles, Predicate<Placement> accessible) {
-        Objects.requireNonNull(state); Objects.requireNonNull(owner); Objects.requireNonNull(origin); Objects.requireNonNull(accessible);
+        Objects.requireNonNull(accessible);
+        return prepareDestinationUpTo(state, owner, kind, maximum, origin, roles,
+                placement -> accessible.test(placement) ? Optional.of(placement) : Optional.empty());
+    }
+    /** Retain the producer's successful preparation instead of evaluating its route/admission twice. */
+    public static <T> Optional<T> prepareDestinationUpTo(FrontierWorldState state, SubjectId owner, String kind, int maximum,
+            SurfaceAnchor origin, Set<ResourceStorageRole> roles, java.util.function.Function<Placement, Optional<T>> prepare) {
+        Objects.requireNonNull(state); Objects.requireNonNull(owner); Objects.requireNonNull(origin); Objects.requireNonNull(prepare);
         if (maximum < 1 || maximum > 64) throw new IllegalArgumentException("storage selection needs a bounded real portion");
         return ranked(state, owner, kind, origin, Set.copyOf(roles))
                 .filter(policy -> !ReferenceContainerCustody.blocksCanonicalUse(state, policy.endpoint().containerId())).map(policy -> {
             int quantity = maximum;
             while (quantity > 0 && !ContainerStorageAdmission.receive(state, policy.endpoint().containerId(), kind, quantity, Optional.empty())) quantity--;
             return quantity == 0 ? null : new Placement(policy.endpoint(), quantity);
-        }).filter(Objects::nonNull).filter(accessible).findFirst();
+        }).filter(Objects::nonNull).map(prepare).flatMap(Optional::stream).findFirst();
     }
     private static java.util.stream.Stream<ResourceStoragePolicy> ranked(FrontierWorldState state, SubjectId owner, String itemKind,
             SurfaceAnchor origin, Set<ResourceStorageRole> roles) {

@@ -235,6 +235,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         private static final ImmutableInvariantCheck<Void> HIVE_MOBILIZATION = new ImmutableInvariantCheck<>("owned.hive-mobilization");
         private static final ImmutableInvariantCheck<Void> ECONOMIC_CLAIMS = new ImmutableInvariantCheck<>("owned.economic-claims");
         private static final ImmutableInvariantCheck<Void> ACTOR_ITEM_CUSTODY = new ImmutableInvariantCheck<>("owned.actor-item-custody");
+        private static final ImmutableInvariantCheck<Void> NAVIGATION_BOUNDS = new ImmutableInvariantCheck<>("owned.navigation-bounds");
         private static final ImmutableInvariantCheck<Void> COCOON_CUSTODY = new ImmutableInvariantCheck<>("owned.cocoon-custody");
         private static final ImmutableInvariantCheck<Void> SETTLEMENT_POLICIES = new ImmutableInvariantCheck<>("owned.settlement-policies");
         private static final ImmutableInvariantCheck<Void> PHYSICAL_DELTAS = new ImmutableInvariantCheck<>("owned.physical-deltas");
@@ -295,7 +296,8 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             forest.requireWithin(bootstrap.bounds());
             if (!bootstrap.ruleset().forestry().enabled() && !forest.regions().isEmpty())
                 throw new IllegalArgumentException("forest history requires its explicit content profile");
-            navigationGeometry.requireWithin(bootstrap.bounds());
+            OwnedChecks.NAVIGATION_BOUNDS.validate(() -> navigationGeometry.requireWithin(bootstrap.bounds()),
+                    bootstrap.bounds(), navigationGeometry.cells());
             FrontierComponentValidation.validateMachines(productionStations, inventory, bootstrap.ruleset().production(), bootstrap.ruleset().tools());
             ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites, forest, physicalIntents);
             ActorBodyAuthority.validate(bootstrap, actorLocations, fencedRecovery);

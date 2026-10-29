@@ -10,6 +10,17 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationShapeIntegrationTest {
+    @Test void warmedBoundsCheckRejectsChangedGeometryAndDoesNotPoisonItsPredecessor() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:geometry-bounds"), 41));
+        var bounds = initial.bootstrap().bounds(); var inside = new BlockPosition(bounds.minX(), 60, bounds.minZ());
+        var state = initial.withChanges(FrontierWorldStateUpdate.begin().navigationGeometry(new NavigationGeometryState(1,
+                Map.of(inside, NavigationObservation.known(NavigationCell.SOLID)))));
+        var outside = new BlockPosition(bounds.maxXExclusive(), 60, bounds.minZ());
+        var invalid = new NavigationGeometryState(2, Map.of(outside, NavigationObservation.known(NavigationCell.SOLID)));
+        assertThrows(IllegalArgumentException.class, () -> state.withChanges(FrontierWorldStateUpdate.begin().navigationGeometry(invalid)));
+        assertEquals(state, state.withChanges(FrontierWorldStateUpdate.begin().navigationGeometry(state.navigationGeometry())));
+        var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
+    }
     @Test void backgroundShapeSnapshotCannotEvictUnchangedOwnerProjection() throws Exception {
         var point = new BlockPosition(20, 64, 20);
         var partial = new NavigationGeometryState(0, Map.of(point, NavigationObservation.known(SLAB)), Map.of());

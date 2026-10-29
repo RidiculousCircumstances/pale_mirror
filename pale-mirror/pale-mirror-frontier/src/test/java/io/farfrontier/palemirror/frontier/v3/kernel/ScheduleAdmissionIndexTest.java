@@ -25,6 +25,10 @@ class ScheduleAdmissionIndexTest {
         assertEquals(ScheduleAdmissionIndex.Decision.READY, index.recheckSelected(0, SECOND));
         assertEquals(ScheduleAdmissionIndex.Decision.DEFERRED, index.recheckSelected(0, SECOND));
         assertEquals(budget.maxAdmissionEvaluations(), budget.maxClassificationEvaluations() + budget.maxExecutionEvaluations());
+        var executionOnly = new WorkConsumption(0, 0, budget.maxClassificationEvaluations(), 0).remaining(budget).orElseThrow();
+        assertEquals(0, executionOnly.maxClassificationEvaluations());
+        assertEquals(budget.maxExecutionEvaluations(), executionOnly.maxExecutionEvaluations(),
+                "consumption cannot discard the independent READY allowance");
     }
     @Test void samePassRefusalRequiresExactStateAndNewTurnsStillNeedOwnerProof() {
         var checks = new AtomicInteger();
