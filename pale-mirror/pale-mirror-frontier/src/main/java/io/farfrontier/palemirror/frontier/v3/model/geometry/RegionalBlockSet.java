@@ -72,7 +72,9 @@ public final class RegionalBlockSet extends AbstractSet<BlockPosition> {
     @Override public int size() { return size; }
     @Override public int hashCode() { return hash; }
     @Override public boolean contains(Object value) {
-        return value instanceof BlockPosition position && in(Region.at(position)).contains(position);
+        if (!(value instanceof BlockPosition position)) return false;
+        var blocks = regions.get(position.x() >> 4, position.z() >> 4);
+        return blocks != null && blocks.values.contains(position);
     }
     @Override public Iterator<BlockPosition> iterator() {
         return regions.values().stream().flatMap(blocks -> blocks.values.stream()).iterator();

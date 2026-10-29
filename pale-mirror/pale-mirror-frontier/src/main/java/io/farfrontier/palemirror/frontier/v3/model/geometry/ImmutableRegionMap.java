@@ -9,24 +9,87 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
     private record Page(int x, int z) {
         static Page at(Region region) { return new Page(region.x() >> 4, region.z() >> 4); }
     }
+    /** Exact sparse page. Sorted local offsets avoid allocating a Region for
+     * every block/body lookup; only changed pages reconstruct their arrays. */
+    private static final class PageValues<V> extends AbstractMap<Region, V> {
+        private final int baseX, baseZ, hash, keyHash;
+        private final int[] offsets;
+        private final Object[] values;
+        PageValues(Map<Region, V> source, int hash) {
+            var entries = new ArrayList<>(source.entrySet());
+            if (entries.isEmpty() || entries.size() > 256) throw new IllegalArgumentException("invalid sparse regional page");
+            entries.sort(Comparator.comparingInt(entry -> offset(entry.getKey().x(), entry.getKey().z())));
+            var first = entries.getFirst().getKey(); baseX = first.x() & ~15; baseZ = first.z() & ~15;
+            offsets = new int[entries.size()]; values = new Object[entries.size()]; this.hash = hash;
+            int keys = 0;
+            for (int i = 0; i < entries.size(); i++) {
+                var entry = entries.get(i); var region = entry.getKey();
+                if ((region.x() & ~15) != baseX || (region.z() & ~15) != baseZ)
+                    throw new IllegalArgumentException("regional page contains foreign coordinates");
+                offsets[i] = offset(region.x(), region.z()); values[i] = Objects.requireNonNull(entry.getValue());
+                keys += region.hashCode();
+            }
+            keyHash = keys;
+        }
+        private static int offset(int x, int z) { return ((z & 15) << 4) | (x & 15); }
+        @SuppressWarnings("unchecked") private V value(int at) { return (V) values[at]; }
+        V get(int x, int z) {
+            if ((x & ~15) != baseX || (z & ~15) != baseZ) return null;
+            int at = Arrays.binarySearch(offsets, offset(x, z)); return at < 0 ? null : value(at);
+        }
+        @Override public V get(Object key) { return key instanceof Region region ? get(region.x(), region.z()) : null; }
+        @Override public int size() { return offsets.length; }
+        @Override public int hashCode() { return hash; }
+        @Override public Set<Entry<Region, V>> entrySet() {
+            return Collections.unmodifiableSet(new AbstractSet<>() {
+                @Override public int size() { return offsets.length; }
+                @Override public Iterator<Entry<Region, V>> iterator() {
+                    return new Iterator<>() {
+                        private int cursor;
+                        public boolean hasNext() { return cursor < offsets.length; }
+                        public Entry<Region, V> next() {
+                            if (!hasNext()) throw new NoSuchElementException();
+                            int at = cursor++; int offset = offsets[at];
+                            return Map.entry(new Region(baseX + (offset & 15), baseZ + (offset >> 4)), value(at));
+                        }
+                    };
+                }
+            });
+        }
+    }
     private static final class Part<V> {
-        final Map<Region, V> values;
+        final PageValues<V> values;
         final int hash;
         Part(Map<Region, V> values) { this(values, values.hashCode()); }
         Part(Map<Region, V> values, int hash) {
-            this.values = Collections.unmodifiableMap(new HashMap<>(values)); this.hash = hash;
+            this.values = new PageValues<>(values, hash); this.hash = hash;
         }
     }
     private final Map<Page, Part<V>> pages;
-    private final int size, hash;
-    private record ReadPage<V>(int x, int z, Map<Region, V> values) { }
+    private final int size, hash, keyHash;
+    private record ReadPage<V>(int x, int z, PageValues<V> values) { }
     /** One exact immutable page, not a world/route result or an accumulated cache. */
     private volatile ReadPage<V> lastRead;
+    /** Read-only membership capability; never a route or permission certificate. */
+    public interface RegionKeys extends Set<Region> { boolean containsRegion(int x, int z); }
+    private final RegionKeys keys = new Keys();
+    private final class Keys extends AbstractSet<Region> implements RegionKeys {
+        @Override public int size() { return size; }
+        @Override public int hashCode() { return keyHash; }
+        @Override public boolean contains(Object key) { return containsKey(key); }
+        @Override public boolean containsRegion(int x, int z) { return get(x, z) != null; }
+        @Override public Iterator<Region> iterator() { return entrySet().stream().map(Entry::getKey).iterator(); }
+        @Override public boolean add(Region region) { throw new UnsupportedOperationException("immutable regional facts"); }
+        @Override public boolean remove(Object region) { throw new UnsupportedOperationException("immutable regional facts"); }
+        @Override public void clear() { throw new UnsupportedOperationException("immutable regional facts"); }
+    }
     private ImmutableRegionMap(Map<Page, Part<V>> pages) {
         this.pages = Collections.unmodifiableMap(new HashMap<>(pages));
-        int count = 0, fingerprint = 0;
-        for (var part : pages.values()) { count = Math.addExact(count, part.values.size()); fingerprint += part.hash; }
-        size = count; hash = fingerprint;
+        int count = 0, fingerprint = 0, keysFingerprint = 0;
+        for (var part : pages.values()) {
+            count = Math.addExact(count, part.values.size()); fingerprint += part.hash; keysFingerprint += part.values.keyHash;
+        }
+        size = count; hash = fingerprint; keyHash = keysFingerprint;
     }
     public static <V> ImmutableRegionMap<V> copyOf(Map<Region, V> source) {
         Objects.requireNonNull(source);
@@ -86,14 +149,20 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
     private Map<Region, V> in(Page page) { var part = pages.get(page); return part == null ? Map.of() : part.values; }
     @Override public V get(Object key) {
         if (!(key instanceof Region region)) return null;
-        int x = region.x() >> 4, z = region.z() >> 4;
+        return get(region.x(), region.z());
+    }
+    /** Exact point lookup without allocating a coordinate key. */
+    public V get(int regionX, int regionZ) {
+        int x = regionX >> 4, z = regionZ >> 4;
         var read = lastRead;
         if (read == null || read.x() != x || read.z() != z) {
-            read = new ReadPage<>(x, z, in(new Page(x, z)));
+            var part = pages.get(new Page(x, z));
+            read = new ReadPage<>(x, z, part == null ? null : part.values);
             lastRead = read;
         }
-        return read.values().get(region);
+        return read.values() == null ? null : read.values().get(regionX, regionZ);
     }
+    @Override public RegionKeys keySet() { return keys; }
     @Override public boolean containsKey(Object key) { return get(key) != null; }
     @Override public int size() { return size; }
     @Override public int hashCode() { return hash; }

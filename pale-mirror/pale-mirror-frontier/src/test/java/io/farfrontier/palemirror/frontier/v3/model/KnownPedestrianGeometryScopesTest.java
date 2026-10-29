@@ -66,6 +66,24 @@ class KnownPedestrianGeometryScopesTest {
     }
     private record CollidingFact(String value) { @Override public int hashCode() { return 7; } }
     @Test void regionalPagesPreserveExactCollisionsRemovalAndImmutablePredecessors() {
+        var source = new java.util.HashMap<PedestrianGeometryRevision.Region, CollidingFact>();
+        for (int x = -18; x <= 18; x++) for (int z = -18; z <= 18; z++)
+            if (((x ^ z) & 3) != 0) source.put(new PedestrianGeometryRevision.Region(x, z), new CollidingFact(x + "/" + z));
+        source.put(new PedestrianGeometryRevision.Region(Integer.MIN_VALUE, Integer.MAX_VALUE), new CollidingFact("extreme"));
+        var expected = Map.copyOf(source); var indexed = ImmutableRegionMap.copyOf(source); source.clear();
+        assertEquals(expected, indexed); assertEquals(indexed, expected);
+        assertEquals(expected.hashCode(), indexed.hashCode()); assertEquals(expected.keySet(), indexed.keySet());
+        assertEquals(expected.keySet().hashCode(), indexed.keySet().hashCode());
+        for (int x = -20; x <= 20; x++) for (int z = -20; z <= 20; z++) {
+            var region = new PedestrianGeometryRevision.Region(x, z);
+            assertEquals(expected.get(region), indexed.get(x, z));
+            assertEquals(expected.containsKey(region), indexed.keySet().containsRegion(x, z));
+        }
+        assertEquals(expected.get(new PedestrianGeometryRevision.Region(Integer.MIN_VALUE, Integer.MAX_VALUE)),
+                indexed.get(Integer.MIN_VALUE, Integer.MAX_VALUE));
+        assertFalse(NavigationRegionCoverage.intersects(indexed.keySet(), new WorldBounds(-16, -16, 1, 1)));
+        assertTrue(NavigationRegionCoverage.intersects(indexed.keySet(), new WorldBounds(-32, -16, 1, 1)));
+        assertThrows(UnsupportedOperationException.class, () -> indexed.keySet().clear());
         var a = new PedestrianGeometryRevision.Region(-1, -1);
         var remote = new PedestrianGeometryRevision.Region(1000, 1000);
         var before = ImmutableRegionMap.copyOf(Map.of(a, new CollidingFact("before"), remote, new CollidingFact("remote")));

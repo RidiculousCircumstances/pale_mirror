@@ -5904,3 +5904,40 @@ current/obsolete funded advice and production/recovery. Shared suites overlap;
 do not add the counts as unique coverage. Extend the existing loss-of-workforce
 negative to warmed production potential and immutable predecessor reads. No timing,
 forced-GC or new test-class campaign. No schema or compatibility layer introduced.
+
+### Primitive sparse spatial pages (2026-10-29)
+
+The completed ff0af88c9 ordinary observation advanced432366→435485 over304.352165s:
+10.247997/s, debt3021→5990,16OK samples, no fast-forward/recovery or own build,
+profile, deployment or client overlap. This does not satisfy G. The preceding
+faa562b86 allocation capture remains relevant to unchanged geometry: repeated
+Region allocation originates in common block/set/coverage point reads and observed
+collision-mode lookup, not lazy wide-profile token expansion.
+
+Keep ImmutableRegionMap as the sole immutable regional directory. Store each
+16×16 page as sorted local-offset/value arrays instead of a HashMap keyed by
+allocated Region records. Primitive get(x,z) retains exact absence/value semantics;
+the ordinary Map API, complete equality, cached entry/key hashes and unchanged-page
+sharing remain. The same regional block maps/sets, layered surfaces and coverage
+reads use this capability. Plain Set coverage retains its exact original behavior.
+Retained observation column/detail indexes use the same page owner with explicit
+changed-region updates, replacing the prior full index copy. No new global cache,
+raised retention/budget, terrain assumption, collision rule, route authority or
+persistence schema. Contextual shape halos and unknown observations stay intact.
+
+primitive-spatial-index-focus:71tests/10suites PASS63s plus guardrails. Existing
+non-flat layered routes, damaged/unknown geometry, shapes, body profiles, permission
+invalidation, resident meals, actual admitted/current-funded trade advice and full
+100-settlement state checkpoint/hydration passed. Extend the existing regional-map
+negative with dense/sparse pages, holes, negative/extreme coordinates, defensive
+input capture, exact Map/hash/key membership and coverage. No timing test added.
+
+For this cut the user requests commit/deploy, measured effect and then a stop with
+a report. Use a paired ordinary COLD run from one native-saved scale-world checkpoint,
+identical rules/seed/config/worker/heap, fixed warm-up and5-minute windows, without
+own build/profile/client overlap. Restore only that named disposable scale world
+between legs; retain its checkpoint and both receipts so a reset cannot hide debt.
+A bounded separate CPU/allocation capture can establish the affected producer cost.
+Deploy the verified candidate to both runtimes and report throughput/debt alongside
+measurement limits. Neither a paired gain nor a source-only bound closes G or
+five-player/HOT acceptance. No further optimization breadth in this delivery.

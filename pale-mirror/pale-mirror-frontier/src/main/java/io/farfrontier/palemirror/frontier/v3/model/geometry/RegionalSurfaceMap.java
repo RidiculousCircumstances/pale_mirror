@@ -46,7 +46,9 @@ public final class RegionalSurfaceMap extends AbstractMap<TerrainColumn, List<Su
     @Override public int size() { return size; }
     @Override public int hashCode() { return hash; }
     @Override public List<SurfaceAnchor> get(Object column) {
-        return column instanceof TerrainColumn key ? in(region(key)).get(key) : null;
+        if (!(column instanceof TerrainColumn key)) return null;
+        var columns = regions.get(key.x() >> 4, key.z() >> 4);
+        return columns == null ? null : columns.values.get(key);
     }
     @Override public boolean containsKey(Object column) { return get(column) != null; }
     @Override public Set<Entry<TerrainColumn, List<SurfaceAnchor>>> entrySet() {

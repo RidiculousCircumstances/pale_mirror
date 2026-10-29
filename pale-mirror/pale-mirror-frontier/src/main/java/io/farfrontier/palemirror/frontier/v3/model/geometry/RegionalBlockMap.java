@@ -64,7 +64,11 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
         var updated = parts.with(next);
         return updated == parts ? this : new RegionalBlockMap<>(updated, count, fingerprint);
     }
-    @Override public V get(Object key) { return key instanceof BlockPosition position ? in(Region.at(position)).get(position) : null; }
+    @Override public V get(Object key) {
+        if (!(key instanceof BlockPosition position)) return null;
+        var part = parts.get(position.x() >> 4, position.z() >> 4);
+        return part == null ? null : part.values.get(position);
+    }
     @Override public boolean containsKey(Object key) { return get(key) != null; }
     @Override public int size() { return size; }
     @Override public int hashCode() { return hash; }

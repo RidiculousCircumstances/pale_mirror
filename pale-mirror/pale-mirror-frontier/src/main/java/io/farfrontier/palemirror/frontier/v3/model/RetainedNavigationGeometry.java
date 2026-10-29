@@ -7,12 +7,12 @@ import java.util.*;
 /** Shared observation overlay. No knowledge is inferred from the job asking for a route. */
 final class RetainedNavigationGeometry {
     private record Index(Map<TerrainColumn, List<BlockPosition>> columns, Set<TerrainColumn> detailed) { }
-    private record Projection(RegionalBlockMap<Optional<NavigationCell>> cells, Map<Region, Index> index) { }
+    private record Projection(RegionalBlockMap<Optional<NavigationCell>> cells, ImmutableRegionMap<Index> index) { }
     private static final class Working {
         RegionalBlockMap<NavigationObservation> priorObserved = RegionalBlockMap.copyOf(Map.of());
         RegionalBlockMap<NavigationBlockState> priorSources = RegionalBlockMap.copyOf(Map.of());
         Map<NavigationBlockState, NavigationObservation> priorDefinitions = Map.of();
-        Projection projected = new Projection(RegionalBlockMap.copyOf(Map.of()), Map.of());
+        Projection projected = new Projection(RegionalBlockMap.copyOf(Map.of()), ImmutableRegionMap.copyOf(Map.of()));
         final Set<Region> contextualRegions = new HashSet<>();
     }
     private static final ThreadLocal<Working> CURRENT = ThreadLocal.withInitial(Working::new);
@@ -52,7 +52,7 @@ final class RetainedNavigationGeometry {
                 return result;
             }
             private List<SurfaceAnchor> readSurfaces(int x, int z) {
-                var part = index.get(new Region(x >> 4, z >> 4));
+                var part = index.get(x >> 4, z >> 4);
                 var positions = part == null ? null : part.columns().get(new TerrainColumn(x, z));
                 if (positions == null) return base.surfacesAt(x, z);
                 var levels = new TreeSet<SurfaceAnchor>(Comparator.comparingInt(SurfaceAnchor::y));
@@ -84,7 +84,7 @@ final class RetainedNavigationGeometry {
                 var column = new TerrainColumn(x, z);
                 for (int rx = (x - 3) >> 4; rx <= (x + 3) >> 4; rx++)
                     for (int rz = (z - 3) >> 4; rz <= (z + 3) >> 4; rz++) {
-                        var part = index.get(new Region(rx, rz));
+                        var part = index.get(rx, rz);
                         if (part != null && part.detailed().contains(column)) return true;
                     }
                 return base.detailedCollisionAt(x, z);
@@ -148,9 +148,9 @@ final class RetainedNavigationGeometry {
             updates.put(region, result);
         }
         var cells = projected.cells().replace(updates);
-        var index = new HashMap<>(projected.index());
+        var index = new HashMap<Region, Optional<Index>>();
         for (var region : cells.changesFrom(projected.cells())) {
-            if (cells.in(region).isEmpty()) { index.remove(region); continue; }
+            if (cells.in(region).isEmpty()) { index.put(region, Optional.empty()); continue; }
             var columns = new HashMap<TerrainColumn, List<BlockPosition>>(); var detailed = new HashSet<TerrainColumn>();
             for (var position : cells.in(region).keySet()) {
                 columns.computeIfAbsent(new TerrainColumn(position.x(), position.z()), ignored -> new ArrayList<>()).add(position);
@@ -158,10 +158,10 @@ final class RetainedNavigationGeometry {
                     detailed.add(new TerrainColumn(position.x() + dx, position.z() + dz));
             }
             columns.replaceAll((key, values) -> List.copyOf(values));
-            index.put(region, new Index(Map.copyOf(columns), Set.copyOf(detailed)));
+            index.put(region, Optional.of(new Index(Map.copyOf(columns), Set.copyOf(detailed))));
         }
         working.priorObserved = observed; working.priorSources = sources; working.priorDefinitions = observations.definitions();
-        working.projected = new Projection(cells, Map.copyOf(index));
+        working.projected = new Projection(cells, projected.index().with(index));
         return working.projected;
     }
 }
