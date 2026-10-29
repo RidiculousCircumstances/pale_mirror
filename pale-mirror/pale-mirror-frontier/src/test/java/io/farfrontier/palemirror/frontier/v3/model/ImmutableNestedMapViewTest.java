@@ -28,6 +28,14 @@ class ImmutableNestedMapViewTest {
         assertEquals(first, restored); assertSame(first.get("child:1"), restored.get("child:1"));
         var removed = view.project(epoch, ImmutableLookupMap.withoutEntry(initial, 1), project);
         assertFalse(removed.containsKey("child:1")); assertEquals(511, removed.size());
+        ImmutablePlanningScope.within(() -> {
+            var base = view.project(epoch, initial, project);
+            view.project(epoch, changed, project); int count = projections.get();
+            assertSame(base, view.project(epoch, initial, project)); assertEquals(count, projections.get());
+            return null;
+        });
+        int count = projections.get(); assertEquals(first, view.project(epoch, initial, project));
+        assertEquals(count + 1, projections.get(), "lexical reuse cannot survive its decision");
     }
     @Test void atomicTransferDuplicateMutableIngressAndFailureStayExact() {
         var view = new ImmutableNestedMapView<String, Row, String, Object>(3, 3); var epoch = new Object(); var value = new Object();

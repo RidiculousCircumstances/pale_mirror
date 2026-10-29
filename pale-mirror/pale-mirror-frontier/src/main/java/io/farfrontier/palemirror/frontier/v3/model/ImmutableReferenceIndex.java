@@ -45,6 +45,30 @@ public final class ImmutableReferenceIndex<C, K, D> {
     private final Check<C, K, D> check;
     private final Set<Source<C, ?, ?>> sources = Collections.newSetFromMap(new IdentityHashMap<>());
     private final ThreadLocal<Image<C, K, D>> current = new ThreadLocal<>();
+    /** One coherent source capture for a projection evaluation. Source functions
+     * may themselves prepare owner facts; validation must not prepare them again. */
+    static final class Inputs<C> {
+        final List<Source<C, ?, ?>> sources;
+        final List<Map<?, ?>> roots;
+        Inputs(List<Source<C, ?, ?>> sources, C context, List<Map<?, ?>> previous) {
+            this.sources = sources;
+            ArrayList<Map<?, ?>> captured = null;
+            for (int i = 0; i < sources.size(); i++) {
+                var value = sources.get(i).values(context);
+                if (captured == null && previous != null && previous.get(i) == value) continue;
+                if (captured == null) {
+                    captured = new ArrayList<>(sources.size());
+                    if (previous != null) captured.addAll(previous.subList(0, i));
+                }
+                captured.add(value);
+            }
+            roots = captured == null ? previous : List.copyOf(captured);
+        }
+        Map<?, ?> values(Source<C, ?, ?> source) {
+            for (int i = 0; i < sources.size(); i++) if (sources.get(i) == source) return roots.get(i);
+            throw new IllegalArgumentException("uncaptured immutable reference source");
+        }
+    }
     public ImmutableReferenceIndex(int maximumRows, int maximumReads, List<Source<C, ?, ?>> sources,
             BiFunction<C, D, List<Read<C>>> compile, Check<C, K, D> check) {
         if (maximumRows < 1 || maximumReads < 1 || sources.isEmpty()) throw new IllegalArgumentException("positive reference-index bounds required");
@@ -54,21 +78,24 @@ public final class ImmutableReferenceIndex<C, K, D> {
             throw new IllegalArgumentException("duplicate reference source declaration");
     }
     public void validate(Object epoch, Map<K, D> declarations, C context) {
+        validate(epoch, declarations, context, null);
+    }
+    void validate(Object epoch, Map<K, D> declarations, C context, Inputs<C> inputs) {
         Objects.requireNonNull(epoch); Objects.requireNonNull(declarations); Objects.requireNonNull(context);
         if (declarations.size() > maximumRows) throw new IllegalArgumentException("reference index exceeds its declared row bound");
         var image = current.get();
         if (image == null || image.epoch != epoch || ImmutableInvariantCheck.fullAudit()) {
             image = new Image<>(epoch); current.set(image);
         }
-        try { update(image, declarations, context); }
+        try { update(image, declarations, context, inputs); }
         catch (RuntimeException | Error failed) { current.remove(); throw failed; }
     }
-    private void update(Image<C, K, D> image, Map<K, D> declarations, C context) {
+    private void update(Image<C, K, D> image, Map<K, D> declarations, C context, Inputs<C> inputs) {
         var dirty = new LinkedHashSet<K>();
         ImmutableMapChanges.forEachIdentityChangedKey(image.declarations, declarations, dirty::add);
         // Each used source is compared once, not once per registered consumer.
         for (var source : List.copyOf(image.roots.keySet())) {
-            var next = source.values(context);
+            var next = inputs == null ? source.values(context) : inputs.values(source);
             var prior = image.roots.get(source);
             changedKeys(prior, next, key -> {
                 if (source.sameValue(prior.get(key), next.get(key))) return;
@@ -91,7 +118,7 @@ public final class ImmutableReferenceIndex<C, K, D> {
             if (previous != null && previous.reads().equals(retained)) continue;
             unlink(image, key, previous);
             for (var read : retained) {
-                image.roots.putIfAbsent(read.source(), read.source().values(context));
+                image.roots.putIfAbsent(read.source(), inputs == null ? read.source().values(context) : inputs.values(read.source()));
                 image.readers.computeIfAbsent(read.source(), ignored -> new HashMap<>())
                         .computeIfAbsent(read.key(), ignored -> new HashSet<>()).add(key);
             }

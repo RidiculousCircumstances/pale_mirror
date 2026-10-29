@@ -137,3 +137,52 @@ debt7208 after its additional profiling window. No automatic push.
 The target of20 canonical ticks/s without accumulating debt remains OPEN and unmet.
 No five-player, graphical product acceptance or whole-economy balance claim is
 made by the offline replay, focused gates or short ordinary windows.
+
+
+## Bounded decision-branch reuse — 2026-10-29 follow-up
+
+The read-only follow-up identified233 exact repeated account read bases within
+100 actual trade decisions. `ImmutableReadProjection` retained only its current
+working image, so an A→B→A reservation comparison could recalculate A. The common
+projection and nested producer directory now reuse completed immutable outputs
+through the existing `ImmutablePlanningScope`. Its64-view/64-basis bounds are
+unchanged; nested calls share the lexical scope and outer exit releases history.
+Saturation takes the ordinary calculation path. No persistent/global branch cache,
+reactive library, trade-specific helper logic or new scheduler is added.
+
+The scope key contains the exact epoch, producer declarations and every registered
+source-root identity, including maps containing absent read addresses. A hit does
+not advance or restore mutable reverse indexes; a subsequent miss still compares
+against their actual working basis. Full reference ingress bypasses scoped
+projection success. Errors still discard failed working images and cannot publish
+an unsuccessful result. Source roots are captured once per projection evaluation;
+reference validation uses that same capture instead of invoking suppliers again.
+Stable published keys are reused rather than allocated on each cache hit.
+
+The existing scope/reference/nested-index tests cover branching A→B→A→C, appearance,
+removal, failures, epoch separation, full audit, saturation and scope exit. Final
+`branch-publications/final-gates.log`:66Java tests in16classes and55native economy
+GameTests PASS, with guardrails, build and packaged-JAR verification (57s). This
+reuses unchanged boundaries from the previous acceptance; the previously disclosed
+unrelated full-suite failures remain outside this cut, not reported green.
+
+Diagnostic evidence is under `build/simulation-throughput/branch-publications/`.
+Untimed callbacks show1487→1260 stock/account row computations and233→10 exact
+repeated bases (95.7% fewer). Storage/workforce/station recomputations remain zero.
+Ten repeated account bases remain; whole-publication granularity and bounded
+history are not a promise to eliminate every row-level repeat. Neither percentage
+is a percentage of total CPU or TPS. The final key-reuse edit changes metadata
+allocation only; a final counter receipt is recorded before deployment.
+
+The same baseline-compiled actual trade driver runs against the frozen current
+baseline JAR and candidate classes. It executes100participant decisions up to
+explicit absent route evidence, with one warm-up and three measured passes/JVM,
+Java21/G1/Xms1G/Xmx4G. All300decision/await/event/demand rows agree exactly:
+SHA256`dea5bf2cf03f0a7f84f835180d69cec4441323b5486c4b9fc59157fd70b98e86`.
+Final median threadCPU1527.604→1532.623ms; allocated811.773→799.446MB. CPU ranges
+overlap: no demonstrated CPU gain. Allocation falls1.52%. Earlier key-allocation
+pilots are retained separately, not relabelled as final measurements.
+
+Native ordinary baseline/candidate comparison and verified deployment receipts
+are recorded after the final scale observation; the overall20/no-debt goal stays
+open. No client update or new world schema is needed.

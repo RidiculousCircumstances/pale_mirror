@@ -33,6 +33,8 @@ public final class ImmutablePlanningScope {
     }
     private ImmutablePlanningScope() { }
 
+    static boolean active() { return ACTIVE.get() != null; }
+
     public static <T> T within(Supplier<T> action) {
         Objects.requireNonNull(action);
         if (ACTIVE.get() != null) return action.get();
@@ -69,7 +71,7 @@ public final class ImmutablePlanningScope {
         }
         return value;
     }
-    static boolean same(List<Object> left, List<Object> right) {
+    static boolean same(List<?> left, List<?> right) {
         if (left.size() != right.size()) return false;
         for (int i = 0; i < left.size(); i++) if (left.get(i) != right.get(i)) return false;
         return true;

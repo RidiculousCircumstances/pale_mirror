@@ -9,6 +9,7 @@ final class ImmutableNestedMapView<K, I, J, V> {
     private static final class Image<K, I, J, V> {
         final Object epoch;
         Map<K, I> source = Map.of();
+        List<Object> basis;
         final Map<K, Map<J, V>> parts = new HashMap<>();
         final Map<J, K> producers = new HashMap<>();
         Map<J, V> snapshot = ImmutableLookupMap.copyOf(Map.of());
@@ -24,6 +25,13 @@ final class ImmutableNestedMapView<K, I, J, V> {
         Objects.requireNonNull(epoch); Objects.requireNonNull(source); Objects.requireNonNull(project);
         if (source.size() > maximumRows) throw new IllegalArgumentException("nested registry exceeds its producer bound");
         Map<K, I> input = source instanceof ImmutableMapImage<?, ?> ? source : ImmutableLookupMap.copyOf(source);
+        if (!ImmutablePlanningScope.active()) return projectCurrent(epoch, input, project);
+        var image = current.get();
+        var basis = image != null && image.epoch == epoch && image.source == input && image.basis != null
+                ? image.basis : List.of(epoch, input);
+        return ImmutablePlanningScope.get(this, basis, () -> projectCurrent(epoch, input, project));
+    }
+    private Map<J, V> projectCurrent(Object epoch, Map<K, I> input, Function<I, Map<J, V>> project) {
         var image = current.get();
         if (image == null || image.epoch != epoch) image = new Image<>(epoch);
         if (image.source == input) return image.snapshot;
@@ -52,7 +60,7 @@ final class ImmutableNestedMapView<K, I, J, V> {
                 if (entry.getValue().isEmpty()) image.parts.remove(entry.getKey()); else image.parts.put(entry.getKey(), entry.getValue());
             }
             if (values.size() > maximumChildren) throw new IllegalArgumentException("nested registry exceeds its child bound");
-            image.source = input; image.snapshot = values; current.set(image);
+            image.source = input; image.basis = List.of(epoch, input); image.snapshot = values; current.set(image);
             return values;
         } catch (RuntimeException | Error invalid) { current.remove(); throw invalid; }
     }
