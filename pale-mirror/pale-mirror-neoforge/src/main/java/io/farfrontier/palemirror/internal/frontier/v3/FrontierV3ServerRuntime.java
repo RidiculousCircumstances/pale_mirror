@@ -67,7 +67,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, TransactionCommitter committer, int checkpointIntervalTicks, RecoveryImage recovered,
             RuntimeException startupFailure, DiagnosticRuntimeIdentity diagnosticRuntimeIdentity
     ) {
-        this.preparations = new FrontierV3ScheduledPreparation<>(Objects.requireNonNull(configuration, "configuration").scheduledPlanner(), configuration.worldId().value());
+        this.preparations = new FrontierV3ScheduledPreparation<>(Objects.requireNonNull(configuration, "configuration").scheduledPlanner(), configuration.worldId().value(),
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.SPEC.isLoaded()
+                        ? io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.ADVICE_WORKERS.get()
+                        : io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.ADVICE_WORKERS.getDefault());
         this.configuration = configuration.withScheduledPlanner(preparations)
                 .withTransactionCommitter(Objects.requireNonNull(committer, "transaction committer"));
         this.store = Objects.requireNonNull(store, "store");

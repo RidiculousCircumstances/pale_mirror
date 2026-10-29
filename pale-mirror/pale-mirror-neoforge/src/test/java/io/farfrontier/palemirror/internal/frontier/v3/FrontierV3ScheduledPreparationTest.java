@@ -4,15 +4,18 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3ScheduledPreparationTest {
-    @Test @Timeout(10) void disposableAdviceRunsOffOwnerButOnlyCurrentOwnerMayAuthorizeItsExactContinuation() throws Exception {
+    @ParameterizedTest @ValueSource(ints = {2, 4}) @Timeout(10)
+    void disposableAdviceRunsOffOwnerButOnlyCurrentOwnerMayAuthorizeItsExactContinuation(int workers) throws Exception {
         var owner = Thread.currentThread(); var entered = new CountDownLatch(1); var release = new CountDownLatch(1);
-        var otherEntered = new CountDownLatch(1);
+        var otherEntered = new CountDownLatch(1); var allEntered = new CountDownLatch(workers);
         var computed = new AtomicReference<Thread>(); var validated = new AtomicReference<Thread>();
         var action = new ScheduledAction(new ScheduleId("schedule:advice"), new SimInstant(1), 0, new SubjectId("subject:advice"), "advice", 1);
         ScheduledActionPlanner<Integer> planner = new ScheduledActionPlanner<>() {
@@ -20,7 +23,7 @@ class FrontierV3ScheduledPreparationTest {
             public List<ScheduledAction> reconsideredBy(Integer before, Integer after, SimInstant at) { return List.of(action); }
             public Optional<ScheduledAdvisory<Integer>> advice(Integer captured, ScheduledAction ignored, SimInstant at) {
                 return Optional.of(() -> {
-                    computed.set(Thread.currentThread());
+                    computed.set(Thread.currentThread()); allEntered.countDown();
                     if (captured == 7) otherEntered.countDown(); else entered.countDown();
                     try { release.await(); } catch (InterruptedException failure) { throw new IllegalStateException(failure); }
                     return (current, now) -> {
@@ -31,13 +34,20 @@ class FrontierV3ScheduledPreparationTest {
                 });
             }
         };
-        try (var host = new FrontierV3ScheduledPreparation<>(planner)) {
-            var ready = new CountDownLatch(2); host.onReady(ready::countDown);
+        try (var host = new FrontierV3ScheduledPreparation<>(planner, "frontier:parallel-advice", workers)) {
+            var ready = new CountDownLatch(workers + 1); host.onReady(ready::countDown);
             var calculation = host.beginAdvice(host.advice(3, action, new SimInstant(1)).orElseThrow()).orElseThrow();
             entered.await(); assertFalse(calculation.ready()); assertTrue(calculation.poll().isEmpty()); assertNull(validated.get());
             assertNotSame(owner, computed.get());
             var other = host.beginAdvice(host.advice(7, action, new SimInstant(1)).orElseThrow()).orElseThrow();
             otherEntered.await();
+            for (int i = 2; i < workers; i++)
+                host.beginAdvice(host.advice(100 + i, action, new SimInstant(1)).orElseThrow()).orElseThrow();
+            allEntered.await();
+            var queued = host.beginAdvice(host.advice(701, action, new SimInstant(1)).orElseThrow()).orElseThrow();
+            assertTrue(queued.poll().isEmpty()); assertFalse(host.adviceAvailable());
+            assertTrue(host.beginAdvice(host.advice(702, action, new SimInstant(1)).orElseThrow()).isEmpty(),
+                    "more compute workers must not expand the waiting queue or consume auxiliary headroom");
             assertTrue(other.poll().isEmpty());
             assertEquals(1, release.getCount(), "one blocked settlement forecast cannot serialize an independent forecast");
             // The live kernel holds its exact predecessor during this stage. An
@@ -52,6 +62,7 @@ class FrontierV3ScheduledPreparationTest {
             release.countDown(); ready.await();
             assertTrue(calculation.ready());
             var completion = calculation.poll().orElseThrow();
+            assertTrue(queued.poll().orElseThrow().revalidate(4, new SimInstant(2)).isEmpty());
             assertTrue(other.poll().orElseThrow().revalidate(4, new SimInstant(2)).isEmpty());
             assertTrue(completion.revalidate(4, new SimInstant(2)).isEmpty());
             assertSame(owner, validated.get());

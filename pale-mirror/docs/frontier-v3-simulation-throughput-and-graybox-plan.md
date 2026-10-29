@@ -5645,3 +5645,33 @@ account explicitly; focused30646 then3PASS9s. Production bytes unchanged between
 runs. All131 affected tests pass,0 skipped; guardrailsPASS. No new timing tests,
 full-suite/physical/throughput acceptance claim. Logs inventory-custody-reference-
 focus.log and inventory-custody-reference-fixture-focus.log.
+
+### Bounded operational forecast parallelism
+
+e732657d3 frozen12s, both retained-world deployments verified. Ordinary37107,
+no build/profile/client overlap,16statusok,notrecovering,fastForward0:
+304.369140s384257->387133=9.449053ticks/s;debt694->3905. Receipts inventory-custody-
+reference-ordinary/{summary.json,samples.jsonl,before-domain.json,after-domain.json}.
+This remains a failed20/s criterion, not a measured regression/gain across evolving
+world workloads. Do not closeG or hide debt with a reset.
+
+Both the preceding ordinary run(72-90capacitywaiters) and this run(87-91 in sampled
+initial observations) expose persistent forecast compute pressure. Actual a5
+CPU attribution confirms each of the two advice workers used~34.7CPU-s/47.25s.
+After removing evidenced duplicated work, expose operational runtime.adviceWorkers
+(1..4,default2) and measure four on the same100-town stand. Keep main12-town stand
+at2. No queue-capacity increase: waiting capacity2 and auxiliary headroom1 stay
+exact; exact predecessor worker1 and owner revalidation/publication stay serial.
+No canonical admission budget, clock, TTL, caching bound, pricing rule or starvation
+policy changes. Diagnostics report actual worker count. Existing latch-based test
+runs2/4workers, blocks all forecast workers, verifies backpressure and retained
+auxiliary headroom, independent exact work, stale rejection and owner-only completion.
+An unloaded pure runtime test uses the declared operational default; actual game
+startup uses its loaded NeoForge config. This is a resource-allocation experiment,
+not an assumption that extra threads solve all remaining state/query costs.
+
+Forecast-worker focus65817PASS50s+guardrails: scheduled preparation2/4worker
+backpressure/owner fences, current predecessor runtime/recovery, operation
+confirmation and calendar behavior. Compilation confirms the loaded-config path
+against the actual NeoForge API. Source defaults remain2; explicit scale-only4
+configuration and retained-world ordinary comparison follow verified deployment.

@@ -28,11 +28,12 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
         return "{\"pending\":" + pending + ",\"running\":" + (worker.getActiveCount() + exactWorker.getActiveCount())
                 + ",\"queued\":" + (worker.getQueue().size() + exactWorker.getQueue().size()) + ",\"completed\":" + completed.get()
                 + ",\"cancelled\":" + cancelled + ",\"cancelledReady\":" + cancelledReady + ",\"totalNanos\":" + totalNanos.get() + ",\"maxNanos\":" + maxNanos.get()
+                + ",\"adviceWorkers\":" + worker.getCorePoolSize()
                 + ",\"adviceCompleted\":" + adviceCompleted.get() + ",\"adviceNanos\":" + adviceNanos.get()
                 + ",\"adviceAccepted\":" + adviceAccepted + ",\"adviceRejected\":" + adviceRejected
                 + ",\"adviceRejectionReasons\":" + new com.google.gson.Gson().toJson(adviceRejectionReasons) + "}";
     }
-    private final ThreadPoolExecutor worker = worker("PMV3-scheduled-advice", 2, 2);
+    private final ThreadPoolExecutor worker;
     private final ThreadPoolExecutor exactWorker = worker("PMV3-scheduled-preparation", 1, 1);
     private static ThreadPoolExecutor worker(String name, int threads, int capacity) {
         var sequence = new java.util.concurrent.atomic.AtomicInteger();
@@ -43,8 +44,13 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                 });
     }
     FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate) { this(delegate, "unbound"); }
-    FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate, String world) {
+    FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate, String world) { this(delegate, world, 2); }
+    FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate, String world, int adviceWorkers) {
+        if (adviceWorkers < 1 || adviceWorkers > 4) throw new IllegalArgumentException("advice workers must be 1..4");
         this.delegate = Objects.requireNonNull(delegate); this.traceWorld = Objects.requireNonNull(world);
+        // Preserve the two waiting slots, including auxiliary/checkpoint headroom.
+        // Parallelism changes only independent captured forecasts, never publication.
+        worker = worker("PMV3-scheduled-advice", adviceWorkers, 2);
     }
     <T> java.util.Optional<java.util.concurrent.Future<T>> prepareValue(Supplier<T> value) {
         var trace = FrontierV3DelayTrace.task("AUXILIARY", traceWorld); trace.mark("QUEUED");

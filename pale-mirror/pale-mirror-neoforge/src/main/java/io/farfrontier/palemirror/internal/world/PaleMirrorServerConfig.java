@@ -14,6 +14,7 @@ public final class PaleMirrorServerConfig {
     public static final ModConfigSpec.DoubleValue RUNTIME_BUDGET_MILLIS;
     public static final ModConfigSpec.IntValue RUNTIME_WEIGHT_BUDGET;
     public static final ModConfigSpec.IntValue NAVIGATION_WORKERS;
+    public static final ModConfigSpec.IntValue ADVICE_WORKERS;
     public static final ModConfigSpec.IntValue NAVIGATION_SLICES_PER_TURN;
     public static final ModConfigSpec.BooleanValue DH_CACHE_ONLY_CONTROL;
     public static final ModConfigSpec.DoubleValue DH_FAST_TRAVEL_ENTER_SPEED;
@@ -48,6 +49,8 @@ public final class PaleMirrorServerConfig {
         RUNTIME_WEIGHT_BUDGET = builder.comment(
                         "Maximum weighted PM operations admitted per tick before background work is deferred.")
                 .defineInRange("runtime.weightBudget", 256, 16, 4096);
+        ADVICE_WORKERS = builder.comment("Bounded immutable economic forecast workers; restart required. Exact preparation and owner publication remain serial.")
+                .defineInRange("runtime.adviceWorkers", 2, 1, 4);
         NAVIGATION_WORKERS = builder.comment("Bounded immutable route-search workers; restart required. Never access live Minecraft state.")
                 .defineInRange("runtime.navigationWorkers", 2, 1, 4);
         NAVIGATION_SLICES_PER_TURN = builder.comment("Background navigation work quanta per observed host turn; short slices return unused work to that same turn. Total in-flight ceiling remains eight.")
