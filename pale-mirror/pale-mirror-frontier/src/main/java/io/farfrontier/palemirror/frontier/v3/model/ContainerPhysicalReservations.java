@@ -34,7 +34,9 @@ final class ContainerPhysicalReservations {
         var view = new ImmutableInputView<List<ContainerSlotClaim>>();
         return owners -> {
             var source = inputs.apply(owners);
-            return view.get(List.of(source), () -> List.copyOf(read.apply(source)));
+            // Complete immutable claim values cut off downstream invalidation when
+            // only the producer's progress changes; native permission is separate.
+            return view.getPublished(List.of(source), () -> List.copyOf(read.apply(source)));
         };
     }
     private static final List<Function<Owners, List<ContainerSlotClaim>>> PORTS = List.of(

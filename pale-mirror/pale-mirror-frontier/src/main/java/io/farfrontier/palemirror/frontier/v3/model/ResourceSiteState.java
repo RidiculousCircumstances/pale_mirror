@@ -44,6 +44,9 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
         return java.util.Optional.ofNullable(harvestJobs().get(Objects.requireNonNull(jobId)));
     }
     Map<SubjectId, ResourceSiteHarvestJob> harvestJobs() {
+        return harvestJobs(sites);
+    }
+    static Map<SubjectId, ResourceSiteHarvestJob> harvestJobs(Map<SubjectId, ResourceSiteLifecycle> sites) {
         return HARVEST_DIRECTORY.project(ResourceSiteState.class, sites, ResourceSiteLifecycle::harvestJobs);
     }
 

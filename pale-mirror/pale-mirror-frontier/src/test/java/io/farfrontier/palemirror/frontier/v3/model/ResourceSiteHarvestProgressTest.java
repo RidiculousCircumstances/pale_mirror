@@ -27,6 +27,27 @@ class ResourceSiteHarvestProgressTest {
                         Optional.empty(), new SurfaceAnchor(new BlockPosition(0, 64, 0))), WorkToolAssignment.Stage.EQUIPPED));
     }
 
+    @Test void progressOnlyChangesRetainReservationFactsAndAbsentAccountsStillInvalidateOnInsertion() {
+        var first = job(ResourceSiteHarvestProgress.notStarted(65));
+        var next = job(new ResourceSiteHarvestProgress(65, 1, -1));
+        var before = ImmutableLookupMap.copyOf(java.util.Map.of(first.siteId(), new ResourceSiteLifecycle(first.siteId(),
+                ResourceSitePhase.HARVESTING, 1L, ResourceSiteLifecycle.MATURE_STAGE, Optional.of(first))));
+        var after = ImmutableLookupMap.withEntry(before, next.siteId(), new ResourceSiteLifecycle(next.siteId(),
+                ResourceSitePhase.HARVESTING, 1L, ResourceSiteLifecycle.MATURE_STAGE, Optional.of(next)));
+        var claims = HarvestContainerReservations.claims(before);
+        assertEquals(1, claims.size());
+        assertSame(claims, HarvestContainerReservations.claims(after), "progress must not renew unchanged capacity facts downstream");
+        var accounts = ImmutableLookupMap.copyOf(java.util.Map.<SubjectId, CustodyAccount>of());
+        HarvestContainerReservations.validateAccounts(accounts, after);
+        var wrong = new CustodyAccount(first.actorAccountId(), new ResourceCustody.Container(first.outputSlot().containerId()),
+                java.util.Map.of(new SubjectId("lot:test"), 1), java.util.Map.of());
+        var invalid = ImmutableLookupMap.withEntry(accounts, wrong.id(), wrong);
+        assertThrows(IllegalArgumentException.class, () -> HarvestContainerReservations.validateAccounts(invalid, after),
+                "a previously absent account must not hide a newly inserted foreign holder");
+        assertDoesNotThrow(() -> HarvestContainerReservations.validateAccounts(accounts, after));
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> { HarvestContainerReservations.validateAccounts(accounts, after); return null; }));
+    }
+
     @Test void deliveredBatchIsBoundedByActualHandAndRoundTripsWithoutRouteCache() {
         ResourceSiteHarvestJob base = job(new ResourceSiteHarvestProgress(65, 64, -1));
         ResourceSiteHarvestJob returning = base.withFullBatchReturn();

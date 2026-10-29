@@ -349,7 +349,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.resource_site.prepare", (state, action) -> ResourceSiteProcess.planPreparation(state, action)),
             Map.entry("frontier.resource_site.harvest", detached(withPlanningRecovery(atExecutionTime(
                     (state, action, instant) -> ResourceSiteHarvestProcess.plan(state, action, instant.ticks()))))),
-            Map.entry("frontier.resource_site.harvest.cold_progress", detached(withPlanningRecovery(new FrontierScheduledPlanner() {
+            Map.entry("frontier.resource_site.harvest.cold_progress", withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.planColdProgress(state, action);
                 }
@@ -362,7 +362,7 @@ public final class FrontierWorldProcessCatalog {
                 @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.coldProgressWakeKeys(state, action);
                 }
-            }))),
+            })),
             Map.entry("frontier.objective.resource_harvest", atExecutionTime((state, action, instant) ->
                     StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action, instant.ticks()))),
             Map.entry("frontier.structural_repair.scan", (state, action) -> StructuralRepairProcess.plan(state, action)),

@@ -29,14 +29,28 @@ and bounded comparable measurement. No claim of20TPS or savedseconds from source
   transfers, ground recovery and cargo paths now use it. Exact producer order,
   epochs and immutable branch history remain observable; mutable inputs are
   defensively captured. Mutational ledger passes are outside this read change.
-- Transport mission and harvest COLD continuation have the existing exact
-  preparation capability. This releases native server-thread work, but keeps
-  the canonical predecessor barrier. It is not a claim that serial calculation
-  became parallel clock progress; worker waits must be included in measurement.
+- Transport mission continuation uses the existing exact preparation capability.
+  The canonical predecessor barrier remains. Cheap harvest COLD progress stays
+  direct: the first native comparison showed that offloading these tiny steps
+  added worker round trips without improving total throughput. Expensive harvest
+  start/navigation retain their existing preparation boundary. Worker waits are
+  included in the measurements, rather than counting relocated work as savings.
 - Worksite custody selection is a shared read-only join over declared scopes
   and current live/preparing leases. Families retain native support, witness and
   durability checks. Stable selections retain declaration order/identity; a
   changed selection resets the bounded departure cursor, including shrinkage.
+- Harvest reservation declarations contain complete capacity/account facts,
+  separately from work progress and time. Existing registry, grouping and reverse
+  reference views now invalidate only changed declarations and addressed account
+  or container rows. Missing rows, foreign custody and duplicate destinations
+  retain their original rejection behavior, including full-audit entry.
+- All six container claim ports publish their complete immutable values through
+  the existing equality cutoff, avoiding downstream backing scans for unchanged
+  capacity facts. Native permissions and current epochs remain separate checks.
+- Immutable-map consumers share exact fallback differences between closed
+  immutable images. Producer lineage remains the first path; mutable maps never
+  use the memo. A bounded 32-pair per-thread window holds weak image references,
+  preserves traversal order and carries no validation or mutation authority.
 - Admission retains confirmed HELD wake addresses within the exact immutable
   state/action/pass. Cross-pass reuse still requires owner proof. READY selection
   still rechecks permission; all deterministic budget charges remain unchanged.
@@ -47,3 +61,7 @@ JAR verification passed. Broad unfiltered Frontier run was stopped in the
 unchanged non-target cold-bomber/settlement-assault fixture (stack retained), not
 reported as a passing full suite; no hive test/source was changed. Performance
 measurements and final delivery follow below after the paired native run.
+The corrected second candidate additionally passed186 focused Frontier cases
+(including immutable collections and harvest interference),23 native field-turn
+cases and guardrails. Native economy55 passed before the shared map-difference
+follow-up; this is not a claim of rerunning that lane on the final source.
