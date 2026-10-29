@@ -9,12 +9,18 @@ import java.util.function.Supplier;
 final class ImmutableInvariantCheck<T> {
     private record Accepted<T>(ImmutableDependencies dependencies, T result) { }
     private final ThreadLocal<Accepted<T>> accepted = new ThreadLocal<>();
+    private final String traceKind;
+    ImmutableInvariantCheck() { this.traceKind = null; }
+    ImmutableInvariantCheck(String traceKind) { this.traceKind = Objects.requireNonNull(traceKind); }
 
     T value(Supplier<T> check, Object... inputs) {
         Objects.requireNonNull(check, "owned invariant check");
         var previous = accepted.get();
         if (!fullAudit() && previous != null && previous.dependencies().matches(inputs)) return previous.result();
-        T result = check.get(); // a failing check cannot install trusted inputs
+        T result;
+        if (traceKind == null) result = check.get();
+        else try (var ignored = ImmutableValidationScope.detail(traceKind)) { result = check.get(); }
+        // A failing check cannot install trusted inputs.
         accepted.set(new Accepted<>(ImmutableDependencies.of(inputs), result));
         return result;
     }

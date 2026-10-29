@@ -197,7 +197,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         this.instant = Objects.requireNonNull(initialInstant, "initial instant");
         this.commandPlanner = Objects.requireNonNull(commandPlanner, "command planner");
         this.scheduledPlanner = Objects.requireNonNull(scheduledPlanner, "scheduled planner");
-        this.admissionIndex = new ScheduleAdmissionIndex<>(this.scheduledPlanner, limits.maxPendingSchedules());
+        this.admissionIndex = new ScheduleAdmissionIndex<>(this.scheduledPlanner, limits.maxPendingSchedules(), executionMetrics);
         this.reducer = Objects.requireNonNull(reducer, "reducer");
         this.stateCodec = Objects.requireNonNull(stateCodec, "state codec");
         this.projectionMapper = Objects.requireNonNull(projectionMapper, "projection mapper");
@@ -646,11 +646,16 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             }
             events.add(event);
             if (nextState != beforeEvent && !wakeAll) {
-                try { wakeKeys.addAll(Set.copyOf(scheduledPlanner.wakeKeys(beforeEvent, nextState, event))); }
+                try (var ignored = FrontierExecutionMetrics.safelyDetail(executionMetrics, FrontierExecutionMetrics.Stage.TRANSACTION, "transaction.wake-keys", worldId.value())) {
+                    wakeKeys.addAll(Set.copyOf(scheduledPlanner.wakeKeys(beforeEvent, nextState, event)));
+                }
                 catch (RuntimeException invalidDerivedIndex) { wakeAll = true; }
             }
             if (nextState != beforeEvent) {
-                var retirements = scheduledPlanner.retiredBy(beforeEvent, nextState, event, nextSchedules::snapshot);
+                List<ScheduledAction> retirements;
+                try (var ignored = FrontierExecutionMetrics.safelyDetail(executionMetrics, FrontierExecutionMetrics.Stage.TRANSACTION, "transaction.retirements", worldId.value())) {
+                    retirements = scheduledPlanner.retiredBy(beforeEvent, nextState, event, nextSchedules::snapshot);
+                }
                 List<ScheduledAction> pending = retirements.isEmpty() ? List.of() : nextSchedules.snapshot();
                 for (ScheduledAction retired : retirements) {
                     if (!pending.contains(retired)) throw new IllegalArgumentException("retirement requires an exact pending action");
@@ -662,7 +667,11 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 }
             }
         }
-        for (var action : scheduledPlanner.reconsideredBy(state, nextState, eventInstant)) {
+        List<ScheduledAction> reconsidered;
+        try (var ignored = FrontierExecutionMetrics.safelyDetail(executionMetrics, FrontierExecutionMetrics.Stage.TRANSACTION, "transaction.reconsider", worldId.value())) {
+            reconsidered = scheduledPlanner.reconsideredBy(state, nextState, eventInstant);
+        }
+        for (var action : reconsidered) {
             var effect = new ScheduleEffect.ReconsiderationRequested(action);
             stateValidator.validateScheduleEffect(nextState, action.subject(), effect);
             ScheduleEffectApplier.apply(nextSchedules, effect, eventInstant, action.subject());
@@ -716,21 +725,23 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         var publishedState = nextState;
         boolean publishedWakeAll = wakeAll;
         Runnable publish = () -> {
-            state = publishedState;
-            encodedState = encoded;
-            revision = nextRevision;
-            instant = eventInstant;
-            nextSchedules.commit();
-            events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance)
-                    .map(ScheduleEffect.class::cast).forEach(admissionIndex::forget);
-            if (publishedWakeAll) schedules.wakeAll(eventInstant.ticks());
-            else schedules.wake(wakeKeys, eventInstant.ticks());
-            transactions.add(transaction);
-            FrontierExecutionMetrics.safelyTransaction(executionMetrics, transaction, true);
-            acceptedCommandReceipt.ifPresent(receipts::add);
-            if (publicationObserver != null) {
-                try { publicationObserver.published(transaction, previousState, publishedState); }
-                catch (RuntimeException ignored) { /* Non-authoritative observer cannot quarantine published work. */ }
+            try (var publicationSpan = FrontierExecutionMetrics.safelyDetail(executionMetrics, FrontierExecutionMetrics.Stage.TRANSACTION, "transaction.publish", worldId.value())) {
+                state = publishedState;
+                encodedState = encoded;
+                revision = nextRevision;
+                instant = eventInstant;
+                nextSchedules.commit();
+                events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance)
+                        .map(ScheduleEffect.class::cast).forEach(admissionIndex::forget);
+                if (publishedWakeAll) schedules.wakeAll(eventInstant.ticks());
+                else schedules.wake(wakeKeys, eventInstant.ticks());
+                transactions.add(transaction);
+                FrontierExecutionMetrics.safelyTransaction(executionMetrics, transaction, true);
+                acceptedCommandReceipt.ifPresent(receipts::add);
+                if (publicationObserver != null) {
+                    try { publicationObserver.published(transaction, previousState, publishedState); }
+                    catch (RuntimeException ignored) { /* Non-authoritative observer cannot quarantine published work. */ }
+                }
             }
         };
         // Retain identity before the first poll too: it may have admitted bytes and

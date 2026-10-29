@@ -219,32 +219,32 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     }
     /** One successful image per owned check; recovery forces every check through ImmutableInvariantCheck.full. */
     private static final class OwnedChecks {
-        private static final ImmutableInvariantCheck<Void> STATION_RELATIONS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> RESOURCE_SITES = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> HARVEST_RESERVATIONS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> HARVEST_ACCOUNTS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> STRATEGIC_PLANS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> HIVE_SETTLEMENT_KNOWLEDGE = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> HIVE_TERRITORY_KNOWLEDGE = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> ROUTE_CONSTRUCTION = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> ROUTE_MAINTENANCE = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> ASSEMBLY_LEASES = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> MEDICAL_EVACUATION = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> HIVE_STATE = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> HIVE_NUTRIENT = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> HIVE_MOBILIZATION = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> ECONOMIC_CLAIMS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> ACTOR_ITEM_CUSTODY = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> COCOON_CUSTODY = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> SETTLEMENT_POLICIES = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> PHYSICAL_DELTAS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> FIXED_CONTAINER_POSITIONS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> PRODUCTION_FACILITIES = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> STRUCTURE_CONDITIONS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> SERVICE_WORK = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> SETTLEMENT_ASSAULT = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> PHYSICAL_OBSERVATIONS = new ImmutableInvariantCheck<>();
-        private static final ImmutableInvariantCheck<Void> RESOURCE_PHYSICAL_STATE = new ImmutableInvariantCheck<>();
+        private static final ImmutableInvariantCheck<Void> STATION_RELATIONS = new ImmutableInvariantCheck<>("owned.station-relations");
+        private static final ImmutableInvariantCheck<Void> RESOURCE_SITES = new ImmutableInvariantCheck<>("owned.resource-sites");
+        private static final ImmutableInvariantCheck<Void> HARVEST_RESERVATIONS = new ImmutableInvariantCheck<>("owned.harvest-reservations");
+        private static final ImmutableInvariantCheck<Void> HARVEST_ACCOUNTS = new ImmutableInvariantCheck<>("owned.harvest-accounts");
+        private static final ImmutableInvariantCheck<Void> STRATEGIC_PLANS = new ImmutableInvariantCheck<>("owned.strategic-plans");
+        private static final ImmutableInvariantCheck<Void> HIVE_SETTLEMENT_KNOWLEDGE = new ImmutableInvariantCheck<>("owned.hive-settlement-knowledge");
+        private static final ImmutableInvariantCheck<Void> HIVE_TERRITORY_KNOWLEDGE = new ImmutableInvariantCheck<>("owned.hive-territory-knowledge");
+        private static final ImmutableInvariantCheck<Void> ROUTE_CONSTRUCTION = new ImmutableInvariantCheck<>("owned.route-construction");
+        private static final ImmutableInvariantCheck<Void> ROUTE_MAINTENANCE = new ImmutableInvariantCheck<>("owned.route-maintenance");
+        private static final ImmutableInvariantCheck<Void> ASSEMBLY_LEASES = new ImmutableInvariantCheck<>("owned.assembly-leases");
+        private static final ImmutableInvariantCheck<Void> MEDICAL_EVACUATION = new ImmutableInvariantCheck<>("owned.medical-evacuation");
+        private static final ImmutableInvariantCheck<Void> HIVE_STATE = new ImmutableInvariantCheck<>("owned.hive-state");
+        private static final ImmutableInvariantCheck<Void> HIVE_NUTRIENT = new ImmutableInvariantCheck<>("owned.hive-nutrient");
+        private static final ImmutableInvariantCheck<Void> HIVE_MOBILIZATION = new ImmutableInvariantCheck<>("owned.hive-mobilization");
+        private static final ImmutableInvariantCheck<Void> ECONOMIC_CLAIMS = new ImmutableInvariantCheck<>("owned.economic-claims");
+        private static final ImmutableInvariantCheck<Void> ACTOR_ITEM_CUSTODY = new ImmutableInvariantCheck<>("owned.actor-item-custody");
+        private static final ImmutableInvariantCheck<Void> COCOON_CUSTODY = new ImmutableInvariantCheck<>("owned.cocoon-custody");
+        private static final ImmutableInvariantCheck<Void> SETTLEMENT_POLICIES = new ImmutableInvariantCheck<>("owned.settlement-policies");
+        private static final ImmutableInvariantCheck<Void> PHYSICAL_DELTAS = new ImmutableInvariantCheck<>("owned.physical-deltas");
+        private static final ImmutableInvariantCheck<Void> FIXED_CONTAINER_POSITIONS = new ImmutableInvariantCheck<>("owned.fixed-container-positions");
+        private static final ImmutableInvariantCheck<Void> PRODUCTION_FACILITIES = new ImmutableInvariantCheck<>("owned.production-facilities");
+        private static final ImmutableInvariantCheck<Void> STRUCTURE_CONDITIONS = new ImmutableInvariantCheck<>("owned.structure-conditions");
+        private static final ImmutableInvariantCheck<Void> SERVICE_WORK = new ImmutableInvariantCheck<>("owned.service-work");
+        private static final ImmutableInvariantCheck<Void> SETTLEMENT_ASSAULT = new ImmutableInvariantCheck<>("owned.settlement-assault");
+        private static final ImmutableInvariantCheck<Void> PHYSICAL_OBSERVATIONS = new ImmutableInvariantCheck<>("owned.physical-observations");
+        private static final ImmutableInvariantCheck<Void> RESOURCE_PHYSICAL_STATE = new ImmutableInvariantCheck<>("owned.resource-physical-state");
     }
     public FrontierWorldState { Objects.requireNonNull(bootstrap, "bootstrap");
         actorLocations = FrontierWorldStateSupport.immutableMap(actorLocations, "actor locations"); structureConditions = FrontierWorldStateSupport.immutableMap(structureConditions, "structure conditions");

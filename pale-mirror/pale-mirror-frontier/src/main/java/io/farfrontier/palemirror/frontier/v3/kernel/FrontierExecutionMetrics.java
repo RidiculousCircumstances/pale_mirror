@@ -86,6 +86,11 @@ public interface FrontierExecutionMetrics {
 
     /** Optional fine-grained tracing. Disabled collectors retain no counters or spans. */
     default Span detail(Stage stage, String kind, String owner) { return NoOp.SPAN; }
+    /** Optional lexical detail capture, without allocating diagnostic contexts when disabled. */
+    default boolean detailsEnabled() { return false; }
+    static boolean safelyDetailsEnabled(FrontierExecutionMetrics metrics) {
+        try { return metrics.detailsEnabled(); } catch (RuntimeException ignored) { return false; }
+    }
     static Span safelyDetail(FrontierExecutionMetrics metrics, Stage stage, String kind, String owner) {
         try {
             var span = metrics.detail(stage, kind, owner);

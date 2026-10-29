@@ -49,7 +49,7 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
                                               List<ScheduledAction> retainedChanges, FrontierExecutionMetrics metrics) {
         String owner = next.bootstrap().worldId().value();
         try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "owned-state", owner)) {
-            validateTransition(previous, next);
+            ImmutableValidationScope.observed(metrics, owner, () -> { validateTransition(previous, next); return null; });
         }
         // One unchanged publication barrier; nested spans only explain its cost.
         try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-closure", owner)) {

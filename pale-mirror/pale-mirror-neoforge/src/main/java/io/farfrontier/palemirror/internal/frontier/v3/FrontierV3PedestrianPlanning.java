@@ -54,14 +54,25 @@ final class FrontierV3PedestrianPlanning {
         if (owner != runtime || workTurn == null || remainingHostNanos <= 0 || !calculationReady.compareAndSet(true, false)) return;
         long started = System.nanoTime();
         try {
-            recoverWaits(runtime);
-            continuations.releaseUnused(planner::discardUnobserved);
-            planner.retainDemandKeys(continuations.retainedDemandKeys(runtime.canonicalState().orElseThrow().instant()));
-            planner.advance(workTurn, () -> System.nanoTime() - started < remainingHostNanos);
-            continuations.changed(planner.drainChanges(), planner::readFact);
-            admitReady(runtime, continuations);
+            try (var ignored = detail(runtime, "navigation.host-retention")) {
+                recoverWaits(runtime);
+                continuations.releaseUnused(planner::discardUnobserved);
+                planner.retainDemandKeys(continuations.retainedDemandKeys(runtime.canonicalState().orElseThrow().instant()));
+            }
+            try (var ignored = detail(runtime, "navigation.host-advance")) {
+                planner.advance(workTurn, () -> System.nanoTime() - started < remainingHostNanos);
+            }
+            try (var ignored = detail(runtime, "navigation.host-wake")) {
+                continuations.changed(planner.drainChanges(), planner::readFact);
+                admitReady(runtime, continuations);
+            }
             deferredReady = continuations.readyCount();
         } finally { remainingHostNanos = Math.max(0L, remainingHostNanos - (System.nanoTime() - started)); }
+    }
+    private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.Span detail(
+            FrontierV3ServerRuntime<?, ?> runtime, String kind) {
+        return io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.safelyDetail(runtime.executionMetrics(),
+                io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.Stage.SCHEDULE_PLAN, kind, runtime.traceWorld());
     }
     /** Bind the service during startup, not by class-loading its implementation
      * in the first ordinary world tick. Detached recovery still waits asynchronously.

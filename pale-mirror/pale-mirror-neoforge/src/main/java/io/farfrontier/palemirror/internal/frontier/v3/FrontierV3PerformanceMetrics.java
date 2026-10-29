@@ -53,6 +53,7 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
         };
     }
 
+    @Override public boolean detailsEnabled() { return FrontierV3DelayTrace.stagesEnabled(); }
     @Override public Span detail(Stage stage, String kind, String owner) {
         var traced = FrontierV3DelayTrace.stage(stage, kind, owner);
         return traced == null ? null : () -> FrontierV3DelayTrace.close(traced);

@@ -40,6 +40,8 @@ class FrontierExecutionMetricsTest {
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.VALIDATION));
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.TRANSACTION));
         assertTrue(metrics.details.containsAll(List.of("owned-state", "reference-closure", "reference-meals", "retirement-proofs")));
+        assertTrue(metrics.details.stream().anyMatch(kind -> kind.startsWith("admission.held/")));
+        assertTrue(metrics.details.contains("transaction.publish"));
         assertTrue(metrics.queueObserved, "queue depth and deferred-lag observation is emitted on every canonical advance");
     }
 
@@ -76,6 +78,7 @@ class FrontierExecutionMetricsTest {
         private final List<Stage> stages = new ArrayList<>();
         private boolean queueObserved;
         private final List<String> details = new ArrayList<>();
+        @Override public boolean detailsEnabled() { return true; }
         @Override public Span detail(Stage stage, String kind, String owner) { return () -> details.add(kind); }
 
         @Override public Span begin(Stage stage, String kind, String owner) {
@@ -91,6 +94,7 @@ class FrontierExecutionMetricsTest {
 
     private static final class FaultingMetrics implements FrontierExecutionMetrics {
         private int detailFailures;
+        @Override public boolean detailsEnabled() { return true; }
         @Override public Span detail(Stage stage, String kind, String owner) {
             detailFailures++; throw new IllegalStateException("synthetic detail observation failure");
         }

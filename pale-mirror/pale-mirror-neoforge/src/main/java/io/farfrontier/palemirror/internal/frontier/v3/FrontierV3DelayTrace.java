@@ -89,6 +89,7 @@ final class FrontierV3DelayTrace {
         };
     }
 
+    static boolean stagesEnabled() { return STAGES.isEnabled(); }
     static Stage stage(FrontierExecutionMetrics.Stage stage, String kind, String subject) {
         if (!STAGES.isEnabled()) return null;
         var event = new Stage(); var local = CURRENT.get(); var context = local.action;
