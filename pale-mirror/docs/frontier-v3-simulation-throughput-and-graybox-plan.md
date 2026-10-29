@@ -5771,3 +5771,44 @@ there is no forced GC, wall-clock assertion or new confidence campaign.
 Corrected equipment focus:18testsPASS24s(4suites; shared architecture overlaps the
 prior40). The live-input eviction correction92456PASS20s+guardrails, production
 source unchanged. No inference from a passing test to20/s or reduced retained bytes.
+
+### Separate economic observation from immediate matching notifications
+
+The retained 6f24 capacity controls did not establish a throughput gain: ordinary
+2-worker/12GiB observation completed 304.429382s, 405870→408938, 10.077871/s,
+debt 746→3767; 4-worker/12GiB completed 304.567791s, 411154→413491,
+7.673169/s, debt 1728→5483. Both had 16 OK samples, no fast-forward/recovery or
+own build/profile/client overlap. These sequential evolving-world measurements
+are not isolated speed ratios. Restore the scale runtime's previous 2-worker,
+8GiB configuration through normal native save/exit; main remains 2-worker/12GiB.
+Both configuration-only restarts retain the verified 6f24 artifact and world.
+The 20/s no-growing-debt criterion remains open.
+
+Complete source tracing rejects the proposed unchanged-quote-refresh explanation:
+GoodsParticipantProcess already retains unchanged active orders. Expiration and
+actual changed consent are meaningful republications, not redundant renewals.
+The confirmed narrower mismatch is notification meaning: GoodsParticipantWakeup
+previously used the same opposite-commodity interest as MarketEconomicInputChanges,
+so even an ask above every current bid immediately requested matching work.
+Matching cannot accept that pair under GoodsOrderMatching's explicit price limits.
+
+GoodsMarketInterest now exposes two read-only uses of its existing declared-order
+index. Economic observation retains every opposite commodity interest. Immediate
+matching notifications additionally require live uncommitted quantity and crossing
+price limits, with the same inclusive expiry as MarketOfferBook and trade admission.
+Only quoted() selects the narrower recipients. Current funds, stocks, crew, storage,
+geometry, exact admission and the complete NO_PURCHASE input/book fence are unchanged.
+No policy price, need, retry budget, queue capacity, schema or compatibility layer
+changes. User confirms old test-world compatibility is not required for later cuts.
+
+matching-notification-focus ran guardrails and 84 affected tests: 83 passed; the
+new notification test initially asserted a resource-only dirty scope, although its
+fixture already carried the documented whole-participant scope. Correct only that
+assertion to accept either complete scope or the named commodity, retaining the
+strict input-revision increase and no-immediate-wake checks. The corrected existing
+test passed in matching-notification-corrected-focus (21s); production unchanged.
+Existing actual consolidated trips, stable/current-funded admission, pending route
+continuation, full trade/partial receipt and codec/recovery tests passed in the
+first run. New cases also retain duplicate expiry, fully committed orders,
+withdrawn/older branches and equal-price boundary behavior. No timing test added.
+Runtime speed benefit for this cut is not yet measured.

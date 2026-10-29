@@ -11,6 +11,34 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsParticipantOpportunityAdviceTest {
+    @Test void noncrossingQuoteSchedulesEconomicObservationWithoutAnImmediateMatchingSearch() {
+        var state = ConsolidatedTradeFixture.initial(new WorldId("frontier:quote-notification"), 20260918065L, false);
+        var participants = state.companies().goodsTrade().participants();
+        var seller = participants.participants().get(new SubjectId("settlement:1"));
+        var buyer = participants.participants().get(buyer(state));
+        var bid = new GoodsTradeOrder(new SubjectId("order:notification-bid"), buyer.party(), GoodsTradeOrder.Side.BUY,
+                FrontierWorldState.depotId(buyer.settlementId()), "minecraft:bread", 64, 0, FixedScalar.ONE, 1000);
+        var before = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(bid)));
+        var ask = new GoodsTradeOrder(new SubjectId("order:notification-ask"), seller.party(), GoodsTradeOrder.Side.SELL,
+                FrontierWorldState.depotId(seller.settlementId()), "minecraft:bread", 64, 0, FixedScalar.whole(2), 1000);
+        var changed = before.withCompanies(before.companies().withGoodsTrade(before.companies().goodsTrade().place(ask)));
+        assertTrue(GoodsParticipantWakeup.quoted(changed, List.of(ask), 401).isEmpty());
+        assertTrue(changed.companies().goodsTrade().participants().economicState(buyer.party().id()).inputRevision()
+                > before.companies().goodsTrade().participants().economicState(buyer.party().id()).inputRevision());
+        var affected = changed.companies().goodsTrade().participants().economicState(buyer.party().id()).affected();
+        assertTrue(affected.containsKey(SettlementEconomicPlanningState.Change.MARKET));
+        var scope = affected.get(SettlementEconomicPlanningState.Change.MARKET);
+        assertTrue(scope.isEmpty() || scope.contains("minecraft:bread"),
+                "price/production review must still observe an unaffordable ask; empty scope covers the whole participant");
+        var cheaper = new GoodsTradeOrder(new SubjectId("order:notification-cheaper"), seller.party(), GoodsTradeOrder.Side.SELL,
+                ask.containerId(), ask.itemKind(), 64, 0, FixedScalar.ONE, 1000);
+        var crossing = changed.withCompanies(changed.companies().withGoodsTrade(changed.companies().goodsTrade().place(cheaper)));
+        var events = GoodsParticipantWakeup.quoted(crossing, List.of(cheaper, cheaper), 401);
+        assertEquals(1, events.size()); assertEquals(buyer.party().id(), events.getFirst().subject());
+        assertEquals(GoodsParticipantWakeup.action(buyer.party().id(), 402),
+                ((ScheduleEffect.ReconsiderationRequested) events.getFirst().payload()).action());
+        assertTrue(crossing.companies().goodsTrade().contracts().isEmpty(), "notification grants no stock or contract");
+    }
     @Test void economicPublicationDoesNotWaitForItsSuccessorCaravanRoute() throws Exception {
         var state = quoted(); var owner = buyer(state); var at = new SimInstant(402);
         var calls = new java.util.concurrent.atomic.AtomicInteger();
