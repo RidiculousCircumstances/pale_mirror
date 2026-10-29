@@ -438,3 +438,55 @@ Verification and deployment/measurement receipts are retained under
 `build/simulation-throughput/addressed-forecast-wake-optimization/`.
 The existing cab6 same-checkpoint ordinary leg is the unchanged baseline;
 no numerical improvement is claimed before the candidate is measured.
+
+
+### Delivered measurements: d8d93de1d
+
+86 focused forecast/advice/activity/storage/navigation tests passed. Final changed
+storage/missions/hydration plus architecture selection passed18 cases; native
+Minecraft economy passed55 required cases. Guardrails/JAR/package passed79s;
+clean detached release repeated packaging/guardrails successfully26s. One new
+fixture local-name collision was corrected before the successful final run.
+No new physical execution or durable schema was introduced, and unchanged adapter
+WAL/order evidence from cab6 remains retained rather than repeated.
+
+| Same-checkpoint ordinary SCALE leg | Ticks | Seconds | Ticks/s | Debt before → after | Revisions/tick |
+| --- | ---: | ---: | ---: | --- | ---: |
+| Prior cab6 baseline | 874 | 61.745 | 14.154971 | 882 → 1243 | 20.0046 |
+| d8d93de1d candidate | 902 | 61.773 | 14.601885 | 779 → 1113 | 19.6674 |
+
+Both restored the exact complete109-file checkpoint, recovered explicitly,
+warmed60s and sampled seven times10s apart with unchanged rules/JVM/workers and
+no task build, profiler or client during observation. The candidate started54
+simulation ticks later in the advancing workload. Observed difference+3.157% is
+small, with different work mix/JIT/shared-host conditions; this is not evidence
+of a reliable3% speedup or sustained20ticks/s. Do not compound it with previous
+cuts. Debt still grew334ticks in the candidate window (baseline361).
+
+The candidate made8490 layered misses, with2107 recent exact-version evicted
+rebuilds (24.82% lower-bound count share),41563 completed hits and only3 misses
+whose tile still retained another version. The latter is not a complete count
+of geometry invalidations. At most512 evictions are remembered, so other missed
+keys may also be previous versions or evictions. Graph building CPU is not
+measured by these counters. Baseline completed9445 layered graphs versus8492
+candidate graphs, but work-mix differences prevent attributing that delta to a
+particular change. Cache churn is confirmed; its optimal policy and isolated CPU
+contribution remain unproven. No speculative capacity or retention change made.
+
+Five sampled towns had0 starving residents before/after, ordinary meal activity
+and existing terminal harvests. This narrow check neither certifies all100 towns
+nor establishes new HOT/player/product acceptance. Both runtime deployment
+receipts and final health samples are linked in the evidence directory; MAIN's
+world is retained and only SCALE was checkpoint-restored. Installed artifact:
+`e3493e7015fd0eab278b98584c3c5a3466e089a422c448694ccf203a691db0cbcb04046e41a69bad7a5de0ca7409fde5ea5ff838829c6de4ad23f068ddd059d0` (SHA512).
+
+
+Final three ordinary checks explicitly reported OK, no fast-forward and
+recovering=false on both runtimes. MAIN instant2115227→2115651, debt0; SCALE
+458786→459066, debt1811→1954. Fresh logs contained no ERROR/quarantine. Actual
+Java22 processes MAIN334816/birth36458391 and SCALE320292/birth36438257 had the
+same installed SHA512 as the frozen artifact. No task client/profiler/build or
+observer remains active after the checks. Implementation and pack are checked
+separately; no tracked pack changes were needed, and unrelated `.f0v-baseline/`
+was preserved. The remaining goal is sustained scale20ticks/s/no debt growth,
+with cache reuse/working-set policy and connected preparation cost still open.
