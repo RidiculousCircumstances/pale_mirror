@@ -8,12 +8,18 @@ import java.util.*;
 /** Disposable quote envelope, never a claim on stock, money, capacity or workers.
  * Exact admission may reduce or reject it and must return to the same ranking. */
 final class GoodsTripQuotes {
-    static Map<String, ProcurementSelection.Line> lines(FrontierWorldState state, GoodsParticipant seller,
+    record Quote(Map<String, ProcurementSelection.Line> lines, Map<String, FixedScalar> minimumPrices) {
+        Quote { lines = Map.copyOf(lines); minimumPrices = Map.copyOf(minimumPrices); }
+    }
+    static Quote read(FrontierWorldState state, GoodsParticipant seller,
             GoodsParticipant buyer, GoodsOrderMatching.Endpoints endpoints, long now) {
         var quotes = GoodsOrderMatching.quotes(state, seller, buyer, now).stream()
                 .filter(pair -> pair.sell().containerId().equals(endpoints.source())
                         && pair.buy().containerId().equals(endpoints.receiver())
                         && pair.sell().unitPriceLimit().compareTo(pair.buy().unitPriceLimit()) <= 0).toList();
+        var minimumPrices = new TreeMap<String, FixedScalar>();
+        quotes.forEach(pair -> minimumPrices.merge(pair.sell().itemKind(), pair.sell().unitPriceLimit(),
+                (a, b) -> a.compareTo(b) <= 0 ? a : b));
         var remainders = new HashMap<SubjectId, Integer>();
         var quantities = new TreeMap<String, Integer>(); var amounts = new TreeMap<String, Long>();
         int slots = Math.min(state.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumTripCargoStacks(),
@@ -42,7 +48,7 @@ final class GoodsTripQuotes {
         var result = new TreeMap<String, ProcurementSelection.Line>();
         quantities.forEach((item, quantity) -> result.put(item, new ProcurementSelection.Line(quantity,
                 new FixedScalar(Math.ceilDiv(amounts.get(item), quantity)))));
-        return Map.copyOf(result);
+        return new Quote(result, minimumPrices);
     }
     private GoodsTripQuotes() { }
 }

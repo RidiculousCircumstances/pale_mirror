@@ -57,6 +57,57 @@ public final class ExpeditionCrewAdmission {
     }
     private ExpeditionCrewAdmission() { }
 
+    /** Optimistic necessary condition for ANY crew of at least one resident.
+     * It includes all home residents, all shared warehouse food and every home
+     * asset's food. It deliberately ignores permissions, cargo consumption and
+     * capacity. A positive answer grants no food, crew, asset or departure. */
+    public static final class OptimisticSupply {
+        private record Person(int satiety, int metabolism, Map<String, Long> personal) { }
+        private final FrontierRuleset.ResidentLife life;
+        private final List<Person> people;
+        private final Map<String, Long> shared;
+        private final BoundedValueMemo<Long, Boolean> durations = new BoundedValueMemo<>(256);
+        private OptimisticSupply(FrontierRuleset.ResidentLife life, List<Person> people, Map<String, Long> shared) {
+            this.life = life; this.people = List.copyOf(people); this.shared = Map.copyOf(shared);
+        }
+        public boolean couldSupply(long minimumDuration) {
+            if (minimumDuration < 0) throw new IllegalArgumentException("negative minimum journey duration");
+            return durations.get(minimumDuration, () -> {
+                for (var food : life.foods().foods().values()) for (var person : people) {
+                    int need = ExpeditionProvisioning.requiredFoodItems(minimumDuration, person.satiety(), person.metabolism(), food, life);
+                    if (need <= Math.addExact(person.personal().get(food.itemKind()), shared.get(food.itemKind()))) return true;
+                }
+                return false;
+            });
+        }
+    }
+    /** Captured quantities/nutrition only; no retained world, clock, geometry or
+     * mutable index. The caller keeps this within its exact immutable decision. */
+    public static OptimisticSupply optimisticSupply(FrontierWorldState state, SubjectId sponsor, long now) {
+        if (now < 0) throw new IllegalArgumentException("negative provision instant");
+        var residents = state.humanPopulation().residentsIn(sponsor);
+        var ids = residents.stream().map(ResidentProfile::id).toList();
+        var stock = stocks(state, sponsor, ids); var life = state.bootstrap().ruleset().residentLife();
+        var shared = new HashMap<String, Long>();
+        for (var food : life.foods().foods().values()) {
+            long available = stock.get(food.itemKind()).warehouse();
+            for (var asset : state.transportFleet().assetsAt(sponsor)) {
+                available = Math.addExact(available, FungibleResourceCustodySupport.accountAtContainer(state, asset.containerId())
+                        .map(account -> state.inventory().fungibleResources().unclaimedQuantity(account.id(), sponsor, food.itemKind())).orElse(0));
+            }
+            shared.put(food.itemKind(), available);
+        }
+        var people = new ArrayList<OptimisticSupply.Person>();
+        for (var resident : residents) {
+            int rate = resident.characteristics().effectiveMetabolismPermille(now);
+            int satiety = state.humanPopulation().nutrition(resident.id()).accrueThrough(now, life, rate).satietyUnits();
+            var personal = new HashMap<String, Long>();
+            stock.forEach((food, quantities) -> personal.put(food, quantities.personal().get(resident.id())));
+            people.add(new OptimisticSupply.Person(satiety, rate, Map.copyOf(personal)));
+        }
+        return new OptimisticSupply(life, people, shared);
+    }
+
     public static boolean canFeedBeforeTravel(FrontierWorldState state, SubjectId sponsor,
             List<SubjectId> crew, Optional<TransportAsset> asset, long now) {
         return canSupply(state, sponsor, crew, asset, 0, now);

@@ -25,6 +25,8 @@ class ExpeditionCrewAdmissionTest {
             throw new AssertionError("material prerequisite must not request a route");
         })) {
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.empty(), tick));
+            var unavailable = ExpeditionCrewAdmission.optimisticSupply(state, home, tick);
+            assertFalse(unavailable.couldSupply(0), "even the optimistic superset cannot invent food");
             var lot = new SubjectId("lot:personal-food");
             var resources = state.inventory().fungibleResources().issue(
                     new ResourceLot(lot, home, food.itemKind(), 64, "fixture:provisions", List.of()),
@@ -32,18 +34,23 @@ class ExpeditionCrewAdmissionTest {
                             Map.of(lot, 64), Map.of(), Optional.of(UnitInventoryPresentation.slots().get(1))));
             state = state.withInventory(state.inventory().withFungibleResources(resources));
             assertTrue(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, List.of(crew.getFirst()), Optional.empty(), tick));
+            var optimistic = ExpeditionCrewAdmission.optimisticSupply(state, home, tick);
+            assertTrue(optimistic.couldSupply(12000));
+            assertFalse(unavailable.couldSupply(0), "a captured input must not be replaced by another stock branch");
             long longJourney = Math.ceilDiv(Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(),
                     128L * food.nutritionPerItem() + life.satietyCapacityUnits()), 1000L), life.metabolismMinPermille());
             assertTrue(ExpeditionProvisioning.requiredFoodItems(longJourney, 0,
                     life.metabolismMinPermille(), food, life) > 64, "fixture journey must exhaust the personal stack");
             assertFalse(ExpeditionCrewAdmission.canSupply(state, home, List.of(crew.getFirst()), Optional.empty(), longJourney, tick),
                     "cached stock must not cache the duration-dependent food requirement");
+            assertFalse(optimistic.couldSupply(longJourney), "a short-journey success cannot cover a longer lower bound");
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.empty(), tick));
             assertEquals(List.of(crew.getFirst()), ExpeditionCrewAdmission.select(state, home,
                     List.of(crew.getLast(), crew.getFirst()), 1, Optional.empty(), 12000, tick, ids -> true),
                     "an unfed first candidate must not hide a provisioned alternative");
             assertTrue(ExpeditionCrewAdmission.select(state, home, crew, 2, Optional.empty(), 12000, tick, ids -> true).isEmpty(),
                     "one resident's personal stock cannot silently supply both crew members");
+            assertTrue(optimistic.couldSupply(12000), "optimism for one person cannot grant the rejected two-person departure");
             assertTrue(ExpeditionCrewAdmission.select(state, home, crew, 1, Optional.empty(), 12000, tick,
                     ids -> !ids.contains(crew.getFirst())).isEmpty(), "provisions do not override the caller's work permission");
             var shared = new SubjectId("lot:shared-food");
@@ -53,7 +60,15 @@ class ExpeditionCrewAdmissionTest {
             state = state.withInventory(state.inventory().withFungibleResources(resources));
             assertTrue(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.of(asset), tick));
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.empty(), tick));
+            var animalOnly = state.withInventory(state.inventory().withFungibleResources(
+                    resources.destroy(new SubjectId("custody:personal-food"), Map.of(lot, 64), Map.of())));
+            assertTrue(ExpeditionCrewAdmission.optimisticSupply(animalOnly, home, tick).couldSupply(0),
+                    "real food on a home animal belongs in the optimistic upper bound");
+            assertFalse(ExpeditionCrewAdmission.optimisticSupply(animalOnly, new SubjectId("settlement:2"), tick).couldSupply(0),
+                    "another settlement cannot use this animal's supplies");
             var withdrawn = state.withInventory(state.inventory().withFungibleResources(FungibleResourceLedger.empty()));
+            assertFalse(ExpeditionCrewAdmission.optimisticSupply(withdrawn, home, tick).couldSupply(0),
+                    "a new decision must see a player withdrawal rather than old supply evidence");
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(withdrawn, home, List.of(crew.getFirst()), Optional.empty(), tick),
                     "a new stock snapshot cannot retain withdrawn personal provisions");
             assertTrue(ExpeditionCrewAdmission.select(withdrawn, home, crew, 1, Optional.empty(), 12000, tick,

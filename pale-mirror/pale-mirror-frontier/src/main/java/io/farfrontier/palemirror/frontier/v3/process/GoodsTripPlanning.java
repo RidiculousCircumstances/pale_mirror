@@ -5,6 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.supply.*;
 import io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection;
 import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming;
+import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionCrewAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyBounds;
 import java.util.*;
 
 /** One transaction publishes sales only after exact logistics admission has succeeded on an immutable draft. */
@@ -77,6 +79,9 @@ final class GoodsTripPlanning {
         var candidates = new ArrayList<Alternative>();
         var buyer = reviewer;
         var demand = GoodsParticipantAssessment.trading(initial, buyer, now);
+        var funding = GoodsParticipantFunding.purchases(demand, initial.bootstrap().ruleset().goodsTrade());
+        var supplies = new HashMap<SubjectId, ExpeditionCrewAdmission.OptimisticSupply>();
+        int unfunded = 0, unprovisioned = 0;
         var requirements = GoodsParticipantPolicies.require(buyer).decide(demand, initial.bootstrap().ruleset().goodsTrade())
                 .stream().filter(intent -> intent.side() == GoodsTradeOrder.Side.BUY)
                 .map(intent -> new ProcurementSelection.Requirement(intent.itemKind(), intent.quantity(),
@@ -92,13 +97,24 @@ final class GoodsTripPlanning {
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, seller, buyer, now)) {
                 if (selected.filter(value -> !value.source().equals(GoodsParticipantStorage.endpoint(initial, endpoints.source()))
                         || !value.receiver().equals(GoodsParticipantStorage.endpoint(initial, endpoints.receiver()))).isPresent()) continue;
-                var lines = GoodsTripQuotes.lines(initial, seller, buyer, endpoints, now);
+                var quote = GoodsTripQuotes.read(initial, seller, buyer, endpoints, now);
+                var lines = quote.lines();
                 if (lines.isEmpty()) continue;
+                if (!funding.canStart(quote.minimumPrices())) { unfunded++; continue; }
+                var source = GoodsParticipantStorage.endpoint(initial, endpoints.source());
+                var receiver = GoodsParticipantStorage.endpoint(initial, endpoints.receiver());
+                long minimumDuration = ExpeditionJourneyBounds.minimumDuration(initial, source, receiver);
                 for (var mode : GoodsTradeFulfillment.Mode.values()) {
                     if (selected.filter(value -> value.mode() != mode).isPresent()) continue;
+                    var organizer = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller : buyer;
+                    // Zero spatial separation gives a deliberately weak bound;
+                    // leave local trips to their normal exact owner checks.
+                    if (minimumDuration > 0 && !supplies.computeIfAbsent(organizer.settlementId(),
+                            home -> ExpeditionCrewAdmission.optimisticSupply(initial, home, now)).couldSupply(minimumDuration)) {
+                        unprovisioned++; continue;
+                    }
                     var forecast = ProcurementTravelForecast.between(initial, endpoints.source(), endpoints.receiver(), itinerary(mode));
                     var timing = new ExpeditionTiming(forecast.deliveryTicks(), forecast.journeyTicks());
-                    var organizer = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller : buyer;
                     var cost = GoodsTransportOptions.forecast(initial, organizer, timing.durationTicks(), 1, now).orElseThrow().cost();
                     var id = new SubjectId("procurement:" + WorkOpportunityIdentity.digest(seller.party().id().value()
                             + "|" + buyer.party().id().value() + "|" + mode + "|"
@@ -111,6 +127,8 @@ final class GoodsTripPlanning {
                 }
             }
         }
+        if (candidates.isEmpty() && (unfunded > 0 || unprovisioned > 0))
+            return complete(new Result(initial, List.of(), "NO_FEASIBLE_FIRST_ALLOCATION; funding=" + unfunded + "; provisions=" + unprovisioned));
         return new Calculation(initial, buyer, now, requirements, candidates, comparisons);
     }
     private static Optional<Candidate> reserveSelected(FrontierWorldState initial, GoodsParticipant buyer, Proposal proposal,

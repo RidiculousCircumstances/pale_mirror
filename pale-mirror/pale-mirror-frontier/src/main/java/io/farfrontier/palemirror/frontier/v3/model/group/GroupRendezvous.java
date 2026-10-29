@@ -13,6 +13,24 @@ public final class GroupRendezvous {
         Request { boundary = Set.copyOf(boundary); }
     }
     private GroupRendezvous() { }
+    /** Every successful bounded cardinal search stays within MAX_VISITED - 1
+     * horizontal steps of its entrance. Bounding boxes also cover unchosen
+     * entrance alternatives; height, obstacles and unknown geometry can only
+     * make this lower bound looser, never justify a false negative. */
+    public static long minimumHorizontalSeparation(List<SurfaceAnchor> left, List<SurfaceAnchor> right) {
+        if (left.isEmpty() || right.isEmpty()) throw new IllegalArgumentException("assembly bound needs declared entrances");
+        long minLX = left.stream().mapToInt(SurfaceAnchor::x).min().orElseThrow();
+        long maxLX = left.stream().mapToInt(SurfaceAnchor::x).max().orElseThrow();
+        long minLZ = left.stream().mapToInt(SurfaceAnchor::z).min().orElseThrow();
+        long maxLZ = left.stream().mapToInt(SurfaceAnchor::z).max().orElseThrow();
+        long minRX = right.stream().mapToInt(SurfaceAnchor::x).min().orElseThrow();
+        long maxRX = right.stream().mapToInt(SurfaceAnchor::x).max().orElseThrow();
+        long minRZ = right.stream().mapToInt(SurfaceAnchor::z).min().orElseThrow();
+        long maxRZ = right.stream().mapToInt(SurfaceAnchor::z).max().orElseThrow();
+        long gapX = Math.max(0, Math.max(minLX - maxRX, minRX - maxLX));
+        long gapZ = Math.max(0, Math.max(minLZ - maxRZ, minRZ - maxLZ));
+        return Math.max(0, gapX + gapZ - 2L * (MAX_VISITED - 1));
+    }
     public static synchronized SurfaceAnchor select(KnownPedestrianRouteKnowledge knowledge, SurfaceAnchor entrance,
                                        Set<SurfaceAnchor> serviceBoundary, int members) {
         if (members < 1 || members > UnitGroup.MAX_MEMBERS) throw new IllegalArgumentException("invalid assembly roster size");

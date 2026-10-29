@@ -139,15 +139,15 @@ class GoodsParticipantReviewAdviceTest {
                 foreign.party(), GoodsTradeOrder.Side.SELL, FrontierWorldState.depotId(foreign.settlementId()),
                 "minecraft:coal", 128, 0, new FixedScalar(FixedScalar.SCALE / 2), 4500), 4000);
         var inventory = state.inventory(); var trade = state.companies().goodsTrade();
-        var lines = GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 4000);
+        var lines = GoodsTripQuotes.read(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 4000).lines();
         assertEquals(70, lines.get("minecraft:coal").quantity(), "two bids cannot duplicate the one public ask");
         assertSame(inventory, state.inventory()); assertSame(trade, state.companies().goodsTrade());
         assertTrue(trade.contracts().isEmpty(), "a quote envelope is not backed or admitted commercial authority");
-        assertEquals(70, GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 5000)
+        assertEquals(70, GoodsTripQuotes.read(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 5000).lines()
                 .get("minecraft:coal").quantity(), "the original inclusive expiry boundary remains valid");
-        assertTrue(GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 5001).isEmpty(),
+        assertTrue(GoodsTripQuotes.read(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 5001).lines().isEmpty(),
                 "expired consent cannot remain a preliminary alternative");
-        assertEquals(70, GoodsTripQuotes.lines(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 4000)
+        assertEquals(70, GoodsTripQuotes.read(state, seller, buyer, new GoodsOrderMatching.Endpoints(source, receiver), 4000).lines()
                 .get("minecraft:coal").quantity(), "a later expiry check cannot erase an earlier dated branch");
     }
 

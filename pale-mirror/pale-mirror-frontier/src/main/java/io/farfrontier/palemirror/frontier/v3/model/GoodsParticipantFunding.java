@@ -8,6 +8,27 @@ import java.util.List;
 /** Economic policy translates its supply advice into spending priority, never new money or holds. */
 public final class GoodsParticipantFunding {
     private GoodsParticipantFunding() { }
+    /** One immutable commercial input view, borrowed for one planning decision.
+     * A negative answer proves that no first allocation at these quote floors
+     * can be funded. It does not filter later lines of a composite purchase. */
+    public static final class Purchases {
+        private final GoodsParticipantView view;
+        private final GoodsTradeRules rules;
+        private final java.util.Map<String, FixedScalar> limits = new java.util.HashMap<>();
+        private Purchases(GoodsParticipantView view, GoodsTradeRules rules) {
+            this.view = java.util.Objects.requireNonNull(view); this.rules = java.util.Objects.requireNonNull(rules);
+        }
+        public boolean canStart(java.util.Map<String, FixedScalar> minimumPrices) {
+            for (var entry : minimumPrices.entrySet()) {
+                if (!view.stocks().containsKey(entry.getKey()) || entry.getValue().raw() <= 0)
+                    throw new IllegalArgumentException("first purchase has an undeclared resource or nonpositive price");
+                var funding = limits.computeIfAbsent(entry.getKey(), item -> purchase(view, rules, item));
+                if (funding.compareTo(entry.getValue()) >= 0) return true;
+            }
+            return false;
+        }
+    }
+    public static Purchases purchases(GoodsParticipantView view, GoodsTradeRules rules) { return new Purchases(view, rules); }
     public static FixedScalar purchase(GoodsParticipantView view, GoodsTradeRules rules, String item) {
         if (view.awaitingReview().contains(item)) return FixedScalar.ZERO;
         if (view.participant().policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT && rules.supplyPlanning().enabled()
