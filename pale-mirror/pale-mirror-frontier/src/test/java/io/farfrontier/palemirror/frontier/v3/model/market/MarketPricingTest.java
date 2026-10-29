@@ -159,6 +159,15 @@ class MarketPricingTest {
         assertThrows(IllegalArgumentException.class, () -> before.record("grain", first));
         history = history.record("grain", sale(3, 1100, 10, 4));
         assertTrue(history.reference("grain", 1000).orElseThrow().raw() > 3_900_000);
+        var changedReference = history.reference("grain", 1000);
+        assertEquals(new FixedScalar(3_400_000), history.reference("grain", 1).orElseThrow(),
+                "a different horizon cannot reuse the last query's weighted price");
+        assertEquals(changedReference, history.reference("grain", 1000));
+        assertEquals(new FixedScalar(2_800_000), before.reference("grain", 1000).orElseThrow(),
+                "a later completed sale cannot contaminate an older history branch");
+        var otherCommodity = history.record("coal", sale(61, 1101, 1, 9));
+        assertEquals(changedReference, otherCommodity.reference("grain", 1000));
+        assertThrows(IllegalArgumentException.class, () -> before.reference("grain", 0));
         for (int i = 4; i <= 60; i++) history = history.record("grain", sale(i, 1100 + i, 1, 4));
         assertEquals(MarketPriceHistory.MAX_SALES, history.commodities().get("grain").size());
     }

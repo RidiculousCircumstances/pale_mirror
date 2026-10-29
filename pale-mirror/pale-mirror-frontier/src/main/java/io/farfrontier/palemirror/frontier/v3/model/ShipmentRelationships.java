@@ -7,8 +7,10 @@ import static io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelation
 /** Derived current references, never a duplicate cargo/execution register. */
 final class ShipmentRelationships {
     private ShipmentRelationships() { }
+    /** Ordinary publication checks the owner without constructing a discarded diagnostic graph. */
+    static void validate(FrontierWorldState state) { ShipmentStateSupport.validate(state); }
     static void collect(FrontierWorldState state, List<Edge> edges) {
-        ShipmentStateSupport.validate(state);
+        validate(state);
         for (Shipment shipment : state.shipments().shipments().values()) {
             var owner = new SubjectEndpoint(EntityKind.SHIPMENT, shipment.id());
             Lifecycle life = shipment.terminal() ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;

@@ -5561,3 +5561,48 @@ actual consolidated trade, equipment purchasing, declared group competing-roster
 rejection, transport completion and recovery retained. Existing stock source/test
 bytes stayed unchanged during the second focus. Logs shared-economic-stock-focus.log
 and local-group-membership-focus.log. No per-edit client campaign or timing tests.
+
+### Validation without unused diagnostic projection; exact price-history reuse
+
+a5afaa48a frozen12s,bothretaineddeploysverified. Ordinary304.287452s369231->372349=
+10.246890/s,debt762->3730;16statusok,fastForward0,notrecovering,no ownbuild/profile/client.
+No newterminalharvest/retainedfulfilledcontractsin5towns; hungry1:0->2,7:0->0,35:1->1,
+68:0->0,100:1->0,all5starving0. shared-economic-stock-ordinary/summary.json+domainreceipts.
+CriterionremainsOPEN. No isolated gain/regression across evolving workloads.
+
+Bounded45s allocation/coarsegate84207COMPLETE: actuala5source/JAR/cgroup/PIDguards,
+CPU20ms,ObjectAllocationSample50/s,ClockTurnONLYcustomenabled,other4customeventsdisabled.
+47.253157snativeCPU313.22s/matched214.12s(9new/0retired),advice34.72/34.52s,server23.35,
+exact11.63,nav10.87/10.83,C2JIT19.77s. ClockTurn13238,nooverlaps,44.803827s covered,
+372712->373098; owner24.434266s,gapslabeledbyPREVIOUSgateEXACT14.203347,WAL4.095992,
+READY1.271814,BUDGET.698260,COMMIT.100148. These labels do not establish actual exact-
+worker wait duration or task/readiness lifecycle; no ordinary capacity claim.
+Allocation2153samples,396truncated,0DataLoss. First samples have extremely large
+weights; do not rank single first-event weights as exact producer costs. Supplemental
+report excludes first timestamp per Java thread(9boundarysamples),395truncated retained;
+weights stillNOTexact. All raw evidence preserved. shared-economic-stock-allocation-
+current-{gates,callers,callers-without-first-thread-sample}.txt andJFR/CPU/native files.
+
+Source+repeatedsamples identify avoidable diagnostic Edge/SubjectEndpoint/string
+construction in ShipmentRelationships.collect during validateTransition, despite
+existing complete ShipmentStateSupport.validate using its exact read index. Also
+forestry/extraction/budget collectors mix owning checks and pure edge projection.
+Provide named validate versus collect entrypoints as already done for UnitGroup.
+Ordinary transition calls validate; full graph/recovery diagnostic keeps collect.
+Preserve every current state/owner/target/custody/budget check. Projection-only closed
+manifest checks stay in full graph construction; these fixed typed producer shapes
+are covered by existing manifest/relationship tests. No false empty graph or lowered
+reference-closure barrier. In particular forest target.require and mining resident/
+home/tool/endpoints, all treasury bilateral links remain mandatory without projection.
+
+MarketPriceHistory.reference also repeats identical 32-sale BigInteger arithmetic
+for each valuation;17+9 BigInteger samples plus10+7 int-array samples in two advice
+threads, repeated call chain through GoodsResourceValuation. Use existing bounded
+ImmutableResultView on the exact defensive immutable selected sale-list identity
+and recency horizon; limitMAX_COMMODITIES, no world retention/time expiry/new price
+policy. Empty/invalid horizon behavior and exact original integer arithmetic remain.
+A changed sale bucket/horizon is a different input; an old branch keeps its own result.
+
+Connected owner/market focus:68testsPASS,0fail/error/skip,95s wall; guardrailsPASS.
+Existing real transport/expedition, mining external changes/replay, forestry lifecycle,
+reference manifest and completed-price histories covered. No schema/reset required.

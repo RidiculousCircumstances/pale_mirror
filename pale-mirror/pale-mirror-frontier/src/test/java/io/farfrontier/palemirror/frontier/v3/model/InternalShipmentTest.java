@@ -24,6 +24,9 @@ class InternalShipmentTest {
                     FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(resources))));
             assertSame(state.shipments(), preview.shipments());
             assertThrows(IllegalArgumentException.class, () -> ShipmentStateSupport.validate(preview));
+            var validation = assertThrows(IllegalArgumentException.class, () -> ShipmentRelationships.validate(preview));
+            var projection = assertThrows(IllegalArgumentException.class, () -> ShipmentRelationships.collect(preview, new ArrayList<>()));
+            assertEquals(projection.getMessage(), validation.getMessage(), "ordinary validation retains the diagnostic owner's custody rejection");
             assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
                 ShipmentStateSupport.validate(preview); return null;
             }));

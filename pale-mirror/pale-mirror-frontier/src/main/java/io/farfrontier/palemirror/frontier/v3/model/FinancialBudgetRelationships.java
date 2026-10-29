@@ -7,20 +7,24 @@ import static io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelation
 /** Explicit registered budget-owner references. No spending, selection or inferred owner kind. */
 final class FinancialBudgetRelationships {
     private FinancialBudgetRelationships() { }
-    static void collect(FrontierWorldState state, List<Edge> edges) {
+    static void validate(FrontierWorldState state) { inspect(state, List.of(), false); }
+    static void collect(FrontierWorldState state, List<Edge> edges) { inspect(state, edges, true); }
+    private static void inspect(FrontierWorldState state, List<Edge> edges, boolean project) {
         for (var budget : state.inventory().economics().budgets().values()) {
-            var source = new SubjectEndpoint(EntityKind.FINANCIAL_BUDGET, budget.id());
             var mission = state.shipments().missions().get(budget.ownerId());
             if (budget.ownerKind() != FinancialBudget.OwnerKind.TRANSPORT_MISSION || mission == null
                     || !mission.financialBudgetId().equals(Optional.of(budget.id()))
                     || !mission.organization().sponsor().id().equals(budget.payerId())
                     || mission.stage() == TransportMission.Stage.COMPLETE && budget.remaining().raw() != 0)
                 throw new IllegalArgumentException("financial budget lost its exact active or closed mission owner");
-            var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
-            edges.add(declaredEdge(Kind.BUDGET_PAYER, source, source,
-                    new SubjectEndpoint(EntityKind.ECONOMIC_ACCOUNT, budget.payerId()), life, "budget:" + budget.id().value()));
-            edges.add(declaredEdge(Kind.BUDGET_OWNER, source, source,
-                    new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, budget.ownerId()), life, "budget:" + budget.id().value()));
+            if (project) {
+                var source = new SubjectEndpoint(EntityKind.FINANCIAL_BUDGET, budget.id());
+                var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;
+                edges.add(declaredEdge(Kind.BUDGET_PAYER, source, source,
+                        new SubjectEndpoint(EntityKind.ECONOMIC_ACCOUNT, budget.payerId()), life, "budget:" + budget.id().value()));
+                edges.add(declaredEdge(Kind.BUDGET_OWNER, source, source,
+                        new SubjectEndpoint(EntityKind.TRANSPORT_MISSION, budget.ownerId()), life, "budget:" + budget.id().value()));
+            }
         }
         for (var mission : state.shipments().missions().values()) mission.financialBudgetId().ifPresent(id -> {
             var budget = state.inventory().economics().budgets().get(id);
@@ -33,9 +37,11 @@ final class FinancialBudgetRelationships {
             if (mission == null || !purchase.reasonId().equals(mission.id())
                     || mission.replenishmentPurchase().filter(p -> p.payment().equals(purchase)).isEmpty())
                 throw new IllegalArgumentException("budget purchase lost its exact retained mission receipt obligation");
-            var source = new SubjectEndpoint(EntityKind.FINANCIAL_RESERVATION, purchase.id());
-            edges.add(declaredEdge(Kind.RESERVATION_BUDGET, source, source,
-                    new SubjectEndpoint(EntityKind.FINANCIAL_BUDGET, id), Lifecycle.ACTIVE, "purchase:" + purchase.id().value()));
+            if (project) {
+                var source = new SubjectEndpoint(EntityKind.FINANCIAL_RESERVATION, purchase.id());
+                edges.add(declaredEdge(Kind.RESERVATION_BUDGET, source, source,
+                        new SubjectEndpoint(EntityKind.FINANCIAL_BUDGET, id), Lifecycle.ACTIVE, "purchase:" + purchase.id().value()));
+            }
         });
     }
 }

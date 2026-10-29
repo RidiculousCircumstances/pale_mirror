@@ -9,6 +9,8 @@ import java.util.*;
 public record MarketPriceHistory(Map<String, List<Sale>> commodities) {
     public static final int MAX_COMMODITIES = 256;
     public static final int MAX_SALES = 32;
+    private static final io.farfrontier.palemirror.frontier.v3.model.ImmutableResultView<Long, Optional<FixedScalar>> REFERENCES =
+            new io.farfrontier.palemirror.frontier.v3.model.ImmutableResultView<>(MAX_COMMODITIES);
     public record Sale(SubjectId receipt, SubjectId seller, SubjectId buyer, long atTick,
                        int quantity, FixedScalar unitPrice, FixedScalar deliveryUnitPrice) {
         public Sale(SubjectId receipt, SubjectId seller, SubjectId buyer, long atTick, int quantity, FixedScalar unitPrice) {
@@ -55,6 +57,11 @@ public record MarketPriceHistory(Map<String, List<Sale>> commodities) {
         if (recencyTicks < 1) throw new IllegalArgumentException("invalid market recency horizon");
         var sales = commodities.getOrDefault(item, List.of());
         if (sales.isEmpty()) return Optional.empty();
+        // Selected immutable observations and horizon are the complete input.
+        // Other commodities, world mutations and clock advances cannot alter it.
+        return REFERENCES.get(List.of(sales), recencyTicks, () -> calculateReference(sales, recencyTicks));
+    }
+    private static Optional<FixedScalar> calculateReference(List<Sale> sales, long recencyTicks) {
         long last = sales.getLast().atTick();
         BigInteger total = BigInteger.ZERO, weights = BigInteger.ZERO;
         for (var sale : sales) {
