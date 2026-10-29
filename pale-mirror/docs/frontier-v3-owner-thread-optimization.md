@@ -79,3 +79,84 @@ negative fixture initially expected an ordinary immutable value update to run th
 publication audit; it now invokes the actual participant validation boundary,
 checks full audit too, and verifies recovery of the valid predecessor. Production
 checks were not weakened. Frozen package verification is recorded with delivery.
+
+## Native comparison and final result
+
+All four legs restored the same complete109-file native-saved SCALE checkpoint
+(`primitive-spatial-paired/checkpoint`), checked file hashes, seed126, ruleset,
+server config and JVM args.100 settlements, about3031 residents, two advice and
+two navigation workers,2G/8G Generational ZGC; no players or fast-forward. Each
+leg waited for recovery, warmed60s, then took seven performance samples10s apart.
+No task-owned build, profile or client overlapped the ordinary measurement.
+
+| Source | Canonical ticks | Seconds | Ticks/s | Debt before → after |
+| --- | ---: | ---: | ---: | --- |
+| af28fd3ad baseline | 610 | 61.731 | 9.881565 | 1279 → 1904 |
+| 260c0abe7 first offload | 597 | 61.709 | 9.674448 | 973 → 1610 |
+| 4bd5f7146 reservation follow-up | 559 | 61.776 | 9.048882 | 1061 → 1738 |
+| cbeb1f6e3 final | 694 | 61.725 | 11.243458 | 938 → 1479 |
+
+Final ordinary throughput is13.78% above the starting leg. This is a bounded
+same-checkpoint comparison on a shared evolving host; asynchronous work mix and
+different advancing canonical start positions limit causal precision. It is not
+an isolated contribution estimate for each edit, a confidence interval, a HOT/
+five-player guarantee or proof of20TPS. The first two candidates failed to show
+an overall gain and were never deployed to MAIN. Their measurements are retained.
+Debt still grows: the scale20canonicalticks/s-without-debt objective remains unmet.
+
+Separate30s JFR windows are attribution evidence, not the ordinary TPS samples.
+Baseline/final profiled rates were6.065905/6.306271; owner CPU12.474/11.315s.
+Exclusive measured stage wall times, baseline → final:
+
+| Instrumented owner work | Seconds in baseline | Seconds in final |
+| --- | ---: | ---: |
+| VALIDATION / relations-groups | 0.577910 | 0.021747 |
+| PHYSICAL / worksite-projection | 0.855195 | 0.106717 |
+| VALIDATION / owned-state | 2.291891 | 1.772225 |
+| VALIDATION / relations-trade | 0.518072 | 0.339266 |
+
+These are observed window costs across different work mixes, not percentages of
+universal CPU savings. Final exact-computation running wait6.989s, WAL running
+wait4.634s, and owner uninstrumented3.004s remain substantial. Accounting does not
+pretend all costs are known: capture-edge/missing causal references and unexplained
+time remain explicit; both profiles report incomplete causal closure despite
+zero JFR data-loss events. No ownership/check/durability relaxation was used to
+reduce these waits. No Reactor, new scheduler or new authoritative graph was added.
+
+Each ordinary sample was statusOK, with recovery and fast-forward off. In the
+five sampled towns, no starving residents were reported; two towns had active
+hunger/meal work. No new terminal harvest or fulfilled commercial contract appeared
+in those five bounded views. This run therefore does not prove a whole-economy
+cycle, new caravan delivery, HOT visual acceptance or player comprehension. Native
+field-turn/economy gates establish their respective tested physical boundaries.
+
+Receipts: `build/simulation-throughput/owner-thread-optimization/` contains
+`measured-summary.json`, all four `native-*/samples.jsonl` and `trace/report/`
+outputs, deployment identity/config/checkpoint receipts and frozen build logs.
+Raw JFR/capture identity are beside each report. The R2 deploy helper accidentally
+reused the R1 deployment log directory; corrected current R2 receipts live in
+`deploy-final/receipt-path-correction.txt`. Overlapping R1 deploy logs are lost;
+its native samples, JFR and exact capture identity remain intact. Final R3 uses
+its own `deploy-r3/` receipts and has no such ambiguity.
+
+## Delivery
+
+Final production source `cbeb1f6e3c704e4ea0bfa16e4863ed6a85939dfb` was built
+from clean detached RELEASE; guardrails, JAR and packaged-JAR verification passed.
+MAIN and SCALE installed SHA512:
+`4ba6dcf82a1be219d336de63636df4234debfd42092bf2474652b167cf80151cabe1794a3d4e44648c926c0d7ffcd281e2541b85e9bec9e6b73e7753051f1b61`.
+Existing root publish/install/preflight/verify scripts confirmed source/runtime/
+profile/target identity, ordinary native save/exit and fresh startup. MAIN world
+`frontier-v3-r281-cold-atomic-20261028` was retained throughout. Actual Java PIDs
+at final verification: MAIN3185448, SCALE3167783 (resolve again before future ops).
+
+Three final observations per server report statusOK, no fast-forward or recovery;
+MAIN has zero pending ordinary ticks, SCALE debt continues to grow. Neither fresh
+runtime log contains new ERROR/quarantine. No test client was left running. MAIN
+and SCALE services remain active. These checks establish this deployment and its
+bounded runtime health, not a long-duration or whole-feature acceptance claim.
+MAIN receipts: `deploy-main-final/`; final checks: `final-runtime-check.log`.
+
+IMPL is committed separately from PACK; RELEASE stays clean detached at the
+production ref. PACK tracked files remain unchanged at `f727133`, unrelated
+`.f0v-baseline/` is preserved. Governance WIP remains separate. No automatic push.
