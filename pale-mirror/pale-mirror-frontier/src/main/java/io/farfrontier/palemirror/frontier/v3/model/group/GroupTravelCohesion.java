@@ -42,15 +42,15 @@ public final class GroupTravelCohesion {
         double enclosingWidth = living.stream().mapToDouble(m -> state.actorLocations().get(m.actorId()).navigationProfile().width())
                 .max().orElseThrow();
         int spacing = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.formationSpacing(policy.spacing(), enclosingWidth);
-        var route = group.journey().orElseThrow().route();
+        var route = UnitGroupRouteGeometry.read(state, group);
         var current = positions.currentPointAt(actorId);
         if (current.isEmpty()) return MovementPermission.hold(MovementPermission.Reason.POSITION_UNAVAILABLE, actorId);
-        double currentProgress = projection(route, current.orElseThrow()) + slot * spacing;
+        double currentProgress = route.projection(current.orElseThrow()) + slot * spacing;
         // Nearest-segment projection can jump between branches beside a bend.
         // A proposed step cannot gain more progress than its physical displacement;
         // arbitration still uses the common actual image, then re-evaluates after acceptance.
-        double progress = projection(route, position) + slot * spacing;
-        if (!onRoute(route, current.orElseThrow()))
+        double progress = route.projection(position) + slot * spacing;
+        if (!route.containsNode(current.orElseThrow()))
             progress = Math.min(progress, currentProgress + distance(current.orElseThrow(), position));
         double slowest = Double.POSITIVE_INFINITY;
         SubjectId slowestPeer = null;
@@ -63,7 +63,7 @@ public final class GroupTravelCohesion {
             if (observation.isEmpty())
                 return MovementPermission.hold(MovementPermission.Reason.POSITION_UNAVAILABLE, living.get(index).actorId());
             var actual = observation.orElseThrow();
-            double peerProgress = projection(route, actual) + index * spacing;
+            double peerProgress = route.projection(actual) + index * spacing;
             // Along-route progress alone orders the members, including U bends. Lateral
             // distance may stretch the envelope but may never reverse who yields.
             // Deterministic slot order breaks exact ties; the lagging member can always close.
@@ -105,38 +105,17 @@ public final class GroupTravelCohesion {
     }
     public static List<SurfaceAnchor> segment(FrontierWorldState state, UnitGroup group, SubjectId actor,
                                              List<SurfaceAnchor> path, ActorPositionView positions) {
-        var itinerary = group.journey().orElseThrow().route();
+        var itinerary = UnitGroupRouteGeometry.read(state, group);
         int limit = path.size();
-        if (!itinerary.contains(path.getFirst())) {
+        if (!itinerary.containsNode(path.getFirst())) {
             // Joining ends at first contact. Re-arbitrate from that exact common-route
             // checkpoint before authorizing the tail; approach projection cannot waive
             // the ordinary along-route envelope for an entire bent itinerary.
-            var stations = Set.copyOf(itinerary);
             for (int index = 1; index < path.size(); index++)
-                if (stations.contains(path.get(index))) { limit = index + 1; break; }
+                if (itinerary.containsNode(path.get(index))) { limit = index + 1; break; }
         }
         int end = 1;
         while (end < limit && permits(state, group, actor, path.get(end), positions)) end++;
         return List.copyOf(path.subList(0, end));
-    }
-    private static boolean onRoute(List<SurfaceAnchor> route, ActorPositionView.TravelPoint point) {
-        return route.stream().anyMatch(surface -> point.equals(ActorPositionView.TravelPoint.at(surface.standingBody())));
-    }
-    private static double projection(List<SurfaceAnchor> route, ActorPositionView.TravelPoint position) {
-        double best = 0, distance = Double.POSITIVE_INFINITY, travelled = 0;
-        for (int index = 0; index < route.size() - 1; index++) {
-            var a = route.get(index); var b = route.get(index + 1);
-            double ax = a.x() + 0.5, ay = a.y() + 1.0, az = a.z() + 0.5;
-            double dx = (double) b.x() - a.x(), dy = (double) b.y() - a.y(), dz = (double) b.z() - a.z();
-            double lengthSquared = dx * dx + dy * dy + dz * dz;
-            double fraction = lengthSquared == 0 ? 0 : Math.clamp(
-                    ((position.x() - ax) * dx + (position.y() - ay) * dy + (position.z() - az) * dz) / lengthSquared, 0, 1);
-            double x = ax + fraction * dx - position.x(), y = ay + fraction * dy - position.y(), z = az + fraction * dz - position.z();
-            double candidate = x * x + y * y + z * z;
-            double length = Math.sqrt(lengthSquared);
-            if (candidate < distance) { best = travelled + fraction * length; distance = candidate; }
-            travelled += length;
-        }
-        return best;
     }
 }

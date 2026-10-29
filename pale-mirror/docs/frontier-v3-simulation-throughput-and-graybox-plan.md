@@ -5360,3 +5360,53 @@ local-custody-order-ordinary/. Connected station-wake focus passed50tests0failur
 +guardrails, including actual automatic feed/processing, attendance, fuel, lifecycle,
 multiple material/recipe work, transport, holder order and global duplicate-section
 negative. No extra timer/retry/cache was introduced. Receipt local-station-wake-focus.log.
+
+
+### Reusable exact route geometry for formation assessment
+
+f45f2e9e5 frozenpackage15s+guardrails/JAR/package; both retained deployments verified.
+Ordinary observation running without a build/profile/client. The unchanged47e4JFR
+also identifies GroupTravelCohesion.projection (60exact leaf samples) and onRoute
+allocating one TravelPoint per itinerary node (40exact allocation samples). Source
+shows complete polyline scans for the candidate, actual member and every peer on
+every permitted step; joining also creates a complete route membership set. Their
+cost grows with the whole distance even for one small local movement.
+
+Introduce shared immutable RouteSpatialIndex: cumulative exact lengths and a
+hierarchy of segment bounding boxes with small leaves. Branch-and-bound finds the
+same nearest segment, preserving earliest equal-distance segment and original
+fraction/progress arithmetic. Point/node membership uses the same tree without
+per-node TravelPoint allocation. No distance cut, approximate result, shortened
+route, obstacle change, actor position or movement authority is introduced.
+Worst-case folded overlap may still visit all leaves; normal spatially separated
+long routes can reject remote branches. No logarithmic worst-case guarantee.
+
+Group cohesion consumes this general geometry and keeps its existing actual-image,
+spacing, hold/resume, joining and pace policy. Current group route declarations feed
+two shared immutable row projections: unchanged routes retain a lazily built index;
+closed/retired groups and new world epochs release it. Unqueried routes are not
+eagerly indexed. Provisional/earlier declared routes compute their own exact geometry,
+never substitute a retained group or acquire permission. UnitGroupState uses the
+existing immutable lookup map/delta updates, preserving full roster/key/uniqueness
+checks, so a local movement does not reproject every route. The existing lookup
+map still copies small maps below its partition threshold; no claim removes that
+bounded cost. No new retention limit.
+
+Verification: a geometric differential check against the retained original linear
+oracle, folded/non-flat/repeated/zero-length and large-coordinate routes, exact
+membership/signed-zero, immutable capture and one-node path. Existing observed group
+movement/envelope and expedition actual delivery/return/non-flat/restart cases cover
+integration. No timing/performance threshold test. Focus after the ordinary window.
+
+f45f2e9e5 ordinary window304.386001s338369->341820=11.337578/s,debt2137->4774;
+no build/profile/client overlap. No new retained accepted quantities or terminal
+harvest in5samples. Hungry1:1->1,7:0->0,35:3->0,68:11->15,100:0->0; all5starving0.
+Evidence local-station-wake-ordinary/. No gain or isolated regression attribution
+across evolving workloads. The ordinary20/debt criterion remains open.
+
+Indexed-route connected focus passed39tests0failures160s+guardrails (incl9architecture),
+original-linear geometric equivalence, actual group observation, non-flat transport,
+expedition provisions, consolidation/return and recovery. No timing threshold test.
+Receipt indexed-group-route-focus.log and corresponding frontier XML reports.
+Frozen packaging/deployment and fresh current attribution follow. Do not reuse the
+old47e4 stage proportions as the current cost map after these connected cuts.
