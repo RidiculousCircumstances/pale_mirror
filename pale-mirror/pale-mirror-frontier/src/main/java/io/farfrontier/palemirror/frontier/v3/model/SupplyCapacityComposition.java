@@ -14,7 +14,7 @@ public final class SupplyCapacityComposition {
     private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(
             new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity(), new AutomaticStationSupplyCapacity(),
             new IndividualStationSupplyCapacity(), new AttendedStockSupplyCapacity(), new ForestrySupplyCapacity()));
-    private static final ImmutableKeyedInputView<SubjectId, List<ProductionCost>> VALUATIONS = new ImmutableKeyedInputView<>(256);
+    private static final ImmutableInputView<ImmutableResultView<SubjectId, List<ProductionCost>>> VALUATIONS = new ImmutableInputView<>();
     private SupplyCapacityComposition() { }
     public static Map<SupplyCapacityPort.Key, SupplyCapacityPort> register(List<SupplyCapacityPort> ports) {
         var result = new EnumMap<SupplyCapacityPort.Key, SupplyCapacityPort>(SupplyCapacityPort.Key.class);
@@ -25,8 +25,11 @@ public final class SupplyCapacityComposition {
     /** Local replacement costs need physical capabilities, not a reserve or market plan.
      * No target/incoming promise is manufactured by this valuation-only projection. */
     static List<ProductionCost> forValuation(FrontierWorldState state, GoodsParticipant participant) {
-        return VALUATIONS.get(state.bootstrap(), participant.party().id(), List.of(state, participant),
-                () -> valueInstalled(state, participant));
+        // A changed whole-world input already invalidates every subject's prior
+        // entry. Keep one current image per computing thread, rather than pinning
+        // a different obsolete world root for each subject under the bootstrap.
+        return VALUATIONS.get(List.of(state), () -> new ImmutableResultView<>(256))
+                .get(List.of(participant), participant.party().id(), () -> valueInstalled(state, participant));
     }
     private static List<ProductionCost> valueInstalled(FrontierWorldState state, GoodsParticipant participant) {
         var stocks = new TreeMap<String, SupplyPlanner.Stock>();

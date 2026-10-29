@@ -53,6 +53,8 @@ class SupplyValuationReadTest {
                 new SupplyPlanner.Stock(0, 0, 0, 0, 0, 0, 1, rules.supplyPlanning().require(c.itemKind()))));
         var port = new ExtractionSupplyCapacity(); var costs = port.valuation(state, home, stocks);
         assertFalse(costs.isEmpty());
+        var productionWorkers = SupplyLabourCapacity.potential(state, home, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY);
+        assertFalse(productionWorkers.isEmpty());
         assertTrue(port.valuation(state, home, Map.of()).isEmpty());
         assertEquals(costs, port.valuation(state, home, stocks));
         var sites = state.extractionSites();
@@ -73,6 +75,10 @@ class SupplyValuationReadTest {
         var unavailable = FrontierWorldState.duringUnpublishedTransition(() -> state.withChanges(
                 FrontierWorldStateUpdate.begin().actorLocations(actors)));
         assertTrue(port.valuation(unavailable, home, stocks).isEmpty());
+        assertTrue(SupplyLabourCapacity.potential(unavailable, home, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY).isEmpty(),
+                "a warmed manufacturing estimate cannot retain dead workers");
+        assertEquals(productionWorkers, SupplyLabourCapacity.potential(state, home, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY),
+                "a changed workforce cannot alter the earlier immutable branch");
         assertEquals(costs, port.valuation(state, home, stocks));
     }
 

@@ -6,6 +6,8 @@ import java.util.*;
 /** A common finite planning horizon; capability owners alone select eligible workers. */
 final class SupplyLabourCapacity {
     private record Candidate(ResidentProfile resident, boolean permitted, int skill) { }
+    private record Potential(SubjectId home, ResidentWorkKind work, HumanCapability capability) { }
+    private static final ImmutableKeyedInputView<Potential, List<ResidentProfile>> POTENTIALS = new ImmutableKeyedInputView<>(256);
     /** Complete dynamic reads of long-run potential. Current assignment, hunger
      * and feet position do not change a person's declared productive capacity. */
     static List<Object> potentialInputs(FrontierWorldState state, SubjectId home) {
@@ -16,12 +18,19 @@ final class SupplyLabourCapacity {
     static List<ResidentProfile> potential(FrontierWorldState state, SubjectId home, ResidentWorkKind work, HumanCapability capability) {
         var rule = state.bootstrap().ruleset().labour().entries().get(work);
         if (rule == null) return List.of();
+        // Installed recipes repeatedly ask for the same long-run workforce.
+        // Retain only its complete declared population/migration/life read set;
+        // current body movement, stock reservations and market drafts are not it.
+        return POTENTIALS.get(state.bootstrap(), new Potential(home, work, capability), potentialInputs(state, home),
+                () -> potential(state, home, capability, rule.targetWorkers()));
+    }
+    private static List<ResidentProfile> potential(FrontierWorldState state, SubjectId home, HumanCapability capability, int limit) {
         return state.humanPopulation().residentsIn(home).stream()
                 .filter(r -> r.capability(capability) > 0
                         && !state.humanPopulation().migrations().containsKey(r.id())
                         && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .sorted(Comparator.comparingInt((ResidentProfile r) -> r.capability(capability)).reversed().thenComparing(ResidentProfile::id))
-                .limit(rule.targetWorkers()).toList();
+                .limit(limit).toList();
     }
     /** Advisory workforce potential precedes demand-driven staffing. This grants no permission. */
     static List<ResidentProfile> candidates(FrontierWorldState state, SubjectId home, ResidentWorkKind work,

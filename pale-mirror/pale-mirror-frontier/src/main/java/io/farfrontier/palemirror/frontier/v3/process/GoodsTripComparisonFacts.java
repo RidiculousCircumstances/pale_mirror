@@ -14,15 +14,24 @@ final class GoodsTripComparisonFacts {
     }
     // Same complete alternative ceiling accepted by ProcurementSelection.
     private static final int MAX_MEASURED = 2048;
-    private static final ImmutableKeyedInputView<SubjectId, BoundedValueMemo<Long, GoodsTripComparisonFacts>> DECISIONS =
-            new ImmutableKeyedInputView<>(256);
+    private record Decision(GoodsParticipant buyer, long now) {
+        // Match the previous exact declaration identity without hashing the
+        // participant's complete counterparty list or price history.
+        @Override public int hashCode() { return 31 * System.identityHashCode(buyer) + Long.hashCode(now); }
+        @Override public boolean equals(Object other) {
+            return this == other || other instanceof Decision value && buyer == value.buyer && now == value.now;
+        }
+    }
+    private static final ImmutableInputView<BoundedValueMemo<Decision, GoodsTripComparisonFacts>> DECISIONS = new ImmutableInputView<>();
     private final Map<SubjectId, Measured> measured = new LinkedHashMap<>(16, .75f, true);
     static GoodsTripComparisonFacts forDecision(FrontierWorldState state, GoodsParticipant buyer, long now) {
         if (now < 0) throw new IllegalArgumentException("negative comparison instant");
-        // Exact immutable identities fence changed stock, funding, workforce,
-        // geometry and consent. Working views are local to the preparation thread.
-        return DECISIONS.get(state.bootstrap(), buyer.party().id(), List.of(state, buyer), () -> new BoundedValueMemo<>(1))
-                .get(now, GoodsTripComparisonFacts::new);
+        // Exact world/declaration/time identity still fences every input. Retain
+        // one current world image, not a historical root per party. A suspended
+        // calculation owns its captured working facts independently of this memo.
+        // Mutable comparisons never enter a shared completed-result cache.
+        return DECISIONS.get(List.of(state), () -> new BoundedValueMemo<>(256))
+                .get(new Decision(Objects.requireNonNull(buyer), now), GoodsTripComparisonFacts::new);
     }
     Measured rank(ProcurementSelection.Offer provisional, ExpeditionTiming timing) {
         var prior = measured.get(provisional.id());

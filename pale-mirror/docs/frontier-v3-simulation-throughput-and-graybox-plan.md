@@ -5852,3 +5852,55 @@ separation, real meal access and admitted trade-advice cases passed in
 profiled-column-facts-focus (34s) plus guardrails. No new test or timing assertion.
 The preceding undated-replacement-value focus ran 30 tests across seven suites;
 shared architecture overlaps other focus runs and must not be counted twice.
+
+### Current-world economic memo lifetime and common workforce facts
+
+All three preceding cuts are committed as aba5ee654, 8b6166e61 and faa562b86.
+The clean detached faa562b86 JAR passed guardrails/package verification (23s) and
+both retained runtimes verified its identical SHA-512, normal native save/exit and
+fresh startup. Ordinary scale observation 34729 completed 304.452366s,
+419430→421917, 8.168766/s, debt 495→4098; last three intervals were
+10.3546/10.9952/9.5664. Sixteen OK samples, fastForward=0, not recovering, no own
+build/profile/deploy/client overlap. No new retained terminal harvest/fulfilled
+contract in the five inspected towns; hungry 1:0→2, 7:1→1, 35:4→2, 68:0→0,
+100:0→1; all five starving=0. This is neither an isolated source-gain comparison
+nor sustainable 20/s. No whole-economy terminal claim follows from five towns.
+
+Current faa562b86 profile 66042 (all custom events OFF) ran 47.229644s:
+process CPU388.07s, matched293.39s, ten new/no retired threads; advice35.63/35.32s,
+navigation26.73/26.73s, server22.54s, exact12.33s, C2 JIT21.84s, matched GC108.63s.
+Seventy-six GC events, all Allocation Rate; after-GC occupancy4.347–6.134GB,
+mean5.443GB on8GiB heap, not an exact live-set measurement. No recorded allocation
+stall/DataLoss. Actual allocation deltas: navigation19.426/19.341GB,
+advice18.448/17.809GB, owner6.808GB, exact6.276GB, journal0.948GB. Producer output
+excludes thirteen first-thread boundary samples; 2158 samples/364 truncated,
+weights remain estimates, not exact producer bytes. Main repeated advice paths
+remain reserveSelected, assembly and installed valuation. Large Region samples
+come from overlay/block-knowledge lookups, not lazy profile-token expansion;
+do not fix expandedToken as if it were the leading current producer.
+
+Two bootstrap-keyed per-subject memos used whole WorldState identity as an input:
+SupplyCapacityComposition and GoodsTripComparisonFacts. Any changed world already
+invalidates those entries, but the former structure unnecessarily pins a different
+obsolete root per subject until that subject is queried again (up to256/thread).
+Retain one current world image per computing thread instead, with the same256-query
+bound and exact participant/declaration identity. Valuation keeps immutable completed
+results; mutable trip comparisons remain thread-local and keyed by exact buyer
+identity plus canonical time. Suspended Calculations retain their own working facts.
+No dependency narrowing, world hashing, quote-absence fence relaxation, admission
+change or shared mutable result cache. Exact freed bytes remain unmeasured.
+
+Current profile/source also repeats SupplyLabourCapacity.potential through installed
+recipe valuation. Reuse the existing complete population/migration/schedule/life
+projection under explicit home/work/capability and immutable ruleset identity.
+Preserve candidate filtering, skill order and workforce limit. Temporary activity,
+body movement and trade reservations do not enter long-run potential; actual work
+eligibility/preference/admission remains separate and uncached by this mechanism.
+
+current-world-advice-cache-focus passed43tests/8suites in107s plus guardrails before
+the additional workforce change. valuation-workforce-reads-focus then passed28tests/
+7suites in46s plus guardrails, covering the changed common workforce consumers,
+current/obsolete funded advice and production/recovery. Shared suites overlap;
+do not add the counts as unique coverage. Extend the existing loss-of-workforce
+negative to warmed production potential and immutable predecessor reads. No timing,
+forced-GC or new test-class campaign. No schema or compatibility layer introduced.
