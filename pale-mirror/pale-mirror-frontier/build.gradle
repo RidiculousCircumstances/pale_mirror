@@ -32,6 +32,22 @@ configurations.reactorExperimentImplementation.extendsFrom(configurations.implem
 dependencies {
     reactorExperimentImplementation 'io.projectreactor:reactor-core:3.8.8'
 }
+// Compile the exact pure-Java native segment reader into the offline experiment
+// only. No duplicate framing implementation or dependency on the NeoForge module.
+tasks.named('compileReactorExperimentJava', JavaCompile) {
+    source(project(':pale-mirror-neoforge').file('src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierWalSegment.java'))
+}
+tasks.register('frontierV3ReactorCommittedFlow', JavaExec) {
+    group = 'verification'
+    description = 'Offline accepted-WAL Java/Reactor comparison; no server writes.'
+    classpath = sourceSets.reactorExperiment.runtimeClasspath
+    mainClass = 'io.farfrontier.palemirror.frontier.v3.process.CommittedTradeFlowExperiment'
+    maxHeapSize = '4g'
+    workingDir = rootProject.layout.projectDirectory.asFile
+    def corpus = providers.gradleProperty('reactorCorpus')
+    def output = providers.gradleProperty('reactorOutput')
+    doFirst { args(corpus.get(), output.get()) }
+}
 tasks.register('frontierV3ReactorExperiment', JavaExec) {
     group = 'verification'
     description = 'Offline A/B/C valuation experiment; never starts or mutates a server.'
