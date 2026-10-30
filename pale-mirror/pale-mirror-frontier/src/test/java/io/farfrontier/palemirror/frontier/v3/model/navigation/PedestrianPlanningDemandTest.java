@@ -7,6 +7,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningDemandTest {
+    @Test void explicitCursorCheckpointRetiresOnlyTheConsumedPrefixAcrossNestedPreparations() {
+        var geometry = ground(PedestrianGeometryRevision.initial());
+        var first = PedestrianRouteRequest.of(geometry, SurfaceAnchor.at(1, 63, 1), SurfaceAnchor.at(2, 63, 1));
+        var next = PedestrianRouteRequest.of(geometry, SurfaceAnchor.at(2, 63, 1), SurfaceAnchor.at(3, 63, 1));
+        PedestrianRoutePlanner view = (g, from, to) -> new PedestrianRouteResult(
+                PedestrianRouteResult.Status.NO_PATH, List.of(), 1, 1, "EXACT_NEGATIVE");
+        var original = PedestrianRoutePlanning.prepare(view, () -> PedestrianRoutePlanning.query(
+                geometry, first.start(), first.target())).reads();
+        assertTrue(original.holdsReadFor(first));
+        var advanced = PedestrianRoutePlanning.prepare(view, original, () -> {
+            assertEquals(PedestrianRouteResult.Status.NO_PATH, PedestrianRoutePlanning.query(
+                    geometry, first.start(), first.target()).status());
+            PedestrianRoutePlanning.retireCompletedReadPhase();
+            return PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.query(geometry, next.start(), next.target()));
+        });
+        var delivered = original.merge(advanced.reads());
+        assertFalse(delivered.holdsReadFor(first), "an advanced cursor must release its completed alternative");
+        assertTrue(delivered.holdsReadFor(next));
+        var suspended = PedestrianRoutePlanning.prepare(view, delivered, () -> "pending external dependency");
+        assertTrue(suspended.reads().holdsReadFor(next), "absence of a checkpoint is never an implicit eviction");
+        var terminal = PedestrianRoutePlanning.prepare(view, suspended.reads(), () -> {
+            PedestrianRoutePlanning.retireCompletedReadPhase(); return "finished";
+        });
+        assertFalse(delivered.merge(terminal.reads()).holdsReadFor(next), "empty retirement must survive merging and publication");
+    }
     @Test void calculationFactBudgetRejectsOverflowInsteadOfSilentlyDroppingAcknowledgedData() {
         var surfaces = java.util.stream.IntStream.range(0, 65_535).mapToObj(i ->
                 SurfaceAnchor.at(i / 2, 63, (i + 1) / 2)).toList();

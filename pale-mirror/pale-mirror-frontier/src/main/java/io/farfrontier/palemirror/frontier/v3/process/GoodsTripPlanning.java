@@ -210,72 +210,80 @@ final class GoodsTripPlanning {
                     continue;
                 }
                 var candidate = (Candidate) alternative;
-                Optional<TransportMissionStarted> trip;
-                try { trip = GoodsTripAssembly.prepare(candidate.draft(), candidate.seller(), buyer,
-                        candidate.parcels(), candidate.mode(), now, candidate.timing().durationTicks()); }
-                catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                    decision = "WAITING_FOR_SELECTED_TRIP; status=" + unavailable.status() + "; reserved=0";
-                    // One selected pending preparation, never full-route fan-out for all quotes.
-                    if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING) {
-                        candidates.add(candidate);
-                        return new Result(initial, List.of(), decision, true);
+                boolean suspended = false;
+                try {
+                    Optional<TransportMissionStarted> trip;
+                    try { trip = GoodsTripAssembly.prepare(candidate.draft(), candidate.seller(), buyer,
+                            candidate.parcels(), candidate.mode(), now, candidate.timing().durationTicks()); }
+                    catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                        decision = "WAITING_FOR_SELECTED_TRIP; status=" + unavailable.status() + "; reserved=0";
+                        // One selected pending preparation, never full-route fan-out for all quotes.
+                        if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING) {
+                            suspended = true;
+                            candidates.add(candidate);
+                            return new Result(initial, List.of(), decision, true);
+                        }
+                        if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY)
+                            awaitingNavigation = true;
+                        smaller(initial, buyer, candidate, now).ifPresent(candidates::add);
+                        continue;
                     }
-                    if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY)
-                        awaitingNavigation = true;
-                    smaller(initial, buyer, candidate, now).ifPresent(candidates::add);
-                    continue;
+                    if (trip.isEmpty()) {
+                        decision = "WAITING_FOR_AVAILABLE_TRANSPORT_OR_PROVISIONS; reserved=0";
+                        smaller(initial, buyer, candidate, now).ifPresent(candidates::add);
+                        continue;
+                    }
+                    var declaration = trip.orElseThrow();
+                    var journey = declaration.mission().supplies().orElseThrow().journey();
+                    var exactTiming = ExpeditionTiming.assess(initial.bootstrap().ruleset().expedition(),
+                            journey.outward().edges(), journey.returning().edges(), declaration.mission().organization().itinerary());
+                    var departure = dispatchCause(initial, buyer, candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, candidate.parcels(),
+                            exactTiming.deliveryTicks(), exactTiming.durationTicks(), now);
+                    var cost = GoodsTransportValuation.exact(initial,
+                            candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, declaration.mission(), now);
+                    if (!departure.permitsDeparture()) {
+                        decision = "DEFERRED_FOR_CONSOLIDATION; exactJourney=SAFE_TO_WAIT; reserved=0";
+                        var deferred = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
+                                exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.DEFERRED);
+                        comparisons.remember(deferred, exactTiming);
+                        candidates.add(new Candidate(candidate.draft(), candidate.reservations(), candidate.seller(), candidate.parcels(),
+                                candidate.mode(), deferred, candidate.prefixes(), exactTiming));
+                        continue;
+                    }
+                    var exactOffer = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
+                            exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.READY);
+                    comparisons.remember(exactOffer, exactTiming);
+                    var alternatives = new ArrayList<>(candidates.stream().map(Alternative::offer).toList()); alternatives.add(exactOffer);
+                    var preferred = new ProcurementSelection().select(requirements, alternatives,
+                            initial.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(SourcingRules::labourValuePerTick).orElse(0L));
+                    if (preferred.filter(exactOffer.id()::equals).isEmpty()) {
+                        candidates.add(new Candidate(candidate.draft(), candidate.reservations(), candidate.seller(), candidate.parcels(),
+                                candidate.mode(), exactOffer, candidate.prefixes(), exactTiming));
+                        continue;
+                    }
+                    var priced = GoodsDeliveryPricing.reserve(initial, candidate.reservations(), candidate.parcels(), cost, now);
+                    if (priced.isEmpty()) {
+                        decision = "DELIVERED_PRICE_OR_FUNDS; expense=" + cost.resourceExpense().raw() + "; reserved=0";
+                        smaller(initial, buyer, candidate, now).ifPresent(candidates::add);
+                        continue;
+                    }
+                    var quotation = priced.orElseThrow(); var events = new ArrayList<>(quotation.events());
+                    events.addAll(GoodsTripAssembly.events(declaration, now));
+                    var admitted = TransportMissionProcess.admit(quotation.state(), declaration.mission().id(), declaration, now);
+                    completed = new Result(admitted, List.copyOf(events), "TRIP_ADMITTED; cause=" + departure
+                            + "; parcels=" + candidate.parcels().size() + "; items=" + candidate.parcels().stream().mapToInt(p -> p.quantity()).sum()
+                            + "; delivery=" + quotation.parcels().stream().mapToLong(p -> p.contract().deliveryUnitPrice().multiply(p.quantity()).raw()).sum()
+                            + "; workerTicks=" + cost.workerTicks()
+                            + "; members=" + declaration.group().members().size() + "; mission=" + declaration.mission().id().value(), false,
+                            Optional.of(new Selection(candidate.seller().party(), buyer.party(),
+                                    GoodsParticipantStorage.endpoint(initial, declaration.mission().sender().containerId()),
+                                    GoodsParticipantStorage.endpoint(initial, declaration.mission().receiver().containerId()), candidate.mode())));
+                    return completed;
+                } finally {
+                    // This attempt is complete. A later repriced/smaller offer is
+                    // a new attempt; only a suspended attempt needs private replay.
+                    if (!suspended) io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.retireCompletedReadPhase();
                 }
-                if (trip.isEmpty()) {
-                    decision = "WAITING_FOR_AVAILABLE_TRANSPORT_OR_PROVISIONS; reserved=0";
-                    smaller(initial, buyer, candidate, now).ifPresent(candidates::add);
-                    continue;
-                }
-                var declaration = trip.orElseThrow();
-                var journey = declaration.mission().supplies().orElseThrow().journey();
-                var exactTiming = ExpeditionTiming.assess(initial.bootstrap().ruleset().expedition(),
-                        journey.outward().edges(), journey.returning().edges(), declaration.mission().organization().itinerary());
-                var departure = dispatchCause(initial, buyer, candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, candidate.parcels(),
-                        exactTiming.deliveryTicks(), exactTiming.durationTicks(), now);
-                var cost = GoodsTransportValuation.exact(initial,
-                        candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, declaration.mission(), now);
-                if (!departure.permitsDeparture()) {
-                    decision = "DEFERRED_FOR_CONSOLIDATION; exactJourney=SAFE_TO_WAIT; reserved=0";
-                    var deferred = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
-                            exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.DEFERRED);
-                    comparisons.remember(deferred, exactTiming);
-                    candidates.add(new Candidate(candidate.draft(), candidate.reservations(), candidate.seller(), candidate.parcels(),
-                            candidate.mode(), deferred, candidate.prefixes(), exactTiming));
-                    continue;
-                }
-                var exactOffer = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
-                        exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.READY);
-                comparisons.remember(exactOffer, exactTiming);
-                var alternatives = new ArrayList<>(candidates.stream().map(Alternative::offer).toList()); alternatives.add(exactOffer);
-                var preferred = new ProcurementSelection().select(requirements, alternatives,
-                        initial.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(SourcingRules::labourValuePerTick).orElse(0L));
-                if (preferred.filter(exactOffer.id()::equals).isEmpty()) {
-                    candidates.add(new Candidate(candidate.draft(), candidate.reservations(), candidate.seller(), candidate.parcels(),
-                            candidate.mode(), exactOffer, candidate.prefixes(), exactTiming));
-                    continue;
-                }
-                var priced = GoodsDeliveryPricing.reserve(initial, candidate.reservations(), candidate.parcels(), cost, now);
-                if (priced.isEmpty()) {
-                    decision = "DELIVERED_PRICE_OR_FUNDS; expense=" + cost.resourceExpense().raw() + "; reserved=0";
-                    smaller(initial, buyer, candidate, now).ifPresent(candidates::add);
-                    continue;
-                }
-                var quotation = priced.orElseThrow(); var events = new ArrayList<>(quotation.events());
-                events.addAll(GoodsTripAssembly.events(declaration, now));
-                var admitted = TransportMissionProcess.admit(quotation.state(), declaration.mission().id(), declaration, now);
-                completed = new Result(admitted, List.copyOf(events), "TRIP_ADMITTED; cause=" + departure
-                        + "; parcels=" + candidate.parcels().size() + "; items=" + candidate.parcels().stream().mapToInt(p -> p.quantity()).sum()
-                        + "; delivery=" + quotation.parcels().stream().mapToLong(p -> p.contract().deliveryUnitPrice().multiply(p.quantity()).raw()).sum()
-                        + "; workerTicks=" + cost.workerTicks()
-                        + "; members=" + declaration.group().members().size() + "; mission=" + declaration.mission().id().value(), false,
-                        Optional.of(new Selection(candidate.seller().party(), buyer.party(),
-                                GoodsParticipantStorage.endpoint(initial, declaration.mission().sender().containerId()),
-                                GoodsParticipantStorage.endpoint(initial, declaration.mission().receiver().containerId()), candidate.mode())));
-                return completed;
             }
             completed = new Result(initial, List.of(), decision, awaitingNavigation);
             return completed;

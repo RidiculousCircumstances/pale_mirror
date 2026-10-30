@@ -648,3 +648,39 @@ baseline replacement. The final seven boundary/key cases plus regional,
 clear/retirement and architecture checks passed; guardrails/JAR/package passed32s.
 The earlier preliminary4a9d6c80d observation is preserved but not used as the
 final optimized result; its binary predates these key corrections.
+
+
+### Scale incident found before promotion: private read-phase lifetime
+
+The first final8f57b6a37 comparison did not finish. At about45899x, SCALE normally
+saved/stopped after quarantine: the opportunity calculation for settlement12
+retained131404 fact units against the existing131072 ceiling. Evidence is kept
+in region-boundary-reuse/incident-retained-facts/ and native-candidate-final/.
+Its incomplete six-sample window is not a successful benchmark or deployment
+acceptance. MAIN remained on4f195546f throughout this diagnostic correction.
+
+Static connected cause: GoodsTripPlanning.Calculation advances a persistent
+alternative cursor, but the generic preparation/owner-delivery memory merged
+acknowledged reads from every already completed alternative. Those accumulated
+proofs no longer served the suspended attempt, yet remained charged until the
+whole trade choice completed. The existing overflow guard correctly exposed the
+unbounded lifetime; increasing its ceiling or silently evicting an unfinished
+root-replayed prefix would conceal the defect or cause repeated preparation.
+
+PedestrianRoutePlanning now offers an explicit completed-read-phase checkpoint.
+The resumable trade cursor invokes it when a candidate attempt finishes, including
+rejection or repricing, and never when the attempt suspends for a pending route.
+A later smaller/repriced offer is a new attempt. Immutable calculation memory
+carries prefix retirement through nested observations and detached owner merges,
+including an empty successor phase. Ordinary/root-replayed calculations retain
+all acknowledged data unless the caller explicitly completes its phase. Shared
+route results, outstanding demand, current geometry validation, budget and
+canonical economic admission do not change. Regression coverage exercises the
+actual advice/wake publication chain, nested and empty retirement, retained
+suspended data, late delivery/shared eviction and multi-leg root replay.
+
+A bounded30s pinned async-profiler capture on the isolated SCALE candidate is
+retained under region-boundary-reuse/profile/. It confirms substantial regional
+build/connect and geometric memo work on navigation threads, but overlaps early
+JIT/GC warm-up and is not a final CPU-share or TPS comparison. No profiler/build/
+client overlaps an ordinary comparison window.

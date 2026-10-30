@@ -64,7 +64,13 @@ public final class PedestrianCalculationMemory {
     }
     static boolean capturable(PedestrianRouteResult result) { return result.status() != PedestrianRouteResult.Status.PLANNING && !result.awaitable(); }
     private final List<Read> reads;
-    private PedestrianCalculationMemory(List<Read> reads) { this.reads = List.copyOf(reads); }
+    // A phase checkpoint must survive empty results, nested observation and
+    // detached owner-side merges. Ordinary memory never retires implicitly.
+    private final boolean retiredPrefix;
+    private PedestrianCalculationMemory(List<Read> reads) { this(reads, false); }
+    private PedestrianCalculationMemory(List<Read> reads, boolean retiredPrefix) {
+        this.reads = List.copyOf(reads); this.retiredPrefix = retiredPrefix;
+    }
     public static PedestrianCalculationMemory empty() { return EMPTY; }
     Optional<Read> find(PedestrianRouteRequest request) { return reads.stream().filter(read -> read.matches(request)).findFirst(); }
     /** Delivery acknowledgment is independent of later geometry validity or business time. */
@@ -76,17 +82,22 @@ public final class PedestrianCalculationMemory {
     }
     static final class Builder {
         private final Map<PedestrianDemandKey, Read> reads = new LinkedHashMap<>();
+        private boolean retiredPrefix;
         void add(Read read) { reads.put(read.key, read); }
-        void addAll(PedestrianCalculationMemory memory) { memory.reads.forEach(this::add); }
+        void retirePrefix() { reads.clear(); retiredPrefix = true; }
+        void addAll(PedestrianCalculationMemory memory) {
+            if (memory.retiredPrefix) retirePrefix();
+            memory.reads.forEach(this::add);
+        }
         PedestrianCalculationMemory snapshot() {
             var values = new ArrayList<>(reads.values());
             long units = values.stream().mapToLong(Read::retainedUnits).sum();
             if (units > MAX_RETAINED_UNITS)
                 throw new IllegalStateException("unfinished pedestrian calculation exceeds retained fact budget: " + units);
-            return values.isEmpty() ? EMPTY : new PedestrianCalculationMemory(values);
+            return values.isEmpty() && !retiredPrefix ? EMPTY : new PedestrianCalculationMemory(values, retiredPrefix);
         }
     }
     public PedestrianCalculationMemory merge(PedestrianCalculationMemory other) {
-        var builder = new Builder(); reads.forEach(builder::add); other.reads.forEach(builder::add); return builder.snapshot();
+        var builder = new Builder(); builder.addAll(this); builder.addAll(other); return builder.snapshot();
     }
 }

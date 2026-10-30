@@ -146,6 +146,15 @@ public final class PedestrianRoutePlanning {
         if (observation != null) observation.add(Objects.requireNonNull(request));
     }
 
+    /** Explicit cursor checkpoint for a resumable calculation: the caller has
+     * finished its previous phase and can resume without replaying that prefix. A suspended
+     * phase must retain its reads. This never evicts shared results or demands.
+     * Root-replayed calculations do not call this capability. */
+    public static void retireCompletedReadPhase() {
+        var reads = CONTEXT.get().completedReads;
+        if (reads != null) reads.retirePrefix();
+    }
+
     /** Bounded read-only opportunity probe. Reuse family predicates through a
      * retained-only calculation capability, without speculative searches or wakes.
      * Only the actual chosen process may acquire the ordinary query capability. */

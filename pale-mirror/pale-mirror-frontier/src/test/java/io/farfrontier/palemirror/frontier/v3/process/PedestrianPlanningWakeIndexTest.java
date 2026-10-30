@@ -11,6 +11,36 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void advancedAdviceCursorRetiresItsPreviousAlternativeWhileKeepingCurrentDelivery() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("cursor-checkpoint", 20);
+        var first = request(3); var next = request(20); var cursor = new java.util.concurrent.atomic.AtomicInteger();
+        ScheduledAdvisory<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState> advice = () -> {
+            if (cursor.get() == 0) {
+                assertEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.query(GROUND, first.start(), first.target()).status());
+                cursor.incrementAndGet(); PedestrianRoutePlanning.retireCompletedReadPhase();
+            }
+            var result = PedestrianRoutePlanning.query(GROUND, next.start(), next.target());
+            if (result.awaitable()) PedestrianRoutePlanning.await(next);
+            return (state, at) -> java.util.Optional.of(() -> () -> List.of(new ProposedEvent(owner.subject(), result.awaitable()
+                    ? new ScheduleEffect.Rescheduled(owner.id(), owner) : new ScheduleEffect.Cancelled(owner.id()))));
+        };
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index)) {
+            index.replace(owner, List.of(first)); planner.query(GROUND, first.start(), first.target());
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges(), planner::readFact);
+            assertTrue(index.reads(owner).holdsReadFor(first));
+            PedestrianPlanningContinuations.advisory(owner, advice).prepare().revalidate(null, new SimInstant(20)).orElseThrow().prepare().get();
+            assertFalse(index.reads(owner).holdsReadFor(first), "publication must propagate the explicit cursor checkpoint");
+            assertTrue(index.waiting(owner));
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges(), planner::readFact);
+            assertTrue(index.reads(owner).holdsReadFor(next));
+            var result = PedestrianPlanningContinuations.advisory(owner, advice).prepare().revalidate(null, new SimInstant(30)).orElseThrow().prepare().get();
+            assertInstanceOf(ScheduleEffect.Cancelled.class, result.getFirst().payload());
+            assertEquals(1, cursor.get()); assertEquals(0, index.waitingCount());
+        }
+    }
     @Test void unfinishedAdviceResumesItsCapturedSnapshotInsteadOfAccumulatingNewInputEpochs() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("snapshot-owner", 20);
         var original = new java.util.concurrent.atomic.AtomicInteger(); var changed = new java.util.concurrent.atomic.AtomicInteger();
