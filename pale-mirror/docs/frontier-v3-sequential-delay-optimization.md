@@ -743,3 +743,143 @@ Java22 MAIN3227416/birth38590576, SCALE3207388/birth38561198; exact installed/fr
 JAR hashes match (final-identity.json). No task build/profiler/client/observer is
 left running. Pack tracked state remains clean, unrelated .f0v-baseline/ preserved;
 canonical architecture amendments remain among preserved governance WIP. No push.
+
+
+## Attribution of the apparent boundary-cache regression
+
+User requested the exact cause of18.03→16.89, before another optimization.
+This investigation changes no production behavior. MAIN remainsa009ef1e2;
+SCALE alone normally saved/stopped/restored the same authorized checkpoint for
+causal observation. Receipts: build/simulation-throughput/boundary-regression-diagnosis/.
+
+### Exact accounting of the original measured loss
+
+The disjoint HOST_TURN parent timers on the single owner thread account for the
+extra wall time. Ready continuations cannot execute inside the native tick
+(FrontierV3CanonicalResumption checks NATIVE_TICKS); these two parent families
+must not be added to their nested validation/transaction stages.
+
+| Original window | Baseline4f195 | Finala009 |
+| --- | ---: | ---: |
+| Elapsed observation, seconds | 61.685735 | 65.675261 |
+| Ready-continuation owner time, seconds | 31.211383 | 35.319604 |
+| Ordinary owner-turn time, seconds | 2.213534 | 2.098411 |
+| Sum of those disjoint owner times, seconds | 33.424917 | 37.418015 |
+| Ready-continuation invocations | 34448 | 40450 |
+| Mean ready-continuation wall duration, microseconds | 906.04 | 873.17 |
+
+Observation grew3.989527s; these owner timers grew3.993098s (difference3.57ms).
+The lost time is additional owner continuation work, rather than a larger mean
+cost per continuation. This is attribution of the observed windows, not proof
+that the cache alone caused every additional invocation. Background elapsed
+sums and nested stages are not additional exclusive shares.
+
+### Fixed-input navigation and trade calculations
+
+Two ignored standalone read-only consumers load the actual native-saved
+schema313 checkpoint at revision7796944,tick456001. They invoke public production
+geometry/profile APIs and the ordinary CooperativePedestrianPlanner in separate
+Java22 JVMs with2G heaps. Baseline is the retained exact4f195 JAR (SHA512de51…13faa),
+candidate the frozen exacta009 JAR (SHA512f3f2…dcf95). No task build/profiler/client
+or another offline leg overlapped either measurement. Input/JAR/source hashes
+and scope are retained in offline-identity.json. These are diagnostic consumers,
+not new timing assertions or permanent CI tests.
+
+First40requests agree on observed terminal fields. The400-request run spans all
+100towns, local residents and distant villager/donkey estimates, and exceeds the
+strong graph cache's capacity. Three warmed rounds each use a fresh planner.
+Exact captured endpoints/bounds/extents are equal. Status,reason,regioncount,
+estimate,length and32-bit route fingerprint agree; a fingerprint is not claimed
+as a full serialized route equality proof or movement authority.
+
+| Fixed400requests | Baseline | Candidate |
+| --- | ---: | ---: |
+| Mean current-thread CPU, seconds | 33.637218 | 27.372476 |
+| Mean elapsed processing, seconds | 35.372889 | 28.491405 |
+| Layered regional graphs per round | 7475 | 7475 |
+| Graph evictions per round | 5427 | 5427 |
+| Deterministic work units per round | 21627695 | 20831653 |
+
+CPU−18.6244%; allocated bytes−17.5644%. This fixed workload does not reproduce an
+intrinsically slower navigator or doubled graph construction. It does not prove
+all dynamic geometry/callers or a global TPS benefit. Ten fixed actual trade
+NO_PURCHASE decisions also agree on choices,passes and search counts; warmed CPU
+3.379132→2.244634s. The extra live searches therefore cannot be inferred from
+cache cost on an unchanged input; the evolving asynchronous workload matters.
+
+### Concrete read-delivery defect found in a009
+
+A source-level interleaving through the actual continuation owner, private read
+memory and ordinary planner is reproduced by ignored ReadCheckpointRace.java:
+
+1. A completed trade phase leaves retiredPrefix=true in the stored Wait.reads.
+2. A detached preparation captures that memory and waits for the next route.
+3. The next route completes; the owner acknowledges it in its newer read memory.
+4. Ordinary shared-result pressure evicts the route (the probe uses the real
+   128-result policy, not a forced invalidation).
+5. The older preparation publishes. Its inherited retiredPrefix marker is
+   applied again by memory.merge during PedestrianPlanningContinuations.publish.
+6. The newer delivered fact disappears. The next resume asks for the same route
+   again despite previously acknowledged delivery.
+
+Exact probe output: BEFORE_LATE_PUBLICATION delivered=true; SHARED_EVICTED=true;
+AFTER_OLDER_PUBLICATION delivered=false,pending=0; NEXT_RESUME=PLANNING;
+DUPLICATE_SEARCHES=1. This is a source-proven defect, not a guessed failure story.
+A retirement instruction was retained as reusable state instead of being
+consumed once at its publication boundary. The fix belongs to the common read
+phase/delivery protocol, retaining late data and exact generation boundaries;
+raising cache capacity or weakening geometry validation would not fix it.
+
+Its share of the original6.3% is NOT measured. Preliminary4a9 already observed
+17.1356/s before read-phase retirement existed, so this later bug cannot explain
+the entire original difference. No production fix is included in this diagnostic.
+
+### Confirmed trade retry amplification and causal limits
+
+Original windows: completed searches5879→8165; worker slices8885→15393;
+advice4584→5404; CHANGED_EMPTY_MARKET rejections306→590. The source guard in
+GoodsParticipantOpportunityAdvice rejects NO_PURCHASE when either the entire
+order-book object or the buyer input revision changed. Rejection flows through
+PedestrianPlanningWakeIndex.obsoleteAdvice, called by the continuation adapter:
+its captured cursor/read memory
+is removed, then the same due opportunity can restart. The reason currently
+combines book changes and buyer input changes; these counters cannot classify
+all590 as false/irrelevant invalidations. Relevant new offers must still reopen
+a previous absence. Dependency precision, rather than disabling freshness, is
+the appropriate correction boundary.
+
+A fresh30s JFR starts at459052, overlapping the last167canonical ticks of the
+original window and continuing to459380. It is not another matched full-window
+TPS benchmark. It records5259navigation slices,1510queued opportunity advice,
+12300ready turns and181complete queued→running→computed→rejected opportunity
+lifecycles with reason CHANGED_EMPTY_MARKET. Those181 computations consume
+2.547182 current-thread CPU seconds before rejection. Some opportunity schedule
+IDs have64 preparations in that interval; the count includes valid partial
+resumptions and newer generations, not64proven duplicate jobs. Worker slice
+completion calls ready.run; the adapter coalesces queued notifications, then
+re-enters navigation retention/publication/wakes and ordinary canonical work.
+Repeated attempts therefore reach the owner, not only the worker pool.
+
+The capture has624492events/no JFR data loss but reports trace_incomplete for
+missing capture-edge dependencies and unexplained wall time. Positive closed
+lifecycles/counters remain evidence; no fully closed end-to-end attribution or
+universal causal percentage is claimed. An earlier quiet trace at534875→535476
+is preserved separately and excluded from old-phase reasoning. A command-envelope
+parsing error delayed the targeted capture; raw receipt/error are preserved,
+and the actual459052→459380coverage is stated above. No extra reset was used
+to hide an unsuccessful product result.
+
+Conclusion: the measured wall deficit is owner work amplification. Fixed-input
+navigation is cheaper. A concrete common delivery bug creates repeat searches;
+broad trade freshness checks cause observed recomputation. The individual share
+of each in the6.3% remains unallocated; presenting that number as cache overhead,
+or claiming every retry is needless, would exceed the evidence.
+
+Report guardrails passed11s. Final health/source identity receipts confirm both
+still run the unchanged a009 artifact: MAINJava3227416/birth38590576,
+instant2625367,debt0; SCALEJava3462879/birth38970822,instant464078,debt1464.
+Both explicit statusOK/recovering=false/noFF/no freshERROR/quarantine. SCALE
+profiling/restore does not establish its sustained throughput; no new production
+behavior or MAIN deployment occurred. No task probe/profiler/client remains.
+Implementation report is committed separately; pack tracked state is unchanged,
+existing.f0v-baseline/ and governance WIP preserved. No push.
