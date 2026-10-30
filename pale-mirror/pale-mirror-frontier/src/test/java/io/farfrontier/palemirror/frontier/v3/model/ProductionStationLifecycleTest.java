@@ -7,6 +7,16 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductionStationLifecycleTest {
+    @Test void anIdleMachineCannotReuseAValidationAfterItsInstallationDisappears() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:machine-reads"), 41,
+                FrontierRulesets.fuelledQuarryGraybox()));
+        var machines = state.productionStations();
+        var catalog = state.bootstrap().ruleset().production();
+        var tools = state.bootstrap().ruleset().tools();
+        machines.validate(state.inventory(), catalog, tools);
+        assertThrows(IllegalArgumentException.class, () -> machines.validate(ExactInventory.empty(), catalog, tools));
+        machines.validate(state.inventory(), catalog, tools);
+    }
     @Test void replacementHasNewIdentityAndNoInheritedHeatWhileObservedPortStockIsAdoptedOnlyOnce() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:station-replacement"), 41,
                 FrontierRulesets.fuelledQuarryGraybox()));

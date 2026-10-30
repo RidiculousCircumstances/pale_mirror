@@ -1130,3 +1130,36 @@ page-membership query, preserving dynamic tree admission, cross-region links,
 immutable old snapshots and conservative unknown/oversized answers. Focused
 forest/navigation tests and guardrails PASS (forest-coverage-checks.log,37s).
 No walkability rule, simulation rate, admission quota or worker count changed.
+
+
+### Fifth candidate: rejected throughput-only interpretation
+
+Frozen a45a3e531 ordinary458132→459275/48.7039s reported23.4684ticks/s and
+debt706→538. This is NOT accepted as healthy throughput: at458927 navigation
+reached8 ready publications,20 protected results and then stopped at
+275,685,517work/20,573completions. Later canonical462564 had0time debt but
+697waiting requests and idle navigation workers. The fifth window is retained
+as a failure receipt, not a win. Native fifth-stalled-planning.txt confirms
+all8 active distant estimates already completed but unable to publish.
+
+Source inspection identifies a registration/delivery gap: advisory revalidation
+acquires ready data before the exact continuation registers its dependency.
+Those notifications see no subscriber; the subsequent registration pins already
+completed results without acknowledging their data. Every new staged continuation
+now checks existing completed read receipts after registering. The common wake
+owner records delivery; it does not query a new path, execute a business action,
+relax geometry checks, advance a future deadline or raise retention/worker limits.
+A connected regression reproduces the pre-registration interleaving and verifies
+acknowledgment, shared-capacity release and absence of business execution.
+
+The source also addresses the profiled machine-validation cost: unchanged idle
+installed machines depend on their exact installation, not every carried item's
+wear/count. Active operations/fuel/recipe effects deliberately retain complete
+inventory evidence; recipe effects retain tool definitions. All existing machine
+checks remain authoritative, including disappearance/replacement and full ingress.
+Focused machine/input/fuel/recovery checks and guardrails PASS57s.
+
+The fifth2ms JFR was captured, but the analyzer crashed on a JDK frame with no
+RecordedMethod. The export now labels such a frame unresolved instead of assuming
+a Java method; the same recording exports successfully. No recapture or invented
+method attribution is needed. Original failed analysis receipt remains preserved.

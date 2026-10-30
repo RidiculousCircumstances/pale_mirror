@@ -435,6 +435,16 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 && retainedDemands.contains(PedestrianDemandKey.of(entry.getKey()))).count();
     }
 
+    /** Bounded owner-time evidence for a delivery/capacity stall; no route queries. */
+    public record CompletedDiagnostic(SurfaceAnchor start, SurfaceAnchor target, String status,
+            int regions, boolean protectedDelivery, boolean capturedRead, boolean readMatchesRequest) { }
+    public synchronized java.util.List<CompletedDiagnostic> completedDiagnostics() {
+        return completed.entrySet().stream().limit(4).map(entry -> new CompletedDiagnostic(entry.getKey().start(),
+                entry.getKey().target(), entry.getValue().result().status().name(), entry.getValue().dependencies().revisions().size(),
+                retainedDemands.contains(PedestrianDemandKey.of(entry.getKey())), entry.getValue().read().isPresent(),
+                entry.getValue().read().filter(read -> read.matches(entry.getKey())).isPresent())).toList();
+    }
+
     public synchronized int pendingCount() { return pending.size(); }
     public synchronized int inFlightCount() { return inFlight.size(); }
     public synchronized int deferredCount() { return deferred.size(); }

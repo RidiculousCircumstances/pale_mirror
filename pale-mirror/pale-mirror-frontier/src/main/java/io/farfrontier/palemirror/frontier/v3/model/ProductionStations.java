@@ -94,56 +94,78 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
     }
     public void validate(ExactInventory inventory, ProductionCatalog catalog,
                          io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
-        for (var machine : machines.values()) {
-            var station = ProductionStationDirectory.require(inventory, machine.stationId()).productionStation().orElseThrow();
-            var equipment = catalog.requireEquipment(station.equipmentType());
-            if (!equipment.capabilities().contains(station.capability()))
-                throw new IllegalArgumentException("installed station capability differs from its declared equipment type");
-            machine.combustion().ifPresent(burn -> {
-                if (station.fuelSlot().isEmpty() || burn.endsAtTick() - burn.startedAtTick() != catalog.requireFuel(burn.itemKind()).burnTicks())
-                    throw new IllegalArgumentException("combustion lost its declared fuel duration or machine port");
-            });
-            machine.operation().ifPresent(operation -> {
-                var recipe = catalog.require(operation.recipeId());
-                equipment.require(recipe);
-                if (operation.initiator() instanceof ProductionOperation.SettlementInitiator institution) {
-                    var record = inventory.containers().get(station.containerId());
-                    if (!institution.settlementId().equals(record.ownerId()) || !operation.orderId().equals(operation.id().value())
-                            || catalog.automaticPolicies().stream().noneMatch(policy -> policy.recipeId().equals(recipe.id())))
-                        throw new IllegalArgumentException("automatic station operation lost its explicit institution mandate");
-                }
-                if (recipe.capability() != station.capability() || recipe.outputForInput(operation.inputQuantity()) != operation.outputQuantity())
-                    throw new IllegalArgumentException("machine operation differs from its declared recipe");
-                if (!operation.transformed()) {
-                    ProductionOperationInputs.validate(inventory, station, operation, recipe);
-                } else if (operation.initiator() instanceof ProductionOperation.OrderInitiator order
-                        && recipe.outcome() instanceof ProductionRecipeOutcome.Fungible
-                        && operation.inputCustody() instanceof ProductionOperation.FungibleInput input) {
-                    var ledger = inventory.fungibleResources(); var claim = ledger.claims().get(operation.outputClaimId());
-                    var account = FungibleResourceReadIndex.container(ledger, station.containerId(), ContainerSectionId.OUTPUT).orElse(null);
-                    if (claim == null || claim.purpose() != ClaimPurpose.STATION_OUTPUT || !claim.claimantId().equals(order.orderId())
-                            || !claim.lotQuantities().equals(Map.of(operation.outputId(), operation.outputQuantity()))
-                            || account == null || account.claimQuantities().getOrDefault(claim.id(), 0) != operation.outputQuantity())
-                        throw new IllegalArgumentException("transformed station operation lost its reserved collection output");
-                }
-            });
-            machine.pendingRecipe().ifPresent(boundary -> boundary.validate(inventory, station, machine.operation().orElseThrow(), catalog, tools));
-            machine.pendingFuel().ifPresent(burn -> {
-                if (!burn.containerId().equals(station.containerId()) || burn.authorityEpoch() < 1
-                        || burn.durationTicks() != catalog.requireFuel(burn.itemKind()).burnTicks()
-                        || !burn.source().getFirst().address().equals(new PhysicalStackAddress.ContainerSlot(
-                            new InventoryCustody.ContainerSlot(station.containerId(), station.fuelSlot().orElseThrow()))))
-                    throw new IllegalArgumentException("machine lost its exact pending fuel port/definition");
-                var ledger = inventory.fungibleResources(); var account = ledger.accounts().get(burn.accountId());
-                var source = burn.source().getFirst();
-                var binding = ledger.bindings().values().stream().filter(value -> value.address().equals(source.address())).findFirst().orElseThrow(
-                        () -> new IllegalArgumentException("machine pending fuel lost its physical preimage"));
-                if (account == null || !account.custody().equals(station.custody(ActorContainerItemOrder.StationPort.FUEL))
-                        || burn.lots().entrySet().stream().anyMatch(entry -> account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
-                        || !binding.accountId().equals(account.id()) || binding.authorityEpoch() != burn.authorityEpoch()
-                        || binding.quantity() != source.before() || !binding.itemKind().equals(burn.itemKind()))
-                    throw new IllegalArgumentException("machine pending fuel contradicts its reserved physical preimage");
-            });
-        }
+        REFERENCES.validate(catalog, machines, new ValidationInputs(inventory, catalog, tools));
+    }
+    private record ValidationInputs(ExactInventory inventory, ProductionCatalog catalog,
+            io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) { }
+    private enum Input { CURRENT }
+    private static final ImmutableReferenceIndex.Source<ValidationInputs, SubjectId, ContainerRecord> STATIONS =
+            new ImmutableReferenceIndex.Source<>(value -> ProductionStationDirectory.declarations(value.inventory()));
+    // Active effects deliberately retain the complete inventory evidence. An idle
+    // machine reads only its installation, never every unrelated carried item.
+    private static final ImmutableReferenceIndex.Source<ValidationInputs, Input, ExactInventory> MATERIALS =
+            new ImmutableReferenceIndex.Source<>(value -> Map.of(Input.CURRENT, value.inventory()));
+    private static final ImmutableReferenceIndex.Source<ValidationInputs, Input, io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog> TOOLS =
+            new ImmutableReferenceIndex.Source<>(value -> Map.of(Input.CURRENT, value.tools()));
+    private static final ImmutableReferenceIndex<ValidationInputs, SubjectId, Machine> REFERENCES =
+            new ImmutableReferenceIndex<>(4_096, 3, java.util.List.of(STATIONS, MATERIALS, TOOLS), (inputs, machine) -> {
+                var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<ValidationInputs>>();
+                reads.add(STATIONS.at(machine.stationId()));
+                if (machine.operation().isPresent() || machine.pendingFuel().isPresent() || machine.pendingRecipe().isPresent())
+                    reads.add(MATERIALS.at(Input.CURRENT));
+                if (machine.pendingRecipe().isPresent()) reads.add(TOOLS.at(Input.CURRENT));
+                return java.util.List.copyOf(reads);
+            }, (inputs, id, machine) -> validateMachine(machine, inputs.inventory(), inputs.catalog(), inputs.tools()));
+    private static void validateMachine(Machine machine, ExactInventory inventory, ProductionCatalog catalog,
+            io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
+        var station = ProductionStationDirectory.require(inventory, machine.stationId()).productionStation().orElseThrow();
+        var equipment = catalog.requireEquipment(station.equipmentType());
+        if (!equipment.capabilities().contains(station.capability()))
+            throw new IllegalArgumentException("installed station capability differs from its declared equipment type");
+        machine.combustion().ifPresent(burn -> {
+            if (station.fuelSlot().isEmpty() || burn.endsAtTick() - burn.startedAtTick() != catalog.requireFuel(burn.itemKind()).burnTicks())
+                throw new IllegalArgumentException("combustion lost its declared fuel duration or machine port");
+        });
+        machine.operation().ifPresent(operation -> {
+            var recipe = catalog.require(operation.recipeId());
+            equipment.require(recipe);
+            if (operation.initiator() instanceof ProductionOperation.SettlementInitiator institution) {
+                var record = inventory.containers().get(station.containerId());
+                if (!institution.settlementId().equals(record.ownerId()) || !operation.orderId().equals(operation.id().value())
+                        || catalog.automaticPolicies().stream().noneMatch(policy -> policy.recipeId().equals(recipe.id())))
+                    throw new IllegalArgumentException("automatic station operation lost its explicit institution mandate");
+            }
+            if (recipe.capability() != station.capability() || recipe.outputForInput(operation.inputQuantity()) != operation.outputQuantity())
+                throw new IllegalArgumentException("machine operation differs from its declared recipe");
+            if (!operation.transformed()) {
+                ProductionOperationInputs.validate(inventory, station, operation, recipe);
+            } else if (operation.initiator() instanceof ProductionOperation.OrderInitiator order
+                    && recipe.outcome() instanceof ProductionRecipeOutcome.Fungible
+                    && operation.inputCustody() instanceof ProductionOperation.FungibleInput input) {
+                var ledger = inventory.fungibleResources(); var claim = ledger.claims().get(operation.outputClaimId());
+                var account = FungibleResourceReadIndex.container(ledger, station.containerId(), ContainerSectionId.OUTPUT).orElse(null);
+                if (claim == null || claim.purpose() != ClaimPurpose.STATION_OUTPUT || !claim.claimantId().equals(order.orderId())
+                        || !claim.lotQuantities().equals(Map.of(operation.outputId(), operation.outputQuantity()))
+                        || account == null || account.claimQuantities().getOrDefault(claim.id(), 0) != operation.outputQuantity())
+                    throw new IllegalArgumentException("transformed station operation lost its reserved collection output");
+            }
+        });
+        machine.pendingRecipe().ifPresent(boundary -> boundary.validate(inventory, station, machine.operation().orElseThrow(), catalog, tools));
+        machine.pendingFuel().ifPresent(burn -> {
+            if (!burn.containerId().equals(station.containerId()) || burn.authorityEpoch() < 1
+                    || burn.durationTicks() != catalog.requireFuel(burn.itemKind()).burnTicks()
+                    || !burn.source().getFirst().address().equals(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(station.containerId(), station.fuelSlot().orElseThrow()))))
+                throw new IllegalArgumentException("machine lost its exact pending fuel port/definition");
+            var ledger = inventory.fungibleResources(); var account = ledger.accounts().get(burn.accountId());
+            var source = burn.source().getFirst();
+            var binding = ledger.bindings().values().stream().filter(value -> value.address().equals(source.address())).findFirst().orElseThrow(
+                    () -> new IllegalArgumentException("machine pending fuel lost its physical preimage"));
+            if (account == null || !account.custody().equals(station.custody(ActorContainerItemOrder.StationPort.FUEL))
+                    || burn.lots().entrySet().stream().anyMatch(entry -> account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
+                    || !binding.accountId().equals(account.id()) || binding.authorityEpoch() != burn.authorityEpoch()
+                    || binding.quantity() != source.before() || !binding.itemKind().equals(burn.itemKind()))
+                throw new IllegalArgumentException("machine pending fuel contradicts its reserved physical preimage");
+        });
     }
 }

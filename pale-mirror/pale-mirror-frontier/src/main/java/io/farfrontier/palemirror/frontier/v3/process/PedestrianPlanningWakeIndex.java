@@ -134,20 +134,36 @@ public final class PedestrianPlanningWakeIndex {
         for (var change : changes) {
             var read = change.kind() == PedestrianPlanningChange.Kind.RESULT_AVAILABLE ? completedRead.apply(change.request())
                     : Optional.<PedestrianCalculationMemory.Read>empty();
-            for (var id : dependents.getOrDefault(PedestrianDemandKey.of(change.request()), Set.of())) {
-                if (read.isPresent()) {
-                    var wait = waits.get(id);
-                    PedestrianCalculationMemory delivered;
-                    try { delivered = wait.reads().including(read.orElseThrow()); }
-                    catch (IllegalStateException failure) {
-                        throw new IllegalStateException("pedestrian calculation delivery failed for " + wait.action().kind()
-                                + "/" + wait.action().id().value() + " owner=" + wait.action().subject().value(), failure);
-                    }
-                    waits.put(id, new Wait(wait.action(), wait.requests(), wait.origin(), wait.predecessor(), delivered, wait.advice()));
-                    retention = null;
+            deliver(change, read);
+        }
+    }
+    /** A ready fact may predate registration of this continuation. Reading its
+     * current receipt closes that delivery gap without acquiring a route or
+     * running the waiting business action. Future/predecessor fences still apply. */
+    void acknowledgeAvailable(ScheduledAction action,
+            java.util.function.Function<PedestrianRouteRequest, Optional<PedestrianCalculationMemory.Read>> completedRead) {
+        var wait = waits.get(action.id());
+        if (wait == null || !wait.action().equals(action)) return;
+        for (var request : wait.requests()) {
+            var read = completedRead.apply(request);
+            if (read.isPresent()) deliver(new PedestrianPlanningChange(request,
+                    PedestrianPlanningChange.Kind.RESULT_AVAILABLE), read);
+        }
+    }
+    private void deliver(PedestrianPlanningChange change, Optional<PedestrianCalculationMemory.Read> read) {
+        for (var id : dependents.getOrDefault(PedestrianDemandKey.of(change.request()), Set.of())) {
+            if (read.isPresent()) {
+                var wait = waits.get(id);
+                PedestrianCalculationMemory delivered;
+                try { delivered = wait.reads().including(read.orElseThrow()); }
+                catch (IllegalStateException failure) {
+                    throw new IllegalStateException("pedestrian calculation delivery failed for " + wait.action().kind()
+                            + "/" + wait.action().id().value() + " owner=" + wait.action().subject().value(), failure);
                 }
-                if (!runnable.contains(id)) ready.add(id);
+                waits.put(id, new Wait(wait.action(), wait.requests(), wait.origin(), wait.predecessor(), delivered, wait.advice()));
+                retention = null;
             }
+            if (!runnable.contains(id)) ready.add(id);
         }
     }
     /** An accepted wake transfers demand to the exact runnable generation. It does

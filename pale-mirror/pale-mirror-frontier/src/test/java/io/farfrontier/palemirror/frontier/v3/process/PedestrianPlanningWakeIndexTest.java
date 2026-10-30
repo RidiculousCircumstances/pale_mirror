@@ -11,6 +11,29 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void adviceAcknowledgesDataThatCompletedBeforeItsContinuationWasRegistered() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("pre-registration", 20);
+        var query = request(3); var calls = new java.util.concurrent.atomic.AtomicInteger();
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index)) {
+            var prepared = PedestrianPlanningContinuations.advisory(owner, snapshotAdvice(owner, query,
+                    calls, () -> true)).prepare();
+            assertEquals(0, index.waitingCount());
+            // Another admitted caller completes the same route before this
+            // advisory's exact continuation is published.
+            planner.query(GROUND, query.start(), query.target());
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges(), planner::readFact);
+            prepared.revalidate(null, new SimInstant(20)).orElseThrow().prepare().get();
+            assertTrue(index.reads(owner).holdsReadFor(query), "registration must acknowledge already available evidence");
+            assertTrue(index.retainedDemandKeys(new SimInstant(20)).isEmpty(), "acknowledged data releases shared result capacity");
+            assertFalse(index.waiting(owner), "acknowledged data cannot leave the due continuation blocked");
+            assertEquals(1, calls.get(), "acknowledging data cannot run the business action");
+            assertEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.prepare(planner.readView(),
+                    index.reads(owner), () -> PedestrianRoutePlanning.query(GROUND, query.start(), query.target()))
+                    .observation().result().status());
+        }
+    }
     @Test void lateDeliverySurvivesAnOlderPreparationAfterAReadPhaseCheckpoint() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("late-checkpoint", 20);
         var first = request(3); var next = request(20);
@@ -280,7 +303,8 @@ class PedestrianPlanningWakeIndexTest {
     @Test void calculationOnlyWaitKeepsItsDueGenerationButBusinessTransitionRetainsItsDeadline() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("calculation-only", 20);
         var future = action("calculation-only", 220); var query = request(3);
-        try (var binding = PedestrianPlanningContinuations.bind(index)) {
+        try (var planner = new CooperativePedestrianPlanner(); var navigation = PedestrianRoutePlanning.bind(planner);
+                var binding = PedestrianPlanningContinuations.bind(index)) {
             var result = PedestrianPlanningContinuations.plan(owner, () -> {
                 PedestrianRoutePlanning.await(query);
                 return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), future)));

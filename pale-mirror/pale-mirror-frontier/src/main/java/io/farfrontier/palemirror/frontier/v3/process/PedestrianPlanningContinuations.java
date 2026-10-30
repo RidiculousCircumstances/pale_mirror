@@ -160,8 +160,11 @@ public final class PedestrianPlanningContinuations {
                 successor = null;
         }
         if (successor == null) index.remove(action.id());
-        else index.stage(action, successor, observation.requests(), calculationOnly
-                ? reads.applyTo(index.reads(action)) : PedestrianCalculationMemory.empty(), calculationOnly ? advice : java.util.Optional.empty());
+        else {
+            index.stage(action, successor, observation.requests(), calculationOnly
+                    ? reads.applyTo(index.reads(action)) : PedestrianCalculationMemory.empty(), calculationOnly ? advice : java.util.Optional.empty());
+            index.acknowledgeAvailable(successor, PedestrianRoutePlanning::readFact);
+        }
         return result;
     }
 }

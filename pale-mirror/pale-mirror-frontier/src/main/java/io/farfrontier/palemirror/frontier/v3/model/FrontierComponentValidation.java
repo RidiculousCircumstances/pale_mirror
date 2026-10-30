@@ -10,7 +10,6 @@ final class FrontierComponentValidation {
     private static final ImmutableInvariantCheck<Void> EXTRACTION_LAND = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> EXTRACTION_WORK = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> FORESTRY_WORK = new ImmutableInvariantCheck<>();
-    private static final ImmutableInvariantCheck<Void> MACHINES = new ImmutableInvariantCheck<>();
     private FrontierComponentValidation() { }
 
     static void validateLandAndWork(FrontierBootstrap bootstrap, ExtractionSiteState extraction,
@@ -22,6 +21,6 @@ final class FrontierComponentValidation {
 
     static void validateMachines(ProductionStations stations, ExactInventory inventory,
                                  ProductionCatalog catalog, io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
-        MACHINES.validate(() -> stations.validate(inventory, catalog, tools), stations, inventory, catalog, tools);
+        stations.validate(inventory, catalog, tools);
     }
 }

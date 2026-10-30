@@ -90,7 +90,8 @@ public class SimulationTraceExport {
                 var row = new LinkedHashMap<String,Object>(); row.put("event",type); row.put("start",start); row.put("end",end); row.put("fields",fields);
                 var thread = type.equals("jdk.ExecutionSample") || type.equals("jdk.NativeMethodSample") ? e.getThread("sampledThread") : e.getThread();
                 row.put("tid",thread == null ? 0 : thread.getJavaThreadId()); row.put("thread",thread == null ? "" : thread.getJavaName());
-                if (e.getStackTrace()!=null) row.put("stack",e.getStackTrace().getFrames().stream().limit(32).map(f -> f.getMethod().getType().getName()+"."+f.getMethod().getName()+":"+f.getLineNumber()).toList());
+                if (e.getStackTrace()!=null) row.put("stack",e.getStackTrace().getFrames().stream().limit(32).map(f -> f.getMethod() == null ? "[unresolved " + f.getType() + " frame]"
+                        : f.getMethod().getType().getName()+"."+f.getMethod().getName()+":"+f.getLineNumber()).toList());
                 writer.write(json(row)); writer.newLine();
             }
         }
