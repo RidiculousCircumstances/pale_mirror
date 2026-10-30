@@ -58,3 +58,96 @@ Earlier failure of the new batch fixture omitted the normal planner binding;
 fixture corrected, not a product timeout change. First scoped compile caught
 its missing checked-exception declaration. No performance claim yet.
 Baseline artifact460803662 retained checksum-pinned in the local trial receipts.
+
+## Frozen trial, 2026-10-30
+
+Implementation48bed7050, schema313 unchanged. Clean detached RELEASE packaged
+verification PASS14s. Candidate SHA512:
+`b6a0b81bda6075f4140f18c371abf76beba979efc5fb08d1023ee086445192332cfb9a3542acd02f9c587d454dcb999b9d11d663f7e0052effc28dc1fe8b1b3d`.
+Baseline460803662 JAR retained checksum-pinned in local receipts.
+
+Both ordinary SCALE runs restored the complete109file native-saved checkpoint,
+seed126,100town profile,2advice/2navigation workers, same Java22/ZGC/heap/config.
+No own compilation, tests, profiling or replay control ran during these ordinary
+windows. All observations were statusok, not recovering, no fast-forward.
+The initial baseline observer missed its already-passed range and is explicitly
+excluded; the replacement used verified same-JVM warmup and an explicit range.
+Async decisions can diverge by scheduling, so this is an aligned life interval
+from the same checkpoint, not byte-identical economic execution or host isolation.
+
+| Counter |460803662|48bed7050|
+|---|---:|---:|
+| Simulation interval |461001–462115|461009–462120|
+| Wall seconds |62.061|56.801|
+| Simulation ticks/second |17.950|19.559|
+| Ordinary debt, before→after |474→601|1525→1550|
+| Ready owner seconds |28.823|26.842|
+| Canonical validation seconds |5.518|5.251|
+| Completed searches |7782|7557|
+| Search work units |65,310,572|63,016,614|
+
+The working window is about9% faster and3.5% less total search work; normalized
+per simulated tick the work reduction is about3.3%. Stable20ticks/s is **not**
+proved: candidate debt still grew25ticks. The owner path remains substantial.
+There is also a slower observed cold prefix: service start→first aligned sample
+was296.47s baseline versus352.22s candidate, each around5000simulated ticks.
+This pair does not isolate the reason from recovery/JIT/advice scheduling/other
+host load. Do not hide it, call it a proven field CPU regression, or extrapolate
+this single working window as a universal throughput guarantee.
+
+Within the candidate window:183shared field acquisitions,281repairs,
+43,167initial eligible seed labels and669,713field work units. Seeded labels
+are eligibility/reuse counters, not a claim that every label stays unchanged.
+Field retention stayed128entries/~31.7knodes within128/65,536bounds. The atlas
+retained134estimates/130,674units within2048/131,072bounds;2121owner/readFact hits
+include delivery rereads, while detached snapshot lookups are not counted. This
+is not2121unique avoided searches. No cache/authority/publication freeze occurred;
+7557completed searches and sampled meal reviews continued. The sampled harvest
+terminal lists did not change; they are not proof of a new harvest cycle.
+
+A separate serial actual-checkpoint ten-buyer CPU replay ran ABBA,8rounds/fork,
+sameJava22,2Gheap,ActiveProcessorCount2 and pinned core, SCALE saved/stopped.
+Warmed last-four-round median CPU seconds per fork:
+old1.1816/new1.1941/new1.1627/old1.2182. No large isolated CPU gain is established.
+All320decision dispositions match;360searches/fork match. New batches reduce
+passes440→432per fork; work23,805,856→23,829,456(+0.10%). The first summary helper
+incorrectly required equal pass counts; corrected analysis reports this intended
+batching difference rather than changing a product assertion or test oracle.
+The replay does not establish complete quote equality or physical acceptance.
+
+Raw receipts/helpers are under `build/simulation-throughput/shared-fields/`:
+`native-comparison.json`, `fields-comparison.json`, `controlled-trade-identity.json`,
+`controlled-trade-summary.json`; observers additionally retain raw diagnostics in
+`owner-throughput-closure/native-shared-{baseline-range,candidate}/`.
+The scale service was normally saved/stopped after measurement; both ports and
+JVM exit verified, world retained. No need to leave an unused100town load running.
+
+Affected frozen native gates PASS: economy55/55(54s Gradle), local-navigation
+45/45(55s), body-lifetime25/25(47s). These check exact cargo/items, current native
+movement and body lifetime boundaries; they are not a graphical client campaign,
+continuous full caravan/harvest-cycle acceptance or a new HUMAN/M2/M3 promotion.
+Receipts `economy-native.log`, `navigation-native.log`, `body-native.log`.
+
+MAIN delivered source48bed7050 through root publish/pinned install/preflight and
+fresh verifier, same SHA512 above. Exact world retained:
+`/home/rd/far-frontier-server/frontier-v3-owner-throughput-20261030`,seed126,
+12town terrain-r31,2advice/2navigation,service`far-frontier-v3-live.service`,
+PID1544763,game25565/RCON25575. Native all-dimensions save/JVM+bothports exit
+verified before install. Pack index158files validated; publication touched only
+ignored hosted artifacts. First post-deploy read tick120114:statusok,debt0,
+FF0,recoveringfalse,123completed searches, atlas/goal counters present.
+Fresh logs have no ERROR/quarantine/NO_CURRENT_AUTHORITY; existing optional
+class-probe warnings are not a new fault-free full-pack claim. A new real-client
+visual acceptance was not performed. Receipts `deploy-main/`, `main-deploy.log`,
+`main-performance-{first,final}.txt`.
+
+IMPL scoped code commit48bed7050; this report commit is documentation only.
+RELEASE clean detached48bed7050. PACK tracked clean atf72713382957; unrelated
+untracked`.f0v-baseline/` preserved. Governance unrelated WIP preserved; only
+current ledger and the scoped shared-goal-fields architecture property updated.
+No push, API goal change, new hierarchy, simulation-detail reduction or worker
+limit increase. The trial establishes the implemented mechanisms and these
+bounded results; it does not establish universal20TPS or a large trade CPU gain.
+Final read120883:statusok,debt0,FF0,recoveringfalse,590searches(no publication
+wait); recent64host ticks max7.57ms. Historical startup max61.78ms on this JVM,
+not a permanent latency bound. Report guardrails PASS12s; diff whitespace clean.
