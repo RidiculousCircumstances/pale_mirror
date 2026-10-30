@@ -64,13 +64,7 @@ public final class PedestrianCalculationMemory {
     }
     static boolean capturable(PedestrianRouteResult result) { return result.status() != PedestrianRouteResult.Status.PLANNING && !result.awaitable(); }
     private final List<Read> reads;
-    // A phase checkpoint must survive empty results, nested observation and
-    // detached owner-side merges. Ordinary memory never retires implicitly.
-    private final boolean retiredPrefix;
-    private PedestrianCalculationMemory(List<Read> reads) { this(reads, false); }
-    private PedestrianCalculationMemory(List<Read> reads, boolean retiredPrefix) {
-        this.reads = List.copyOf(reads); this.retiredPrefix = retiredPrefix;
-    }
+    private PedestrianCalculationMemory(List<Read> reads) { this.reads = List.copyOf(reads); }
     public static PedestrianCalculationMemory empty() { return EMPTY; }
     Optional<Read> find(PedestrianRouteRequest request) { return reads.stream().filter(read -> read.matches(request)).findFirst(); }
     /** Delivery acknowledgment is independent of later geometry validity or business time. */
@@ -85,19 +79,56 @@ public final class PedestrianCalculationMemory {
         private boolean retiredPrefix;
         void add(Read read) { reads.put(read.key, read); }
         void retirePrefix() { reads.clear(); retiredPrefix = true; }
-        void addAll(PedestrianCalculationMemory memory) {
-            if (memory.retiredPrefix) retirePrefix();
-            memory.reads.forEach(this::add);
+        void addAll(PedestrianCalculationMemory memory) { memory.reads.forEach(this::add); }
+        void add(Update update) {
+            if (update.retiresPrefix) retirePrefix();
+            addAll(update.result);
+        }
+        Update update(PedestrianCalculationMemory basis) {
+            var captured = snapshot();
+            return new Update(basis, retiredPrefix ? captured : basis.merge(captured), retiredPrefix);
         }
         PedestrianCalculationMemory snapshot() {
             var values = new ArrayList<>(reads.values());
             long units = values.stream().mapToLong(Read::retainedUnits).sum();
             if (units > MAX_RETAINED_UNITS)
                 throw new IllegalStateException("unfinished pedestrian calculation exceeds retained fact budget: " + units);
-            return values.isEmpty() && !retiredPrefix ? EMPTY : new PedestrianCalculationMemory(values, retiredPrefix);
+            return values.isEmpty() ? EMPTY : new PedestrianCalculationMemory(values);
+        }
+    }
+    /** Disposable publication instruction. Memory itself contains facts only.
+     * Retirement addresses the exact captured reads, never later deliveries. */
+    public record Update(PedestrianCalculationMemory basis, PedestrianCalculationMemory result, boolean retiresPrefix) {
+        public Update { Objects.requireNonNull(basis); Objects.requireNonNull(result); }
+        public static Update adding(PedestrianCalculationMemory reads) { return new Update(EMPTY, reads, false); }
+        public Update basedOn(PedestrianCalculationMemory memory) {
+            if (basis != EMPTY) throw new IllegalStateException("read capture already has a basis");
+            return new Update(memory, retiresPrefix ? result : memory.merge(result), retiresPrefix);
+        }
+        public Update then(Update next) {
+            if (next.basis != result) throw new IllegalArgumentException("disconnected pedestrian read phases");
+            return new Update(basis, next.result, retiresPrefix || next.retiresPrefix);
+        }
+        public PedestrianCalculationMemory applyTo(PedestrianCalculationMemory current) {
+            if (current == basis) return result;
+            var captured = new LinkedHashMap<PedestrianDemandKey, Read>();
+            basis.reads.forEach(read -> captured.put(read.key, read));
+            var latest = new LinkedHashMap<PedestrianDemandKey, Read>();
+            current.reads.forEach(read -> latest.put(read.key, read));
+            var builder = new Builder();
+            for (var read : current.reads)
+                if (!retiresPrefix || captured.get(read.key) != read) builder.add(read);
+            for (var read : result.reads) {
+                var delivered = latest.get(read.key);
+                // Acknowledged evidence delivered after capture wins over its older image.
+                if (delivered == null || delivered == captured.get(read.key)) builder.add(read);
+            }
+            return builder.snapshot();
         }
     }
     public PedestrianCalculationMemory merge(PedestrianCalculationMemory other) {
+        if (other == EMPTY || other == this) return this;
+        if (this == EMPTY) return other;
         var builder = new Builder(); builder.addAll(this); builder.addAll(other); return builder.snapshot();
     }
 }

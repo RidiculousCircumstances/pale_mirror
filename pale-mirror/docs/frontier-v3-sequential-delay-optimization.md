@@ -883,3 +883,39 @@ profiling/restore does not establish its sustained throughput; no new production
 behavior or MAIN deployment occurred. No task probe/profiler/client remains.
 Implementation report is committed separately; pack tracked state is unchanged,
 existing.f0v-baseline/ and governance WIP preserved. No push.
+
+
+### 2026-10-30 — connected read retirement and negative opportunity repair
+
+The user authorized fixing both confirmed boundaries above. Stored calculation
+memory now contains completed facts only. A disposable update carries its exact
+captured basis, resulting facts and explicit phase retirement through nested and
+chained advisory/exact/completion observations. Publication removes only captured
+read identities, preserving later acknowledged evidence even for the same demand.
+The instruction cannot survive in a stored wait and be replayed on the next turn.
+Recovery now retains its successful prefix as well as pending dependencies.
+The same fact budget, geometry fences, exact schedule ownership and no-checkpoint
+root replay semantics remain in force.
+
+Negative opportunity advice now retains trade-owned bounded input evidence,
+constructed only for an actual negative advisory choice. Its prospective buy
+commodities/limits come from the decision producer, including commodities without
+a current input-book bid. The existing commodity index supplies current crossing
+known-seller offers, including explicit absence. Own and relevant seller hard
+economic bases, declared identity/policy/knowledge/prices, current workforce
+admission and transport/order retention thresholds remain guarded. Unrelated
+order changes, above-limit asks and MARKET-only notification generations do not
+restart it. New or changed relevant offers, hard inputs, navigation observations
+and ordinary expiry reopen it. A selected choice still passes existing current
+exact stock/money/crew/custody/mission admission; no evidence grants a reservation.
+No new durable schema, quota, worker count, timing assertion or reactive framework.
+
+Focused checks currently pass: 54 Java cases (navigation wait/demand, market
+interest/advice and architecture), guardrails and adapter production/test
+compilation. They cover late delivery plus real shared-result eviction, a
+checkpoint during nested capture, same-demand later replacement, empty retirement,
+recovery prefix retention, missing/relevant/unrelated/noncrossing/expired offers,
+funding and seller capacity changes, geometry refresh and dated-choice admission.
+The pre-existing adapter restart test reported above remains open; these focused
+checks do not label it green. Frozen artifact/native economics, paired SCALE
+measurement and deployment receipts are recorded below after execution.

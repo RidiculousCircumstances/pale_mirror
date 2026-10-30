@@ -22,7 +22,7 @@ class PedestrianPlanningDemandTest {
             PedestrianRoutePlanning.retireCompletedReadPhase();
             return PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.query(geometry, next.start(), next.target()));
         });
-        var delivered = original.merge(advanced.reads());
+        var delivered = advanced.update().applyTo(original);
         assertFalse(delivered.holdsReadFor(first), "an advanced cursor must release its completed alternative");
         assertTrue(delivered.holdsReadFor(next));
         var suspended = PedestrianRoutePlanning.prepare(view, delivered, () -> "pending external dependency");
@@ -30,7 +30,7 @@ class PedestrianPlanningDemandTest {
         var terminal = PedestrianRoutePlanning.prepare(view, suspended.reads(), () -> {
             PedestrianRoutePlanning.retireCompletedReadPhase(); return "finished";
         });
-        assertFalse(delivered.merge(terminal.reads()).holdsReadFor(next), "empty retirement must survive merging and publication");
+        assertFalse(terminal.update().applyTo(delivered).holdsReadFor(next), "empty retirement must survive merging and publication");
     }
     @Test void calculationFactBudgetRejectsOverflowInsteadOfSilentlyDroppingAcknowledgedData() {
         var surfaces = java.util.stream.IntStream.range(0, 65_535).mapToObj(i ->

@@ -27,7 +27,7 @@ public final class PedestrianPlanningContinuations {
             if (current != owner) throw new IllegalStateException("planning recovery lost its runtime owner");
             for (var wait : waits) if (retained.test(wait.action()) && !owner.tracks(wait.action())) {
                 var ready = wait.advice().acquire();
-                owner.restore(wait.action(), wait.advice().observation().requests());
+                owner.restore(wait.action(), wait.advice().observation().requests(), wait.advice().reads());
                 owner.changed(ready, PedestrianRoutePlanning::readFact);
             }
         }
@@ -70,7 +70,7 @@ public final class PedestrianPlanningContinuations {
         var index = current;
         if (index == null) return planning.get();
         var observation = PedestrianRoutePlanning.observe(index.reads(action), planning);
-        return publish(index, action, observation, observation.reads());
+        return publish(index, action, observation, observation.update());
     }
     /** Detached advice captures route evidence; only accepted owner completion publishes dependencies. */
     static io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation prepare(
@@ -84,7 +84,7 @@ public final class PedestrianPlanningContinuations {
                 if (current != index) throw new IllegalStateException("prepared planning lost its runtime owner");
                 var ready = prepared.acquire(index == null ? PedestrianCalculationMemory.empty() : index.reads(action));
                 if (index == null) return prepared.observation().result();
-                var result = publish(index, action, prepared.observation(), prepared.reads());
+                var result = publish(index, action, prepared.observation(), prepared.update());
                 index.changed(ready, PedestrianRoutePlanning::readFact);
                 return result;
             };
@@ -119,7 +119,10 @@ public final class PedestrianPlanningContinuations {
                                 if (index == null) return completion.result();
                                 var requests = new java.util.LinkedHashSet<>(prepared.observation().requests());
                                 requests.addAll(exact.observation().requests()); requests.addAll(completion.requests());
-                                var result = publish(index, action, new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)), exact.reads().merge(completion.reads()), java.util.Optional.of(snapshot));
+                                var update = prepared.update().then(exact.update()).then(completion.update());
+                                var result = publish(index, action,
+                                        new PedestrianRoutePlanning.Observation<>(completion.result(), java.util.List.copyOf(requests)),
+                                        update, java.util.Optional.of(snapshot));
                                 index.changed(changes, PedestrianRoutePlanning::readFact); return result;
                             };
                         };
@@ -129,11 +132,11 @@ public final class PedestrianPlanningContinuations {
         };
     }
     private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
-            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation, PedestrianCalculationMemory reads) {
+            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation, PedestrianCalculationMemory.Update reads) {
         return publish(index, action, observation, reads, index.advice(action));
     }
     private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
-            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation, PedestrianCalculationMemory reads,
+            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation, PedestrianCalculationMemory.Update reads,
             java.util.Optional<ScheduledAdvisory<FrontierWorldState>> advice) {
         // A calculation-only wait changes no business state and has no elapsed-time
         // deadline. Retain the exact due generation instead of inventing a future
@@ -158,7 +161,7 @@ public final class PedestrianPlanningContinuations {
         }
         if (successor == null) index.remove(action.id());
         else index.stage(action, successor, observation.requests(), calculationOnly
-                ? index.reads(action).merge(reads) : PedestrianCalculationMemory.empty(), calculationOnly ? advice : java.util.Optional.empty());
+                ? reads.applyTo(index.reads(action)) : PedestrianCalculationMemory.empty(), calculationOnly ? advice : java.util.Optional.empty());
         return result;
     }
 }

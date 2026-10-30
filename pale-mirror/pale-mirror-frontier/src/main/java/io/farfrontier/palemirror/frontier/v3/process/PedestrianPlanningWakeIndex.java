@@ -32,7 +32,10 @@ public final class PedestrianPlanningWakeIndex {
         replace(action, requests, Origin.LIVE_CONTINUATION, Optional.empty());
     }
     void restore(ScheduledAction action, List<PedestrianRouteRequest> requests) {
-        replace(action, requests, Origin.RECOVERY_PREVIEW, Optional.empty());
+        restore(action, requests, PedestrianCalculationMemory.empty());
+    }
+    void restore(ScheduledAction action, List<PedestrianRouteRequest> requests, PedestrianCalculationMemory reads) {
+        replace(action, requests, Origin.RECOVERY_PREVIEW, Optional.empty(), reads, Optional.empty());
     }
     /** A producer may have computed its successor before the WAL publishes it.
      * Retain delivery while its exact predecessor is still canonical, but never

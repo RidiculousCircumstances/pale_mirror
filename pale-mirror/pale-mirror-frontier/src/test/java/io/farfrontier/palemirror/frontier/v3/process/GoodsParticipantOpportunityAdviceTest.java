@@ -11,6 +11,66 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsParticipantOpportunityAdviceTest {
+    @Test void absentPurchaseIgnoresUnrelatedMarketRowsButReopensForARelevantNewOffer() {
+        var state = withoutOffers(quoted()); var owner = buyer(state); var at = new SimInstant(401);
+        var action = GoodsParticipantWakeup.action(owner, at.ticks());
+        var completion = GoodsParticipantProcess.planner().advice(state, action, at).orElseThrow().prepare();
+        assertTrue(completion.revalidate(state, at).isPresent());
+        var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var unrelated = new GoodsTradeOrder(new SubjectId("order:unrelated-negative-advice"), seller.party(), GoodsTradeOrder.Side.SELL,
+                FrontierWorldState.depotId(seller.settlementId()), "minecraft:diamond", 64, 0, FixedScalar.ONE, 1000);
+        var changed = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(unrelated)));
+        var buyerInputs = changed.companies().goodsTrade().participants();
+        // A MARKET notification may already be dirty at capture or arrive after it.
+        // Neither is proof of a new purchasing opportunity.
+        var notified = buyerInputs.withEconomicState(owner, buyerInputs.economicState(owner).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.MARKET, Set.of("minecraft:diamond"))));
+        changed = changed.withCompanies(changed.companies().withGoodsTrade(changed.companies().goodsTrade().withParticipants(notified)));
+        assertTrue(completion.revalidate(changed, at).isPresent(), completion.rejectionReason());
+        var relevant = new GoodsTradeOrder(new SubjectId("order:relevant-negative-advice"), seller.party(), GoodsTradeOrder.Side.SELL,
+                FrontierWorldState.depotId(seller.settlementId()), "minecraft:bread", 64, 0, new FixedScalar(1), 1000);
+        var opportunity = changed.withCompanies(changed.companies().withGoodsTrade(changed.companies().goodsTrade().place(relevant)));
+        assertTrue(completion.revalidate(opportunity, at).isEmpty(), "absence must subscribe to the missing commodity too");
+        assertEquals("CHANGED_EMPTY_MARKET", completion.rejectionReason());
+        var money = state.inventory().economics();
+        var drained = state.withInventory(state.inventory().withEconomics(money.transfer(owner,
+                seller.party().id(), money.availableToReserve(owner))));
+        assertTrue(completion.revalidate(drained, at).isEmpty(), "hard funding changes still retire negative advice");
+        assertTrue(completion.revalidate(state, new SimInstant(at.ticks() + state.bootstrap().ruleset().goodsTrade().reviewInterval())).isEmpty());
+        assertEquals("EXPIRED", completion.rejectionReason());
+    }
+    @Test void negativeInputProofTracksCrossingPriceSellerCapacityAndGeometryWithoutRestartingForOtherGoods() {
+        var state = withoutOffers(quoted()); var buyer = state.companies().goodsTrade().participants().participants().get(buyer(state));
+        var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var limits = Map.of("minecraft:bread", FixedScalar.ONE);
+        var absent = GoodsOpportunityInputs.capture(state, buyer, limits, 401);
+        var expensive = new GoodsTradeOrder(new SubjectId("order:noncrossing-negative"), seller.party(), GoodsTradeOrder.Side.SELL,
+                FrontierWorldState.depotId(seller.settlementId()), "minecraft:bread", 64, 0, FixedScalar.whole(2), 1000);
+        var noncrossing = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(expensive)));
+        assertTrue(absent.matches(noncrossing, 401), "an above-limit ask cannot become a feasible purchase");
+        var crossing = new GoodsTradeOrder(new SubjectId("order:crossing-negative"), seller.party(), GoodsTradeOrder.Side.SELL,
+                expensive.containerId(), expensive.itemKind(), 64, 0, FixedScalar.ONE, 1000);
+        var offered = noncrossing.withCompanies(noncrossing.companies().withGoodsTrade(noncrossing.companies().goodsTrade().place(crossing)));
+        assertFalse(absent.matches(offered, 401));
+        var proof = GoodsOpportunityInputs.capture(offered, buyer, limits, 401);
+        assertTrue(proof.matches(offered, 401)); assertFalse(proof.matches(offered, 1001), "expired offers are no longer the same opportunity");
+        var participants = offered.companies().goodsTrade().participants();
+        var inputs = participants.withEconomicState(seller.party().id(), participants.economicState(seller.party().id()).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.CAPACITY, Set.of())));
+        var changedSeller = offered.withCompanies(offered.companies().withGoodsTrade(offered.companies().goodsTrade().withParticipants(inputs)));
+        assertFalse(proof.matches(changedSeller, 401));
+        var at = new SimInstant(401); var action = GoodsParticipantWakeup.action(buyer.party().id(), at.ticks());
+        var completion = GoodsParticipantProcess.planner().advice(state, action, at).orElseThrow().prepare();
+        var geometry = new NavigationGeometryObserved(state.navigationGeometry().revision(),
+                Map.of(new BlockPosition(0, 64, 0), NavigationObservation.known(NavigationCell.AIR))).apply(state, NavigationGeometryObserved.OWNER);
+        assertTrue(completion.revalidate(geometry, at).isEmpty()); assertEquals("GEOMETRY", completion.rejectionReason());
+    }
+    private static FrontierWorldState withoutOffers(FrontierWorldState state) {
+        var trade = state.companies().goodsTrade();
+        for (var order : List.copyOf(trade.orders().values())) if (order.side() == GoodsTradeOrder.Side.SELL)
+            trade = trade.withdraw(order.party().id(), new GoodsTradeOrderWithdrawn(order.id(), order.committedQuantity()));
+        return state.withCompanies(state.companies().withGoodsTrade(trade));
+    }
     @Test void noncrossingQuoteSchedulesEconomicObservationWithoutAnImmediateMatchingSearch() {
         var state = ConsolidatedTradeFixture.initial(new WorldId("frontier:quote-notification"), 20260918065L, false);
         var participants = state.companies().goodsTrade().participants();

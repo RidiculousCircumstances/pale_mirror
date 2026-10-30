@@ -11,6 +11,61 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void lateDeliverySurvivesAnOlderPreparationAfterAReadPhaseCheckpoint() throws Exception {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("late-checkpoint", 20);
+        var first = request(3); var next = request(20);
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index)) {
+            planner.query(GROUND, first.start(), first.target());
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            var phase = PedestrianRoutePlanning.prepare(planner.readView(), () -> {
+                PedestrianRoutePlanning.retireCompletedReadPhase();
+                return PedestrianRoutePlanning.query(GROUND, first.start(), first.target());
+            });
+            index.stage(owner, owner, List.of(next), phase.reads());
+            planner.query(GROUND, next.start(), next.target());
+            var older = PedestrianPlanningContinuations.prepare(owner, () -> {
+                assertEquals(PedestrianRouteResult.Status.PLANNING,
+                        PedestrianRoutePlanning.query(GROUND, next.start(), next.target()).status());
+                PedestrianRoutePlanning.await(next);
+                return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Rescheduled(owner.id(), owner)));
+            }).prepare();
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges(), planner::readFact);
+            assertTrue(index.reads(owner).holdsReadFor(next));
+            for (int i = 0; i < 140; i++) {
+                var point = SurfaceAnchor.at(i % 28 + 1, 63, i / 28 + 3);
+                planner.query(GROUND, point, SurfaceAnchor.at(point.x() + 1, 63, point.z()));
+                while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            }
+            assertTrue(planner.peek(GROUND, next.start(), next.target()).isEmpty(), "exercise real shared-result eviction");
+            older.get();
+            assertTrue(index.reads(owner).holdsReadFor(next), "publication cannot erase a later acknowledged route");
+            PedestrianPlanningContinuations.prepare(owner, () -> {
+                assertEquals(PedestrianRouteResult.Status.FOUND,
+                        PedestrianRoutePlanning.query(GROUND, next.start(), next.target()).status());
+                return List.of(new ProposedEvent(owner.subject(), new ScheduleEffect.Cancelled(owner.id())));
+            }).prepare().get();
+            assertEquals(0, planner.pendingCount(), "resumption must not recalculate the evicted delivered route");
+        }
+    }
+    @Test void retirementDuringPreparationRemovesOnlyItsCapturedPrefixAndPreservesLaterReplacement() {
+        var first = request(3); var next = request(20);
+        var captured = PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.query(GROUND, first.start(), first.target())).reads();
+        var retirement = PedestrianRoutePlanning.observe(captured, () -> {
+            PedestrianRoutePlanning.observe(() -> { PedestrianRoutePlanning.retireCompletedReadPhase(); return 0; });
+            return 0;
+        });
+        assertFalse(retirement.reads().holdsReadFor(first));
+        var replacement = PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.query(GROUND, first.start(), first.target())).reads();
+        var later = replacement.merge(PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.query(GROUND, next.start(), next.target())).reads());
+        var published = retirement.update().applyTo(later);
+        assertTrue(published.holdsReadFor(first), "a later read of the same demand is not the retired captured read");
+        assertTrue(published.holdsReadFor(next));
+        assertFalse(retirement.update().applyTo(captured).holdsReadFor(first));
+        var resumed = PedestrianRoutePlanning.observe(published, () -> 0);
+        assertTrue(resumed.reads().holdsReadFor(first), "stored facts cannot replay an old retirement instruction");
+    }
     @Test void advancedAdviceCursorRetiresItsPreviousAlternativeWhileKeepingCurrentDelivery() throws Exception {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("cursor-checkpoint", 20);
         var first = request(3); var next = request(20); var cursor = new java.util.concurrent.atomic.AtomicInteger();
@@ -268,8 +323,14 @@ class PedestrianPlanningWakeIndexTest {
         try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
                 var waits = PedestrianPlanningContinuations.bind(index);
                 var worker = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var prefix = request(2);
+            planner.query(GROUND, prefix.start(), prefix.target());
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            planner.drainChanges();
             var preparation = PedestrianPlanningContinuations.prepareRestore(() -> java.util.stream.IntStream.range(0, 3)
                     .mapToObj(i -> new PedestrianPlanningContinuations.RecoveryCandidate(List.of(retained, replaced, cancelled).get(i), () -> {
+                        assertEquals(PedestrianRouteResult.Status.FOUND,
+                                PedestrianRoutePlanning.query(GROUND, prefix.start(), prefix.target()).status());
                         var query = request(3 + i);
                         PedestrianRoutePlanning.query(GROUND, query.start(), query.target());
                         PedestrianRoutePlanning.await(query);
@@ -280,6 +341,8 @@ class PedestrianPlanningWakeIndexTest {
             assertEquals(0, index.waitingCount(), "worker cannot publish volatile wake ownership");
             index.replace(replaced, List.of(request(10)));
             recovery.publish(action -> !action.equals(cancelled));
+            assertTrue(index.reads(retained).holdsReadFor(prefix), "recovery must retain its already completed prefix too");
+            assertFalse(index.reads(replaced).holdsReadFor(prefix));
             assertEquals(1, planner.pendingCount(), "stale or already refreshed advice cannot acquire work");
             while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             index.changed(planner.drainChanges());

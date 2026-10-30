@@ -12,15 +12,14 @@ final class GoodsParticipantOpportunityAdvice {
     static ScheduledAdvisory<FrontierWorldState> capture(FrontierWorldState state, ScheduledAction action, SimInstant at) {
         var owner = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(action.subject()));
         var party = owner.party(); var bootstrap = state.bootstrap();
-        var book = state.companies().goodsTrade().orders();
         var navigation = state.navigationGeometry();
-        long input = state.companies().goodsTrade().participants().economicState(party.id()).inputRevision();
         return new ScheduledAdvisory<>() {
             private java.util.function.Supplier<GoodsParticipantProcess.PreparedDecision> calculation;
             @Override public Completion<FrontierWorldState> prepare() {
                 if (calculation == null) calculation = GoodsParticipantProcess.prepareDecisionCalculation(state, action, at,
                         new SettlementEconomicPlanPreparation.Review(at.ticks(), owner.prices(), Optional.empty()), Optional.empty());
-                var choice = calculation.get().choice();
+                var decision = calculation.get();
+                var choice = decision.choice();
                 return new ScheduledAdvisory.Completion<FrontierWorldState>() {
                     private String rejection = "NONE";
                     public String rejectionReason() { return rejection; }
@@ -33,12 +32,11 @@ final class GoodsParticipantOpportunityAdvice {
                         if (now.ticks() - at.ticks() >= bootstrap.ruleset().goodsTrade().reviewInterval()) return reject("EXPIRED");
                         // A resumed pending query must not keep asking its captured unknown
                         // terrain after the observation owner has supplied newer knowledge.
-                        if (choice == GoodsTripPlanning.Disposition.AWAITING_NAVIGATION
+                        if ((choice == GoodsTripPlanning.Disposition.AWAITING_NAVIGATION || choice == GoodsTripPlanning.Disposition.NO_PURCHASE)
                                 && current.navigationGeometry() != navigation) return reject("GEOMETRY");
                         // An old absence must not erase a newly published opportunity.
                         // A selected dated quote still faces all current admission checks.
-                        if (choice == GoodsTripPlanning.Disposition.NO_PURCHASE && (book != current.companies().goodsTrade().orders()
-                                || input != current.companies().goodsTrade().participants().economicState(party.id()).inputRevision()))
+                        if (choice == GoodsTripPlanning.Disposition.NO_PURCHASE && !decision.negativeInputs().orElseThrow().matches(current, now.ticks()))
                             return reject("CHANGED_EMPTY_MARKET");
                         rejection = "NONE";
                         var fresh = new SettlementEconomicPlanPreparation.Review(now.ticks(), participant.prices(), Optional.empty());

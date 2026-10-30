@@ -103,13 +103,14 @@ public final class PedestrianRoutePlanning {
         };
         try {
             var observed = observe(calculation);
-            return new Prepared<>(new Observation<>(observed.result(), observed.requests(), memory.merge(observed.reads())), Map.copyOf(demands));
+            return new Prepared<>(new Observation<>(observed.result(), observed.requests(), observed.update().basedOn(memory)), Map.copyOf(demands));
         }
         finally { context.readBinding = previous; }
     }
     public record Prepared<T>(Observation<T> observation, Map<PedestrianRouteRequest, PedestrianPlanningService> demands) {
         public Prepared { Objects.requireNonNull(observation); demands = Map.copyOf(demands); }
         public PedestrianCalculationMemory reads() { return observation.reads(); }
+        public PedestrianCalculationMemory.Update update() { return observation.update(); }
         /** Owner-side delivery may have advanced since this detached view was captured. */
         public java.util.List<PedestrianPlanningChange> acquire(PedestrianCalculationMemory delivered) {
             return withReadMemory(delivered, this::acquire);
@@ -180,7 +181,7 @@ public final class PedestrianRoutePlanning {
      * capability. Missing facts cannot be supplied by calculation memory. */
     public static <T> Observation<T> observe(PedestrianCalculationMemory memory, java.util.function.Supplier<T> calculation) {
         var observed = withReadMemory(memory, () -> observe(calculation));
-        return new Observation<>(observed.result(), observed.requests(), memory.merge(observed.reads()));
+        return new Observation<>(observed.result(), observed.requests(), observed.update().basedOn(memory));
     }
     /** Does not establish an observation/acquisition scope: delivery must not
      * accidentally abandon a newly acquired, still required dependency. */
@@ -226,12 +227,12 @@ public final class PedestrianRoutePlanning {
         var created = new java.util.LinkedHashSet<PedestrianRouteRequest>(); context.acquired = created;
         var requests = new java.util.LinkedHashSet<PedestrianRouteRequest>();
         context.observations = requests;
-        try { var result = calculation.get(); return new Observation<>(result, java.util.List.copyOf(requests), reads.snapshot()); }
+        try { var result = calculation.get(); return new Observation<>(result, java.util.List.copyOf(requests), reads.update(PedestrianCalculationMemory.empty())); }
         finally {
             context.completedReads = previousReads;
             context.acquired = previousAcquired;
             context.observations = previous;
-            if (previousReads != null) previousReads.addAll(reads.snapshot());
+            if (previousReads != null) previousReads.add(reads.update(PedestrianCalculationMemory.empty()));
             PedestrianRoutePlanner planner;
             synchronized (PedestrianRoutePlanning.class) { planner = context.readBinding == null ? current : context.readBinding; }
             // Newly acquired alternatives alone are disposable. Context restoration
@@ -241,9 +242,13 @@ public final class PedestrianRoutePlanning {
             if (previous != null) previous.addAll(requests);
         }
     }
-    public record Observation<T>(T result, java.util.List<PedestrianRouteRequest> requests, PedestrianCalculationMemory reads) {
+    public record Observation<T>(T result, java.util.List<PedestrianRouteRequest> requests, PedestrianCalculationMemory.Update update) {
         public Observation(T result, java.util.List<PedestrianRouteRequest> requests) { this(result, requests, PedestrianCalculationMemory.empty()); }
-        public Observation { requests = java.util.List.copyOf(requests); Objects.requireNonNull(reads); }
+        public Observation(T result, java.util.List<PedestrianRouteRequest> requests, PedestrianCalculationMemory reads) {
+            this(result, requests, PedestrianCalculationMemory.Update.adding(reads));
+        }
+        public Observation { requests = java.util.List.copyOf(requests); Objects.requireNonNull(update); }
+        public PedestrianCalculationMemory reads() { return update.result(); }
     }
 
     /** Read retained evidence without starting a search. */

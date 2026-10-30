@@ -99,6 +99,10 @@ public final class SettlementEconomicPlanningState {
         return inputRevision > captured.inputRevision && accepted.equals(captured.accepted)
                 && nonMarketBasis == captured.nonMarketBasis;
     }
+    /** Exact hard-input proof, independent of advisory MARKET notifications. */
+    public boolean sameNonMarketInputs(SettlementEconomicPlanningState captured) {
+        return accepted.equals(captured.accepted) && nonMarketBasis == captured.nonMarketBasis;
+    }
     public SettlementEconomicPlanningState accept(SettlementEconomicPlan plan) {
         long next = Math.incrementExact(accepted.map(SettlementEconomicPlan::revision).orElse(0L));
         if (plan.inputRevision() != inputRevision || plan.revision() != next
