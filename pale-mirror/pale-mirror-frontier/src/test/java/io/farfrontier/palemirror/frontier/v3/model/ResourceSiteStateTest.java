@@ -38,10 +38,15 @@ class ResourceSiteStateTest {
         var fixture = FrontierResourceSiteHarvestFixture.create(new WorldId("frontier:harvest-reference-removal"), 125L);
         var state = fixture.state(); var sites = state.resourceSites(); var lifecycle = sites.site(fixture.siteId());
         HarvestActivityCapability.validateReferences(sites, state.actorExecutions());
+        var work = lifecycle.harvestJobs().keySet().iterator().next();
+        assertEquals(Optional.of(fixture.siteId()), sites.workSiteId(work));
+        assertTrue(sites.workSiteId(new SubjectId("work:absent")).isEmpty());
         var phase = lifecycle.growthStage() == ResourceSiteLifecycle.MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING;
         var absent = new ResourceSiteLifecycle(lifecycle.siteId(), phase, lifecycle.growthEpoch(), lifecycle.growthStage(),
                 lifecycle.preparationWork(), lifecycle.conflictDisposition(), Map.of(), lifecycle.harvestLineages(), lifecycle.harvestSequence());
         var changed = sites.replace(absent);
+        assertTrue(changed.workSiteId(work).isEmpty());
+        assertEquals(Optional.of(fixture.siteId()), sites.workSiteId(work), "an abandoned branch cannot lend or erase another site's work");
         assertThrows(IllegalArgumentException.class, () -> HarvestActivityCapability.validateReferences(changed, state.actorExecutions()));
         HarvestActivityCapability.validateReferences(sites, state.actorExecutions());
     }
@@ -63,6 +68,21 @@ class ResourceSiteStateTest {
         assertEquals(fields, ImmutableInvariantCheck.full(() -> new ResourceSiteState(fields.declarations(), fields.sites(), fields.cycles())));
     }
 
+    @Test void changedFieldCannotOverlapAnUnchangedFieldAfterWarmValidation() {
+        var state = initial(); var fields = state.resourceSites();
+        fields.validate(state.bootstrap());
+        var ids = fields.cycles().keySet().stream().limit(2).toList();
+        var id = ids.getFirst(); var cycle = fields.cycle(id);
+        var foreign = fields.cycle(ids.get(1)).layout();
+        var overlap = new ResourceSiteState(fields.declarations(), fields.sites(), ImmutableLookupMap.withEntry(
+                fields.cycles(), id, ResourceFieldCycle.unsurveyed(id, foreign, cycle.epoch())));
+        assertThrows(IllegalArgumentException.class, () -> overlap.validate(state.bootstrap()));
+        fields.validate(state.bootstrap());
+        assertThrows(IllegalArgumentException.class, () -> ImmutableInvariantCheck.full(() -> {
+            overlap.validate(state.bootstrap()); return null;
+        }));
+        fields.validate(state.bootstrap());
+    }
     @Test void warmedLayoutValidationRejectsAnOutOfBoundsForkAndKeepsItsPredecessorValid() {
         var state = initial(); var sites = state.resourceSites(); var id = sites.declarations().keySet().iterator().next();
         sites.validate(state.bootstrap()); var before = sites.descriptors(state.bootstrap()); var cycle = sites.cycle(id);

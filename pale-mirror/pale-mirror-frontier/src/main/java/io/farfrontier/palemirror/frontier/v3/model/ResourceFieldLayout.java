@@ -171,6 +171,7 @@ public final class ResourceFieldLayout {
     public List<BlockPosition> soilSlots() { return soilSlots; }
     public List<BlockPosition> irrigationSlots() { return irrigationSlots; }
     public List<BlockPosition> managedSlots() { return managedSlots; }
+    Set<BlockPosition> managedPositions() { return managedSet; }
     public boolean contains(BlockPosition position) { return managedSet.contains(Objects.requireNonNull(position)); }
     public Optional<Cell> cropAt(BlockPosition position) { return Optional.ofNullable(byCrop.get(Objects.requireNonNull(position))); }
     public Optional<Cell> soilAt(BlockPosition position) { return Optional.ofNullable(bySoil.get(Objects.requireNonNull(position))); }

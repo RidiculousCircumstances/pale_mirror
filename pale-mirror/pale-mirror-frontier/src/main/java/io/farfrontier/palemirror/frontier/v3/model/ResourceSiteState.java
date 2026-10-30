@@ -57,6 +57,18 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
                 declaration -> java.util.Set.of(declaration.settlementId()), settlement);
     }
 
+    private static final ImmutableGroupView<SubjectId, ResourceSiteLifecycle, SubjectId> WORK_SITES = new ImmutableGroupView<>();
+    /** Exact declared work membership, preserving the first declared site for a
+     * wake alias. No behavior, worker selection or storage authority is inferred. */
+    public java.util.Optional<SubjectId> workSiteId(SubjectId work) {
+        var sitesForWork = WORK_SITES.keys(ResourceSiteState.class, sites, site -> {
+            var ids = new java.util.HashSet<>(site.harvestJobs().keySet());
+            site.preparationWork().ifPresent(preparation -> ids.add(preparation.id()));
+            return java.util.Set.copyOf(ids);
+        }, Objects.requireNonNull(work));
+        return sitesForWork.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(sitesForWork.getFirst());
+    }
+    private static final ImmutableInvariantCheck<Void> CULTIVATION_HOMES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> GEOMETRY_VALIDATION = new ImmutableInvariantCheck<>();
     public ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarations, Map<SubjectId, ResourceSiteLifecycle> sites,
             Map<SubjectId, ResourceFieldCycle> cycles, Map<CellMutationKey, ResourceFieldCellObserved> pendingWorldChanges,
@@ -128,34 +140,12 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteDeclaration> declarat
     }
 
     void validate(FrontierBootstrap bootstrap) {
-        if (!FrontierWorldStateSupport.settlementIds(bootstrap).containsAll(cultivation.keySet()))
-            throw new IllegalArgumentException("cultivation review has an unknown home");
+        CULTIVATION_HOMES.validate(() -> {
+            if (!FrontierWorldStateSupport.settlementIds(bootstrap).containsAll(cultivation.keySet()))
+                throw new IllegalArgumentException("cultivation review has an unknown home");
+        }, bootstrap, cultivation);
         var layouts = ResourceSiteLayoutDirectory.layouts(this);
-        GEOMETRY_VALIDATION.validate(() -> validateGeometry(bootstrap, layouts), bootstrap, declarations, layouts);
-    }
-
-    private void validateGeometry(FrontierBootstrap bootstrap, Map<SubjectId, ResourceFieldLayout> layouts) {
-        var authored = FrontierResourceSitePlan.compile(bootstrap);
-        if (!declarations.keySet().containsAll(authored.keySet()))
-            throw new IllegalArgumentException("resource-site state lost an initial declared field");
-        var occupied = new java.util.HashSet<BlockPosition>();
-        for (ResourceSiteDeclaration declaration : declarations.values()) {
-            var initial = authored.get(declaration.id());
-            if (declaration.land().kind() == FieldLandOrigin.Kind.AUTHORED
-                    && (initial == null || !declaration.equals(ResourceSiteDeclaration.of(initial)))
-                    || initial != null && !declaration.equals(ResourceSiteDeclaration.of(initial)))
-                throw new IllegalArgumentException("field declaration forged its authored land authority");
-            Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, declaration.settlementId());
-            SettlementStructure facility = FrontierWorldStateSupport.structure(settlement, declaration.facilityId());
-            if (facility.kind() != StructureKind.FARM || declaration.kind() != ResourceSiteKind.WHEAT_FIELD) {
-                throw new IllegalArgumentException("resource-site lifecycle must bind an owning farm");
-            }
-            var layout = layouts.get(declaration.id());
-            declaration.land().ground().keySet().forEach(layout::requireCell);
-            for (BlockPosition position : layout.managedSlots())
-                if (!bootstrap.bounds().contains(position) || !occupied.add(position))
-                    throw new IllegalArgumentException("field geometry overlaps another field or leaves world bounds");
-        }
+        GEOMETRY_VALIDATION.validate(() -> ResourceSiteGeometryValidation.validate(bootstrap, declarations, layouts), bootstrap, declarations, layouts);
     }
 
     public ResourceSiteLifecycle site(SubjectId id) {

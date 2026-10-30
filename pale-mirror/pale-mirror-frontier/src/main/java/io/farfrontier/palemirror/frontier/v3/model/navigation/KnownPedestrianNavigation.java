@@ -56,7 +56,7 @@ public final class KnownPedestrianNavigation {
             // a new view cannot inherit a known cell or a missing-fact verdict.
             private final io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<BlockPosition,
                     java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell>> cells =
-                    new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(8_192);
+                    io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo.readMostly(8_192);
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> cell(BlockPosition position) {
                 return regionalRevision.isPresent() ? cells.get(position, () -> read(position)) : read(position);
             }

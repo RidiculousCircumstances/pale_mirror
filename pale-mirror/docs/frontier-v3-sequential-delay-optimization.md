@@ -1193,3 +1193,37 @@ completions/505rejections. Two-worker reference was17.8771/s,94.7208m work,
 closing the target. Revert to2workers for the next source comparison.
 Connected local-edge/profile/shape/region/worker/demand/read-delivery tests and
 guardrails PASS34s(local-edge-retirement-checks.log); no new mirrored cache test.
+
+
+### Eighth comparison and owner-local field reads
+
+Frozen01b5e8018, restored2advice/2navigation workers:458123→459222/61.2608s,
+17.9397ticks/s,debt680→806;31.1407s ready owner,5.9344s canonical validation,
+96.4760m search work/7747completions,357rejections. No publication stall.
+This does not establish a substantial TPS gain from local-edge retirement.
+
+The sixth JFR's largest owner lookup caller is SettlementWakeAliases.changed,
+which traverses every field whenever an access event subject is not itself a
+site. ResourceSiteState now owns the common grouped work→site directory for
+harvest/preparation work, preserving first-declared matching and fork isolation.
+Cultivation-home membership is checked only when its complete registry/bootstrap
+changes, independently of crop progress. Field geometry validation now uses
+addressed declaration/layout checks plus common exact position-membership
+uniqueness, so one changed field does not revalidate every other field. Full
+ingress still rebuilds complete evidence. Warm predecessor, removed work, forged
+layout/out-of-bounds and changed-field overlap with an unchanged field remain
+rejected correctly; ResourceSite/Cultivation tests+guardrails PASS50s. Existing
+field/harvest/resident wake checks PASS62s before the final geometry extraction.
+
+Captured collision-cell facts have many shared reads in the same JFR. The common
+bounded memo adds an explicit read-mostly mode: ConcurrentHashMap hits, serialized
+bounded insertion-order eviction, compute outside the monitor. Only the immutable
+collision capture selects it, still8192cells, including unknown answers; ordinary
+producer caches retain their LRU behavior. Equality/pressure/failed-computation
+checks and connected collision/profile/region/worker/delivery checks+guardrails
+PASS32s. No global cache, TTL, new geometry validity assumption or mutable-world
+read is introduced.
+
+An overlap audit of1466captured advice tasks found only7same-subject running
+pairs. It does not justify making all same-owner advice exclusive; no coherence
+lock or new scheduler policy was added on that hypothesis.

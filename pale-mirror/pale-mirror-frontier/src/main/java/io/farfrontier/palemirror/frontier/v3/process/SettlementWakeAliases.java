@@ -26,14 +26,7 @@ final class SettlementWakeAliases {
             if (nextJob != null) addHome(aliases, nextJob.settlementId(), keys);
             SubjectId site = null;
             if (after.resourceSites().sites().containsKey(subject)) site = subject;
-            else {
-                // Retain the existing first declared match; this is a wake hint,
-                // never discovery of the event's mutation owner or behavior.
-                for (var row : after.resourceSites().sites().values()) {
-                    if (row.harvestJobs().containsKey(subject) || row.preparationWork()
-                            .filter(work -> work.id().equals(subject)).isPresent()) { site = row.siteId(); break; }
-                }
-            }
+            else site = after.resourceSites().workSiteId(subject).orElse(null);
             if (site != null) addHome(aliases, after.resourceSite(site).settlementId(), keys);
         }
         if (stock) {
