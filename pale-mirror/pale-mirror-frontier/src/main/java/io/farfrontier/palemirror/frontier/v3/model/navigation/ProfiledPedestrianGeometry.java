@@ -21,11 +21,9 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return new EdgeFactsDiagnostic(EDGE_QUERIES.sum(), COMPUTATIONS.sum(), AREA_QUERIES.sum(), AREA_COMPUTATIONS.sum());
     }
     private record Volume(double x, double z, int feetY) { }
-    private record DirectedEdge(SurfaceAnchor from, SurfaceAnchor to) { }
     private record ColumnFacts(boolean detailed, java.util.List<SurfaceAnchor> surfaces) {
         ColumnFacts { surfaces = java.util.List.copyOf(surfaces); }
     }
-    private final java.util.Map<DirectedEdge, Boolean> edges = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<WorldBounds, java.util.OptionalInt> planes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
@@ -216,14 +214,13 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return true;
     }
     @Override public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
-        // Reuse within this immutable capture. Regional graphs and complete route
-        // facts own cross-view reuse; a second global per-edge LRU repeated their
-        // version/key/locking work for almost entirely one-use surveyed edges.
+        // Regional/boundary graphs retain complete edge connectivity. The local
+        // edge LRU also mostly read each edge once (1.59% hits in the scale cut),
+        // adding keys, synchronized lookups and insertions to every graph edge.
+        // Reuse the expensive column/body/volume facts, then evaluate the edge.
         EDGE_QUERIES.increment();
-        return remembered(edges, new DirectedEdge(from, to), () -> {
-            COMPUTATIONS.increment();
-            return traverse(from, to);
-        });
+        COMPUTATIONS.increment();
+        return traverse(from, to);
     }
 
     private boolean traverse(SurfaceAnchor from, SurfaceAnchor to) {

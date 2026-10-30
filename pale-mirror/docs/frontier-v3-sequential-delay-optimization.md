@@ -1163,3 +1163,33 @@ The fifth2ms JFR was captured, but the analyzer crashed on a JDK frame with no
 RecordedMethod. The export now labels such a frame unresolved instead of assuming
 a Java method; the same recording exports successfully. No recapture or invented
 method attribution is needed. Original failed analysis receipt remains preserved.
+
+
+### Sixth unblocked comparison and remaining local edge memo
+
+Frozen c178c52f8: ordinary458116→459220 in61.7549s,17.8771ticks/s, debt745→876.
+No blocked ready publication;94720793search work/7803completions. Owner30.6187s,
+ordinary1.8041s, canonical validation5.9185s.354advice rejects, negative273
+(154offers,80inputs,38plans,1price). This is healthy progress compared with the
+fifth stall but still below20/s. Subsequent navigation continues; no false23/s win.
+
+The fresh2ms sixth JFR (separate from ordinary throughput) attributes the main
+remaining profiled-geometry memo stack to canTraverse. Actual ordinary counters:
+14568393edge queries,14336132computations:232261hits,1.5943%. Even this remaining
+per-capture edge LRU mostly adds an object key, synchronized lookup, eviction and
+insertion to a one-use regional graph edge. Remove this duplicate LRU, retain
+column/body/volume/contact/area caches and cross-view region/boundary/itinerary/
+route reuse. Exact directed traversal still runs against the same captured facts.
+No work/safety bound or geometry detail is lowered.
+
+A separate same-source operational trial tests3advice workers against2, retaining
+2navigation workers,3ms host soft budget,256weight and8slices. It is not labelled
+a source-code gain; the exact paired checkpoint/config differences are retained.
+
+The3-advice-worker trial c178c52f8/seventh-advice3 worsened throughput to
+15.8580/s (458116→459227/70.0592s), debt940→1230,120.2047m search work,6215advice
+completions/505rejections. Two-worker reference was17.8771/s,94.7208m work,
+4961completions/354rejections. More concurrency increased work rather than
+closing the target. Revert to2workers for the next source comparison.
+Connected local-edge/profile/shape/region/worker/demand/read-delivery tests and
+guardrails PASS34s(local-edge-retirement-checks.log); no new mirrored cache test.
