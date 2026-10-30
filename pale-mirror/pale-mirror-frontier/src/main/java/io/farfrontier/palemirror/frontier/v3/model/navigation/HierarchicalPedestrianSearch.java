@@ -47,7 +47,8 @@ public final class HierarchicalPedestrianSearch {
     private PedestrianRouteResult terminal;
     private Candidate expanding;
     private final Map<Node, Edge> expansionExits = new HashMap<>();
-    private int expansionNode, expansionEdge, expansionDirection = -1, expansionOffset, expansionExit, expansionEntrance;
+    private int expansionNode, expansionEdge, expansionDirection = -1, expansionPortal;
+    private List<PedestrianItineraryCache.Portal> expansionLinks;
     private PedestrianRegion.Refinement segmentRefinement;
     private long turnLimit;
     private int retainedSurfaces;
@@ -69,7 +70,8 @@ public final class HierarchicalPedestrianSearch {
     private PedestrianRegionDependencies preparedDependencies;
     private boolean destinationChecked;
     private int endpointsChecked;
-    private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
+    private int destinationNode, destinationEdge, destinationDirection = -1, destinationPortal;
+    private List<PedestrianItineraryCache.Portal> destinationLinks;
     private java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> missingGeometry = java.util.Set.of();
 
     public HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
@@ -298,8 +300,8 @@ public final class HierarchicalPedestrianSearch {
                 if (candidate.node().equals(destination)) { beginRefinement(candidate.node()); break; }
                 if (regions.size() + 4 > MAX_REGIONS || distance.size() > MAX_NODES)
                     return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_SEARCH_SAFETY_LIMIT");
-                expanding = candidate; macroDirection = 0; expansionNode = expansionEdge = expansionOffset = expansionExit = expansionEntrance = 0;
-                expansionDirection = -1; expansionExits.clear(); publishingExits = null; publication = 0;
+                expanding = candidate; macroDirection = 0; expansionNode = expansionEdge = expansionPortal = 0;
+                expansionDirection = -1; expansionLinks = null; expansionExits.clear(); publishingExits = null; publication = 0;
             }
             // Selecting a candidate is itself charged work. Retain that candidate
             // when it consumes the last unit; expansion belongs to the next slice.
@@ -447,24 +449,18 @@ public final class HierarchicalPedestrianSearch {
         }
         var neighbour = region(new PedestrianRegion.Tile(tileX, tileZ));
         if (neighbour == null || work >= turnLimit) return 0;
-        work++;
-        if (neighbour.unknown()) return 1; // Missing knowledge cannot prove isolation.
-        if (destinationOffset == PedestrianRegion.SIDE) { nextDestinationDirection(); return 0; }
-        int direction = destinationDirection, offset = destinationOffset;
-        int x = direction == 0 ? PedestrianRegion.SIDE - 1 : direction == 2 ? 0 : offset;
-        int z = direction == 3 ? PedestrianRegion.SIDE - 1 : direction == 1 ? 0 : offset;
-        int otherX = direction == 0 ? 0 : direction == 2 ? PedestrianRegion.SIDE - 1 : x;
-        int otherZ = direction == 3 ? 0 : direction == 1 ? PedestrianRegion.SIDE - 1 : z;
-        var exits = local.surfaces(x, z); var entrances = neighbour.surfaces(otherX, otherZ);
-        if (destinationExit == exits.size()) { destinationOffset++; destinationExit = destinationEntrance = 0; return 0; }
-        var exit = exits.get(destinationExit);
-        if (local.component(exit) != destination.component() || destinationEntrance == entrances.size()) {
-            destinationExit++; destinationEntrance = 0; return 0;
+        if (neighbour.unknown()) { work++; return 1; } // Missing knowledge cannot prove isolation.
+        if (destinationLinks == null) {
+            var links = regionCache.boundary(geometry, neighbour, local, Math.toIntExact(turnLimit - work), mayContinue);
+            work += links.work(); if (links.portals() == null) return 0;
+            destinationLinks = links.portals(); return 0;
         }
-        return geometry.canTraverse(entrances.get(destinationEntrance++), exit) ? 1 : 0;
+        work++;
+        if (destinationPortal == destinationLinks.size()) { nextDestinationDirection(); return 0; }
+        return destinationLinks.get(destinationPortal++).toComponent() == destination.component() ? 1 : 0;
     }
     private void nextDestinationDirection() {
-        destinationDirection++; destinationOffset = destinationExit = destinationEntrance = 0;
+        destinationDirection++; destinationPortal = 0; destinationLinks = null;
     }
     private void expandStep() {
         var candidate = expanding;
@@ -507,21 +503,16 @@ public final class HierarchicalPedestrianSearch {
             }
             var neighbour = region(new PedestrianRegion.Tile(tileX, tileZ));
             if (neighbour == null || work >= turnLimit) return;
-            work++;
-            if (expansionOffset == PedestrianRegion.SIDE) { nextDirection(); return; }
-            int offset = expansionOffset;
-            int x = direction == 0 ? PedestrianRegion.SIDE - 1 : direction == 2 ? 0 : offset;
-            int z = direction == 3 ? PedestrianRegion.SIDE - 1 : direction == 1 ? 0 : offset;
-            int otherX = direction == 0 ? 0 : direction == 2 ? PedestrianRegion.SIDE - 1 : x;
-            int otherZ = direction == 3 ? 0 : direction == 1 ? PedestrianRegion.SIDE - 1 : z;
-            var exits = local.surfaces(x, z); var entrances = neighbour.surfaces(otherX, otherZ);
-            if (expansionExit == exits.size()) { expansionOffset++; expansionExit = expansionEntrance = 0; return; }
-            var exit = exits.get(expansionExit);
-            if (local.component(exit) != candidate.node().component() || expansionEntrance == entrances.size()) {
-                expansionExit++; expansionEntrance = 0; return;
+            if (expansionLinks == null) {
+                var links = regionCache.boundary(geometry, local, neighbour, Math.toIntExact(turnLimit - work), mayContinue);
+                work += links.work(); if (links.portals() == null) return;
+                expansionLinks = links.portals(); return;
             }
-            var entrance = entrances.get(expansionEntrance++);
-            if (geometry.canTraverse(exit, entrance)) recordPortal(candidate, neighbour, exit, entrance);
+            work++;
+            if (expansionPortal == expansionLinks.size()) { nextDirection(); return; }
+            var portal = expansionLinks.get(expansionPortal++);
+            if (portal.fromComponent() == candidate.node().component())
+                recordPortal(candidate, neighbour, portal.exit(), portal.entrance());
             return;
         }
         // At most one exit per bounded component. Stable ordering keeps map iteration irrelevant.
@@ -547,7 +538,7 @@ public final class HierarchicalPedestrianSearch {
         if (prior == null || portalScore(edge) < portalScore(prior)) expansionExits.put(node, edge);
     }
     private void nextDirection() {
-        expansionDirection++; expansionOffset = expansionExit = expansionEntrance = 0;
+        expansionDirection++; expansionPortal = 0; expansionLinks = null;
     }
     private long portalScore(Edge edge) {
         return Math.abs((long) edge.entrance().x() - target.x()) + Math.abs((long) edge.entrance().z() - target.z())

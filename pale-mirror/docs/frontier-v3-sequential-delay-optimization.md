@@ -583,3 +583,56 @@ Implementation working tree is clean after the results commit; pack has no new
 tracked edits and unrelated .f0v-baseline/ remains untouched. No automatic push.
 The preexisting adapter recovery failure above remains open and is not concealed
 by the successful graph checks or live health. Sustained scale20 remains OPEN.
+
+
+## Shared directed regional boundaries (October30)
+
+Inter-region expansion and the isolated-goal incoming probe previously enumerated
+border surface pairs and called body traversal again in every search. The
+existing region graph shared only internal edges. The existing individual edge
+memo holds8192 answers per profile/scope; its poor hit ratio cannot by itself
+prove that a bigger memo would solve the workload.
+
+PedestrianRegionCache now owns a bounded PedestrianBoundaryCache under its same
+scope lifecycle. Each directed boundary publishes all valid portals, with source
+and destination component IDs, independently of the search's goal. Hierarchical
+expansion selects the same goal-dependent winning portal from those facts;
+the target probe consumes the reverse direction and retains unknown-terrain
+semantics. Internal local search and current path validation remain unchanged.
+Keys contain exact scope/profile, both regional version tokens (including the
+existing body halo), hard bounds and direction. A remote edit can reuse an
+unchanged boundary; a changed neighbour/profile/scope cannot. Retired scopes and
+clear release their boundary entries. No graph references are retained by completed
+boundary values, and no occupancy/reservation/arrival authority is cached.
+
+A producer builds cooperatively and shares one locked builder per exact key;
+concurrent readers yield rather than duplicate a miss. No geometry callback runs
+under the global cache lock. Only complete results, including genuine empty
+lists, are published.64 builders,8192 completed/building entries and131072 retained
+portals bound retention; they do not truncate a complete boundary. Directed
+multi-level enumeration preserves the original stable portal ordering and body
+checks. Cheap analytical plane traffic cannot evict expensive layered passages.
+A positive certificate for the WHOLE two-region union permits a constant-size
+analytical portal list without individual body checks; two separate plane flags
+alone are insufficient. The existing certificate contract is also used by open
+region shortcuts. Navigation detail, worker counts, rules/schema and domain
+execution/custody/freshness checks are unchanged.
+
+New nested boundary diagnostics count lookups, hits, builds, actual traversal
+checks, analytical proofs and bounded retention. They do not turn a cache hit
+into movement or execution authority. Current acceptance covers profile, directed
+multi-level links, changed/remote geometry, alternative snapshots, clear/retirement,
+concurrent single construction and analytical traffic, plus existing navigation
+regressions and native economic flows. Receipts are under
+build/simulation-throughput/region-boundary-reuse/.
+The preexisting adapter restart test failure recorded above remains outside this
+pure connectivity cut and is not reported green.
+
+
+Focused existing navigation/architecture plus initial boundary checks passed;
+guardrails/JAR/package passed43s. Final six boundary cases passed, including
+single construction with concurrent readers and clearing while its worker is
+inside a controlled traversal.55 native economy cases passed (combined command59s,
+native test interval11.37s). A final six-case focused clear check passed15s.
+No wall-performance threshold or higher timeout was introduced. This verifies
+calculation/recovery boundaries and the selected economy flows, not all HOT/M3.

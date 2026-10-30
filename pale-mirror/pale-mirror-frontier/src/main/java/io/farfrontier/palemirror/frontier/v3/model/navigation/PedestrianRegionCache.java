@@ -7,6 +7,7 @@ import java.lang.ref.WeakReference;
 final class PedestrianRegionCache {
     private static final int MAX_REGIONS = 2_048, MAX_SURFACES = MAX_REGIONS * PedestrianRegion.CELLS;
     private static final int MAX_BUILDERS = 64;
+    private final PedestrianBoundaryCache boundaries = new PedestrianBoundaryCache();
     private long lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs;
     private long completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds, weakGraphHits;
     private static final int MAX_RECENT_EVICTIONS = 512;
@@ -59,7 +60,7 @@ final class PedestrianRegionCache {
         private final Map<K, Entry> entries = new LinkedHashMap<>();
         private final Map<PedestrianRegion.Tile, Integer> tiles = new HashMap<>();
         private int slots, builders;
-        private boolean retired;
+        private volatile boolean retired;
         Entry acquire(K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
             var entry = new Entry(geometry, tile, this, key); entries.put(key, entry);
             tiles.merge(tile, 1, Integer::sum); slots += entry.accountedSize; builders++;
@@ -81,29 +82,36 @@ final class PedestrianRegionCache {
         if (budget <= 0) return new Lookup(null, 0, false);
         if (geometry.regionalRevision().isPresent()) {
             var revision = geometry.regionalRevision().orElseThrow();
-            Bucket<RegionalKey> regions;
-            synchronized (this) {
-                if (scoped.size() >= 64 && !scoped.containsKey(revision.geometryScope()))
-                    forget(scoped.remove(scoped.keySet().iterator().next()));
-                regions = scoped.computeIfAbsent(revision.geometryScope(), ignored -> new Bucket<>());
-            }
+            var regions = regionalScope(revision);
             var key = new RegionalKey(tile, revision.at(tile.x(), tile.z()), geometry.bounds());
             return advance(regions, key, geometry, tile, budget, mayContinue);
         } else {
-            Bucket<PedestrianRegion.Tile> regions;
-            synchronized (this) {
-                // Weak view keys may disappear without a map mutation. Detach their
-                // graph queues too, so weak-key cleanup cannot retain dead worlds.
-                retireCollectedViews();
-                if (views.size() >= 64 && !views.containsKey(geometry)) {
-                    for (var bucket : views.values()) forget(bucket);
-                    views.clear(); unversionedBuckets.clear();
-                }
-                regions = views.computeIfAbsent(geometry, ignored -> new Bucket<>());
-                unversionedBuckets.add(regions);
-            }
+            var regions = viewScope(geometry);
             return advance(regions, tile, geometry, tile, budget, mayContinue);
         }
+    }
+    private synchronized Bucket<RegionalKey> regionalScope(PedestrianGeometryRevision revision) {
+        if (scoped.size() >= 64 && !scoped.containsKey(revision.geometryScope()))
+            forget(scoped.remove(scoped.keySet().iterator().next()));
+        return scoped.computeIfAbsent(revision.geometryScope(), ignored -> new Bucket<>());
+    }
+    private synchronized Bucket<PedestrianRegion.Tile> viewScope(PedestrianRouteGeometry geometry) {
+        retireCollectedViews();
+        if (views.size() >= 64 && !views.containsKey(geometry)) {
+            for (var bucket : views.values()) forget(bucket);
+            views.clear(); unversionedBuckets.clear();
+        }
+        var result = views.computeIfAbsent(geometry, ignored -> new Bucket<>());
+        unversionedBuckets.add(result); return result;
+    }
+    PedestrianBoundaryCache.Lookup boundary(PedestrianRouteGeometry geometry, PedestrianRegion from, PedestrianRegion to,
+            int budget, java.util.function.BooleanSupplier mayContinue) {
+        var revision = geometry.regionalRevision();
+        Bucket<?> scope = revision.isPresent() ? regionalScope(revision.orElseThrow()) : viewScope(geometry);
+        Object origin = revision.map(value -> value.at(from.tile.x(), from.tile.z())).orElse(geometry.version());
+        Object target = revision.map(value -> value.at(to.tile.x(), to.tile.z())).orElse(geometry.version());
+        var key = new PedestrianBoundaryCache.Key(scope, geometry.bounds(), from.tile, to.tile, origin, target);
+        return boundaries.lookup(key, geometry, from, to, budget, mayContinue, () -> !scope.retired);
     }
     private <K> Lookup advance(Bucket<K> bucket, K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile,
                                 int budget, java.util.function.BooleanSupplier mayContinue) {
@@ -188,7 +196,7 @@ final class PedestrianRegionCache {
         evictions++;
     }
     private void forget(Bucket<?> bucket) {
-        bucket.retired = true;
+        bucket.retired = true; boundaries.forget(bucket);
         for (var entry : new ArrayList<>(bucket.entries.values())) evict(entry);
         recentEvictions.keySet().removeIf(history -> history.bucket() == bucket);
     }
@@ -211,7 +219,7 @@ final class PedestrianRegionCache {
         }
         return new PedestrianRegionCacheDiagnostic(lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs,
                 scoped.size() + views.size(), entries, distinct, builders,
-                completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds, weakGraphHits);
+                completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds, weakGraphHits, boundaries.diagnostic());
     }
     /** Bounded scope counters; neither ordinary diagnostics nor inspection scan regional graphs. */
     synchronized Map<String, Long> retentionDiagnostic() {
@@ -226,6 +234,7 @@ final class PedestrianRegionCache {
         for (var bucket : scoped.values()) forget(bucket);
         for (var bucket : unversionedBuckets) forget(bucket);
         views.clear(); unversionedBuckets.clear(); scoped.clear(); probation.clear(); reused.clear(); building.clear(); slots = reusedSlots = 0;
+        boundaries.clear();
         lookups = buildsStarted = evictions = certifiedPlanes = layeredGraphs = 0;
         completedHits = layeredCacheMisses = newVersionMisses = recentEvictedRebuilds = weakGraphHits = 0; recentEvictions.clear();
     }
