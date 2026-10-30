@@ -7,6 +7,31 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class UnitNavigationProfileTest {
+    @Test void repeatedAreaCertificatesAndTheirAbsenceStayWithinOneImmutableCapture() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var area = new WorldBounds(0, 0, 16, 16);
+        for (boolean known : new boolean[]{true, false}) {
+            var raw = new PedestrianRouteGeometry() {
+                public WorldBounds bounds() { return new WorldBounds(-32, -32, 64, 64); }
+                public SurfaceAnchor supportAt(int x, int z) { return floor(x, z); }
+                public boolean blocked(SurfaceAnchor surface) { return false; }
+                public java.util.OptionalInt uniformSupport(WorldBounds requested) {
+                    calls.incrementAndGet(); return known ? java.util.OptionalInt.of(64) : java.util.OptionalInt.empty();
+                }
+            };
+            var geometry = new ProfiledPedestrianGeometry(raw, UnitNavigationProfile.VILLAGER,
+                    io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObstacleView.indexed(Set.of()));
+            var result = geometry.uniformSupport(area); int first = calls.get();
+            assertEquals(known, result.isPresent());
+            assertEquals(result, geometry.uniformSupport(area));
+            assertEquals(first, calls.get(), "one capture cannot repeatedly resurvey the same area");
+            var blocked = new ProfiledPedestrianGeometry(raw, UnitNavigationProfile.VILLAGER,
+                    io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObstacleView.indexed(Set.of(new BlockPosition(0, 65, 0))));
+            assertTrue(blocked.uniformSupport(area).isEmpty(), "another physical capture cannot borrow the clear certificate");
+            assertEquals(result, geometry.uniformSupport(area));
+        }
+    }
+
     @Test void repeatedKnownAndUnknownClearanceQueriesStayLocalToTheirImmutableObservation() {
         for (boolean known : new boolean[]{false, true}) {
             var reads = new java.util.concurrent.atomic.AtomicInteger();

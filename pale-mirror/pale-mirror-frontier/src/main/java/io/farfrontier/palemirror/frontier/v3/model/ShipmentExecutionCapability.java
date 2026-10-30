@@ -5,7 +5,37 @@ import java.util.Optional;
 
 /** Courier owns a transport obligation, never the commercial contract or an independent body. */
 final class ShipmentExecutionCapability implements ActorActivityCapability {
-    private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
+    private record References(ShipmentState shipments, ActorExecutionState executions) { }
+    private static final ImmutableReferenceIndex.Source<References, io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecution> EXECUTIONS =
+            new ImmutableReferenceIndex.Source<>(c -> c.executions().actors());
+    private static final ImmutableReferenceIndex.Source<References, io.farfrontier.palemirror.frontier.v3.api.SubjectId, TransportMission> MISSIONS =
+            new ImmutableReferenceIndex.Source<>(c -> c.shipments().missions());
+    private static final ImmutableReferenceIndex.Source<References, io.farfrontier.palemirror.frontier.v3.api.SubjectId, Shipment> SHIPMENTS =
+            new ImmutableReferenceIndex.Source<>(c -> c.shipments().shipments());
+    private static final ImmutableReferenceIndex<References, io.farfrontier.palemirror.frontier.v3.api.SubjectId, Shipment> FORWARD =
+            new ImmutableReferenceIndex<>(ShipmentState.MAX_SHIPMENTS, 2, java.util.List.of(EXECUTIONS, MISSIONS), (c, shipment) -> {
+                if (shipment.terminal()) return java.util.List.of();
+                var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<References>>();
+                reads.add(EXECUTIONS.at(shipment.execution().actorId()));
+                if (TransportCargoExecution.shared(shipment)) reads.add(MISSIONS.at(shipment.transportMissionId().orElseThrow()));
+                return reads;
+            }, (c, id, shipment) -> {
+                if (shipment.terminal()) return;
+                if (TransportCargoExecution.shared(shipment)) TransportCargoExecution.require(c.shipments(), shipment);
+                c.executions().requireRetained(shipment.execution());
+            });
+    private static final ImmutableReferenceIndex<References, io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecution> BACKWARD =
+            new ImmutableReferenceIndex<>(SimulationCapacity.MAX_ACTORS, 2, java.util.List.of(SHIPMENTS), (c, execution) -> {
+                var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<References>>();
+                execution.current().filter(id -> id.activityKind() == ActorActivityKind.COURIER)
+                        .ifPresent(id -> reads.add(SHIPMENTS.at(id.activityOwnerId())));
+                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.COURIER)
+                        .ifPresent(id -> reads.add(SHIPMENTS.at(id.activityOwnerId())));
+                return reads;
+            }, (c, actor, execution) -> {
+                execution.current().filter(id -> id.activityKind() == ActorActivityKind.COURIER).ifPresent(id -> validateCourier(c, id));
+                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.COURIER).ifPresent(id -> validateCourier(c, id));
+            });
     @Override public ActorActivityKind kind() { return ActorActivityKind.COURIER; }
     @Override public boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) {
         validateReference(state, execution);
@@ -45,23 +75,14 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
             throw new IllegalArgumentException("shipment presentation retains an unsettled hand/effect");
     }
     static void validateReferences(ShipmentState shipments, ActorExecutionState executions) {
-        REFERENCES.validate(() -> validateCurrent(shipments, executions), shipments, executions);
+        var references = new References(shipments, executions);
+        FORWARD.validate(ShipmentExecutionCapability.class, shipments.shipments(), references);
+        BACKWARD.validate(ShipmentExecutionCapability.class, executions.actors(), references);
     }
-    private static void validateCurrent(ShipmentState shipments, ActorExecutionState executions) {
-        for (Shipment shipment : shipments.shipments().values()) if (!shipment.terminal()) {
-            if (TransportCargoExecution.shared(shipment)) TransportCargoExecution.require(shipments, shipment);
-            executions.requireRetained(shipment.execution());
-        }
-        for (ActorExecutionId execution : executions.current(ActorActivityKind.COURIER).values()) {
-            Shipment shipment = shipments.shipments().get(execution.activityOwnerId());
-            if (shipment == null || shipment.terminal() || !shipment.execution().equals(execution))
-                throw new IllegalArgumentException("courier execution lost its exact shipment");
-        }
-        for (ActorExecutionId execution : executions.suspended()) if (execution.activityKind() == ActorActivityKind.COURIER) {
-            Shipment shipment = shipments.shipments().get(execution.activityOwnerId());
-            if (shipment == null || shipment.terminal() || !shipment.execution().equals(execution))
-                throw new IllegalArgumentException("suspended courier lost its exact shipment");
-        }
+    private static void validateCourier(References references, ActorExecutionId execution) {
+        var shipment = references.shipments().shipments().get(execution.activityOwnerId());
+        if (shipment == null || shipment.terminal() || !shipment.execution().equals(execution))
+            throw new IllegalArgumentException("courier execution lost its exact shipment");
     }
     @Override public void validateReference(FrontierWorldState state, ActorExecutionId execution) {
         Shipment shipment = state.shipments().shipments().get(execution.activityOwnerId());

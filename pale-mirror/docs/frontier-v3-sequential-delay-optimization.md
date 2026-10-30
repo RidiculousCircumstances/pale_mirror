@@ -1054,3 +1054,29 @@ epoch floor808; both actors rejected at epochs778/780 lack exact rows. Together
 with the only removal path this confirms the arbitrary-compaction failure. A
 fresh MAIN world can remove already-lost historical evidence; the source fix
 prevents recurrence rather than guessing the missing outcome.
+
+
+### Second contemporary candidate
+
+Frozen20b3b93f8 passed the connected checks/guardrails, packaged-JAR verification
+and55 required native economy checks. Same checkpoint, ordinary window
+458117→459231 in63.7993s:17.4610ticks/s, debt855→1017. Against the fresh53b5
+baseline this is5.09% more throughput; debt still grows, so20/s remains open.
+Ready-owner time31.7167s/40497calls, ordinary1.9397s, canonical validation6.5029s
+(versus35.0050s,2.2261s and9.2963s). Navigation96.3761m work/7928completed
+searches;327advice rejects. Negative-choice breakdown233 is128offers,83buyer
+hard inputs and22accepted plans, with no overlength OTHER category. Those
+actual changed dependencies remain strict; lower counters alone are not a fix.
+
+A fresh2ms JFR (separate from the ordinary measurement) identifies whole-area
+certificate queries repeatedly traversing the same immutable geometry layers,
+and ShipmentExecutionCapability scanning every parcel on unrelated activity
+changes. The next source correction keeps bounded per-capture positive/absent
+area certificates using the existing memo mechanism, with read-only hit counters.
+Shipment/execution/mission forward references and current/suspended courier
+backlinks use the existing common addressed reference index. Source/negative
+checks preserve unknown terrain, obstacle/profile boundaries and either endpoint
+disappearing. A test initially supplied a point predicate as if it were an empty
+area certificate; corrected fixture uses the existing explicit indexed capability.
+No product fallback or deadline was changed. The new focused reference cases
+were split from the test file when it reached the1000-line guardrail.

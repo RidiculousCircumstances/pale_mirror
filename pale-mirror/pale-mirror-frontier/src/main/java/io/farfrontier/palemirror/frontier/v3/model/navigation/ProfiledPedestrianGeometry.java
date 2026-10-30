@@ -13,10 +13,12 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private static final int MAX_VOLUME_RESULTS = 8_192;
     private static final java.util.concurrent.atomic.LongAdder EDGE_QUERIES = new java.util.concurrent.atomic.LongAdder();
     private static final java.util.concurrent.atomic.LongAdder COMPUTATIONS = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder AREA_QUERIES = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder AREA_COMPUTATIONS = new java.util.concurrent.atomic.LongAdder();
     /** Process-lifetime bounded counters only; a read never drives cache or domain decisions. */
-    public record EdgeFactsDiagnostic(long queries, long computations) { }
+    public record EdgeFactsDiagnostic(long queries, long computations, long areaQueries, long areaComputations) { }
     public static EdgeFactsDiagnostic edgeFactsDiagnostic() {
-        return new EdgeFactsDiagnostic(EDGE_QUERIES.sum(), COMPUTATIONS.sum());
+        return new EdgeFactsDiagnostic(EDGE_QUERIES.sum(), COMPUTATIONS.sum(), AREA_QUERIES.sum(), AREA_COMPUTATIONS.sum());
     }
     private record Volume(double x, double z, int feetY) { }
     private record DirectedEdge(SurfaceAnchor from, SurfaceAnchor to) { }
@@ -24,6 +26,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         ColumnFacts { surfaces = java.util.List.copyOf(surfaces); }
     }
     private final java.util.Map<DirectedEdge, Boolean> edges = new java.util.LinkedHashMap<>(128, 0.75f, true);
+    private final java.util.Map<WorldBounds, java.util.OptionalInt> planes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final io.farfrontier.palemirror.frontier.v3.model.BoundedLongMemo<ColumnFacts> columns =
@@ -50,11 +53,17 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     @Override public Optional<PedestrianGeometryRevision> regionalRevision() { return revision; }
     @Override public WorldBounds bounds() { return terrain.bounds(); }
     @Override public java.util.OptionalInt uniformSupport(WorldBounds area) {
-        // A body envelope and its swept volume must fit the certified plane,
-        // including neighbouring columns. The provider certifies full clear air.
-        var envelope = NavigationRegionCoverage.expanded(area, profile.footprintRadius() + 1);
-        return occupied.emptyArea(envelope) ? terrain.uniformSupport(envelope) : java.util.OptionalInt.empty();
+        // Region building, boundary connectivity and optional long open-plane
+        // shortcuts ask the same captured area, including repeatedly failed proofs.
+        // The complete immutable decorator owns the answer; no cross-view truth.
+        AREA_QUERIES.increment();
+        return remembered(planes, area, () -> {
+            AREA_COMPUTATIONS.increment();
+            var envelope = NavigationRegionCoverage.expanded(area, profile.footprintRadius() + 1);
+            return occupied.emptyArea(envelope) ? terrain.uniformSupport(envelope) : java.util.OptionalInt.empty();
+        });
     }
+
     @Override public SurfaceAnchor supportAt(int x, int z) { return terrain.supportAt(x, z); }
     @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return column(x, z).surfaces(); }
     @Override public boolean supportExcluded(SurfaceAnchor surface) { return terrain.supportExcluded(surface); }
