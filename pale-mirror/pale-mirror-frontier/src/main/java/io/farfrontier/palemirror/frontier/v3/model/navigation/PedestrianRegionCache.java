@@ -10,7 +10,10 @@ final class PedestrianRegionCache {
     private final PedestrianBoundaryCache boundaries = new PedestrianBoundaryCache();
     private long lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs;
     private long completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds, weakGraphHits;
-    private static final int MAX_RECENT_EVICTIONS = 512;
+    // Four strong-cache turnovers of metadata can still name graphs held by
+    // other admitted searches. Values remain weak: this adds no graph pin or
+    // strong surface capacity, and retired scope cleanup severs every key.
+    private static final int MAX_RECENT_EVICTIONS = MAX_REGIONS * 4;
     private record Evicted(Object bucket, Object key) { }
     // Share completed graphs still held by admitted searches after strong-cache
     // eviction. Weak references add no strong graph retention; exact keys and the

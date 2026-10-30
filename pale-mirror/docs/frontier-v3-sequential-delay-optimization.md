@@ -1253,3 +1253,25 @@ production target. Corrected test reads the same public stock-promise compositio
 warms it before real forestry admission, verifies the new incoming logs without
 inventory/population writes, then verifies its unchanged predecessor. Forestry
 lifecycle checks+guardrails PASS49s(producer-supply-forest-checks-fixed.log).
+
+
+### Tenth comparison and bounded weak graph directory
+
+Frozen ba34d4c4b ordinary458118→459226/57.1058371s:19.40257ticks/s,
+debt784→818;90.2790m search work/7688completions/14332slices.
+4637advice completions,4282accepted,353rejected. Negative results changed
+124offers/79buyer inputs/35buyer plans/5prices; nonnegative rejects67buyer inputs,
+21plans,14owner inputs,8expired. Completed publications drain and navigation
+continues;20/s without growing debt is still open. Endpoint stage totals were
+omitted, so owner/validation durations are unknown rather than zero.
+
+The regional strong cache retains2048graphs. Its weak directory previously
+forgot exact keys after512evictions even if an admitted search still held the
+graph. Extend only bounded weak metadata to8192entries (four strong turnovers);
+strong graph/surface capacity, revision/profile/scope checks and cleanup stay
+unchanged. Existing pressure coverage now holds a graph through more than512
+evictions and proves reuse without another survey, plus unchanged strong bounds,
+changed-permission rejection and clear. Connected focused checks PASS29s
+(weak-graph-window-checks-fixed.log); the preceding fixture incorrectly put its
+new test tiles outside declared bounds, corrected without relaxing product rules.
+Benefit requires a same-checkpoint ordinary comparison, not a test-time claim.
