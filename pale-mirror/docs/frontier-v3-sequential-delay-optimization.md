@@ -935,3 +935,47 @@ observations, with all actual current checks preserved at positive admission.
 The buyer's hard inputs stay strict. No new expiry or missed-offer fallback.
 Receipts for this unsuccessful candidate remain under
 `build/simulation-throughput/boundary-delivery-fix/native-corrected/`.
+
+Final narrowed repair **53b5f78fd** passed54 focused Java checks and guardrails;
+the clean detached JAR passed verifyPackagedJar. The55 native economic tests
+passed on c29 (same physical/delivery code); they were not repeated for the
+final trade-proof narrowing. Adapter production/test compilation passed for
+the connected route change. No full-suite, real-client/HOT/M3 or sustained20/s
+claim; the pre-existing adapter restart test remains open as recorded above.
+
+Paired final window:458117→459219,1102ticks/67.562569s=**16.310807/s**,
+debt1441→1690. Original a009:458114→459223,1109/65.675261=16.886115/s,
+debt932→1136. Navigation7909vs8165searches,15074vs15393slices and
+97,894,356vs99,463,672work units. Opportunity/advice completions4884vs5404;
+all rejections294vs683; CHANGED_EMPTY_MARKET230vs590 (−61.0%). These
+are observed counters, not proof that every remaining rejection is necessary.
+The same complete109-file checkpoint, rules, worker counts and heap profiles
+were used, with ordinary simulation/no fast-forward. Asynchronous task evolution
+differs; this single matched range does not isolate a per-algorithm speed change.
+The two confirmed defects are corrected, but **overall performance is not fixed**:
+measured rate is3.41%below the prior a009 window, not an improvement toward20/s.
+Ready owner turns39478vs40450,36.231660vs35.319604s; ordinary owner turns
+2.154729vs2.098411s. Mean callback time/mix is still more costly despite fewer
+retries. No causal allocation of the remaining speed loss is asserted.
+
+The fixed10-buyer replay still has identical choices, pass counts, completed
+searches and search work for all builds. Its one warmed CPU sample is
+a0092.244634s,c292.467875s,53b53.299014s; captures occurred at different times
+and are not an isolated attribution. These figures are retained rather than
+selecting only favourable results. Source-proven absence dependency narrowing
+and late-delivery regression coverage establish the corrections; the live
+measurement does not establish a throughput win.
+
+Both MAIN and SCALE deploy verification passed for53b5, frozen JAR SHA512
+`0a5c89d5a606d64dba65246b9fccb3e14bdf1950cbb410ebb4846e227797717135da04b48deacf7e41668793678e87cc56b9791267f8ed4d0c253cfbb6381af1`.
+MAIN retains frontier-v3-r281-cold-atomic-20261028; only SCALE restored the
+hashed checkpoint. The reported09:48server outage coincided with our authenticated
+RCON stop09:48:08 and confirmed native save/restart09:48:48, not a new crash
+report. Separate old-a009 BODY_JOIN_REJECTED/NO_CURRENT_AUTHORITY errors at
+09:42/09:46 are preserved in pre-main-body-join-errors.txt and remain unrelated
+unclosed evidence; no claim that this repair fixes that physical lifecycle.
+Final fresh health/source identities are under boundary-delivery-fix, including
+deploy-main-final,deploy-paired-final,comparison-summary-final.json and
+final-runtime-check.log. Previous unsuccessful candidate evidence is retained.
+Pack tracked inputs remain unchanged, .f0v-baseline/ and governance WIP preserved;
+no push.
