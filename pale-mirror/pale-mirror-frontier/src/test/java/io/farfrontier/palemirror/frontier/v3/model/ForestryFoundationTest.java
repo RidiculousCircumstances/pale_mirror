@@ -59,8 +59,19 @@ class ForestryFoundationTest {
         var tree = new TreeDescriptor(new TreeId(UUID.fromString("bcc6524a-67a7-454d-a7ef-1cb9537e46f4")), 1,
                 "minecraft:tree_feature", prototype.species(), origin, prototype.logs());
         var state = FrontierWorldState.initial(BOOTSTRAP);
+        var provider = new ForestryKnownGeometry();
+        var before = provider.snapshot(state);
         state = state.withChanges(FrontierWorldStateUpdate.begin().forest(state.forest().admit(tree)));
-        var geometry = new ForestryKnownGeometry().snapshot(state).overlay((x, z) -> null);
+        var after = provider.snapshot(state);
+        var base = new BoundedPedestrianApproach.SurveyedSurface() {
+            public SurfaceAnchor at(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public java.util.OptionalInt uniformSupport(WorldBounds area) { return java.util.OptionalInt.of(63); }
+        };
+        var area = new WorldBounds(origin.x(), origin.z(), 1, 1);
+        assertEquals(java.util.OptionalInt.of(63), before.overlay(base).uniformSupport(area));
+        assertTrue(after.overlay(base).uniformSupport(area).isEmpty(), "new captured coverage revokes the old area certificate");
+        assertEquals(java.util.OptionalInt.of(63), before.overlay(base).uniformSupport(area), "the old immutable image stays unchanged");
+        var geometry = after.overlay((x, z) -> null);
         assertTrue(geometry.collisionAt(origin).isPresent(), "captured trees must not depend on initial forest coverage");
         assertTrue(geometry.collisionAt(origin.offset(0, -1, 0)).isEmpty(), "a sparse overlay cannot invent ground knowledge");
     }

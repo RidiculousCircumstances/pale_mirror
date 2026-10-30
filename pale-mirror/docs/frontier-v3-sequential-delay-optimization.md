@@ -1112,3 +1112,21 @@ Source follow-up repairs the profiled miss/validation paths using existing data:
 Focused negatives cover wear followed by removed title/forged keys, existing
 container/cargo/player/fungible custody/recovery rules, and rectangle answers
 against the ordinary set scan across signed/page boundaries and removals.
+
+
+### Fourth contemporary candidate and forest coverage
+
+Frozen f6655c76e passed focused inventory/navigation/reference checks and
+guardrails, packaged-JAR verification and55 required native economy checks.
+Same checkpoint458115→459233 in61.5530s:18.1632ticks/s (+9.31% against53b5),
+debt718→831;92.3260m search work,7935completed searches,341advice rejects.
+The final diagnostic omitted stages at its payload limit: owner and validation
+durations are UNKNOWN for this window. The comparison helper now preserves
+missing sections as null instead of subtracting an absent value as zero.
+
+The same JFR identifies forest coverage loops on geometry area queries. Authored
+forest patches and dynamic forest coverage now use the common exact regional
+page-membership query, preserving dynamic tree admission, cross-region links,
+immutable old snapshots and conservative unknown/oversized answers. Focused
+forest/navigation tests and guardrails PASS (forest-coverage-checks.log,37s).
+No walkability rule, simulation rate, admission quota or worker count changed.

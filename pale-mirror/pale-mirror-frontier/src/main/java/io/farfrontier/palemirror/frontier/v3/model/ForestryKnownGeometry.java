@@ -32,10 +32,10 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
         private final FrontierBootstrap bootstrap;
         private final ForestState forest;
         private final GrayboxForestPlan plan;
+        private final ImmutableRegionMap.RegionKeys dynamicCoverage;
         private final BoundedValueMemo<Region, Optional<Object>> tokens = new BoundedValueMemo<>(128);
         @Override public Set<Region> regions() {
-            return forest.geometryRegions().stream().map(value -> new Region(value.x(), value.z()))
-                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            return dynamicCoverage;
         }
         @Override public Optional<Object> token(Region region) {
             return tokens.get(region, () -> {
@@ -45,10 +45,15 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
             });
         }
         private final BoundedValueMemo<ForestRegion, Image> images = new BoundedValueMemo<>(128);
-        Snapshot(FrontierBootstrap bootstrap, ForestState forest) { this.bootstrap = bootstrap; this.forest = forest;
-            this.plan = GrayboxForestPlan.compile(bootstrap); }
+        Snapshot(FrontierBootstrap bootstrap, ForestState forest) {
+            this.bootstrap = bootstrap; this.forest = forest;
+            this.plan = GrayboxForestPlan.compile(bootstrap);
+            var coverage = new HashMap<Region, Boolean>();
+            forest.geometryRegions().forEach(region -> coverage.put(new Region(region.x(), region.z()), Boolean.TRUE));
+            dynamicCoverage = ImmutableRegionMap.copyOf(coverage).keySet();
+        }
         private Image image(ForestRegion region) {
-            if (!plan.mayTouch(region) && !forest.touches(region)) return EMPTY;
+            if (!plan.mayTouch(region) && !dynamicCoverage.containsRegion(region.x(), region.z())) return EMPTY;
             return images.get(region, () -> {
                 var cells = new HashMap<BlockPosition, Cell>();
                 plan.blocksIn(region).forEach((position, block) -> cells.put(position, new Cell(new NavigationCell(NavigationShape.FULL, true,
@@ -84,15 +89,7 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
                         value.aftermath() ? KnownBlockSurfaceOverlay.Precedence.DECLARATION_FIRST
                                 : KnownBlockSurfaceOverlay.Precedence.OBSERVATION_FIRST));
             }, column -> image(new ForestRegion(column.x() >> 4, column.z() >> 4)).columns().getOrDefault(column, List.of()),
-                    area -> {
-                        if (!NavigationRegionCoverage.bounded(area)) return true;
-                        for (int x = area.minX() >> 4; x <= (area.maxXExclusive() - 1) >> 4; x++)
-                            for (int z = area.minZ() >> 4; z <= (area.maxZExclusive() - 1) >> 4; z++) {
-                                var region = new ForestRegion(x, z);
-                                if (plan.mayTouch(region) || forest.touches(region)) return true;
-                            }
-                        return false;
-                    });
+                    area -> plan.mayTouch(area) || dynamicCoverage.intersects(area));
         }
 
         @Override public Set<Region> changesFrom(KnownNaturalGeometry.Snapshot previous) {

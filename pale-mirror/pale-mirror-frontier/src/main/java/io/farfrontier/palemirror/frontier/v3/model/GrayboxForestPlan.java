@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.model.forestry.*;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.ImmutableRegionMap;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -20,7 +22,7 @@ public final class GrayboxForestPlan {
     private final FrontierBootstrap bootstrap;
     private final List<Patch> patches;
     private final Set<TerrainColumn> protectedColumns;
-    private final Set<ForestRegion> coverage;
+    private final ImmutableRegionMap.RegionKeys coverage;
     private final BoundedValueMemo<ForestRegion, List<TreeDescriptor>> regions = new BoundedValueMemo<>(128);
     private final BoundedValueMemo<io.farfrontier.palemirror.frontier.v3.api.SubjectId, List<Header>> headers = new BoundedValueMemo<>(SimulationCapacity.MAX_SETTLEMENTS);
 
@@ -40,7 +42,9 @@ public final class GrayboxForestPlan {
                 for (int z = Math.floorDiv(patch.centre().z() - radius, 16); z <= Math.floorDiv(patch.centre().z() + radius, 16); z++)
                     covered.add(new ForestRegion(x, z));
         }
-        coverage = Collections.unmodifiableSet(covered);
+        var coverageRows = new HashMap<Region, Boolean>();
+        covered.forEach(region -> coverageRows.put(new Region(region.x(), region.z()), Boolean.TRUE));
+        coverage = ImmutableRegionMap.copyOf(coverageRows).keySet();
         if (patches.isEmpty()) { protectedColumns = Set.of(); return; }
         var excluded = new HashSet<TerrainColumn>();
         FrontierGrayboxPlan.compileInitialSettlementFabric(bootstrap).cells().keySet().forEach(position -> exclude(excluded, position));
@@ -62,7 +66,9 @@ public final class GrayboxForestPlan {
         return PLANS.get(new BootstrapKey(Objects.requireNonNull(bootstrap)), () -> new GrayboxForestPlan(bootstrap));
     }
     /** At most this chunk and the two-block canopy margin, not all trees in the world. */
-    public boolean mayTouch(ForestRegion region) { return coverage.contains(region); }
+    public boolean mayTouch(ForestRegion region) { return coverage.containsRegion(region.x(), region.z()); }
+    /** Same exact coarse coverage, using the shared bounded page membership query. */
+    public boolean mayTouch(WorldBounds area) { return coverage.intersects(area); }
     public List<TreeDescriptor> touching(ForestRegion region) {
         return mayTouch(region) ? regions.get(region, () -> inRegion(region)) : List.of();
     }
