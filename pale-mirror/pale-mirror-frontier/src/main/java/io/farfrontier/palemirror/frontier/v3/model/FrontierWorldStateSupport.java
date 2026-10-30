@@ -174,11 +174,12 @@ public final class FrontierWorldStateSupport {
     static void validateActorItemCustody(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> locations,
                                          ExactInventory inventory, FencedRecoveryState recovery) {
         var actors = ActorIdentityDeclarations.declaredKinds(bootstrap, locations);
+        var itemFacts = ExactInventoryItemFacts.rows(inventory.items());
         ACTOR_EXACT_CUSTODY.validate(() -> {
-            if (inventory.items().values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.Actor actor
+            if (itemFacts.values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.Actor actor
                     && !actors.containsKey(actor.actorId())))
                 throw new IllegalArgumentException("actor-held item must retain one canonical actor");
-        }, bootstrap, actors, inventory.items());
+        }, bootstrap, actors, itemFacts);
         var holders = RESOURCE_HOLDERS.project(bootstrap, inventory.fungibleResources().accounts(), (id, account) -> account.custody());
         ACTOR_FUNGIBLE_CUSTODY.validate(() -> {
             for (var custody : holders.values())
@@ -222,7 +223,7 @@ public final class FrontierWorldStateSupport {
         Set<SubjectId> owners = new HashSet<>();
         bootstrap.settlements().forEach(settlement -> owners.add(settlement.id()));
         owners.add(bootstrap.hive().id()); owners.add(FrontierRouteNetwork.OWNER);
-        if (inventory.items().values().stream().anyMatch(item -> !owners.contains(item.economicOwnerId()))) throw new IllegalArgumentException("item claim owner must be a canonical frontier economy actor");
+        if (ExactInventoryItemFacts.rows(inventory.items()).values().stream().anyMatch(item -> !owners.contains(item.economicOwnerId()))) throw new IllegalArgumentException("item claim owner must be a canonical frontier economy actor");
     }
 
     static void validateSettlementPolicies(FrontierBootstrap bootstrap, HumanPopulation population) {

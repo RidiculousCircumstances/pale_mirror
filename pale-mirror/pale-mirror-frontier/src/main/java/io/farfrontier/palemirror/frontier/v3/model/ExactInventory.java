@@ -721,12 +721,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
     }
     private static Map<InventoryCustody.ContainerSlot, SubjectId> occupiedSlots(Map<SubjectId, ExactItemStack> items) {
-        Map<InventoryCustody.ContainerSlot, SubjectId> result = new HashMap<>();
-        for (ExactItemStack item : items.values()) if (item.custody() instanceof InventoryCustody.ContainerSlot slot) {
-            result.put(slot, item.id());
-        }
-        return result;
+        return ExactInventoryItemFacts.slots(items);
     }
+
     private void requireContainerClaim(ExactItemStack item) {
         InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) item.custody();
         ContainerRecord container = containers.get(slot.containerId());

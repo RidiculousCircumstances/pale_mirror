@@ -8,10 +8,25 @@ import java.util.*;
 final class ExactInventoryValidation {
     private ExactInventoryValidation() { }
     private static final ImmutableInvariantCheck<Void> CONTAINERS = new ImmutableInvariantCheck<>();
-    private static final ImmutableInvariantCheck<Void> ITEM_TITLES = new ImmutableInvariantCheck<>();
-    private static final ImmutableInvariantCheck<Void> LOT_TITLES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> CONFLICTS = new ImmutableInvariantCheck<>();
-    private static final ImmutableInvariantCheck<Void> CARGO_TITLES = new ImmutableInvariantCheck<>();
+    private static final ImmutableReferenceIndex.Source<EconomicLedger, SubjectId, EconomicAccount> TITLE_ACCOUNTS =
+            new ImmutableReferenceIndex.Source<>(EconomicLedger::accounts, (before, after) -> (before == null) == (after == null));
+    private static final ImmutableReferenceIndex<EconomicLedger, SubjectId, ExactInventoryItemFacts.Row> ITEM_TITLES =
+            new ImmutableReferenceIndex<>(Integer.MAX_VALUE, 1, List.of(TITLE_ACCOUNTS),
+                    (ledger, item) -> List.of(TITLE_ACCOUNTS.at(item.economicOwnerId())), (ledger, id, item) -> {
+                        if (!id.equals(item.id())) throw new IllegalArgumentException("item map key does not match item identity");
+                        ledger.require(item.economicOwnerId());
+                    });
+    private static final ImmutableReferenceIndex<EconomicLedger, SubjectId, ResourceLot> LOT_TITLES =
+            new ImmutableReferenceIndex<>(FungibleResourceLedger.MAX_LOTS, 1, List.of(TITLE_ACCOUNTS),
+                    (ledger, lot) -> List.of(TITLE_ACCOUNTS.at(lot.economicOwnerId())),
+                    (ledger, id, lot) -> ledger.require(lot.economicOwnerId()));
+    private static final ImmutableReferenceIndex<EconomicLedger, SubjectId, CargoBatch> CARGO_TITLES =
+            new ImmutableReferenceIndex<>(Integer.MAX_VALUE, 1, List.of(TITLE_ACCOUNTS),
+                    (ledger, cargo) -> List.of(TITLE_ACCOUNTS.at(cargo.ownerId())), (ledger, id, cargo) -> {
+                        if (!id.equals(cargo.id())) throw new IllegalArgumentException("cargo map key does not match cargo identity");
+                        ledger.require(cargo.ownerId());
+                    });
     private static final ImmutableInvariantCheck<Void> EXACT_CUSTODY = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> FUNGIBLE_CUSTODY = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> FUNGIBLE_CARGO = new ImmutableInvariantCheck<>();
@@ -62,17 +77,9 @@ final class ExactInventoryValidation {
                     throw new IllegalArgumentException("container purpose and physical attachment disagree");
             }
         }, containers, surfaces, economics.accounts());
-        ITEM_TITLES.validate(() -> {
-            for (Map.Entry<SubjectId, ExactItemStack> entry : items.entrySet()) {
-                if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("item map key does not match item identity");
-                economics.require(entry.getValue().economicOwnerId());
-            }
-        }, items, economics.accounts());
-        LOT_TITLES.validate(() -> {
-            for (ResourceLot lot : fungibleResources.lots().values()) {
-                economics.require(lot.economicOwnerId());
-            }
-        }, fungibleResources.lots(), economics.accounts());
+        var itemFacts = ExactInventoryItemFacts.rows(items);
+        ITEM_TITLES.validate(ExactInventoryValidation.class, itemFacts, economics);
+        LOT_TITLES.validate(ExactInventoryValidation.class, fungibleResources.lots(), economics);
         CONFLICTS.validate(() -> {
             for (Map.Entry<SubjectId, InventoryConflict> entry : conflicts.entrySet()) {
                 InventoryConflict conflict = entry.getValue();
@@ -87,15 +94,10 @@ final class ExactInventoryValidation {
                 // evidence restart-safe without resurrecting the item or adopting foreign state.
             }
         }, conflicts, containers);
-        CARGO_TITLES.validate(() -> {
-            for (Map.Entry<SubjectId, CargoBatch> entry : cargo.entrySet()) {
-                if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("cargo map key does not match cargo identity");
-                economics.require(entry.getValue().ownerId());
-            }
-        }, cargo, economics.accounts());
+        CARGO_TITLES.validate(ExactInventoryValidation.class, cargo, economics);
         EXACT_CUSTODY.validate(() -> {
             Map<InventoryCustody.ContainerSlot, SubjectId> slots = new HashMap<>();
-            for (ExactItemStack item : items.values()) switch (item.custody()) {
+            for (var item : itemFacts.values()) switch (item.custody()) {
                 case InventoryCustody.ContainerSlot slot -> {
                     ContainerRecord container = containers.get(slot.containerId());
                     if (container == null || slot.slot() >= container.slotCount() || slots.put(slot, item.id()) != null) throw new IllegalArgumentException("invalid or duplicate container slot custody");
@@ -117,18 +119,18 @@ final class ExactInventoryValidation {
             };
             for (CargoBatch batch : cargo.values()) {
                 if (batch.fungibleContents()) continue;
-                for (SubjectId item : batch.itemIds()) require(items.get(item), new InventoryCustody.Cargo(batch.id()), "cargo reverse custody");
+                for (SubjectId item : batch.itemIds()) requireCustody(itemFacts.get(item), new InventoryCustody.Cargo(batch.id()), "cargo reverse custody");
             }
             for (Map.Entry<UUID, List<SubjectId>> player : playerItems.entrySet()) {
                 requireDistinct(player.getValue(), "player custody");
-                for (SubjectId item : player.getValue()) require(items.get(item), new InventoryCustody.Player(player.getKey()), "player reverse custody");
+                for (SubjectId item : player.getValue()) requireCustody(itemFacts.get(item), new InventoryCustody.Player(player.getKey()), "player reverse custody");
             }
             for (Map.Entry<UUID, List<SubjectId>> carrier : worldCarrierItems.entrySet()) {
                 requireDistinct(carrier.getValue(), "world carrier custody");
-                for (SubjectId item : carrier.getValue()) require(items.get(item), new InventoryCustody.WorldCarrier(carrier.getKey()), "world carrier reverse custody");
+                for (SubjectId item : carrier.getValue()) requireCustody(itemFacts.get(item), new InventoryCustody.WorldCarrier(carrier.getKey()), "world carrier reverse custody");
             }
             if (!slots.equals(occupiedSlots)) throw new IllegalArgumentException("container slot index must exactly match exact item custody");
-        }, items, cargo, playerItems, worldCarrierItems, containers, occupiedSlots);
+        }, itemFacts, cargo, playerItems, worldCarrierItems, containers, occupiedSlots);
         var holders = ImmutableInvariantCheck.fullAudit()
                 ? HOLDERS.project(ExactInventoryValidation.class, fungibleResources.accounts(), (before, after) -> false, (id, account) -> account.custody())
                 : HOLDERS.project(ExactInventoryValidation.class, fungibleResources.accounts(), (id, account) -> account.custody());
@@ -215,6 +217,9 @@ final class ExactInventoryValidation {
             }
         }, cargo, holders);
         BINDING_REFERENCES.validate(ExactInventoryValidation.class, bindings, context);
+    }
+    private static void requireCustody(ExactInventoryItemFacts.Row item, InventoryCustody expected, String label) {
+        if (item == null || !item.custody().equals(expected)) throw new IllegalArgumentException("dangling or conflicting " + label);
     }
     static void require(Object value, Object expected, String label) {
         if (value instanceof ExactItemStack item && item.custody().equals(expected)) return;

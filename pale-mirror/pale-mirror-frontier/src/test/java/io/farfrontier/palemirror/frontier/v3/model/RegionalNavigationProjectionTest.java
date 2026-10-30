@@ -7,6 +7,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RegionalNavigationProjectionTest {
+    @Test void pageRectangleMembershipMatchesOrdinaryRegionSetsAcrossSignedBoundariesAndRemoval() {
+        var values = new HashMap<Region, Integer>();
+        for (int x = -18; x <= 18; x++) for (int z = -18; z <= 18; z++)
+            if (Math.floorMod(x * 7 + z * 11, 5) == 0) values.put(new Region(x, z), x - z);
+        values.put(new Region(15, 15), 1); values.put(new Region(-17, -17), 2);
+        var before = ImmutableRegionMap.copyOf(values);
+        var removed = new Region(15, 15);
+        var after = before.with(Map.of(removed, Optional.empty(), new Region(31, -16), Optional.of(3)));
+        for (var indexed : List.of(before, after)) {
+            var ordinary = new HashSet<>(indexed.keySet());
+            for (int x : new int[]{-289, -273, -257, -17, -1, 0, 239, 255, 256, 479})
+                for (int z : new int[]{-289, -257, -1, 0, 239, 255, 256})
+                    for (int side : new int[]{1, 16, 17, 48, 160}) {
+                        var area = new WorldBounds(x, z, side, 17);
+                        assertEquals(NavigationRegionCoverage.intersects(ordinary, area),
+                                NavigationRegionCoverage.intersects(indexed.keySet(), area), area.toString());
+                    }
+        }
+        var exact = new WorldBounds(240, 240, 16, 16);
+        assertTrue(before.keySet().intersects(exact)); assertFalse(after.keySet().intersects(exact));
+        assertTrue(after.keySet().intersects(new WorldBounds(496, -256, 1, 1)));
+        assertTrue(after.keySet().intersects(new WorldBounds(0, 0, 100_000, 100_000)),
+                "an oversized optional certificate stays conservative");
+    }
+
     @Test void regionalUnionsShareRemoteContentsAndColumnsPreserveSetSemantics() {
         var a = new BlockPosition(1, 60, 1); var b = new BlockPosition(33, 70, 1); var c = a.offset(1, 0, 0);
         var first = RegionalBlockSet.copyOf(Set.of(a, b)); var second = RegionalBlockSet.copyOf(Set.of(a, c));

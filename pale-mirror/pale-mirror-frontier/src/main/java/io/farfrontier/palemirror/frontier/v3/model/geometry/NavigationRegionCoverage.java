@@ -22,10 +22,10 @@ public final class NavigationRegionCoverage {
     }
     public static boolean intersects(Set<Region> regions, WorldBounds area) {
         if (!bounded(area)) return true; // No unbounded proof scan: use ordinary geometry.
-        var indexed = regions instanceof ImmutableRegionMap.RegionKeys keys ? keys : null;
+        if (regions instanceof ImmutableRegionMap.RegionKeys keys) return keys.intersects(area);
         for (int x = area.minX() >> 4; x <= (area.maxXExclusive() - 1) >> 4; x++)
             for (int z = area.minZ() >> 4; z <= (area.maxZExclusive() - 1) >> 4; z++)
-                if (indexed != null ? indexed.containsRegion(x, z) : regions.contains(new Region(x, z))) return true;
+                if (regions.contains(new Region(x, z))) return true;
         return false;
     }
 }

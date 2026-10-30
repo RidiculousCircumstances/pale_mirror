@@ -17,10 +17,14 @@ public final class ChunkSurfaceIndex {
     }
 
     private final Map<Chunk, List<SurfaceAnchor>[]> chunks;
+    private final io.farfrontier.palemirror.frontier.v3.model.geometry.ImmutableRegionMap.RegionKeys coverage;
 
     private ChunkSurfaceIndex(Map<Chunk, List<SurfaceAnchor>[]> chunks) {
         // Arrays are built privately and never exposed. HashMap avoids MapN's clustered probing.
         this.chunks = Collections.unmodifiableMap(chunks);
+        var regions = new HashMap<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region, Boolean>();
+        chunks.keySet().forEach(chunk -> regions.put(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(chunk.x(), chunk.z()), Boolean.TRUE));
+        coverage = io.farfrontier.palemirror.frontier.v3.model.geometry.ImmutableRegionMap.copyOf(regions).keySet();
     }
 
     @SuppressWarnings("unchecked")
@@ -41,11 +45,7 @@ public final class ChunkSurfaceIndex {
     }
 
     public boolean intersects(WorldBounds area) {
-        if (!io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationRegionCoverage.bounded(area)) return true;
-        for (int x = area.minX() >> 4; x <= (area.maxXExclusive() - 1) >> 4; x++)
-            for (int z = area.minZ() >> 4; z <= (area.maxZExclusive() - 1) >> 4; z++)
-                if (chunks.containsKey(new Chunk(x, z))) return true;
-        return false;
+        return coverage.intersects(area);
     }
     public SurfaceAnchor at(int x, int z) {
         var levels = surfacesAt(x, z);

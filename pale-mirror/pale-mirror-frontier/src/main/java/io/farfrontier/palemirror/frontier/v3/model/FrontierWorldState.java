@@ -357,7 +357,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         for (HiveGrowthJob job : hiveColony.growthJobs().values()) {
             requireJobTask(strategicPlans, job.taskId(), job.hiveId(), StrategicTaskKind.GROW_HIVE_ORGANISM, "hive growth");
         }
-        OwnedChecks.ECONOMIC_CLAIMS.validate(() -> FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory), bootstrap, inventory.items());
+        OwnedChecks.ECONOMIC_CLAIMS.validate(() -> FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory), bootstrap, ExactInventoryItemFacts.rows(inventory.items()));
         Set<SubjectId> expectedActors = ActorIdentityDeclarations.validate(bootstrap, hiveColony, humanPopulation, actorLocations, transportFleet);
         OwnedChecks.ACTOR_ITEM_CUSTODY.validate(() -> FrontierWorldStateSupport.validateActorItemCustody(bootstrap, actorLocations, inventory, fencedRecovery),
                     bootstrap.worldId(), ActorIdentityDeclarations.lifeStatuses(bootstrap, actorLocations), inventory.items(),

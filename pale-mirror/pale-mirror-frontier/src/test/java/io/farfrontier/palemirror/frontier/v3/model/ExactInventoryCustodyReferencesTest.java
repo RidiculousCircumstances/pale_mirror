@@ -10,6 +10,20 @@ import static org.junit.jupiter.api.Assertions.*;
 class ExactInventoryCustodyReferencesTest {
     private static final SubjectId OWNER = id("owner"), CHEST = id("chest"), ACCOUNT = id("account"), LOT = id("lot"), BINDING = id("binding");
 
+    @Test void toolWearKeepsReferenceFactsButLostTitleAndForgedKeysStillFail() {
+        var tool = new ExactItemStack(id("wear-tool"), OWNER, "minecraft:iron_pickaxe", 1,
+                new InventoryCustody.Actor(id("actor")), new ItemCondition(250, 0));
+        var before = inventory(Map.of(), Map.of(tool.id(), tool), Map.of(), FungibleResourceLedger.empty());
+        var damaged = tool.withCondition(tool.condition().wear(1));
+        var after = inventory(Map.of(), Map.of(tool.id(), damaged), Map.of(), FungibleResourceLedger.empty());
+        rejects(() -> after.withEconomics(new EconomicLedger(Map.of())));
+        rejects(() -> inventory(Map.of(), Map.of(id("forged-key"), damaged), Map.of(), FungibleResourceLedger.empty()));
+        var carried = inventory(Map.of(), Map.of(), Map.of(), resources(new ResourceCustody.Actor(id("actor")), -1));
+        rejects(() -> carried.withEconomics(new EconomicLedger(Map.of())));
+        before.validateComplete(); after.validateComplete(); carried.validateComplete();
+        assertEquals(1, after.items().get(tool.id()).condition().damage());
+    }
+
     @Test void unchangedBindingsFollowChangedCapacityPortsAndExactOccupancy() {
         var before = inventory(Map.of(CHEST, new ContainerRecord(CHEST, OWNER, 4)), Map.of(), Map.of(),
                 resources(new ResourceCustody.Container(CHEST), 3));

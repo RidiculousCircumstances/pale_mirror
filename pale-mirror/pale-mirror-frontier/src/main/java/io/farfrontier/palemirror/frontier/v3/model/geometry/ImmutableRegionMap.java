@@ -15,6 +15,7 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
         private final int baseX, baseZ, hash, keyHash;
         private final int[] offsets;
         private final Object[] values;
+        private final long[] occupied = new long[4];
         PageValues(Map<Region, V> source, int hash) {
             var entries = new ArrayList<>(source.entrySet());
             if (entries.isEmpty() || entries.size() > 256) throw new IllegalArgumentException("invalid sparse regional page");
@@ -27,6 +28,7 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
                 if ((region.x() & ~15) != baseX || (region.z() & ~15) != baseZ)
                     throw new IllegalArgumentException("regional page contains foreign coordinates");
                 offsets[i] = offset(region.x(), region.z()); values[i] = Objects.requireNonNull(entry.getValue());
+                occupied[offsets[i] >>> 6] |= 1L << (offsets[i] & 63);
                 keys += region.hashCode();
             }
             keyHash = keys;
@@ -36,6 +38,14 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
         V get(int x, int z) {
             if ((x & ~15) != baseX || (z & ~15) != baseZ) return null;
             int at = Arrays.binarySearch(offsets, offset(x, z)); return at < 0 ? null : value(at);
+        }
+        boolean intersects(int minX, int minZ, int maxX, int maxZ) {
+            int left = Math.max(0, minX - baseX), right = Math.min(15, maxX - baseX);
+            int bottom = Math.max(0, minZ - baseZ), top = Math.min(15, maxZ - baseZ);
+            int columns = ((1 << (right - left + 1)) - 1) << left;
+            for (int row = bottom; row <= top; row++)
+                if ((occupied[row >>> 2] & ((long) columns << ((row & 3) << 4))) != 0) return true;
+            return false;
         }
         @Override public V get(Object key) { return key instanceof Region region ? get(region.x(), region.z()) : null; }
         @Override public int size() { return offsets.length; }
@@ -80,13 +90,28 @@ public final class ImmutableRegionMap<V> extends AbstractMap<Region, V> {
         }
     }
     /** Read-only membership capability; never a route or permission certificate. */
-    public interface RegionKeys extends Set<Region> { boolean containsRegion(int x, int z); }
+    public interface RegionKeys extends Set<Region> {
+        boolean containsRegion(int x, int z);
+        /** Block area overlaps at least one exact retained region; no per-cell permission. */
+        boolean intersects(io.farfrontier.palemirror.frontier.v3.model.WorldBounds area);
+    }
     private final RegionKeys keys = new Keys();
     private final class Keys extends AbstractSet<Region> implements RegionKeys {
         @Override public int size() { return size; }
         @Override public int hashCode() { return keyHash; }
         @Override public boolean contains(Object key) { return containsKey(key); }
         @Override public boolean containsRegion(int x, int z) { return get(x, z) != null; }
+        @Override public boolean intersects(io.farfrontier.palemirror.frontier.v3.model.WorldBounds area) {
+            if (!NavigationRegionCoverage.bounded(area)) return true;
+            int minX = area.minX() >> 4, minZ = area.minZ() >> 4;
+            int maxX = (area.maxXExclusive() - 1) >> 4, maxZ = (area.maxZExclusive() - 1) >> 4;
+            for (int x = minX >> 4; x <= (maxX >> 4); x++)
+                for (int z = minZ >> 4; z <= (maxZ >> 4); z++) {
+                    var part = pages.get(new Page(x, z));
+                    if (part != null && part.values.intersects(minX, minZ, maxX, maxZ)) return true;
+                }
+            return false;
+        }
         @Override public Iterator<Region> iterator() { return entrySet().stream().map(Entry::getKey).iterator(); }
         @Override public boolean add(Region region) { throw new UnsupportedOperationException("immutable regional facts"); }
         @Override public boolean remove(Object region) { throw new UnsupportedOperationException("immutable regional facts"); }

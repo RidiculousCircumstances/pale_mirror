@@ -5,6 +5,16 @@ import java.util.ArrayList;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChunkSurfaceIndexTest {
+    @Test void rectangleMembershipUsesEveryLayerWithoutInventingCoverageBetweenChunks() {
+        var index = ChunkSurfaceIndex.of(java.util.List.of(SurfaceAnchor.at(-257, 61, -257),
+                SurfaceAnchor.at(255, 60, 255), SurfaceAnchor.at(255, 80, 255)));
+        assertTrue(index.intersects(new WorldBounds(-272, -272, 16, 16)));
+        assertTrue(index.intersects(new WorldBounds(240, 240, 16, 16)));
+        assertFalse(index.intersects(new WorldBounds(-256, -256, 16, 16)));
+        assertFalse(index.intersects(new WorldBounds(256, 256, 16, 16)));
+        assertEquals(2, index.surfacesAt(255, 255).size());
+    }
+
     @Test void sparseNegativeChunksAndHighestSupportAgreeWithColumnIdentity() {
         var surfaces = new ArrayList<SurfaceAnchor>();
         for (int x = -33; x <= 33; x++) for (int z = -33; z <= 33; z++)

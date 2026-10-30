@@ -1080,3 +1080,35 @@ disappearing. A test initially supplied a point predicate as if it were an empty
 area certificate; corrected fixture uses the existing explicit indexed capability.
 No product fallback or deadline was changed. The new focused reference cases
 were split from the test file when it reached the1000-line guardrail.
+
+
+### Third contemporary candidate and remaining indexed work
+
+Frozen9f0ff731f passed connected area/parcel/navigation/group-recovery checks
+and guardrails, package verification and native SCALE startup. Ordinary
+458126→459219 in61.7282s:17.7067ticks/s, debt831→973; ready owner31.6529s,
+canonical validation6.2275s,92.0971m search work,7899completed searches,
+294advice rejects (negative216:108offers,76inputs,28plans,4prices). This is6.57%
+above the contemporary53b5 baseline;20/s without growing debt remains open.
+Area-cache counters show3,484,779queries/3,209,700computations in this window;
+not every area repeats. Further work must reduce actual miss cost too.
+
+Source follow-up repairs the profiled miss/validation paths using existing data:
+- Exact inventory owns one projected identity/title/custody table. Intrinsic
+  titles and world reference checks reuse it across wear/count/material edits;
+  intrinsic item/lot/cargo title checks address the exact existing economic
+  account, so balance updates cannot invalidate all titles. The common
+  constructor derives its slot index from the same facts; wear no longer
+  recopies all occupied slots. Explicit supplied indexes still undergo strict
+  equality/duplicate/custody checks. One current immutable image is retained,
+  no new item admission limit or history.
+- Existing16×16 regional pages retain four exact occupancy words. Bounded
+  rectangle membership probes pages/row masks instead of performing a separate
+  point lookup for every covered chunk. ChunkSurfaceIndex uses this same
+  membership capability while keeping its layered point lookup. Bounds, signed
+  coordinates, removals, missing facts and conservative oversized refusal remain.
+  These masks answer only membership, not walkability or permission.
+
+Focused negatives cover wear followed by removed title/forged keys, existing
+container/cargo/player/fungible custody/recovery rules, and rectangle answers
+against the ordinary set scan across signed/page boundaries and removals.
