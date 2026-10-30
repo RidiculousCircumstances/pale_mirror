@@ -636,3 +636,15 @@ inside a controlled traversal.55 native economy cases passed (combined command59
 native test interval11.37s). A final six-case focused clear check passed15s.
 No wall-performance threshold or higher timeout was introduced. This verifies
 calculation/recovery boundaries and the selected economy flows, not all HOT/M3.
+
+
+Static review before final delivery additionally found deep hashing of complete
+regional collision tokens in both the old RegionalKey and the new boundary key.
+Their hash functions now use bounded spatial/scope inputs; full equality still
+checks local versions and the explicit baseline identity. The baseline fence is
+retained even when local tokens happen to be equal. A connected warm lookup test
+counts token hash visits (no wall-time assertion), and rejects reuse after a
+baseline replacement. The final seven boundary/key cases plus regional,
+clear/retirement and architecture checks passed; guardrails/JAR/package passed32s.
+The earlier preliminary4a9d6c80d observation is preserved but not used as the
+final optimized result; its binary predates these key corrections.

@@ -14,7 +14,18 @@ final class PedestrianBoundaryCache {
     private static final int MAX_ENTRIES = 2_048 * 4, MAX_BUILDERS = 64;
     private static final int MAX_PORTALS = MAX_ENTRIES * PedestrianRegion.SIDE;
     record Key(Object scope, WorldBounds bounds, PedestrianRegion.Tile from, PedestrianRegion.Tile to,
-               Object originVersion, Object targetVersion) { }
+               Object baseline, Object originVersion, Object targetVersion) {
+        @Override public boolean equals(Object other) {
+            return this == other || other instanceof Key value && scope == value.scope && baseline == value.baseline
+                    && bounds.equals(value.bounds) && from.equals(value.from) && to.equals(value.to)
+                    && Objects.equals(originVersion, value.originVersion) && Objects.equals(targetVersion, value.targetVersion);
+        }
+        // Complete regional facts can include large collision images. Address by
+        // scope and spatial pair; equality still checks BOTH complete versions.
+        @Override public int hashCode() {
+            return 31 * (31 * (31 * System.identityHashCode(scope) + bounds.hashCode()) + from.hashCode()) + to.hashCode();
+        }
+    }
     record Lookup(List<PedestrianItineraryCache.Portal> portals, int work) { }
     private record Advance(List<PedestrianItineraryCache.Portal> portals, int work, int checks) { }
     private final Map<Key, Entry> entries = new HashMap<>();

@@ -17,7 +17,13 @@ final class PedestrianRegionCache {
     // bounded directory keep the ordinary version/retirement boundary intact.
     private final Map<Evicted, WeakReference<PedestrianRegion>> recentEvictions = new LinkedHashMap<>();
     private final Map<PedestrianRouteGeometry, Bucket<PedestrianRegion.Tile>> views = new WeakHashMap<>();
-    private record RegionalKey(PedestrianRegion.Tile tile, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) { }
+    private record RegionalKey(PedestrianRegion.Tile tile, Object baseline, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) {
+        @Override public int hashCode() { return 31 * tile.hashCode() + bounds.hashCode(); }
+        @Override public boolean equals(Object other) {
+            return this == other || other instanceof RegionalKey value && baseline == value.baseline
+                    && tile.equals(value.tile) && bounds.equals(value.bounds) && Objects.equals(revision, value.revision);
+        }
+    }
     // Reconstructible terrain/profile value keys must not disappear while an equal
     // current view is in use. Scope and every graph queue remain explicitly bounded.
     private final Map<Object, Bucket<RegionalKey>> scoped = new LinkedHashMap<>(16, 0.75f, true);
@@ -83,7 +89,7 @@ final class PedestrianRegionCache {
         if (geometry.regionalRevision().isPresent()) {
             var revision = geometry.regionalRevision().orElseThrow();
             var regions = regionalScope(revision);
-            var key = new RegionalKey(tile, revision.at(tile.x(), tile.z()), geometry.bounds());
+            var key = new RegionalKey(tile, revision.baseline(), revision.at(tile.x(), tile.z()), geometry.bounds());
             return advance(regions, key, geometry, tile, budget, mayContinue);
         } else {
             var regions = viewScope(geometry);
@@ -110,7 +116,8 @@ final class PedestrianRegionCache {
         Bucket<?> scope = revision.isPresent() ? regionalScope(revision.orElseThrow()) : viewScope(geometry);
         Object origin = revision.map(value -> value.at(from.tile.x(), from.tile.z())).orElse(geometry.version());
         Object target = revision.map(value -> value.at(to.tile.x(), to.tile.z())).orElse(geometry.version());
-        var key = new PedestrianBoundaryCache.Key(scope, geometry.bounds(), from.tile, to.tile, origin, target);
+        Object baseline = revision.map(PedestrianGeometryRevision::baseline).orElse(geometry.version());
+        var key = new PedestrianBoundaryCache.Key(scope, geometry.bounds(), from.tile, to.tile, baseline, origin, target);
         return boundaries.lookup(key, geometry, from, to, budget, mayContinue, () -> !scope.retired);
     }
     private <K> Lookup advance(Bucket<K> bucket, K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile,

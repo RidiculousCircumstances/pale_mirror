@@ -154,4 +154,23 @@ class PedestrianBoundaryCacheTest {
         assertNotSame(previous, current, "a retired geometry scope must obtain a new publication");
         cache.clear(); assertEquals(0, cache.diagnostic().boundaries().retainedPortals());
     }
+    @Test void warmRegionalAndBoundaryLookupsDoNotHashTheirCollisionImages() {
+        var hashes = new AtomicInteger();
+        var token = new Object() { @Override public int hashCode() { hashes.incrementAndGet(); return 7; } };
+        var revision = new PedestrianGeometryRevision(new Object(), new Object(), new Object(), Map.of(
+                new PedestrianGeometryRevision.Region(0, 0), token, new PedestrianGeometryRevision.Region(1, 0), token));
+        var geometry = geometry(revision, false, false); var cache = new PedestrianRegionCache();
+        var from = region(cache, geometry, LEFT); var to = region(cache, geometry, RIGHT);
+        var connected = links(cache, geometry, from, to);
+        hashes.set(0);
+        assertSame(from, cache.region(geometry, LEFT, 1).region());
+        assertSame(connected, cache.boundary(geometry, from, to, 1, () -> true).portals());
+        assertEquals(0, hashes.get(), "cache addressing cannot traverse regional collision data");
+        var replacedBaseline = new PedestrianGeometryRevision(revision.scope(), revision.geometryScope(), new Object(), revision.revisions());
+        var changed = geometry(replacedBaseline, false, true);
+        var changedFrom = region(cache, changed, LEFT); var changedTo = region(cache, changed, RIGHT);
+        assertNotSame(from, changedFrom, "a replaced baseline cannot borrow graphs carrying equal local tokens");
+        assertTrue(links(cache, changed, changedFrom, changedTo).isEmpty(), "boundary equality must retain the baseline fence too");
+    }
+
 }
