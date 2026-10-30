@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -99,6 +100,10 @@ class StrategicPlanGraphValidationTest {
                 valid.infectionKnowledge(), valid.hiveTerritoryKnowledge(), valid.hiveSettlementKnowledge(),
                 valid.hiveDoctrine(), valid.settlementAssaults(), initial.decisionAuthorities());
         assertThrows(IllegalArgumentException.class, () -> missingCommitment.validate(
+                world.bootstrap(), world.routeTopology(), world.humanPopulation(), world.resourceSites()));
+        var forgedMembers = valid.withWorkPermissions(home, new ResidentWorkPermissions(Map.of(
+                ResidentWorkKind.AGRICULTURE, Set.of(new SubjectId("resident:missing")))));
+        assertThrows(IllegalArgumentException.class, () -> forgedMembers.validate(
                 world.bootstrap(), world.routeTopology(), world.humanPopulation(), world.resourceSites()));
         var foreign = objective("objective:foreign", Optional.empty());
         var invalid = new StrategicPlanState(Map.of(foreign.id(), foreign), Map.of(), Map.of());

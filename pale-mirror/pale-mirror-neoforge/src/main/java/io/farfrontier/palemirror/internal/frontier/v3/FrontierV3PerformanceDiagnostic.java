@@ -219,7 +219,6 @@ final class FrontierV3PerformanceDiagnostic {
                 + ",\"advanceNanos\":" + value.advanceNanos() + ",\"maxAdvanceNanos\":" + value.maxAdvanceNanos() + "}";
     }
 
-    /** A bounded attribution survives the detail budget even when the full stage table does not. */
     /** Exact cumulative counters survive optional detail omission; absence remains unknown. */
     private static String ownerWork(List<FrontierExecutionMetrics.StageSample> samples, String world) {
         return "{\"ready\":" + cumulative(samples, FrontierExecutionMetrics.Stage.HOST_TURN, "pm-ready-continuation", "world")
@@ -233,6 +232,7 @@ final class FrontierV3PerformanceDiagnostic {
                 .orElse("null");
     }
 
+    /** A bounded attribution survives the detail budget even when the full stage table does not. */
     private static String costlyStages(List<FrontierExecutionMetrics.StageSample> samples) {
         var selected = samples.stream().filter(sample -> sample.stage() != FrontierExecutionMetrics.Stage.HOST_TICK
                         && sample.stage() != FrontierExecutionMetrics.Stage.HOST_TURN)

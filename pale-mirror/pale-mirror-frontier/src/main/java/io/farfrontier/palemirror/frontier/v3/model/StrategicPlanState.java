@@ -17,7 +17,12 @@ public final class StrategicPlanState {
         return new ObjectiveSlot(objective.ownerId(), objective.lane(), objective.resourceSiteTarget());
     }
     public static final int MAX_OBJECTIVES = SimulationCapacity.MAX_SETTLEMENTS * 16;
-    private static final ImmutableInvariantCheck<Void> VALIDATION = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> AUTHORITY_DECLARATIONS = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> AUTHORITY_MEMBERS = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> AUTHORITY_COMMITMENTS = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> OBJECTIVE_TARGETS = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> PATROL_REFERENCES = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> INFECTION_KNOWLEDGE = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<ActiveObjectives> ACTIVE_OBJECTIVES = new ImmutableInvariantCheck<>();
     private static final ImmutableInvariantCheck<Void> TASK_GRAPH = new ImmutableInvariantCheck<>();
     private static final ImmutableResultView<Boolean, Map<SubjectId, List<StrategicTask>>> OWNED_TASKS =
@@ -315,36 +320,45 @@ public final class StrategicPlanState {
 
     void validate(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation,
                   ResourceSiteState resourceSites) {
-        VALIDATION.validate(() -> validateCurrent(bootstrap, routeTopology, humanPopulation, resourceSites.declarations()),
-                this, bootstrap, routeTopology, humanPopulation.residents(), resourceSites.declarations());
-    }
-    private void validateCurrent(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation,
-                                 Map<SubjectId, ResourceSiteDeclaration> resourceSites) {
         Objects.requireNonNull(routeTopology, "route topology");
-        var currentActive = activeObjectives(); // full recovery audits rebuild derived evidence
         TASK_GRAPH.validate(this::validateTaskGraph, objectives, tasks);
-        if (!decisionAuthorities.authorities().isEmpty()) {
-            DecisionAuthorityState expected = DecisionAuthorityState.initial(bootstrap);
-            if (!decisionAuthorities.authorities().keySet().equals(expected.authorities().keySet())) {
-                throw new IllegalArgumentException("decision authority scope must be exactly the settlements and Hivemind");
-            }
-            decisionAuthorities.authorities().forEach((owner, authority) -> {
-                DecisionAuthority expectedAuthority = expected.require(owner);
-                authority.workPermissions().workers().values().forEach(workers -> workers.forEach(id -> {
+        var currentActive = activeObjectives(); // full recovery audits rebuild derived membership
+        AUTHORITY_DECLARATIONS.validate(() -> validateAuthorityDeclarations(bootstrap), bootstrap, decisionAuthorities);
+        AUTHORITY_MEMBERS.validate(() -> validateAuthorityMembers(humanPopulation), decisionAuthorities, humanPopulation.residents());
+        AUTHORITY_COMMITMENTS.validate(() -> validateAuthorityCommitments(currentActive), decisionAuthorities, currentActive);
+        OBJECTIVE_TARGETS.validate(() -> validateObjectiveTargets(bootstrap, resourceSites.declarations()),
+                objectives, bootstrap, resourceSites.declarations());
+        PATROL_REFERENCES.validate(() -> validatePatrolReferences(bootstrap, routeTopology, humanPopulation),
+                routePatrols, tasks, bootstrap, routeTopology, humanPopulation.residents());
+        INFECTION_KNOWLEDGE.validate(() -> infectionKnowledge.validate(bootstrap), infectionKnowledge, bootstrap);
+    }
+    private void validateAuthorityDeclarations(FrontierBootstrap bootstrap) {
+        if (decisionAuthorities.authorities().isEmpty()) return;
+        DecisionAuthorityState expected = DecisionAuthorityState.initial(bootstrap);
+        if (!decisionAuthorities.authorities().keySet().equals(expected.authorities().keySet()))
+            throw new IllegalArgumentException("decision authority scope must be exactly the settlements and Hivemind");
+        decisionAuthorities.authorities().forEach((owner, authority) -> {
+            DecisionAuthority declared = expected.require(owner);
+            if (authority.kind() != declared.kind() || !authority.policy().equals(declared.policy()))
+                throw new IllegalArgumentException("decision authority policy is not registered for its owner");
+        });
+    }
+    private void validateAuthorityMembers(HumanPopulation humanPopulation) {
+        decisionAuthorities.authorities().forEach((owner, authority) ->
+                authority.workPermissions().priorities().values().forEach(workers -> workers.keySet().forEach(id -> {
                     ResidentProfile resident = humanPopulation.resident(id);
                     if (resident == null || !resident.settlementId().equals(owner))
                         throw new IllegalArgumentException("work permission must reference an exact local resident");
-                }));
-                if (authority.kind() != expectedAuthority.kind() || !authority.policy().equals(expectedAuthority.policy())) {
-                    throw new IllegalArgumentException("decision authority policy is not registered for its owner");
-                }
-                Set<SubjectId> active = currentActive.byOwner().getOrDefault(owner, Set.of());
-                if (!active.equals(java.util.Set.copyOf(authority.commitmentIds()))) {
-                    throw new IllegalArgumentException("decision authority commitments must exactly reference active objectives");
-                }
-            });
-        }
-        infectionKnowledge.validate(bootstrap);
+                })));
+    }
+    private void validateAuthorityCommitments(ActiveObjectives currentActive) {
+        decisionAuthorities.authorities().forEach((owner, authority) -> {
+            Set<SubjectId> active = currentActive.byOwner().getOrDefault(owner, Set.of());
+            if (!active.equals(Set.copyOf(authority.commitmentIds())))
+                throw new IllegalArgumentException("decision authority commitments must exactly reference active objectives");
+        });
+    }
+    private void validateObjectiveTargets(FrontierBootstrap bootstrap, Map<SubjectId, ResourceSiteDeclaration> resourceSites) {
         objectives.values().forEach(objective -> {
             boolean knownOwner = bootstrap.hive().id().equals(objective.ownerId())
                     || FrontierWorldStateSupport.hasSettlement(bootstrap, objective.ownerId());
@@ -356,6 +370,8 @@ public final class StrategicPlanState {
                 }
             });
         });
+    }
+    private void validatePatrolReferences(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation) {
         routePatrols.values().forEach(patrol -> {
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());
             StrategicTask task = tasks.get(patrol.taskId());

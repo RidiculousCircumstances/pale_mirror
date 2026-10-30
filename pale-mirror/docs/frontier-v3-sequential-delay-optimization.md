@@ -1301,3 +1301,27 @@ envelope; absent attribution remains null, never invented zero. This measures
 the same existing telemetry and adds no runtime instrumentation. Performance and
 detail-budget checks+guardrails PASS22s; initial new parser assertion forgot the
 existing PMV3_DIAG prefix, corrected without changing product rendering semantics.
+
+
+### Twelfth comparison and independent strategic invariants
+
+Frozen97d1146d7 ordinary458133→459219/54.6165814s:19.88407ticks/s,
+debt531→537;64.7153m search work/7927completions/12228slices.
+Ready owner26.8415s/37931calls;ordinary1.6731s/1092;validation5.2946s/10940.
+4783advice completed/4452accepted/331rejected. Remaining negative changes are
+144offers/95buyer inputs/18buyer plans/2prices; other46buyer inputs/13plans/
+9owner inputs/4expiry. A changed actual supply/input/consent remains a valid
+rejection; the count must not be forced to zero by accepting stale results.
+
+The sixth JFR attributes29owned-validation samples to strategic state. Its one
+whole-state validation tuple made any task progress repeat all authorities'
+policy, workforce and commitments plus every objective/patrol. Split these
+existing checks by their complete immutable inputs in the same semantic owner:
+declarations, workforce, commitments, objective targets, patrol references and
+infection knowledge. Existing common ImmutableInvariantCheck retains only its
+last successful tuple; complete recovery ignores cached evidence and rebuilds
+active membership. No validation rule, actor authority or domain detail is removed.
+Workforce membership reads existing priority keys directly, avoiding another
+projected roster map per authority. Warm foreign/missing-commitment and missing
+worker checks remain strict. Connected strategic/objective/retirement/group/trade
+checks+guardrails PASS2m11s; final full-audit focused receipt recorded separately.
