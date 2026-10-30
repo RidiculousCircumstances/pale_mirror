@@ -684,3 +684,62 @@ retained under region-boundary-reuse/profile/. It confirms substantial regional
 build/connect and geometric memo work on navigation threads, but overlaps early
 JIT/GC warm-up and is not a final CPU-share or TPS comparison. No profiler/build/
 client overlaps an ordinary comparison window.
+
+
+### Final matched observation: a009ef1e2
+
+The read-phase correction passed50 selected frontier cases:7 boundary,11 demand,
+24 wake/continuation,1 trip feasibility,4 opportunity advice and3 procurement
+transport. All55 native economy cases passed again (15.73s native interval;
+combined command61s). Earlier focused guardrails/JAR/package passed36s; the clean
+detached a009ef1e2 frozen guardrails/JAR/package passed13s. No ceilings or test
+assertions were weakened. The preexisting adapter recovery failure remains open.
+
+The ordinary SCALE comparison restored the same complete109-file checkpoint,
+required explicit recovery=false and no fast-forward, warmed60s, then waited
+for the baseline's canonical window. Same rules/JVM/two advice/two navigation
+workers. No task build/profiler/client overlapped either measured window.
+
+| Ordinary SCALE leg | Canonical interval | Ticks / seconds | Ticks/s | Debt before → after |
+| --- | --- | --- | ---: | --- |
+| 4f195546f baseline | 458107 → 459219 | 1112 / 61.685735 | 18.026858 | 1186 → 1308 |
+| a009ef1e2 final | 458114 → 459223 | 1109 / 65.675261 | 16.886115 | 932 → 1136 |
+
+This is **no demonstrated global speedup**: observed rate difference−6.3280%,
+with growing ordinary debt. It must not be presented as sustained20 or added to
+older speed ratios. Same checkpoint and nearly matching canonical intervals do
+not make asynchronous completion/task mix identical: final completed8165 searches
+versus5879 baseline,15393 versus8885 worker slices,5404 versus4584 advice tasks;
+revisions/tick20.3291 versus21.3858. Thus neither global benefit nor a universal
+6% algorithmic slowdown is established by this one comparison.
+
+The new producer's measured work is explicit:1,120,163 boundary lookups,
+127,590 hits,991,157 whole-union analytical proofs,1413 completed layered builds,
+23,500 body traversal checks,1393 evictions. End retention remains bounded;
+see comparison-summary.json for exact counters. Aggregate directed geometric
+computations nevertheless rose9,126,890→12,156,815, and completed layered region
+graphs4995→11010. The repeated-boundary mechanism is removed, but the whole
+calculation path still does too much regional work for the20-tick target.
+These counters do not attribute all geometry work to any one caller.
+
+The final observation passed the earlier quarantine point and completed normally,
+with no fresh ERROR/quarantine. Five sampled towns had zero starving residents
+before/after and ordinary meal activity. This is bounded COLD/runtime evidence,
+not long-term100-town economic equilibrium or HOT/player/M3 acceptance. Earlier
+preliminary4a9 and failed8f57 windows remain preserved and excluded from the final
+successful-window claim. Receipts: build/simulation-throughput/region-boundary-reuse/.
+
+Source-bound final artifact SHA512:
+`f3f2802d1ca47213576c5a0a7a3f7a6cea2cc35b264721a0a5cedd649737d7eaa5d3ae17b9d63c5b22379a69ddc07593bd3eb168d87042b93026a2da32bdcf95`.
+
+Both runtimes installed the exact frozen a009ef1e2 artifact through the existing
+root deployment owners, with native saved-dimensions/exit and fresh verification.
+MAIN retained frontier-v3-r281-cold-atomic-20261028; SCALE used the authorized
+scale-r31-schema313-seed126 checkpoint only. Final three ordinary checks on each
+explicitly statusOK/recovering=false/noFF: MAIN2540020→2540442,debt0;
+SCALE460665→461479,debt1444→1053. The later catch-up does not erase the measured
+window's deficit or establish sustained20. No fresh ERROR/quarantine. Actual
+Java22 MAIN3227416/birth38590576, SCALE3207388/birth38561198; exact installed/frozen
+JAR hashes match (final-identity.json). No task build/profiler/client/observer is
+left running. Pack tracked state remains clean, unrelated .f0v-baseline/ preserved;
+canonical architecture amendments remain among preserved governance WIP. No push.
