@@ -12,40 +12,17 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     /** Rebuildable geometry-only retention ceiling, not actor positions or route authority. */
     private static final int MAX_VOLUME_RESULTS = 8_192;
     private static final java.util.concurrent.atomic.LongAdder EDGE_QUERIES = new java.util.concurrent.atomic.LongAdder();
-    private static final java.util.concurrent.atomic.LongAdder REGIONAL_READS = new java.util.concurrent.atomic.LongAdder();
-    private static final java.util.concurrent.atomic.LongAdder REGIONAL_COMPUTATIONS = new java.util.concurrent.atomic.LongAdder();
-    private static final java.util.concurrent.atomic.LongAdder UNVERSIONED_COMPUTATIONS = new java.util.concurrent.atomic.LongAdder();
-    private static final java.util.concurrent.atomic.LongAdder SCOPE_CONSTRUCTIONS = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder COMPUTATIONS = new java.util.concurrent.atomic.LongAdder();
     /** Process-lifetime bounded counters only; a read never drives cache or domain decisions. */
-    public record EdgeFactsDiagnostic(long queries, long regionalReads, long regionalComputations,
-                                      long unversionedComputations, long scopeConstructionAttempts) { }
+    public record EdgeFactsDiagnostic(long queries, long computations) { }
     public static EdgeFactsDiagnostic edgeFactsDiagnostic() {
-        return new EdgeFactsDiagnostic(EDGE_QUERIES.sum(), REGIONAL_READS.sum(), REGIONAL_COMPUTATIONS.sum(),
-                UNVERSIONED_COMPUTATIONS.sum(), SCOPE_CONSTRUCTIONS.sum());
+        return new EdgeFactsDiagnostic(EDGE_QUERIES.sum(), COMPUTATIONS.sum());
     }
     private record Volume(double x, double z, int feetY) { }
     private record DirectedEdge(SurfaceAnchor from, SurfaceAnchor to) { }
     private record ColumnFacts(boolean detailed, java.util.List<SurfaceAnchor> surfaces) {
         ColumnFacts { surfaces = java.util.List.copyOf(surfaces); }
     }
-    /** Exact local facts plus a bounded declared geometry epoch; no world-state or actor snapshot. */
-    private record RegionalEdge(Object geometryScope, Object baseline, UnitNavigationProfile profile,
-                                WorldBounds bounds, DirectedEdge edge, Object originFacts, Object targetFacts) {
-        // Regional facts can contain detailed collision sets. Do not deep-hash
-        // them on each lookup; equality still compares the COMPLETE local facts.
-        @Override public int hashCode() { return 31 * (31 * edge.hashCode() + profile.hashCode()) + geometryScope.hashCode(); }
-        @Override public boolean equals(Object other) {
-            return this == other || other instanceof RegionalEdge value && baseline == value.baseline
-                    && geometryScope.equals(value.geometryScope) && profile.equals(value.profile)
-                    && bounds.equals(value.bounds) && edge.equals(value.edge)
-                    && Objects.equals(originFacts, value.originFacts) && Objects.equals(targetFacts, value.targetFacts);
-        }
-    }
-    // At most eight declared geometry/profile scopes, each with at most the
-    // existing 8192-fact bound. Eviction releases epochs and only causes rereads.
-    private static final io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<Object,
-            io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<RegionalEdge, Boolean>> REGIONAL_EDGES =
-            new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(8);
     private final java.util.Map<DirectedEdge, Boolean> edges = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
@@ -230,29 +207,16 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return true;
     }
     @Override public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
-        // A captured geometry/profile is immutable. The per-view hot cache
-        // shares directed swept-body facts; reuse across views below requires
-        // their complete declared local regional facts to match.
+        // Reuse within this immutable capture. Regional graphs and complete route
+        // facts own cross-view reuse; a second global per-edge LRU repeated their
+        // version/key/locking work for almost entirely one-use surveyed edges.
         EDGE_QUERIES.increment();
-        var edge = new DirectedEdge(from, to);
-        return remembered(edges, edge, () -> {
-            if (revision.isEmpty()) { UNVERSIONED_COMPUTATIONS.increment(); return traverse(from, to); }
-            REGIONAL_READS.increment();
-            var facts = revision.orElseThrow();
-            var origin = PedestrianGeometryRevision.Region.at(from.support());
-            var target = PedestrianGeometryRevision.Region.at(to.support());
-            // The profiled revision already covers neighbouring body columns and
-            // contextual collision halos. Only those exact immutable facts are
-            // retained; a remote edit need not destroy this local result.
-            var key = new RegionalEdge(facts.geometryScope(), facts.baseline(), profile, bounds(), edge,
-                    facts.at(origin.x(), origin.z()), facts.at(target.x(), target.z()));
-            var shared = REGIONAL_EDGES.get(facts.geometryScope(), () -> {
-                SCOPE_CONSTRUCTIONS.increment();
-                return new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(MAX_VOLUME_RESULTS);
-            });
-            return shared.get(key, () -> { REGIONAL_COMPUTATIONS.increment(); return traverse(from, to); });
+        return remembered(edges, new DirectedEdge(from, to), () -> {
+            COMPUTATIONS.increment();
+            return traverse(from, to);
         });
     }
+
     private boolean traverse(SurfaceAnchor from, SurfaceAnchor to) {
         if (detailed(from) || detailed(to)) {
             if (Math.abs((long) from.x() - to.x()) + Math.abs((long) from.z() - to.z()) != 1

@@ -38,7 +38,7 @@ final class GoodsParticipantOpportunityAdvice {
                         // A selected dated quote still faces all current admission checks.
                         if (choice == GoodsTripPlanning.Disposition.NO_PURCHASE) {
                             var changed = decision.negativeInputs().orElseThrow().change(current, now.ticks());
-                            if (changed.isPresent()) return reject("CHANGED_EMPTY_MARKET_" + changed.orElseThrow().name());
+                            if (changed.isPresent()) return reject("EMPTY_MARKET_" + changed.orElseThrow().name());
                         }
                         rejection = "NONE";
                         var fresh = new SettlementEconomicPlanPreparation.Review(now.ticks(), participant.prices(), Optional.empty());

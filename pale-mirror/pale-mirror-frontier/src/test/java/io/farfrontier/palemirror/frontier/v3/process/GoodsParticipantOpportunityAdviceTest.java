@@ -31,7 +31,7 @@ class GoodsParticipantOpportunityAdviceTest {
                 FrontierWorldState.depotId(seller.settlementId()), "minecraft:bread", 64, 0, new FixedScalar(1), 1000);
         var opportunity = changed.withCompanies(changed.companies().withGoodsTrade(changed.companies().goodsTrade().place(relevant)));
         assertTrue(completion.revalidate(opportunity, at).isEmpty(), "absence must subscribe to the missing commodity too");
-        assertEquals("CHANGED_EMPTY_MARKET_OFFERS", completion.rejectionReason());
+        assertEquals("EMPTY_MARKET_OFFERS", completion.rejectionReason());
         var money = state.inventory().economics();
         var drained = state.withInventory(state.inventory().withEconomics(money.transfer(owner,
                 seller.party().id(), money.availableToReserve(owner))));

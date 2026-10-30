@@ -5,25 +5,22 @@ import java.util.Optional;
 
 /** Actor-owned passive presence has no job, labour or resource continuation. */
 final class PresenceActivityCapability implements ActorActivityCapability {
-    private record Validated(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
-                             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecutionId> presence) { }
-    private static final ThreadLocal<Validated> CHECK = new ThreadLocal<>();
+    private static final ImmutableReferenceIndex.Source<java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation>,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> ACTORS = new ImmutableReferenceIndex.Source<>(actors -> actors);
+    private static final ImmutableReferenceIndex<java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation>,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecutionId> CHECK = new ImmutableReferenceIndex<>(
+            SimulationCapacity.MAX_ACTORS, 1, java.util.List.of(ACTORS),
+            (actors, id) -> java.util.List.of(ACTORS.at(id.actorId())),
+            (actors, actor, id) -> validateDeclared(actors, id));
     private final ActorPresencePolicies policies;
     PresenceActivityCapability(ActorPresencePolicies policies) {
         this.policies = java.util.Objects.requireNonNull(policies);
     }
     static void validateReferences(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
                                     ActorExecutionState executions) {
-        var presence = executions.current(ActorActivityKind.PRESENCE); var previous = CHECK.get();
-        if (!ImmutableInvariantCheck.fullAudit() && previous != null && previous.presence() == presence) {
-            if (previous.actors() == actors) return;
-            ImmutableMapChanges.forEach(previous.actors(), actors, change -> {
-                var id = presence.get(change.key());
-                if (id != null) validateDeclared(actors, id);
-            });
-        } else for (var id : presence.values()) validateDeclared(actors, id);
-        CHECK.set(new Validated(actors, presence));
+        CHECK.validate(PresenceActivityCapability.class, executions.current(ActorActivityKind.PRESENCE), actors);
     }
+
     private static void validateDeclared(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
                                           ActorExecutionId id) {
         if (!id.activityOwnerId().equals(id.actorId()) || !actors.containsKey(id.actorId())

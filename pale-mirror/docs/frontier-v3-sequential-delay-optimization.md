@@ -1018,3 +1018,39 @@ Connected source corrections:
 Focused connected checks pass, including old restart coverage. Deployment and
 performance outcomes for these corrections will be recorded after the frozen
 candidate run; source changes alone do not establish20ticks/s or HOT acceptance.
+
+
+### First contemporary candidate and follow-up
+
+Frozen8ccad2ef3 passed focused reference/navigation/body/recovery checks, guardrails,
+packaged-JAR verification and55 required native economy checks. The ordinary
+same-checkpoint SCALE window458131→459230 measured15.9517ticks/s (68.895s),
+debt949→1228, versus contemporary53b5 baseline16.6158ticks/s. Ready owner time
+36.6437s/39979calls versus35.0050s/39983; search work98.5603m versus100.7847m.
+No throughput gain is established. Negative-choice rejection breakdown233:
+77buyer inputs,27accepted plan,129offers. Four overlength diagnostic reasons
+fell into OTHER; shortened bounded labels repair that observability issue.
+These are dated computation dependencies; current exact positive admission is
+not weakened to make the rejection count smaller.
+
+Next connected source changes use existing shared immutable mechanisms:
+- Trade owns addressed order/contract/claim reads; unchanged contracts still
+  reject a missing financial hold, resource claim, item or endpoint. Commitment
+  totals and item exclusivity retain their exact complete owner dependencies.
+- Split exact equipment, fungible holder declarations and physical hand/body
+  reference checks. Changing quantities alone cannot force full equipment and
+  holder scans. Passive-presence references use the common addressed index.
+- Retire the shared individual-edge LRU. Baseline read-only counters showed
+  33,458,930regional reads and33,439,668computations (19,262hits,0.058%). JFR
+  confirms its memo/key/locking path consumes navigation CPU. Per-capture column,
+  volume, contact, clearance and edge caches remain; regional graphs, boundaries,
+  itineraries, exact positive/negative completed routes and dependency fences
+  remain. Changed/unknown geometry is computed normally, never presumed free.
+  The cross-view test stops requiring an optional cache hit while retaining
+  the semantic remote/local/halo/profile/baseline damage cases.
+
+MAIN snapshot5399530 has35current+4061retired recovery rows and compacted
+epoch floor808; both actors rejected at epochs778/780 lack exact rows. Together
+with the only removal path this confirms the arbitrary-compaction failure. A
+fresh MAIN world can remove already-lost historical evidence; the source fix
+prevents recurrence rather than guessing the missing outcome.

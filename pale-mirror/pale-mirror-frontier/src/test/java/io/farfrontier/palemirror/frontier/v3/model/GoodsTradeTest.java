@@ -553,6 +553,21 @@ class GoodsTradeTest {
     }
 
 
+    @Test void unchangedContractStillRejectsLostFinancialAndResourceReferencesAfterIndexedValidation() {
+        var state = reserved();
+        GoodsTradeStateSupport.validate(state);
+        var lostHold = state.withInventory(state.inventory().withEconomics(state.inventory().economics().release(HOLD)));
+        assertThrows(IllegalArgumentException.class, () -> GoodsTradeStateSupport.validate(lostHold),
+                "unchanged contracts must be revisited when their exact financial hold disappears");
+        GoodsTradeStateSupport.validate(state);
+        var lostClaim = state.withInventory(state.inventory().withFungibleResources(
+                state.inventory().fungibleResources().releaseClaim(SOURCE_ACCOUNT, CLAIM)));
+        assertThrows(IllegalArgumentException.class, () -> GoodsTradeStateSupport.validate(lostClaim),
+                "unchanged contracts must be revisited when their exact resource claim disappears");
+        GoodsTradeStateSupport.validate(state);
+        assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> { GoodsTradeStateSupport.validate(state); return null; }));
+    }
+
     @Test void sellerCannotInventBuyerConsentOrSpendSomeoneElsesBalance() {
         FrontierWorldState state = initial();
         state = fact(state, SELLER, new GoodsTradeOrderPlaced(sellOrder()));

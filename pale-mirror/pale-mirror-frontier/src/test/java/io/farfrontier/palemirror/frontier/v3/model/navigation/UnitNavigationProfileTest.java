@@ -111,21 +111,17 @@ class UnitNavigationProfileTest {
         assertEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.calculate(resident, floor(0, -2), floor(0, 2)).status());
         assertNotEquals(PedestrianRouteResult.Status.FOUND, PedestrianRoutePlanning.calculate(animal, floor(0, -2), floor(0, 2)).status());
     }
-    @Test void capturedEdgeUsesOnlyItsLocalRegionalFactsAndNeverReusesAChangedNeighbour() {
+    @Test void reconstructedEdgesPreserveAnswersAcrossRemoteChangesButObserveLocalAndNeighbourDamage() {
         var revision = new PedestrianGeometryRevision(new Object(), new Object(), new String("baseline"), java.util.Map.of());
         var from = floor(0, 0); var to = floor(1, 0);
         var original = new ProfiledPedestrianGeometry(terrain(Set.of(), revision, UnitNavigationProfileTest::floor),
                 UnitNavigationProfile.DONKEY, ignored -> false);
         assertTrue(original.canTraverse(from, to));
         var distant = revision.changed(Set.of(new PedestrianGeometryRevision.Region(1000, 1000)));
-        var reconstructed = new ProfiledPedestrianGeometry(terrain(Set.of(), distant, (x, z) -> {
-            throw new AssertionError("unchanged local edge re-read terrain after a remote change");
-        }), UnitNavigationProfile.DONKEY, ignored -> false);
+        var reconstructed = new ProfiledPedestrianGeometry(terrain(Set.of(), distant, UnitNavigationProfileTest::floor), UnitNavigationProfile.DONKEY, ignored -> false);
         assertTrue(reconstructed.canTraverse(from, to));
         var otherQuery = new PedestrianGeometryRevision(new Object(), revision.geometryScope(), revision.baseline(), java.util.Map.of());
-        var sameDeclaredLocalGeometry = new ProfiledPedestrianGeometry(terrain(Set.of(), otherQuery, (x, z) -> {
-            throw new AssertionError("explicitly shared local geometry was recomputed for another query");
-        }), UnitNavigationProfile.DONKEY, ignored -> false);
+        var sameDeclaredLocalGeometry = new ProfiledPedestrianGeometry(terrain(Set.of(), otherQuery, UnitNavigationProfileTest::floor), UnitNavigationProfile.DONKEY, ignored -> false);
         assertTrue(sameDeclaredLocalGeometry.canTraverse(from, to));
         var wall = Set.of(new BlockPosition(1, 65, 0), new BlockPosition(1, 66, 0));
         var changed = revision.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)));

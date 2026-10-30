@@ -109,69 +109,25 @@ public final class GoodsTradeStateSupport {
 
     /** Full recovery and publication audit; receipts are historical, never live lot/account claims. */
     public static void validate(FrontierWorldState state) {
-        GoodsTradeState trade = state.companies().goodsTrade();
-        GoodsTradeParticipantValidation.validate(state);
-        Map<SubjectId, Integer> orderTotals = new java.util.HashMap<>();
-        for (GoodsTradeOrder order : trade.orders().values()) {
-            if (state.inventory().economics().require(order.party().id()).ownerKind() != order.party().kind()) {
-                throw new IllegalArgumentException("goods order " + order.id().value() + " has a forged participant kind");
-            }
-            var participant = trade.participants().participants().get(order.party().id());
-            if (participant == null || !participant.party().equals(order.party()))
-                throw new IllegalArgumentException("public order lost its exact registered participant");
-            requireContainer(state, order.containerId());
-        }
-        var individualItems = new java.util.HashSet<SubjectId>();
-        for (GoodsTradeContract contract : trade.contracts().values()) {
-            GoodsTradeState.validateTerms(contract, trade.orders().get(contract.sellOrderId()), trade.orders().get(contract.buyOrderId()));
-            orderTotals.merge(contract.sellOrderId(), contract.quantity(), Math::addExact);
-            orderTotals.merge(contract.buyOrderId(), contract.quantity(), Math::addExact);
-            requireContainer(state, contract.sourceContainerId()); requireContainer(state, contract.receiverContainerId());
-            FinancialReservation hold = state.inventory().economics().reservations().get(contract.financialReservationId());
-            if (contract.terminal() ? hold != null : hold == null || !hold.reasonId().equals(contract.id())
-                    || !hold.payerId().equals(contract.buyer().id()) || !hold.payeeId().equals(contract.seller().id())
-                    || !hold.amount().equals(contract.outstandingPrice())) {
-                throw new IllegalArgumentException("goods contract has a missing or mismatched financial hold");
-            }
-            for (var allocation : contract.outstandingClaims().entrySet()) {
-                var individual = contract.individualAllocations().get(allocation.getKey());
-                if (individual != null) {
-                    if (!individualItems.add(individual.itemId()) || !individual.matches(state.inventory().items().get(individual.itemId())))
-                        throw new IllegalArgumentException("individual contract lost its allocated item or condition");
-                    continue;
-                }
-                ClaimAllocation claim = state.inventory().fungibleResources().claims().get(allocation.getKey());
-                if (claim == null || claim.purpose() != ClaimPurpose.GOODS_TRADE || !claim.claimantId().equals(contract.id())
-                        || !claim.economicOwnerId().equals(contract.seller().id()) || !claim.itemKind().equals(contract.itemKind())
-                        || claim.quantity() != allocation.getValue()) {
-                    throw new IllegalArgumentException("goods contract has a missing or mismatched resource allocation");
-                }
-            }
-        }
-        for (GoodsTradeOrder order : trade.orders().values()) if (order.committedQuantity() != Math.addExact(orderTotals.getOrDefault(order.id(), 0), order.retiredCommittedQuantity())) {
-            throw new IllegalArgumentException("goods order commitment is not accounted by retained contracts");
-        }
-        for (ClaimAllocation claim : state.inventory().fungibleResources().claims().values()) {
-            if (claim.purpose() != ClaimPurpose.GOODS_TRADE) continue;
-            GoodsTradeContract contract = trade.contracts().get(claim.claimantId());
-            if (contract == null || !contract.outstandingClaims().containsKey(claim.id())) {
-                throw new IllegalArgumentException("goods allocation lacks its exact commercial owner");
-            }
-        }
+        GoodsTradeReferenceValidation.validate(state);
     }
 
     static void validateTransition(FrontierWorldState before, FrontierWorldState after) {
         var old = before.companies().goodsTrade(); var next = after.companies().goodsTrade();
         if (old == next || old.contracts() == next.contracts() && old.orders() == next.orders()) return;
         var retired = new java.util.HashMap<SubjectId, Integer>();
-        for (var contract : old.contracts().values()) if (!next.contracts().containsKey(contract.id())) {
+        ImmutableMapChanges.forEachIdentityChangedKey(old.contracts(), next.contracts(), id -> {
+            var contract = old.contracts().get(id);
+            if (contract == null || next.contracts().containsKey(id)) return;
             if (!contract.terminal()) throw new IllegalArgumentException("live commercial obligation cannot be erased: " + contract.id().value());
             retired.merge(contract.sellOrderId(), contract.quantity(), Math::addExact);
             retired.merge(contract.buyOrderId(), contract.quantity(), Math::addExact);
-        }
-        for (var order : next.orders().values()) {
-            var prior = old.orders().get(order.id());
-            if (prior != null && order.retiredCommittedQuantity() != Math.addExact(prior.retiredCommittedQuantity(), retired.getOrDefault(order.id(), 0)))
+        });
+        var affected = new java.util.HashSet<>(retired.keySet());
+        ImmutableMapChanges.forEachIdentityChangedKey(old.orders(), next.orders(), affected::add);
+        for (var id : affected) {
+            var order = next.orders().get(id); var prior = old.orders().get(id);
+            if (order != null && prior != null && order.retiredCommittedQuantity() != Math.addExact(prior.retiredCommittedQuantity(), retired.getOrDefault(id, 0)))
                 throw new IllegalArgumentException("public order history must account exactly for retired terminal contracts");
         }
     }

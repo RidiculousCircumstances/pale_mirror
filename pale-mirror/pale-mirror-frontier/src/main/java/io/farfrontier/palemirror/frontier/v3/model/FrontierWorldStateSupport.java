@@ -165,19 +165,36 @@ public final class FrontierWorldStateSupport {
         return item.economicOwnerId();
     }
 
-    static void validateActorItemCustody(WorldId worldId, Map<SubjectId, ActorLocation> locations,
+    private static final ImmutableInvariantCheck<Void> ACTOR_EXACT_CUSTODY = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> ACTOR_FUNGIBLE_CUSTODY = new ImmutableInvariantCheck<>();
+    private static final ImmutableInvariantCheck<Void> ACTOR_STACK_CUSTODY = new ImmutableInvariantCheck<>();
+    private static final ImmutableRegistryView<SubjectId, CustodyAccount, ResourceCustody> RESOURCE_HOLDERS =
+            new ImmutableRegistryView<>(FungibleResourceLedger.MAX_ACCOUNTS, java.util.Objects::equals);
+
+    static void validateActorItemCustody(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> locations,
                                          ExactInventory inventory, FencedRecoveryState recovery) {
-        var actors = locations.keySet();
-        if (inventory.items().values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.Actor actor
-                && !actors.contains(actor.actorId()))) throw new IllegalArgumentException("actor-held item must retain one canonical actor");
-        for (CustodyAccount account : inventory.fungibleResources().accounts().values()) {
-            if (account.custody() instanceof ResourceCustody.Actor actor && !actors.contains(actor.actorId())) {
-                throw new IllegalArgumentException("actor-held resource must retain one canonical actor");
-            }
-        }
+        var actors = ActorIdentityDeclarations.declaredKinds(bootstrap, locations);
+        ACTOR_EXACT_CUSTODY.validate(() -> {
+            if (inventory.items().values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.Actor actor
+                    && !actors.containsKey(actor.actorId())))
+                throw new IllegalArgumentException("actor-held item must retain one canonical actor");
+        }, bootstrap, actors, inventory.items());
+        var holders = RESOURCE_HOLDERS.project(bootstrap, inventory.fungibleResources().accounts(), (id, account) -> account.custody());
+        ACTOR_FUNGIBLE_CUSTODY.validate(() -> {
+            for (var custody : holders.values())
+                if (custody instanceof ResourceCustody.Actor actor && !actors.containsKey(actor.actorId()))
+                    throw new IllegalArgumentException("actor-held resource must retain one canonical actor");
+        }, bootstrap, actors, holders);
+        var lives = ActorIdentityDeclarations.lifeStatuses(bootstrap, locations);
+        ACTOR_STACK_CUSTODY.validate(() -> validateActorStackCustody(bootstrap.worldId(), lives, inventory, recovery),
+                bootstrap, lives, inventory.fungibleResources().bindings(), recovery);
+    }
+
+    private static void validateActorStackCustody(WorldId worldId, Map<SubjectId, ActorLifeStatus> lives,
+                                                 ExactInventory inventory, FencedRecoveryState recovery) {
         for (PhysicalStackBinding binding : inventory.fungibleResources().bindings().values()) {
             if (binding.address() instanceof PhysicalStackAddress.ActorStack hand
-                    && (!actors.contains(hand.actorId())
+                    && (!lives.containsKey(hand.actorId())
                     || !hand.entityId().equals(SceneLease.deterministicEntityId(worldId, hand.actorId())))) {
                 throw new IllegalArgumentException("actor-hand resource binding has a foreign actor or body");
             }
@@ -185,7 +202,7 @@ public final class FrontierWorldStateSupport {
                 var id = io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(hand.actorId());
                 var body = recovery.current().get(id);
                 var retired = recovery.tombstones().get(id);
-                if (locations.get(hand.actorId()).condition().status() == ActorLifeStatus.ALIVE) {
+                if (lives.get(hand.actorId()) == ActorLifeStatus.ALIVE) {
                     if (body == null || body.asset() != FencedRecoveryAsset.BODY || body.ownerRevision() != 0L
                             || !body.ownerId().equals(hand.actorId())
                             || body.phase() != FencedRecoveryPhase.RUNNING && body.phase() != FencedRecoveryPhase.AMBIGUOUS)

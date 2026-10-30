@@ -39,11 +39,19 @@ class ExactInventoryTest {
                 new SubjectId("settlement:one"), "minecraft:saddle", 1, new InventoryCustody.Actor(actor))),
                 Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
         var locations = Map.of(actor, ActorLocation.standingOn(new SurfaceAnchor(new BlockPosition(0, 64, 0)), ActorKind.PACK_ANIMAL, UnitNavigationProfile.DONKEY));
-        var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId("test:equipment-registry");
+        var world = FrontierBootstrapper.create(new io.farfrontier.palemirror.frontier.v3.api.WorldId("test:equipment-registry"), 91L);
         assertDoesNotThrow(() -> FrontierWorldStateSupport.validateActorItemCustody(world, locations, inventory, FencedRecoveryState.empty()));
         assertEquals(List.of(item), inventory.actorItems(actor).stream().map(ExactItemStack::id).toList());
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateSupport.validateActorItemCustody(
                 world, Map.of(), inventory, FencedRecoveryState.empty()), "unregistered actor custody still fails world validation");
+        var lot = new SubjectId("lot:held-food"); var account = new SubjectId("custody:held-food");
+        var resources = new FungibleResourceLedger(Map.of(lot, new ResourceLot(lot, new SubjectId("settlement:one"),
+                "minecraft:bread", 2, "fixture", List.of())), Map.of(), Map.of(account,
+                new CustodyAccount(account, new ResourceCustody.Actor(actor), Map.of(lot, 2), Map.of())), Map.of());
+        var carried = inventory.withFungibleResources(resources);
+        assertDoesNotThrow(() -> FrontierWorldStateSupport.validateActorItemCustody(world, locations, carried, FencedRecoveryState.empty()));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateSupport.validateActorItemCustody(
+                world, Map.of(), carried, FencedRecoveryState.empty()), "unchanged resource holders must follow actor removal");
     }
 
     @Test void unboundColdStockAndReservationsExplainCapacityWithoutPhysicalBindings() {

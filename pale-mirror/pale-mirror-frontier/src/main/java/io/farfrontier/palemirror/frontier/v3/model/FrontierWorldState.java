@@ -359,7 +359,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         }
         OwnedChecks.ECONOMIC_CLAIMS.validate(() -> FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory), bootstrap, inventory.items());
         Set<SubjectId> expectedActors = ActorIdentityDeclarations.validate(bootstrap, hiveColony, humanPopulation, actorLocations, transportFleet);
-        OwnedChecks.ACTOR_ITEM_CUSTODY.validate(() -> FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), actorLocations, inventory, fencedRecovery),
+        OwnedChecks.ACTOR_ITEM_CUSTODY.validate(() -> FrontierWorldStateSupport.validateActorItemCustody(bootstrap, actorLocations, inventory, fencedRecovery),
                     bootstrap.worldId(), ActorIdentityDeclarations.lifeStatuses(bootstrap, actorLocations), inventory.items(),
                     inventory.fungibleResources().accounts(), inventory.fungibleResources().bindings(), fencedRecovery);
         OwnedChecks.COCOON_CUSTODY.validate(() -> HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas,
