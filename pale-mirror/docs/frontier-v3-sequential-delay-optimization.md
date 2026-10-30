@@ -901,9 +901,10 @@ Negative opportunity advice now retains trade-owned bounded input evidence,
 constructed only for an actual negative advisory choice. Its prospective buy
 commodities/limits come from the decision producer, including commodities without
 a current input-book bid. The existing commodity index supplies current crossing
-known-seller offers, including explicit absence. Own and relevant seller hard
-economic bases, declared identity/policy/knowledge/prices, current workforce
-admission and transport/order retention thresholds remain guarded. Unrelated
+known-seller offers, including explicit absence. The buyer's hard economic basis and declared identity/policy/knowledge/prices,
+relevant peer identity/policy/home and transport/order retention thresholds remain
+guarded. Peer stock/prices/crew remain dated observations, as for positive advice;
+current exact positive admission alone can grant their resources or workforce. Unrelated
 order changes, above-limit asks and MARKET-only notification generations do not
 restart it. New or changed relevant offers, hard inputs, navigation observations
 and ordinary expiry reopen it. A selected choice still passes existing current
@@ -915,7 +916,22 @@ interest/advice and architecture), guardrails and adapter production/test
 compilation. They cover late delivery plus real shared-result eviction, a
 checkpoint during nested capture, same-demand later replacement, empty retirement,
 recovery prefix retention, missing/relevant/unrelated/noncrossing/expired offers,
-funding and seller capacity changes, geometry refresh and dated-choice admission.
+funding changes, unrelated seller production, geometry refresh and dated-choice admission.
 The pre-existing adapter restart test reported above remains open; these focused
 checks do not label it green. Frozen artifact/native economics, paired SCALE
 measurement and deployment receipts are recorded below after execution.
+
+First frozen repair c29d60cb2 passed the54 focused and55 native economic checks
+and was deployed, but its SCALE window was worse:1098ticks/75.278146s=14.585907/s,
+debt1483→1890, versus a0091109/65.675261=16.886115/s. Navigation work fell
+(7816vs8165searches;14,839vs15,393slices;96,391,596vs99,463,672work), while
+CHANGED_EMPTY_MARKET rejections rose757vs590. Do not call it a performance fix.
+The introduced negative proof also subscribed to every seller hard-input token
+and every seller resident's admission, beyond the dated-peer contract. An unrelated
+cobblestone stock change at a bread seller could retire the buyer's unchanged
+bread opportunity. Those guards are removed: retained quote consent and declared
+peer identity/policy/home remain addressed; seller stock/prices/crew are dated
+observations, with all actual current checks preserved at positive admission.
+The buyer's hard inputs stay strict. No new expiry or missed-offer fallback.
+Receipts for this unsuccessful candidate remain under
+`build/simulation-throughput/boundary-delivery-fix/native-corrected/`.

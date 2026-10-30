@@ -39,7 +39,7 @@ class GoodsParticipantOpportunityAdviceTest {
         assertTrue(completion.revalidate(state, new SimInstant(at.ticks() + state.bootstrap().ruleset().goodsTrade().reviewInterval())).isEmpty());
         assertEquals("EXPIRED", completion.rejectionReason());
     }
-    @Test void negativeInputProofTracksCrossingPriceSellerCapacityAndGeometryWithoutRestartingForOtherGoods() {
+    @Test void negativeInputProofTracksCrossingConsentAndGeometryWithoutSubscribingToOtherSellerProduction() {
         var state = withoutOffers(quoted()); var buyer = state.companies().goodsTrade().participants().participants().get(buyer(state));
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var limits = Map.of("minecraft:bread", FixedScalar.ONE);
@@ -56,9 +56,9 @@ class GoodsParticipantOpportunityAdviceTest {
         assertTrue(proof.matches(offered, 401)); assertFalse(proof.matches(offered, 1001), "expired offers are no longer the same opportunity");
         var participants = offered.companies().goodsTrade().participants();
         var inputs = participants.withEconomicState(seller.party().id(), participants.economicState(seller.party().id()).invalidate(
-                Map.of(SettlementEconomicPlanningState.Change.CAPACITY, Set.of())));
+                Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:cobblestone"))));
         var changedSeller = offered.withCompanies(offered.companies().withGoodsTrade(offered.companies().goodsTrade().withParticipants(inputs)));
-        assertFalse(proof.matches(changedSeller, 401));
+        assertTrue(proof.matches(changedSeller, 401), "unrelated seller production is not changed bread consent");
         var at = new SimInstant(401); var action = GoodsParticipantWakeup.action(buyer.party().id(), at.ticks());
         var completion = GoodsParticipantProcess.planner().advice(state, action, at).orElseThrow().prepare();
         var geometry = new NavigationGeometryObserved(state.navigationGeometry().revision(),
