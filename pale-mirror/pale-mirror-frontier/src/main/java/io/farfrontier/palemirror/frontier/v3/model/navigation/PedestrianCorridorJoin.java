@@ -56,10 +56,10 @@ final class PedestrianCorridorJoin {
                         || last.component(target) < 0 || last.component(target) != last.component(tail)) {
                     finished = true; continue;
                 }
-                prefix = first.refine(start, head); suffix = last.refine(tail, target); continue;
+                prefix = cache.refine(geometry, first, start, head); suffix = cache.refine(geometry, last, tail, target); continue;
             }
-            if (prefix.result() == null) { work += prefix.advance(Math.min(256, budget - work)); continue; }
-            if (suffix.result() == null) { work += suffix.advance(Math.min(256, budget - work)); continue; }
+            if (prefix.result() == null) { work += prefix.advance(Math.min(256, budget - work), mayContinue); continue; }
+            if (suffix.result() == null) { work += suffix.advance(Math.min(256, budget - work), mayContinue); continue; }
             work++;
             if (part == 3) { result = assembled.result(); finished = true; continue; }
             var source = part == 0 ? prefix.result() : part == 1 ? corridor.route() : suffix.result();

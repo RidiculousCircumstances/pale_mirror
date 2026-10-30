@@ -319,6 +319,15 @@ public final class KnownPedestrianRouteKnowledge {
             SurfaceAnchor start, SurfaceAnchor target) {
         return KnownPedestrianNavigation.estimateBetween(geometryFrom(start), start, target);
     }
+    public List<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathProof> plannedItineraryBatch(
+            List<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteLeg> legs) {
+        return KnownPedestrianNavigation.plannedItineraryBatch(legs, this::geometryFrom);
+    }
+    /** Acquire independent selected legs together; a missing result never invents an estimate. */
+    public List<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteEstimate> estimateBatch(
+            List<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteLeg> legs) {
+        return KnownPedestrianNavigation.estimateBatch(legs, this::geometryFrom);
+    }
     public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianAccessSelection accessSelection(SurfaceAnchor origin) {
         return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianAccessSelection(geometryFrom(origin), origin);
     }

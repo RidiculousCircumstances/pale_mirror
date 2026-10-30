@@ -8,6 +8,7 @@ final class PedestrianRegionCache {
     private static final int MAX_REGIONS = 2_048, MAX_SURFACES = MAX_REGIONS * PedestrianRegion.CELLS;
     private static final int MAX_BUILDERS = 64;
     private final PedestrianBoundaryCache boundaries = new PedestrianBoundaryCache();
+    private final PedestrianGoalFields goalFields = new PedestrianGoalFields();
     private long lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs;
     private long completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds, weakGraphHits;
     // Four strong-cache turnovers of metadata can still name graphs held by
@@ -99,6 +100,27 @@ final class PedestrianRegionCache {
             return advance(regions, tile, geometry, tile, budget, mayContinue);
         }
     }
+    PedestrianRegion.Refinement refine(PedestrianRouteGeometry geometry, PedestrianRegion region,
+                                       io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor from,
+                                       io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor to) {
+        return region.certifiedPlane() || from.equals(to) ? region.refine(from, to)
+                : region.refine(from, to, goalFields.acquire(geometry, region, to));
+    }
+    /** Pure warm-field lookup. No terrain reads, graph construction or queue acquisition. */
+    synchronized PedestrianRegion.Refinement sharedLocal(PedestrianRouteGeometry geometry,
+            io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor from,
+            io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor to) {
+        var tile = PedestrianRegion.Tile.at(from);
+        if (!tile.equals(PedestrianRegion.Tile.at(to)) || geometry.regionalRevision().isEmpty()) return null;
+        var revision = geometry.regionalRevision().orElseThrow(); var bucket = scoped.get(revision.geometryScope());
+        if (bucket == null) return null;
+        var entry = bucket.entries.get(new RegionalKey(tile, revision.baseline(), revision.at(tile.x(), tile.z()), geometry.bounds()));
+        var region = entry == null ? null : entry.region;
+        if (region == null || region.certifiedPlane() || region.component(from) < 0 || region.component(from) != region.component(to)) return null;
+        var field = goalFields.completed(region, to, from);
+        return field == null ? null : region.refine(from, to, field);
+    }
+    Map<String, Long> goalFieldDiagnostic() { return goalFields.diagnostic(); }
     private synchronized Bucket<RegionalKey> regionalScope(PedestrianGeometryRevision revision) {
         if (scoped.size() >= 64 && !scoped.containsKey(revision.geometryScope()))
             forget(scoped.remove(scoped.keySet().iterator().next()));
@@ -244,7 +266,7 @@ final class PedestrianRegionCache {
         for (var bucket : scoped.values()) forget(bucket);
         for (var bucket : unversionedBuckets) forget(bucket);
         views.clear(); unversionedBuckets.clear(); scoped.clear(); probation.clear(); reused.clear(); building.clear(); slots = reusedSlots = 0;
-        boundaries.clear();
+        boundaries.clear(); goalFields.clear();
         lookups = buildsStarted = evictions = certifiedPlanes = layeredGraphs = 0;
         completedHits = layeredCacheMisses = newVersionMisses = recentEvictedRebuilds = weakGraphHits = 0; recentEvictions.clear();
     }

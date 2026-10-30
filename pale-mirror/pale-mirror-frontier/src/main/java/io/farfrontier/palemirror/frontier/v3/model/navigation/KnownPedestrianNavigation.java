@@ -155,9 +155,7 @@ public final class KnownPedestrianNavigation {
     public static PedestrianPathProof plannedItinerary(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         var result = completeBetween(geometry, start, target);
         if (result.awaitable()) PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target));
-        if (result.status() != PedestrianRouteResult.Status.FOUND)
-            throw new RouteUnavailable(result.status(), result.reason());
-        return PedestrianPathProof.from(result.route());
+        return itinerary(start, target, result);
     }
 
     /** Regional connectivity for alternative ranking. Never exposes cells to a movement executor. */
@@ -165,12 +163,55 @@ public final class KnownPedestrianNavigation {
         var result = PedestrianRoutePlanning.query(geometry, start, target, PedestrianRouteExtent.ESTIMATE);
         if (result.awaitable())
             PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target, PedestrianRouteExtent.ESTIMATE));
-        if (result.status() != PedestrianRouteResult.Status.ESTIMATED)
-            throw new RouteUnavailable(result.status(), result.reason());
+        return estimate(start, target, result);
+    }
+    private static PedestrianRouteEstimate estimate(SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteResult result) {
+        if (result.status() != PedestrianRouteResult.Status.ESTIMATED) throw new RouteUnavailable(result.status(), result.reason());
         var estimate = result.estimate().orElseThrow();
         if (!estimate.origin().equals(start) || !estimate.destination().equals(target))
             throw new IllegalArgumentException("planner returned an estimate with foreign endpoints");
         return estimate;
+    }
+    private static PedestrianPathProof itinerary(SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteResult result) {
+        if (result.status() != PedestrianRouteResult.Status.FOUND) throw new RouteUnavailable(result.status(), result.reason());
+        if (!result.route().getFirst().equals(start) || !result.route().getLast().equals(target))
+            throw new IllegalArgumentException("planner returned an itinerary with foreign endpoints");
+        return PedestrianPathProof.from(result.route());
+    }
+    /** One bounded set of already-selected independent legs, not speculative alternative fan-out. */
+    public static List<PedestrianRouteEstimate> estimateBatch(List<PedestrianRouteLeg> legs,
+            java.util.function.Function<SurfaceAnchor, PedestrianRouteGeometry> geometries) {
+        return batch(legs, geometries, PedestrianRouteExtent.ESTIMATE,
+                (leg, result) -> estimate(leg.origin(), leg.destination(), result));
+    }
+    public static List<PedestrianPathProof> plannedItineraryBatch(List<PedestrianRouteLeg> legs,
+            java.util.function.Function<SurfaceAnchor, PedestrianRouteGeometry> geometries) {
+        return batch(legs, geometries, PedestrianRouteExtent.COMPLETE,
+                (leg, result) -> itinerary(leg.origin(), leg.destination(), result));
+    }
+    private static <T> List<T> batch(List<PedestrianRouteLeg> legs,
+            java.util.function.Function<SurfaceAnchor, PedestrianRouteGeometry> geometries, PedestrianRouteExtent extent,
+            java.util.function.BiFunction<PedestrianRouteLeg, PedestrianRouteResult, T> decode) {
+        Objects.requireNonNull(geometries); legs = List.copyOf(legs);
+        if (legs.isEmpty() || legs.size() > 32) throw new IllegalArgumentException("unbounded pedestrian calculation batch");
+        var results = new java.util.ArrayList<T>(); var waits = new java.util.ArrayList<PedestrianRouteRequest>();
+        RouteUnavailable waiting = null;
+        for (var leg : legs) {
+            var geometry = Objects.requireNonNull(geometries.apply(leg.origin()));
+            var result = PedestrianRoutePlanning.query(geometry, leg.origin(), leg.destination(), extent);
+            if (result.awaitable()) waits.add(PedestrianRouteRequest.of(geometry, leg.origin(), leg.destination(), extent));
+            try { results.add(decode.apply(leg, result)); }
+            catch (RouteUnavailable unavailable) {
+                if (unavailable.status() != PedestrianRouteResult.Status.PLANNING
+                        && unavailable.status() != PedestrianRouteResult.Status.UNKNOWN_GEOMETRY) throw unavailable;
+                if (waiting == null) waiting = unavailable;
+            }
+        }
+        if (waiting != null) {
+            // A terminal refusal of another leg must not retain unrelated waits.
+            waits.forEach(PedestrianRoutePlanning::await); throw waiting;
+        }
+        return List.copyOf(results);
     }
 
     /** Calculation result only. An alternatives owner decides which unresolved requests actually block its result. */

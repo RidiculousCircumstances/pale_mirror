@@ -55,6 +55,7 @@ public final class HierarchicalPedestrianSearch {
     private List<Map.Entry<Node, Edge>> publishingExits;
     private int publication;
     private java.util.function.BooleanSupplier mayContinue = () -> true;
+    private PedestrianRegion.Refinement sharedLocal;
     private PedestrianLocalSearch localSearch;
     private PedestrianLocalSearch reverseLocalSearch;
     private PedestrianLocalSearch destinationProbe;
@@ -106,8 +107,11 @@ public final class HierarchicalPedestrianSearch {
                     dependencies.put(tile, this.geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z()))
                             .orElse(this.geometry.version()));
                 };
-            localSearch = new PedestrianLocalSearch(geometry, start, target, observe);
-            reverseLocalSearch = new PedestrianLocalSearch(geometry, target, start, observe, true);
+            sharedLocal = regionCache.sharedLocal(geometry, start, target);
+            if (sharedLocal == null) {
+                localSearch = new PedestrianLocalSearch(geometry, start, target, observe);
+                reverseLocalSearch = new PedestrianLocalSearch(geometry, target, start, observe, true);
+            } else observe.accept(start);
         }
     }
 
@@ -199,7 +203,7 @@ public final class HierarchicalPedestrianSearch {
         if (terminal != null) return terminal;
         long limit = work + budget;
         turnLimit = limit;
-        if (localSearch != null || reverseLocalSearch != null) {
+        if (localSearch != null || reverseLocalSearch != null || sharedLocal != null) {
             while (endpointsChecked < 2) {
                 if (work >= limit || !mayContinue.getAsBoolean())
                     return result(PedestrianRouteResult.Status.PLANNING, "ENDPOINT_CHECK_PENDING");
@@ -220,6 +224,12 @@ public final class HierarchicalPedestrianSearch {
                 if (geometry.blocked(endpoint))
                     return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_BLOCKED_SUPPORT");
             }
+        }
+        if (sharedLocal != null) {
+            work += sharedLocal.advance(Math.toIntExact(limit - work), mayContinue);
+            if (sharedLocal.result() == null) return result(PedestrianRouteResult.Status.PLANNING, "SHARED_LOCAL_FIELD_IN_PROGRESS");
+            route.addAll(sharedLocal.result()); sharedLocal = null;
+            return finish(PedestrianRouteResult.Status.FOUND, "SHARED_LOCAL_GOAL_FIELD");
         }
         if (localSearch != null) {
             work += localSearch.advance(Math.toIntExact(limit - work), mayContinue);
@@ -347,7 +357,7 @@ public final class HierarchicalPedestrianSearch {
                 var graph = region(PedestrianRegion.Tile.at(refinementStart));
                 if (terminal != null) return terminal;
                 if (graph == null || work >= limit) break;
-                segmentRefinement = graph.refine(refinementStart, end);
+                segmentRefinement = regionCache.refine(geometry, graph, refinementStart, end);
             }
             // A local refinement is itself resumable; keep each admitted piece small.
             work += segmentRefinement.advance(Math.min(256, Math.toIntExact(limit - work)));

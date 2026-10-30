@@ -212,6 +212,8 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"edgeFacts\":" + new com.google.gson.Gson().toJson(
                         io.farfrontier.palemirror.frontier.v3.model.navigation.ProfiledPedestrianGeometry.edgeFactsDiagnostic())
                 + ",\"regionCache\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.regionCacheDiagnostic()) : "null")
+                + ",\"goalFields\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.goalFieldDiagnostic()) : "null")
+                + ",\"estimateAtlas\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.estimateAtlasDiagnostic()) : "null")
                 + (details ? ",\"completedDeliveries\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.completedDiagnostics()) : "[]") : "")
                 + (details ? ",\"completedOutcomes\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.completedOutcomes()) : "{}")
                     + ",\"regionRetention\":" + (owner == runtime ? new com.google.gson.Gson().toJson(planner.regionRetentionDiagnostic()) : "{}")

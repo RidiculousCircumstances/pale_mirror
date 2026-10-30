@@ -30,6 +30,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private final PedestrianRegionCache regions = new PedestrianRegionCache();
     private final PedestrianCorridorCache corridors = new PedestrianCorridorCache();
     private final PedestrianItineraryCache itineraries = new PedestrianItineraryCache();
+    private final PedestrianEstimateAtlas estimates = new PedestrianEstimateAtlas();
     private java.util.Set<PedestrianDemandKey> retainedDemands = java.util.Set.of();
     // At most MAX_PENDING completed workers may await bounded result-buffer capacity.
     private final Map<PedestrianSearchTask, PedestrianRouteResult> awaitingPublication = new LinkedHashMap<>();
@@ -84,6 +85,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var request = PedestrianRouteRequest.of(geometry, start, target, extent);
         Completed result = completed.get(request);
         if (result != null) return result.result();
+        var estimated = estimates.find(request); if (estimated.isPresent()) return estimated.orElseThrow().result();
         var reversed = reverseResult(completed.entrySet(), geometry, start, target, extent);
         if (reversed.isPresent()) return reversed.orElseThrow();
         fairness.requested(request, service);
@@ -195,6 +197,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         completedOutcomes.merge(result.status(), 1L, Math::addExact);
         corridors.remember(request.geometry(), result, dependency);
         completed.put(request, new Completed(result, dependency, search.preparedRead())); retainedSurfaces += result.route().size();
+        estimates.remember(request, search.preparedRead());
         completedView = null;
         knowledgeDemandCache = null;
         retainedRegions += dependency.revisions().size();
@@ -354,6 +357,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var request = PedestrianRouteRequest.of(geometry, start, target, extent);
         var result = completed.get(request);
         if (result != null) return java.util.Optional.of(result.result());
+        var estimated = PedestrianEstimateAtlas.find(estimates.snapshot(), request);
+        if (estimated.isPresent()) return java.util.Optional.of(estimated.orElseThrow().result());
         var reversed = reverseResult(completed.entrySet(), geometry, start, target, extent);
         if (reversed.isPresent()) return reversed;
         if (pending.containsKey(request)) return java.util.Optional.of(waiting("PLANNING_QUEUED"));
@@ -372,6 +377,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         return java.util.Optional.empty();
     }
     @Override public synchronized java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
+        var estimated = estimates.find(request); if (estimated.isPresent()) return estimated;
         return completed.values().stream().map(Completed::read).flatMap(java.util.Optional::stream)
                 .filter(read -> read.matches(request)).findFirst();
     }
@@ -380,6 +386,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         if (completedView != null) return completedView;
         var retained = java.util.List.copyOf(completed.entrySet().stream()
                 .map(entry -> Map.entry(entry.getKey(), entry.getValue())).toList());
+        var estimatedFacts = estimates.snapshot();
         completedView = new PedestrianRoutePlanner() {
             @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
                 return query(geometry, start, target, PedestrianRouteExtent.COMPLETE);
@@ -389,6 +396,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 return peek(geometry, start, target, extent).orElseGet(() -> waiting("PLANNING_NOT_REQUESTED"));
             }
             @Override public java.util.Optional<PedestrianCalculationMemory.Read> readFact(PedestrianRouteRequest request) {
+                var estimated = PedestrianEstimateAtlas.find(estimatedFacts, request); if (estimated.isPresent()) return estimated;
                 var read = retained.stream().map(entry -> entry.getValue().read()).flatMap(java.util.Optional::stream)
                         .filter(value -> value.matches(request)).findFirst();
                 if (read.isPresent()) return read;
@@ -397,6 +405,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             @Override public java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry,
                     SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
                 var request = PedestrianRouteRequest.of(geometry, start, target, extent);
+                var estimated = PedestrianEstimateAtlas.find(estimatedFacts, request);
+                if (estimated.isPresent()) return java.util.Optional.of(estimated.orElseThrow().result());
                 for (var entry : retained) if (entry.getKey().equals(request)
                         || entry.getKey().sameDemand(request) && entry.getValue().dependencies().matches(geometry))
                     return java.util.Optional.of(entry.getValue().result());
@@ -492,6 +502,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     public synchronized Map<String, Long> regionRetentionDiagnostic() { return regions.retentionDiagnostic(); }
     public synchronized long workUnits() { return workUnits; }
     public synchronized long corridorCandidates() { return corridors.hits(); }
+    public synchronized Map<String, Long> estimateAtlasDiagnostic() { return estimates.diagnostic(); }
+    public synchronized Map<String, Long> goalFieldDiagnostic() { return regions.goalFieldDiagnostic(); }
     public synchronized PedestrianRegionCacheDiagnostic regionCacheDiagnostic() { return regions.diagnostic(); }
     private static PedestrianRouteResult waiting(String reason) {
         return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, java.util.List.of(), 0L, 0, reason);
@@ -503,7 +515,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); calculationAddresses.clear(); changes.clear();
         completedView = null;
         awaitingPublication.clear(); retainedDemands = java.util.Set.of();
-        regions.clear(); corridors.clear(); itineraries.clear(); retainedSurfaces = 0; retainedRegions = 0;
+        regions.clear(); corridors.clear(); itineraries.clear(); estimates.clear(); retainedSurfaces = 0; retainedRegions = 0;
         synchronizedScopes.clear();
         knowledgeDemandCache = null;
     }

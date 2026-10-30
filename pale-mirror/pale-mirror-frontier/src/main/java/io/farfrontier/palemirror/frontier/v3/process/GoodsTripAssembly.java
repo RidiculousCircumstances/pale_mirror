@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.model.expedition.*;
 import io.farfrontier.palemirror.frontier.v3.model.group.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteLeg;
 import java.util.*;
 
 /** Logistics preflight. It receives exact commercial obligations; it cannot reserve a sale or invent an asset. */
@@ -39,8 +40,9 @@ final class GoodsTripAssembly {
         var source = GoodsParticipantStorage.endpoint(state, contract.sourceContainerId());
         var destination = GoodsParticipantStorage.endpoint(state, contract.receiverContainerId());
         var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(source, destination));
-        long outward = knowledge.estimateBetween(source.station(), destination.station()).estimatedEdges();
-        long returning = knowledge.estimateBetween(destination.station(), source.station()).estimatedEdges();
+        var estimates = knowledge.estimateBatch(List.of(new PedestrianRouteLeg(source.station(), destination.station()),
+                new PedestrianRouteLeg(destination.station(), source.station())));
+        long outward = estimates.get(0).estimatedEdges(); long returning = estimates.get(1).estimatedEdges();
         var timing = ExpeditionTiming.assess(state.bootstrap().ruleset().expedition(),
                 mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? outward : returning,
                 mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? returning : outward,

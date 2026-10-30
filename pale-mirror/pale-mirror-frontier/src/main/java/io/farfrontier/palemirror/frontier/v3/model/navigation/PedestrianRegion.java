@@ -71,6 +71,12 @@ final class PedestrianRegion {
     }
     private final Topology topology;
     private final boolean unknown;
+    private volatile PedestrianRegionGraph goalGraph;
+    PedestrianRegionGraph goalGraph() {
+        var ready = goalGraph; if (ready != null) return ready;
+        var prepared = new PedestrianRegionGraph(this);
+        synchronized (this) { if (goalGraph == null) goalGraph = prepared; return goalGraph; }
+    }
 
     PedestrianRegion(Tile tile, List<SurfaceAnchor> surfaces, List<Integer>[] columns,
                      List<Integer>[] edges, int[] components, boolean unknown) {
@@ -90,26 +96,33 @@ final class PedestrianRegion {
     List<Integer> outgoing(int index) { return topology.outgoing(index); }
     int component(SurfaceAnchor surface) { int index = topology.index(surface); return index < 0 ? -1 : topology.component(index); }
     List<SurfaceAnchor> surfaces(int x, int z) { return topology.surfaces(x, z); }
-    Refinement refine(SurfaceAnchor from, SurfaceAnchor to) { return new Refinement(from, to); }
+    Refinement refine(SurfaceAnchor from, SurfaceAnchor to) { return new Refinement(from, to, null); }
+    Refinement refine(SurfaceAnchor from, SurfaceAnchor to, PedestrianGoalFields.Entry field) { return new Refinement(from, to, field); }
     final class Refinement {
         private final int origin, target, component;
         private final int[] previous, queue;
         private final List<SurfaceAnchor> reverse = new ArrayList<>();
         private int read, write = 1, edge, rewind = -1, planeCursor;
         private List<SurfaceAnchor> result;
-        Refinement(SurfaceAnchor from, SurfaceAnchor to) {
+        private final PedestrianGoalFields.Cursor field;
+        Refinement(SurfaceAnchor from, SurfaceAnchor to, PedestrianGoalFields.Entry field) {
+            this.field = field == null ? null : field.cursor(from);
             component = component(from);
             if (component < 0 || component(to) != component) throw new IllegalArgumentException("regional refinement lacks connected endpoints");
             origin = topology.index(from); target = topology.index(to); planeCursor = origin;
-            if (topology instanceof Plane) { previous = new int[0]; queue = previous; }
+            if (topology instanceof Plane || field != null) { previous = new int[0]; queue = previous; }
             else {
                 previous = new int[size()]; Arrays.fill(previous, -1); previous[origin] = origin;
                 queue = new int[size()]; queue[0] = origin;
             }
         }
-        int advance(int budget) {
+        int advance(int budget) { return advance(budget, () -> true); }
+        int advance(int budget, java.util.function.BooleanSupplier mayContinue) {
             int work = 0;
-            while (work < budget && result == null) {
+            if (field != null) {
+                work = field.advance(budget, mayContinue); result = field.result(); return work;
+            }
+            while (work < budget && result == null && mayContinue.getAsBoolean()) {
                 work++;
                 if (topology instanceof Plane) {
                     reverse.add(surface(planeCursor));

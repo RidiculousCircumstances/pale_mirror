@@ -57,7 +57,7 @@ public final class PedestrianCalculationMemory {
                     new Regional(dependencies, revision.baseline()))).orElseGet(() -> conservative(request, result));
         }
         public PedestrianRouteResult result() { return saved.restore(); }
-        private long retainedUnits() { return 32L + fence.retainedUnits() + saved.coordinates(); }
+        long retainedUnits() { return 32L + fence.retainedUnits() + saved.coordinates(); }
         boolean matches(PedestrianRouteRequest request) {
             return key.equals(PedestrianDemandKey.of(request)) && fence.matches(request.geometry());
         }
