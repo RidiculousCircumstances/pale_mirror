@@ -509,8 +509,8 @@ all old sharing. Geometry scope/profile, local version and hard bounds remain in
 the original key; changing the world or a local collision halo cannot borrow the
 old graph. No navigation detail, path checks, worker count, strong cache capacity,
 ruleset or persistence contract changes. New weakGraphHits counter distinguishes
-these actual avoided builds from ordinary strong-cache hits and remaining recent
-rebuilds. Ordinary eviction and GC can still require later recomputation.
+queries served through weak sharing from ordinary strong-cache hits and remaining
+recent rebuilds. It is a query count, not a distinct avoided-build count. Ordinary eviction and GC can still require later recomputation.
 
 The existing pressure test now holds an evicted graph as an active reader would,
 then proves identical-object reuse with a one-unit allowance and unchanged build
@@ -530,3 +530,56 @@ not attributable to this graph-reuse change; its cause remains OPEN. The test
 has not been weakened, removed or reported green. Current changed calculation
 checks and source-key/retirement invariants are verified, not complete adapter
 or product acceptance. Existing unaffected native economic evidence is retained.
+
+
+### Fresh comparison and delivery: 4f195546f
+
+Source4f195546f86704d6ec520af70376ed4671bc306b; frozen guardrails/JAR/package
+passed15s. Candidate measured first, then clean unchanged d8d93de1d rebuilt and
+measured in this session because the earlier baseline was several hours old.
+Each leg normally saved/stopped, restored the same hashed109-file SCALE checkpoint,
+recovered explicitly, warmed60s and took7x10s samples. No task build/profiler/
+client overlapped either ordinary measurement. Same rules/JVM/two advice/two
+navigation workers. MAIN is retained, never checkpoint-restored.
+
+| Fresh ordinary SCALE leg | Ticks | Seconds | Ticks/s | Debt before → after | Revisions/tick |
+| --- | ---: | ---: | ---: | --- | ---: |
+| d8d93de1d baseline | 964 | 61.7803 | 15.603675 | 794 → 1066 | 19.6525 |
+| 4f195546f candidate | 994 | 61.7332 | 16.101543 | 814 → 1055 | 19.6006 |
+
+Observed rate difference+3.1907%, not sustained20/no growing debt. Candidate first
+sample was339simulation ticks later; phase mix, warm-up/JIT/GC and shared-host
+variation remain limits. Do not compound this with previous gains or treat the
+small difference as a universal guaranteed speedup.
+
+Recent exact-version eviction rebuilds2104→0; layered misses9137→8561; completed
+layered graphs9134→8562; total region lookups653074→654836. Candidate44126 completed
+hits include2775 weak-sharing queries. These are actual lookup counts, not2775
+distinct builds saved. The512-key bound means zero recent rebuilds does not prove
+zero repeated builds outside its retained history. Cleared/collected or older
+unindexed graphs still require ordinary reconstruction. Both returned immutable
+graphs and newly built graphs retain the same exact collision/version checks.
+The measured duplicate-work path is removed; other owner/worker costs still
+prevent20ticks/s. No cache capacity increase, time/detail reduction or new worker.
+
+Source-bound artifact SHA512:
+`de51e28d82aa918cba72bbf664878b0839955a8706adefd467c2b09c447d6cce8a174e1e336c597ee714f9beb641d16e5c1acc5d72a146da55e6efd071a13faa`.
+The measured candidate JAR is retained in ignored receipts and the final rebuilt
+artifact must match it before deployment. Complete receipts are under
+build/simulation-throughput/shared-region-reuse/, including comparison-summary.json,
+native-{candidate,baseline}/ and deploy-{candidate,baseline,candidate-final,main}/.
+
+
+Final candidate rebuild matched the measured JAR byte-for-byte (SHA512 above).
+Both servers installed/verified that artifact through the existing root owners
+after normal native saves. MAIN world remained frontier-v3-r281-cold-atomic-20261028;
+SCALE alone restored scale-r31-schema313-seed126. Final three ordinary checks on
+each explicitly statusOK/noFF/recovering=false: MAIN2427612→2428036,debt0;
+SCALE456500→456788,debt841→978. No fresh ERROR/quarantine in either log. Java22
+MAIN2717791/birth38024294, SCALE2714602/birth38020191. Five candidate-sampled towns
+had0starving residents before/after and ordinary meal activity; not full economy,
+HOT/player or M3 acceptance. No task observer/build/profiler/client remains active.
+Implementation working tree is clean after the results commit; pack has no new
+tracked edits and unrelated .f0v-baseline/ remains untouched. No automatic push.
+The preexisting adapter recovery failure above remains open and is not concealed
+by the successful graph checks or live health. Sustained scale20 remains OPEN.
