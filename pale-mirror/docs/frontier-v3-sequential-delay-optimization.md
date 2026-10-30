@@ -1325,3 +1325,74 @@ Workforce membership reads existing priority keys directly, avoiding another
 projected roster map per authority. Warm foreign/missing-commitment and missing
 worker checks remain strict. Connected strategic/objective/retirement/group/trade
 checks+guardrails PASS2m11s; final full-audit focused receipt recorded separately.
+
+
+### Final ordinary and fixed-input checks (source460803662)
+
+Same saved checkpoint,100settlements/~3031residents,unchanged2advice/2navigation
+workers and ordinary budgets, no fast-forward/profiler/build/test overlap:
+458118→459220/54.6464589s=20.16599ticks/s,debt555→546. Ready owner26.92797s/
+37882calls (baseline35.00501s/39983),ordinary1.66783s/1093,validation5.34611s/
+11059 (baseline9.29627s/11005).61.533968m search work/7897completions/11998slices
+versus baseline100.784704m/7896/15261. Advice4666completed/4356accepted/311rejected:
+negative127offers/86buyer input/20buyer plan/4prices; other48buyer input/7plan/
+17owner input/2expired. Current changed hard inputs remain strict. This closes
+the observed throughput problem without claiming every rejection is avoidable.
+
+Additional ordinary121.70304s:459500→461984=20.41034ticks/s,debt532→482,
+16729more searches/133.782883m work. No buffered result/publication stall. The
+earlier fifth23.47/s result remains excluded: it stopped navigation. These are
+COLD scale observations, not five-player HOT performance or every future world.
+Receipts:comparison-baseline-twelfth-thirteenth.json,native-thirteenth/,
+steady-thirteenth/ under build/simulation-throughput/owner-throughput-closure/.
+
+Final fixed actual checkpoint/ten-buyer CPU ABBA old/final/final/old,8rounds/fork,
+sameJava22/affinity/2Gheap/ActiveProcessorCount2; warmed last4 medians old2.6270/
+2.1811s,new1.3251/1.3145s. Dispositions,passes and search counts match across
+all320rows; old26.762936m/new23.805856m total work per fork. This is serial
+worker CPU, not complete quote equality or a live tick-rate measurement. Host
+CPU isolation is not claimed. The initial isolated2.24→3.30s comparison did not
+establish a regression; final controlled comparison shows materially lower CPU.
+Receipts:control-final/controlled-trade-identity.json,controlled-trade-summary.json.
+
+Frozen package verified. Final native economy55/55required PASS(1m01sGradle,
+13.20sGameTests),body-lifetime25/25required PASS(58sGradle,10.69sGameTests).
+The latter exercises ordinary native body admission/serialization/return and
+common authority boundaries, not a real-client campaign or replay of the old
+live incident. Pure pressure/codec/body-dependent negative checks and group
+recovery checks were retained from their unchanged source corrections. The old
+group restart defect is classified as a fixture omission of the common planning
+continuation binding; no product timeout or recovery oracle was weakened.
+NO_CURRENT_AUTHORITY's separate product cause was arbitrary removal of needed
+exact BODY retirement history at4096pressure. Current asset-owned retention
+keeps it until an exact same-owner successor fences the older incarnation; an
+epoch floor is not owner history. Already-lost history is not invented.
+
+
+### Delivery
+
+MAIN and SCALE use the same verified clean frozen source460803662 and JAR SHA512
+b939bc4229fccf9d05c6b43f760be1c6b3f2d524f112b97810143c40c8dddf05359c25af779c0bd99319162d7019cbdb4f25230dd9993c5074a80a6f06f5af24.
+MAIN was stopped through ordinary authenticated Minecraft stop; all-dimensions
+save, JVM/ports exit and exact resolved disposable paths were verified before
+replacing frontier-v3-r281-cold-atomic-20261028 with
+frontier-v3-owner-throughput-20261030,seed126,12settlements,terrain-r31.
+Only installed datapacks were copied, no old entity/history state. Source join
+history already lost in the old world is not retroactively fabricated.
+
+Root publication validated158indexed pack files. Pinned install and fresh
+deployment verifier PASS,pid454486,25565,normalDone. Initial read at712canonical
+ticks:statusok,debt0,no fast-forward/recovery,134completed searches,no deferred
+search/publication pressure; recent64host ticks max8.604ms. Startup historical
+max148ms is not represented as a steady-state peak guarantee. Fresh log has no
+ERROR/quarantine/NO_CURRENT_AUTHORITY. Receipt:deploy-main-final/,
+main-final-performance.txt. This is technical/server validation, no new real-client
+visual acceptance claim. Source changes committed; root PACK tracked files remain
+unchanged (only ignored hosted artifacts changed),unrelated.f0v-baseline preserved.
+No empty root commit and no automatic push.
+
+After the measurements and native gates, the task-owned SCALE benchmark had
+zero players and was stopped through ordinary authenticated Minecraft stop:
+all dimensions saved,MainPID0,inactive/dead,both ports closed; world/evidence
+retained. MAIN remains active/running,pid454486. This removes continuous
+benchmark CPU load from normal play. Final report guardrails PASS14s.
