@@ -136,6 +136,7 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"fastForwardSlice\":").append(sliceTelemetry == null ? "null" : sliceTelemetry(sliceTelemetry))
                 .append(",\"worstSpan\":").append(worstSpan(metrics.stages()))
                 .append(",\"costlyStages\":").append(costlyStages(metrics.stages()))
+                .append(",\"ownerWork\":").append(ownerWork(metrics.stages(), checkpoint.worldId().value()))
                 .append(",\"hostTurn\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TURN))
                 .append(",\"hostTick\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TICK))
                 .append(",\"scheduleQueue\":").append(queuePressure(metrics, checkpoint.instant().ticks()));
@@ -219,6 +220,19 @@ final class FrontierV3PerformanceDiagnostic {
     }
 
     /** A bounded attribution survives the detail budget even when the full stage table does not. */
+    /** Exact cumulative counters survive optional detail omission; absence remains unknown. */
+    private static String ownerWork(List<FrontierExecutionMetrics.StageSample> samples, String world) {
+        return "{\"ready\":" + cumulative(samples, FrontierExecutionMetrics.Stage.HOST_TURN, "pm-ready-continuation", "world")
+                + ",\"ordinary\":" + cumulative(samples, FrontierExecutionMetrics.Stage.HOST_TURN, "pm-turn-including-durability", "world")
+                + ",\"validation\":" + cumulative(samples, FrontierExecutionMetrics.Stage.VALIDATION, "canonical-state", world) + "}";
+    }
+    private static String cumulative(List<FrontierExecutionMetrics.StageSample> samples,
+                                     FrontierExecutionMetrics.Stage stage, String kind, String owner) {
+        return samples.stream().filter(sample -> sample.stage() == stage && sample.kind().equals(kind) && sample.owner().equals(owner))
+                .findFirst().map(sample -> "{\"samples\":" + sample.samples() + ",\"totalNanos\":" + sample.totalNanos() + "}")
+                .orElse("null");
+    }
+
     private static String costlyStages(List<FrontierExecutionMetrics.StageSample> samples) {
         var selected = samples.stream().filter(sample -> sample.stage() != FrontierExecutionMetrics.Stage.HOST_TICK
                         && sample.stage() != FrontierExecutionMetrics.Stage.HOST_TURN)

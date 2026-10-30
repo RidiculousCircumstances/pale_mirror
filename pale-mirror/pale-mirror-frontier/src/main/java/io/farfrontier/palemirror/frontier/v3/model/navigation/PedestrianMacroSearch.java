@@ -10,7 +10,8 @@ import static io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianI
 final class PedestrianMacroSearch {
     private record Candidate(Node node, int cost, int estimate) { }
     private record Previous(Node from, Itinerary itinerary, Arc arc) { }
-    private final List<Itinerary> graphs;
+    private final Snapshot graphs;
+    private List<Itinerary> candidates = List.of();
     private final PedestrianRegionCache cache;
     private final SurfaceAnchor start, target;
     private final BiConsumer<PedestrianRegion.Tile, Object> observed;
@@ -30,9 +31,9 @@ final class PedestrianMacroSearch {
     private List<Portal> result;
     private boolean finished, constructing;
 
-    PedestrianMacroSearch(List<Itinerary> graphs, PedestrianRouteGeometry geometry, PedestrianRegionCache cache,
+    PedestrianMacroSearch(Snapshot graphs, PedestrianRouteGeometry geometry, PedestrianRegionCache cache,
                            SurfaceAnchor start, SurfaceAnchor target, BiConsumer<PedestrianRegion.Tile, Object> observed) {
-        this.graphs = List.copyOf(graphs); this.geometry = geometry; this.cache = cache;
+        this.graphs = Objects.requireNonNull(graphs); this.geometry = geometry; this.cache = cache;
         this.start = start; this.target = target; this.observed = observed;
     }
     void rebase(PedestrianRouteGeometry geometry) { this.geometry = geometry; }
@@ -73,10 +74,10 @@ final class PedestrianMacroSearch {
                 var candidate = queue.remove();
                 if (distances.get(candidate.node()) != candidate.cost()) continue;
                 if (candidate.node().equals(goal)) { rewind = candidate.node(); continue; }
-                expanding = candidate; graphIndex = arcIndex = 0; continue;
+                expanding = candidate; candidates = graphs.at(candidate.node()); graphIndex = arcIndex = 0; continue;
             }
-            if (graphIndex == graphs.size()) { expanding = null; continue; }
-            var graph = graphs.get(graphIndex); var arcs = graph.graph().get(expanding.node());
+            if (graphIndex == candidates.size()) { expanding = null; continue; }
+            var graph = candidates.get(graphIndex); var arcs = graph.graph().get(expanding.node());
             if (arcs == null || Boolean.FALSE.equals(validity.get(graph))) { graphIndex++; arcIndex = 0; continue; }
             if (!validity.containsKey(graph)) {
                 if (validation == null) validation = graph.dependencies().entrySet().iterator();

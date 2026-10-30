@@ -1275,3 +1275,29 @@ changed-permission rejection and clear. Connected focused checks PASS29s
 (weak-graph-window-checks-fixed.log); the preceding fixture incorrectly put its
 new test tiles outside declared bounds, corrected without relaxing product rules.
 Benefit requires a same-checkpoint ordinary comparison, not a test-time claim.
+
+
+### Eleventh comparison and addressed itinerary candidates
+
+Frozen e14e62f83 ordinary458116→459229/58.0522594s:19.17238ticks/s,
+debt539→587;85.6322m search work/8073completions/14172slices.
+4820advice completed,4489accepted,330rejected. This confirms substantially fewer
+layered rebuilds (15925cumulative versus40214at tenth endpoint), not an overall
+TPS gain; completed workers keep progressing.
+
+The sixth JFR also samples MacroSearch.advance repeatedly. Source shows each
+expanded macro node scans up to128itineraries, including unrelated graphs.
+Itinerary cache now shares a fixed ordered snapshot per present geometry scope/
+bounds, with at most1024memoized node-membership rows. First lookup examines
+at most128graphs; repeated lookups address only matching candidates. Publication,
+replacement, scope eviction and clear retire the corresponding current snapshot;
+admitted searches retain their original candidates. Exact dependency validation,
+arc ordering, regional fallback and strong graph/portal limits remain unchanged.
+Connected hint churn/revision/planning/hierarchical checks+guardrails PASS29s.
+
+Existing8KiB operator output sometimes omits the detailed phase table. Add three
+compact cumulative ownerWork counters (ready/ordinary/validation) to its required
+envelope; absent attribution remains null, never invented zero. This measures
+the same existing telemetry and adds no runtime instrumentation. Performance and
+detail-budget checks+guardrails PASS22s; initial new parser assertion forgot the
+existing PMV3_DIAG prefix, corrected without changing product rendering semantics.

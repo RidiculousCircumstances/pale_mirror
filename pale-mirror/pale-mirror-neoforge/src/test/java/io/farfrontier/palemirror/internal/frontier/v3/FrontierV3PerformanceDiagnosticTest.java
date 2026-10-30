@@ -16,6 +16,8 @@ class FrontierV3PerformanceDiagnosticTest {
         metrics.observeQueue(new SimInstant(100), 20, 0, Optional.of(action));
         metrics.observeQueue(new SimInstant(103), 19, 2, Optional.empty());
         metrics.observePressure(new FrontierExecutionMetrics.QueuePressure(103, 19, 0, 2, 11, 6, 0, 0));
+        metrics.begin(FrontierExecutionMetrics.Stage.HOST_TURN, "pm-ready-continuation", "world").close();
+        metrics.begin(FrontierExecutionMetrics.Stage.VALIDATION, "canonical-state", "frontier:pressure-freshness").close();
         for (int i = 0; i < 260; i++) metrics.begin(FrontierExecutionMetrics.Stage.VALIDATION, "validate-" + i, "world").close();
         metrics.begin(FrontierExecutionMetrics.Stage.HOST_TURN, "pm-turn-including-durability", "world").close();
         assertTrue(metrics.snapshot().stages().stream().anyMatch(value -> value.stage() == FrontierExecutionMetrics.Stage.VALIDATION && value.kind().equals("other")));
@@ -34,5 +36,8 @@ class FrontierV3PerformanceDiagnosticTest {
         assertTrue(json.contains("\"checking\":6"));
         assertTrue(json.contains("\"readinessScope\":\"LAST_ASSESSED_RECHECK_BEFORE_EXECUTION\""));
         assertTrue(json.contains("\"hostTurn\":{\"samples\":1") && json.contains("\"recentSamples\":1"));
+        var ownerWork = com.google.gson.JsonParser.parseString(json.substring("PMV3_DIAG ".length())).getAsJsonObject().getAsJsonObject("ownerWork");
+        for (String name : List.of("ready", "ordinary", "validation"))
+            assertTrue(ownerWork.getAsJsonObject(name).get("samples").getAsLong() == 1, json);
     }
 }

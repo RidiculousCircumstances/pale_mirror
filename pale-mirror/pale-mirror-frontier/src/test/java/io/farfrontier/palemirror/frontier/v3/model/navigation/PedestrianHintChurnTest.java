@@ -29,6 +29,27 @@ class PedestrianHintChurnTest {
         assertEquals(expected.status(), actual.status(), "unrelated cache publication must not extend an admitted search indefinitely");
         assertEquals(expected.estimate(), actual.estimate());
     }
+    @Test void capturedHintMembershipIsStableAcrossReplacementAndClear() {
+        var revision = PedestrianGeometryRevision.initial();
+        PedestrianRouteGeometry geometry = new PedestrianRouteGeometry() {
+            public Object version() { return revision; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(revision); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 256, 256); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+        };
+        var cache = new PedestrianItineraryCache(); publish(cache, geometry, revision, 0);
+        var captured = cache.snapshot(geometry);
+        var node = new PedestrianItineraryCache.Node(new PedestrianRegion.Tile(0, 0), 0);
+        var prior = captured.at(node);
+        assertEquals(1, prior.size());
+        publish(cache, geometry, revision, 1);
+        assertNotEquals(prior.getFirst().dependencies(), cache.snapshot(geometry).at(node).getFirst().dependencies());
+        cache.clear();
+        assertTrue(cache.snapshot(geometry).isEmpty());
+        assertSame(prior, captured.at(node), "publication/retirement cannot alter an admitted search's fixed candidates");
+        assertTrue(captured.at(new PedestrianItineraryCache.Node(new PedestrianRegion.Tile(8, 8), 0)).isEmpty());
+    }
     @Test void aLongCachedDetourCannotReplaceANearbyOrdinaryRoute() {
         var revision = PedestrianGeometryRevision.initial();
         PedestrianRouteGeometry ground = new PedestrianRouteGeometry() {
