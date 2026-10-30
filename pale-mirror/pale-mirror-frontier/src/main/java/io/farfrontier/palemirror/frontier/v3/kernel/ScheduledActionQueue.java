@@ -22,10 +22,11 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /** Engine-owned schedule index. Its only mutation path is explicit schedule or cancellation events. */
-public final class ScheduledActionQueue {
+public final class ScheduledActionQueue implements ScheduleReadView {
     private final NavigableSet<ScheduledAction> ordered = new TreeSet<>();
     private final ScheduleExecutionIndex execution = new ScheduleExecutionIndex();
     private final Map<ScheduleId, ScheduledAction> byId = new HashMap<>();
+    private final Map<SubjectId, Set<ScheduledAction>> bySubject = new HashMap<>();
     private final Map<ReviewKey, NavigableSet<ScheduledAction>> byOwnerKind = new HashMap<>();
     private final NavigableMap<Long, Integer> deadlines = new TreeMap<>();
     private long countedThrough = Long.MIN_VALUE;
@@ -46,6 +47,7 @@ public final class ScheduledActionQueue {
             throw new IllegalStateException("scheduled action ordering collision: " + action.id().value());
         }
         execution.created(action);
+        bySubject.computeIfAbsent(action.subject(), ignored -> new HashSet<>()).add(action);
         byOwnerKind.computeIfAbsent(ReviewKey.of(action), ignored -> new TreeSet<>()).add(action);
         deadlines.merge(action.dueAt().ticks(), 1, Integer::sum);
         if (action.dueAt().ticks() <= countedThrough) countedDue++;
@@ -58,6 +60,9 @@ public final class ScheduledActionQueue {
         immutableSnapshot = null;
         execution.removed(action);
         removeOwnerKind(action);
+        var subjects = bySubject.get(action.subject());
+        subjects.remove(action);
+        if (subjects.isEmpty()) bySubject.remove(action.subject());
         removeDeadline(action);
         return ordered.remove(action);
     }
@@ -229,6 +234,17 @@ public final class ScheduledActionQueue {
         return immutableSnapshot;
     }
 
+    @Override public List<ScheduledAction> forSubjects(Set<SubjectId> subjects) {
+        var result = new ArrayList<ScheduledAction>();
+        for (var subject : subjects) result.addAll(bySubject.getOrDefault(subject, Set.of()));
+        result.sort(ScheduledAction::compareTo);
+        return List.copyOf(result);
+    }
+
+    @Override public Optional<ScheduledAction> action(ScheduleId id) {
+        return Optional.ofNullable(byId.get(Objects.requireNonNull(id, "schedule id")));
+    }
+
     public int size() {
         return ordered.size();
     }
@@ -250,7 +266,7 @@ public final class ScheduledActionQueue {
     }
 
     /** Small copy-on-write overlay for exactly one canonical transaction. */
-    static final class Mutation {
+    static final class Mutation implements ScheduleReadView {
         private final ScheduledActionQueue base;
         private final Map<ScheduleId, ScheduledAction> created = new LinkedHashMap<>();
         private final Set<ScheduleId> removed = new LinkedHashSet<>();
@@ -340,7 +356,7 @@ public final class ScheduledActionQueue {
             return List.copyOf(created.values());
         }
 
-        List<ScheduledAction> snapshot() {
+        @Override public List<ScheduledAction> snapshot() {
             requireOpen();
             if (removed.isEmpty() && created.isEmpty()) return base.snapshot();
             List<ScheduledAction> values = new java.util.ArrayList<>(base.ordered.size() - removed.size() + created.size());
@@ -356,6 +372,20 @@ public final class ScheduledActionQueue {
             }
             while (added < additions.size()) values.add(additions.get(added++));
             return List.copyOf(values);
+        }
+
+        @Override public List<ScheduledAction> forSubjects(Set<SubjectId> subjects) {
+            requireOpen();
+            var result = new ArrayList<ScheduledAction>();
+            for (var subject : subjects) for (var action : base.bySubject.getOrDefault(subject, Set.of()))
+                if (!removed.contains(action.id())) result.add(action);
+            for (var action : created.values()) if (subjects.contains(action.subject())) result.add(action);
+            result.sort(ScheduledAction::compareTo);
+            return List.copyOf(result);
+        }
+
+        @Override public Optional<ScheduledAction> action(ScheduleId id) {
+            return Optional.ofNullable(find(id));
         }
 
         /** Applies a prevalidated overlay. No allocation proportional to unchanged future work occurs. */

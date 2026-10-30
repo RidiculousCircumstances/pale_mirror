@@ -16,6 +16,30 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScheduledActionQueueTest {
+    @Test void addressedTransactionViewRetainsFutureActionsAndReplacesExactSubjectMembership() {
+        var queue = new ScheduledActionQueue();
+        var a = action("schedule:subject-a", 500, 0, "resident:a", 1);
+        var b = action("schedule:subject-b", 800, 0, "resident:b", 1);
+        queue.schedule(a); queue.schedule(b);
+        var replacement = action(a.id().value(), 900, 0, "resident:c", 1);
+        var edit = queue.beginMutation(); edit.cancel(a.id()); edit.schedule(replacement);
+        var subjects = Set.of(a.subject(), b.subject());
+        assertEquals(List.of(a, b), queue.forSubjects(subjects));
+        assertEquals(List.of(b), edit.forSubjects(subjects));
+        assertEquals(List.of(replacement), edit.forSubjects(Set.of(replacement.subject())));
+        assertEquals(Optional.of(replacement), edit.action(a.id()));
+        assertEquals(Optional.of(a), queue.action(a.id()), "uncommitted membership cannot escape");
+        edit.cancel(b.id());
+        assertTrue(edit.forSubjects(subjects).isEmpty());
+        edit.commit();
+        assertEquals(List.of(replacement), queue.forSubjects(Set.of(a.subject(), b.subject(), replacement.subject())));
+        assertTrue(queue.action(b.id()).isEmpty());
+        assertThrows(IllegalStateException.class, () -> edit.forSubjects(subjects));
+        assertThrows(IllegalStateException.class, () -> edit.action(a.id()));
+        queue.cancel(replacement.id());
+        assertTrue(queue.forSubjects(Set.of(replacement.subject())).isEmpty());
+    }
+
     @Test void cooperativeSlicesFinishOneKeylessPollingRoundBeforeStartingAnother() {
         var queue = new ScheduledActionQueue();
         for (int i = 0; i < 13; i++) queue.schedule(action("schedule:poll-" + i, 1, 0, "resident:poll-" + i, 1));

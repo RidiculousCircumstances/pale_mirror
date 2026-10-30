@@ -50,7 +50,7 @@ class PedestrianHintChurnTest {
                 portals.add(new PedestrianItineraryCache.Portal(cells.get(i-1), cells.get(i), 0, 0));
         }
         var itineraries = new PedestrianItineraryCache();
-        itineraries.remember(ground, cells.getLast(), portals, proof);
+        itineraries.publish(PedestrianItineraryCache.prepare(ground, cells.getLast(), portals, proof).orElseThrow());
         var corridors = new PedestrianCorridorCache();
         corridors.remember(ground, new PedestrianRouteResult(PedestrianRouteResult.Status.FOUND, cells, 0, 0, "proven detour"),
                 new PedestrianRegionDependencies(ground.bounds(), revision.scope(), revision.geometryScope(), proof));
@@ -82,6 +82,6 @@ class PedestrianHintChurnTest {
         var proof = new LinkedHashMap<PedestrianRegion.Tile, Object>();
         for (int x = 0; x < 16; x++) for (int z = 0; z < 8 + variant; z++)
             proof.put(new PedestrianRegion.Tile(x, z), revision.at(x, z));
-        cache.remember(geometry, portal.entrance(), List.of(portal), proof);
+        cache.publish(PedestrianItineraryCache.prepare(geometry, portal.entrance(), List.of(portal), proof).orElseThrow());
     }
 }

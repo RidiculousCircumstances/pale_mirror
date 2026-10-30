@@ -29,18 +29,11 @@ final class PedestrianItineraryCache {
         return entries.entrySet().stream().filter(entry -> entry.getKey().geometryScope().equals(scope)
                 && entry.getKey().bounds().equals(geometry.bounds())).map(Map.Entry::getValue).toList();
     }
-    synchronized void remember(PedestrianRouteGeometry geometry, SurfaceAnchor target, List<Portal> route,
-                               Map<PedestrianRegion.Tile, Object> proof) {
+    record Prepared(Key key, Itinerary value) { }
+    static Optional<Prepared> prepare(PedestrianRouteGeometry geometry, SurfaceAnchor target, List<Portal> route,
+                                      Map<PedestrianRegion.Tile, Object> proof) {
         var key = key(geometry, target);
-        if (key == null || route.isEmpty() || route.size() > MAX_PORTALS || proof.size() > MAX_DEPENDENCIES) return;
-        var old = entries.get(key);
-        // A continuation must not replace the useful full trunk with its suffix.
-        if (old != null && old.dependencies().equals(proof) && old.portals().size() >= route.size()) return;
-        if (old != null) { entries.remove(key); subtract(old); }
-        while (!entries.isEmpty() && (entries.size() >= MAX_ENTRIES || portals + route.size() > MAX_PORTALS
-                || dependencies + proof.size() > MAX_DEPENDENCIES)) {
-            var iterator = entries.values().iterator(); var removed = iterator.next(); iterator.remove(); subtract(removed);
-        }
+        if (key == null || route.isEmpty() || route.size() > MAX_PORTALS || proof.size() > MAX_DEPENDENCIES) return Optional.empty();
         var graph = new HashMap<Node, List<Arc>>();
         for (int i = 0; i < route.size(); i++) {
             int end = Math.min(route.size(), i + MACRO_SPAN);
@@ -49,8 +42,22 @@ final class PedestrianItineraryCache {
             arcs.add(new Arc(route.get(i).to(), i, i + 1));
         }
         graph.replaceAll((node, arcs) -> List.copyOf(arcs));
-        var value = new Itinerary(target, List.copyOf(route), Map.copyOf(proof), Map.copyOf(graph));
-        entries.put(key, value); portals += route.size(); dependencies += proof.size();
+        // This private graph has no writer after publication. HashMap also avoids
+        // MapN's linear-probe clustering for adjacent spatial node hashes.
+        var value = new Itinerary(target, List.copyOf(route), Map.copyOf(proof), Collections.unmodifiableMap(graph));
+        return Optional.of(new Prepared(key, value));
+    }
+    synchronized void publish(Prepared prepared) {
+        var key = prepared.key(); var value = prepared.value();
+        var old = entries.get(key);
+        // A continuation must not replace the useful full trunk with its suffix.
+        if (old != null && old.dependencies().equals(value.dependencies()) && old.portals().size() >= value.portals().size()) return;
+        if (old != null) { entries.remove(key); subtract(old); }
+        while (!entries.isEmpty() && (entries.size() >= MAX_ENTRIES || portals + value.portals().size() > MAX_PORTALS
+                || dependencies + value.dependencies().size() > MAX_DEPENDENCIES)) {
+            var iterator = entries.values().iterator(); var removed = iterator.next(); iterator.remove(); subtract(removed);
+        }
+        entries.put(key, value); portals += value.portals().size(); dependencies += value.dependencies().size();
     }
     private static Key key(PedestrianRouteGeometry geometry, SurfaceAnchor target) {
         return geometry.regionalRevision().map(revision -> new Key(revision.geometryScope(), geometry.bounds(),

@@ -183,11 +183,19 @@ class FrontierV3PedestrianPlanningTest {
         }
         assertNotNull(loaded); var groupId = loaded.id(); var missionId = loaded.mission().id();
         assertFalse(engine.canonicalState().state().shipments().missions().get(missionId).supplies().orElseThrow().complete());
-        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner)) {
+        var waits = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var continuations = io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations.bind(waits)) {
             engine.advanceTo(new SimInstant(engine.checkpoint().instant().ticks() + 2), new WorkBudget(128, 1024));
             assertEquals(TransportMission.Stage.LOADING, engine.canonicalState().state().shipments().missions().get(missionId).stage());
             assertEquals(UnitGroup.Phase.READY, engine.canonicalState().state().unitGroups().groups().get(groupId).phase());
             assertTrue(planner.pendingCount() > 0);
+            assertTrue(waits.waitingCount() > 0, "pre-crash setup must use the same continuation owner as the server");
+            for (var wait : waits.diagnostics(8)) {
+                assertTrue(engine.checkpoint().schedules().contains(wait.action()));
+                assertTrue(wait.action().dueAt().compareTo(engine.checkpoint().instant()) <= 0,
+                        "a calculation wait retains its due action; recovery cannot run an ordinary future business review");
+            }
             store.installSnapshot(new SnapshotRecord(engine.checkpoint(), store.recover(configuration.worldId()).walTail().size()));
         }
         var runtime = FrontierV3ServerRuntime.start(configuration, store, 1000);

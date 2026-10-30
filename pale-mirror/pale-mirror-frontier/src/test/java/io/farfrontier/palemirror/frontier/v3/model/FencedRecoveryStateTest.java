@@ -169,42 +169,63 @@ class FencedRecoveryStateTest {
         assertEquals(FencedRecoveryPhase.AMBIGUOUS, recovered.fencedRecovery().current().get(EFFECT).phase());
     }
 
+    @Test void unrelatedRecoveryPressureCannotForgetTheLatestBodyRetirement() {
+        var retained = new java.util.LinkedHashMap<SubjectId, FencedRecoveryTombstone>();
+        retained.put(BODY, new FencedRecoveryTombstone(BODY, FencedRecoveryAsset.BODY, OWNER, 7L, 7L,
+                FencedRecoveryDisposition.RESUME_COLD, "saved-body-departure"));
+        for (int index = 1; index < FencedRecoveryState.MAX_BINDINGS; index++) {
+            var id = new SubjectId("effect:pressure-" + String.format("%04d", index));
+            retained.put(id, new FencedRecoveryTombstone(id, FencedRecoveryAsset.EFFECT, OWNER, 7L, 1L,
+                    FencedRecoveryDisposition.REJECT_STALE, "confirmed"));
+        }
+        var full = new FencedRecoveryState(Map.of(), retained, 0L);
+        var pressure = full.prepare(binding(EFFECT, FencedRecoveryAsset.EFFECT, 8L, false));
+        assertEquals(full.tombstones().get(BODY), pressure.tombstones().get(BODY),
+                "the body owner still needs exact epoch/disposition for saved resources and late native loads");
+        assertThrows(IllegalArgumentException.class, () -> pressure.compactTombstones(java.util.Set.of(BODY)));
+        var successor = pressure.prepare(binding(BODY, FencedRecoveryAsset.BODY, pressure.nextEpoch(BODY), true));
+        var compacted = successor.prepare(binding(CONTAINER, FencedRecoveryAsset.CONTAINER, successor.nextEpoch(CONTAINER), false));
+        assertFalse(compacted.tombstones().containsKey(BODY), "a successor body already fences every dependent old-body use");
+        assertEquals(successor.current().get(BODY), compacted.current().get(BODY));
+        assertEquals(FencedRecoveryState.MAX_BINDINGS, compacted.current().size() + compacted.tombstones().size());
+    }
+
     @Test
     void boundedTombstoneRetentionCompactsOnlyForANewDurableAuthorityAndStillRejectsUnknownLateProjection() {
         java.util.Map<SubjectId, FencedRecoveryTombstone> retained = new java.util.LinkedHashMap<>();
         for (int index = 0; index < FencedRecoveryState.MAX_BINDINGS; index++) {
-            SubjectId id = new SubjectId("body:retention-" + String.format("%04d", index));
-            retained.put(id, new FencedRecoveryTombstone(id, FencedRecoveryAsset.BODY, OWNER, 7L, 1L,
+            SubjectId id = new SubjectId("effect:retention-" + String.format("%04d", index));
+            retained.put(id, new FencedRecoveryTombstone(id, FencedRecoveryAsset.EFFECT, OWNER, 7L, 1L,
                     FencedRecoveryDisposition.REJECT_STALE, "confirmed"));
         }
         FencedRecoveryState full = new FencedRecoveryState(Map.of(), retained, 0L);
-        SubjectId successor = new SubjectId("body:retention-successor");
-        FencedRecoveryState next = full.prepare(binding(successor, FencedRecoveryAsset.BODY, 1L, true));
+        SubjectId successor = new SubjectId("effect:retention-successor");
+        FencedRecoveryState next = full.prepare(binding(successor, FencedRecoveryAsset.EFFECT, 1L, true));
 
         assertEquals(FencedRecoveryState.MAX_BINDINGS, next.current().size() + next.tombstones().size());
         assertTrue(next.current().containsKey(successor));
-        assertEquals(2L, next.nextEpoch(new SubjectId("body:retention-0000")),
+        assertEquals(2L, next.nextEpoch(new SubjectId("effect:retention-0000")),
                 "automatic eviction must preserve a numeric fence for the forgotten identity");
-        assertFalse(next.tombstones().containsKey(new SubjectId("body:retention-0000")),
+        assertFalse(next.tombstones().containsKey(new SubjectId("effect:retention-0000")),
                 "compaction is deterministic rather than depending on map iteration or a later visitor");
         assertEquals(FencedRecoveryDisposition.REJECT_STALE,
-                next.lateLoad(new SubjectId("body:retention-0000"), FencedRecoveryAsset.BODY, OWNER, 1L),
+                next.lateLoad(new SubjectId("effect:retention-0000"), FencedRecoveryAsset.EFFECT, OWNER, 1L),
                 "compaction never converts a forgotten projection into authority");
     }
 
     @Test void forgettingTerminalDetailCannotReuseAnIncarnationEvenAfterAnotherCompaction() {
-        var retired = FencedRecoveryState.empty().prepare(binding(BODY, FencedRecoveryAsset.BODY, 7L, true))
-                .running(BODY, 7L).revokeToCold(BODY, 7L);
-        var compacted = retired.compactTombstones(java.util.Set.of(BODY));
+        var retired = FencedRecoveryState.empty().prepare(binding(EFFECT, FencedRecoveryAsset.EFFECT, 7L, true))
+                .cancelBeforeEffect(EFFECT, 7L);
+        var compacted = retired.compactTombstones(java.util.Set.of(EFFECT));
         assertTrue(compacted.current().isEmpty());
         assertTrue(compacted.tombstones().isEmpty());
-        assertEquals(8L, compacted.nextEpoch(BODY));
-        assertThrows(IllegalArgumentException.class, () -> compacted.prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true)));
+        assertEquals(8L, compacted.nextEpoch(EFFECT));
+        assertThrows(IllegalArgumentException.class, () -> compacted.prepare(binding(EFFECT, FencedRecoveryAsset.EFFECT, 1L, true)));
         var next = compacted.prepare(binding(CARGO, FencedRecoveryAsset.CARGO, compacted.nextEpoch(CARGO), true));
         next = next.cancelBeforeEffect(CARGO, 8L).compactTombstones(java.util.Set.of(CARGO));
-        assertEquals(9L, next.nextEpoch(BODY));
+        assertEquals(9L, next.nextEpoch(EFFECT));
         assertEquals(9L, next.nextEpoch(CARGO));
-        assertEquals(FencedRecoveryDisposition.REJECT_STALE, next.lateLoad(BODY, FencedRecoveryAsset.BODY, OWNER, 7L));
+        assertEquals(FencedRecoveryDisposition.REJECT_STALE, next.lateLoad(EFFECT, FencedRecoveryAsset.EFFECT, OWNER, 7L));
     }
 
     private static FencedRecoveryBinding binding(SubjectId id, FencedRecoveryAsset asset, long epoch, boolean reversible) {

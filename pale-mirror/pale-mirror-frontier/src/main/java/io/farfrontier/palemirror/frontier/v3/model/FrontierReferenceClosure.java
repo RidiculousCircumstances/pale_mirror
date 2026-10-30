@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleReadView;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 
 import java.util.HashMap;
@@ -36,15 +37,15 @@ final class FrontierReferenceClosure {
     }
 
     static void validateTransition(FrontierWorldState before, FrontierWorldState after, List<ScheduledAction> schedules) {
-        validateTransition(before, after, () -> schedules, schedules);
+        validateTransition(before, after, ScheduleReadView.of(schedules), schedules);
     }
     static void validateTransition(FrontierWorldState before, FrontierWorldState after,
-                                   java.util.function.Supplier<List<ScheduledAction>> schedules,
+                                   ScheduleReadView schedules,
                                    List<ScheduledAction> retainedChanges) {
         validateTransition(before, after, schedules, retainedChanges, FrontierExecutionMetrics.noOp());
     }
     static void validateTransition(FrontierWorldState before, FrontierWorldState after,
-                                   java.util.function.Supplier<List<ScheduledAction>> schedules,
+                                   ScheduleReadView schedules,
                                    List<ScheduledAction> retainedChanges, FrontierExecutionMetrics metrics) {
         String owner = after.bootstrap().worldId().value();
         try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-trade", owner)) {
@@ -65,7 +66,7 @@ final class FrontierReferenceClosure {
         try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "reference-schedule-subjects", owner)) {
             // Retired targets and newly retained actions remain independent checks.
             var removed = ScheduledSubjectExistence.removed(before, after);
-            if (!removed.isEmpty()) for (var action : schedules.get()) if (removed.contains(action.subject())
+            if (!removed.isEmpty()) for (var action : schedules.forSubjects(removed)) if (removed.contains(action.subject())
                     && !SYSTEM_SUBJECTS.contains(action.subject().value()))
                 throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
             validateScheduledSubjects(after, retainedChanges);

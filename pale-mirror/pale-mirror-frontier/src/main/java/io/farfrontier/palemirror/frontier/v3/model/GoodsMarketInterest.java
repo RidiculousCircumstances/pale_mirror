@@ -20,18 +20,27 @@ public final class GoodsMarketInterest {
                     ? quote.unitPriceLimit().compareTo(order.unitPriceLimit()) <= 0
                     : order.unitPriceLimit().compareTo(quote.unitPriceLimit()) <= 0));
     }
+    /** Current public consent only; retired contract bookkeeping is not a new offer. */
+    public record PurchaseOffer(io.farfrontier.palemirror.frontier.v3.api.SubjectId id, GoodsTradeParty party,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId containerId, String itemKind, int availableQuantity,
+            io.farfrontier.palemirror.frontier.v3.api.FixedScalar unitPriceLimit, long expiresAtTick) {
+        private static PurchaseOffer of(GoodsTradeOrder order) {
+            return new PurchaseOffer(order.id(), order.party(), order.containerId(), order.itemKind(), order.availableQuantity(),
+                    order.unitPriceLimit(), order.expiresAtTick());
+        }
+    }
     /** Addressed offer image, including absence for each requested commodity.
      * No full order-book scan per buyer and no admission authority. */
-    public static Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, GoodsTradeOrder> purchaseOffers(
+    public static Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, PurchaseOffer> purchaseOffers(
             GoodsTradeState trade, GoodsParticipant buyer, Map<String, io.farfrontier.palemirror.frontier.v3.api.FixedScalar> limits, long now) {
-        var result = new HashMap<io.farfrontier.palemirror.frontier.v3.api.SubjectId, GoodsTradeOrder>();
+        var result = new HashMap<io.farfrontier.palemirror.frontier.v3.api.SubjectId, PurchaseOffer>();
         for (var item : limits.keySet()) for (var order : ORDERS.unorderedRows(GoodsMarketInterest.class, trade.orders(),
                 order -> Set.of(new Key(order.itemKind(), order.side())), new Key(item, GoodsTradeOrder.Side.SELL))) {
             if (order.availableQuantity() <= 0 || order.expiresAtTick() < now || order.party().equals(buyer.party())
                     || order.unitPriceLimit().compareTo(limits.get(item)) > 0) continue;
             var seller = trade.participants().participants().get(order.party().id());
             if (seller != null && seller.party().equals(order.party()) && GoodsBuyerDemand.mutuallyKnown(buyer, seller))
-                result.put(order.id(), order);
+                result.put(order.id(), PurchaseOffer.of(order));
         }
         return Map.copyOf(result);
     }

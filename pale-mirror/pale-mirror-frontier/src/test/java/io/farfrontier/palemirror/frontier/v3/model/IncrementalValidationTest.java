@@ -194,9 +194,15 @@ class IncrementalValidationTest {
         FrontierReferenceClosure.validateScheduledSubjects(before, List.of(action));
         var terrainChanged = before.recordPhysicalDelta(new PhysicalDelta(new BlockPosition(0, 64, 0),
                 PhysicalDeltaKind.UNKNOWN_SCAR, java.util.Optional.empty(), java.util.Optional.empty(), "ordinary-observation"));
+        var addressed = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleReadView() {
+            @Override public List<ScheduledAction> snapshot() { throw new AssertionError("ordinary validation copied the entire queue"); }
+            @Override public List<ScheduledAction> forSubjects(java.util.Set<SubjectId> subjects) {
+                return subjects.contains(lot) ? List.of(action) : List.of();
+            }
+            @Override public java.util.Optional<ScheduledAction> action(ScheduleId id) { return java.util.Optional.of(action).filter(value -> value.id().equals(id)); }
+        };
         assertDoesNotThrow(() -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransaction(before, terrainChanged, List.of(),
-                () -> { throw new AssertionError("ordinary validation copied the entire pre-queue"); },
-                () -> { throw new AssertionError("ordinary validation copied the entire post-queue"); }, List.of()));
+                addressed, addressed, List.of()));
         var ledger = before.inventory().fungibleResources();
         var amount = ledger.lots().get(lot).quantity();
         var changed = ledger.transformCold(ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(owner)),
@@ -204,9 +210,9 @@ class IncrementalValidationTest {
                         ResidentMeal.BREAD_KIND, 1, "test", List.of()));
         var after = before.withInventory(before.inventory().withFungibleResources(changed));
         assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validateTransition(before, after,
-                () -> List.of(action), List.of()), "retirement cannot evade validation by leaving the schedule unchanged");
-        assertDoesNotThrow(() -> FrontierReferenceClosure.validateTransition(before, after, List::of, List.of()));
+                addressed, List.of()), "retirement cannot evade validation by leaving the schedule unchanged");
+        assertDoesNotThrow(() -> FrontierReferenceClosure.validateTransition(before, after, io.farfrontier.palemirror.frontier.v3.kernel.ScheduleReadView.of(List.of()), List.of()));
         assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validateTransition(after, after,
-                () -> List.of(action), List.of(action)), "new references must also exist");
+                addressed, List.of(action)), "new references must also exist");
     }
 }

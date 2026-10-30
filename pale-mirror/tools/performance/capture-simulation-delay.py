@@ -19,6 +19,8 @@ def main():
     p.add_argument("--artifact",type=Path,required=True);p.add_argument("--source-ref",required=True)
     p.add_argument("--source-repo",type=Path,required=True)
     p.add_argument("--seconds",type=int,default=30);p.add_argument("--output",type=Path,required=True)
+    p.add_argument("--settings",type=Path,default=Path(__file__).with_name("simulation-delay.jfc"),
+                   help="observational JFR settings; recorded by exact checksum")
     p.add_argument("--jdk",type=Path,default=Path(os.environ["JAVA_HOME"]) if "JAVA_HOME" in os.environ else None)
     a=p.parse_args();runtime=a.runtime.resolve();out=a.output.resolve()
     if not 10<=a.seconds<=120:p.error("capture must be bounded to10–120seconds")
@@ -40,7 +42,8 @@ def main():
     if not a.artifact.resolve().is_relative_to(a.source_repo.resolve()):raise ValueError("artifact is outside frozen source")
     out.mkdir(parents=True,exist_ok=True);pid=pids[0];jdk=a.jdk
     java=str(jdk/"bin/java") if jdk else "java";jcmd=str(jdk/"bin/jcmd") if jdk else "jcmd"
-    config=Path(__file__).with_name("simulation-delay.jfc").resolve()
+    config=a.settings.resolve()
+    if not config.is_file():raise ValueError("JFR settings file is unavailable")
     def cpu():
         t=(Path("/proc")/pid/"stat").read_text().rsplit(")",1)[1].split()
         return {"monotonicNs":time.monotonic_ns(),"cpuTicks":int(t[11])+int(t[12]),"birthTicks":int(t[19])}

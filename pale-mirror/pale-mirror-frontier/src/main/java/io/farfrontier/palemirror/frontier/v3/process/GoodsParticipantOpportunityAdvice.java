@@ -36,8 +36,10 @@ final class GoodsParticipantOpportunityAdvice {
                                 && current.navigationGeometry() != navigation) return reject("GEOMETRY");
                         // An old absence must not erase a newly published opportunity.
                         // A selected dated quote still faces all current admission checks.
-                        if (choice == GoodsTripPlanning.Disposition.NO_PURCHASE && !decision.negativeInputs().orElseThrow().matches(current, now.ticks()))
-                            return reject("CHANGED_EMPTY_MARKET");
+                        if (choice == GoodsTripPlanning.Disposition.NO_PURCHASE) {
+                            var changed = decision.negativeInputs().orElseThrow().change(current, now.ticks());
+                            if (changed.isPresent()) return reject("CHANGED_EMPTY_MARKET_" + changed.orElseThrow().name());
+                        }
                         rejection = "NONE";
                         var fresh = new SettlementEconomicPlanPreparation.Review(now.ticks(), participant.prices(), Optional.empty());
                         return Optional.of(() -> GoodsParticipantProcess.prepareDecision(current, action, now, fresh, Optional.of(choice)).completion());

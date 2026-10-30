@@ -39,7 +39,7 @@ class FrontierDomainRelationshipsTest {
         assertThrows(IllegalArgumentException.class, () ->
                 FrontierWorldState.duringUnpublishedTransition(() -> {
                     FrontierWorldStateTransitionValidator.INSTANCE.validateTransaction(before, invalid,
-                            java.util.List.of(), java.util.List::of, java.util.List::of, java.util.List.of());
+                            java.util.List.of(), io.farfrontier.palemirror.frontier.v3.kernel.ScheduleReadView.of(java.util.List.of()), io.farfrontier.palemirror.frontier.v3.kernel.ScheduleReadView.of(java.util.List.of()), java.util.List.of());
                     return null;
                 }), "publication must force the full audit even inside an unpublished scope");
         assertThrows(IllegalStateException.class, () -> FrontierWorldState.duringUnpublishedTransition(() -> {

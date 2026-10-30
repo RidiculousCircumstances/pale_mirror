@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Activity-independent body fencing over the existing single recovery store.
@@ -114,6 +115,14 @@ public final class ActorBodyAuthority {
                 && retired.asset() == FencedRecoveryAsset.BODY && retired.ownerId().equals(body.actorId())
                 && retired.ownerRevision() == 0L && retired.retiredEpoch() == body.physicalEpoch()
                 && retired.disposition() == FencedRecoveryDisposition.RESUME_COLD;
+    }
+    /** The latest body retirement is still exact lifetime/resource evidence.
+     * A newer prepared incarnation fences every dependent use of that old body.
+     * Generic epoch-floor compaction cannot replace this owner's exact history. */
+    static boolean mayCompactRetirement(FencedRecoveryTombstone retired, Optional<FencedRecoveryBinding> successor) {
+        return successor.filter(next -> next.bindingId().equals(retired.bindingId())
+                && next.asset() == FencedRecoveryAsset.BODY && next.ownerId().equals(retired.ownerId())
+                && next.ownerRevision() == retired.ownerRevision() && next.authorityEpoch() > retired.retiredEpoch()).isPresent();
     }
     /** Death retires actuation, not the independently retained resource evidence of that exact incarnation. */
     public static void requireRetiredDeath(FrontierWorldState state, ActorBodyId body) {

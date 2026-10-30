@@ -41,14 +41,14 @@ public interface StateValidator<S> {
     }
 
     /**
-     * Transaction barrier. Complete schedule images are borrowed, lazy readers valid
+     * Transaction barrier. Schedule views are borrowed, indexed readers valid
      * only during this synchronous call, before the queue mutation commits. Delta
      * validation must not copy unchanged future work. Retirement checks request the
-     * complete image when needed; readers may not escape into a retained result.
+     * addressed membership; complete images are reserved for full audits. Readers may not escape.
      */
     default void validateTransaction(S previous, S next, List<FrontierEvent> events,
-                                     java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
-                                     java.util.function.Supplier<List<ScheduledAction>> schedulesAfter,
+                                     ScheduleReadView schedulesBefore,
+                                     ScheduleReadView schedulesAfter,
                                      List<ScheduledAction> retainedChanges) {
         validateTransition(previous, next);
     }
@@ -56,8 +56,8 @@ public interface StateValidator<S> {
     /** Optional observational detail; existing validators keep the same barrier.
      * Diagnostics never decide whether a canonical transition is valid. */
     default void validateTransaction(S previous, S next, List<FrontierEvent> events,
-                                     java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
-                                     java.util.function.Supplier<List<ScheduledAction>> schedulesAfter,
+                                     ScheduleReadView schedulesBefore,
+                                     ScheduleReadView schedulesAfter,
                                      List<ScheduledAction> retainedChanges, FrontierExecutionMetrics metrics) {
         validateTransaction(previous, next, events, schedulesBefore, schedulesAfter, retainedChanges);
     }

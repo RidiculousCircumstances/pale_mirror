@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.StateValidator;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleReadView;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 
@@ -38,14 +39,14 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
     }
 
     @Override public void validateTransaction(FrontierWorldState previous, FrontierWorldState next, List<FrontierEvent> events,
-                                              java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
-                                              java.util.function.Supplier<List<ScheduledAction>> schedulesAfter,
+                                              ScheduleReadView schedulesBefore,
+                                              ScheduleReadView schedulesAfter,
                                               List<ScheduledAction> retainedChanges) {
         validateTransaction(previous, next, events, schedulesBefore, schedulesAfter, retainedChanges, FrontierExecutionMetrics.noOp());
     }
     @Override public void validateTransaction(FrontierWorldState previous, FrontierWorldState next, List<FrontierEvent> events,
-                                              java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
-                                              java.util.function.Supplier<List<ScheduledAction>> schedulesAfter,
+                                              ScheduleReadView schedulesBefore,
+                                              ScheduleReadView schedulesAfter,
                                               List<ScheduledAction> retainedChanges, FrontierExecutionMetrics metrics) {
         String owner = next.bootstrap().worldId().value();
         try (var ignored = FrontierExecutionMetrics.safelyDetail(metrics, FrontierExecutionMetrics.Stage.VALIDATION, "owned-state", owner)) {
@@ -60,8 +61,8 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
         }
     }
     private void validateRetirements(FrontierWorldState previous, List<FrontierEvent> events,
-                                     java.util.function.Supplier<List<ScheduledAction>> schedulesBefore,
-                                     java.util.function.Supplier<List<ScheduledAction>> schedulesAfter) {
+                                     ScheduleReadView schedulesBefore,
+                                     ScheduleReadView schedulesAfter) {
         for (FrontierEvent event : events) {
             if (!(event.payload() instanceof PhysicalIntentTransition transition) || !terminal(transition.status())) continue;
             PhysicalIntentRetirementProof proof = transition.retirementProof().orElseThrow(() ->
@@ -76,12 +77,12 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
             validateSubject(proof.leaseOrCarrier(), proof.relations(), "lease/carrier");
             validateSubject(proof.commitment(), proof.relations(), "resource commitment");
             if (proof.continuation() instanceof PhysicalIntentRetirementProof.ExactSchedule exact) {
-                if (schedulesBefore.get().stream().noneMatch(action -> action.id().equals(exact.value()))) {
+                if (schedulesBefore.action(exact.value()).isEmpty()) {
                     throw new IllegalArgumentException("retirement proof schedule is absent from engine pre-state");
                 }
                 long dispositions = events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance)
                         .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, exact.value())).count();
-                if (dispositions != 1L || schedulesAfter.get().stream().anyMatch(action -> action.id().equals(exact.value()))) {
+                if (dispositions != 1L || schedulesAfter.action(exact.value()).isPresent()) {
                     throw new IllegalArgumentException("retirement proof schedule does not have one engine-owned disposition");
                 }
             } else if (events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance).map(ScheduleEffect.class::cast)

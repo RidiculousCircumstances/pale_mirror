@@ -6,6 +6,23 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsMarketInterestTest {
+    @Test void retiringOldCommitmentHistoryPreservesTheSameLiveOfferButNewReservationsChangeIt() {
+        var state = GoodsTradeTest.initial(); var participants = state.companies().goodsTrade().participants();
+        var parties = state.bootstrap().settlements().stream().limit(2)
+                .map(home -> participants.participants().get(home.id()).party()).toList();
+        var seller = parties.get(0); var buyer = participants.participants().get(parties.get(1).id());
+        var open = priced("live-history", seller, GoodsTradeOrder.Side.SELL, 1, 100).commit(32);
+        var before = new GoodsTradeState(Map.of(open.id(), open), Map.of(), participants);
+        var after = new GoodsTradeState(Map.of(open.id(), open.retireCommitment(32)), Map.of(), participants);
+        var limits = Map.of("minecraft:bread", FixedScalar.ONE);
+        var captured = GoodsMarketInterest.purchaseOffers(before, buyer, limits, 20);
+        assertFalse(captured.isEmpty());
+        assertEquals(captured, GoodsMarketInterest.purchaseOffers(after, buyer, limits, 20),
+                "retired historical contracts change no remaining quantity, price, endpoint or consent identity");
+        var reserved = new GoodsTradeState(Map.of(open.id(), open.commit(1)), Map.of(), participants);
+        assertNotEquals(captured, GoodsMarketInterest.purchaseOffers(reserved, buyer, limits, 20));
+        assertEquals(Map.of(), GoodsMarketInterest.purchaseOffers(after, buyer, limits, 101));
+    }
     @Test void immediateMatchingUsesLivePriceConsentWithoutDiscardingEconomicInterest() {
         var state = GoodsTradeTest.initial(); var participants = state.companies().goodsTrade().participants();
         var parties = state.bootstrap().settlements().stream().limit(3)

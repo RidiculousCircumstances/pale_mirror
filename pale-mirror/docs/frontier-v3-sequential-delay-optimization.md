@@ -979,3 +979,42 @@ deploy-main-final,deploy-paired-final,comparison-summary-final.json and
 final-runtime-check.log. Previous unsuccessful candidate evidence is retained.
 Pack tracked inputs remain unchanged, .f0v-baseline/ and governance WIP preserved;
 no push.
+
+
+## Owner throughput continuation (2026-10-30)
+
+Scope is the four remaining performance costs plus exact body retirement and the
+old group-restart failure. Receipts: `build/simulation-throughput/owner-throughput-closure/`.
+
+Alternating old/new/new/old forks replayed the identical checkpoint and ten buyers
+for eight rounds each, same runtime22/heap/affinity. All32 rounds retain the same
+choices, passes, searches and work units. Last-four-round CPU medians were old
+1.9576/1.9564s and new1.9654/2.0506s. The previous isolated2.24/3.30s samples do not
+establish a47% regression. Host load is not isolated.
+
+Fresh53b5 untraced baseline:458126→459225 in66.142s (16.6158ticks/s), delivery
+debt947→1171. The subsequent2ms JFR is a separate instrumented window, not that
+TPS baseline. It is trace_incomplete; stack samples identify hotspots but cannot
+be treated as exact whole-interval causal percentages.
+
+Connected source corrections:
+- Compile reusable itinerary graphs on the existing immutable calculation worker;
+  owner publication checks/installs the bounded prepared cache image.
+- Queue-owned subject/ID indexes serve pre-WAL reference retirement, including
+  unchanged future actions and transactional replacements; no full queue copy
+  for a single removed subject. Complete ingress/recovery validation remains.
+- Negative trade advice retains actual offer consent/availability, excluding the
+  historical retired-commitment counter; real availability/price/expiry changes
+  still invalidate. Separate bounded rejection labels expose remaining causes.
+- Recovery compaction now consults the explicit asset retention Strategy. The
+  latest body retirement cannot be forgotten before a newer exact incarnation:
+  saved dependent resources and late-body joins need that owner fact. Global
+  epoch-floor retention alone never proves the actor's outcome.
+- The old restart fixture failed to bind the common calculation continuation
+  owner before the crash. Correct setup retains the due action and rebinds it
+  after recovery. Its actual supply-loading→outbound assertion passes without a
+  longer timeout. This is a fixture defect, not evidence of failed product recovery.
+
+Focused connected checks pass, including old restart coverage. Deployment and
+performance outcomes for these corrections will be recorded after the frozen
+candidate run; source changes alone do not establish20ticks/s or HOT acceptance.

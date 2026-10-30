@@ -63,7 +63,7 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         // Detailed terminal history is bounded. Its compacted epoch floor remains durable:
         // rejecting unknown late loads alone does not prevent allocating their old epoch again.
         // Make room atomically with the new authority; never discard the numeric fence.
-        FencedRecoveryState retained = compactForNewBinding(binding.bindingId());
+        FencedRecoveryState retained = compactForNewBinding(binding);
         Map<SubjectId, FencedRecoveryBinding> next = new LinkedHashMap<>(retained.current); next.put(binding.bindingId(), binding);
         return new FencedRecoveryState(next, retained.tombstones, retained.retiredEpochFloor);
     }
@@ -199,17 +199,28 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         long floor = retiredEpochFloor;
         for (SubjectId id : ids) {
             if (current.containsKey(id)) throw new IllegalArgumentException("cannot compact a current recovery authority");
-            var removed = next.remove(id);
-            if (removed != null) floor = Math.max(floor, removed.retiredEpoch());
+            var removed = next.get(id);
+            if (removed != null) {
+                if (!removed.asset().mayCompact(removed, java.util.Optional.empty()))
+                    throw new IllegalArgumentException("retired owner still requires its exact history: " + id);
+                next.remove(id); floor = Math.max(floor, removed.retiredEpoch());
+            }
         }
         return new FencedRecoveryState(current, next, floor);
     }
 
-    /** Deterministic bounded retention policy; unknown late projections still reject by default. */
-    private FencedRecoveryState compactForNewBinding(SubjectId incomingId) {
+    /** Deterministic bounded retention through each asset owner's declared capability.
+     * A numeric floor fences allocation; it cannot replace still-needed exact owner history. */
+    private FencedRecoveryState compactForNewBinding(FencedRecoveryBinding incoming) {
         if (current.size() + tombstones.size() < MAX_BINDINGS) return this;
-        SubjectId retired = tombstones.keySet().stream().filter(id -> !id.equals(incomingId)).sorted().findFirst()
-                .orElseGet(() -> tombstones.containsKey(incomingId) ? incomingId : null);
+        var incomingId = incoming.bindingId();
+        java.util.function.Predicate<SubjectId> mayCompact = id -> {
+            var value = tombstones.get(id);
+            return value != null && value.asset().mayCompact(value, java.util.Optional.ofNullable(
+                    id.equals(incomingId) ? incoming : current.get(id)));
+        };
+        SubjectId retired = tombstones.keySet().stream().filter(id -> !id.equals(incomingId) && mayCompact.test(id))
+                .min(SubjectId::compareTo).orElseGet(() -> mayCompact.test(incomingId) ? incomingId : null);
         if (retired == null) throw new IllegalArgumentException("recovery current-authority limit exceeded");
         Map<SubjectId, FencedRecoveryTombstone> next = new LinkedHashMap<>(tombstones); next.remove(retired);
         return new FencedRecoveryState(current, next, Math.max(retiredEpochFloor, tombstones.get(retired).retiredEpoch()));

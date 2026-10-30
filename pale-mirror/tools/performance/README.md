@@ -21,7 +21,7 @@ python3 tools/performance/capture-simulation-delay.py \
   --jdk /absolute/java21 --seconds 30 --output /absolute/new-capture-directory
 ```
 
-Capture is bounded to 10–120 seconds / 128 MiB. Preserve provenance and raw JFR.
+Capture is bounded to 10–120 seconds / 128 MiB. Optional `--settings /absolute/profile.jfc` selects an observational sampling configuration; its exact hash is retained. Use the same configuration for paired traced comparisons. Preserve provenance and raw JFR.
 The capture CLI runs the analyzer. For an existing recording, enable the six PM
 events using `simulation-delay.jfc`, then run:
 

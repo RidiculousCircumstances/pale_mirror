@@ -64,7 +64,8 @@ public final class HierarchicalPedestrianSearch {
     private final PedestrianItineraryCache itineraries;
     private PedestrianMacroSearch itineraryJoin;
     private boolean reusePrepared;
-    private boolean itineraryPublished;
+    private boolean itineraryPublished, itineraryPrepared;
+    private java.util.Optional<PedestrianItineraryCache.Prepared> preparedItinerary = java.util.Optional.empty();
     private Map<PedestrianRegion.Tile, Object> terminalProof, itineraryProof;
     private PedestrianCalculationMemory.Read preparedRead;
     private PedestrianRegionDependencies preparedDependencies;
@@ -145,7 +146,10 @@ public final class HierarchicalPedestrianSearch {
      * changes afterward. Publication need not rescan their surfaces on the owner.
      */
     synchronized void preparePublication() {
-        if (itinerary != null) itineraryDependencies();
+        if (itinerary != null && itineraries != null && !itineraryPrepared) {
+            preparedItinerary = PedestrianItineraryCache.prepare(geometry, target, itinerary, itineraryDependencies());
+            itineraryPrepared = true;
+        }
         if (terminal != null) {
             resultDependencies();
             if (preparedDependencies == null) preparedDependencies = dependencies();
@@ -408,7 +412,8 @@ public final class HierarchicalPedestrianSearch {
     /** Server publication after generation/dependency checks; never called from a worker. */
     synchronized void publishReuse() {
         if (!itineraryPublished && itineraries != null && itinerary != null) {
-            itineraries.remember(geometry, target, itinerary, itineraryDependencies());
+            if (!itineraryPrepared) throw new IllegalStateException("itinerary publication lacks its prepared image");
+            preparedItinerary.ifPresent(itineraries::publish);
             itineraryPublished = true;
         }
     }
