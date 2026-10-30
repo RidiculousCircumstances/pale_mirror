@@ -6,9 +6,13 @@ import java.util.*;
 
 /** Only not-yet-issued tree loot is incoming; actual carried logs already belong to the inventory ledger. */
 final class ForestryStockSupply implements StockSupplyPort {
+    private static final ImmutableInputView<List<Commitment>> VIEW = new ImmutableInputView<>();
     public Key key() { return Key.FORESTRY; }
     public long inputDemand(FrontierWorldState state, SubjectId owner, String kind, long tick) { return 0; }
     public List<Commitment> pending(FrontierWorldState state) {
+        return VIEW.getPublished(List.of(state.bootstrap(), state.forest()), () -> read(state));
+    }
+    private static List<Commitment> read(FrontierWorldState state) {
         return state.forest().work().values().stream().filter(job -> job.target().isPresent()).map(job -> {
             long remaining = job.felling().map(batch -> (long) batch.batch().effects().size() - job.appliedEffects())
                     .orElseGet(() -> (long) ForestKnowledge.require(state, job.target().orElseThrow().tree()).remaining());

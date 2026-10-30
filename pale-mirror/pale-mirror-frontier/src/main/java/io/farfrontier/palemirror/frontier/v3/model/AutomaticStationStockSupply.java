@@ -5,8 +5,12 @@ import java.util.*;
 
 /** Retained machine promises prevent duplicate production while raw materials are being transformed. */
 final class AutomaticStationStockSupply implements StockSupplyPort {
+    private static final ImmutableInputView<List<Commitment>> VIEW = new ImmutableInputView<>();
     @Override public Key key() { return Key.AUTOMATIC_STATIONS; }
     @Override public List<Commitment> pending(FrontierWorldState state) {
+        return VIEW.getPublished(List.of(state.productionStations(), state.inventory().fungibleResources().lots(), state.bootstrap().ruleset().production()), () -> read(state));
+    }
+    private static List<Commitment> read(FrontierWorldState state) {
         var result = new ArrayList<Commitment>();
         for (var machine : state.productionStations().machines().values()) machine.operation().ifPresent(operation -> {
             if (!(operation.initiator() instanceof ProductionOperation.SettlementInitiator owner) || operation.transformed()) return;

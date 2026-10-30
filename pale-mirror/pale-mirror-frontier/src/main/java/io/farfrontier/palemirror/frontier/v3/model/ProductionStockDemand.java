@@ -31,7 +31,7 @@ public final class ProductionStockDemand {
                 .filter(value -> value.itemKind().equals(itemKind)).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("production output has no declared stock target: " + itemKind));
         long incoming = 0, outgoing = 0;
-        for (var commitment : StockSupplyComposition.pending(state)) {
+        for (var commitment : StockSupplyComposition.pending(state, settlement, itemKind)) {
             if (!commitment.economicOwner().equals(settlement) || !commitment.itemKind().equals(itemKind)
                     || completingSubject.filter(commitment.subject()::equals).isPresent()) continue;
             incoming = Math.addExact(incoming, commitment.incoming());
@@ -66,7 +66,7 @@ public final class ProductionStockDemand {
     }
     public static long coverage(FrontierWorldState state, SubjectId owner, String item) {
         long incoming = 0, outgoing = 0;
-        for (var commitment : StockSupplyComposition.pending(state)) {
+        for (var commitment : StockSupplyComposition.pending(state, owner, item)) {
             if (!commitment.economicOwner().equals(owner) || !commitment.itemKind().equals(item)) continue;
             incoming = Math.addExact(incoming, commitment.incoming()); outgoing = Math.addExact(outgoing, commitment.outgoing());
         }

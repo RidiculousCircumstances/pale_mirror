@@ -5,6 +5,7 @@ import java.util.*;
 
 /** A farmer commits only its current bounded hand-sized part, not the whole renewable field. */
 final class HarvestStockSupply implements StockSupplyPort {
+    private static final ImmutableKeyOrderView<SubjectId> ORDER = new ImmutableKeyOrderView<>(ResourceSiteState.MAX_SITES);
     private static final ImmutableInputView<List<Commitment>> VIEW = new ImmutableInputView<>();
     private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId,
             ResourceFieldCycle> CYCLES = new ImmutableReferenceIndex.Source<>(state -> state.resourceSites().cycles());
@@ -24,8 +25,9 @@ final class HarvestStockSupply implements StockSupplyPort {
         // Preserve the producer's iteration order when flattening the read image.
         var sites = state.resourceSites().sites();
         var commitments = SITES.project(state.bootstrap(), sites, state);
-        return VIEW.get(List.of(sites, commitments, state.bootstrap()), () -> sites.values().stream()
-                .flatMap(site -> commitments.get(site.siteId()).stream()).toList());
+        var order = ORDER.get(sites);
+        return VIEW.getPublished(List.of(order, commitments), () -> order.stream()
+                .flatMap(id -> commitments.get(id).stream()).toList());
     }
     private static List<Commitment> readSite(FrontierWorldState state, ResourceSiteLifecycle site) {
         if (site.harvestJobs().isEmpty()) return List.of();

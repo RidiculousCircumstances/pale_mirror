@@ -1227,3 +1227,29 @@ read is introduced.
 An overlap audit of1466captured advice tasks found only7same-subject running
 pairs. It does not justify making all same-owner advice exclusive; no coherence
 lock or new scheduler policy was added on that hypothesis.
+
+
+### Ninth comparison and producer-owned supply facts
+
+Frozen e65e8840e ordinary458118→459233/61.4546s:18.1435ticks/s,debt629→743;
+ready30.8433s,ordinary1.8486s,canonical validation5.8673s.98.7364m search work,
+7803completions,329advice rejects. Navigation progresses;20/s remains open.
+
+JFR also identifies ProductionStockDemand reading global promises repeatedly.
+Source inspection finds StockSupplyComposition's manually maintained root tuple
+omits forest entirely. Forestry admission changes forest/execution state while
+all listed roots can remain unchanged, leaving cached future wood supply stale.
+Composition now reads complete immutable promises from the six existing owners,
+which retain their own complete dependency tuples; unrelated stock/account/need
+changes cannot reconstruct every producer. Current promises are grouped by
+actual economic owner/item for production demand, preserving quantities, source
+order and completing-subject exclusions. No second stock ledger or business
+policy is introduced. Legacy policy-only export intentions retain their existing
+path, outside the current economics-enabled obligation projection.
+
+Focused production/harvest/extraction/automatic station/supply-window checks PASS;
+initial new forestry fixture incorrectly requested an r28 undeclared oak_log
+production target. Corrected test reads the same public stock-promise composition,
+warms it before real forestry admission, verifies the new incoming logs without
+inventory/population writes, then verifies its unchanged predecessor. Forestry
+lifecycle checks+guardrails PASS49s(producer-supply-forest-checks-fixed.log).

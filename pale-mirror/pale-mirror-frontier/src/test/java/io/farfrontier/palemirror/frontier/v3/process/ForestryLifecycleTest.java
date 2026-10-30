@@ -46,6 +46,18 @@ class ForestryLifecycleTest {
     private static FrontierWorldState arrived(FrontierWorldState state, ForestryWork job) {
         return state.withActorBody(job.execution().actorId(), job.movementOrder().legalStations().getFirst().standingBody());
     }
+    @Test void startingForestryInvalidatesWarmedProductionSupplyWithoutUnrelatedWorldWrites() {
+        var fixture = fixture(); var work = fixture.start().work();
+        java.util.function.ToLongFunction<FrontierWorldState> incoming = state -> StockSupplyComposition.pending(
+                state, work.home(), work.outputKind()).stream().mapToLong(StockSupplyPort.Commitment::incoming).sum();
+        long before = incoming.applyAsLong(fixture.state());
+        var started = ForestryWorkAdmission.start(fixture.state(), fixture.start(), fixture.tick());
+        assertSame(fixture.state().inventory(), started.inventory());
+        assertSame(fixture.state().humanPopulation(), started.humanPopulation());
+        assertEquals(before + work.target().orElseThrow().expectedLogs(),
+                incoming.applyAsLong(started));
+        assertEquals(before, incoming.applyAsLong(fixture.state()));
+    }
     @Test void wholeTreeAndCargoSurviveRecoveryAndSettleOnceWithoutAPlannerInReplay() throws Exception {
         var f = fixture(); var codec = new FrontierWorldStateCodec(); var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         var start = (ForestryWorkStarted)codecs.decode(f.start().type(), codecs.encode(f.start()));

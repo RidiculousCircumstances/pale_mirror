@@ -24,13 +24,30 @@ public final class StockSupplyComposition {
         if (result.size() != StockSupplyPort.Key.values().length) throw new IllegalArgumentException("missing stock supply owner");
         return Map.copyOf(result);
     }
-    static List<StockSupplyPort.Commitment> pending(FrontierWorldState state) {
-        return VIEW.get(List.of(state.productionJobs(), state.productionStations(), state.resourceSites(), state.extractionSites(),
-                state.inventory(), state.companies().goodsTrade().contracts(), state.companies().goodsTrade().participants(),
-                state.humanPopulation(), LivingResidentStockView.counts(state), state.shipments(), state.bootstrap()), () -> {
-            var result = new ArrayList<StockSupplyPort.Commitment>();
-            for (var key : StockSupplyPort.Key.values()) result.addAll(PORTS.get(key).pending(state));
-            return List.copyOf(result);
+    private record StockKey(io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String item) { }
+    private static final ImmutableInputView<Map<StockKey, List<StockSupplyPort.Commitment>>> BY_STOCK = new ImmutableInputView<>();
+    /** Addressed read of the same promises; exclusions remain with the consumer. */
+    public static List<StockSupplyPort.Commitment> pending(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String item) {
+        var all = pending(state);
+        var groups = BY_STOCK.get(List.of(all), () -> {
+            var result = new HashMap<StockKey, List<StockSupplyPort.Commitment>>();
+            for (var promise : all) result.computeIfAbsent(new StockKey(promise.economicOwner(), promise.itemKind()),
+                    ignored -> new ArrayList<>()).add(promise);
+            result.replaceAll((key, rows) -> List.copyOf(rows));
+            return ImmutableLookupMap.copyOf(result);
         });
+        return groups.getOrDefault(new StockKey(Objects.requireNonNull(owner), Objects.requireNonNull(item)), List.of());
+    }
+    static List<StockSupplyPort.Commitment> pending(FrontierWorldState state) {
+        var rows = new ArrayList<List<StockSupplyPort.Commitment>>();
+        var inputs = new ArrayList<Object>();
+        for (var key : StockSupplyPort.Key.values()) {
+            var current = PORTS.get(key).pending(state); rows.add(current); inputs.add(current);
+        }
+        // Each producer supplies its complete current facts. An unrelated world
+        // root cannot invalidate them, and a newly added owner cannot be omitted
+        // from a manually maintained aggregate dependency tuple (as forestry was).
+        return VIEW.get(inputs, () -> rows.stream().flatMap(List::stream).toList());
     }
 }

@@ -4,6 +4,7 @@ import java.util.*;
 
 /** Recipe owner alone translates its retained batch into future supply and consumption. */
 final class StationWorkStockSupply implements StockSupplyPort {
+    private static final ImmutableInputView<List<Commitment>> VIEW = new ImmutableInputView<>();
     @Override public Key key() { return Key.STATION_WORK; }
     @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind, long atTick) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
@@ -17,6 +18,9 @@ final class StationWorkStockSupply implements StockSupplyPort {
                         recipe.product().quantity()), recipe.singleIngredient().quantity()) : 0;
     }
     @Override public List<Commitment> pending(FrontierWorldState state) {
+        return VIEW.getPublished(List.of(state.productionJobs(), state.inventory().items(), state.inventory().fungibleResources().lots()), () -> read(state));
+    }
+    private static List<Commitment> read(FrontierWorldState state) {
         var result = new ArrayList<Commitment>();
         var ledger = state.inventory().fungibleResources();
         for (var job : state.productionJobs().values()) {
