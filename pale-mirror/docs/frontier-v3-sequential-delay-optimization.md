@@ -490,3 +490,43 @@ observer remains active after the checks. Implementation and pack are checked
 separately; no tracked pack changes were needed, and unrelated `.f0v-baseline/`
 was preserved. The remaining goal is sustained scale20ticks/s/no debt growth,
 with cache reuse/working-set policy and connected preparation cost still open.
+
+
+## Reusing live regional graphs after eviction (October30)
+
+The measured repeated builds have a concrete source-level duplicate-work path:
+HierarchicalPedestrianSearch, CorridorJoin and MacroSearch retain completed
+immutable graphs, while the shared bounded cache can evict the same version.
+Another request then builds another copy although an admitted reader still owns
+that graph. Strong-cache eviction need not mean the completed object is gone.
+
+The existing bounded512-key eviction directory now holds weak completed-graph
+references instead of only Boolean history. An exact key hit returns the existing
+graph in one work unit before surveying; it creates no builder, does not reinsert
+or pin the graph in the strong cache and adds no strong graph retention. Collected
+or absent weak references follow ordinary construction. Retirement/clear severs
+all old sharing. Geometry scope/profile, local version and hard bounds remain in
+the original key; changing the world or a local collision halo cannot borrow the
+old graph. No navigation detail, path checks, worker count, strong cache capacity,
+ruleset or persistence contract changes. New weakGraphHits counter distinguishes
+these actual avoided builds from ordinary strong-cache hits and remaining recent
+rebuilds. Ordinary eviction and GC can still require later recomputation.
+
+The existing pressure test now holds an evicted graph as an active reader would,
+then proves identical-object reuse with a one-unit allowance and unchanged build
+count. It also checks changed local geometry cannot reuse it, and cache clear
+severs sharing even if that old object remains alive. Existing profile, scope,
+non-flat, unknown, blocked route and worker checks remain selected.
+Receipts: build/simulation-throughput/shared-region-reuse/.
+
+
+49 initial selected navigation/architecture checks passed; guardrails and JAR
+packaging passed32s. Updated pressure/changed-version/clear checks passed in the
+final focused run. The additional adapter selection had3 passes and1 failure:
+FrontierV3PedestrianPlanningTest.restartRebindsLostCalculationAndActualServerCompletionWakesWaitingGroup.
+The unchanged clean d8d93de1d baseline reproduces the same failure at simulation
+6005 with group READY, worker pool/search work/region lookups all0. It is therefore
+not attributable to this graph-reuse change; its cause remains OPEN. The test
+has not been weakened, removed or reported green. Current changed calculation
+checks and source-key/retirement invariants are verified, not complete adapter
+or product acceptance. Existing unaffected native economic evidence is retained.

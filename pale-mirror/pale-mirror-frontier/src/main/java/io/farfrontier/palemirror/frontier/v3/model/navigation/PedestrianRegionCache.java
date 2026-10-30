@@ -1,17 +1,20 @@
 package io.farfrontier.palemirror.frontier.v3.model.navigation;
 
 import java.util.*;
+import java.lang.ref.WeakReference;
 
 /** Bounded reusable layered regions, including cooperative construction; no world/task authority. */
 final class PedestrianRegionCache {
     private static final int MAX_REGIONS = 2_048, MAX_SURFACES = MAX_REGIONS * PedestrianRegion.CELLS;
     private static final int MAX_BUILDERS = 64;
     private long lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs;
-    private long completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds;
+    private long completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds, weakGraphHits;
     private static final int MAX_RECENT_EVICTIONS = 512;
     private record Evicted(Object bucket, Object key) { }
-    // Diagnostic history only: never consulted for retention, traversal or admission.
-    private final Map<Evicted, Boolean> recentEvictions = new LinkedHashMap<>();
+    // Share completed graphs still held by admitted searches after strong-cache
+    // eviction. Weak references add no strong graph retention; exact keys and the
+    // bounded directory keep the ordinary version/retirement boundary intact.
+    private final Map<Evicted, WeakReference<PedestrianRegion>> recentEvictions = new LinkedHashMap<>();
     private final Map<PedestrianRouteGeometry, Bucket<PedestrianRegion.Tile>> views = new WeakHashMap<>();
     private record RegionalKey(PedestrianRegion.Tile tile, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) { }
     // Reconstructible terrain/profile value keys must not disappear while an equal
@@ -108,6 +111,14 @@ final class PedestrianRegionCache {
         synchronized (this) {
             lookups++; entry = bucket.entries.get(key);
             if (entry != null) { if (entry.region != null) completedHits++; touch(entry); }
+            else {
+                var retained = recentEvictions.get(new Evicted(bucket, key));
+                var shared = retained == null ? null : retained.get();
+                if (shared != null) {
+                    completedHits++; weakGraphHits++;
+                    return new Lookup(shared, 1, false);
+                }
+            }
         }
         if (entry == null) {
             var plane = PedestrianRegionBuild.uniformSupport(geometry, tile);
@@ -170,7 +181,7 @@ final class PedestrianRegionCache {
         var history = new Evicted(entry.bucket, entry.key);
         if (!recentEvictions.containsKey(history) && recentEvictions.size() >= MAX_RECENT_EVICTIONS)
             recentEvictions.remove(recentEvictions.keySet().iterator().next());
-        recentEvictions.put(history, Boolean.TRUE);
+        recentEvictions.put(history, new WeakReference<>(entry.region));
         entry.bucket.remove(entry); slots -= entry.accountedSize;
         probation.remove(entry); building.remove(entry);
         if (reused.remove(entry)) reusedSlots -= entry.accountedSize;
@@ -200,7 +211,7 @@ final class PedestrianRegionCache {
         }
         return new PedestrianRegionCacheDiagnostic(lookups, buildsStarted, evictions, certifiedPlanes, layeredGraphs,
                 scoped.size() + views.size(), entries, distinct, builders,
-                completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds);
+                completedHits, layeredCacheMisses, newVersionMisses, recentEvictedRebuilds, weakGraphHits);
     }
     /** Bounded scope counters; neither ordinary diagnostics nor inspection scan regional graphs. */
     synchronized Map<String, Long> retentionDiagnostic() {
@@ -208,13 +219,14 @@ final class PedestrianRegionCache {
         for (var bucket : scoped.values()) reserved += bucket.slots;
         for (var bucket : views.values()) reserved += bucket.slots;
         return Map.of("scopes", counts.retainedScopes(), "entries", counts.retainedEntries(),
-                "distinctScopedTiles", counts.distinctScopedTiles(), "reservedSurfaceSlots", reserved, "builders", counts.retainedBuilders());
+                "distinctScopedTiles", counts.distinctScopedTiles(), "reservedSurfaceSlots", reserved, "builders", counts.retainedBuilders(),
+                "weakEntries", (long) recentEvictions.size());
     }
     synchronized void clear() {
         for (var bucket : scoped.values()) forget(bucket);
         for (var bucket : unversionedBuckets) forget(bucket);
         views.clear(); unversionedBuckets.clear(); scoped.clear(); probation.clear(); reused.clear(); building.clear(); slots = reusedSlots = 0;
         lookups = buildsStarted = evictions = certifiedPlanes = layeredGraphs = 0;
-        completedHits = layeredCacheMisses = newVersionMisses = recentEvictedRebuilds = 0; recentEvictions.clear();
+        completedHits = layeredCacheMisses = newVersionMisses = recentEvictedRebuilds = weakGraphHits = 0; recentEvictions.clear();
     }
 }

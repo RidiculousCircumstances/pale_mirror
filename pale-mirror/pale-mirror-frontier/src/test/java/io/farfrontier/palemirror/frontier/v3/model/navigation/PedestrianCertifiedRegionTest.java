@@ -50,12 +50,19 @@ class PedestrianCertifiedRegionTest {
         };
         var cache = new PedestrianRegionCache(); var first = new PedestrianRegion.Tile(0, 0);
         assertNull(cache.region(geometry, first, 1).region());
-        for (int x = 1; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 100_000).region());
+        var heldBySearch = cache.region(geometry, new PedestrianRegion.Tile(1, 0), 100_000).region();
+        assertNotNull(heldBySearch);
+        for (int x = 2; x <= 2200; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 100_000).region());
         assertTrue(cache.diagnostic().evictions() > 0, "real layered graphs still obey the unchanged retention bound");
         assertNotNull(cache.region(geometry, first, 100_000).region());
         assertEquals(0, cache.diagnostic().recentEvictedRebuilds(), "one-use geography is not a repeated-key rebuild");
-        assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(1, 0), 100_000).region());
-        assertEquals(1, cache.diagnostic().recentEvictedRebuilds(), "exact evicted version is distinguished from new geography");
+        long builds = cache.diagnostic().buildsStarted();
+        assertSame(heldBySearch, cache.region(geometry, new PedestrianRegion.Tile(1, 0), 1).region(),
+                "another search must share an existing immutable graph after strong-cache eviction");
+        assertEquals(builds, cache.diagnostic().buildsStarted(), "sharing cannot resurvey the still-live graph");
+        assertEquals(0, cache.diagnostic().recentEvictedRebuilds());
+        assertEquals(1, cache.diagnostic().weakGraphHits());
+        assertTrue(cache.retentionDiagnostic().get("weakEntries") <= 512);
         long hits = cache.diagnostic().completedHits();
         assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(1, 0), 1).region());
         assertEquals(hits + 1, cache.diagnostic().completedHits());
@@ -63,6 +70,22 @@ class PedestrianCertifiedRegionTest {
         for (int x = 2201; x <= 4400; x++) assertNotNull(cache.region(geometry, new PedestrianRegion.Tile(x, 0), 1).region());
         assertEquals(evictions, cache.diagnostic().evictions(), "plane certificates cannot evict a graph even when the cache is full");
         assertEquals(1, firstColumn.get(), "completed graph pressure cannot erase unfinished work");
+        var changedRevision = revision.changed(Set.of(new PedestrianGeometryRevision.Region(1, 0)));
+        PedestrianRouteGeometry changed = new PedestrianRouteGeometry() {
+            public Object version() { return changedRevision; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(changedRevision); }
+            public WorldBounds bounds() { return geometry.bounds(); }
+            public SurfaceAnchor supportAt(int x, int z) { return geometry.supportAt(x, z); }
+            public boolean blocked(SurfaceAnchor surface) { return true; }
+        };
+        var blocked = cache.region(changed, new PedestrianRegion.Tile(1, 0), 100_000).region();
+        assertNotNull(blocked); assertEquals(0, blocked.size(), "a changed local revision cannot borrow the old weak graph");
+        assertSame(heldBySearch, cache.region(geometry, new PedestrianRegion.Tile(1, 0), 1).region());
+        cache.clear();
+        assertEquals(0, cache.retentionDiagnostic().get("weakEntries"));
+        assertNull(cache.region(geometry, new PedestrianRegion.Tile(1, 0), 1).region(),
+                "clearing the cache must sever reuse even when a search still holds the old graph");
+        java.lang.ref.Reference.reachabilityFence(heldBySearch);
     }
     @Test void reusedLayeredGraphSurvivesAOneUseSurveyWithoutPinningEveryNewGraph() {
         var revision = PedestrianGeometryRevision.initial();
