@@ -84,6 +84,35 @@ class StationWorkMovementTest {
         assertFalse(state.actorMovements().containsKey(actor));
         assertEquals(StationWorkGoal.current(state, job).station(), state.actorLocations().get(actor).supportingSurface());
     }
+    @Test void stationBecomingUnavailableRetainsItsExactApproachAsAWaitWithoutAnEntryGrant() {
+        var fixture = started(); var job = fixture.job();
+        var state = BakeryTestClock.arrive(fixture.state(), job, 300L);
+        var pickup = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 10_000L)).stream()
+                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+        state = ProductionProcess.reduceBakeryColdStep(state, job.settlementId(), pickup);
+        job = state.productionJobs().get(job.id());
+        var start = order(new Fixture(state, job));
+        state = ActorMovementProcess.reduceStarted(state, job.workerId(), start);
+        var point = ProductionServiceAccess.point(state, job);
+        var blocked = state.withInventory(state.inventory().withSurfaceStatus(point, ContainerSurfaceStatus.CONFLICT));
+        var provider = ActorMovementProviders.require(start.movement());
+        provider.validate(blocked, start.movement());
+        var identity = provider.serviceApproach(blocked, start.movement()).orElseThrow();
+        ServiceAccessCoordinator.requireDeclared(blocked, identity);
+        assertFalse(ServiceAccessCoordinator.available(blocked, identity));
+        var demand = new ProductionServiceAccess().demands(blocked, point).stream()
+                .filter(value -> value.identity().equals(identity)).findFirst().orElseThrow();
+        assertFalse(demand.readyToEnter());
+        assertTrue(ServiceAccessCoordinator.mayAdvance(blocked, identity, state.actorLocations().get(job.workerId()).supportingSurface()));
+        assertFalse(ServiceAccessCoordinator.mayAdvance(blocked, identity, StationWorkGoal.current(blocked, job).station()));
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(blocked));
+        ServiceAccessCoordinator.requireDeclared(recovered, identity);
+        assertFalse(ServiceAccessCoordinator.available(recovered, identity));
+        assertEquals(state.productionJobs(), blocked.productionJobs());
+        ServiceAccessCoordinator.requireDeclared(state, identity);
+        assertTrue(new ProductionServiceAccess().demands(state, point).stream().filter(value -> value.identity().equals(identity))
+                .findFirst().orElseThrow().readyToEnter(), "restored readiness belongs to the same retained approach");
+    }
     private static boolean sourceOccupied(FrontierWorldState state, SubjectId source, SubjectId actor) {
         return new ProductionServiceAccess().demands(state, source).stream()
                 .anyMatch(demand -> demand.identity().actorId().equals(actor) && demand.presence() == ServiceAccessDemand.Presence.OCCUPIED);

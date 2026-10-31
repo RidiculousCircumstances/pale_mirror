@@ -7,7 +7,7 @@ final class GuardServiceAccess implements ServiceAccessCapability {
     public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.GUARD_EQUIPMENT; }
     public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId point) {
-        if (!ReferenceContainerCustody.isReferenceContainer(state, point) || ReferenceContainerCustody.blocksCanonicalUse(state, point)) return List.of();
+        if (!ReferenceContainerCustody.isReferenceContainer(state, point)) return List.of();
         var boundary = ServiceAccessCoordinator.boundary(state, point);
         return candidates.keys(state.bootstrap(), state.strategicPlans().guards(), duty -> Set.of(duty.source().containerId()), point).stream()
                 .map(state.strategicPlans().guards()::get).filter(duty -> duty.phase() != GuardDuty.Phase.ON_DUTY)
@@ -16,7 +16,8 @@ final class GuardServiceAccess implements ServiceAccessCapability {
                 .map(duty -> new ServiceAccessDemand(GuardAuthority.service(duty), priority(),
                         ServiceAccessCoordinator.occupies(state, boundary, duty.execution().actorId())
                             ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH,
-                        0, GuardAuthority.pending(state, duty))).toList();
+                        0, GuardAuthority.pending(state, duty),
+                        !ReferenceContainerCustody.blocksCanonicalUse(state, point) && GuardAuthority.goalAvailable(state, duty))).toList();
     }
     public Set<SubjectId> wakePoints(FrontierWorldState before, FrontierWorldState after) {
         return ServiceAccessWakeDependencies.changed(before.strategicPlans().guards(), after.strategicPlans().guards(),

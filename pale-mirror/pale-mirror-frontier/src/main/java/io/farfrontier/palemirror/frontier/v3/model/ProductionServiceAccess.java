@@ -98,13 +98,13 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
                         && !(state.actorMovements().get(job.workerId()).context()
-                            instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.StationWorkLeg)
-                    || !operationEligible(state, job)) continue;
+                            instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.StationWorkLeg)) continue;
             var phase = job.stationWork().orElseThrow().phase();
             boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, job.workerId());
             if (phase != StationWorkState.Phase.DELIVERED && point(state, job).equals(pointId) || occupied)
                 result.add(new ServiceAccessDemand(identity(job, pointId), priority(), occupied
-                        ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0L, false));
+                        ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0L, false,
+                        operationEligible(state, job)));
         }
         return List.copyOf(result);
     }

@@ -160,8 +160,13 @@ class GuardDutyTest {
         var damaged = state.recordPhysicalDelta(new PhysicalDelta(block.offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
                 Optional.empty(), Optional.empty(), "test:guard-blocked-departure"));
         assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> provider.requireRoute(damaged, movement, route));
+        var blockedSource = state.withInventory(state.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.CONFLICT));
+        ServiceAccessCoordinator.requireDeclared(blockedSource, GuardAuthority.service(duty));
+        assertFalse(ServiceAccessCoordinator.available(blockedSource, GuardAuthority.service(duty)));
         var stored = state.inventory().items().get(sword.id()); var player = new InventoryCustody.Player(new UUID(3, 4));
         state = state.withInventory(state.inventory().moveObservedItem(stored.id(), stored.custody(), player));
+        ServiceAccessCoordinator.requireDeclared(state, GuardAuthority.service(duty));
+        assertFalse(ServiceAccessCoordinator.available(state, GuardAuthority.service(duty)), "a lost source is a retained wait until its owner withdraws the order");
         state = apply(state, GuardWorkProcess.progress(state, GuardContinuation.progress(duty.id(), 6001), 6001), 6001);
         assertFalse(state.actorMovements().containsKey(actor)); assertEquals(duty, state.strategicPlans().guards().get(duty.id()));
         assertEquals(player, state.inventory().items().get(sword.id()).custody()); assertFalse(GuardEquipment.held(state, duty));

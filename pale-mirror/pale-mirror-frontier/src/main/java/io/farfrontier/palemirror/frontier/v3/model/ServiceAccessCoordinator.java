@@ -95,7 +95,11 @@ public final class ServiceAccessCoordinator {
                         && (!requestingSelfCare || !movement.order().actorId().equals(requested.actorId())));
         // Priority selects the next visitor; it cannot revoke an incumbent's
         // atomic service/clearance turn while another visitor approaches.
-        var incumbent = demands.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.OCCUPIED)
+        var incumbent = demands.stream()
+                // A retained resource wait declares its identity/footprint, not an exclusive turn.
+                // An already admitted physical effect still owns its atomic interaction.
+                .filter(demand -> demand.readyToEnter() || demand.physicallyAdmitted())
+                .filter(demand -> demand.presence() == ServiceAccessDemand.Presence.OCCUPIED)
                 .min(Comparator.comparing(ServiceAccessDemand::priority)
                         .thenComparing(demand -> !demand.physicallyAdmitted())
                         .thenComparingLong(ServiceAccessDemand::requestedAtTick)

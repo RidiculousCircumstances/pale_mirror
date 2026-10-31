@@ -342,8 +342,10 @@ class BakeryColdVerticalTest {
         assertFalse(full.inventory().canReceiveFungible(depot, "minecraft:bread", job.outputCount()));
         var atFullDepot = full.withActorBody(job.workerId(), StationWorkGoal.current(full,
                 full.productionJobs().get(job.id())).station().standingBody());
-        assertTrue(new ProductionServiceAccess().demands(atFullDepot, depot).isEmpty(),
-                "an impossible delivery cannot retain an incumbent service turn merely by standing there");
+        var waiting = new ProductionServiceAccess().demands(atFullDepot, depot);
+        assertEquals(1, waiting.size(), "a retained delivery still declares its exact service identity");
+        assertFalse(waiting.getFirst().readyToEnter(), "backpressure cannot retain an incumbent service turn");
+        ServiceAccessCoordinator.requireDeclared(atFullDepot, ProductionServiceAccess.identity(job, depot));
         assertFalse(ProductionServiceAccess.available(atFullDepot, atFullDepot.productionJobs().get(job.id())));
         var otherVisitor = atFullDepot.bootstrap().settlements().getFirst().residents().stream()
                 .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();

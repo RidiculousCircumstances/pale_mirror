@@ -100,3 +100,13 @@ Guard route tests use public catalog planning (including output validation), and
 the physical issue test validates its producer's declared outputs. Physical
 confirmation and population-owned resume/interruption already declare that output;
 no permissive fallback or bypass of the closed process contract was added.
+
+Native production also exposed a resource-readiness/identity mismatch: an existing
+station approach remained owned while its service producer dropped the declaration
+when inputs, custody or output capacity became unavailable. Production and guard
+equipment now retain the exact waiting declaration with `readyToEnter=false`.
+Shared arbitration excludes an unready claimant from exclusive entry/incumbency,
+while preserving any already admitted physical effect and actual occupancy evidence.
+This keeps backpressure from becoming a fatal missing-owner contract or blocking
+other food visitors; restored readiness reuses the same job and approach. Focused
+tests cover blocked station travel, recovery, lost guard stock and full output storage.
