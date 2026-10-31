@@ -15,7 +15,7 @@ import java.util.WeakHashMap;
 final class FrontierV3ActorMovementNavigation {
     private record Route(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
                          long leaseRevision, MovementOrder order, RouteTopology topology,
-                         Map<BlockPosition, PhysicalDelta> physicalDeltas, List<SurfaceAnchor> waypoints, long retryHintsAt) { }
+                         Map<BlockPosition, PhysicalDelta> physicalDeltas, List<SurfaceAnchor> waypoints, long retryHintsAt, boolean waitingForService) { }
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private record Wait(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution,
                         MovementOrder order, String reason) { }
@@ -49,7 +49,7 @@ final class FrontierV3ActorMovementNavigation {
         }
         boolean waitingForService = service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow());
         if (waitingForService) {
-            ROUTES.remove(body); // Grant resumes from the actual waiting pocket, not an old ingress hint.
+            // The hint cache keys service admission; a grant replans from the actual waiting pocket.
             var identity = service.orElseThrow();
             var point = ServiceBoundaryComposition.declaration(state, identity.pointId());
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, body, state,
@@ -74,21 +74,7 @@ final class FrontierV3ActorMovementNavigation {
             FrontierV3GoalNavigation.stop(body, actuation);
             return;
         }
-        // An asynchronous PLANNING hint is not a permanent empty route. Once native
-        // steering blocks, reread it at the shared retry cadence without cancelling
-        // a progressing path or forcing a synchronous world search.
-        Route route = ROUTES.get(body);
-        if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
-                || !route.order().equals(movement.order())
-                || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()
-                || route.waypoints().isEmpty() && BLOCKED.containsKey(body) && level.getGameTime() >= route.retryHintsAt()) {
-            var basis = state;
-            route = new Route(actuation.id(), lease.revision(), movement.order(), state.routeTopology(), state.physicalDeltas(),
-                    FrontierV3NativeRouteHint.optional(() -> provider.route(basis, movement,
-                            FrontierV3SurfaceObservation.observedBody(body).supportingSurface())),
-                    level.getGameTime() + FrontierV3MinecraftGoalNavigation.retryIntervalTicks());
-            ROUTES.put(body, route);
-        }
+        var hint = routeHint(state, body, actuation);
         if (movement.order().legalStations().stream().anyMatch(station -> FrontierV3SemanticMovement.arrived(level, body, station))) {
             BLOCKED.remove(body);
             FrontierV3GoalNavigation.stop(body, actuation);
@@ -96,7 +82,7 @@ final class FrontierV3ActorMovementNavigation {
         }
         try {
             FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
-                    FrontierV3GoalNavigation.Goal.routed(movement.order(), route.waypoints(), state.bootstrap().bounds()), actuation, permission);
+                    FrontierV3GoalNavigation.Goal.routed(movement.order(), hint, state.bootstrap().bounds()), actuation, permission);
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 blocked(body, movement, "minecraft_path:" + result.reason());
             else BLOCKED.remove(body);
@@ -107,6 +93,36 @@ final class FrontierV3ActorMovementNavigation {
                     + " owner=" + movement.order().ownerId().value() + " goal=" + movement.order().goalRevision()
                     + " execution=" + movement.executionId(), invalidContract);
         }
+    }
+
+    /** The same retained owner route also guides a temporary service-buffer approach. */
+    static List<SurfaceAnchor> routeHint(FrontierWorldState state, Mob body, FrontierV3ActorActuation actuation) {
+        if (!actuation.current(body)) throw new IllegalArgumentException("route hint requires current actor authority");
+        var movement = state.actorMovements().get(actuation.id().execution().actorId());
+        if (movement == null) return List.of();
+        if (!movement.executionId().equals(actuation.id().execution()))
+            throw new IllegalArgumentException("route hint cannot borrow a competing execution");
+        var provider = ActorMovementProviders.require(movement); provider.validate(state, movement);
+        var lease = state.ambientLeases().get(movement.order().actorId());
+        long leaseRevision = lease == null ? 0 : lease.revision();
+        var service = provider.serviceApproach(state, movement);
+        boolean waiting = service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow());
+        // An asynchronous PLANNING hint is not a permanent empty route. Once native
+        // steering blocks, reread it at the shared retry cadence without cancelling
+        // a progressing path or forcing a synchronous world search.
+        Route route = ROUTES.get(body);
+        if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != leaseRevision
+                || !route.order().equals(movement.order()) || route.waitingForService() != waiting
+                || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()
+                || route.waypoints().isEmpty() && BLOCKED.containsKey(body) && body.level().getGameTime() >= route.retryHintsAt()) {
+            var basis = state;
+            route = new Route(actuation.id(), leaseRevision, movement.order(), state.routeTopology(), state.physicalDeltas(),
+                    FrontierV3NativeRouteHint.optional(() -> provider.route(basis, movement,
+                            FrontierV3SurfaceObservation.observedBody(body).supportingSurface())),
+                    body.level().getGameTime() + FrontierV3MinecraftGoalNavigation.retryIntervalTicks(), waiting);
+            ROUTES.put(body, route);
+        }
+        return route.waypoints();
     }
 
     private static void blocked(Mob body, ActorMovement movement, String reason) {

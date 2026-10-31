@@ -76,3 +76,15 @@ stall and was an invalid bound for this populated fixture, not an accepted resul
 No performance improvement or stable80ms maximum is claimed by these feature checks.
 MAIN stays stopped; deployment uses a separate fresh-schema private world, retains
 previous benchmark worlds and does not publish a new client pack or push Git refs.
+
+A later HOT delivery observation identified an additional connected navigation gap:
+service waiting discarded the retained journey and attempted a distant native-only
+buffer goal. The same shared, authority-checked actor route cache now supplies the
+advisory approach for any service visitor with an owned movement. The buffer route
+branches toward that visitor's selected pocket before the common throat, ends at its
+own temporary target and never permits the occupied service zone. Grant changes
+invalidate the cache so actual waiting position becomes the next route origin.
+No service admission, resource transfer or owner goal is awarded by a staging leg.
+Focused navigation checks and45 native local-navigation checks passed; the new
+far-buffer test proves retained route/order, separate visitor destination and hard
+service exclusion. This correction is generic, not a forge/depot/guard route.

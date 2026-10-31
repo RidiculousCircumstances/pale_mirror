@@ -71,7 +71,8 @@ final class FrontierV3ServiceApproachNavigation {
                     new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
                         actuation.id().execution().activityOwnerId(), actorId, ordinal, generation, List.of(prior.target()),
                         TraversalCapability.PEDESTRIAN,
-                        io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION)), actuation);
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION),
+                    FrontierV3ActorMovementNavigation.routeHint(state, body, actuation)), actuation);
         // Do not preflight with canReach: a pedestrian obstruction must reach the
         // navigator's courtesy protocol, not become a permanent no-path decision.
         // A real geometry failure advances the bounded candidate search next turn.
@@ -96,13 +97,34 @@ final class FrontierV3ServiceApproachNavigation {
         ActorBodyAuthority.requireActuation(state, authority);
     }
 
+    private static List<SurfaceAnchor> waitingHint(ServiceAccessPoint point, SurfaceAnchor target, List<SurfaceAnchor> approach) {
+        if (approach.isEmpty()) return List.of();
+        var hint = new java.util.ArrayList<SurfaceAnchor>();
+        for (var surface : approach) {
+            if (!point.boundary().cleared(surface.standingBody())) break;
+            if (hint.size() >= io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MAX_ROUTE_SURFACES - 1) break;
+            hint.add(surface);
+            long distance = Math.abs((long) surface.x() - target.x()) + Math.abs((long) surface.y() - target.y())
+                    + Math.abs((long) surface.z() - target.z());
+            // Branch towards this visitor's buffer before reaching the common throat.
+            if (distance <= FrontierV3RouteNavigation.MAX_LEG_SUPPORTS) break;
+        }
+        if (hint.isEmpty()) return List.of();
+        if (!hint.getLast().equals(target)) hint.add(target);
+        return List.copyOf(hint);
+    }
+
     static FrontierV3GoalNavigation.Goal waitingGoal(ServiceAccessPoint point, SurfaceAnchor target, WorldBounds bounds,
             io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        return waitingGoal(point, target, bounds, order, List.of());
+    }
+    static FrontierV3GoalNavigation.Goal waitingGoal(ServiceAccessPoint point, SurfaceAnchor target, WorldBounds bounds,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order, List<SurfaceAnchor> approach) {
         if (!point.waitingSurfaces().contains(target) || point.egressSurfaces().contains(target)
                 || !point.boundary().cleared(target.standingBody()))
             throw new IllegalArgumentException("waiting target must belong to the declared non-egress buffer");
         return new FrontierV3GoalNavigation.Goal(List.of(target), TraversalCapability.PEDESTRIAN,
                 new FrontierV3NavigationScope.OutsideService(new FrontierV3NavigationScope.ObservedWorld(bounds), point.boundary()),
-                Optional.of(order), List.of());
+                Optional.of(order), waitingHint(point, target, approach));
     }
 }

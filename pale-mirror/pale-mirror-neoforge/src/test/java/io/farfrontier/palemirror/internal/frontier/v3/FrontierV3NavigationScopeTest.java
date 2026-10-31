@@ -98,6 +98,26 @@ class FrontierV3NavigationScopeTest {
         assertThrows(IllegalArgumentException.class,
                 () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, start, bounds, order), "undeclared positions cannot become waiting targets");
     }
+    @Test void aFarVisitorKeepsItsOwnRouteButBranchesToItsBufferBeforeTheServiceThroat() {
+        var station = SurfaceAnchor.at(90, 63, 1);
+        var waiting = SurfaceAnchor.at(87, 63, 5);
+        var boundary = new ServiceAccessBoundary(java.util.Set.of(station));
+        var point = new ServiceAccessPoint(new SubjectId("test:remote-facility"), new SubjectId("test:remote-home"),
+                station, boundary, List.of(waiting), java.util.Set.of(SurfaceAnchor.at(89, 63, 1)));
+        var order = new MovementOrder(new SubjectId("test:waiting-owner"), new SubjectId("test:far-visitor"), 1, 7,
+                List.of(waiting), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var approach = java.util.stream.IntStream.rangeClosed(1, 90).mapToObj(x -> SurfaceAnchor.at(x, 63, 1)).toList();
+        var goal = FrontierV3ServiceApproachNavigation.waitingGoal(point, waiting, new WorldBounds(0, 0, 100, 100), order, approach);
+        assertEquals(approach.getFirst(), goal.routeHint().getFirst());
+        assertEquals(waiting, goal.routeHint().getLast());
+        assertEquals(List.of(waiting), goal.legalStations(), "temporary staging never becomes service admission");
+        assertEquals(order, goal.order().orElseThrow());
+        assertTrue(goal.routeHint().stream().allMatch(surface -> goal.scope().permits(surface.support())));
+        assertFalse(goal.routeHint().contains(station));
+        assertTrue(goal.routeHint().get(goal.routeHint().size() - 2).x() < 89,
+                "each visitor branches to its own pocket before the common entry/egress");
+    }
+
     @Test void progressAlongADetourCanIncreaseStraightLineDistanceToTheGoal() {
         var nodes = List.of(new net.minecraft.world.level.pathfinder.Node(2, 64, 4),
                 new net.minecraft.world.level.pathfinder.Node(6, 64, 4),

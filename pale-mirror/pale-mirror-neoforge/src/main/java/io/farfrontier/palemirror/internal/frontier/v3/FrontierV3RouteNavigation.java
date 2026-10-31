@@ -12,7 +12,7 @@ import java.util.WeakHashMap;
 /** Shared ephemeral route following. Only the retained final goal can report semantic arrival. */
 final class FrontierV3RouteNavigation {
     // Safety bound on local hints, not a task-specific detour radius or durable cursor.
-    private static final int MAX_LEG_SUPPORTS = 12;
+    static final int MAX_LEG_SUPPORTS = 12;
     private static final Map<Mob, Leg> LEGS = new WeakHashMap<>();
     record Leg(FrontierV3GoalNavigation.Goal goal, int startIndex, List<SurfaceAnchor> stations, long retryHintsAt) {
         boolean retryHints(long tick, FrontierV3MinecraftGoalNavigation.Status status) {
