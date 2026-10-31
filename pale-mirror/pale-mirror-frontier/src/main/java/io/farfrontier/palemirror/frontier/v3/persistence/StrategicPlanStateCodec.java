@@ -102,6 +102,7 @@ public final class StrategicPlanStateCodec {
         }
         output.writeByte(plans.hiveDoctrine().doctrine().wireTag()); output.writeLong(plans.hiveDoctrine().selectedAt());
         ScoutPatrolCodec.write(output, plans);
+        GuardDutyCodec.writeAll(output, plans.guards());
     }
 
     public static StrategicPlanState read(DataInputStream input) throws IOException {
@@ -226,7 +227,7 @@ public final class StrategicPlanStateCodec {
         return new StrategicPlanState(objectives, tasks, patrols, new SettlementInfectionKnowledge(knowledge),
                 new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine,
                 assaults, new DecisionAuthorityState(authorities), new OperationFrontEffectCoordinator(frontEffects),
-                ScoutPatrolCodec.read(input));
+                ScoutPatrolCodec.read(input), GuardDutyCodec.readAll(input));
     }
 
 

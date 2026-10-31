@@ -8,12 +8,12 @@ import java.util.*;
 /** Known deposit access requires ready equipment; active products forecast renewal over the shared horizon. */
 final class ExtractionEquipmentDemand implements EquipmentDemandPort {
     @Override public Key key() { return Key.EXTRACTION; }
-    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
-    @Override public List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
+    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
+    @Override public List<EquipmentDemand> read(FrontierWorldState state, SubjectId home) {
         return VIEWS.get(state.bootstrap(), home, List.of(state.extractionSites().deposits(), state.extractionSites().work(),
                 state.humanPopulation().schedule(home)), () -> project(state, home));
     }
-    private static List<EquipmentWorkDemand> project(FrontierWorldState state, SubjectId home) {
+    private static List<EquipmentDemand> project(FrontierWorldState state, SubjectId home) {
         var staffing = state.bootstrap().ruleset().labour().entries().get(ResidentWorkKind.EXTRACTION);
         if (staffing == null || staffing.targetWorkers() == 0) return List.of();
         var labour = new HashMap<ToolRequirement, Long>();
@@ -54,7 +54,7 @@ final class ExtractionEquipmentDemand implements EquipmentDemandPort {
             long plannedWear = availableWear == 0 ? 0 : Math.min(availableWear,
                     java.math.BigInteger.valueOf(horizonWork).multiply(java.math.BigInteger.valueOf(availableWear))
                             .divide(java.math.BigInteger.valueOf(work)).longValueExact());
-            return new EquipmentWorkDemand("extraction/" + entry.getKey(), List.of(required), count,
+            return new EquipmentDemand("extraction/" + entry.getKey(), List.of(required), count,
                     Math.max(count, plannedWear),
                     Math.max(1, Math.ceilDiv(variants.stream().mapToLong(labour::get).sum(),
                             variants.stream().mapToLong(r -> Math.multiplyExact(cells.get(r), r.wear())).sum())));

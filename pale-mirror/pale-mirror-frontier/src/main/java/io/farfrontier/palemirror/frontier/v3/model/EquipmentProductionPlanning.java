@@ -129,6 +129,7 @@ public final class EquipmentProductionPlanning {
                 io.farfrontier.palemirror.frontier.v3.model.supply.SourcingMarket.Offer chosen = null;
                 long chosenWear = 0; long chosenValue = Long.MAX_VALUE;
                 for (var offer : market.offers()) {
+                    if (deficit.demand().acquisition() == io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentDemand.Acquisition.PRODUCE_LOCAL) continue;
                     var definition = tools.find(offer.item());
                     if (definition.isEmpty() || !deficit.demand().supports(definition.orElseThrow())
                             || offerUsed.getOrDefault(offer.id(), 0) >= offer.quantity()

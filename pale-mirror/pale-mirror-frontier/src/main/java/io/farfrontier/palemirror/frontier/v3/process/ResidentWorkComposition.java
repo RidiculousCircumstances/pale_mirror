@@ -7,6 +7,12 @@ import java.util.List;
 public final class ResidentWorkComposition {
     public static final ResidentWorkSelection SELECTION = create(List.of(
             new ResidentWorkAvailabilityPort() {
+                public ResidentWorkKind kind() { return ResidentWorkKind.GUARD; }
+                public HumanCapability capability() { return HumanCapability.SECURITY; }
+                public boolean available(FrontierWorldState state, ResidentProfile resident, long tick) {
+                    return GuardWorkProcess.availableWork(state, resident, tick);
+                }
+            }, new ResidentWorkAvailabilityPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.AGRICULTURE; }
                 public HumanCapability capability() { return HumanCapability.AGRICULTURE; }
                 public boolean available(FrontierWorldState state, ResidentProfile resident, long tick) {

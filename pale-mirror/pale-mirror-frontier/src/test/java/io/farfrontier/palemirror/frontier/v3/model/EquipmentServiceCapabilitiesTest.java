@@ -15,7 +15,9 @@ class EquipmentServiceCapabilitiesTest {
         for (var roles : List.of(PhysicalIntentRoleBinding.engineeringEquipmentIssue(PROJECT, ACTOR, ITEM, STORE),
                 PhysicalIntentRoleBinding.engineeringEquipmentReturn(PROJECT, ACTOR, ITEM, STORE),
                 PhysicalIntentRoleBinding.assaultEquipmentIssue(PROJECT, ACTOR, ITEM, STORE),
-                PhysicalIntentRoleBinding.assaultEquipmentReturn(PROJECT, ACTOR, ITEM, STORE))) {
+                PhysicalIntentRoleBinding.assaultEquipmentReturn(PROJECT, ACTOR, ITEM, STORE),
+                PhysicalIntentRoleBinding.guardEquipmentIssue(PROJECT, ACTOR, ITEM, STORE),
+                PhysicalIntentRoleBinding.guardEquipmentReturn(PROJECT, ACTOR, ITEM, STORE))) {
             var intent = intent(roles);
             var capability = EquipmentServiceBoundary.capability(intent);
             assertEquals(PROJECT, capability.ownerId(intent));
@@ -36,23 +38,27 @@ class EquipmentServiceCapabilitiesTest {
     }
 
     @Test void aMissingOrForgedNominalDimensionFailsBeforeOwnerCode() {
-        var roles = PhysicalIntentRoleBinding.engineeringEquipmentIssue(PROJECT, ACTOR, ITEM, STORE);
-        for (var removed : roles.namedRoles().keySet()) {
-            var missing = new EnumMap<PhysicalIntentSubjectRole, SubjectId>(PhysicalIntentSubjectRole.class);
-            missing.putAll(roles.namedRoles()); missing.remove(removed);
-            assertThrows(IllegalArgumentException.class, () -> PhysicalIntentRoleBinding.decode(roles.schema(), missing));
+        for (var roles : List.of(PhysicalIntentRoleBinding.engineeringEquipmentIssue(PROJECT, ACTOR, ITEM, STORE),
+                PhysicalIntentRoleBinding.guardEquipmentIssue(PROJECT, ACTOR, ITEM, STORE),
+                PhysicalIntentRoleBinding.guardEquipmentReturn(PROJECT, ACTOR, ITEM, STORE))) {
+            for (var removed : roles.namedRoles().keySet()) {
+                var missing = new EnumMap<PhysicalIntentSubjectRole, SubjectId>(PhysicalIntentSubjectRole.class);
+                missing.putAll(roles.namedRoles()); missing.remove(removed);
+                assertThrows(IllegalArgumentException.class, () -> PhysicalIntentRoleBinding.decode(roles.schema(), missing));
+            }
+            assertThrows(NullPointerException.class, () -> new EquipmentServiceCapabilities.Key(null, roles.kind(), roles.schema()));
+            assertThrows(NullPointerException.class, () -> new EquipmentServiceCapabilities.Key(roles.schema().owner(), null, roles.schema()));
+            assertThrows(NullPointerException.class, () -> new EquipmentServiceCapabilities.Key(roles.schema().owner(), roles.kind(), null));
+            var valid = EquipmentServiceBoundary.capability(intent(roles));
+            for (var key : List.of(new EquipmentServiceCapabilities.Key(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT, roles.kind(), roles.schema()),
+                    new EquipmentServiceCapabilities.Key(roles.schema().owner(), roles.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
+                            ? PhysicalIntentKind.EQUIPMENT_RETURN : PhysicalIntentKind.EQUIPMENT_ISSUE, roles.schema()),
+                    new EquipmentServiceCapabilities.Key(roles.schema().owner(), roles.kind(), PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_ISSUE)))
+                assertThrows(IllegalArgumentException.class, () -> new EquipmentServiceCapabilities.Capability(key, valid.ownerRole(), valid.actorRole(), valid.recoveryAsset(), valid.serviceKind(),
+                        (state, ignored) -> fail("invalid registration executed owner code"),
+                        (state, ignored) -> fail("invalid registration executed commitment code"),
+                        (state, ignored) -> { fail("invalid registration executed station code"); return Optional.empty(); }));
         }
-        assertThrows(NullPointerException.class, () -> new EquipmentServiceCapabilities.Key(null, roles.kind(), roles.schema()));
-        assertThrows(NullPointerException.class, () -> new EquipmentServiceCapabilities.Key(roles.schema().owner(), null, roles.schema()));
-        assertThrows(NullPointerException.class, () -> new EquipmentServiceCapabilities.Key(roles.schema().owner(), roles.kind(), null));
-        var valid = EquipmentServiceBoundary.capability(intent(roles));
-        for (var key : List.of(new EquipmentServiceCapabilities.Key(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT, roles.kind(), roles.schema()),
-                new EquipmentServiceCapabilities.Key(roles.schema().owner(), PhysicalIntentKind.EQUIPMENT_RETURN, roles.schema()),
-                new EquipmentServiceCapabilities.Key(roles.schema().owner(), roles.kind(), PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_ISSUE)))
-            assertThrows(IllegalArgumentException.class, () -> new EquipmentServiceCapabilities.Capability(key, valid.ownerRole(), valid.actorRole(), valid.recoveryAsset(), valid.serviceKind(),
-                    (state, ignored) -> fail("invalid registration executed owner code"),
-                    (state, ignored) -> fail("invalid registration executed commitment code"),
-                    (state, ignored) -> { fail("invalid registration executed station code"); return Optional.empty(); }));
     }
 
     @Test void returnCannotDeclareADifferentContainerFromItsTypedSlot() {
@@ -98,6 +104,7 @@ class EquipmentServiceCapabilitiesTest {
         var id = new PhysicalIntentId("intent:equipment-declaration");
         var serviceKind = switch (roles.schema()) {
             case ENGINEERING_EQUIPMENT_ISSUE, ENGINEERING_EQUIPMENT_RETURN -> ServiceAccessDemand.Kind.ENGINEERING_EQUIPMENT;
+            case GUARD_EQUIPMENT_ISSUE, GUARD_EQUIPMENT_RETURN -> ServiceAccessDemand.Kind.GUARD_EQUIPMENT;
             case ASSAULT_EQUIPMENT_ISSUE, ASSAULT_EQUIPMENT_RETURN -> ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT;
             default -> throw new IllegalArgumentException("fixture requires an explicit equipment tuple");
         };

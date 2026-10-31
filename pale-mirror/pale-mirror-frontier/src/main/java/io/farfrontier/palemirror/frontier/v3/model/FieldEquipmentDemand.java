@@ -7,13 +7,13 @@ import java.util.*;
 /** Equipment for admitted cultivation over the common planning horizon, not hypothetical expansion. */
 final class FieldEquipmentDemand implements EquipmentDemandPort {
     @Override public Key key() { return Key.FIELD; }
-    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
-    @Override public List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
+    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
+    @Override public List<EquipmentDemand> read(FrontierWorldState state, SubjectId home) {
         var inputs = FieldWorkForecast.permittedInputs(state, home);
         if (inputs.workers().isEmpty()) return List.of();
         return VIEWS.get(state.bootstrap(), home, inputs.keys(), () -> project(state, home, inputs.workers(), inputs.stores()));
     }
-    private static List<EquipmentWorkDemand> project(FrontierWorldState state, SubjectId home,
+    private static List<EquipmentDemand> project(FrontierWorldState state, SubjectId home,
             List<ResidentProfile> workers, List<BlockPosition> stores) {
         long tilling = 0; long cells = 0;
         if (workers.isEmpty()) return List.of();
@@ -49,7 +49,7 @@ final class FieldEquipmentDemand implements EquipmentDemandPort {
                 concurrency, schedule.dayTicks(), SupplyPlanningWindow.dailyWork(schedule),
                 SupplyPlanningWindow.forSettlement(state, home, List.of()).ticks());
         long wear = Math.addExact(tilling, forecast.isEmpty() ? 0 : forecast.getLast().recipes());
-        return List.of(new EquipmentWorkDemand("field", List.of(
+        return List.of(new EquipmentDemand("field", List.of(
                 FieldHarvestExtraction.DEFINITION.toolRequirement(), new ToolRequirement(ToolAbilities.TILL, 0, 1)), concurrency,
                 Math.max(concurrency, wear), state.bootstrap().ruleset().workCatalog()
                         .require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST).workUnits()));

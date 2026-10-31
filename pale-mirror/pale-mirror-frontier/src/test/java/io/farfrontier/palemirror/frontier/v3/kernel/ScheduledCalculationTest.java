@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ScheduledCalculationTest {
     private static final WorldId WORLD = new WorldId("world:prepared-test");
@@ -63,6 +64,26 @@ class ScheduledCalculationTest {
         assertEquals(1, starts.get());
         assertTrue(!engine.hasPendingCalculation());
         assertTrue(engine.pendingScheduledCalculation().isEmpty());
+    }
+
+    @Test void aShorterHorizonWithdrawsOnlyReadOnlyPreparationAndNeverExecutesFutureWork() {
+        var ready = new java.util.concurrent.atomic.AtomicBoolean();
+        var starts = new AtomicInteger(); var cancelled = new AtomicInteger();
+        var action = scheduled("schedule:future-preparation", SUBJECT.value(), 10, 1);
+        var engine = preparingEngine(action, ready, starts, cancelled);
+        engine.advanceTo(new SimInstant(30), new WorkBudget(2, 10));
+        assertTrue(engine.hasPendingCalculation());
+        var shorter = engine.advanceTo(new SimInstant(5), new WorkBudget(2, 10));
+        assertEquals("ACTIVE", shorter.status().kind().name());
+        assertEquals(new SimInstant(5), shorter.instant());
+        assertEquals(Revision.ZERO, shorter.revision());
+        assertEquals(List.of(action), engine.checkpoint().schedules());
+        assertEquals(1, cancelled.get());
+        assertFalse(engine.hasPendingCalculation());
+        ready.set(true);
+        engine.advanceTo(new SimInstant(10), new WorkBudget(2, 10));
+        assertEquals(1, engine.canonicalState().state().value());
+        assertEquals(2, starts.get());
     }
 
     @Test void aSmallerResumeBudgetCannotMoveTimePastThePreparedTransaction() {

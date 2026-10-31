@@ -19,6 +19,7 @@ public enum PhysicalIntentRecoveryDiagnosticProducer {
     SETTLEMENT_PROVISION(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION),
     RESOURCE_SITE_PREPARATION(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION),
     RESOURCE_SITE_HARVEST(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST),
+    GUARD_DUTY(PhysicalIntentLifecycleOwner.GUARD_DUTY),
     NO_PHYSICAL_CAPABILITY(null);
 
     private final PhysicalIntentLifecycleOwner owner;

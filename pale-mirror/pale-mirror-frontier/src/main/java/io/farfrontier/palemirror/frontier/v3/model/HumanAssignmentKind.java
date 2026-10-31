@@ -15,5 +15,6 @@ public enum HumanAssignmentKind {
     TRANSIT,
     EXTRACTION,
     EQUIPMENT_SERVICE,
-    FORESTRY
+    FORESTRY,
+    GUARD
 }

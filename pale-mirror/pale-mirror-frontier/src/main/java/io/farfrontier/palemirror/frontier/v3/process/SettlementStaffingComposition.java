@@ -9,6 +9,12 @@ import java.util.Optional;
 public final class SettlementStaffingComposition {
     public static final SettlementStaffingPolicy POLICY = new SettlementStaffingPolicy(List.of(
             new SettlementStaffingPort() {
+                public ResidentWorkKind kind() { return ResidentWorkKind.GUARD; }
+                public HumanCapability capability() { return HumanCapability.SECURITY; }
+                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
+                    return GuardWorkProcess.staffingDemand(state, home, rules);
+                }
+            }, new SettlementStaffingPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.AGRICULTURE; }
                 public HumanCapability capability() { return HumanCapability.AGRICULTURE; }
                 public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {

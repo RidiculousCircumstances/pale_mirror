@@ -379,6 +379,7 @@ final class FrontierV3TestPilotScenario {
                 || !reference.get("field").isJsonPrimitive() || !reference.get("field").getAsJsonPrimitive().isString()) return false;
         String view = reference.get("view").getAsString(), field = reference.get("field").getAsString();
         return (view.equals("actor") && field.equals("name") && requiredId(reference, "id", "resident:"))
+                || (view.equals("settlement") && field.equals("firstGuardName") && requiredId(reference, "id", "settlement:"))
                 || (view.equals("scene") && field.equals("primaryActorName"))
                 || (view.equals("site") && field.equals("workerPresentation"));
     }

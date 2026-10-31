@@ -1,14 +1,14 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentWorkDemand;
+import io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentDemand;
 import java.util.*;
 
 /** Forestry supplies capability/wear demand; the shared equipment economy chooses manufacture or repair. */
 final class ForestryEquipmentDemand implements EquipmentDemandPort {
     @Override public Key key() { return Key.FORESTRY; }
-    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
-    @Override public List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
+    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
+    @Override public List<EquipmentDemand> read(FrontierWorldState state, SubjectId home) {
         if (!ForestryStockDemand.enabled(state, home)) return List.of();
         return VIEWS.get(state.bootstrap(), home, List.of(state.inventory(), state.forest().work(), state.forest().regions()), () -> {
             if (!io.farfrontier.palemirror.frontier.v3.model.forestry.ForestKnowledge.harvestable(state, home)) return List.of();
@@ -21,7 +21,7 @@ final class ForestryEquipmentDemand implements EquipmentDemandPort {
             long wear = Math.max(concurrent, Math.multiplyExact(missing, rules.tool().wear()));
             long workPerWear = rules.harvests().stream().mapToLong(profile -> state.bootstrap().ruleset().workCatalog()
                     .require(profile.logKind(), WorkOperation.EXTRACT).workUnits()).max().orElseThrow();
-            return List.of(new EquipmentWorkDemand("forestry", List.of(rules.tool()), concurrent, wear,
+            return List.of(new EquipmentDemand("forestry", List.of(rules.tool()), concurrent, wear,
                     Math.max(1, Math.ceilDiv(workPerWear, rules.tool().wear()))));
         });
     }

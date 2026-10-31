@@ -28,7 +28,7 @@ final class PhysicalIntentReferenceValidation {
             membership(i -> i.inventory().fungibleResources().lots()), membership(i -> i.inventory().fungibleResources().claims()),
             membership(i -> i.hiveColony().growthJobs()), membership(i -> i.humanPopulation().birthJobs()),
             membership(i -> i.humanPopulation().medicalOperations()), membership(i -> i.humanPopulation().provisions()),
-            membership(Inputs::productionJobs), membership(Inputs::serviceWorks), membership(PhysicalIntentReferenceValidation::fieldSubjects),
+            membership(Inputs::productionJobs), membership(Inputs::serviceWorks), membership(i -> i.strategicPlans().guards()), membership(PhysicalIntentReferenceValidation::fieldSubjects),
             membership(PhysicalIntentReferenceValidation::outputSubjects),
             new ImmutableReferenceIndex.Source<>(Inputs::routeConstructions), new ImmutableReferenceIndex.Source<>(Inputs::routeMaintenances),
             new ImmutableReferenceIndex.Source<>(i -> i.fieldReferences().conflicts()));
@@ -113,7 +113,8 @@ final class PhysicalIntentReferenceValidation {
                     && inventory.containers().containsKey(subject));
             boolean declaredResourceContainer = subjectEntry.getKey() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_CONTAINER
                     && inventory.containers().containsKey(subject);
-            if (!declaredResourceContainer && !productionResourceSubject && !hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) &&
+            boolean declaredGuardDuty = subjectEntry.getKey() == PhysicalIntentSubjectRole.GUARD_DUTY && strategicPlans.guards().containsKey(subject);
+            if (!declaredGuardDuty && !declaredResourceContainer && !productionResourceSubject && !hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) &&
                     !expectedStructures.contains(subject) && !expectedSettlements.contains(subject)
                     && !inventory.items().containsKey(subject)
                     && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject)

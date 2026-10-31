@@ -277,6 +277,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             GroupMemberActivityCapability.validateReferences(unitGroups, actorExecutions);
             ShipmentExecutionCapability.validateReferences(shipments, actorExecutions);
             ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
+            GuardAuthority.validateReferences(bootstrap, strategicPlans, humanPopulation, actorLocations, actorExecutions);
             PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
             ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, strategicPlans, actorExecutions);
             RoutePatrolExecutionAuthority.validateReferences(strategicPlans.routePatrols(), actorExecutions);

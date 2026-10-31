@@ -27,7 +27,7 @@ public record GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, Su
             throw new IllegalArgumentException("multiple stock recovery envelopes for one operating requirement");
         if (known.size() > MAX_KNOWN || known.stream().map(value -> value.party().id()).distinct().count() != known.size()
                 || known.stream().anyMatch(value -> value.party().equals(party)) || reviewRevision < 0 || reviewedAtTick < 0
-                || decision == null || decision.isBlank() || decision.length() > 512 || prices.size() > 16)
+                || decision == null || decision.isBlank() || decision.length() > 512 || prices.size() > GoodsTradeRules.MAX_COMMODITIES)
             throw new IllegalArgumentException("invalid bounded participant knowledge/review");
     }
     public GoodsParticipant reviewed(String reason, long tick) {

@@ -18,6 +18,8 @@ public final class HumanTacticalFunctionProjection {
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
         return switch (assignment.kind()) {
             case SETTLEMENT_DEFENCE -> defenceFunction(state, assignment, resident);
+            case GUARD -> GuardEquipment.in(state, resident.settlementId()).stream().filter(duty -> duty.execution().actorId().equals(residentId))
+                    .anyMatch(duty -> GuardEquipment.held(state, duty)) ? HumanTacticalFunction.GUARD : HumanTacticalFunction.CIVILIAN;
             case ROUTE_PATROL -> HumanTacticalFunction.GUARD;
             default -> HumanTacticalFunction.CIVILIAN;
         };

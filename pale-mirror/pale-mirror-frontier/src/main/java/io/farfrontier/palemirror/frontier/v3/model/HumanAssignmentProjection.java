@@ -82,7 +82,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                     state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
                     state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(),
                     couriers(state), groupMembers(state), ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations()),
-                    extraction(state), forestry(state)));
+                    extraction(state), forestry(state), state.strategicPlans().guards()));
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof Dependencies value) || sources.size() != value.sources.size()) return false;
@@ -123,6 +123,8 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                 .forEach(visit -> claim(values, visit.actorId(), HumanAssignmentKind.EQUIPMENT_SERVICE, visit.ownerId()));
         claimProjected(values, extraction(state));
         claimProjected(values, forestry(state));
+        state.strategicPlans().guards().values().stream().sorted(Comparator.comparing(GuardDuty::id))
+                .forEach(duty -> claim(values, duty.execution().actorId(), HumanAssignmentKind.GUARD, duty.id()));
         // A conflict suspends execution, not the retained job's exclusive worker claim.
         fieldAssignments(state).entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .flatMap(site -> site.getValue().stream())

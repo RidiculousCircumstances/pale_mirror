@@ -27,7 +27,7 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
         if (state.bootstrap().ruleset().fields().agriculture().isEmpty()
                 || SupplyPlanningWindow.dailyWork(state.humanPopulation().schedule(home)) == 0) return List.of();
         if (state.bootstrap().ruleset().tools().definitions().values().stream().noneMatch(tool ->
-                FieldEquipment.requirements().alternatives().stream().anyMatch(group -> group.stream().allMatch(tool::supports)))) return List.of();
+                FieldEquipment.requirements().alternatives().stream().anyMatch(group -> group.stream().allMatch(requirement -> requirement.supports(tool))))) return List.of();
         var workers = FieldWorkForecast.valuationWorkers(state, home);
         if (workers.isEmpty()) return List.of();
         var stores = FieldWorkForecast.storagePositions(state, home);

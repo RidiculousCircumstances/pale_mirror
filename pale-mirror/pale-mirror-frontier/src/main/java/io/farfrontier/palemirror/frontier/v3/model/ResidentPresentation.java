@@ -19,6 +19,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case PRODUCTION -> "Production";
             case COURIER -> "Transport resources";
             case GROUP_MEMBER -> "Expedition";
+            case GUARD -> "Peaceful guard duty";
             case ROUTE_PATROL -> "Route patrol";
             case SETTLEMENT_DEFENCE -> "Settlement defence";
             case ENGINEERING_RECOVERY -> "Repair infrastructure";
@@ -41,7 +42,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
                     }).orElse("Production worker");
             case COURIER -> "Carrier";
             case GROUP_MEMBER -> "Companion";
-            case ROUTE_PATROL -> "Guard";
+            case GUARD, ROUTE_PATROL -> "Guard";
             case SETTLEMENT_DEFENCE -> words(HumanTacticalFunctionProjection.derive(state, actor).name());
             case ENGINEERING_RECOVERY -> "Engineer";
             case SETTLEMENT_SERVICE -> "Service worker";

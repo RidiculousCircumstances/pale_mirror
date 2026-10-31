@@ -41,6 +41,11 @@ final class ScheduleExecutionIndex {
         if (inputs.isEmpty() || inputs.orElseThrow() != pollInputs || !now.equals(pollInstant)) {
             pollInputs = inputs.orElse(null); pollInstant = now; pollRemaining = polled.size();
         }
+        // An attempted fast-forward horizon is not committed canonical time.
+        // Return later admissions to the deadline index when the next pass is shorter.
+        for (int count = 0; count < limit && !ready.isEmpty() && ready.last().dueAt().compareTo(now) > 0; count++) {
+            var action = ready.pollLast(); future.add(action); readySince.put(action.id(), action.dueAt().ticks());
+        }
         promoteDue(now, limit);
         for (int count = 0; count < limit && !audits.isEmpty() && audits.firstKey() <= now.ticks(); count++) {
             var action = audits.firstEntry().getValue().first();
@@ -72,6 +77,9 @@ final class ScheduleExecutionIndex {
         for (int index = 0; index < count; index++) {
             var entry = checking.entrySet().iterator().next();
             var action = entry.getValue();
+            if (action.dueAt().compareTo(now) > 0) {
+                checking.remove(action.id()); future.add(action); continue;
+            }
             var decision = assessment.apply(action);
             if (decision == ScheduleAdmissionIndex.Decision.DEFERRED) return;
             checking.remove(action.id());
@@ -125,16 +133,23 @@ final class ScheduleExecutionIndex {
         if (action.dueAt().compareTo(now) > 0) future.add(action);
         else reconsider(action, now.ticks());
     }
-    ScheduledAction firstReady() { return ready.isEmpty() ? null : ready.first(); }
+    ScheduledAction firstReady() {
+        for (var action : ready) {
+            if (action.dueAt().compareTo(pollInstant) > 0) break;
+            if (readySince.get(action.id()) <= pollInstant.ticks()) return action;
+        }
+        return null;
+    }
     SimInstant readyNotBefore(ScheduledAction action) {
         if (!ready.contains(action)) throw new IllegalArgumentException("action has no ready admission");
         return new SimInstant(readySince.get(action.id()));
     }
     ScheduledAction firstChecking(SimInstant now) {
-        if (!checking.isEmpty()) return checking.values().iterator().next();
+        for (var action : checking.values()) if (action.dueAt().compareTo(now) <= 0) return action;
         return !future.isEmpty() && future.first().dueAt().compareTo(now) <= 0 ? future.first() : null;
     }
-    List<ScheduledAction> readyActions() { return List.copyOf(ready); }
+    List<ScheduledAction> readyActions() { return ready.stream().takeWhile(action -> action.dueAt().compareTo(pollInstant) <= 0)
+            .filter(action -> readySince.get(action.id()) <= pollInstant.ticks()).toList(); }
 
     void wake(Set<SubjectId> keys, long atTick) {
         var actions = new TreeSet<ScheduledAction>();

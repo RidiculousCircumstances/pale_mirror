@@ -30,11 +30,12 @@ public final class FrontierDomainRelationships {
         GOODS_ORDER, GOODS_CONTRACT, ECONOMIC_ACCOUNT, CONTAINER, SHIPMENT, UNIT_GROUP, TRANSPORT_MISSION,
         PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
-        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK, SETTLEMENT, MINERAL_DEPOSIT, FORESTRY_WORK, FOREST_SOURCE
+        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK, SETTLEMENT, MINERAL_DEPOSIT, FORESTRY_WORK, FOREST_SOURCE, GUARD_DUTY
     }
 
     /** Stable semantic strings are deliberately independent from enum ordinal/wire ordering. */
     public enum Kind {
+        GUARD_HOME("guard-home"), GUARD_RESIDENT("guard-resident"), GUARD_WEAPON("guard-weapon"), GUARD_STORAGE("guard-storage"),
         FORESTRY_HOME("forestry-home"), FORESTRY_WORKER("forestry-worker"), FORESTRY_TOOL("forestry-tool"),
         FORESTRY_TOOL_SOURCE("forestry-tool-source"), FORESTRY_STORAGE("forestry-storage"), FORESTRY_SOURCE("forestry-source"), FORESTRY_CARGO("forestry-cargo"),
         EXTRACTION_MINERAL("extraction-mineral"), SETTLEMENT_MINERAL_KNOWLEDGE("settlement-mineral-knowledge"),
@@ -100,6 +101,7 @@ public final class FrontierDomainRelationships {
         return Map.copyOf(result); }
     private static Set<Lifecycle> lifecycle(Kind kind) { return kind == Kind.ACTOR_AMBIENT_LEASE || kind == Kind.ACTOR_CARRIER_EVIDENCE ? EnumSet.of(Lifecycle.OBSERVED) : EnumSet.allOf(Lifecycle.class); }
     private static EntityKind source(Kind kind) { return switch (kind) {
+        case GUARD_HOME, GUARD_RESIDENT, GUARD_WEAPON, GUARD_STORAGE -> EntityKind.GUARD_DUTY;
         case FORESTRY_HOME, FORESTRY_WORKER, FORESTRY_TOOL, FORESTRY_TOOL_SOURCE, FORESTRY_STORAGE, FORESTRY_SOURCE, FORESTRY_CARGO -> EntityKind.FORESTRY_WORK;
         case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
         case SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.SETTLEMENT;
@@ -122,6 +124,10 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static EntityKind target(Kind kind) { return switch (kind) {
+        case GUARD_HOME -> EntityKind.SETTLEMENT;
+        case GUARD_RESIDENT -> EntityKind.RESIDENT;
+        case GUARD_WEAPON -> EntityKind.EXACT_ITEM;
+        case GUARD_STORAGE -> EntityKind.CONTAINER;
         case FORESTRY_HOME -> EntityKind.SETTLEMENT;
         case FORESTRY_WORKER -> EntityKind.RESIDENT;
         case FORESTRY_TOOL -> EntityKind.EXACT_ITEM;
@@ -166,6 +172,7 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, HIVE_MOBILIZATION_TASK -> EntityKind.TASK; case SERVICE_FACILITY -> EntityKind.STRUCTURE; case SERVICE_INPUT -> EntityKind.EXACT_ITEM;
         case SERVICE_SCENE_LEASE -> EntityKind.SCENE_LEASE; case HIVE_MOBILIZATION_MEMBER -> EntityKind.BIOFORM; }; }
     private static EntityKind owner(Kind kind) { return switch (kind) {
+        case GUARD_HOME, GUARD_RESIDENT, GUARD_WEAPON, GUARD_STORAGE -> EntityKind.GUARD_DUTY;
         case FORESTRY_HOME, FORESTRY_WORKER, FORESTRY_TOOL, FORESTRY_TOOL_SOURCE, FORESTRY_STORAGE, FORESTRY_SOURCE, FORESTRY_CARGO -> EntityKind.FORESTRY_WORK;
         case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
         case SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.SETTLEMENT;
@@ -246,6 +253,7 @@ public final class FrontierDomainRelationships {
     }
 
     private static final List<OwnerSurface> CURRENT_OWNER_SURFACES = List.of(
+            surface(GuardDuty.class, "id", "home", "weapon"),
             surface(io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryWork.class,
                     "id", "home", "toolId", "carriedAccount", "outputLot"),
             surface(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSite.class, "id", "settlementId", "mineralDeposits"),
@@ -426,6 +434,7 @@ public final class FrontierDomainRelationships {
         ShipmentRelationships.collect(state, edges);
         ExtractionRelationships.collect(state, edges);
         ForestryRelationships.collect(state, edges);
+        GuardRelationships.collect(state, edges);
         UnitGroupRelationships.collect(state, edges);
         FinancialBudgetRelationships.collect(state, edges);
         addLeases(state, edges);
@@ -482,6 +491,8 @@ public final class FrontierDomainRelationships {
     private record ValidationFamily(String traceName, java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
                                     ValidationCollector collect) { }
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
+            new ValidationFamily("relations-guards", s -> List.of(s.strategicPlans().guards(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory().items(), s.inventory().containers()),
+                    (s, edges, incidents) -> GuardAuthority.validateReferences(s.bootstrap(), s.strategicPlans(), s.humanPopulation(), s.actorLocations(), s.actorExecutions())),
             new ValidationFamily("relations-forestry", s -> List.of(s.forest(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory()),
                     (s, edges, incidents) -> ForestryRelationships.validate(s)),
             new ValidationFamily("relations-extraction", s -> List.of(s.extractionSites(), s.humanPopulation().residents(), s.actorExecutions(), s.inventory()),

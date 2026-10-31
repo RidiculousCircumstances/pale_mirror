@@ -15,7 +15,7 @@ import java.util.function.BiPredicate;
 /** Registered exact-source commitments supply disruption policy; the observation owner knows no jobs. */
 final class ExactItemDepartureComposition {
     /** Commitment ownership is independent of the older physical-intent protocol. */
-    enum Owner { FIELD_EQUIPMENT, PRODUCTION_WORK, MEDICAL_TREATMENT, ENGINEERING_WORKSITE, SETTLEMENT_ASSAULT, STATION_OPERATION, STATION_WORK_ITEM, GOODS_INDIVIDUAL }
+    enum Owner { FIELD_EQUIPMENT, PRODUCTION_WORK, MEDICAL_TREATMENT, ENGINEERING_WORKSITE, SETTLEMENT_ASSAULT, STATION_OPERATION, STATION_WORK_ITEM, GOODS_INDIVIDUAL, GUARD_DUTY }
     private static final ExactItemDepartureComposition CURRENT = new ExactItemDepartureComposition(List.of(
             new Policy(Owner.FIELD_EQUIPMENT, FieldEquipmentDeparture::committed,
                     (state, command, item, observation) -> List.of(observation), FieldEquipmentDeparture::observe),
@@ -25,6 +25,7 @@ final class ExactItemDepartureComposition {
             new Policy(Owner.MEDICAL_TREATMENT, MedicalTreatmentProcess::hasSupplyCommitment,
                     MedicalTreatmentProcess::planSupplyDeparture, MedicalTreatmentProcess::observeSupplyDeparture),
             equipmentPolicy(Owner.ENGINEERING_WORKSITE, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE),
+            equipmentPolicy(Owner.GUARD_DUTY, PhysicalIntentLifecycleOwner.GUARD_DUTY),
             new Policy(Owner.SETTLEMENT_ASSAULT, DefenderEquipmentSourceDeparture::committed,
                     DefenderEquipmentSourceDeparture::plan, DefenderEquipmentSourceDeparture::observe),
             new Policy(Owner.STATION_OPERATION, io.farfrontier.palemirror.frontier.v3.model.StationExactItemDeparture::committed,

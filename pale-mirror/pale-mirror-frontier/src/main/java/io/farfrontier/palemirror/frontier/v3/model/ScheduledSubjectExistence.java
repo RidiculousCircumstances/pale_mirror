@@ -73,7 +73,7 @@ final class ScheduledSubjectExistence {
                 state.humanPopulation().residents(), state.humanPopulation().birthJobs(), state.humanPopulation().migrations(),
                 state.humanPopulation().provisions(), state.hiveColony().growthJobs(), state.hiveColony().nutrientTransfers(),
                 state.hiveColony().mobilizations(), state.strategicPlans().objectives(), state.strategicPlans().tasks(),
-                state.strategicPlans().routePatrols(), state.strategicPlans().settlementAssaults(), state.companies().companies(),
+                state.strategicPlans().routePatrols(), state.strategicPlans().settlementAssaults(), state.strategicPlans().guards(), state.companies().companies(),
                 state.companies().market().demands(), state.companies().market().quotes(), state.companies().market().workOrders(),
                 state.companies().goodsTrade().orders(), state.companies().goodsTrade().contracts(),
                 state.shipments().shipments(), state.shipments().missions(), state.unitGroups().groups());

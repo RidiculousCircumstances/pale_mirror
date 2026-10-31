@@ -19,7 +19,8 @@ final class FrontierStateSchema {
     // Public market orders retain one shared remaining quantity; bilateral schema310 is rejected.
     // Compaction retains the durable epoch floor; erased history cannot be reconstructed.
     // Atomic COLD cell receipts change the closed process event inventory.
-    static final int VERSION = 313;
+    // Peaceful guard appointments retain exact equipment and execution declarations.
+    static final int VERSION = 314;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

@@ -14,7 +14,7 @@ final class ServiceAccessCapabilities {
     private static final ServiceAccessCapabilities CURRENT = new ServiceAccessCapabilities(List.of(
             new ResidentMealServiceAccess(), new ProductionServiceAccess(), new HarvestServiceAccess(), new ShipmentServiceAccess(),
             new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), new EngineeringEquipmentServiceAccess(),
-            new DefenderEquipmentServiceAccess(), new ForestryServiceAccess()));
+            new DefenderEquipmentServiceAccess(), new ForestryServiceAccess(), new GuardServiceAccess()));
     private final Map<ServiceAccessDemand.Kind, ServiceAccessCapability> capabilities;
     private final ThreadLocal<PointIndex> pointIndexes = new ThreadLocal<>();
 

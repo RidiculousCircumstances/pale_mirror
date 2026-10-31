@@ -50,6 +50,7 @@ public record PhysicalIntentRetirementProof(
         case UNIT_GROUP -> "unit-group";
         case TRANSPORT_MISSION -> "transport-mission";
         case ACTOR -> "actor";
+        case GUARD_DUTY -> "guard-duty";
         case FORESTRY_WORK -> "forestry-work"; case FOREST_SOURCE -> "forest-source";
         case EXTRACTION_SITE -> "extraction-site"; case EXTRACTION_WORK -> "extraction-work";
         case SETTLEMENT -> "settlement"; case MINERAL_DEPOSIT -> "mineral-deposit";

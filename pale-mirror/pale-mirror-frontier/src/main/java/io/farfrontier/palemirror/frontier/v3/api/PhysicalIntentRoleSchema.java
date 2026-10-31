@@ -60,7 +60,12 @@ public enum PhysicalIntentRoleSchema {
             PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK, PhysicalIntentSubjectRole.WORKER, PhysicalIntentSubjectRole.INPUT_ITEM),
     PRODUCTION_RESOURCES(27, PhysicalIntentLifecycleOwner.PRODUCTION_WORK, PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
             PhysicalIntentSubjectRole.PRODUCTION_JOB, PhysicalIntentSubjectRole.INPUT_RESOURCE_LOT, PhysicalIntentSubjectRole.OUTPUT_RESOURCE_LOT,
-            PhysicalIntentSubjectRole.RESOURCE_CLAIM, PhysicalIntentSubjectRole.CUSTODY_ACCOUNT, PhysicalIntentSubjectRole.RESOURCE_CONTAINER);
+            PhysicalIntentSubjectRole.RESOURCE_CLAIM, PhysicalIntentSubjectRole.CUSTODY_ACCOUNT, PhysicalIntentSubjectRole.RESOURCE_CONTAINER),
+    GUARD_EQUIPMENT_RETURN(32, PhysicalIntentLifecycleOwner.GUARD_DUTY, PhysicalIntentKind.EQUIPMENT_RETURN,
+            PhysicalIntentSubjectRole.GUARD_DUTY, PhysicalIntentSubjectRole.GUARD_RESIDENT, PhysicalIntentSubjectRole.EQUIPMENT, PhysicalIntentSubjectRole.RESOURCE_CONTAINER),
+    GUARD_EQUIPMENT_ISSUE(31, PhysicalIntentLifecycleOwner.GUARD_DUTY, PhysicalIntentKind.EQUIPMENT_ISSUE,
+            PhysicalIntentSubjectRole.GUARD_DUTY, PhysicalIntentSubjectRole.GUARD_RESIDENT,
+            PhysicalIntentSubjectRole.EQUIPMENT, PhysicalIntentSubjectRole.RESOURCE_CONTAINER);
 
     private final int wireTag;
     private final PhysicalIntentLifecycleOwner owner;

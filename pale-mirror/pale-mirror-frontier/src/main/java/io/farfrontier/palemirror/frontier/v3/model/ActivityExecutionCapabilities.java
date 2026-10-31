@@ -24,6 +24,7 @@ public final class ActivityExecutionCapabilities {
             delegated(HumanAssignmentKind.COURIER, ActorActivityKind.COURIER),
             new ExtractionAssignmentCapability(),
             new ForestryAssignmentCapability(),
+            delegated(HumanAssignmentKind.GUARD, ActorActivityKind.GUARD),
             delegated(HumanAssignmentKind.EQUIPMENT_SERVICE, ActorActivityKind.EQUIPMENT_SERVICE),
             new GroupAssignmentCapability(),
             delegated(HumanAssignmentKind.ROUTE_PATROL, ActorActivityKind.ROUTE_PATROL),

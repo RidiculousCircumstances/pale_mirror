@@ -82,6 +82,16 @@ public final class PhysicalIntentRoleBinding {
             map(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER, workOrder, PhysicalIntentSubjectRole.ENGINEERING_WORKER, worker, PhysicalIntentSubjectRole.EQUIPMENT, equipment, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, source)); }
     public static PhysicalIntentRoleBinding engineeringEquipmentReturn(SubjectId workOrder, SubjectId worker, SubjectId equipment, SubjectId target) { return bind(PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_RETURN,
             map(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER, workOrder, PhysicalIntentSubjectRole.ENGINEERING_WORKER, worker, PhysicalIntentSubjectRole.EQUIPMENT, equipment, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, target)); }
+    public static PhysicalIntentRoleBinding guardEquipmentIssue(SubjectId duty, SubjectId actor, SubjectId item, SubjectId source) {
+        return bind(PhysicalIntentRoleSchema.GUARD_EQUIPMENT_ISSUE,
+                map(PhysicalIntentSubjectRole.GUARD_DUTY, duty, PhysicalIntentSubjectRole.GUARD_RESIDENT, actor,
+                        PhysicalIntentSubjectRole.EQUIPMENT, item, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, source));
+    }
+    public static PhysicalIntentRoleBinding guardEquipmentReturn(SubjectId duty, SubjectId actor, SubjectId item, SubjectId source) {
+        return bind(PhysicalIntentRoleSchema.GUARD_EQUIPMENT_RETURN,
+                map(PhysicalIntentSubjectRole.GUARD_DUTY, duty, PhysicalIntentSubjectRole.GUARD_RESIDENT, actor,
+                        PhysicalIntentSubjectRole.EQUIPMENT, item, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, source));
+    }
     public static PhysicalIntentRoleBinding assaultEquipmentIssue(SubjectId assault, SubjectId defender, SubjectId equipment, SubjectId source) { return bind(PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_ISSUE,
             map(PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT, assault, PhysicalIntentSubjectRole.ASSAULT_DEFENDER, defender, PhysicalIntentSubjectRole.EQUIPMENT, equipment, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, source)); }
     public static PhysicalIntentRoleBinding assaultEquipmentReturn(SubjectId assault, SubjectId defender, SubjectId equipment, SubjectId target) { return bind(PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_RETURN,

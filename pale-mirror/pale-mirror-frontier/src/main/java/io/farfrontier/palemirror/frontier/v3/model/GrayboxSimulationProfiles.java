@@ -38,10 +38,10 @@ final class GrayboxSimulationProfiles {
                     forestry.resumeBelowItems(), forestry.workersPerSettlement(), forestry.cargoItems(), forestry.reviewTicks(),
                     forestry.tool(), forestry.harvests(), forestry.starterEquipment());
         }
-        return new FrontierRuleset(id, base.schemaVersion(), base.cadence(), base.spatial(), base.rates(), base.facilityCapacity(),
+        return GrayboxGuardContent.extend(new FrontierRuleset(id, base.schemaVersion(), base.cadence(), base.spatial(), base.rates(), base.facilityCapacity(),
                 base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
                 base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(),
-                base.execution(), base.production(), fields, base.tools(), layout, forestry);
+                base.execution(), base.production(), fields, base.tools(), layout, forestry));
     }
     private GrayboxSimulationProfiles() { }
 }

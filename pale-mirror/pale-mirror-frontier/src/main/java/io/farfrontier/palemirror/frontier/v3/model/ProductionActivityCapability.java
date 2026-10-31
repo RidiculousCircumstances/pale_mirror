@@ -80,10 +80,17 @@ final class ProductionActivityCapability implements ActorActivityCapability {
                 : Optional.of(new ActorActivityCheckpoint.Wait(status == ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT
                     ? ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION : ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, job.id())));
     }
+    @Override public Optional<ActorActivityAmbientTarget> stationaryAmbientTarget(FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution);
+        return Optional.of(new ActorActivityAmbientTarget(AmbientGoalKind.WORK,
+                state.actorLocations().get(execution.actorId()).supportingSurface()));
+    }
     @Override public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
         validateReference(state, execution);
         var movement = state.actorMovements().get(execution.actorId());
-        return lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT && movement != null && movement.executionId().equals(execution)
+        return lease.goal() == AmbientGoalKind.WORK
+                    && lease.goalBody().supportingSurface().equals(state.actorLocations().get(execution.actorId()).supportingSurface())
+                || lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT && movement != null && movement.executionId().equals(execution)
                 && movement.order().legalStations().contains(lease.goalBody().supportingSurface());
     }
     static ResidentWorkYield.Status checkpointStatus(FrontierWorldState state, ProductionJob job) {

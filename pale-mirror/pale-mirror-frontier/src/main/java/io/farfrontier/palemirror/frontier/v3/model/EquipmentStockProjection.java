@@ -10,7 +10,7 @@ public final class EquipmentStockProjection {
     private static final ImmutableKeyedInputView<SubjectId, List<Deficit>> DEFICITS = new ImmutableKeyedInputView<>(256);
     private static final ImmutableKeyedInputView<SubjectId, Set<SubjectId>> RETAINED = new ImmutableKeyedInputView<>(256);
     public record Unit(SubjectId id, String kind, ItemCondition condition) { }
-    public record Deficit(EquipmentWorkDemand demand, int missingUnits, long missingWear) {
+    public record Deficit(EquipmentDemand demand, int missingUnits, long missingWear) {
         public boolean immediate() { return missingUnits > 0; }
     }
     public static List<Unit> units(FrontierWorldState state, SubjectId home) {
@@ -77,7 +77,7 @@ public final class EquipmentStockProjection {
                 ActorIdentityDeclarations.lifeStatuses(state.bootstrap(), state.actorLocations()), demands),
                 () -> projectRetained(state, home, demands, owned));
     }
-    private static Set<SubjectId> projectRetained(FrontierWorldState state, SubjectId home, List<EquipmentWorkDemand> demands,
+    private static Set<SubjectId> projectRetained(FrontierWorldState state, SubjectId home, List<EquipmentDemand> demands,
             List<ExactItemStack> owned) {
         var retained = new HashSet<SubjectId>(); var catalog = state.bootstrap().ruleset().tools();
         var units = owned.stream()
@@ -109,7 +109,7 @@ public final class EquipmentStockProjection {
         var units = units(state, home); var demands = EquipmentDemandComposition.read(state, home);
         return DEFICITS.get(state.bootstrap(), home, List.of(units, demands), () -> projectDeficits(state, units, demands));
     }
-    private static List<Deficit> projectDeficits(FrontierWorldState state, List<Unit> units, List<EquipmentWorkDemand> demands) {
+    private static List<Deficit> projectDeficits(FrontierWorldState state, List<Unit> units, List<EquipmentDemand> demands) {
         var catalog = state.bootstrap().ruleset().tools(); var used = new HashSet<SubjectId>();
         var result = new ArrayList<Deficit>();
         for (var demand : demands) {

@@ -68,6 +68,19 @@ class StationEquipmentWorkerTest {
         assertTrue(state.actorExecutions().owns(job.workerId(),
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id()));
     }
+    @Test void coldWorkerAlreadyAtStorageCanAcquireTheSameBodyForStationaryHotInteraction() {
+        var f = fixture(false); var state = BakeryTestClock.arrive(f.state(), f.job(), 300);
+        assertFalse(state.actorMovements().containsKey(f.job().workerId()));
+        assertEquals(StationWorkGoal.current(state, state.productionJobs().get(f.job().id())).station(),
+                state.actorLocations().get(f.job().workerId()).supportingSurface());
+        var lease = AmbientActorProcess.nextLease(state, f.job().workerId(), new SimInstant(1000));
+        assertEquals(AmbientGoalKind.WORK, lease.goal());
+        assertTrue(state.actorExecutions().owns(f.job().workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, f.job().id()));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                AmbientActorProcess.plan(state, new AmbientLeasePrepared(lease)));
+        assertEquals(f.state().inventory(), state.inventory(), "body eligibility never awards the unperformed pickup");
+    }
     private static EquipmentWorkFixture.Fixture fixture(boolean repair) {
         return EquipmentWorkFixture.create(new WorldId("frontier:equipment-worker"), 41, repair);
     }

@@ -15,7 +15,7 @@ import java.util.WeakHashMap;
 final class FrontierV3ActorMovementNavigation {
     private record Route(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
                          long leaseRevision, MovementOrder order, RouteTopology topology,
-                         Map<BlockPosition, PhysicalDelta> physicalDeltas, List<SurfaceAnchor> waypoints) { }
+                         Map<BlockPosition, PhysicalDelta> physicalDeltas, List<SurfaceAnchor> waypoints, long retryHintsAt) { }
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private record Wait(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution,
                         MovementOrder order, String reason) { }
@@ -74,14 +74,19 @@ final class FrontierV3ActorMovementNavigation {
             FrontierV3GoalNavigation.stop(body, actuation);
             return;
         }
+        // An asynchronous PLANNING hint is not a permanent empty route. Once native
+        // steering blocks, reread it at the shared retry cadence without cancelling
+        // a progressing path or forcing a synchronous world search.
         Route route = ROUTES.get(body);
         if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
                 || !route.order().equals(movement.order())
-                || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()) {
+                || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()
+                || route.waypoints().isEmpty() && BLOCKED.containsKey(body) && level.getGameTime() >= route.retryHintsAt()) {
             var basis = state;
             route = new Route(actuation.id(), lease.revision(), movement.order(), state.routeTopology(), state.physicalDeltas(),
                     FrontierV3NativeRouteHint.optional(() -> provider.route(basis, movement,
-                            FrontierV3SurfaceObservation.observedBody(body).supportingSurface())));
+                            FrontierV3SurfaceObservation.observedBody(body).supportingSurface())),
+                    level.getGameTime() + FrontierV3MinecraftGoalNavigation.retryIntervalTicks());
             ROUTES.put(body, route);
         }
         if (movement.order().legalStations().stream().anyMatch(station -> FrontierV3SemanticMovement.arrived(level, body, station))) {

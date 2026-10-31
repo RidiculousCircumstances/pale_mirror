@@ -43,6 +43,7 @@ public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
     private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(Map.entry("wood-production-r29", FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
+            Map.entry("simulation-baseline-r31", FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")),
             Map.entry("wood-demand-r30", FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30")),
             Map.entry("production", FrontierRulesets.production()),
             Map.entry("tool-graybox", FrontierRulesets.toolGraybox()),
@@ -56,6 +57,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("peacefulGuards", PeacefulGuardFixture::configuration),
             Map.entry("equipmentRepair", (world, seed) -> equipmentWorkConfiguration(world, seed, true)),
             Map.entry("equipmentManufacture", (world, seed) -> equipmentWorkConfiguration(world, seed, false)),
             Map.entry("woodProductionWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("wood-demand-r30"))),

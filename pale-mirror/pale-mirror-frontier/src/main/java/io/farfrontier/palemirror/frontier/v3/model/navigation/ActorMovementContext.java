@@ -9,8 +9,8 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
 public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
-        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK }
+        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg, ActorMovementContext.GuardEquipment {
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT }
     Provider provider();
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
@@ -42,6 +42,20 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
                     || movement.executionId().activityKind() != ActorActivityKind.PRODUCTION
                     || movement.order().goalOrdinal() != work.goalOrdinal() || movement.order().goalRevision() != 1L)
                 throw new IllegalArgumentException("station movement lost its exact job, material trip or phase");
+        }
+    }
+    record GuardEquipment(SubjectId dutyId, long revision) implements ActorMovementContext {
+        public GuardEquipment { Objects.requireNonNull(dutyId); if (revision < 1) throw new IllegalArgumentException("invalid guard equipment goal"); }
+        public Provider provider() { return Provider.GUARD_EQUIPMENT; }
+        public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.GUARDS.at(dutyId));
+        }
+        public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            var duty = refs.strategicPlans().guards().get(dutyId);
+            if (duty == null || duty.phase() == GuardDuty.Phase.ON_DUTY || duty.revision() != revision
+                    || !duty.execution().equals(movement.executionId()) || !duty.order().equals(movement.order()))
+                throw new IllegalArgumentException("guard movement has a stale or foreign appointment/goal");
         }
     }
     record ForestryLeg(SubjectId jobId, long jobRevision) implements ActorMovementContext {

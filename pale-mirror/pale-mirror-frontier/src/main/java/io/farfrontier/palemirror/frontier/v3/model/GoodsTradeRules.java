@@ -19,6 +19,8 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
         this(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies,
                 io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules.disabled());
     }
+    public static final int MAX_COMMODITIES = 32;
+
     public record Commodity(String itemKind, int targetPerResident, int targetFixed,
                             FixedScalar minimumSellPrice, FixedScalar maximumBuyPrice, GoodsStockSpecification stock) {
         public Commodity(String kind, int perResident, int fixed, FixedScalar ask, FixedScalar bid) {
@@ -39,7 +41,7 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
         var copy = new EnumMap<GoodsPolicyKind, List<Commodity>>(GoodsPolicyKind.class);
         policies.forEach((kind, commodities) -> {
             var values = List.copyOf(commodities);
-            if (values.isEmpty() || values.size() > 16
+            if (values.isEmpty() || values.size() > MAX_COMMODITIES
                     || values.stream().map(Commodity::itemKind).distinct().count() != values.size())
                 throw new IllegalArgumentException("goods policy must declare a bounded unique commodity catalog");
             copy.put(Objects.requireNonNull(kind), values);

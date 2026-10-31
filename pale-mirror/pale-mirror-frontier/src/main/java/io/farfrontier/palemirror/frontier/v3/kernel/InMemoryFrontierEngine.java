@@ -322,6 +322,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                     KernelQuarantineReporter.Boundary.DUE_TRANSACTION, failure);
             return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         }
+        // Preparation is read-only and owns no effect. A smaller subsequent horizon
+        // cannot execute its previously admitted future action or execution instant.
+        if (pendingCalculation != null && pendingCalculation.instant().compareTo(target) > 0) cancelExactCalculation();
         admissionIndex.begin(budget);
         schedules.beginExecutionPass(target, budget.maxClassificationEvaluations(), state);
         List<TransactionId> completed = new ArrayList<>();
@@ -347,7 +350,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             if (action == null) break;
             try {
                 if (!schedules.containsExact(action) || action.dueAt().compareTo(target) > 0)
-                    throw new IllegalStateException("ready index returned an obsolete or future action");
+                    throw new IllegalStateException("ready index returned an obsolete or future action: id=" + action.id().value()
+                            + " due=" + action.dueAt().ticks() + " target=" + target.ticks()
+                            + " exact=" + schedules.containsExact(action));
                 int cost = scheduledPlanner.admissionWeight(state, action);
                 if (cost < 1 || cost > budget.maxActionWeight())
                     throw new IllegalStateException("declared action cost cannot fit its execution budget: " + cost);

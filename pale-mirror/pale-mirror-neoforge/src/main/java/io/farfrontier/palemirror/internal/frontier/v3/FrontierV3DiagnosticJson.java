@@ -401,7 +401,15 @@ final class FrontierV3DiagnosticJson {
                 .filter(resident -> state.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.HUNGRY).count();
         int starving = (int) livingResidents.stream()
                 .filter(resident -> state.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.STARVING).count();
-        return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"strategic\":" + lane(value.strategic())
+        var guards = io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state, subject);
+        return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"guardTarget\":" + io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.target(state)
+                + ",\"guardsAssigned\":" + guards.size() + ",\"guardsReady\":" + guards.stream().filter(duty ->
+                    state.actorLocations().get(duty.execution().actorId()).condition().status() == ActorLifeStatus.ALIVE
+                    && io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state, duty)).count()
+                + ",\"guardActors\":" + strings(guards.stream().map(duty -> duty.execution().actorId().value()).toList())
+                + ",\"guardNames\":" + strings(guards.stream().map(duty -> state.humanPopulation().resident(duty.execution().actorId()).name()).toList())
+                + ",\"firstGuardName\":\"" + quote(guards.isEmpty() ? "" : state.humanPopulation().resident(guards.getFirst().execution().actorId()).name()) + "\""
+                + ",\"strategic\":" + lane(value.strategic())
                 + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())
                 + ",\"harvestAdmission\":\"" + quote(value.harvestAdmission()) + "\",\"livingFarmers\":" + value.livingFarmers()

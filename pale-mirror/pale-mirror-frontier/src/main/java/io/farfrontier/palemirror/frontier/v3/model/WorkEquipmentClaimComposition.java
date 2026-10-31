@@ -8,6 +8,7 @@ import java.util.function.BiFunction;
 /** Read-only composition of owner-retained reservations, not another mutable equipment registry. */
 public final class WorkEquipmentClaimComposition {
     private static final List<Function<FrontierWorldState, Set<SubjectId>>> OWNERS = List.of(
+            producer(state -> state.strategicPlans().guards(), (state, duty) -> Set.of(duty.weapon())),
             producer(state -> state.forest().work(), (state, job) -> Set.of(job.toolId())),
             producer(state -> state.extractionSites().work(), (state, job) -> job.terminal() ? Set.of() : Set.of(job.toolId())),
             producer(state -> state.resourceSites().harvestJobs(), (state, job) -> job.equipment().settled() ? Set.of() : Set.of(job.equipment().itemId())),

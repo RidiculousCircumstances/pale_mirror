@@ -138,6 +138,7 @@ class SettlementStaffingPolicyTest {
                 port(ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY, 2, 1),
                 port(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, 0, 0),
                 port(ResidentWorkKind.FORESTRY, HumanCapability.EXTRACTION, 0, 0),
+                port(ResidentWorkKind.GUARD, HumanCapability.SECURITY, 0, 0),
                 port(ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, 64, 0)));
         var state = initial();
         assertThrows(IllegalArgumentException.class, () -> policy.propose(state, state.bootstrap().settlements().getFirst().id(), 200L));
@@ -159,6 +160,7 @@ class SettlementStaffingPolicyTest {
                 port(ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY, bakers, 1),
                 port(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, 0, 0),
                 port(ResidentWorkKind.FORESTRY, HumanCapability.EXTRACTION, 0, 0),
+                port(ResidentWorkKind.GUARD, HumanCapability.SECURITY, 0, 0),
                 port(ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, 64, 0)));
     }
     private static SettlementStaffingPort port(ResidentWorkKind kind, HumanCapability capability, int target, int reserve) {

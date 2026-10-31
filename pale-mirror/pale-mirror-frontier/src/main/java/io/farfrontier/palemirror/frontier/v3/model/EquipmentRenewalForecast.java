@@ -14,6 +14,7 @@ final class EquipmentRenewalForecast {
         var party = state.companies().goodsTrade().participants().participants().get(home);
         if (party == null) return Map.of();
         for (var demand : EquipmentDemandComposition.read(state, home)) {
+            if (demand.workWear().isEmpty()) continue;
             var kinds = units.stream().filter(u -> demand.supports(state.bootstrap().ruleset().tools().require(u.kind())))
                     .map(EquipmentStockProjection.Unit::kind).collect(java.util.stream.Collectors.toSet());
             Option best = null;

@@ -25,7 +25,8 @@ public enum PhysicalIntentLifecycleOwner {
     RESOURCE_SITE_PREPARATION("frontier.resource-site-preparation"),
     AMBIENT_ACTOR_CUSTODY("frontier.ambient-actor-custody"),
     DECONTAMINATION("frontier.decontamination"),
-    SETTLEMENT_SERVICE_DECONTAMINATION("frontier.settlement-service-decontamination");
+    SETTLEMENT_SERVICE_DECONTAMINATION("frontier.settlement-service-decontamination"),
+    GUARD_DUTY("frontier.guard-duty");
 
     /** The first durable owner-capability codec.  Future incompatible meanings must bump it. */
     public static final int CODEC_VERSION = 2;

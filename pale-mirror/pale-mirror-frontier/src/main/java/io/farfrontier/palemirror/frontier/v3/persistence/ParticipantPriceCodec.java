@@ -19,7 +19,7 @@ final class ParticipantPriceCodec {
     }
     static Map<String, MarketPricePolicy.Quote> read(DataInputStream in) throws IOException {
         int count = in.readInt();
-        if (count < 0 || count > 16) throw new IllegalArgumentException("unbounded saved participant prices");
+        if (count < 0 || count > io.farfrontier.palemirror.frontier.v3.model.GoodsTradeRules.MAX_COMMODITIES) throw new IllegalArgumentException("unbounded saved participant prices");
         var prices = new HashMap<String, MarketPricePolicy.Quote>();
         for (int n = count; n > 0; n--) {
             String item = in.readUTF();

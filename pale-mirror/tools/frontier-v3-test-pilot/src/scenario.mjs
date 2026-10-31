@@ -548,6 +548,7 @@ function validEntityName(value) {
   return value && Object.keys(value).length === 1 && reference && Object.keys(reference).length === 3
     && validDiagnosticIdentity(reference)
     && ((reference.view === 'actor' && reference.field === 'name' && requiredId(reference.id, 'resident:'))
+      || (reference.view === 'settlement' && reference.field === 'firstGuardName' && requiredId(reference.id, 'settlement:'))
       || (reference.view === 'scene' && reference.field === 'primaryActorName')
       || (reference.view === 'site' && reference.field === 'workerPresentation'));
 }

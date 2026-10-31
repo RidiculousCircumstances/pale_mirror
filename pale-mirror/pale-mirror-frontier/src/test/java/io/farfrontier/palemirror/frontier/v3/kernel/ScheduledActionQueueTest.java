@@ -14,8 +14,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ScheduledActionQueueTest {
+    @Test void shorterExecutionHorizonCannotRunPreviouslyPromotedFutureWork() {
+        var queue = new ScheduledActionQueue();
+        var early = action("schedule:early", 10, 0, "resident:a", 1);
+        var later = action("schedule:later", 20, 0, "resident:b", 1);
+        queue.schedule(early); queue.schedule(later);
+        assertEquals(List.of(early), queue.selectDue(new SimInstant(30), new WorkBudget(1, 1)).admitted());
+        queue.cancel(early.id());
+        assertTrue(queue.selectDue(new SimInstant(11), new WorkBudget(1, 1)).admitted().isEmpty());
+        assertNull(queue.firstReady());
+        assertTrue(queue.containsExact(later), "horizon withdrawal never drops canonical work");
+        assertEquals(List.of(later), queue.selectDue(new SimInstant(20), new WorkBudget(1, 1)).admitted());
+    }
+
     @Test void addressedTransactionViewRetainsFutureActionsAndReplacesExactSubjectMembership() {
         var queue = new ScheduledActionQueue();
         var a = action("schedule:subject-a", 500, 0, "resident:a", 1);

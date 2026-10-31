@@ -153,9 +153,10 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> ALL_WORLD = union(physicalCommands(), REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
-            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES);
+            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES, GuardProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("forestry", new ForestryProcessModule()),
+            Map.entry("guard", new GuardProcessModule()),
             Map.entry("cultivation", new CultivationProcessModule()),
             Map.entry("defender-equipment-return-visit", new DefenderEquipmentReturnVisitProcessModule()),
             Map.entry("extraction", new ExtractionWorkProcessModule()),
@@ -203,6 +204,10 @@ public final class FrontierWorldProcessCatalog {
         };
     }
     private static final Map<String, FrontierScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry(GuardContinuation.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> GuardWorkProcess.review(state, action, instant.ticks()))))),
+            Map.entry(GuardContinuation.PROGRESS, ScheduledReviewAdmission.coalescedContinuation(withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> GuardWorkProcess.progress(state, action, instant.ticks()))))),
             Map.entry(CultivationProcessModule.REVIEW, coalescedReview(atExecutionTime(CultivationProcessModule::plan))),
             Map.entry(ProductionStationProcessModule.REVIEW, ProductionStationProcessModule.planner()),
             Map.entry(ResourceHaulingPolicy.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(ResourceHaulingPolicy::plan)))),
@@ -432,7 +437,7 @@ public final class FrontierWorldProcessCatalog {
                 ProductionStationProcessModule.DESCRIPTOR, GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
                 DefenderEquipmentReturnVisitProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
-                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR, CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR);
+                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR, CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR, GuardProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }

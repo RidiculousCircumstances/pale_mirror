@@ -1,0 +1,209 @@
+{
+  "schema": 1,
+  "id": "disposable_peaceful_guards_restart",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25575,
+    "profile": "peaceful-guards"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "guardTarget": 2
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 1000
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "guardTarget": 2,
+        "guardsAssigned": 2,
+        "guardsReady": 2
+      },
+      "timeoutMs": 300000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "maxAngleDeg": 80,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 0,
+        "y": 80,
+        "z": 0
+      },
+      "settleMs": 15000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": -8
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "guardTarget": 2,
+        "guardsAssigned": 2,
+        "guardsReady": 2
+      },
+      "timeoutMs": 300000
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "container",
+            "id": "container:1-depot",
+            "field": "position"
+          }
+        },
+        "offset": {
+          "x": -8,
+          "y": -1,
+          "z": -8
+        },
+        "settleMs": 1000
+      },
+      {
+        "type": "assert_fixture",
+        "timeoutMs": 30000,
+        "checks": [
+          {
+            "view": "settlement",
+            "id": "settlement:1",
+            "expect": {
+              "status": "ok",
+              "guardsAssigned": 2,
+              "guardsReady": 2
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "assertions": [
+    {
+      "after": 1,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "guardsReady": 2,
+        "guardsAssigned": 2
+      }
+    },
+    {
+      "after": 7,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "guardsReady": 2,
+        "guardsAssigned": 2
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "peaceful-armed-guard-after-restart"
+    }
+  ],
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 6000,
+    "timeoutMs": 450000
+  }
+}

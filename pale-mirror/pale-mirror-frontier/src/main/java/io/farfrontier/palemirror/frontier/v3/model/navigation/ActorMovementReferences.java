@@ -30,6 +30,8 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
         Objects.requireNonNull(forest); Objects.requireNonNull(productionJobs);
         Objects.requireNonNull(actors); Objects.requireNonNull(executions);
     }
+    public static final Source<ActorMovementReferences, SubjectId, GuardDuty>
+            GUARDS = new Source<>(r -> r.strategicPlans().guards());
     public static final Source<ActorMovementReferences, SubjectId, ProductionJob>
             PRODUCTION = new Source<>(ActorMovementReferences::productionJobs);
     public static final Source<ActorMovementReferences, SubjectId, ForestryWork>
@@ -57,7 +59,7 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
     public static final Source<ActorMovementReferences, SubjectId, ResidentMeal>
             MEALS = new Source<>(r -> r.people().meals());
     public static final List<Source<ActorMovementReferences, ?, ?>> SOURCES = List.of(
-            PRODUCTION, FORESTRY, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
+            PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
     public List<Read<ActorMovementReferences>> reads(ActorMovement movement) {
         var actor = movement.order().actorId();
         var result = new java.util.ArrayList<Read<ActorMovementReferences>>();
