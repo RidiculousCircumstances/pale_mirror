@@ -88,3 +88,7 @@ No service admission, resource transfer or owner goal is awarded by a staging le
 Focused navigation checks and45 native local-navigation checks passed; the new
 far-buffer test proves retained route/order, separate visitor destination and hard
 service exclusion. This correction is generic, not a forge/depot/guard route.
+The shared service-clearance owner also publishes one ordinary body inspection on
+witnessed buffer arrival when canonical position differs. This fixes distance-based
+admission retaining the remote origin; it neither records each step nor completes the
+work/service order. Native local-navigation45/45 and focused navigation12 passed again.

@@ -46,8 +46,15 @@ final class FrontierV3ServiceClearanceNavigation {
             // Being outside is not a parking instruction: the exit must remain available.
             // A normal jump on the way to a buffer must not switch back to an egress goal;
             // only the occupancy receipt above requires supported-ground evidence.
-            return FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, depotId,
+            var result = FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, depotId,
                     actorId, ordinal, generation, actuation);
+            // Admission compares canonical physical positions. Publish the actual buffer
+            // arrival once, rather than leaving this visitor back at its distant origin.
+            // Common body inspection alone writes the position; no work arrival is awarded.
+            if (FrontierV3ServiceApproachNavigation.reachedWaitingTarget(level, body, depotId)
+                    && !state.actorLocations().get(actorId).body().equals(FrontierV3SurfaceObservation.observedBody(body)))
+                FrontierV3ActorBodyController.inspectCurrent(level, runtime, body);
+            return result;
         }
         return pursue(level, body, state, settlementId, depotId, ownerId, actorId, ordinal, generation, actuation);
     }

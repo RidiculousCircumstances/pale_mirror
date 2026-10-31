@@ -83,6 +83,13 @@ final class FrontierV3ServiceApproachNavigation {
                 : result; // Never return semantic ARRIVED to a work owner.
     }
 
+    /** A staging checkpoint is a physical position fact, never owner/service arrival. */
+    static boolean reachedWaitingTarget(ServerLevel level, Mob body, SubjectId point) {
+        var waiting = WAITING.get(body);
+        return waiting != null && waiting.point().equals(point) && waiting.authority().current(body)
+                && FrontierV3SemanticMovement.arrived(level, body, waiting.target());
+    }
+
     /**
      * The owning provider validates its service/order relation before calling us.
      * A parcel can legitimately be serviced by a GROUP_MEMBER execution whose
