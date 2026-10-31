@@ -45,18 +45,24 @@ class FrontierV3NavigationScopeTest {
     }
 
     private static FrontierWorldState tradeReview(FrontierWorldState state, SubjectId party, long tick) {
-        for (var proposed : io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.plan(state,
-                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(party, tick),
-                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick))) {
-            if (proposed.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect) continue;
-            var event = new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(1,
-                    new io.farfrontier.palemirror.frontier.v3.api.EventId("event:service-wait-test"),
-                    new io.farfrontier.palemirror.frontier.v3.api.TransactionId("transaction:service-wait-test"),
-                    state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(1),
-                    new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick), proposed.subject(),
-                    io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
-                            new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:service-wait-test")), proposed.payload());
-            state = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.reduce(state, event);
+        var market = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested)
+                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantWakeup.party(
+                        state, party, "service-wait-fixture", tick - 1).getFirst().payload()).action();
+        // Review publishes consent; its ordinary opportunity successor admits transport.
+        for (var phase : List.of(io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(party, tick), market)) {
+            for (var proposed : io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.plan(state,
+                    phase,
+                    new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick))) {
+                if (proposed.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect) continue;
+                var event = new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(1,
+                        new io.farfrontier.palemirror.frontier.v3.api.EventId("event:service-wait-test"),
+                        new io.farfrontier.palemirror.frontier.v3.api.TransactionId("transaction:service-wait-test"),
+                        state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(1),
+                        new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick), proposed.subject(),
+                        io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
+                                new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:service-wait-test")), proposed.payload());
+                state = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.reduce(state, event);
+            }
         }
         return state;
     }
