@@ -831,7 +831,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition"));
             case "actor-movement" -> types("frontier.actor_movement_grounded", "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
-                    "frontier.actor_movement_cold_route_started",
+                    "frontier.actor_movement_cold_route_started", "kernel.reconsideration_requested",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(
                     "frontier.actor_movement_started", "frontier.actor_movement_interrupted",

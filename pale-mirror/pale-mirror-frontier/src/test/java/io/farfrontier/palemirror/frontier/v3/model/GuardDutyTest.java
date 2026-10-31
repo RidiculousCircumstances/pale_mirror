@@ -127,12 +127,12 @@ class GuardDutyTest {
         var requested = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         var command = command(state, requested, 6001);
         var plan = accepted(FrontierWorldProcessCatalog.planCommand("physical-observation", state, command));
-        state = apply(state, plan.events(), 6001);
+        state = apply(state, FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("physical-observation", plan.events()), 6001);
         intent = state.physicalIntents().get(intent.id());
         var receipt = new EquipmentIssueObservation(new PhysicalObservationId("observation:guard-issued"), intent.id(), duty.id(), actor, item.id(), slot);
         requested = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         plan = accepted(FrontierWorldProcessCatalog.planCommand("physical-observation", state, command(state, requested, 6002)));
-        state = apply(state, plan.events(), 6002);
+        state = apply(state, FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("physical-observation", plan.events()), 6002);
         assertFalse(GuardAuthority.pending(state, duty)); assertTrue(GuardEquipment.held(state, duty));
         state = apply(state, GuardWorkProcess.progress(state, GuardContinuation.progress(duty.id(), 6003), 6003), 6003);
         assertEquals(GuardDuty.Phase.ON_DUTY, state.strategicPlans().guards().get(duty.id()).phase());
@@ -230,7 +230,8 @@ class GuardDutyTest {
         var movement = state.actorMovements().get(actor);
         if (movement == null) return state;
         long now = Math.max(tick + 1, movement.coldTravel().map(TimedKnownRoute::arrivalTick).orElse(tick + 1));
-        return apply(state, ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement, now), now), now);
+        return apply(state, FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), state,
+                ActorMovementProcess.progress(movement, now), new SimInstant(now)), now);
     }
     private static FrontierWorldState armed() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst();
@@ -278,7 +279,8 @@ class GuardDutyTest {
                 var movement = state.actorMovements().get(duty.execution().actorId());
                 if (movement != null) {
                     long now = Math.max(tick + 1, movement.coldTravel().map(TimedKnownRoute::arrivalTick).orElse(tick + 1));
-                    state = apply(state, ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement, now), now), now);
+                    state = apply(state, FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), state,
+                            ActorMovementProcess.progress(movement, now), new SimInstant(now)), now);
                 }
             }
             if (GuardEquipment.in(state, home.id()).stream().allMatch(d -> d.phase() == GuardDuty.Phase.ON_DUTY)

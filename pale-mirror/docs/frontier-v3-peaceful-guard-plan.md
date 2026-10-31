@@ -92,3 +92,11 @@ The shared service-clearance owner also publishes one ordinary body inspection o
 witnessed buffer arrival when canonical position differs. This fixes distance-based
 admission retaining the remote origin; it neither records each step nor completes the
 work/service order. Native local-navigation45/45 and focused navigation12 passed again.
+
+The first native guard equipment arrival exposed a missing declared output on the
+shared actor-movement process: a registered provider may request its owner's
+coalesced continuation. The descriptor now explicitly permits that kernel event.
+Guard route tests use public catalog planning (including output validation), and
+the physical issue test validates its producer's declared outputs. Physical
+confirmation and population-owned resume/interruption already declare that output;
+no permissive fallback or bypass of the closed process contract was added.
