@@ -110,3 +110,12 @@ while preserving any already admitted physical effect and actual occupancy evide
 This keeps backpressure from becoming a fatal missing-owner contract or blocking
 other food visitors; restored readiness reuses the same job and approach. Focused
 tests cover blocked station travel, recovery, lost guard stock and full output storage.
+
+Native arrival also identified a guard-specific scheduling omission: the owner
+started its movement state without the shared movement continuation. All guard
+approach/clearance admissions now use common `ActorMovementProcess.planStart`,
+which emits the order and its queue entry in one batch; station work also uses
+that factory. Goal withdrawal cancels the exact movement continuation. A real
+engine-queue regression runs approach, issue and clearance to terminal readiness
+without manually invoking movement handlers. The queue's missing-schedule check
+remains strict.

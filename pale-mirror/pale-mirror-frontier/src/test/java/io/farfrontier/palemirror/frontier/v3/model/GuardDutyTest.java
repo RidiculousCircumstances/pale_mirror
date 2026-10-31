@@ -44,6 +44,37 @@ class GuardDutyTest {
         assertSame(unchanged, state.inventory()); assertEquals(2, GuardEquipment.in(state, home).size());
         var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
     }
+    @Test void actualKernelRunsEquipmentApproachIssueAndExitWithoutManuallyDrivingMovement() {
+        var state = armed(); var duty = state.strategicPlans().guards().values().iterator().next();
+        var sword = state.inventory().items().get(duty.weapon());
+        state = state.withInventory(state.inventory().moveObservedItem(sword.id(), sword.custody(),
+                new InventoryCustody.ContainerSlot(duty.source().containerId(), state.inventory().firstFreeSlot(duty.source().containerId()).orElseThrow())));
+        duty = duty.acquiring(sword.id(), duty.source());
+        state = state.withStrategicPlans(state.strategicPlans().withGuard(duty));
+        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
+        var engine = FrontierEngines.createCanonicalStateAccess(new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(6000),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                List.of(GuardContinuation.progress(duty.id(), 6001), ResidentActivityProcess.review(duty.execution().actorId(), 20000)),
+                base.transactionCommitter(), base.stateValidator(),
+                base.executionMetrics(), base.kernelQuarantineReporter()));
+        for (long tick = 6001; tick < 20000; tick += 20) {
+            var result = engine.advanceTo(new SimInstant(tick), new WorkBudget(1000, 1000));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().toString());
+            var current = engine.canonicalState().state();
+            if (current.strategicPlans().guards().get(duty.id()).phase() == GuardDuty.Phase.ON_DUTY
+                    && !current.actorMovements().containsKey(duty.execution().actorId())) break;
+        }
+        var completed = engine.canonicalState().state();
+        var ready = completed.strategicPlans().guards().get(duty.id());
+        assertEquals(GuardDuty.Phase.ON_DUTY, ready.phase(), "the real queue must execute both approach and post-issue clearance: " + engine.checkpoint().schedules()
+                + " movement=" + completed.actorMovements().get(duty.execution().actorId())
+                + " actor=" + completed.actorLocations().get(duty.execution().actorId())
+                + " access=" + ServiceAccessCoordinator.available(completed, GuardAuthority.service(ready)));
+        assertTrue(GuardEquipment.held(completed, ready));
+        assertFalse(completed.actorMovements().containsKey(duty.execution().actorId()));
+        assertTrue(ServiceAccessCoordinator.boundary(completed, duty.source().containerId())
+                .cleared(completed.actorLocations().get(duty.execution().actorId()).body()));
+    }
     @Test void lostWeaponLowersReadinessWithoutInventingAReplacementAndStaleExecutionFails() {
         var state = armed(); var duty = state.strategicPlans().guards().values().iterator().next();
         var item = state.inventory().items().get(duty.weapon());

@@ -69,7 +69,10 @@ public final class GuardWorkProcess {
         var activeMove = state.actorMovements().get(duty.execution().actorId());
         if (activeMove != null) {
             if (activeMove.context() instanceof ActorMovementContext.GuardEquipment && !GuardAuthority.goalAvailable(state, duty))
-                return List.of(changed(duty, GuardDutyEvent.Change.GOAL_WITHDRAWN), cancel(action), GuardContinuation.wake(duty.id(), tick));
+                return List.of(changed(duty, GuardDutyEvent.Change.GOAL_WITHDRAWN),
+                        new ProposedEvent(duty.execution().actorId(), new ScheduleEffect.Cancelled(
+                                ActorMovementProcess.progress(activeMove, activeMove.issuedAtTick() + 1).id())),
+                        cancel(action), GuardContinuation.wake(duty.id(), tick));
             return cancelled(action);
         }
         var item = state.inventory().items().get(duty.weapon());
@@ -78,7 +81,7 @@ public final class GuardWorkProcess {
             var events = new ArrayList<ProposedEvent>();
             var clearance = clearance(state, duty, tick);
             if (clearance.isPresent()) {
-                events.add(new ProposedEvent(duty.execution().actorId(), new ActorMovementStarted(clearance.orElseThrow())));
+                events.addAll(ActorMovementProcess.planStart(clearance.orElseThrow()));
                 events.addAll(retry(state, action, tick));
             } else {
                 events.add(changed(duty, GuardDutyEvent.Change.ENDED)); events.add(cancel(action));
@@ -106,9 +109,11 @@ public final class GuardWorkProcess {
             return List.of(new ProposedEvent(duty.id(), new GuardDutyEvent.Changed(duty.id(), duty.revision(), GuardDutyEvent.Change.RESELECTED,
                     Optional.of(new GuardDutyEvent.Selection(choice.item().id(), choice.source())))), GuardContinuation.wake(duty.id(), tick));
         }
-        if (!duty.order().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()))
-            return List.of(new ProposedEvent(duty.execution().actorId(), new ActorMovementStarted(new ActorMovement(duty.order(), tick,
-                    new ActorMovementContext.GuardEquipment(duty.id(), duty.revision()), duty.execution()))), cancel(action));
+        if (!duty.order().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface())) {
+            var events = new ArrayList<>(ActorMovementProcess.planStart(new ActorMovement(duty.order(), tick,
+                    new ActorMovementContext.GuardEquipment(duty.id(), duty.revision()), duty.execution())));
+            events.add(cancel(action)); return List.copyOf(events);
+        }
         if (!ServiceAccessCoordinator.available(state, GuardAuthority.service(duty))) return retry(state, action, tick);
         if (ActorExecutionCoordinator.coldAvailable(state, duty.execution().actorId())) {
             // A live container alone cannot supply a native actor hand. Await its common release
@@ -127,7 +132,7 @@ public final class GuardWorkProcess {
         var after = reduce(state, duty.id(), (GuardDutyEvent) event.payload(), tick);
         var events = new ArrayList<ProposedEvent>(); events.add(event);
         clearance(after, duty, tick)
-                .ifPresent(move -> events.add(new ProposedEvent(duty.execution().actorId(), new ActorMovementStarted(move))));
+                .ifPresent(move -> events.addAll(ActorMovementProcess.planStart(move)));
         events.add(cancel(action)); return List.copyOf(events);
     }
 

@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
-import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
@@ -47,8 +46,7 @@ final class StationWorkMovementPlanning {
         var execution = state.actorExecutions().current(ActorActivityKind.PRODUCTION).get(job.workerId());
         var movement = new ActorMovement(order, tick, new ActorMovementContext.StationWorkLeg(job.id(), work.phase(),
                 work.materials().tripOrdinal(), ProductionServiceAccess.point(state, job)), execution);
-        return List.of(new ProposedEvent(job.workerId(), new ActorMovementStarted(movement)),
-                new ProposedEvent(job.workerId(), new ScheduleEffect.Created(ActorMovementProcess.progress(movement, Math.addExact(tick, 1L)))),
-                ProductionContinuation.wake(job, tick));
+        var events = new ArrayList<>(ActorMovementProcess.planStart(movement));
+        events.add(ProductionContinuation.wake(job, tick)); return List.copyOf(events);
     }
 }

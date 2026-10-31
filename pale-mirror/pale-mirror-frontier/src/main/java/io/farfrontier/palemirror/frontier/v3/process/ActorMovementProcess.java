@@ -20,6 +20,13 @@ public final class ActorMovementProcess {
     public static long maximumJourneyTicks() { return Math.multiplyExact((long) TimedKnownRoute.MAX_SURFACES, COLD_TICKS_PER_EDGE); }
     private ActorMovementProcess() { }
 
+    /** One admission batch for an owned order and its mandatory shared continuation. */
+    public static List<ProposedEvent> planStart(ActorMovement movement) {
+        return List.of(new ProposedEvent(movement.order().actorId(), new ActorMovementStarted(movement)),
+                new ProposedEvent(movement.order().actorId(), new ScheduleEffect.Created(
+                        progress(movement, Math.addExact(movement.issuedAtTick(), 1L)))));
+    }
+
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject,
                                                    ActorMovementStarted started) {
         ActorMovement movement = started.movement();
