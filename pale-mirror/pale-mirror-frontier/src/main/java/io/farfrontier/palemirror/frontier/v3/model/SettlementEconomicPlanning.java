@@ -42,13 +42,17 @@ final class SettlementEconomicPlanning {
     }
     static ExportAdvice exportAdvice(FrontierWorldState state, SettlementSupplyFacts input,
             boolean requireSustainedExport, Set<String> potentialItems, boolean includeCounters) {
+        return exportAdvice(state, input, requireSustainedExport, potentialItems, includeCounters, input.atTick());
+    }
+    static ExportAdvice exportAdvice(FrontierWorldState state, SettlementSupplyFacts input,
+            boolean requireSustainedExport, Set<String> potentialItems, boolean includeCounters, long marketAt) {
         var home = input.settlement();
         var trade = state.companies().goodsTrade(); var rules = state.bootstrap().ruleset().goodsTrade();
         var participant = trade.participants().participants().get(home);
         var asks = new TreeMap<String, Long>();
         for (var commodity : rules.policies().get(participant.policy()))
             asks.put(commodity.itemKind(), GoodsParticipantPricing.ask(participant, commodity).raw());
-        long now = input.atTick();
+        long now = marketAt;
         var interests = new ArrayList<QuoteCandidate>(); var counters = new ArrayList<QuoteCandidate>();
         for (var item : new TreeSet<>(potentialItems)) {
           for (var demand : GoodsBuyerDemand.read(state, participant, item, now, includeCounters ? 0 : asks.get(item))) {

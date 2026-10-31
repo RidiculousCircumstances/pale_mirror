@@ -12,7 +12,9 @@ final class FrontierV3AdvisoryDiagnosticJson {
         json.addProperty("capacityWaiters", status.capacityWaiters()); json.addProperty("hostAvailable", status.hostAvailable());
         json.addProperty("reservationReadiness", status.reservationReadiness().name());
         json.add("reservation", status.reservation().map(FrontierV3AdvisoryDiagnosticJson::action).orElse(JsonNull.INSTANCE));
-        json.add("oldestCapacityWaiter", status.oldestCapacityWaiter().map(FrontierV3AdvisoryDiagnosticJson::action).orElse(JsonNull.INSTANCE));
+        json.add("capacityHead", status.capacityHead().map(FrontierV3AdvisoryDiagnosticJson::action).orElse(JsonNull.INSTANCE));
+        // Current capacity admission began here; business dueAt also includes earlier route/calculation stages.
+        json.add("capacityHeadSinceTick", status.capacityHeadSince().<JsonElement>map(at -> new JsonPrimitive(at.ticks())).orElse(JsonNull.INSTANCE));
         return json.toString();
     }
     private static JsonElement action(ScheduledAction action) {

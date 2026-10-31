@@ -94,6 +94,42 @@ class GoodsParticipantReviewAdviceTest {
         assertTrue(completion.revalidate(state, new SimInstant(4000 + state.bootstrap().ruleset().goodsTrade().reviewInterval())).isEmpty());
         assertTrue(completion.revalidate(state, new SimInstant(3999)).isEmpty());
     }
+    @Test void peerRetryReusesOnlyTheDatedDomesticForecastAndHardOwnerChangesReopenIt() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:domestic-review-reuse"), 126L,
+                FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
+        var home = state.bootstrap().settlements().get(6).id();
+        var action = GoodsParticipantProcess.review(home, 4000);
+        var first = SettlementEconomicPlanPreparation.review(state, action, new SimInstant(4000));
+        var trade = state.companies().goodsTrade(); var registry = trade.participants();
+        var owner = registry.participants().get(home); var peer = owner.known().getFirst().party().id();
+        var peerChanged = registry.withEconomicState(peer, registry.economicState(peer).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.STOCK, Set.of("minecraft:bread"))));
+        var changed = state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(peerChanged)));
+        var retried = SettlementEconomicPlanPreparation.review(changed, action, new SimInstant(4001));
+        assertSame(first.publication().orElseThrow().domestic(), retried.publication().orElseThrow().domestic());
+        assertEquals(first.atTick(), retried.atTick(), "reuse preserves the forecast date rather than renewing it");
+        assertEquals(first.publication().orElseThrow().reviewAtTick(), retried.publication().orElseThrow().reviewAtTick());
+        var market = registry.withEconomicState(home, registry.economicState(home).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.MARKET, Set.of("minecraft:bread"))));
+        var notified = SettlementEconomicPlanPreparation.review(state.withCompanies(state.companies().withGoodsTrade(
+                trade.withParticipants(market))), action, new SimInstant(4001));
+        assertSame(first.publication().orElseThrow().domestic(), notified.publication().orElseThrow().domestic());
+        assertEquals(first.publication().orElseThrow().inputRevision() + 1, notified.publication().orElseThrow().inputRevision(),
+                "the new MARKET generation and the draft price review both remain accounted");
+        var hard = registry.withEconomicState(home, registry.economicState(home).invalidate(
+                Map.of(SettlementEconomicPlanningState.Change.CASH, Set.of())));
+        var renewed = SettlementEconomicPlanPreparation.review(state.withCompanies(state.companies().withGoodsTrade(
+                trade.withParticipants(hard))), action, new SimInstant(4002));
+        assertEquals(4002, renewed.atTick(), "a changed funding basis must collect and price domestic facts anew");
+        var historical = SettlementEconomicPlanPreparation.review(state, action, new SimInstant(3999));
+        assertEquals(3999, historical.atTick(), "a future cached forecast cannot leak into a historical branch");
+        var expired = SettlementEconomicPlanPreparation.review(state, action,
+                new SimInstant(4000 + state.bootstrap().ruleset().goodsTrade().reviewInterval()));
+        assertTrue(expired.atTick() > first.atTick());
+        assertTrue(state.companies().goodsTrade().contracts().isEmpty());
+        assertTrue(state.shipments().missions().isEmpty(), "review-stage reuse grants no shipment or stock authority");
+    }
+
     @Test void publicQuoteWakesOpposingCommodityInterestsOnceAndLeavesOtherKnownPeersAlone() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:addressed-market-wake"), 126L,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));

@@ -37,6 +37,8 @@ class ScheduledAdvisoryKernelTest {
         assertEquals(new Counter(1), engine.canonicalState().state());
         assertEquals(0, begun.get()); assertEquals(List.of(advice), engine.checkpoint().schedules());
         assertEquals(1, engine.advisoryStatus().capacityWaiters());
+        assertTrue(engine.advisoryStatus().capacityHead().isPresent());
+        assertTrue(engine.advisoryStatus().capacityHeadSince().isPresent());
         assertTrue(engine.advisoryStatus().reservation().isEmpty(), "a parked owner cannot retain the runnable capacity ticket");
         available.set(true); engine.advanceTo(at, budget);
         assertEquals(1, begun.get()); assertEquals(new Counter(11), engine.canonicalState().state());
@@ -73,12 +75,15 @@ class ScheduledAdvisoryKernelTest {
         // The exact predecessor remains independently runnable.
         engine.advanceTo(at, budget); assertTrue(engine.hasPendingCalculation());
         assertEquals(1, engine.advisoryStatus().capacityWaiters());
+        assertTrue(engine.advisoryStatus().capacityHead().isPresent());
+        assertTrue(engine.advisoryStatus().capacityHeadSince().isPresent());
         assertTrue(engine.advisoryStatus().reservation().isEmpty());
         available.set(true); engine.advanceTo(at, budget);
         assertEquals(0, begun.get()); assertEquals(new Counter(0), engine.canonicalState().state());
         assertEquals(Optional.of(advice), engine.advisoryStatus().reservation());
         assertEquals(FrontierAdvisoryStatus.Readiness.CHECKING, engine.advisoryStatus().reservationReadiness());
         assertEquals(0, engine.advisoryStatus().inFlight());
+        assertTrue(engine.advisoryStatus().capacityHeadSince().isEmpty());
         exactReady.set(true); engine.advanceTo(at, budget);
         assertEquals(1, begun.get(), "continuous asynchronous exact work must not starve an idle advice lane");
         assertEquals(new Counter(11), engine.canonicalState().state());

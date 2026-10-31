@@ -1,14 +1,28 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionDeposit;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.geometry.*;
 
 /** Extraction supplies block facts; shared regional projection owns navigation interpretation. */
 final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
-    private record DepositView(ExtractionGeometryFacts facts, RegionalNavigationProjection projection) {
-        DepositView() { this(new ExtractionGeometryFacts(), new RegionalNavigationProjection()); }
+    /** Published parts are quiescent. A later snapshot forks only a changed site's writer. */
+    private record DepositView(ExtractionGeometryFacts facts, RegionalNavigationProjection projection,
+            Object definitions, RegionalNavigationProjection.View view) {
+        DepositView() { this(new ExtractionGeometryFacts(), new RegionalNavigationProjection(), null, null); }
+        DepositView refresh(FrontierWorldState state, ExtractionDeposit deposit) {
+            if (facts.unchanged(state, deposit) && definitions == state.navigationGeometry().definitions()) return this;
+            var nextFacts = new ExtractionGeometryFacts(facts);
+            var blocks = nextFacts.read(state, deposit);
+            if (blocks == facts.snapshot() && definitions == state.navigationGeometry().definitions())
+                return new DepositView(nextFacts, projection, definitions, view);
+            var nextProjection = projection.fork();
+            var nextView = nextProjection.read(blocks, state.navigationGeometry());
+            return new DepositView(nextFacts, nextProjection, state.navigationGeometry().definitions(), nextView);
+        }
     }
+    private final ImmutableResultView<SubjectId, DepositView> siteViews = new ImmutableResultView<>(128);
     private final ImmutableResultView<String, KnownSiteGeometry.View> completed = new ImmutableResultView<>(4);
     private volatile Projection preparedSeed;
     private final ThreadLocal<Projection> working = ThreadLocal.withInitial(() -> {
@@ -23,7 +37,7 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
                 state.extractionSites().geology(), state.extractionSites().knowledge(), state.navigationGeometry().definitions()),
                 "geometry", () -> {
                     var builder = working.get();
-                    var result = builder.refresh(state);
+                    var result = builder.refresh(state, siteViews);
                     var seed = preparedSeed;
                     if (seed == null || seed.view != result) preparedSeed = new Projection(builder);
                     return result;
@@ -44,13 +58,12 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
         /** Private frozen seeds are never refreshed; fork before any mutation. */
         Projection(Projection source) {
             projectedBootstrap = source.projectedBootstrap; view = source.view;
-            source.deposits.forEach((id, part) -> deposits.put(id,
-                    new DepositView(new ExtractionGeometryFacts(part.facts()), part.projection().fork())));
+            deposits.putAll(source.deposits);
             surfaceParts = source.surfaceParts.fork(); obstacleParts = source.obstacleParts.fork();
             withdrawnParts = source.withdrawnParts.fork(); unknownParts = source.unknownParts.fork();
             blockParts = source.blockParts.fork();
         }
-        private KnownSiteGeometry.View refresh(FrontierWorldState state) {
+        private KnownSiteGeometry.View refresh(FrontierWorldState state, ImmutableResultView<SubjectId, DepositView> completedSites) {
             if (projectedBootstrap != state.bootstrap()) {
                 deposits.clear(); surfaceParts = new RegionalSurfaceContributions<>();
                 obstacleParts = new RegionalBlockContributions<>(); withdrawnParts = new RegionalBlockContributions<>();
@@ -64,8 +77,15 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
                 unknownParts.replace(removed, RegionalBlockSet.copyOf(Set.of())); blockParts.replace(removed, RegionalBlockMap.copyOf(Map.of()));
             }
             for (var entry : current.entrySet()) {
-                var local = deposits.computeIfAbsent(entry.getKey(), ignored -> new DepositView());
-                var result = local.projection().read(local.facts().read(state, entry.getValue()), state.navigationGeometry());
+                var prior = deposits.get(entry.getKey());
+                if (prior == null) prior = new DepositView();
+                var seed = prior; var deposit = entry.getValue(); var sites = state.extractionSites();
+                var local = completedSites.get(List.of(state.bootstrap(), deposit.site(), deposit.cells(), deposit.geometry(),
+                        sites.geology(), sites.knowledge(), sites.geologicalExclusions(), state.navigationGeometry().definitions()),
+                        entry.getKey(), () -> seed.refresh(state, deposit));
+                deposits.put(entry.getKey(), local);
+                if (local.view() == prior.view()) continue;
+                var result = local.view();
                 var geometry = result.geometry();
                 surfaceParts.replace(entry.getKey(), RegionalSurfaceMap.copyOf(geometry.supports()));
                 obstacleParts.replace(entry.getKey(), RegionalBlockSet.copyOf(geometry.volumes()));

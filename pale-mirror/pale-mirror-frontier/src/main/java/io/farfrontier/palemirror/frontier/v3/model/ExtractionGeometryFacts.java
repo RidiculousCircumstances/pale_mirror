@@ -16,19 +16,36 @@ final class ExtractionGeometryFacts {
     private Map<BlockPosition, ExtractionDeposit.GeometryState> observations;
     private RegionalBlockSet footprint = RegionalBlockSet.copyOf(Set.of());
     private RegionalBlockSet excluded = RegionalBlockSet.copyOf(Set.of());
-    private final LocalBlockExclusions exclusions = new LocalBlockExclusions();
-    private List<Object> basis = List.of();
+    private final LocalBlockExclusions exclusions;
+    private Object exclusionRoot;
+    private Object bootstrap;
+    private Object geology;
+    private Object knowledge;
+    private record GeologicalRegion(List<io.farfrontier.palemirror.frontier.v3.model.geology.MineralGeology.Match> declarations,
+            Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> surveyed) { }
+    private Map<Region, GeologicalRegion> geologicalRegions = Map.of();
     private io.farfrontier.palemirror.frontier.v3.api.SubjectId settlement;
     private Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> minerals = Set.of();
     private RegionalBlockMap<Optional<NavigationBlockState>> facts = RegionalBlockMap.copyOf(Map.of());
 
-    ExtractionGeometryFacts() { }
+    ExtractionGeometryFacts() { exclusions = new LocalBlockExclusions(); }
     ExtractionGeometryFacts(ExtractionGeometryFacts source) {
+        exclusions = new LocalBlockExclusions(source.exclusions); exclusionRoot = source.exclusionRoot;
         layout = source.layout; declared = source.declared; overrides = source.overrides;
         cells = source.cells; observations = source.observations; footprint = source.footprint;
-        excluded = source.excluded; basis = source.basis; settlement = source.settlement;
+        excluded = source.excluded; bootstrap = source.bootstrap; geology = source.geology; knowledge = source.knowledge;
+        geologicalRegions = source.geologicalRegions; settlement = source.settlement;
         minerals = source.minerals; facts = source.facts;
     }
+
+    boolean unchanged(FrontierWorldState state, ExtractionDeposit deposit) {
+        return layout == deposit.site().layout() && cells == deposit.cells() && observations == deposit.geometry()
+                && bootstrap == state.bootstrap() && geology == state.extractionSites().geology()
+                && knowledge == state.extractionSites().knowledge()
+                && exclusionRoot == state.extractionSites().geologicalExclusions()
+                && deposit.site().settlementId().equals(settlement) && deposit.site().mineralDeposits().equals(minerals);
+    }
+    RegionalBlockMap<Optional<NavigationBlockState>> snapshot() { return facts; }
 
     RegionalBlockMap<Optional<NavigationBlockState>> read(FrontierWorldState state, ExtractionDeposit deposit) {
         var changed = new HashSet<Region>();
@@ -57,9 +74,26 @@ final class ExtractionGeometryFacts {
         }
         var nextExcluded = RegionalBlockSet.copyOf(exclusions.read(nextFootprint, state.extractionSites().geologicalExclusions()));
         changed.addAll(nextExcluded.changesFrom(excluded));
-        var nextBasis = List.of(state.bootstrap(), state.extractionSites().geology(), state.extractionSites().knowledge());
-        if (!ImmutablePlanningScope.same(basis, nextBasis) || !deposit.site().settlementId().equals(settlement)
-                || !deposit.site().mineralDeposits().equals(minerals)) changed.addAll(nextFootprint.regions());
+        var sites = state.extractionSites();
+        boolean ownerChanged = !deposit.site().settlementId().equals(settlement)
+                || !deposit.site().mineralDeposits().equals(minerals);
+        var nextRegions = geologicalRegions;
+        if (layoutChanged || ownerChanged || geology != sites.geology() || knowledge != sites.knowledge()) {
+            var local = new HashMap<Region, GeologicalRegion>();
+            for (var region : nextFootprint.regions()) {
+                var declarations = sites.geology().in(region);
+                var surveyed = new HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
+                for (var match : declarations) if (deposit.site().mineralDeposits().contains(match.depositId())
+                        && sites.knowledge().knows(deposit.site().settlementId(), sites.geology().deposits().get(match.depositId())))
+                    surveyed.add(match.depositId());
+                var image = new GeologicalRegion(declarations, Set.copyOf(surveyed));
+                var prior = geologicalRegions.get(region);
+                local.put(region, image.equals(prior) ? prior : image);
+                if (!image.equals(prior)) changed.add(region);
+            }
+            nextRegions = Map.copyOf(local);
+        }
+        if (bootstrap != state.bootstrap()) changed.addAll(nextFootprint.regions());
         if (!changed.isEmpty()) {
             var working = new ExtractionWorkingSurfaces(state, deposit);
             var updates = new HashMap<Region, Map<BlockPosition, Optional<NavigationBlockState>>>();
@@ -73,7 +107,9 @@ final class ExtractionGeometryFacts {
         }
         declared = nextDeclared; footprint = nextFootprint; layout = nextLayout; overrides = nextOverrides;
         cells = deposit.cells(); observations = deposit.geometry(); excluded = nextExcluded;
-        basis = nextBasis; settlement = deposit.site().settlementId(); minerals = deposit.site().mineralDeposits();
+        bootstrap = state.bootstrap(); geology = sites.geology(); knowledge = sites.knowledge();
+        exclusionRoot = sites.geologicalExclusions();
+        geologicalRegions = nextRegions; settlement = deposit.site().settlementId(); minerals = deposit.site().mineralDeposits();
         return facts;
     }
 }

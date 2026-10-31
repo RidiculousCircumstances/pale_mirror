@@ -91,11 +91,12 @@ public final class ScheduledActionQueue implements ScheduleReadView {
         execution.hold(action, keys, instant);
     }
 
-    void holdForCalculation(ScheduledAction action, boolean capacity) {
+    void holdForCalculation(ScheduledAction action, boolean capacity, SimInstant now) {
         if (!containsExact(action)) throw new IllegalArgumentException("cannot wait for an obsolete action generation");
-        execution.holdCalculation(action, capacity);
+        execution.holdCalculation(action, capacity, now);
     }
     ScheduledAction firstAdviceCapacityWait() { return execution.firstCapacityWait(); }
+    Optional<SimInstant> adviceCapacityHeadSince() { return execution.capacityHeadSince(); }
     int adviceCapacityWaitCount() { return execution.capacityWaitCount(); }
     io.farfrontier.palemirror.frontier.v3.api.FrontierAdvisoryStatus.Readiness readiness(ScheduledAction action) {
         return containsExact(action) ? execution.readiness(action)

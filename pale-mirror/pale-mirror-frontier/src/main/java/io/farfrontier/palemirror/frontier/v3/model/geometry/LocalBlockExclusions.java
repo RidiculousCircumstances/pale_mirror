@@ -10,6 +10,13 @@ public final class LocalBlockExclusions {
     private RegionalBlockSet indexedFootprint = RegionalBlockSet.copyOf(Set.of());
     private RegionalBlockSet relevant = RegionalBlockSet.copyOf(Set.of());
 
+    public LocalBlockExclusions() { }
+    /** Fork private cursors while sharing only immutable regional images. */
+    public LocalBlockExclusions(LocalBlockExclusions source) {
+        priorFootprint = source.priorFootprint; priorExclusions = source.priorExclusions;
+        indexedFootprint = source.indexedFootprint; relevant = source.relevant;
+    }
+
     public Set<BlockPosition> read(Set<BlockPosition> footprint, KnownBlockExclusions exclusions) {
         Objects.requireNonNull(footprint); Objects.requireNonNull(exclusions);
         if (priorFootprint != footprint || priorExclusions != exclusions) {

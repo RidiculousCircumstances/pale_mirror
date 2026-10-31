@@ -27,11 +27,14 @@ public final class SettlementEconomicEvaluation {
     public record Completed(GoodsParticipantAssessment.Assessment assessment, List<ConditionalProductionQuote> quotes) {
         public Completed { quotes = List.copyOf(quotes); }
     }
+    /** Preserve the domestic forecast's date, but evaluate new counterpart consent
+     * at the current capture instant. Reuse must never resurrect an expired bid. */
     public static Completed complete(FrontierWorldState state, GoodsParticipantAssessment.Assessment domestic,
-            long inputRevision, long planRevision, long expiresAt) {
+            long inputRevision, long planRevision, long expiresAt, long marketAt) {
+        if (marketAt < domestic.atTick()) throw new IllegalArgumentException("market precedes domestic forecast");
         if (domestic.domestic().isEmpty()) return new Completed(domestic, List.of());
         var advice = SettlementEconomicPlanning.exportAdvice(state, domestic.facts().orElseThrow(), false,
-                ECONOMY.potentialExports(domestic.domestic().orElseThrow()), true);
+                ECONOMY.potentialExports(domestic.domestic().orElseThrow()), true, marketAt);
         var reviewed = ECONOMY.withConditionalQuotes(domestic.domestic().orElseThrow(),
                 advice.consented().stream().map(SettlementEconomicPlanning.QuoteCandidate::interest).toList(),
                 advice.counters().stream().map(SettlementEconomicPlanning.QuoteCandidate::interest).toList());
@@ -43,7 +46,7 @@ public final class SettlementEconomicEvaluation {
             var freight = quantity == candidate.freight().quantity() ? Optional.of(candidate.freight())
                     : GoodsDeliveryAdvice.read(state, supplier, candidate.buyer(), candidate.interest().item(), quantity,
                             candidate.interest().unitPrice(), candidate.buyer().availableMoney().raw(),
-                            GoodsDeliveryAdvice.Supply.CONDITIONAL_PRODUCTION, domestic.atTick());
+                            GoodsDeliveryAdvice.Supply.CONDITIONAL_PRODUCTION, marketAt);
             if (freight.isEmpty()) continue;
             var value = freight.orElseThrow();
             quotes.add(new ConditionalProductionQuote(supplier.party(), candidate.buyer().participant().party(),

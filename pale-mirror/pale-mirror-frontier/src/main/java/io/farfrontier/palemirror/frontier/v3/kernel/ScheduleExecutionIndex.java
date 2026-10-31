@@ -14,7 +14,7 @@ final class ScheduleExecutionIndex {
     private final NavigableSet<ScheduledAction> future = new TreeSet<>();
     private final LinkedHashMap<ScheduleId, ScheduledAction> checking = new LinkedHashMap<>();
     private final NavigableSet<ScheduledAction> ready = new TreeSet<>();
-    private record CalculationWait(ScheduledAction action, boolean capacity) { }
+    private record CalculationWait(ScheduledAction action, boolean capacity, SimInstant enteredAt) { }
     // Technical waits have no domain wake keys or polling round. Membership remains canonical.
     private final LinkedHashMap<ScheduleId, CalculationWait> calculations = new LinkedHashMap<>();
     private final Map<ScheduleId, Wait> waiting = new HashMap<>();
@@ -95,14 +95,21 @@ final class ScheduleExecutionIndex {
             audits.computeIfAbsent(auditAt, ignored -> new TreeSet<>()).add(action);
         }
     }
-    void holdCalculation(ScheduledAction action, boolean capacity) {
+    void holdCalculation(ScheduledAction action, boolean capacity, SimInstant now) {
         ready.remove(action); checking.remove(action.id()); future.remove(action); removeWait(action.id());
         readySince.remove(action.id()); auditCandidates.remove(action.id());
-        calculations.put(action.id(), new CalculationWait(action, capacity));
+        var prior = calculations.get(action.id());
+        SimInstant entered = prior != null && prior.action().equals(action) && prior.capacity() == capacity
+                ? prior.enteredAt() : now;
+        calculations.put(action.id(), new CalculationWait(action, capacity, entered));
     }
     ScheduledAction firstCapacityWait() {
         for (var wait : calculations.values()) if (wait.capacity()) return wait.action();
         return null;
+    }
+    Optional<SimInstant> capacityHeadSince() {
+        for (var wait : calculations.values()) if (wait.capacity()) return Optional.of(wait.enteredAt());
+        return Optional.empty();
     }
     int capacityWaitCount() { return (int) calculations.values().stream().filter(CalculationWait::capacity).count(); }
     Readiness readiness(ScheduledAction action) {

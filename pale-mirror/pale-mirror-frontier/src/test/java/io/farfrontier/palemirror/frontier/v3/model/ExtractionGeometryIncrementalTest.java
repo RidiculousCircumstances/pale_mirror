@@ -119,6 +119,43 @@ class ExtractionGeometryIncrementalTest {
         var recovered = codec.decode(codec.encode(known));
         assertEquals(new ExtractionKnownGeometry().project(known), new ExtractionKnownGeometry().project(recovered));
     }
+    @Test void geologicalChangesOutsideTheFootprintDoNotRevokeLocalFactsButLocalUnknownOreDoes() {
+        var state = initial(); var original = deposit(state);
+        var facts = new ExtractionGeometryFacts(); var before = facts.read(state, original);
+        var sourcePositions = original.site().layout().cellsByPosition().keySet();
+        var local = original.site().layout().terrainSupports().keySet().stream()
+                .filter(p -> !sourcePositions.contains(p) && !original.site().layout().fixedBlocks().containsKey(p)
+                        && !original.geometry().containsKey(p) && state.extractionSites().geology().at(p).isEmpty())
+                .findFirst().orElseThrow();
+        var remote = new BlockPosition(state.bootstrap().bounds().minX() + 1, 20, state.bootstrap().bounds().minZ() + 1);
+        var id = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("mineral:regional-unknown");
+        var material = new BlockExtraction.Block("minecraft:coal_ore", Map.of());
+        var declarations = new HashMap<>(state.extractionSites().geology().deposits());
+        declarations.put(id, new io.farfrontier.palemirror.frontier.v3.model.geology.MineralDeposit(id, 1,
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.geology.MineralDeposit.Section(
+                        new BlockVolume(remote, remote), material))));
+        var sites = state.extractionSites();
+        var remoteState = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(new ExtractionSiteState(
+                sites.deposits(), sites.work(), sites.nextWorkOrdinal(), sites.geologicalExclusions(),
+                new io.farfrontier.palemirror.frontier.v3.model.geology.MineralGeology(declarations), sites.knowledge())));
+        assertSame(before, facts.read(remoteState, original));
+        declarations.put(id, new io.farfrontier.palemirror.frontier.v3.model.geology.MineralDeposit(id, 1,
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.geology.MineralDeposit.Section(
+                        new BlockVolume(local, local), material))));
+        var unknownState = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(new ExtractionSiteState(
+                sites.deposits(), sites.work(), sites.nextWorkOrdinal(), sites.geologicalExclusions(),
+                new io.farfrontier.palemirror.frontier.v3.model.geology.MineralGeology(declarations), sites.knowledge())));
+        var unknown = facts.read(unknownState, original);
+        assertEquals(Optional.empty(), unknown.get(local), "unselected geology cannot inherit a former terrain permission");
+        assertEquals(Set.of(Region.at(local)), unknown.changesFrom(before));
+        assertEquals(new ExtractionGeometryFacts().read(unknownState, original), unknown);
+        assertEquals(before, facts.read(state, original), "branch rollback restores the geological absence as well as presence");
+        var provider = new ExtractionKnownGeometry();
+        var prior = provider.project(state); provider.project(remoteState);
+        assertEquals(new ExtractionKnownGeometry().project(unknownState), provider.project(unknownState));
+        assertEquals(prior, provider.project(state));
+    }
+
     @Test void extensionKeepsUnchangedRegionsAndPublishesTheNewSourceWithoutRebuildingAllDeposits() {
         var state = initial(); var original = deposit(state); var layout = original.site().layout();
         var station = layout.entrance();

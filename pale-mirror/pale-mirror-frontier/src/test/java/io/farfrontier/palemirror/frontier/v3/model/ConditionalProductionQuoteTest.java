@@ -42,6 +42,22 @@ class ConditionalProductionQuoteTest {
         byte[] oldSchema = snapshot.encode(state); java.nio.ByteBuffer.wrap(oldSchema).putShort(4, (short) 303);
         assertThrows(IllegalArgumentException.class, () -> snapshot.decode(oldSchema));
     }
+    @Test void reusedDomesticForecastDoesNotReviveBidsExpiredBeforeItsNewMarketCapture() {
+        var fixture = fixture(); var state = fixture.state();
+        var supplier = state.companies().goodsTrade().participants().participants().get(SUPPLIER);
+        var domestic = SettlementEconomicEvaluation.domestic(state, supplier, 5002);
+        long expiry = state.companies().goodsTrade().orders().values().stream()
+                .mapToLong(GoodsTradeOrder::expiresAtTick).max().orElseThrow();
+        var before = SettlementEconomicEvaluation.complete(state, domestic, 0, 1, expiry + 1000, 5002);
+        assertFalse(before.quotes().isEmpty(), "fixture supplies an actual conditional buyer, not an empty-market false pass");
+        var expired = SettlementEconomicEvaluation.complete(state, domestic, 0, 1, expiry + 1000, expiry);
+        assertTrue(expired.quotes().isEmpty(), "market expiry is evaluated now, even when domestic facts remain reusable");
+        assertSame(domestic.domestic().orElseThrow(), expired.assessment().domestic().orElseThrow());
+        assertEquals(5002, expired.assessment().atTick(), "the old forecast must not claim to be newly computed");
+        assertThrows(IllegalArgumentException.class, () -> SettlementEconomicEvaluation.complete(state, domestic, 0, 1,
+                expiry + 1000, 5001));
+    }
+
     @Test void ownedCollectorSuppliesAreNotAnotherCashInvoiceInAcquisitionWillingness() {
         var f = fixture(); var state = f.state();
         var buyer = state.companies().goodsTrade().participants().participants().get(BUYER);

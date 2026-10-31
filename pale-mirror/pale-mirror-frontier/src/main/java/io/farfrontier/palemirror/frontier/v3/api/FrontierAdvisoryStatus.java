@@ -5,6 +5,6 @@ import java.util.Optional;
 
 /** Read-only technical admission evidence, never a schedule or execution authority. */
 public record FrontierAdvisoryStatus(int inFlight, int ready, int capacityWaiters, boolean hostAvailable,
-        Optional<ScheduledAction> reservation, Readiness reservationReadiness, Optional<ScheduledAction> oldestCapacityWaiter) {
+        Optional<ScheduledAction> reservation, Readiness reservationReadiness, Optional<ScheduledAction> capacityHead, Optional<SimInstant> capacityHeadSince) {
     public enum Readiness { NONE, READY, CHECKING, FUTURE, CALCULATION, HELD, ABSENT }
 }

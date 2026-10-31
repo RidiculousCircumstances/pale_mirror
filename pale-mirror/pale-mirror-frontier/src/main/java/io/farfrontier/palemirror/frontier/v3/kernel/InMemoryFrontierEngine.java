@@ -66,7 +66,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return new FrontierAdvisoryStatus(pendingAdvice.size(), (int) pendingAdvice.values().stream()
                 .filter(value -> value.calculation().ready()).count(), schedules.adviceCapacityWaitCount(), scheduledPlanner.adviceAvailable(),
                 Optional.ofNullable(adviceReservation), adviceReservation == null ? FrontierAdvisoryStatus.Readiness.NONE
-                    : schedules.readiness(adviceReservation), Optional.ofNullable(schedules.firstAdviceCapacityWait()));
+                    : schedules.readiness(adviceReservation), Optional.ofNullable(schedules.firstAdviceCapacityWait()), schedules.adviceCapacityHeadSince());
     }
     @Override public void cancelPendingCalculation() {
         requireOwnerThread();
@@ -409,7 +409,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                             if (acceptedAdvice == null) {
                                 // One initial attempt is charged. Subsequent host-capacity/result
                                 // waits leave runnable admission until that exact technical condition changes.
-                                schedules.holdForCalculation(action, !pendingAdvice.containsKey(action.id()));
+                                schedules.holdForCalculation(action, !pendingAdvice.containsKey(action.id()), instant);
                                 preparationAttempts++; weight = Math.addExact(weight, admittedAdvice ? cost : 1); continue;
                             }
                         }
