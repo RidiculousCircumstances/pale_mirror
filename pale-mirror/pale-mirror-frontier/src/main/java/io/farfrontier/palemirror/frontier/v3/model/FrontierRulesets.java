@@ -65,6 +65,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset SIMULATION_BASELINE = GrayboxSimulationProfiles.baseline(DEMAND_DRIVEN_WOOD_GRAYBOX);
     private static final FrontierRuleset SIMULATION_TERRAIN = GrayboxSimulationProfiles.terrain(DEMAND_DRIVEN_WOOD_GRAYBOX);
     private static final FrontierRuleset SIMULATION_SCALE = GrayboxSimulationProfiles.scale(DEMAND_DRIVEN_WOOD_GRAYBOX);
+    private static final FrontierRuleset SIMULATION_SCALE_FIFTY = GrayboxSimulationProfiles.scaleFifty(DEMAND_DRIVEN_WOOD_GRAYBOX);
     /** New-world startup references match current recipes; historical profiles stay immutable. */
     private static FrontierRuleset operatingPrices(FrontierRuleset base) {
         var trade = base.goodsTrade().withPriceSeeds(GoodsPolicyKind.PUBLIC_SETTLEMENT,
@@ -100,6 +101,7 @@ public final class FrontierRulesets {
             Map.entry(SIMULATION_BASELINE.id(), SIMULATION_BASELINE),
             Map.entry(SIMULATION_TERRAIN.id(), SIMULATION_TERRAIN),
             Map.entry(SIMULATION_SCALE.id(), SIMULATION_SCALE),
+            Map.entry(SIMULATION_SCALE_FIFTY.id(), SIMULATION_SCALE_FIFTY),
             Map.entry(DEMAND_DRIVEN_WOOD_GRAYBOX.id(), DEMAND_DRIVEN_WOOD_GRAYBOX),
             Map.entry(FORESTRY_GRAYBOX.id(), FORESTRY_GRAYBOX),
             Map.entry(PREVIOUS_FORESTRY_GRAYBOX.id(), PREVIOUS_FORESTRY_GRAYBOX),

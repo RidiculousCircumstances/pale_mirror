@@ -58,10 +58,21 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
             int jitterZ = Math.floorMod(row * 211 + col * 397, 1_401) - 700;
             positions.add(new BlockPosition(-21_000 + col * 4_500 + jitterX, 0, -21_000 + row * 4_500 + jitterZ));
         }
+        return scaleLayout(positions);
+    }
+    /** Half-density scale profile retains the original occupied geographical extent. */
+    public static FrontierWorldLayout scaleFifty() {
+        var original = scale().settlements();
+        var positions = new ArrayList<BlockPosition>();
+        for (int index = 0; index < original.size(); index++)
+            if ((index / 10 + index % 10) % 2 == 0) positions.add(original.get(index));
+        return scaleLayout(positions);
+    }
+    private static FrontierWorldLayout scaleLayout(List<BlockPosition> positions) {
         var producers = new HashSet<Integer>();
         // Authored content repeats the twelve environmental sectors, independently of ID ordering.
         for (int i = 0; i < positions.size(); i++) if (Set.of(0, 1, 3, 5, 7, 10).contains(i % 12)) producers.add(i);
-        return new FrontierWorldLayout(new WorldBounds(-50_000, -50_000, 100_000, 100_000), positions, names(100),
+        return new FrontierWorldLayout(new WorldBounds(-50_000, -50_000, 100_000, 100_000), positions, names(positions.size()),
                 Roads.LOCAL_ACCESS, Optional.of(producers));
     }
     public List<RoadLink> roadLinks() {

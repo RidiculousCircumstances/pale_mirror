@@ -17,6 +17,9 @@ final class GrayboxSimulationProfiles {
     static FrontierRuleset scale(FrontierRuleset base) {
         return layout("frontier-v3-simulation-scale-r31", base, FrontierWorldLayout.scale());
     }
+    static FrontierRuleset scaleFifty(FrontierRuleset base) {
+        return layout("frontier-v3-simulation-scale-50-r31", base, FrontierWorldLayout.scaleFifty());
+    }
     private static FrontierRuleset layout(String id, FrontierRuleset base, FrontierWorldLayout layout) {
         var fields = new FieldBalance(base.fields().ordinarySide(), base.fields().extractiveSide(),
                 Optional.of(GrayboxAgriculture.forLayout(layout)), base.fields().cultivation());
