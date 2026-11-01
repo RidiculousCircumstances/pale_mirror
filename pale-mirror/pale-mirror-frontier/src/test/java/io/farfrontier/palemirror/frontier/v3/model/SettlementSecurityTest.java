@@ -35,6 +35,18 @@ class SettlementSecurityTest {
         assertThrows(IllegalArgumentException.class,()->new SecurityEvent.Incident(r.duty().home(),r.body().body(),r.offender(),0));
         assertThrows(IllegalArgumentException.class,()->SecurityTransitions.apply(r.state(),r.duty().home(),seen,21001));
     }
+    @Test void nativePerceptionDoesNotMeasureRangeFromAnOlderCanonicalTravelPose() {
+        var r=ready();var state=offence(r);var actor=r.body().body().actorId();
+        var oldOrigin=state.actorLocations().get(actor).body().offset(100,0,0);
+        state=state.withActorBody(actor,oldOrigin);
+        var observed=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        assertEquals(contact(r),observed.security().contacts().get(r.duty().home()));
+        assertEquals(oldOrigin,observed.actorLocations().get(actor).body(),"perception cannot install a body pose or invent movement arrival");
+        assertTrue(GuardResponse.contact(observed,r.duty(),21001).isPresent());
+        var beyondHome=new SecurityState.Contact(r.duty().home(),contact(r).target(),contact(r).position().offset(1000,0,0),21002,2);
+        var distant=SecurityTransitions.apply(observed,r.duty().home(),new SecurityEvent.Seen(r.body(),beyondHome),21002);
+        assertTrue(GuardResponse.contact(distant,r.duty(),21002).isEmpty(),"native perception does not relax the domain pursuit envelope");
+    }
     @Test void oneGuardObservationWakesEveryAppointmentThroughTheRealRegisteredCommandBoundary(){
         var r=ready();var state=offence(r);var payload=new SecurityEvent.Seen(r.body(),contact(r));
         var registry=FrontierWorldRuntimeDefinition.processRegistry();

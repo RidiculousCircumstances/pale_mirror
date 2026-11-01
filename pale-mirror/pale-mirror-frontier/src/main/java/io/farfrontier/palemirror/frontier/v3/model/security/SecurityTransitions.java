@@ -19,9 +19,10 @@ public final class SecurityTransitions {
                     || contact.atTick()!=tick || !GuardEquipment.held(state,guard)
                     || contact.target().kind()==CombatTarget.Kind.PLAYER && !security.hostile(guard.home(),contact.target().entity()))
                 throw new IllegalArgumentException("unwitnessed or nonhostile security contact");
-            var origin=state.actorLocations().get(seen.observer().body().actorId()).supportingSurface();
-            if(SecurityCoverage.distance(origin,new SurfaceAnchor(contact.position()))>state.bootstrap().ruleset().security().observationRadius()*2L)
-                throw new IllegalArgumentException("security contact lies beyond bounded observation");
+            // Range and LOS are native perception facts, checked against the live observer
+            // by the physical executor. Canonical movement may still retain an older pose;
+            // it cannot independently re-measure that native observation. Domain pursuit
+            // bounds remain with GuardResponse and do not grant an unseen melee effect.
             security=security.observed(contact);
         }else if(event instanceof SecurityEvent.ContactEnded ended){
             ActorBodyAuthority.requireActuation(state,ended.observer());
