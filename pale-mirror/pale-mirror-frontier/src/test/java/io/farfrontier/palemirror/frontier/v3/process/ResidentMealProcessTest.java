@@ -548,6 +548,7 @@ class ResidentMealProcessTest {
         state = ResidentMealProcess.reduceHotPrepared(state, resident, preparation);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         var cancelled = new ResidentMealHotEffectCancelled(preparedBody, preparation.step());
+        assertTrue(cancelled.requiresDurableBeforeEffect(), "saved cancellation closes the native operation through its durable owner command");
         var payloads = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(cancelled, payloads.decode(cancelled.type(), payloads.encode(cancelled)));
         var pendingTake = state;

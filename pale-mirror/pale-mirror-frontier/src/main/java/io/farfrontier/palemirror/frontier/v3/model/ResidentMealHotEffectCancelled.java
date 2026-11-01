@@ -8,5 +8,6 @@ import java.util.Objects;
  * It clears preparation only: no transfer, consumption, claim release or activity retirement. */
 public record ResidentMealHotEffectCancelled(ActorBodyId body, ResidentMealPhysicalStep step) implements FrontierPayload {
     public ResidentMealHotEffectCancelled { Objects.requireNonNull(body); Objects.requireNonNull(step); }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
     @Override public String type() { return "frontier.resident_meal_hot_effect_cancelled"; }
 }
