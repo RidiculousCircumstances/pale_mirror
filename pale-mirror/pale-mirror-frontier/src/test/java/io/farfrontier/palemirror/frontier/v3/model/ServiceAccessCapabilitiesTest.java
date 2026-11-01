@@ -125,6 +125,19 @@ class ServiceAccessCapabilitiesTest {
         assertTrue(ServiceAccessCoordinator.turnoverPoint(occupied, actor).isPresent());
         var farAway = occupied.withActorBody(actor, new SurfaceAnchor(home.anchor().offset(40, 0, 40)).standingBody());
         assertTrue(ServiceAccessCoordinator.turnoverPoint(farAway, actor).isEmpty(), "lookup reads the current actor body");
+        var column = TerrainColumn.at(waiting.support());
+        var candidates = ServiceBoundaryComposition.nearbyDeclarations(initial, column);
+        var stock = initial.inventory();
+        var warehouse = stock.containers().values().stream().filter(value -> value.storage().isPresent()).findFirst().orElseThrow();
+        var policy = warehouse.storage().orElseThrow();
+        var containers = new java.util.HashMap<>(stock.containers());
+        containers.put(warehouse.id(), warehouse.withStorage(new ResourceStoragePolicy(policy.endpoint(),
+                policy.filter(), policy.priority() == 1000 ? 999 : policy.priority() + 1, policy.role())));
+        var reprioritized = initial.withChanges(FrontierWorldStateUpdate.begin().inventory(new ExactInventory(containers,
+                stock.items(), stock.cargo(), stock.playerItems(), stock.worldCarrierItems(), stock.conflicts(),
+                stock.surfaces(), stock.economics(), stock.fungibleResources())));
+        assertSame(candidates, ServiceBoundaryComposition.nearbyDeclarations(reprioritized, column),
+                "warehouse priority does not change the producer-declared spatial search footprint");
         var changed = initial.recordPhysicalDelta(new PhysicalDelta(waiting.support().offset(0, 1, 0),
                 PhysicalDeltaKind.UNKNOWN_SCAR, java.util.Optional.empty(), java.util.Optional.empty(), "test obstacle"));
         assertNotSame(points, ServiceBoundaryComposition.geometries(changed));

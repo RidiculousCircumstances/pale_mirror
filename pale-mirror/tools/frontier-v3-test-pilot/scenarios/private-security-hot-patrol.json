@@ -52,6 +52,10 @@
       "settleMs": 0
     },
     {
+      "type": "command",
+      "command": "/tp @s ~3 ~3 ~"
+    },
+    {
       "type": "assert_fixture",
       "timeoutMs": 60000,
       "checks": [

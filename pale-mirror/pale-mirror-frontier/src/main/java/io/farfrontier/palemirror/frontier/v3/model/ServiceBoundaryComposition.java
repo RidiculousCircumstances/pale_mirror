@@ -22,6 +22,7 @@ public final class ServiceBoundaryComposition {
     /** Explicit all-points view; ordinary local turnover uses the declaration-only column index. */
     private static final ImmutableResultView<String, List<ServiceAccessPoint>> TURNOVER = new ImmutableResultView<>(4);
     private record ColumnIndex(Object declarations, Object providerVersions, Object residents,
+            Map<ServicePointId, ServiceBoundaryProvider.SearchFootprint> footprints,
             Map<TerrainColumn, List<ServiceBoundaryProvider.Declaration>> candidates) { }
     private static ColumnIndex columnIndex;
     private ServiceBoundaryComposition() { }
@@ -113,13 +114,25 @@ public final class ServiceBoundaryComposition {
         var residents = state.humanPopulation().residents();
         if (columnIndex != null && columnIndex.declarations() == declared
                 && columnIndex.providerVersions() == versions && columnIndex.residents() == residents) return columnIndex;
+        var footprints = new HashMap<ServicePointId, ServiceBoundaryProvider.SearchFootprint>();
+        declared.values().forEach(value -> footprints.put(value.identity(),
+                provider(value.kind()).searchFootprint(state, value)));
+        // Inventory/resident revisions may change without changing any search area.
+        // Compare compact producer declarations before expanding thousands of columns.
+        if (columnIndex != null && columnIndex.declarations() == declared && columnIndex.footprints().equals(footprints)) {
+            columnIndex = new ColumnIndex(declared, versions, residents, columnIndex.footprints(), columnIndex.candidates());
+            return columnIndex;
+        }
         var byColumn = new HashMap<TerrainColumn, List<ServiceBoundaryProvider.Declaration>>();
         declared.values().stream().sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId)).forEach(value -> {
-            for (var column : provider(value.kind()).searchColumns(state, value))
+            for (var column : footprints.get(value.identity()).columns())
                 byColumn.computeIfAbsent(column, ignored -> new ArrayList<>()).add(value);
         });
         byColumn.replaceAll((column, values) -> List.copyOf(values));
-        columnIndex = new ColumnIndex(declared, versions, residents, Map.copyOf(byColumn));
+        // Terrain-column hashes cluster on regular grids; retain HashMap's bucket
+        // separation instead of rehashing this large index into MapN's linear probes.
+        columnIndex = new ColumnIndex(declared, versions, residents, Map.copyOf(footprints),
+                Collections.unmodifiableMap(byColumn));
         return columnIndex;
     }
     private static List<ServiceAccessPoint> turnoverPoints(FrontierWorldState state) {

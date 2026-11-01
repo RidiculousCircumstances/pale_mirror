@@ -14,8 +14,15 @@ public interface ServiceBoundaryProvider {
     ServicePointId.Kind kind();
     Object version(FrontierWorldState state);
     List<Declaration> declarations(FrontierWorldState state);
-    /** Conservative declared search footprint. Must not resolve navigation or inspect terrain. */
-    Set<TerrainColumn> searchColumns(FrontierWorldState state, Declaration declaration);
+    /** Compact declared broad phase; independent of stock, actors and terrain verdicts. */
+    record SearchFootprint(ServiceAccessBoundary boundary, SurfaceAnchor center,
+                           List<SurfaceAnchor> preferred, int population, boolean waiting) {
+        public SearchFootprint { preferred = List.copyOf(preferred); }
+        Set<TerrainColumn> columns() {
+            return ServiceWaitingTargets.searchColumns(boundary, center, preferred, population, waiting);
+        }
+    }
+    SearchFootprint searchFootprint(FrontierWorldState state, Declaration declaration);
     KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, Declaration declaration);
     ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration);
 }

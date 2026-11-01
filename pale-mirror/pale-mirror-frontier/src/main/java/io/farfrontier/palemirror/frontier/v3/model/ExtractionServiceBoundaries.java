@@ -28,8 +28,8 @@ final class ExtractionServiceBoundaries implements ServiceBoundaryProvider {
     @Override public synchronized ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration) {
         return geometry.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration));
     }
-    @Override public Set<TerrainColumn> searchColumns(FrontierWorldState state, Declaration declaration) {
-        return request(state, declaration).searchColumns();
+    @Override public SearchFootprint searchFootprint(FrontierWorldState state, Declaration declaration) {
+        return request(state, declaration).searchFootprint();
     }
     private ServicePointGeometryCache.Request request(FrontierWorldState state, Declaration declaration) {
         var endpoint = endpoint(state, declaration.pointId());

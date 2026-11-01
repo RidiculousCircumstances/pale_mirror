@@ -107,10 +107,10 @@ public final class SettlementServiceAccessPoints {
         var waiting = ServiceWaitingTargets.select(boundary, knowledge, apron, preferred, egress, population);
         return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), boundary, waiting, egress);
     }
-    static Set<TerrainColumn> searchColumns(FrontierWorldState state, Settlement settlement, SettlementStructure depot) {
+    static ServiceBoundaryProvider.SearchFootprint searchFootprint(FrontierWorldState state, Settlement settlement, SettlementStructure depot) {
         var port = SettlementDepotServicePort.forDepot(depot);
         var apron = port.facing().step(port.exteriorApproach(), -1);
-        return ServiceWaitingTargets.searchColumns(port.accessBoundary(), apron, preferred(settlement, port, apron),
+        return new ServiceBoundaryProvider.SearchFootprint(port.accessBoundary(), apron, preferred(settlement, port, apron),
                 population(state, settlement.id()), true);
     }
     private static List<SurfaceAnchor> preferred(Settlement settlement, SettlementDepotServicePort port, SurfaceAnchor apron) {
