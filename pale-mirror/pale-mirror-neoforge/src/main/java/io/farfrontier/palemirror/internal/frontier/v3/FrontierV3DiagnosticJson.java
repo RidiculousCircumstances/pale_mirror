@@ -416,7 +416,7 @@ final class FrontierV3DiagnosticJson {
                     && io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state, duty)).count()
                 + ",\"guardActors\":" + strings(guards.stream().map(duty -> duty.execution().actorId().value()).toList())
                 + ",\"guardNames\":" + strings(guards.stream().map(duty -> state.humanPopulation().resident(duty.execution().actorId()).name()).toList())
-                + ",\"firstGuardPosition\":" + readyGuard.map(duty->position(state.actorLocations().get(duty.execution().actorId()).body())).orElse("null")
+                + ",\"firstGuardPosition\":" + readyGuard.map(duty->position(io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state,duty.execution().actorId(),checkpoint.instant().ticks()))).orElse("null")
                 + ",\"firstGuardName\":\"" + quote(readyGuard.map(duty->state.humanPopulation().resident(duty.execution().actorId()).name()).orElse("")) + "\""
                 + ",\"strategic\":" + lane(value.strategic())
                 + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())

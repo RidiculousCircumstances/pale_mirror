@@ -265,3 +265,8 @@ A harm victim supplies exact body identity, not permission to actuate its curren
 current or exactly retained retired-body evidence validates the observation. Schema316
 changes the incident payload explicitly. The carrier confirms settlement hostility after
 its fist packet and captures target health at attack time, avoiding unrelated fall damage.
+
+The guard-position diagnostic reads the shared time-aware movement pose; a retained
+COLD origin is not the current position. Native restart setup warms the loaded scene,
+then resolves that current pose again before establishing visibility. Chunk admission
+must not turn the old pre-loading coordinate into a claimed observation opportunity.

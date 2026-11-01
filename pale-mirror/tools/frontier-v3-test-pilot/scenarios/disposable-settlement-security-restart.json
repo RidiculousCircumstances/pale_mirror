@@ -225,6 +225,23 @@
         "settleMs": 1000
       },
       {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "settlement",
+            "id": "settlement:1",
+            "field": "firstGuardPosition"
+          }
+        },
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "settleMs": 0
+      },
+      {
         "type": "command",
         "command": "/gamemode survival"
       }
