@@ -87,7 +87,12 @@ class SettlementSecurityTest {
         assertTrue(current.security().contacts().isEmpty());assertTrue(current.security().hostile(r.duty().home(),r.offender()));
         var newer=new SecurityState.Contact(contact(r).home(),contact(r).target(),contact(r).position(),21002,2);
         var refreshed=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),newer),21002);
-        assertThrows(IllegalArgumentException.class,()->SecurityTransitions.apply(refreshed,r.duty().home(),ended,21003));
+        var superseded=SecurityTransitions.apply(refreshed,r.duty().home(),ended,21003);
+        assertEquals(newer,superseded.security().contacts().get(r.duty().home()));
+        assertEquals(current,SecurityTransitions.apply(current,r.duty().home(),ended,21003));
+        assertTrue(ended.requiresDurableBeforeEffect());
+        var retired=ActorBodyAuthority.released(current,r.body().body());
+        assertEquals(retired,SecurityTransitions.apply(retired,r.duty().home(),ended,21004),"observed end remains valid after exact body departure");
     }
     @Test void patrolTravelsAndWatchesThroughTheRealQueueWithRetainedPostsAcrossSnapshot() {
         var state=Fixture.ARMED;

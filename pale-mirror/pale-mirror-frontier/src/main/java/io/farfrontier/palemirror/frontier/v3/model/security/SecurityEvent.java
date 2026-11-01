@@ -23,6 +23,7 @@ public sealed interface SecurityEvent extends FrontierPayload permits SecurityEv
         public ContactEnded {Objects.requireNonNull(observer);Objects.requireNonNull(home);Objects.requireNonNull(target);
             if(expectedRevision<1)throw new IllegalArgumentException("invalid ended contact predecessor");}
         public String type(){return TYPE;}
+        public boolean requiresDurableBeforeEffect(){return true;}
     }
     record Prepared(SecurityState.Strike strike) implements SecurityEvent {
         public static final String TYPE="frontier.combat.prepared";

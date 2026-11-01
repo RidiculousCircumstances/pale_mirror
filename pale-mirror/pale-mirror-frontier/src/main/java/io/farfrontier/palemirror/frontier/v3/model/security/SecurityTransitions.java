@@ -25,13 +25,18 @@ public final class SecurityTransitions {
             // bounds remain with GuardResponse and do not grant an unseen melee effect.
             security=security.observed(contact);
         }else if(event instanceof SecurityEvent.ContactEnded ended){
-            ActorBodyAuthority.requireActuation(state,ended.observer());
-            var guard=GuardAuthority.require(state,ended.observer().execution());
+            // This is an already observed fact, not a new actuation permission. Its
+            // exact body may have left HOT before the durable observation is delivered.
+            ActorBodyAuthority.requireObservation(state,ended.observer().body());
+            var resident=state.humanPopulation().resident(ended.observer().body().actorId());
+            if(!subject.equals(ended.home()) || resident==null || !resident.settlementId().equals(ended.home())
+                    || ended.observer().execution().activityKind()!=io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GUARD)
+                throw new IllegalArgumentException("ended contact lost its exact guard observer/home");
             var contact=security.contacts().get(ended.home());
-            if(!subject.equals(ended.home()) || !guard.home().equals(ended.home()) || guard.phase()!=GuardDuty.Phase.ON_DUTY
-                    || contact==null || !contact.target().equals(ended.target()) || contact.revision()!=ended.expectedRevision())
-                throw new IllegalArgumentException("ended contact lost its exact observer or predecessor");
-            security=security.contactEnded(ended.home());
+            // A newer sighting/respawn supersedes this fact. Acknowledge history without
+            // erasing that successor, just as a repeated end cannot recreate a contact.
+            if(contact!=null && contact.target().equals(ended.target()) && contact.revision()==ended.expectedRevision())
+                security=security.contactEnded(ended.home());
         }else if(event instanceof SecurityEvent.Prepared prepared){
             var strike=prepared.strike();ActorBodyAuthority.requireActuation(state,strike.attacker());
             var guard=GuardAuthority.require(state,strike.attacker().execution());var contact=security.contacts().get(guard.home());

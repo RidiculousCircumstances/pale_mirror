@@ -164,6 +164,16 @@ public final class FrontierV3SecurityExecutor {
                     }
                     var receipt=new CompoundTag();receipt.putString("owner",strike.duty().value());receipt.putLong("ordinal",strike.attemptOrdinal());receipt.putBoolean("hit",hit);
                     guard.getPersistentData().put(ATTEMPT,receipt);
+                    if(hit && !target.isAlive()) {
+                        // The confirmed terminal hit must outlive Minecraft's short corpse
+                        // window and possible departure of the last presentation observer.
+                        var after=runtime.decodedState().orElseThrow();
+                        var duty=after.strategicPlans().guards().get(strike.duty());
+                        var contact=after.security().contacts().get(duty.home());
+                        if(contact!=null && contact.target().equals(strike.target()))
+                            FrontierV3ConfirmedNativeEvent.capture(level,duty.home(),new SecurityEvent.ContactEnded(
+                                    strike.attacker(),duty.home(),strike.target(),contact.revision()));
+                    }
                     return FrontierV3NativeEffect.Outcome.APPLIED;
                 }),()->attempt(guard,strike));
         if(result.pending())return;
