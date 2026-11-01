@@ -43,7 +43,7 @@
         }
       },
       "offset": {
-        "x": 2,
+        "x": 0,
         "y": 0,
         "z": 0
       },
@@ -194,11 +194,24 @@
           }
         },
         "offset": {
-          "x": 2,
+          "x": 0,
           "y": 0,
           "z": 0
         },
         "settleMs": 1000
+      },
+      {
+        "type": "look_nearest_entity",
+        "entityType": "minecraft:villager",
+        "nameContains": {
+          "diagnostic": {
+            "view": "settlement",
+            "id": "settlement:1",
+            "field": "firstGuardName"
+          }
+        },
+        "maxDistance": 24,
+        "timeoutMs": 30000
       },
       {
         "type": "command",
