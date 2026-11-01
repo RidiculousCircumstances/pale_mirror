@@ -13,6 +13,10 @@ final class GuardPatrolProcess {
         var threat = GuardResponse.contact(state,duty,tick);
         if(threat.isPresent() && mission.isPresent()) {
             var contact=threat.orElseThrow();
+            if(mission.orElseThrow().response().equals(Optional.of(contact.target()))
+                    && GuardResponse.recoveringAfterAttack(state,duty,tick))
+                return List.of(scheduled(action,duty,Math.addExact(state.security().nextAttack().get(duty.id()),
+                        state.bootstrap().ruleset().security().observationInterval()+1L)));
             if(mission.isPresent() && mission.orElseThrow().response().equals(Optional.of(contact.target()))
                     && !GuardResponse.redirect(state,duty,tick)) {
                 if(!duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface())) return start(state,action,duty,tick);

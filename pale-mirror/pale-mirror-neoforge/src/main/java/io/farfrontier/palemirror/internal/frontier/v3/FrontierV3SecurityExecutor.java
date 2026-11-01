@@ -86,7 +86,9 @@ public final class FrontierV3SecurityExecutor {
                 }
             }
             var contact=GuardResponse.contact(state,duty,tick).orElse(null);
-            if(contact==null || state.actorMovements().containsKey(duty.execution().actorId()) || state.security().pending().containsKey(duty.id())
+            var approach=state.actorMovements().get(duty.execution().actorId());
+            if(contact==null || approach!=null && !(approach.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.GuardMissionLeg)
+                    || state.security().pending().containsKey(duty.id())
                     || tick<state.security().nextAttack().getOrDefault(duty.id(),0L))continue;
             var actual=level.getEntity(contact.target().entity());
             if(!(actual instanceof LivingEntity living)||!living.isAlive()||!guard.hasLineOfSight(living) )continue;

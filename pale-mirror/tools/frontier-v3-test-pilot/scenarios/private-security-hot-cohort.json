@@ -6,7 +6,7 @@
     "port": 25581
   },
   "pilot": {
-    "username": "pmhotguard3"
+    "username": "pmhotguard4"
   },
   "setup": [
     {
@@ -36,7 +36,7 @@
             "status": "ok",
             "hasArmedGuard": true,
             "security": {
-              "hostilePlayers": 2
+              "hostilePlayers": 3
             }
           }
         }
@@ -81,11 +81,23 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 3
+          "hostilePlayers": 4
         }
       },
       "timeoutMs": 120000,
       "pollIntervalMs": 100
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "routeSurface"
+        }
+      },
+      "settleMs": 0
     },
     {
       "type": "wait_until_diagnostic",
@@ -95,7 +107,7 @@
         "status": "ok",
         "security": {
           "contactKind": "PLAYER",
-          "contactTarget": "71540bc7-d737-36db-a4fa-4bdd0caf57ea"
+          "contactTarget": "d64a82e9-aa2d-382d-928f-78b1fea52f4a"
         }
       },
       "timeoutMs": 120000,
@@ -114,7 +126,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 3,
+          "hostilePlayers": 4,
           "contactKind": null,
           "respondingGuards": 0
         }
@@ -147,13 +159,13 @@
   ],
   "assertions": [
     {
-      "after": 8,
+      "after": 9,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 3,
+          "hostilePlayers": 4,
           "contactKind": null,
           "respondingGuards": 0
         }
@@ -166,7 +178,7 @@
       "name": "settlement-before-resident-assault"
     },
     {
-      "after": 5,
+      "after": 6,
       "name": "native-player-death",
       "presentation": "player"
     }

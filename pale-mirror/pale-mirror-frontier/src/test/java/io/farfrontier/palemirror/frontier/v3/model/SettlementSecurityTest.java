@@ -143,6 +143,13 @@ class SettlementSecurityTest {
         var lease=new AmbientActorLease(actor,body,new SimInstant(21001),1,AmbientLeaseStatus.HOT,AmbientGoalKind.GUARD,body);
         state=state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actor,move)).ambientLeases(Map.of(actor,lease)));
         var action=GuardContinuation.progress(duty.id(),21002);
+        var weapon=state.inventory().items().get(duty.weapon());
+        var strike=new SecurityState.Strike(duty.id(),duty.revision(),r.body(),contact(r).target(),duty.weapon(),weapon.condition(),
+                new WeaponProfile(weapon.itemKind(),6,13,3,1),17,21003,21002);
+        var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,new CommandId("test:approach-melee"),state.bootstrap().worldId(),Revision.ZERO,
+                new SimInstant(21002),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(new CommandId("test:approach-melee")),new SecurityEvent.Prepared(strike));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
+                FrontierWorldProcessCatalog.planCommand("security",state,command));
         var waiting=GuardWorkProcess.progress(state,action,21002);
         assertFalse(waiting.stream().anyMatch(event->event.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted));
         assertTrue(waiting.stream().anyMatch(event->event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled));
@@ -150,6 +157,33 @@ class SettlementSecurityTest {
                 lease.withGoal(AmbientGoalKind.ACTOR_MOVEMENT,move.order().legalStations().getFirst().standingBody()))));
         var readyEvents=GuardWorkProcess.progress(state,action,21002);
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted.class,readyEvents.getFirst().payload());
+        var accepted=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                FrontierWorldProcessCatalog.planCommand("security",state,command));
+        var emitted=FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("security",accepted.events());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted.class,emitted.getFirst().payload());
+        assertInstanceOf(SecurityEvent.Prepared.class,emitted.getLast().payload());
+    }
+
+    @Test void meleeRecoveryDoesNotRestartAnApproachWhileNativeSensingCanContinueAttacking() {
+        var r=ready();var state=offence(r);
+        state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor().offset(3,0,0),0,0);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),21001);
+        var duty=state.strategicPlans().guards().get(r.duty().id());
+        var response=patrol.responding(new SurfaceAnchor(contact(r).position()).offset(1,0,0),contact(r).target());
+        state=new GuardMissionSelected(duty.id(),duty.revision(),response).apply(state,duty.id(),21001);
+        duty=state.strategicPlans().guards().get(duty.id());var item=state.inventory().items().get(duty.weapon());
+        var strike=new SecurityState.Strike(duty.id(),duty.revision(),r.body(),contact(r).target(),duty.weapon(),item.condition(),
+                new WeaponProfile(item.itemKind(),6,13,3,1),17,21002,21001);
+        state=SecurityTransitions.apply(state,duty.id(),new SecurityEvent.Prepared(strike),21001);
+        state=SecurityTransitions.apply(state,duty.id(),new SecurityEvent.Completed(duty.id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21002);
+        assertFalse(duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()));
+        var result=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21003),21003);
+        assertTrue(result.stream().anyMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled));
+        assertFalse(result.stream().anyMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted));
+        long end=state.security().nextAttack().get(duty.id())+state.bootstrap().ruleset().security().observationInterval()+1;
+        assertFalse(GuardResponse.recoveringAfterAttack(state,duty,end),"a missed native opportunity must release the bounded recovery hold");
     }
 
     @Test void harmObservesTheBodyEvenBeforeItsActuatorRunsAndRejectsAFalseEpoch() {

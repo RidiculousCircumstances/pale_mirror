@@ -38,5 +38,10 @@ public final class GuardResponse {
         return !mission.response().orElseThrow().equals(contact.orElseThrow().target())
                 || SecurityCoverage.distance(mission.station(),new SurfaceAnchor(contact.orElseThrow().position()))>MAX_CONTACT_STATION_DISTANCE;
     }
+    /** Brief recovery gives native sensing one opportunity after cooldown before restarting an approach. */
+    public static boolean recoveringAfterAttack(FrontierWorldState state,GuardDuty duty,long tick) {
+        var next=state.security().nextAttack().get(duty.id());
+        return next!=null && tick<=Math.addExact(next,state.bootstrap().ruleset().security().observationInterval());
+    }
     private GuardResponse(){}
 }
