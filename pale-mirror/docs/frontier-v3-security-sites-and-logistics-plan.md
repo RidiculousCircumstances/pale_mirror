@@ -191,7 +191,7 @@ not block protection: ordinary player edits keep their existing causal handling.
   and continuous-operation claims retain M0/M1/M2/M3 distinctions. Completion is
   implementation+verified private delivery, not merely this plan's existence.
 
-Implementation status: schema316 source implemented, integration/native acceptance in progress.
+Implementation status: schema316 implemented; focused native security/restart flow passed on clean b622c42d6. Verified private delivery is recorded below.
 The initial site policy keeps existing operating declarations bound for their lifetime;
 unbound reservations may be released, while a bound right cannot disappear under
 work or stored effects. Automatic operating-site decommissioning, contested claims
@@ -203,8 +203,8 @@ Existing release/retirement owners must precede any future operating-site releas
 Modeled connected evidence currently covers actual surveyed claim/extension,
 patrol queue travel/watch/successive posts, response post retention/contact expiry,
 prepared combat/wear/persistence fences, and mixed internal transport through actual
-mission/group/guide/animal release without a sale. Native acceptance is pending;
-see the canonical continuity ledger for current exact identity and receipts.
+mission/group/guide/animal release without a sale. Evidence levels and the focused
+native result are recorded below; the canonical ledger owns current runtime identity.
 
 
 ## Verified implementation boundaries
@@ -226,19 +226,23 @@ free-area acquisition, and mixed internal cargo through delivery/return/retireme
 no money change. Shared storage discovery now separates candidate approaches from the
 single retained interaction station; actual carrier dimensions select that station.
 
-First native disposable client carrier completed ordinary manufacture/issue, player
-assault, real sword retaliation (health20 to14), departure, graceful restart, remembered
-hostility, repeated retaliation without a second assault, and disengagement. Receipt:
-`build/security-native/native-security-policy.json`. The frame was inspected. This is
-focused native evidence for one armed guard and persistent player relations, not full
-cohort/scale/visual acceptance. A final native run after the adjacent-contact correction
-and a clean private packaged deployment remain required.
+Final checked-in native carrier passed on clean b622c42d6: finite forge materials
+without initial swords or appointments, ordinary manufacture/issue, a real fist attack,
+confirmed persistent offence, sword retaliation (health20 to14), departure and bounded
+investigation/return. A graceful restart retained hostility; a second visit without
+another assault produced another sword hit (health20 to14), then disengagement and
+patrol resumption. Receipt `build/security-native/native-security-current-pose.json`
+links its actual build identity,12 actions, PMV3 trace, both terminal diagnostics and
+reviewed frame. Task client/server/private Xvfb exited and25583/4 closed. This is focused
+one-guard native endpoint/recovery evidence, not a full cohort, continuous industrial
+M2, human M3 or scale/performance acceptance claim. Mixed cargo and free-land acquisition
+have real queue/save evidence; no new graphical mixed-cargo acceptance is claimed.
 
 The full native milestone exposed two unrelated legacy assault/route-patrol failures;
 both recur on clean baseline de34b065f. They remain explicit existing gate debt, not a
 reason to enable or redesign those inactive families. A separate obsolete diagnostic
 assertion expected the removed composite scenes executor; it now checks actual SCENE
-stages after observation. All49 execution rows fit the unchanged8KiB response budget.
+stages after observation. All50 execution rows fit the unchanged8KiB response budget.
 
 
 Native follow-up found a distinct pursuit defect: expiring the60tick live contact
@@ -270,3 +274,25 @@ The guard-position diagnostic reads the shared time-aware movement pose; a retai
 COLD origin is not the current position. Native restart setup warms the loaded scene,
 then resolves that current pose again before establishing visibility. Chunk admission
 must not turn the old pre-loading coordinate into a claimed observation opportunity.
+
+
+## Final verification and delivery record
+
+Serial clean RELEASE `guardrails check` passed (frontier2219, NeoForge891, domain324,
+visuals79; zero failures). Later semantic fixes passed affected investigation, stale
+strike, safe movement checkpoint and confirmed-native-event predecessor/recovery
+negatives. Node55/55; body-first native25/25 and scene-handoff3/3 passed. Clean bd4
+packaged build/verification and b622 diagnostic-only package verification passed.
+Two inactive legacy assault/patrol native failures also reproduce on clean de34;
+they remain explicit baseline gate debt, not silently removed or enabled here.
+
+Private full-pack deployment at b622 uses root preflight and checksum-pinned installer,
+clean detached source, Java22 and the existing fresh schema316 seed129 world. Receipts:
+`build/security-native/deploy-b622c42d6/verified.json`. Actual JVM identity, installed hash,
+fresh startup, exact world and absent MAIN ports verified. Two health reads advanced
+8233→9501, statusok, fast-forward0, pending ordinary ticks0/1, no new quarantine.
+The private runtime starts with ordinary world resources; approved guards become ready
+only after real sword manufacture/issue. At instant12047 settlement1 had0 ready guards;
+the native scenario's finite forge inputs are evidence setup, not installed free stock.
+MAIN remains stopped. No public pack/client update or push. Notes-only delivery refs
+may follow b622; native source dependencies and packaged verification remain reusable.
