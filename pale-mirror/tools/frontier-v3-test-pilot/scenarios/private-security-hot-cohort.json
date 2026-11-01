@@ -55,6 +55,18 @@
       "settleMs": 1000
     },
     {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "settleMs": 0
+    },
+    {
       "type": "command",
       "command": "/gamemode survival"
     }
@@ -68,8 +80,8 @@
     {
       "type": "attack_nearest_entity",
       "entityType": "minecraft:villager",
-      "maxDistance": 32,
-      "maxAttacks": 3,
+      "maxDistance": 8,
+      "maxAttacks": 1,
       "requireRemoval": false,
       "requireDamage": true,
       "timeoutMs": 30000
