@@ -23,7 +23,7 @@
     },
     {
       "type": "command",
-      "command": "/effect give @s minecraft:instant_health 1 30 true"
+      "command": "/effect give @s minecraft:instant_health 1 5 true"
     },
     {
       "type": "assert_fixture",
@@ -61,17 +61,15 @@
   ],
   "actions": [
     {
-      "type": "observe_settlement_population",
-      "settlementId": "settlement:1",
-      "durationTicks": 40,
-      "maxDistance": 128,
-      "timeoutMs": 30000
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
     },
     {
       "type": "attack_nearest_entity",
       "entityType": "minecraft:villager",
       "maxDistance": 32,
-      "maxAttacks": 1,
+      "maxAttacks": 3,
       "requireRemoval": false,
       "requireDamage": true,
       "timeoutMs": 30000
@@ -164,7 +162,7 @@
   ],
   "frames": [
     {
-      "after": 1,
+      "after": 2,
       "name": "settlement-before-resident-assault"
     },
     {
