@@ -361,3 +361,47 @@ without closing materialization. Progress reports must name the evidence level.
 Wave 6 and v2 removal cannot complete while any P0 `MAT-*` gap is open. P1 gaps,
 including `MAT-008` through `MAT-010`, must close before the clean-room M3
 product gate.
+
+## Settlement security and outlying batch logistics — schema316
+
+This cut extends the peaceful appointment through retained patrol/watch/respond/
+return missions. UAE/common navigation owns every move; SecurityState owns dated
+contacts, persistent UUID hostility, readiness and exact pending strike. Native
+weapon attributes feed MELEE_ATTACK through the existing non-replayable operation
+protocol, including separate PLAYER_HEALTH and item witnesses. Exact target native
+incarnation fences replay. COLD creates no phantom opponents or player combat.
+
+Confirmed one-shot native facts use the same indexed operation journal and canonical
+confirmation/recovery mechanism across predecessor/durability waits. OBSERVED_EVENT
+is a durable event witness, never a physical mutation port or saved-health image.
+Passive victim identity does not require current-job actuation. Response redirection
+uses the shared interruption planner and exact native handoff checkpoint. Stale
+contact retains only bounded investigation, never unseen live targeting or a strike.
+
+Mixed freight reuses the existing group, finite animal/container and exact parcels.
+One atomic admission reserves real material and combined receiving capacity; normal
+transfer/return/retirement owners release cargo, guide, group and animal. Site grants
+are distinct from resource ownership. Surveyed cultivation actually acquires free
+known cropland; initial mines/forests retain explicit allocations. Bound operating
+grants cannot disappear under live work; decommissioning/new mine/forest acquisition
+policy is outside this first implementation. Ordinary local storage has no mandatory
+original-depot binding; approach candidates remain separate from one exact station.
+
+Real queue/save evidence covers patrol/watch/successive posts, response bookmark,
+stale/forged arrival/strike negatives, safe interruption, native-fact recovery, exact
+free-land acquisition, mixed delivery/return and full mission/group/asset retirement
+without money change. Final checked-in `disposable-settlement-security-restart.json`
+PASSED clean b622c42d6: finite forge inputs without swords/appointments → ordinary
+manufacture/issue → player fist attack → offence → sword health20→14 → departure/
+bounded investigation/return → graceful restart → remembered player without second
+assault → sword health20→14 → departure/patrol. Receipt
+`IMPL/build/security-native/native-security-current-pose.json`, its PMV3 trace and
+reviewed frame are linked by `IMPL/build/security-native/verification-summary.json`.
+Client/private Xvfb/disposable server stopped;25583/4 closed.
+
+This is one-guard native endpoint/recovery evidence, not full-cohort M2, continuous
+industrial/mixed-freight M2, human M3 or scale acceptance. Two inactive legacy native
+assault/patrol failures recur on the clean de34 baseline and remain explicit gate
+debt. Serial clean release check and affected subsequent negatives passed. Packaged
+private deployment uses schema316 seed129; current exact source/hash/JVM/fresh health
+receipts live under `IMPL/build/security-native/deploy-final/`. MAIN stays stopped.
