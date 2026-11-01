@@ -120,6 +120,19 @@
       "id": "settlement:1"
     },
     {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 24,
+      "timeoutMs": 30000
+    },
+    {
       "type": "wait_until_player_health",
       "maximum": 19,
       "minimum": 1,
@@ -201,19 +214,6 @@
         "settleMs": 1000
       },
       {
-        "type": "look_nearest_entity",
-        "entityType": "minecraft:villager",
-        "nameContains": {
-          "diagnostic": {
-            "view": "settlement",
-            "id": "settlement:1",
-            "field": "firstGuardName"
-          }
-        },
-        "maxDistance": 24,
-        "timeoutMs": 30000
-      },
-      {
         "type": "command",
         "command": "/gamemode survival"
       }
@@ -233,7 +233,7 @@
       }
     },
     {
-      "after": 10,
+      "after": 11,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
