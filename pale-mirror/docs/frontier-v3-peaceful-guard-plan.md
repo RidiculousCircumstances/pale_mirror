@@ -119,3 +119,11 @@ that factory. Goal withdrawal cancels the exact movement continuation. A real
 engine-queue regression runs approach, issue and clearance to terminal readiness
 without manually invoking movement handlers. The queue's missing-schedule check
 remains strict.
+
+The265ef29 native run completed two actual issues and graceful restart; both
+appointments remained ready and the client saw the first guard. Its later COLD
+visit failed because the scenario targeted unsupported air at overworld(0,80,0),
+while visit ingress correctly requires stable arrival. The exit now uses the
+ordinary seed41 spawn(12,63,-138), independently witnessed at initial login. No
+arrival predicate, timeout or world/actor state is overridden. This is a scenario
+correction, not a guard failure or an accepted complete previous-run receipt.

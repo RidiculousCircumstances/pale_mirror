@@ -99,9 +99,9 @@
       "type": "visit",
       "dimension": "minecraft:overworld",
       "position": {
-        "x": 0,
-        "y": 80,
-        "z": 0
+        "x": 12,
+        "y": 63,
+        "z": -138
       },
       "settleMs": 15000
     },
