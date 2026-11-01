@@ -6,7 +6,7 @@
     "port": 25581
   },
   "pilot": {
-    "username": "pmhotguard5"
+    "username": "pmhotguard6"
   },
   "setup": [
     {
@@ -19,7 +19,7 @@
     },
     {
       "type": "command",
-      "command": "/attribute @s minecraft:generic.max_health base set 100"
+      "command": "/attribute @s minecraft:generic.max_health base set 40"
     },
     {
       "type": "command",
@@ -36,7 +36,7 @@
             "status": "ok",
             "hasArmedGuard": true,
             "security": {
-              "hostilePlayers": 4
+              "hostilePlayers": 5
             }
           }
         }
@@ -93,7 +93,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 5
+          "hostilePlayers": 6
         }
       },
       "timeoutMs": 120000,
@@ -119,7 +119,7 @@
         "status": "ok",
         "security": {
           "contactKind": "PLAYER",
-          "contactTarget": "dcb987f6-3370-3610-a20e-e485f39c593b"
+          "contactTarget": "d0ce4483-83eb-38b3-b13e-1af1653404b3"
         }
       },
       "timeoutMs": 120000,
@@ -138,7 +138,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 5,
+          "hostilePlayers": 6,
           "contactKind": null,
           "respondingGuards": 0
         }
@@ -177,7 +177,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 5,
+          "hostilePlayers": 6,
           "contactKind": null,
           "respondingGuards": 0
         }
