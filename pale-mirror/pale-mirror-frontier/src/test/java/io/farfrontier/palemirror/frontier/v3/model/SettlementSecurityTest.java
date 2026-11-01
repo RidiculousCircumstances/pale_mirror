@@ -112,4 +112,26 @@ class SettlementSecurityTest {
         assertTrue(state.security().hostile(duty.home(),r.offender()));
     }
 
+    @Test void alarmWaitsForTheSharedHotMovementCheckpointBeforeRedirecting() {
+        var r=ready();var state=offence(r);
+        state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        var target=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var mission=new GuardMission(target.kind(),target.id(),target.observationAnchor().offset(3,0,0),0,0);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),mission).apply(state,r.duty().id(),21001);
+        var duty=state.strategicPlans().guards().get(r.duty().id());var actor=duty.execution().actorId();
+        var move=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(duty.missionOrder(),21001,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.GuardMissionLeg(duty.id(),duty.revision()),duty.execution());
+        var body=state.actorLocations().get(actor).body();
+        var lease=new AmbientActorLease(actor,body,new SimInstant(21001),1,AmbientLeaseStatus.HOT,AmbientGoalKind.GUARD,body);
+        state=state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actor,move)).ambientLeases(Map.of(actor,lease)));
+        var action=GuardContinuation.progress(duty.id(),21002);
+        var waiting=GuardWorkProcess.progress(state,action,21002);
+        assertFalse(waiting.stream().anyMatch(event->event.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted));
+        assertTrue(waiting.stream().anyMatch(event->event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled));
+        state=state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor,
+                lease.withGoal(AmbientGoalKind.ACTOR_MOVEMENT,move.order().legalStations().getFirst().standingBody()))));
+        var readyEvents=GuardWorkProcess.progress(state,action,21002);
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted.class,readyEvents.getFirst().payload());
+    }
+
 }

@@ -248,3 +248,10 @@ continues only the retained point, can reacquire through ordinary LOS, cannot au
 an unseen strike, and ends at its deadline or the pursuit boundary. Diagnostics expose
 INVESTIGATE separately from RESPOND. The restart carrier first establishes local
 visibility; an arbitrary two-block teleport offset had no visibility guarantee.
+
+Guard alarm and obstructed-post replacement must obtain Ready/Waiting from the shared
+ActorMovementInterruptionPlanner, including native ambient-handoff fences. They never
+construct ActorMovementInterrupted from a guessed current position. A native alarm
+caught the former bypass while an old lease still named its prior goal; the existing
+movement invariant correctly rejected it. Family continuation retains a wait until the
+common owner acknowledges the exact checkpoint.

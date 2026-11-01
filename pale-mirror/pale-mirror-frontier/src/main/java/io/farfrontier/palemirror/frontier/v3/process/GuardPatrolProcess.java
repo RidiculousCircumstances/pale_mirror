@@ -103,10 +103,11 @@ final class GuardPatrolProcess {
                 || PedestrianRoutePlanning.peek(knowledge.geometry(),body.supportingSurface(),goal)
                         .filter(result->result.status()==PedestrianRouteResult.Status.NO_PATH).isPresent();
         if(!blocked)return List.of(scheduled(action,duty,tick+20));
-        var replacement=selectPost(state,action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);
-        var events=new ArrayList<ProposedEvent>();
-        events.add(new ProposedEvent(duty.execution().actorId(),new ActorMovementInterrupted(duty.execution().actorId(),movement.order().goalRevision(),tick,body,duty.execution())));
-        events.add(new ProposedEvent(duty.execution().actorId(),new ScheduleEffect.Cancelled(ActorMovementProcess.progress(movement,tick+1).id())));
+        var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,duty.execution(),tick);
+        if(assessment instanceof ActivityInterruptionPlanner.Waiting)return List.of(scheduled(action,duty,tick+20));
+        var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,duty.execution().actorId());
+        var replacement=selectPost(ready.following(),action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);
+        var events=new ArrayList<>(ready.events());
         events.addAll(replacement);return List.copyOf(events);
     }
     private static Optional<SurfaceAnchor> reachable(KnownPedestrianRouteKnowledge knowledge,SurfaceAnchor origin,List<SurfaceAnchor> candidates) {

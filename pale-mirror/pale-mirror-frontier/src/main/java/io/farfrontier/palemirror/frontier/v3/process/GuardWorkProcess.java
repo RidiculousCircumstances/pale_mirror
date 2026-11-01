@@ -71,11 +71,12 @@ public final class GuardWorkProcess {
         if (activeMove != null) {
             if(activeMove.context() instanceof ActorMovementContext.GuardMissionLeg
                     && io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.redirect(state,duty,tick)) {
-                var body=ActorMovementProcess.bodyAt(state,duty.execution().actorId(),tick);
-                return List.of(new ProposedEvent(duty.execution().actorId(), new ActorMovementInterrupted(duty.execution().actorId(),
-                        activeMove.order().goalRevision(),tick,body,duty.execution())),
-                        new ProposedEvent(duty.execution().actorId(),new ScheduleEffect.Cancelled(ActorMovementProcess.progress(activeMove,tick+1).id())),
-                        cancel(action),GuardContinuation.wake(duty.id(),tick));
+                var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,duty.execution(),tick);
+                if(assessment instanceof ActivityInterruptionPlanner.Waiting)return retry(state,action,tick);
+                var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,duty.execution().actorId());
+                var events=new ArrayList<>(ready.events());
+                events.add(cancel(action));events.add(GuardContinuation.wake(duty.id(),tick));
+                return List.copyOf(events);
             }
             if (activeMove.context() instanceof ActorMovementContext.GuardEquipment && !GuardAuthority.goalAvailable(state, duty))
                 return List.of(changed(duty, GuardDutyEvent.Change.GOAL_WITHDRAWN),

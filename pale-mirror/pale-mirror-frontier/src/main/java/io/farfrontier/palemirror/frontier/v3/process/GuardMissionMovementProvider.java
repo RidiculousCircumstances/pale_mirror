@@ -48,10 +48,8 @@ public final class GuardMissionMovementProvider implements ActorMovementProvider
     @Override public ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement) { validate(state, movement); return state.actorExecutions(); }
     @Override public ActorExecutionState interruptionAuthority(FrontierWorldState state, ActorMovement movement) { validate(state, movement); return state.actorExecutions(); }
     @Override public Optional<BodyPosition> interruptionCheckpoint(FrontierWorldState state, ActorMovement movement, long tick) {
-        var body = ActorMovementProcess.bodyAt(state, movement.order().actorId(), tick); var access = serviceApproach(state, movement);
-        if (access.isEmpty()) return Optional.of(body);
-        var declaration = ServiceBoundaryComposition.operational(state, access.orElseThrow().pointId());
-        return declaration.isEmpty() || declaration.orElseThrow().boundary().cleared(body) ? Optional.of(body) : Optional.empty();
+        validate(state,movement);
+        return Optional.of(ActorMovementProcess.bodyAt(state,movement.order().actorId(),tick));
     }
     @Override public boolean permitsReplacement(ResidentActivityChoice.Kind next) { return next == ResidentActivityChoice.Kind.EAT; }
     @Override public List<ProposedEvent> arrived(FrontierWorldState state, ActorMovement movement, long tick) {
