@@ -6,7 +6,7 @@
     "port": 25581
   },
   "pilot": {
-    "username": "pmhotguard9"
+    "username": "pmhotguard10"
   },
   "setup": [
     {
@@ -36,7 +36,7 @@
             "status": "ok",
             "hasArmedGuard": true,
             "security": {
-              "hostilePlayers": 8
+              "hostilePlayers": 9
             }
           }
         }
@@ -113,7 +113,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 9
+          "hostilePlayers": 10
         }
       },
       "timeoutMs": 120000,
@@ -139,7 +139,7 @@
         "status": "ok",
         "security": {
           "contactKind": "PLAYER",
-          "contactTarget": "435c2bc3-f0ec-30b2-877f-57c089e7c501"
+          "contactTarget": "a1825cd3-36ca-350d-ae94-06f13e415ecf"
         }
       },
       "timeoutMs": 120000,
@@ -158,7 +158,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 9,
+          "hostilePlayers": 10,
           "contactKind": null,
           "respondingGuards": 0
         }
@@ -180,7 +180,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 9,
+          "hostilePlayers": 10,
           "contactKind": null,
           "respondingGuards": 0
         }
