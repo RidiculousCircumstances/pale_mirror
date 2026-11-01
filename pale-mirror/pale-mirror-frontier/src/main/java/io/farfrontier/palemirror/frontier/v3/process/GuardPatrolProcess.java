@@ -26,11 +26,8 @@ final class GuardPatrolProcess {
             var stations=new ArrayList<SurfaceAnchor>();var position=contact.position();
             var reserved=GuardEquipment.in(state,duty.home()).stream().filter(other->!other.id().equals(duty.id()))
                     .flatMap(other->other.mission().stream()).map(GuardMission::station).collect(java.util.stream.Collectors.toSet());
-            for(int dx=-2;dx<=2;dx++)for(int dz=-2;dz<=2;dz++) {
-                if(Math.abs(dx)+Math.abs(dz)!=1)continue;
-                for(var station:knowledge.surfacesAt(position.x()+dx,position.z()+dz))
-                    if(Math.abs(station.y()-position.y())<=1 && !knowledge.geometry().blocked(station) && !reserved.contains(station)) stations.add(station);
-            }
+            stations.addAll(PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(position),
+                    GuardResponse.MAX_CONTACT_STATION_DISTANCE,reserved));
             stations.sort(Comparator.comparingLong(station->SecurityCoverage.distance(station,state.actorLocations().get(duty.execution().actorId()).supportingSurface())));
             var selected=reachable(knowledge,state.actorLocations().get(duty.execution().actorId()).supportingSurface(),stations);
             if(selected.isPresent()) {
@@ -82,7 +79,7 @@ final class GuardPatrolProcess {
             }
             stations.sort(Comparator.comparingLong((SurfaceAnchor point) -> SecurityCoverage.distance(point, origin))
                     .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y));
-            var selected=reachable(knowledge,state.actorLocations().get(duty.execution().actorId()).supportingSurface(),stations);
+            var selected=reachable(knowledge,state.actorLocations().get(duty.execution().actorId()).supportingSurface(),stations.stream().limit(8).toList());
             if(selected.isEmpty())continue;
             var next = new GuardMission(target.kind(), target.id(), selected.orElseThrow(), ordinal, 0);
             return List.of(new ProposedEvent(duty.id(), new GuardMissionSelected(duty.id(), duty.revision(), next)), GuardContinuation.wake(duty.id(), tick));
@@ -115,7 +112,7 @@ final class GuardPatrolProcess {
         events.addAll(replacement);return List.copyOf(events);
     }
     private static Optional<SurfaceAnchor> reachable(KnownPedestrianRouteKnowledge knowledge,SurfaceAnchor origin,List<SurfaceAnchor> candidates) {
-        for(var station:candidates.stream().limit(8).toList())try { knowledge.plannedBetween(origin,station);return Optional.of(station); }
+        for(var station:candidates)try { knowledge.plannedBetween(origin,station);return Optional.of(station); }
         catch(KnownPedestrianNavigation.RouteUnavailable failure) { if(failure.status()!=PedestrianRouteResult.Status.NO_PATH)throw failure; }
         return Optional.empty();
     }

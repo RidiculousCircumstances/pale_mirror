@@ -3,7 +3,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.*;
 /** Shared contact selection and protected-area pursuit envelope; never tracks an invisible target. */
 public final class GuardResponse {
-    /** One cardinal neighbour and at most one support-height step, as admitted by response placement. */
+    /** Admitted standing area includes every known contact within this support-space distance. */
     public static final int MAX_CONTACT_STATION_DISTANCE = 2;
     public static Optional<SecurityState.Contact> contact(FrontierWorldState state,GuardDuty duty,long tick){
         var contact=state.security().contacts().get(duty.home());
