@@ -142,7 +142,6 @@
         "status": "ok",
         "security": {
           "hostilePlayers": 2,
-          "contactKind": null,
           "respondingGuards": 0
         }
       },
@@ -164,7 +163,6 @@
         "status": "ok",
         "security": {
           "hostilePlayers": 2,
-          "contactKind": null,
           "respondingGuards": 0
         }
       }
