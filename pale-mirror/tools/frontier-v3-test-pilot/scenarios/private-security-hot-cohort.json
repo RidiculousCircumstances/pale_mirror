@@ -47,24 +47,12 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "diagnostic": {
-          "view": "actor",
-          "id": "resident:1-1",
-          "field": "position"
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "routeSurface"
         }
       },
       "settleMs": 1000
-    },
-    {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "diagnostic": {
-          "view": "actor",
-          "id": "resident:1-1",
-          "field": "position"
-        }
-      },
-      "settleMs": 0
     },
     {
       "type": "command",
@@ -73,28 +61,15 @@
   ],
   "actions": [
     {
-      "type": "look_nearest_entity",
-      "entityType": "minecraft:villager",
-      "nameContains": {
-        "diagnostic": {
-          "view": "actor",
-          "id": "resident:1-1",
-          "field": "name"
-        }
-      },
-      "maxDistance": 64,
+      "type": "observe_settlement_population",
+      "settlementId": "settlement:1",
+      "durationTicks": 40,
+      "maxDistance": 128,
       "timeoutMs": 30000
     },
     {
       "type": "attack_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": {
-        "diagnostic": {
-          "view": "actor",
-          "id": "resident:1-1",
-          "field": "name"
-        }
-      },
       "maxDistance": 32,
       "maxAttacks": 1,
       "requireRemoval": false,
@@ -113,18 +88,6 @@
       },
       "timeoutMs": 120000,
       "pollIntervalMs": 100
-    },
-    {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "routeSurface"
-        }
-      },
-      "settleMs": 0
     },
     {
       "type": "wait_until_diagnostic",
@@ -186,7 +149,7 @@
   ],
   "assertions": [
     {
-      "after": 9,
+      "after": 8,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -202,10 +165,10 @@
   "frames": [
     {
       "after": 1,
-      "name": "civilian-before-player-assault"
+      "name": "settlement-before-resident-assault"
     },
     {
-      "after": 6,
+      "after": 5,
       "name": "native-player-death",
       "presentation": "player"
     }
