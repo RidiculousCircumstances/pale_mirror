@@ -21,7 +21,8 @@ public final class PedestrianLocalDeparture {
     }
 
     public static boolean publicPosition(FrontierWorldState state, SurfaceAnchor surface) {
-        return KnownPedestrianRouteKnowledge.forFrontier(state).traversable(List.of(surface));
+        return !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(surface.support())
+                && KnownPedestrianRouteKnowledge.forFrontier(state).traversable(List.of(surface));
     }
 
     /** A private-station escape precedes an outdoor approach; it is not an unauthorized re-entry. */

@@ -157,6 +157,33 @@ class KnownPedestrianRouteKnowledgeTest {
         ResourceStorageNavigation.forEndpoint(codec.decode(codec.encode(declared)), endpoint).requireRoute(route);
     }
 
+    @Test void knownClearBodyAboveAnAuthoredBlockIsAUsableFloorRatherThanAnAccessRestriction() {
+        var state=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:authored-floor-contact"),91L));
+        var home=state.bootstrap().settlements().getFirst();
+        var hall=home.structures().stream().filter(s->s.kind()==StructureKind.HALL).findFirst().orElseThrow();
+        var support=hall.anchor().offset(-1,0,0);var surface=new SurfaceAnchor(support);
+        var facts=new LinkedHashMap<BlockPosition,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation>();
+        facts.put(support,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
+        for(int y=1;y<=2;y++)facts.put(support.offset(0,y,0),io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.AIR));
+        state=new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0,facts).apply(state,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+        var codec=new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        for(var current:List.of(state,codec.decode(codec.encode(state)))) {
+            var geometry=KnownPedestrianRouteKnowledge.forPublicJourney(current,home.id(),List.of())
+                    .forActor(current,home.residents().getFirst().id()).geometry();
+            assertTrue(geometry.knowsSupport(surface));assertTrue(geometry.clearBody(surface));
+            assertTrue(geometry.clearStation(surface),"a building's solid floor is not itself a forbidden standing contact");
+        }
+        var blocked=new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(state.navigationGeometry().revision(),
+                Map.of(support.offset(0,1,0),io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID)))
+                .apply(state,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+        assertTrue(KnownPedestrianRouteKnowledge.forPublicJourney(blocked,home.id(),List.of())
+                .forActor(blocked,home.residents().getFirst().id()).geometry().blocked(surface),"actual body obstruction still closes the contact");
+    }
+
     @Test void observedChestTopStillGrantsOnlyRetainedDepartureAfterRecovery() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:observed-chest-departure"), 91L));
         var home = state.bootstrap().settlements().getFirst();

@@ -74,7 +74,8 @@ final class GuardPatrolProcess {
                 if (Math.max(Math.abs(dx),Math.abs(dz))<3) continue;
                 for (var station : knowledge.surfacesAt(origin.x()+dx, origin.z()+dz)) {
                     if (Math.abs(station.y()-origin.y()) <= 4 && !knowledge.geometry().blocked(station)
-                            && !reserved.contains(station) && ServiceBoundaryComposition.turnoverPoint(state, station).isEmpty()) stations.add(station);
+                            && !reserved.contains(station) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(station.support())
+                            && ServiceBoundaryComposition.turnoverPoint(state, station).isEmpty()) stations.add(station);
                 }
             }
             stations.sort(Comparator.comparingLong((SurfaceAnchor point) -> SecurityCoverage.distance(point, origin))

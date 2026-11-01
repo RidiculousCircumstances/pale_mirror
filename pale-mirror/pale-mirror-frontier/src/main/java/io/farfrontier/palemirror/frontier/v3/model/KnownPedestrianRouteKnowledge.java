@@ -543,11 +543,13 @@ public final class KnownPedestrianRouteKnowledge {
             BoundedPedestrianApproach.SurveyedSurface ground, Set<BlockPosition> cleared) {
         var cache = cache();
         var storage = KnownStorageGeometry.fixedSupports(state);
-        // Authored support exclusions do not depend on moving actors, crop stages or
-        // newly observed navigation shapes. Reuse that immutable overlay, not the terrain view.
+        // Access restrictions are independent of collision volumes. A solid authored
+        // block can be a known safe floor when the body above it is clear; treating
+        // every solid support as forbidden would make observed plinths/steps unusable.
+        // Private work stations and container tops remain explicit access restrictions.
         if (cache.accessBootstrap != state.bootstrap() || cache.accessStorage != storage) {
             cache.accessExclusions.clear(); cache.accessBootstrap = state.bootstrap(); cache.accessStorage = storage;
-            cache.accessBase = RegionalBlockSet.copyOf(retainedStaticOccupancy(state.bootstrap())).overlay(Set.of(), storage);
+            cache.accessBase = FacilityPedestrianContacts.of(state.bootstrap()).workstations().overlay(Set.of(), storage);
         }
         var denied = cache.accessExclusions.get(cleared);
         if (denied == null) {

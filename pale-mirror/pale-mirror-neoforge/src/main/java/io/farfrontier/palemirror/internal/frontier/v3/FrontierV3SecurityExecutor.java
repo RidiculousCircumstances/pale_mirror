@@ -19,6 +19,7 @@ public final class FrontierV3SecurityExecutor {
     private static final String ATTEMPT="pm_v3_combat_attempt";
     private static final int MAX_GUARDS_PER_PASS=32;
     private static final Map<ServerLevel,Integer> OBSERVATION_CURSOR=new WeakHashMap<>();
+    private static final Map<ServerLevel,Long> NEXT_OBSERVATION_TICK=new WeakHashMap<>();
     public static void observedDamage(ServerLevel level,LivingEntity victim,Entity attacker,float damage) {
         if(!(attacker instanceof ServerPlayer player)||damage<=0 || !FrontierV3PhysicalWorld.isPhysical(level))return;
         var runtime=FrontierV3ServerLifecycle.runtimeFor(level.getServer());
@@ -38,10 +39,14 @@ public final class FrontierV3SecurityExecutor {
         var state=runtime.decodedState().orElseThrow();
         // Prepared effects recover before another observation or attack is admitted.
         for(var strike:state.security().pending().values().stream().limit(MAX_GUARDS_PER_PASS).toList()) execute(level,runtime,strike);
-        if(level.getGameTime()%state.bootstrap().ruleset().security().observationInterval()!=0)return;
+        // Cooperative passes can resume on any tick. A modulo-only gate can miss
+        // every opportunity at a stable nonzero phase; sample once the interval is due.
+        long nativeTick=level.getGameTime();
+        if(nativeTick<NEXT_OBSERVATION_TICK.getOrDefault(level,0L))return;
+        NEXT_OBSERVATION_TICK.put(level,Math.addExact(nativeTick,state.bootstrap().ruleset().security().observationInterval()));
         state=runtime.decodedState().orElseThrow();int visited=0;
         var duties=state.strategicPlans().guards().values().stream().sorted(Comparator.comparing(GuardDuty::id)).toList();
-        if(duties.isEmpty()) { OBSERVATION_CURSOR.remove(level); return; }
+        if(duties.isEmpty()) { OBSERVATION_CURSOR.remove(level); NEXT_OBSERVATION_TICK.remove(level); return; }
         int cursor=Math.floorMod(OBSERVATION_CURSOR.getOrDefault(level,0),duties.size());
         for(int inspected=0;inspected<duties.size() && visited<MAX_GUARDS_PER_PASS;inspected++) {
             var duty=duties.get(cursor);cursor=(cursor+1)%duties.size();OBSERVATION_CURSOR.put(level,cursor);
