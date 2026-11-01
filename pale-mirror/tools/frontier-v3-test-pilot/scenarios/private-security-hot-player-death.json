@@ -32,7 +32,7 @@
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
-          "field": "firstGuardPosition"
+          "field": "routeSurface"
         }
       },
       "settleMs": 1000
@@ -44,7 +44,7 @@
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
-          "field": "firstGuardPosition"
+          "field": "routeSurface"
         }
       },
       "settleMs": 0
@@ -55,19 +55,6 @@
     }
   ],
   "actions": [
-    {
-      "type": "look_nearest_entity",
-      "entityType": "minecraft:villager",
-      "nameContains": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "firstGuardName"
-        }
-      },
-      "maxDistance": 64,
-      "timeoutMs": 30000
-    },
     {
       "type": "wait_until_diagnostic",
       "view": "settlement",
@@ -110,7 +97,7 @@
   ],
   "assertions": [
     {
-      "after": 5,
+      "after": 4,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -125,11 +112,7 @@
   ],
   "frames": [
     {
-      "after": 1,
-      "name": "guards-before-remembered-player-combat"
-    },
-    {
-      "after": 3,
+      "after": 2,
       "name": "native-player-death",
       "presentation": "player"
     }

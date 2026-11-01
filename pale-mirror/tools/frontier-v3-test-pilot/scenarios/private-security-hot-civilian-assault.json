@@ -100,29 +100,29 @@
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
-          "field": "firstGuardPosition"
+          "field": "routeSurface"
         }
       },
       "settleMs": 0
     },
     {
-      "type": "look_nearest_entity",
-      "entityType": "minecraft:villager",
-      "nameContains": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "firstGuardName"
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "contactKind": "PLAYER"
         }
       },
-      "maxDistance": 64,
-      "timeoutMs": 30000
+      "timeoutMs": 120000,
+      "pollIntervalMs": 100
     },
     {
       "type": "wait_until_player_health",
       "maximum": 19,
       "minimum": 1,
-      "timeoutMs": 60000
+      "timeoutMs": 120000
     },
     {
       "type": "visit",
