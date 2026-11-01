@@ -405,3 +405,18 @@ assault/patrol failures recur on the clean de34 baseline and remain explicit gat
 debt. Serial clean release check and affected subsequent negatives passed. Packaged
 private deployment uses schema316 seed129; current exact source/hash/JVM/fresh health
 receipts live under `IMPL/build/security-native/deploy-final/`. MAIN stays stopped.
+
+
+### HOT hardening of security — 2026-11-02
+
+The same schema316 cut now has a successful four-guard native lethal-contact carrier
+on source41742c731: actual fist incident, shared response, health40→0, named kill,
+durable contact termination, no pending strike, retained PATROL missions. A normal
+same-world restart retains hostility11/no contact; source27d9cc85e then passes the
+corrected patrol carrier with the same exact native guard UUID and65 motion samples
+covering23.85blocks over320ticks. `IMPL/build/security-hot/deploy-footprint/verified.json`
+binds source/artifact/PID/world and bounded advancing health; MAIN stays stopped.
+Detailed causes, connected fixes and proof limits are in
+[the HOT findings](frontier-v3-security-hot-findings-20261102.md).
+This adds cohort endpoint/contact and retained-motion recovery evidence, not full
+industrial/mixed-freight M2, human M3, formation visuals or scale acceptance.
