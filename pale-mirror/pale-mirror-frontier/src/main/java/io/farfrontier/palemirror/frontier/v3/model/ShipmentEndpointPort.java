@@ -21,5 +21,9 @@ interface ShipmentEndpointPort {
     /** Immutable declared service geometry; not stock, readiness or interaction permission. */
     List<SurfaceAnchor> declaredStations(FrontierBootstrap bootstrap, ShipmentEndpoint endpoint);
     List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint);
+    /** Admission candidates only. The selector retains one exact endpoint; continuations never rediscover it. */
+    default List<SurfaceAnchor> approachStations(FrontierWorldState state,ShipmentEndpoint endpoint,KnownPedestrianRouteKnowledge actorKnowledge) {
+        return stations(state,endpoint);
+    }
     SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint);
 }

@@ -157,6 +157,8 @@ final class ResourceSiteHarvestPlanning {
 
     private static java.util.Optional<ResourceSiteHarvestStarted> offer(FrontierWorldState state, StrategicTask task,
             ResourceSite site, ResidentProfile farmer, long tick) {
+        if(!state.siteUses().authorizes(new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(
+                io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.CULTIVATION,site.id()),site.settlementId()))return java.util.Optional.empty();
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), tick)
                 || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted())
             return java.util.Optional.empty();
@@ -179,7 +181,7 @@ final class ResourceSiteHarvestPlanning {
         ShipmentEndpoint storage = null;
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> storageRoute = java.util.Optional.empty();
         for (var candidate : ResourceStorageSelection.newStackCandidates(state, site.settlementId(), "minecraft:wheat", 64,
-                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
+                worker.supportingSurface(), HarvestStoragePolicy.ROLES)) {
             try {
                 var route = ResourceStorageNavigation.plannedPath(state, worker.supportingSurface(), worker.navigationProfile(), candidate);
                 storage = candidate;
@@ -616,6 +618,10 @@ final class ResourceSiteHarvestPlanning {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         if (lifecycle.harvestJobs().containsKey(job.id()))
             throw new IllegalArgumentException("field admission cannot duplicate its current execution");
+        var declaration=state.resourceSite(job.siteId());
+        if(!state.siteUses().authorizes(new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(
+                io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.CULTIVATION,job.siteId()),declaration.settlementId()))
+            throw new IllegalArgumentException("field work lacks its exact operating right");
         validateJob(state, lifecycle, job);
         var projected = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
         var cycle = state.resourceSites().cycle(job.siteId());

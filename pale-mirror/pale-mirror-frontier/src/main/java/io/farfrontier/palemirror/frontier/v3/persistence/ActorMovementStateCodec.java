@@ -46,6 +46,9 @@ final class ActorMovementStateCodec {
                     output.writeByte(leg.phase().wireTag()); output.writeLong(leg.tripOrdinal());
                     FrontierWorldStateCodec.writeString(output, leg.pointId().value());
                 }
+                case ActorMovementContext.GuardMissionLeg leg -> {
+                    output.writeByte(12); FrontierWorldStateCodec.writeString(output, leg.dutyId().value()); output.writeLong(leg.revision());
+                }
                 case ActorMovementContext.GuardEquipment leg -> {
                     output.writeByte(11); FrontierWorldStateCodec.writeString(output, leg.dutyId().value()); output.writeLong(leg.revision());
                 }
@@ -111,6 +114,7 @@ final class ActorMovementStateCodec {
             long issuedAt = input.readLong();
             var executionId = ActorExecutionStateCodec.readId(input);
             ActorMovementContext context = switch (input.readUnsignedByte()) {
+                case 12 -> new ActorMovementContext.GuardMissionLeg(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
                 case 11 -> new ActorMovementContext.GuardEquipment(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
                 case 10 -> new ActorMovementContext.StationWorkLeg(new SubjectId(FrontierWorldStateCodec.readString(input)),
                         io.farfrontier.palemirror.frontier.v3.model.StationWorkState.Phase.fromWireTag(input.readUnsignedByte()), input.readLong(),

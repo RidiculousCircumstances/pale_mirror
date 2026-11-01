@@ -6,14 +6,16 @@ import java.io.*;
 import java.util.*;
 /** Current-format guard events; no historical duty or equipment identity inference. */
 final class GuardPayloadCodecs {
-    static PayloadCodecs create() { return new PayloadCodecs(List.of(codec(GuardDutyEvent.Appointed.TYPE), codec(GuardDutyEvent.Changed.TYPE))); }
+    static PayloadCodecs create() { return new PayloadCodecs(List.of(codec(GuardDutyEvent.Appointed.TYPE), codec(GuardDutyEvent.Changed.TYPE), codec(GuardMissionSelected.TYPE))); }
     private static PayloadCodec codec(String type) {
         return new PayloadCodec() {
             public String type() { return type; }
             public byte[] encode(FrontierPayload payload) {
                 if (!payload.type().equals(type)) throw new IllegalArgumentException("foreign guard payload");
                 try { var bytes = new ByteArrayOutputStream(); var out = new DataOutputStream(bytes);
-                    if (payload instanceof GuardDutyEvent.Appointed value) GuardDutyCodec.write(out, value.duty());
+                    if (payload instanceof GuardMissionSelected value) {
+                        out.writeUTF(value.duty().value()); out.writeLong(value.expectedRevision()); GuardDutyCodec.mission(out, value.mission());
+                    } else if (payload instanceof GuardDutyEvent.Appointed value) GuardDutyCodec.write(out, value.duty());
                     else { var value = (GuardDutyEvent.Changed) payload;
                         out.writeUTF(value.duty().value()); out.writeLong(value.revision()); out.writeByte(value.change().wireTag());
                         out.writeBoolean(value.selection().isPresent());
@@ -25,7 +27,8 @@ final class GuardPayloadCodecs {
             }
             public FrontierPayload decode(byte[] bytes) {
                 try { var in = new DataInputStream(new ByteArrayInputStream(bytes));
-                    FrontierPayload value = type.equals(GuardDutyEvent.Appointed.TYPE) ? new GuardDutyEvent.Appointed(GuardDutyCodec.read(in))
+                    FrontierPayload value = type.equals(GuardMissionSelected.TYPE) ? new GuardMissionSelected(new SubjectId(in.readUTF()), in.readLong(), GuardDutyCodec.mission(in))
+                            : type.equals(GuardDutyEvent.Appointed.TYPE) ? new GuardDutyEvent.Appointed(GuardDutyCodec.read(in))
                             : new GuardDutyEvent.Changed(new SubjectId(in.readUTF()), in.readLong(), GuardDutyEvent.Change.require(in.readUnsignedByte()),
                                 in.readBoolean() ? Optional.of(new GuardDutyEvent.Selection(new SubjectId(in.readUTF()), ShipmentStateCodec.endpoint(in))) : Optional.empty());
                     if (in.available() != 0) throw new IllegalArgumentException("trailing guard payload bytes");

@@ -38,15 +38,15 @@ public final class LandUseExclusions {
         var endpoints = state.inventory().containers().values().stream().filter(container -> container.storage().isPresent())
                 .sorted(Comparator.comparing(ContainerRecord::id)).map(container -> container.storage().orElseThrow().endpoint()).toList();
         inputs.addAll(endpoints);
-        var access = endpoints.stream().map(endpoint -> ResourceStorageAccess.at(state, endpoint.containerId())).toList();
+        var access = endpoints.stream().map(endpoint -> ServiceAccessCoordinator.boundary(state,endpoint.containerId())).toList();
         // Declaration-cache refresh can reconstruct equal access boundaries.
         // Their object identity is not a land revision; retain complete values
         // in the query while canonical owner inputs remain identity fenced.
-        var accessImage = new AccessImage(access.stream().map(ResourceStorageAccess::accessBoundary).toList());
+        var accessImage = new AccessImage(access);
         // The preparation worker and reducer consume the same immutable land.
         // Share only completed results; no global monitor covers geometry work.
         return VIEW.get(inputs, accessImage, () -> {
-            parts.add(RegionalColumnSet.fromPositions(access.stream().flatMap(value -> value.ownedAccessSurfaces().stream())
+            parts.add(RegionalColumnSet.fromPositions(access.stream().flatMap(value -> value.occupiedSurfaces().stream())
                     .map(SurfaceAnchor::support).toList()));
             return RegionalColumnSet.union(parts);
         });

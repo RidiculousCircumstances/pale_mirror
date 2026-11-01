@@ -5,6 +5,11 @@ import java.util.Optional;
 
 /** Actor-owned passive presence has no job, labour or resource continuation. */
 final class PresenceActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     private static final ImmutableReferenceIndex.Source<java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation>,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> ACTORS = new ImmutableReferenceIndex.Source<>(actors -> actors);
     private static final ImmutableReferenceIndex<java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation>,

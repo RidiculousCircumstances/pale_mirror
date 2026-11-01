@@ -51,6 +51,17 @@ public final class ContainerStorageAdmission {
         return state.inventory().canReceiveFungible(container, kind, quantity, ContainerPhysicalReservations.slots(state, container, completing),
                 inbound(state, container, completing));
     }
+    public static boolean receiveManifest(FrontierWorldState state,SubjectId container,java.util.Map<String,Integer> portions) {
+        if(portions.isEmpty() || portions.values().stream().anyMatch(quantity->quantity<1))throw new IllegalArgumentException("empty manifest capacity demand");
+        var record=state.inventory().containers().get(container);
+        if(record==null || ReferenceContainerCustody.blocksCanonicalUse(state,container)
+                || record.storage().filter(policy->portions.keySet().stream().anyMatch(kind->!policy.filter().accepts(kind))).isPresent())return false;
+        var first=portions.entrySet().iterator().next();var pending=inbound(state,container,Optional.empty());
+        var incoming=new java.util.HashMap<>(pending.fungible());
+        portions.forEach((kind,quantity)->{if(!kind.equals(first.getKey()))incoming.merge(kind,(long)quantity,Math::addExact);});
+        return state.inventory().canReceiveFungible(container,first.getKey(),first.getValue(),
+                ContainerPhysicalReservations.slots(state,container,Optional.empty()),new ContainerIncomingStock(incoming,pending.individual()));
+    }
     public static boolean receive(FrontierWorldState state, ResourceCustody.Container holder, String kind, int quantity, Optional<SubjectId> completing) {
         if (holder.section().equals(ContainerSectionId.STOCK)) return receive(state, holder.containerId(), kind, quantity, completing);
         var record = state.inventory().containers().get(holder.containerId());

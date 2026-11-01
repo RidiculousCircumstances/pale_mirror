@@ -5,7 +5,15 @@ import java.util.*;
 /** Explicit immutable genesis placement. All geometry, recovery and worldgen
  * consumers receive the same ruleset value; coordinates are not inferred from IDs. */
 public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements,
-        List<String> settlementNames, Roads roads, Optional<Set<Integer>> extractionProducers, Terrain terrain) {
+        List<String> settlementNames, Roads roads, Optional<Set<Integer>> extractionProducers, Terrain terrain, ProductionSites productionSites) {
+    public enum ProductionSites { ADJACENT, DISPERSED }
+    public FrontierWorldLayout(WorldBounds bounds,List<BlockPosition> settlements,List<String> names,Roads roads,
+            Optional<Set<Integer>> extractionProducers,Terrain terrain) {
+        this(bounds,settlements,names,roads,extractionProducers,terrain,ProductionSites.ADJACENT);
+    }
+    public FrontierWorldLayout withProductionSites(ProductionSites mode) {
+        return new FrontierWorldLayout(bounds,settlements,settlementNames,roads,extractionProducers,terrain,mode);
+    }
     public enum Terrain { FLAT, RELIEF }
     public enum Roads { HISTORICAL_GRID, LOCAL_ACCESS }
     public record RoadLink(int from, int to) { }
@@ -25,7 +33,7 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
         return List.copyOf(result);
     }
     public FrontierWorldLayout {
-        Objects.requireNonNull(bounds); settlements = List.copyOf(settlements);
+        Objects.requireNonNull(productionSites); Objects.requireNonNull(bounds); settlements = List.copyOf(settlements);
         settlementNames = List.copyOf(settlementNames); Objects.requireNonNull(roads); Objects.requireNonNull(terrain);
         extractionProducers = Objects.requireNonNull(extractionProducers).map(Set::copyOf);
         int count = settlements.size();
@@ -89,8 +97,8 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
     }
     String canonicalText() {
         String base = bounds + ":" + settlements;
-        return roads == Roads.HISTORICAL_GRID && settlementNames.equals(HISTORICAL_NAMES) && extractionProducers.isEmpty() && terrain == Terrain.FLAT ? base
+        return roads == Roads.HISTORICAL_GRID && settlementNames.equals(HISTORICAL_NAMES) && extractionProducers.isEmpty() && terrain == Terrain.FLAT && productionSites == ProductionSites.ADJACENT ? base
                 : base + ":names=" + settlementNames + ":roads=" + roads + ":extraction="
-                    + extractionProducers.map(values -> values.stream().sorted().toList().toString()).orElse("historical-stride") + ":terrain=" + terrain;
+                    + extractionProducers.map(values -> values.stream().sorted().toList().toString()).orElse("historical-stride") + ":terrain=" + terrain + ":productionSites=" + productionSites;
     }
 }

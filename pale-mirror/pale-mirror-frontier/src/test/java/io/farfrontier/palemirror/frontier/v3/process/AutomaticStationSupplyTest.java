@@ -20,7 +20,7 @@ class AutomaticStationSupplyTest {
                 new ResourceLot(lot, home.id(), "minecraft:iron_ingot", 3, "fixture-output", List.of()),
                 new CustodyAccount(account, holder, Map.of(lot, 3), Map.of()))));
         var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
-        var offered = AutomaticStationSupply.offer(state, worker, record, 1).orElseThrow();
+        var offered = AutomaticStationSupply.requests(state, record, 1).getFirst().prepare(state, worker, 1).orElseThrow();
         assertEquals(ProductionFacilityLayout.metalStorageId(facility), offered.shipment().receiver().containerId());
         assertEquals(ActorContainerItemOrder.StationPort.OUTPUT, ((ShipmentEndpoint.ProductionPort) offered.shipment().sender()).port());
         var payloads = io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
@@ -58,7 +58,7 @@ class AutomaticStationSupplyTest {
         ledger = ledger.transfer(account, existing.id(), Map.of(lot, 3), Map.of());
         state = AcceptedEconomyFixture.publish(state.withInventory(state.inventory().withFungibleResources(ledger)), home.id(), 1);
         var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
-        var offered = AutomaticStationSupply.offer(state, worker, record, 1).orElseThrow();
+        var offered = AutomaticStationSupply.requests(state, record, 1).getFirst().prepare(state, worker, 1).orElseThrow();
         assertEquals(spec.custody(ActorContainerItemOrder.StationPort.INPUT), offered.shipment().receiver().custody());
         assertEquals(Map.of(lot, 3), offered.shipment().lotQuantities());
         state = InternalShipmentStateSupport.dispatch(state, home.id(), offered);

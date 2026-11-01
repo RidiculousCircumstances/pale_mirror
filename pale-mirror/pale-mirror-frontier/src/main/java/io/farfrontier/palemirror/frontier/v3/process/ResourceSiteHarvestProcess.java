@@ -860,10 +860,10 @@ public final class ResourceSiteHarvestProcess {
         }
         var storage = ResourceStorageAccess.at(state, job.outputSlot().containerId());
         var policy = state.inventory().containers().get(storage.containerId()).storage().orElseThrow();
-        if (!storage.settlementId().equals(settlement.id()) || policy.role() != ResourceStorageRole.WAREHOUSE
+        if (!storage.settlementId().equals(settlement.id()) || !HarvestStoragePolicy.ROLES.contains(policy.role())
                 || !admitted && (!policy.filter().accepts("minecraft:wheat") || !state.containerSlotAvailable(job.outputSlot())
                     || ResourceStorageSelection.receivingCandidates(state, settlement.id(), "minecraft:wheat", 64,
-                            state.actorLocations().get(job.workerId()).supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE),
+                            state.actorLocations().get(job.workerId()).supportingSurface(), HarvestStoragePolicy.ROLES,
                             java.util.Optional.empty()).stream().noneMatch(endpoint -> endpoint.containerId().equals(storage.containerId())))) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");
         }

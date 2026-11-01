@@ -51,9 +51,12 @@ public final class ForestKnowledge {
                 var declaration = state.forest().regions().get(entry.getValue()).get(entry.getKey()).declaration();
                 long dx = (long)declaration.origin().x()-settlement.anchor().x(), dz = (long)declaration.origin().z()-settlement.anchor().z();
                 long distance = dx*dx+dz*dz;
-                if (patches.stream().anyMatch(patch -> distance >= (long)patch.innerRadius()*patch.innerRadius()
-                        && distance <= (long)patch.outerRadius()*patch.outerRadius()))
-                    result.putIfAbsent(declaration.id(), new GrayboxForestPlan.Header(TreeReference.declaredBy(declaration), declaration.origin(), declaration.logs().size(), declaration.species()));
+                var patch=patches.stream().filter(rule->distance>=(long)rule.innerRadius()*rule.innerRadius()
+                        && distance<=(long)rule.outerRadius()*rule.outerRadius()).sorted(Comparator.comparing(ForestryRules.Patch::id)).findFirst();
+                if(patch.isPresent()) result.putIfAbsent(declaration.id(),new GrayboxForestPlan.Header(TreeReference.declaredBy(declaration),
+                        declaration.origin(),declaration.logs().size(),declaration.species(),
+                        new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.FORESTRY,
+                                new SubjectId(patch.orElseThrow().id()))));
             }
             return List.copyOf(result.values());
         });

@@ -57,7 +57,7 @@ public final class FrontierResourceSitePlan {
             ResourceFieldLayout authored = bootstrap.initialFieldLayouts().get(id);
             int side = extractiveHomes.contains(settlement) ? bootstrap.ruleset().fields().extractiveSide()
                     : bootstrap.ruleset().fields().ordinarySide();
-            ResourceSite site = authored == null ? availableField(bootstrap.bounds(), id, settlement, farm, occupied, side)
+            ResourceSite site = authored == null ? availableField(bootstrap, id, settlement, farm, occupied, side)
                     : new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, authored);
             if (site.layout().cells().isEmpty() || site.managedSlots().stream().anyMatch(slot -> !bootstrap.bounds().contains(slot)
                     || occupied.contains(slot)) || site.layout().cells().stream().anyMatch(cell ->
@@ -96,11 +96,19 @@ public final class FrontierResourceSitePlan {
         return reserved;
     }
 
-    private static ResourceSite availableField(WorldBounds bounds, SubjectId id, Settlement settlement, SettlementStructure farm,
+    private static ResourceSite availableField(FrontierBootstrap bootstrap, SubjectId id, Settlement settlement, SettlementStructure farm,
                                                Set<BlockPosition> occupied, int fieldSide) {
+        var bounds = bootstrap.bounds();
+        // Content varies distance independently of settlement worker/route authority.
+        int distance = bootstrap.ruleset().worldLayout().productionSites() == FrontierWorldLayout.ProductionSites.DISPERSED
+                ? 24 + Math.floorMod(Objects.hash(bootstrap.seed(), settlement.id()), 4) * 24 : 0;
         for (FacilityFacing side : candidateSides(farm.facing())) {
-            var footprint = cropSlots(farm, side, fieldSide);
-            var layout = fieldSide == 8 ? initialGrayboxLayout(footprint) : initialLargeGrayboxLayout(footprint);
+            var anchor = new BlockPosition(farm.anchor().x() + side.x()*distance, farm.anchor().y(), farm.anchor().z() + side.z()*distance);
+            var frame = new SettlementStructure(farm.id(), farm.settlementId(), farm.kind(), anchor, farm.facing());
+            var footprint = cropSlots(frame, side, fieldSide).stream().map(crop -> new BlockPosition(crop.x(),
+                    bootstrap.terrain().supportYAt(crop.x(), crop.z()) + 1, crop.z())).toList();
+            var layout = fieldSide == 8 && bootstrap.ruleset().worldLayout().productionSites() == FrontierWorldLayout.ProductionSites.ADJACENT
+                    ? initialGrayboxLayout(footprint) : initialLargeGrayboxLayout(footprint);
             ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, layout);
             if (candidate.managedSlots().stream().allMatch(bounds::contains) && candidate.managedSlots().stream().noneMatch(occupied::contains)) {
                 return candidate;

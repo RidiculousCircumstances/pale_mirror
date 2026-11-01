@@ -27,7 +27,7 @@
           "id": "settlement:1",
           "expect": {
             "status": "ok",
-            "guardTarget": 2
+            "hasArmedGuard": true
           }
         }
       ]
@@ -37,15 +37,15 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "diagnostic": {
-          "view": "container",
-          "id": "container:1-depot",
-          "field": "position"
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
         }
       },
       "offset": {
-        "x": -8,
-        "y": -1,
-        "z": -8
+        "x": 2,
+        "y": 0,
+        "z": 0
       },
       "settleMs": 1000
     }
@@ -57,9 +57,7 @@
       "id": "settlement:1",
       "expect": {
         "status": "ok",
-        "guardTarget": 2,
-        "guardsAssigned": 2,
-        "guardsReady": 2
+        "hasArmedGuard": true
       },
       "timeoutMs": 300000
     },
@@ -110,15 +108,15 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "diagnostic": {
-          "view": "container",
-          "id": "container:1-depot",
-          "field": "position"
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
         }
       },
       "offset": {
-        "x": -8,
-        "y": -1,
-        "z": -8
+        "x": 2,
+        "y": 0,
+        "z": 0
       },
       "settleMs": 1000
     },
@@ -128,9 +126,7 @@
       "id": "settlement:1",
       "expect": {
         "status": "ok",
-        "guardTarget": 2,
-        "guardsAssigned": 2,
-        "guardsReady": 2
+        "hasArmedGuard": true
       },
       "timeoutMs": 300000
     }
@@ -144,15 +140,15 @@
         "dimension": "pale_mirror:frontier_graybox",
         "position": {
           "diagnostic": {
-            "view": "container",
-            "id": "container:1-depot",
-            "field": "position"
+            "view": "settlement",
+            "id": "settlement:1",
+            "field": "firstGuardPosition"
           }
         },
         "offset": {
-          "x": -8,
-          "y": -1,
-          "z": -8
+          "x": 2,
+          "y": 0,
+          "z": 0
         },
         "settleMs": 1000
       },
@@ -165,8 +161,7 @@
             "id": "settlement:1",
             "expect": {
               "status": "ok",
-              "guardsAssigned": 2,
-              "guardsReady": 2
+              "hasArmedGuard": true
             }
           }
         ]
@@ -180,8 +175,7 @@
       "id": "settlement:1",
       "expect": {
         "status": "ok",
-        "guardsReady": 2,
-        "guardsAssigned": 2
+        "hasArmedGuard": true
       }
     },
     {
@@ -190,8 +184,7 @@
       "id": "settlement:1",
       "expect": {
         "status": "ok",
-        "guardsReady": 2,
-        "guardsAssigned": 2
+        "hasArmedGuard": true
       }
     }
   ],

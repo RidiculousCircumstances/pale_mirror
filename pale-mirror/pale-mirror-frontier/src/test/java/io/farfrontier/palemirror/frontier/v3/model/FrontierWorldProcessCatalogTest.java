@@ -288,6 +288,8 @@ class FrontierWorldProcessCatalogTest {
     @Test
     void everyProcessDescriptorRoundTripsOneOwnedRepresentativePayload() {
         Map<String, FrontierPayload> representatives = Map.ofEntries(
+                Map.entry("security",new io.farfrontier.palemirror.frontier.v3.model.security.SecurityEvent.Completed(
+                        new SubjectId("guard:representative"),1,false,new ItemCondition(250,0))),
                 Map.entry("guard", new GuardDutyEvent.Changed(new SubjectId("guard:representative"), 1, GuardDutyEvent.Change.ENDED, Optional.empty())),
                 Map.entry("kernel-schedule", new ScheduleEffect.Cancelled(new ScheduleId("schedule:representative"))),
                 Map.entry("physical-observation", new PhysicalIntentTransition(new PhysicalIntentId("intent:representative"),

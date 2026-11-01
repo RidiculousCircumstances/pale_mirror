@@ -17,7 +17,8 @@ class EngineeringEquipmentVisitTest {
         for (boolean maintenance : List.of(false, true)) {
             var state = fixture(maintenance, 4);
             var crew = owner(state).engineeringTeam().orElseThrow().memberIds();
-            assertEquals(1, ResourceStorageAccess.at(state, STORE).stations().size());
+            assertTrue(ResourceStorageAccess.at(state,STORE).stations().contains(
+                    state.inventory().containers().get(STORE).storage().orElseThrow().endpoint().station()));
             var visited = new HashSet<SubjectId>();
             for (int index = 0; index < crew.size(); index++) {
                 try { state = startVisit(state, PhysicalIntentKind.EQUIPMENT_ISSUE); }

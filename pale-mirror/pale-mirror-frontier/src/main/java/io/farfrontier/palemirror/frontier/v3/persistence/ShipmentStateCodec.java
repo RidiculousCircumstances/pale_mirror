@@ -12,6 +12,10 @@ final class ShipmentStateCodec {
         for (Shipment value : state.shipments().values().stream().sorted(Comparator.comparing(Shipment::id)).toList()) writeShipment(out, value);
         out.writeInt(state.missions().size());
         for (var mission : state.missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) TransportMissionCodec.write(out, mission);
+        out.writeInt(state.accumulation().firstAvailable().size());
+        for (var row : state.accumulation().firstAvailable().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            id(out, row.getKey().home()); id(out, row.getKey().account()); out.writeUTF(row.getKey().itemKind()); out.writeLong(row.getValue());
+        }
     }
     static ShipmentState read(DataInputStream in) throws IOException {
         int n = in.readInt(); if (n < 0 || n > ShipmentState.MAX_SHIPMENTS) throw new IllegalArgumentException("invalid shipment count");
@@ -20,7 +24,13 @@ final class ShipmentStateCodec {
         int count = UnitGroupStateCodec.count(in, io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS);
         var missions = new LinkedHashMap<SubjectId, TransportMission>();
         for (int i = 0; i < count; i++) { var mission = TransportMissionCodec.read(in); if (missions.putIfAbsent(mission.id(), mission) != null) throw new IllegalArgumentException("duplicate transport mission ID"); }
-        return new ShipmentState(result, missions);
+        int waiting = UnitGroupStateCodec.count(in, HaulAccumulation.MAX_ROWS);
+        var accumulation = new LinkedHashMap<HaulAccumulation.Key, Long>();
+        for (int i = 0; i < waiting; i++) {
+            var key = new HaulAccumulation.Key(id(in), id(in), in.readUTF());
+            if (accumulation.putIfAbsent(key, in.readLong()) != null) throw new IllegalArgumentException("duplicate haul waiting row");
+        }
+        return new ShipmentState(result, missions, new HaulAccumulation(accumulation));
     }
     static void writeShipment(DataOutputStream out, Shipment value) throws IOException {
         id(out, value.id());

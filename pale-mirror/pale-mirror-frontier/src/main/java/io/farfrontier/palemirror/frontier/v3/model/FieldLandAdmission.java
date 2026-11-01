@@ -6,7 +6,7 @@ import java.util.*;
 
 /** Sole land-admission boundary: extends idle exact geometry or declares another site; never prepares soil. */
 final class FieldLandAdmission {
-    record Result(ResourceSiteState sites, List<SubjectId> declared, boolean deferred) {
+    record Result(ResourceSiteState sites, io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState rights, List<SubjectId> declared, boolean deferred) {
         Result { declared = List.copyOf(declared); }
     }
     static Result admit(FrontierWorldState state, ResourceSiteState sites, SubjectId home, List<ResourceSite> fields,
@@ -18,7 +18,7 @@ final class FieldLandAdmission {
         int area = sites.declarations().values().stream().filter(d -> d.settlementId().equals(home))
                 .mapToInt(d -> inputSites.cycle(d.id()).layout().cells().size()).sum();
         if (area + additions.size() > rules.maximumCells()) throw new IllegalArgumentException("cultivation exceeds its area bound");
-        if (additions.isEmpty()) return new Result(sites, List.of(), false);
+        if (additions.isEmpty()) return new Result(sites, state.siteUses(), List.of(), false);
         var declared = new ArrayList<SubjectId>();
         int count = (int) sites.declarations().values().stream().filter(d -> d.settlementId().equals(home)).count();
         ResourceSite attach = null;
@@ -31,7 +31,7 @@ final class FieldLandAdmission {
         }
         // A work area may contain gaps in cultivable soil. The exact survey already
         // proves access through the common walking graph, including those gaps.
-        if (attach == null && count >= rules.maximumFields()) return new Result(sites, List.of(), true);
+        if (attach == null && count >= rules.maximumFields()) return new Result(sites, state.siteUses(), List.of(), true);
         SubjectId siteId;
         ResourceFieldLayout old = attach == null ? null : sites.cycle(attach.id()).layout();
         long nextId = old == null ? 1 : old.nextCellId();
@@ -58,7 +58,14 @@ final class FieldLandAdmission {
         }
         var selected = new HashSet<>(sites.cycle(siteId).sowing().cells()); selected.addAll(soil.keySet());
         sites = sites.planSowing(siteId, selected);
-        return new Result(sites, declared, false);
+        var rights=state.siteUses();
+        var operation=new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(
+                io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.CULTIVATION,siteId);
+        for(var cell:additions) {
+            var natural=rights.candidate(home,operation.kind(),cell.crop()).orElseThrow(()->new IllegalArgumentException("selected land lost its natural-site availability"));
+            rights=rights.admit(operation,natural.id(),home);
+        }
+        return new Result(sites, rights, declared, false);
     }
     private FieldLandAdmission() { }
 }

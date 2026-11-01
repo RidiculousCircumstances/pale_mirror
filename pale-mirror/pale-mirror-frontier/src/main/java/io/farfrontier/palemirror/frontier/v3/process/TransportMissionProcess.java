@@ -17,6 +17,13 @@ public final class TransportMissionProcess {
     public static ScheduledAction progress(SubjectId mission, long tick) {
         return TransportMissionContinuation.at(mission, tick);
     }
+    /** Every admitted mission requires its workflow, group and exact parcel continuations together. */
+    public static List<ScheduledAction> initialContinuations(TransportMission mission,long tick) {
+        var result=new ArrayList<ScheduledAction>();
+        for(var parcel:mission.shipmentIds())result.add(ShipmentProcess.progress(parcel,tick));
+        result.add(UnitGroupProcess.progress(mission.groupId(),tick));result.add(progress(mission.id(),tick));
+        return List.copyOf(result);
+    }
     public static ProposedEvent wake(SubjectId mission, long tick) {
         return TransportMissionContinuation.wake(mission, tick);
     }

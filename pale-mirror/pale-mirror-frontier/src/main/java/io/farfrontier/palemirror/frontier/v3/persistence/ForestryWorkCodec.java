@@ -43,10 +43,14 @@ final class ForestryWorkCodec {
     }
     static void writeTarget(DataOutputStream out, ForestryWork.Target target) throws IOException {
         reference(out, target.tree()); out.writeLong(target.sourceRevision()); FrontierWorldStateCodec.writePosition(out, target.station().support());
-        out.writeInt(target.expectedLogs());
+        out.writeInt(target.expectedLogs());out.writeByte(target.operation().kind().wireTag());out.writeUTF(target.operation().id().value());
+        var use=target.use();out.writeUTF(use.area().value());out.writeByte(use.kind().wireTag());out.writeUTF(use.holder().value());out.writeLong(use.generation());
     }
     static ForestryWork.Target readTarget(DataInputStream in) throws IOException {
-        return new ForestryWork.Target(reference(in), in.readLong(), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), in.readInt());
+        return new ForestryWork.Target(reference(in), in.readLong(), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), in.readInt(),
+                new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.require(in.readUnsignedByte()),new SubjectId(in.readUTF())),
+                new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Grant(new SubjectId(in.readUTF()),io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.require(in.readUnsignedByte()),
+            new SubjectId(in.readUTF()),in.readLong()));
     }
     static void writeFelling(DataOutputStream out, TreeFelling felling) throws IOException {
         reference(out, felling.tree()); out.writeLong(felling.sourceRevision()); var batch = felling.batch();

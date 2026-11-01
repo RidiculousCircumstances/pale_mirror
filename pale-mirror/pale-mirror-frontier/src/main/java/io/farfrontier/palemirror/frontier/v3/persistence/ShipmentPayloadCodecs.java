@@ -9,6 +9,30 @@ final class ShipmentPayloadCodecs {
     private ShipmentPayloadCodecs() { }
     static PayloadCodecs create() {
         return new PayloadCodecs(List.of(
+                codec(InternalTransportMissionStarted.TYPE,(out,payload)->{
+                    var value=(InternalTransportMissionStarted)payload;
+                    var bytes=UnitGroupPayloadCodecs.transport().encode(value.transport());
+                    out.writeInt(bytes.length);out.write(bytes);out.writeInt(value.claims().size());
+                    for(var claim:value.claims()) {out.writeUTF(claim.id().value());out.writeUTF(claim.claimantId().value());out.writeUTF(claim.economicOwnerId().value());
+                        out.writeUTF(claim.itemKind());out.writeInt(claim.quantity());ShipmentStateCodec.lots(out,claim.lotQuantities());out.writeByte(FrontierWireTags.tag(claim.purpose()));}
+                },in->{
+                    int size=UnitGroupStateCodec.count(in,1048576);var bytes=in.readNBytes(size);if(bytes.length!=size)throw new IllegalArgumentException("truncated internal transport");
+                    var transport=(TransportMissionStarted)UnitGroupPayloadCodecs.transport().decode("frontier.transport_mission_started",bytes);
+                    int count=UnitGroupStateCodec.count(in,32);var claims=new java.util.ArrayList<ClaimAllocation>();
+                    for(int i=0;i<count;i++)claims.add(new ClaimAllocation(new SubjectId(in.readUTF()),new SubjectId(in.readUTF()),new SubjectId(in.readUTF()),in.readUTF(),in.readInt(),
+                            ShipmentStateCodec.lots(in),FrontierWireTags.require(ClaimPurpose.class,in.readUnsignedByte())));
+                    return new InternalTransportMissionStarted(transport,claims);
+                }),
+                codec(HaulAccumulationReviewed.TYPE, (out, payload) -> {
+                    var value = (HaulAccumulationReviewed) payload; out.writeUTF(value.home().value()); out.writeInt(value.available().size());
+                    for (var key : value.available().stream().sorted().toList()) { out.writeUTF(key.account().value()); out.writeUTF(key.itemKind()); }
+                }, in -> {
+                    var home = new SubjectId(in.readUTF()); int count = UnitGroupStateCodec.count(in, HaulAccumulation.MAX_ROWS);
+                    var keys = new java.util.HashSet<HaulAccumulation.Key>();
+                    for (int i = 0; i < count; i++) if (!keys.add(new HaulAccumulation.Key(home, new SubjectId(in.readUTF()), in.readUTF())))
+                        throw new IllegalArgumentException("duplicate haul review source");
+                    return new HaulAccumulationReviewed(home, keys);
+                }),
                 codec("frontier.shipment_death_settled", (out, p) -> {
                     var value = (ShipmentDeathSettled) p; out.writeUTF(value.shipmentId().value()); out.writeLong(value.expectedRevision());
                     out.writeUTF(value.identity().body().actorId().value()); out.writeLong(value.identity().body().physicalEpoch());

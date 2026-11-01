@@ -23,9 +23,12 @@ public record ForestryWork(SubjectId id, SubjectId home, ActorExecutionId execut
             throw new IllegalArgumentException("unknown forestry work phase");
         }
     }
-    public record Target(TreeReference tree, long sourceRevision, SurfaceAnchor station, int expectedLogs) {
+    public record Target(TreeReference tree, long sourceRevision, SurfaceAnchor station, int expectedLogs, io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation operation,
+            io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Grant use) {
         public Target {
-            Objects.requireNonNull(tree); Objects.requireNonNull(station);
+            Objects.requireNonNull(tree); Objects.requireNonNull(station); Objects.requireNonNull(operation); Objects.requireNonNull(use);
+            if(operation.kind()!=io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.FORESTRY || operation.kind()!=use.kind())
+                throw new IllegalArgumentException("forestry target lost its declared use kind");
             if (sourceRevision < 1 || expectedLogs < 1 || expectedLogs > io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtractionBatch.MAX_BLOCKS)
                 throw new IllegalArgumentException("invalid retained forestry source target");
         }

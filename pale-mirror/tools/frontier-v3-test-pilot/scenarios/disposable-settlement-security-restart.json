@@ -1,0 +1,246 @@
+{
+  "schema": 1,
+  "id": "disposable_settlement_security_restart",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583,
+    "profile": "peaceful-guards"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "hasArmedGuard": true
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "attack_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 32,
+      "maxAttacks": 1,
+      "requireRemoval": false,
+      "requireDamage": true,
+      "timeoutMs": 30000,
+      "causalMilestone": "player_harmed_declared_guard"
+    },
+    {
+      "type": "wait_until_player_health",
+      "maximum": 19,
+      "minimum": 1,
+      "timeoutMs": 60000,
+      "causalMilestone": "guard_native_sword_retaliation"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 63,
+        "z": -138
+      },
+      "settleMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "wait_until_player_health",
+      "maximum": 19,
+      "minimum": 1,
+      "timeoutMs": 60000,
+      "causalMilestone": "remembered_player_targeted_after_restart"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 63,
+        "z": -138
+      },
+      "settleMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 6,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/gamemode creative"
+      },
+      {
+        "type": "command",
+        "command": "/effect give PMTestPilot minecraft:instant_health 1 10 true"
+      },
+      {
+        "type": "assert_fixture",
+        "timeoutMs": 30000,
+        "checks": [
+          {
+            "view": "settlement",
+            "id": "settlement:1",
+            "expect": {
+              "status": "ok",
+              "security": {
+                "hostilePlayers": 1
+              },
+              "hasArmedGuard": true
+            }
+          }
+        ]
+      },
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "settlement",
+            "id": "settlement:1",
+            "field": "firstGuardPosition"
+          }
+        },
+        "offset": {
+          "x": 2,
+          "y": 0,
+          "z": 0
+        },
+        "settleMs": 1000
+      },
+      {
+        "type": "command",
+        "command": "/gamemode survival"
+      }
+    ]
+  },
+  "assertions": [
+    {
+      "after": 6,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0
+        }
+      }
+    },
+    {
+      "after": 10,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0
+        }
+      }
+    }
+  ],
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 6000,
+    "timeoutMs": 450000
+  },
+  "frames": [
+    {
+      "after": 1,
+      "name": "armed-guard-patrol-before-player-offence"
+    }
+  ]
+}

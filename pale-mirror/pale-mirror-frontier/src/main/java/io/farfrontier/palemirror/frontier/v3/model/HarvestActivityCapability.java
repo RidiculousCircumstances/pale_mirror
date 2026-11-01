@@ -5,6 +5,11 @@ import java.util.Optional;
 
 /** Field owner supplies its exact checkpoint and preserves work/cargo through interruption. */
 final class HarvestActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     private static final ImmutableReferenceIndex.Source<ResourceSiteState, io.farfrontier.palemirror.frontier.v3.api.SubjectId,
             ResourceSiteHarvestJob> JOBS = new ImmutableReferenceIndex.Source<>(ResourceSiteState::harvestJobs);
     private static final ImmutableReferenceIndex<ResourceSiteState, io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecution> REFERENCES =

@@ -107,9 +107,9 @@ public final class FrontierV3SceneGameTests {
             String execution = FrontierV3PhysicalExecutionDiagnostic.render(runtime.checkpointImage().orElseThrow());
             helper.assertTrue(execution.contains("\"kind\":\"execution\"")
                             && execution.contains("\"id\":\"physical-observation\"")
-                            && execution.contains("\"id\":\"scenes\""),
+                            && execution.contains("\"stage\":\"SCENE\""),
                     "the physical execution diagnostic must expose the closed registered plan");
-            helper.assertTrue(execution.indexOf("\"id\":\"physical-observation\"") < execution.indexOf("\"id\":\"scenes\""),
+            helper.assertTrue(execution.indexOf("\"id\":\"physical-observation\"") < execution.indexOf("\"stage\":\"SCENE\""),
                     "the read-only plan must preserve observation before scene execution");
             helper.assertTrue(execution.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 8_192,
                     "the execution plan diagnostic must remain bounded");

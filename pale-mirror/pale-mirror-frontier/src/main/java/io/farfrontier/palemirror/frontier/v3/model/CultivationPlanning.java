@@ -6,7 +6,7 @@ import java.util.*;
 
 /** Economic/land composition. Only the registry accepts its proposal; this owner never writes blocks or assigns workers. */
 public final class CultivationPlanning {
-    public record Plan(ResourceSiteState sites, List<SubjectId> declared) {
+    public record Plan(ResourceSiteState sites, io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState rights, List<SubjectId> declared) {
         public Plan { Objects.requireNonNull(sites); declared = List.copyOf(declared); }
     }
     private record Key(SubjectId home, long atTick) { }
@@ -22,7 +22,7 @@ public final class CultivationPlanning {
                 .filter(field -> { var phase = sites.site(field.id()).phase(); return phase == ResourceSitePhase.GROWING
                         || phase == ResourceSitePhase.READY || phase == ResourceSitePhase.HARVESTING; })
                 .sorted(Comparator.comparing(ResourceSite::id)).toList();
-        if (fields.isEmpty()) return new Plan(sites, List.of());
+        if (fields.isEmpty()) return new Plan(sites, state.siteUses(), List.of());
         int area = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home))
                 .mapToInt(field -> field.layout().cells().size()).sum();
         var survey = FieldDevelopmentLand.survey(state, home, fields, Math.max(0, rules.maximumCells() - area));
@@ -30,9 +30,9 @@ public final class CultivationPlanning {
         var accepted = state.companies().goodsTrade().participants().economicState(home);
         if (accepted.accepted().isEmpty() || accepted.awaitingResources(atTick,
                 state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().keySet()).contains(FieldHarvestExtraction.ITEM))
-            return new Plan(sites, List.of());
+            return new Plan(sites, state.siteUses(), List.of());
         var economic = accepted.accepted().orElseThrow().cultivation().orElse(null);
-        if (economic == null) return new Plan(sites, List.of());
+        if (economic == null) return new Plan(sites, state.siteUses(), List.of());
         long horizon = economic.horizonTicks(), desired = economic.desiredOutput(), safety = economic.safetyOutput();
         boolean safe = economic.safe();
         var candidates = new ArrayList<CultivationAreaPlanner.Cell>();
@@ -79,7 +79,7 @@ public final class CultivationPlanning {
         var reason = admitted.deferred() ? CultivationAreaPlanner.Reason.DEVELOPMENT_LIMIT : decision.reason();
         next = next.reviewed(home, new CultivationReview(atTick, decision.targetOutput(), output, first, horizon,
                 selected, planted, reserve, reason));
-        return new Plan(next, admitted.declared());
+        return new Plan(next, admitted.rights(), admitted.declared());
     }
     private CultivationPlanning() { }
 }

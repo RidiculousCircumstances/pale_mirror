@@ -8,14 +8,17 @@ final class FrontierV3PhysicalExecutionDiagnostic {
 
     static String render(FrontierScheduleView checkpoint) {
         StringBuilder value = new StringBuilder("{\"schema\":1,\"kind\":\"execution\",\"id\":\"\",\"revision\":")
-                .append(checkpoint.revision().value()).append(",\"status\":\"ok\",\"executors\":[");
+                .append(checkpoint.revision().value()).append(",\"status\":\"ok\",\"executorDefaults\":{\"maxInvocationsPerTick\":1,\"exclusiveWritesFromId\":true},\"executors\":[");
         boolean first = true;
         for (FrontierV3PhysicalExecutorRegistry.Diagnostic executor : FrontierV3PhysicalExecutors.registry().diagnostics()) {
             if (!first) value.append(','); first = false;
             value.append("{\"id\":\"").append(quote(executor.id())).append("\",\"stage\":\"")
-                    .append(executor.stage()).append("\",\"dependencies\":").append(strings(executor.dependencies()))
-                    .append(",\"exclusiveWrites\":").append(strings(executor.exclusiveWrites()))
-                    .append(",\"maxInvocationsPerTick\":").append(executor.maxInvocationsPerTick()).append('}');
+                    .append(executor.stage()).append("\",\"dependencies\":").append(strings(executor.dependencies()));
+            if (!executor.exclusiveWrites().equals(java.util.List.of(executor.id()))) {
+                value.append(",\"exclusiveWrites\":").append(strings(executor.exclusiveWrites()));
+            }
+            if(executor.maxInvocationsPerTick()!=1)value.append(",\"maxInvocationsPerTick\":").append(executor.maxInvocationsPerTick());
+            value.append('}');
         }
         return FrontierV3DiagnosticJson.bounded("execution", "", checkpoint, value.append("]}").toString());
     }

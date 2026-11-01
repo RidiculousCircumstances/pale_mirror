@@ -27,7 +27,7 @@ final class CultivationProcessModule implements FrontierWorldProcessModule {
         var events = new ArrayList<ProposedEvent>();
         if (result.sites() != state.resourceSites()) {
             events.add(new ProposedEvent(action.subject(), new CultivationReviewed(prior == null ? -1 : prior.atTick(), now)));
-            var projected = state.withResourceSites(result.sites());
+            var projected = state.withChanges(FrontierWorldStateUpdate.begin().resourceSites(result.sites()).siteUses(result.rights()));
             for (var id : result.declared()) events.add(new ProposedEvent(id, new ScheduleEffect.Created(
                     ResourceFieldGrowthProcess.next(result.sites().site(id), Math.addExact(now, state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
             for (var declaration : result.sites().declarations().values().stream().sorted(Comparator.comparing(ResourceSiteDeclaration::id)).toList()) {
@@ -48,6 +48,7 @@ final class CultivationProcessModule implements FrontierWorldProcessModule {
         var prior = state.resourceSites().cultivation().get(event.subject());
         if (reviewed.atTick() != event.instant().ticks() || reviewed.previousReviewTick() != (prior == null ? -1 : prior.atTick()))
             throw new IllegalArgumentException("cultivation review has a stale predecessor or clock");
-        return state.withResourceSites(CultivationPlanning.read(state, event.subject(), reviewed.atTick()).sites());
+        var plan=CultivationPlanning.read(state,event.subject(),reviewed.atTick());
+        return state.withChanges(FrontierWorldStateUpdate.begin().resourceSites(plan.sites()).siteUses(plan.rights()));
     }
 }

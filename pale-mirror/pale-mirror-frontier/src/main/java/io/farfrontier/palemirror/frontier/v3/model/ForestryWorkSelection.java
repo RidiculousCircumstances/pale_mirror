@@ -18,7 +18,8 @@ public final class ForestryWorkSelection {
         int carried = ForestryWorkAuthority.carried(state, job);
         var reserved = state.forest().work().values().stream().filter(other -> !other.id().equals(job.id()))
                 .flatMap(other -> other.target().stream()).toList();
-        var headers = ForestKnowledge.knownBy(state, job.home()).stream().filter(header -> reserved.stream().noneMatch(target -> target.tree().equals(header.tree())))
+        var headers = ForestKnowledge.knownBy(state, job.home()).stream().filter(header -> state.siteUses().permits(header.operation(),job.home(),
+            header.origin())).filter(header -> reserved.stream().noneMatch(target -> target.tree().equals(header.tree())))
                 .filter(header -> state.forest().find(header.tree()).map(tree -> tree.remaining() > 0).orElse(true))
                 .sorted(Comparator.comparingLong((GrayboxForestPlan.Header header) -> distance(origin.support(), header.origin()))
                         .thenComparing(header -> header.tree().id())).limit(MAX_SOURCE_TRIALS).toList();
@@ -35,7 +36,8 @@ public final class ForestryWorkSelection {
                     var destination = WorkStorageSelection.select(state, new WorkStorageSelection.Portion(job.home(), job.outputKind(),
                             carried + tree.remaining(), false), station, state.actorLocations().get(job.execution().actorId()).navigationProfile(), Optional.empty());
                     if (destination.isPresent()) return Optional.of(new ForestryWorkAdvanced.TreeSelection(tree.declaration(),
-                            new ForestryWork.Target(tree.reference(), tree.revision(), station, tree.remaining()), approach,
+                            new ForestryWork.Target(tree.reference(), tree.revision(), station, tree.remaining(), header.operation(),
+            state.siteUses().operations().get(header.operation()).stream().filter(grant->state.siteUses().areas().get(grant.area()).extent().contains(header.origin())).findFirst().orElseThrow()), approach,
                             destination.orElseThrow().endpoint(), destination.orElseThrow().route()));
                 } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
                     // Unknown calculation is not a rejected candidate. Retain its
@@ -51,7 +53,8 @@ public final class ForestryWorkSelection {
                 || ForestKnowledge.knownBy(state, job.home()).stream().noneMatch(header -> header.tree().equals(selected.target().tree())))
             throw new IllegalArgumentException("forestry source selection lost its mandate or declared knowledge");
         var tree = ForestKnowledge.require(state, selected.target().tree()); var target = selected.target();
-        if (!tree.declaration().equals(selected.declaration()) || tree.revision() != target.sourceRevision()
+        if (!job.home().equals(target.use().holder()) || !state.siteUses().operations().getOrDefault(target.operation(),Set.of()).contains(target.use())
+                || !tree.declaration().equals(selected.declaration()) || tree.revision() != target.sourceRevision()
                 || tree.remaining() != target.expectedLogs() || !serviceable(state, job, tree)
                 || tree.remaining() + ForestryWorkAuthority.carried(state, job) > state.bootstrap().ruleset().forestry().cargoItems()
                 || state.forest().work().values().stream().filter(other -> !other.id().equals(job.id())).flatMap(other -> other.target().stream())
@@ -79,7 +82,10 @@ public final class ForestryWorkSelection {
     }
     public static boolean targetCurrent(FrontierWorldState state, ForestryWork job) {
         if (job.target().isEmpty()) return false;
-        var target = job.target().orElseThrow(); var tree = ForestKnowledge.require(state, target.tree());
+        var target = job.target().orElseThrow();
+        if(!job.home().equals(target.use().holder()) || !state.siteUses().operations().getOrDefault(target.operation(),Set.of()).contains(target.use()))
+            throw new IllegalArgumentException("retained tree target lost its exact operating right");
+        var tree = ForestKnowledge.require(state, target.tree());
         if (job.felling().isPresent()) {
             // Exact suffix validation is exhaustive and throws on forged effects. A changed revision is ordinary invalidation.
             if (tree.revision() != Math.addExact(target.sourceRevision(), job.appliedEffects())) return false;

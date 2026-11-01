@@ -14,14 +14,17 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Complete causal path with actual material consumption, station work, travel and custody. */
 class GuardDutyTest {
     private static FrontierWorldState initial() {
-        return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:peaceful-guards"), 41,
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:peaceful-guards"), 41,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
+        var home=state.bootstrap().settlements().getFirst().id();
+        var staffing=SettlementStaffingComposition.change(state,home,1);
+        return staffing.isPresent()?SettlementStaffingComposition.reduce(state,home,staffing.orElseThrow()):state;
     }
     @Test void emptyGuardPlacesCreateFiniteMaterialDemandWithoutGenesisSwordsOrWear() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
         assertTrue(state.inventory().items().values().stream().noneMatch(item -> item.itemKind().equals("minecraft:iron_sword")));
         var deficit = EquipmentStockProjection.deficits(state, home).stream().filter(d -> d.demand().pool().equals("guard")).findFirst().orElseThrow();
-        assertEquals(2, deficit.missingUnits()); assertEquals(0, deficit.missingWear());
+        assertEquals(SettlementWorkPolicy.permissions(state,home).workers(ResidentWorkKind.GUARD).size(), deficit.missingUnits()); assertEquals(0, deficit.missingWear());
         assertTrue(deficit.demand().workWear().isEmpty());
         var order = EquipmentProductionPlanning.planned(state, home, 300).stream().filter(p -> p.request().pool().equals("guard")).findFirst().orElseThrow();
         assertTrue(order.operations() >= 1 && order.operations() <= 2, "unfunded future inputs may start with one obtainable sword");
@@ -37,8 +40,9 @@ class GuardDutyTest {
             assertEquals("Guard", ResidentPresentation.from(state, duty.execution().actorId()).role());
             assertTrue(ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD).checkpoint(state, duty.execution()).ready());
         }
-        assertTrue(EquipmentStockProjection.deficits(state, home).stream().noneMatch(d -> d.demand().pool().equals("guard")));
-        assertTrue(EquipmentProductionPlanning.planned(state, home, 6000).stream().noneMatch(p -> p.request().pool().equals("guard")));
+        assertEquals(Math.max(0,SettlementWorkPolicy.permissions(state,home).workers(ResidentWorkKind.GUARD).size()-2),
+                EquipmentStockProjection.deficits(state,home).stream().filter(d->d.demand().pool().equals("guard")).mapToInt(EquipmentStockProjection.Deficit::missingUnits).sum());
+        assertEquals(0,state.inventory().fungibleResources().totalQuantity(home,"minecraft:iron_ingot"));
         var unchanged = state.inventory();
         state = apply(state, GuardWorkProcess.review(state, GuardContinuation.review(home, 6000), 6000), 6000);
         assertSame(unchanged, state.inventory()); assertEquals(2, GuardEquipment.in(state, home).size());
@@ -80,7 +84,8 @@ class GuardDutyTest {
         var item = state.inventory().items().get(duty.weapon());
         state = state.withInventory(state.inventory().moveObservedItem(item.id(), item.custody(), new InventoryCustody.Player(new UUID(1, 2))));
         assertFalse(GuardEquipment.held(state, duty));
-        assertEquals(1, EquipmentStockProjection.deficits(state, duty.home()).stream().filter(d -> d.demand().pool().equals("guard")).findFirst().orElseThrow().missingUnits());
+        assertEquals(SettlementWorkPolicy.permissions(state,duty.home()).workers(ResidentWorkKind.GUARD).size()-1, EquipmentStockProjection.deficits(state,
+            duty.home()).stream().filter(d -> d.demand().pool().equals("guard")).findFirst().orElseThrow().missingUnits());
         state = apply(state, GuardWorkProcess.progress(state, GuardContinuation.progress(duty.id(), 6000), 6000), 6000);
         assertEquals(item.withCustody(new InventoryCustody.Player(new UUID(1, 2))), state.inventory().items().get(item.id()));
         var finalState = state;
@@ -137,7 +142,8 @@ class GuardDutyTest {
         assertFalse(state.strategicPlans().guards().containsKey(duty.id()), "returned equipment must not remain permanently reserved");
         assertInstanceOf(InventoryCustody.ContainerSlot.class, state.inventory().items().get(duty.weapon()).custody());
         assertFalse(WorkEquipmentClaimComposition.reserved(state).contains(duty.weapon()));
-        assertTrue(EquipmentStockProjection.deficits(state, duty.home()).stream().anyMatch(d -> d.demand().pool().equals("guard") && d.missingUnits() == 1));
+        int expected=SettlementWorkPolicy.permissions(state,duty.home()).workers(ResidentWorkKind.GUARD).size()-1;
+        assertTrue(EquipmentStockProjection.deficits(state, duty.home()).stream().anyMatch(d -> d.demand().pool().equals("guard") && d.missingUnits() == expected));
     }
     @Test void preparedTransferRecoversAndPreventsMealOrBodyReleaseBeforeItsExactReceipt() {
         var state = armed(); var previous = state.strategicPlans().guards().values().iterator().next(); var actor = previous.execution().actorId();
@@ -269,7 +275,7 @@ class GuardDutyTest {
         return apply(state, FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), state,
                 ActorMovementProcess.progress(movement, now), new SimInstant(now)), now);
     }
-    private static FrontierWorldState armed() {
+    static FrontierWorldState armed() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst();
         var depot = state.inventory().containers().get(FrontierWorldState.depotId(home.id()));
         state = AutomaticStationProductionTest.supply(state, depot, "minecraft:iron_ingot", 4, "guard-metal");

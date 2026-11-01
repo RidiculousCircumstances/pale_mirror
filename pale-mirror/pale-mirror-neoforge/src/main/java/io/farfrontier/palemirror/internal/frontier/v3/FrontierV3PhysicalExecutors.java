@@ -81,6 +81,7 @@ final class FrontierV3PhysicalExecutors {
             executor("settlement-service-decontamination", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
                     Set.of("settlement-service-input-issue"), "settlement-service-decontamination-effect",
                     FrontierV3SettlementServiceDecontaminationExecutor::tick),
+            executor("security-melee", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("defender-equipment-issue"), "security-melee", FrontierV3SecurityExecutor::tick),
             executor("defender-equipment-return", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("settlement-service-decontamination"), "defender-equipment-return-effect", FrontierV3EquipmentReturnExecutor::tick),
             executor("exact-item-consumption", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation", "hive-nutrient-endpoints"), "exact-item-consumption-effect", FrontierV3ExactItemConsumptionExecutor::tick),
             executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),

@@ -5,14 +5,15 @@ import java.util.*;
 /** Ordinary declared storage participates in the same access/clearance protocol as existing service points. */
 final class StorageServiceBoundaries implements ServiceBoundaryProvider {
     private final ServicePointGeometryCache geometries = new ServicePointGeometryCache();
+    private final ImmutableInputView<Object> versions=new ImmutableInputView<>();
     @Override public ServicePointId.Kind kind() { return ServicePointId.Kind.RESOURCE_STORAGE; }
-    @Override public Object version(FrontierWorldState state) { return state.inventory().containers(); }
+    @Override public Object version(FrontierWorldState state) { return versions.get(List.of(state.inventory().containers(),state.inventory().surfaces()),Object::new); }
     @Override public List<Declaration> declarations(FrontierWorldState state) {
         return state.inventory().containers().values().stream().filter(record -> record.purpose() == ContainerPurpose.RESOURCE_STORAGE)
                 .map(record -> {
                     var endpoint = endpoint(state, record.id());
                     return new Declaration(new ServicePointId(kind(), endpoint.settlementId(), endpoint.containerId()),
-                            new ServiceAccessBoundary(Set.of(endpoint.station())));
+                            StorageInteractionStations.boundary(state.inventory().surfaces().get(record.id()).position()));
                 }).toList();
     }
     private ShipmentEndpoint.Storage endpoint(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId id) {

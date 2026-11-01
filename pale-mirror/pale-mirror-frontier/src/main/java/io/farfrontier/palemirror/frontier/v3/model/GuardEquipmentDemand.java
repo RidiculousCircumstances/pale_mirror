@@ -9,9 +9,9 @@ final class GuardEquipmentDemand implements EquipmentDemandPort {
     public Key key() { return Key.GUARD; }
     private final ImmutableKeyedInputView<SubjectId, List<EquipmentDemand>> views = new ImmutableKeyedInputView<>(256);
     public List<EquipmentDemand> read(FrontierWorldState state, SubjectId home) {
-        int target = GuardEquipment.target(state);
+        int target = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.GUARD).size();
         if (target == 0) return List.of();
-        return views.get(state.bootstrap(), home, List.of(state.bootstrap().ruleset().labour()), () -> List.of(
+        return views.get(state.bootstrap(), home, List.of(state.bootstrap().ruleset().labour(), target), () -> List.of(
                 new EquipmentDemand("guard", List.of(GuardEquipment.CAPABILITY), target, Optional.empty(),
                         EquipmentDemand.Acquisition.PRODUCE_LOCAL)));
     }

@@ -29,7 +29,11 @@ public final class InternalShipmentStateSupport {
         ledger = bindings.isEmpty() ? ledger.reserve(claim, shipment.sourceAccountId())
                 : ledger.reserveBound(claim, shipment.sourceAccountId(), bindings.getFirst().authorityEpoch());
         var allocated = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(ledger)));
-        return ShipmentStateSupport.dispatch(allocated, issuer, shipment);
+        var dispatched = ShipmentStateSupport.dispatch(allocated, issuer, shipment);
+        var waiting = new LinkedHashMap<>(dispatched.shipments().accumulation().firstAvailable());
+        waiting.remove(new HaulAccumulation.Key(issuer, shipment.sourceAccountId(), shipment.itemKind()));
+        return dispatched.withChanges(FrontierWorldStateUpdate.begin().shipments(dispatched.shipments()
+                .withAccumulation(new HaulAccumulation(waiting))));
     }
     public static FrontierWorldState receive(FrontierWorldState state, SubjectId subject, InternalShipmentReceived event) {
         var shipment = Objects.requireNonNull(state.shipments().shipments().get(event.shipmentId()), "received internal shipment");

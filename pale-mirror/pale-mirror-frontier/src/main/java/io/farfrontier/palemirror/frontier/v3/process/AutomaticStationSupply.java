@@ -5,11 +5,11 @@ import java.util.*;
 
 /** Automatic-production demand adapter. Common logistics owns claims, movement and transfers. */
 final class AutomaticStationSupply {
-    static Optional<InternalShipmentDispatched> offer(FrontierWorldState state, ResidentProfile worker,
-            ContainerRecord record, long tick) {
+    static List<InternalHaulRequest> requests(FrontierWorldState state, ContainerRecord record, long tick) {
         var spec = record.productionStation().orElseThrow();
         var policy = AutomaticStationProduction.policy(state, spec).orElse(null);
-        if (policy == null) return Optional.empty();
+        if (policy == null) return List.of();
+        var requests=new ArrayList<InternalHaulRequest>();
         var recipe = state.bootstrap().ruleset().production().require(policy.recipeId());
         var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), record.ownerId()).structures().stream()
                 .filter(value -> value.id().equals(spec.facilityId())).findFirst().orElseThrow();
@@ -22,9 +22,7 @@ final class AutomaticStationSupply {
         if (output > 0) {
             for (var destination : ResourceStorageSelection.candidates(state, record.ownerId(), recipe.product().itemKind(),
                     source.station(), Set.of(ResourceStorageRole.WAREHOUSE))) {
-                var dispatched = InternalShipmentPlanning.prepare(state, worker, source, destination,
-                        recipe.product().itemKind(), Math.min(64, output), tick);
-                if (dispatched.isPresent()) return dispatched;
+                InternalHaulRequest.select(state,record.ownerId(),source,destination,recipe.product().itemKind(),output).ifPresent(requests::add);
             }
         }
         long missing = ProductionStockDemand.read(state, record.ownerId(), recipe.product().itemKind(), tick).missing();
@@ -44,11 +42,10 @@ final class AutomaticStationSupply {
             int quantity = Math.toIntExact(Math.max(0, Math.multiplyExact(batches, material.getValue()) - supplied.getOrDefault(material.getKey(), 0L)));
             if (quantity == 0) continue;
             for (var warehouse : ResourceStorageSelection.candidates(state, record.ownerId(), material.getKey(), input.station(), Set.of(ResourceStorageRole.WAREHOUSE))) {
-                var dispatched = InternalShipmentPlanning.prepare(state, worker, warehouse, input, material.getKey(), quantity, tick);
-                if (dispatched.isPresent()) return dispatched;
+                InternalHaulRequest.select(state,record.ownerId(),warehouse,input,material.getKey(),quantity).ifPresent(requests::add);
             }
         }
-        return Optional.empty();
+        return List.copyOf(requests);
     }
     private AutomaticStationSupply() { }
 }

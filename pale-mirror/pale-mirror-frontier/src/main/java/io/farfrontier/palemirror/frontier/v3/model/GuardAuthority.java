@@ -45,6 +45,7 @@ public final class GuardAuthority {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.GUARD_EQUIPMENT, duty.id(), duty.execution().actorId(), duty.source().containerId());
     }
     public static boolean pending(FrontierWorldState state, GuardDuty duty) {
+        if (state.security().pending().containsKey(duty.id())) return true;
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.GUARD_DUTY
                 && intent.roles().require(PhysicalIntentSubjectRole.GUARD_DUTY).equals(duty.id())
                 && intent.status() != PhysicalIntentStatus.CONFIRMED);

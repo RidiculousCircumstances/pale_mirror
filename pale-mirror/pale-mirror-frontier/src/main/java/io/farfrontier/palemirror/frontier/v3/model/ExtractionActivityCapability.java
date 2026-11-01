@@ -5,6 +5,11 @@ import java.util.Optional;
 
 /** Mining is an interruptible retained activity. Food does not destroy its tool, cargo or source reservation. */
 final class ExtractionActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     @Override public ActorActivityKind kind() { return ActorActivityKind.EXTRACTION; }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuationAfterResume(

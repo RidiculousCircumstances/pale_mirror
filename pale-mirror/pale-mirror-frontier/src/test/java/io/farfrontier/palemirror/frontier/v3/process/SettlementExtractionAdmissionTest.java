@@ -41,9 +41,10 @@ class SettlementExtractionAdmissionTest {
         var known = new HashMap<>(surveys.getOrDefault(first.settlementId(), Map.of()));
         for (var id : second.mineralDeposits()) known.put(id, state.extractionSites().geology().deposits().get(id).revision());
         surveys.put(first.settlementId(), known);
-        state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(new ExtractionSiteState(deposits, Map.of(), 1,
-                    state.extractionSites().geologicalExclusions(), state.extractionSites().geology(),
-                    new io.farfrontier.palemirror.frontier.v3.model.geology.GeologicalKnowledge(surveys)))
+        var extraction=new ExtractionSiteState(deposits,Map.of(),1,state.extractionSites().geologicalExclusions(),state.extractionSites().geology(),
+                new io.farfrontier.palemirror.frontier.v3.model.geology.GeologicalKnowledge(surveys));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(extraction)
+                .siteUses(io.farfrontier.palemirror.frontier.v3.model.land.GrayboxSiteUsePlan.initial(state.bootstrap(),state.resourceSites(),extraction))
                 .inventory(new ExactInventory(containers, items, inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(),
                         inventory.conflicts(), inventory.surfaces(), inventory.economics(), inventory.fungibleResources())));
         state = AcceptedEconomyFixture.publish(state, first.settlementId(), 100);

@@ -10,7 +10,7 @@ import java.util.Map;
 public final class ActorMovementProviders {
     private static final Map<ActorMovementContext.Provider, ActorMovementProvider> PORTS = registry(
             List.of(new ServiceExitMovementProvider(), new ShipmentMovementProvider(), new GroupMovementProvider(), new ExpeditionSupplyMovementProvider(), new ExtractionMovementProvider(), new DefenderEquipmentReturnMovementProvider(),
-                    new ForestryMovementProvider(), new StationWorkMovementProvider(), new GuardMovementProvider()));
+                    new ForestryMovementProvider(), new StationWorkMovementProvider(), new GuardMovementProvider(), new GuardMissionMovementProvider()));
     public static Map<ActorMovementContext.Provider, ActorMovementProvider> registry(List<ActorMovementProvider> ports) {
         var result = new EnumMap<ActorMovementContext.Provider, ActorMovementProvider>(ActorMovementContext.Provider.class);
         for (var port : List.copyOf(ports))

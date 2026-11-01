@@ -7,7 +7,7 @@ import java.util.*;
  * A producer must validate its current durable domain intent before opening this envelope. */
 record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long sequence, Set<Participant> applied,
         Set<Participant> saved, boolean cancelled, boolean ownerClosed) {
-    enum Medium { TERRAIN, CHUNK_BLOCKS, ENTITIES, ENTITY_COLUMN, PLAYER, ENTITY_SNAPSHOT }
+    enum Medium { TERRAIN, CHUNK_BLOCKS, ENTITIES, ENTITY_COLUMN, PLAYER, PLAYER_HEALTH, ENTITY_SNAPSHOT }
     /** Closed, explicit producer keys. They name authority; the coordinator never
      * infers a protocol from an owner ID or dispatches business logic on these keys. */
     enum Protocol {
@@ -23,7 +23,7 @@ record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long seq
         GROUND_DESTRUCTION("ground-destruction-v1"), GROUND_MERGE("ground-merge-v1"), CONTAINER_DROP("container-drop-v1"),
         CONTAINER_REMOVAL("container-removal-v1"),
         ENTITY_RESOURCE_DROP("entity-resource-drop-v1"), NATIVE_INVENTORY_TRANSFER("native-inventory-transfer-v1"),
-        BODY_ADMISSION("body-admission-v1"), BODY_FATALITY("body-fatality-v1"), BODY_DEPARTURE("body-departure-v1");
+        MELEE_ATTACK("melee-attack-v1"), BODY_ADMISSION("body-admission-v1"), BODY_FATALITY("body-fatality-v1"), BODY_DEPARTURE("body-departure-v1");
         private final String wire;
         Protocol(String wire) { this.wire = wire; }
         String wire() { return wire; }

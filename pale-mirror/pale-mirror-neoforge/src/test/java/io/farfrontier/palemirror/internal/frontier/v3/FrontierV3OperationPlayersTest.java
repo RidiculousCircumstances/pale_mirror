@@ -10,6 +10,24 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3OperationPlayersTest {
     @TempDir Path directory;
+    @Test void aHeldInventoryCursorCannotEraseHealthSaveEvidence() {
+        var player = UUID.randomUUID();
+        var bag = new CompoundTag();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.PLAYER_HEALTH,
+                player.toString(), FrontierV3NativeOperationMarkers.lifetime(bag));
+        var operation = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
+                FrontierV3OperationReceipt.Protocol.MELEE_ATTACK, new SubjectId("guard:test"), "strike", "intent", Set.of(participant)), 1);
+        FrontierV3NativeOperationMarkers.stamp(bag, operation.nativeReceipt(participant));
+        var image = new CompoundTag(); image.putUUID("UUID", player);
+        var data = new CompoundTag(); data.put(FrontierV3OperationPlayers.HEALTH_KEY, bag);
+        data.put(FrontierV3OperationPlayers.KEY, new CompoundTag()); image.put("NeoForgeData", data);
+        var held = FrontierV3OperationPlayers.snapshot(image, false);
+        assertFalse(held.getCompound("NeoForgeData").contains(FrontierV3OperationPlayers.KEY));
+        assertTrue(image.getCompound("NeoForgeData").contains(FrontierV3OperationPlayers.KEY), "native detached image only");
+        assertEquals(List.of(operation.nativeReceipt(participant)), FrontierV3OperationPlayers.receipts(player, held));
+        held.getCompound("NeoForgeData").put(FrontierV3OperationPlayers.KEY, bag);
+        assertThrows(IllegalStateException.class, () -> FrontierV3OperationPlayers.receipts(player, held));
+    }
     @Test void actualTargetMustContainExactPlayerLifetimeAndOperationNotTheIntendedTemp() throws Exception {
         var id = UUID.randomUUID(); var bag = new CompoundTag();
         var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.PLAYER,

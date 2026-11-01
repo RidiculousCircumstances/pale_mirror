@@ -270,6 +270,10 @@ public final class FrontierV3TestPilotClient {
         try {
             switch (type) {
                 case "wait" -> { if (tick - actionStartedTick >= action.get("ms").getAsLong() / 50L) advance(type); }
+                case "wait_until_player_health" -> {
+                    if(FrontierV3PilotPlayerHealth.reached(minecraft,action))advance(type);
+                    else timeout(minecraft,action,"server health packet did not reach the declared range");
+                }
                 case "wait_until_block" -> waitUntilBlock(minecraft, action);
                 case "assert_complete_resource_site" -> assertCompleteResourceSite(minecraft, action);
                 case "wait_until_diagnostic" -> waitUntilDiagnostic(minecraft, action);

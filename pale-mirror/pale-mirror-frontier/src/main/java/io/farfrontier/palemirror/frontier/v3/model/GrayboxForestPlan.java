@@ -18,7 +18,7 @@ public final class GrayboxForestPlan {
         @Override public int hashCode() { return System.identityHashCode(bootstrap); }
     }
     private record Patch(ForestryRules.Patch rule, BlockPosition centre) { }
-    public record Header(TreeReference tree, BlockPosition origin, int logs, String species) { }
+    public record Header(TreeReference tree, BlockPosition origin, int logs, String species, io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation operation) { }
     private final FrontierBootstrap bootstrap;
     private final List<Patch> patches;
     private final Set<TerrainColumn> protectedColumns;
@@ -51,6 +51,8 @@ public final class GrayboxForestPlan {
         for (var home : bootstrap.settlements()) home.residents().forEach(resident -> exclude(excluded, resident.home()));
         for (var site : FrontierResourceSitePlan.compile(bootstrap).values())
             site.managedSlots().forEach(position -> exclude(excluded, position));
+        GrayboxFieldStoragePlan.compile(bootstrap).forEach(buffer->{exclude(excluded,buffer.surface().position());
+            exclude(excluded,buffer.container().storage().orElseThrow().endpoint().station().support());});
         var roads = FrontierRouteNetwork.footprint(bootstrap, RouteTopology.initial());
         roads.foundationCells().forEach(position -> exclude(excluded, position));
         roads.surfaceCells().forEach(position -> exclude(excluded, position));
@@ -120,7 +122,8 @@ public final class GrayboxForestPlan {
         var origin = new BlockPosition(x, bootstrap.terrain().supportYAt(x, z) + 1, z);
         var identity = UUID.nameUUIDFromBytes((bootstrap.worldId().value() + "|" + bootstrap.seed() + "|"
                 + PROVIDER + "|" + rule.id() + "|" + x + "|" + z).getBytes(StandardCharsets.UTF_8));
-        return new Header(new TreeReference(new TreeId(identity), 1, ForestRegion.containing(origin)), origin, height, "minecraft:oak");
+        return new Header(new TreeReference(new TreeId(identity), 1, ForestRegion.containing(origin)), origin, height, "minecraft:oak",
+            new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.FORESTRY,new io.farfrontier.palemirror.frontier.v3.api.SubjectId(rule.id())));
     }
     private boolean clear(int x, int z) {
         for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++)

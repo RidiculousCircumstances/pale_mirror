@@ -5,6 +5,11 @@ import java.util.*;
 
 /** Family-owned safe checkpoints. Tool/cargo do not prevent food between bounded effects. */
 final class ForestryActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     @Override public ActorActivityKind kind() { return ActorActivityKind.FORESTRY; }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     @Override public void validateReference(FrontierWorldState state, ActorExecutionId execution) { ForestryWorkAuthority.require(state, execution); }

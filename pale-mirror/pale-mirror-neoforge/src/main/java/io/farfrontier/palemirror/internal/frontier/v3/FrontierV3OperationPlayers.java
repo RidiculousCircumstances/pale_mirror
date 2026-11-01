@@ -12,35 +12,46 @@ import java.util.*;
  * acknowledge inventory operations. No restore, guessed item match or forced UI close. */
 public final class FrontierV3OperationPlayers {
     static final String KEY = "pm_v3_player_operations";
+    static final String HEALTH_KEY="pm_v3_player_health_operations";
+    private record Aspect(String key,FrontierV3OperationReceipt.Medium medium){}
+    private static final List<Aspect> ASPECTS=List.of(new Aspect(KEY,FrontierV3OperationReceipt.Medium.PLAYER),
+            new Aspect(HEALTH_KEY,FrontierV3OperationReceipt.Medium.PLAYER_HEALTH));
     private FrontierV3OperationPlayers() { }
-    static FrontierV3MinecraftOperation.Participant current(ServerPlayer player) {
-        var data = player.getPersistentData();
-        if (!data.contains(KEY)) data.put(KEY, new CompoundTag());
-        if (!data.contains(KEY, Tag.TAG_COMPOUND)) throw new IllegalStateException("invalid player operation bag");
-        var bag = data.getCompound(KEY);
-        var identity = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.PLAYER,
-                player.getStringUUID(), FrontierV3NativeOperationMarkers.lifetime(bag));
-        return new FrontierV3MinecraftOperation.Participant(identity, bag, () -> { });
+    static FrontierV3MinecraftOperation.Participant current(ServerPlayer player) { return current(player,ASPECTS.getFirst()); }
+    static FrontierV3MinecraftOperation.Participant currentHealth(ServerPlayer player) { return current(player,ASPECTS.get(1)); }
+    private static FrontierV3MinecraftOperation.Participant current(ServerPlayer player,Aspect aspect) {
+        var data=player.getPersistentData();
+        if(!data.contains(aspect.key()))data.put(aspect.key(),new CompoundTag());
+        if(!data.contains(aspect.key(),Tag.TAG_COMPOUND))throw new IllegalStateException("invalid player operation aspect");
+        var bag=data.getCompound(aspect.key());
+        var identity=new FrontierV3OperationReceipt.Participant(aspect.medium(),player.getStringUUID(),FrontierV3NativeOperationMarkers.lifetime(bag));
+        return new FrontierV3MinecraftOperation.Participant(identity,bag,()->{});
     }
     /** Decorate only the detached image actually passed to the native file writer. */
     public static CompoundTag snapshot(Player player, CompoundTag image) {
-        if (player.containerMenu.getCarried().isEmpty()) return image;
+        return snapshot(image, player.containerMenu.getCarried().isEmpty());
+    }
+    static CompoundTag snapshot(CompoundTag image, boolean inventoryCursorEmpty) {
+        if (inventoryCursorEmpty) return image;
         var result = image.copy(); result.getCompound("NeoForgeData").remove(KEY); return result;
     }
-    static List<FrontierV3OperationReceipt.NativeReceipt> receipts(UUID player, CompoundTag image) {
-        var data = image.getCompound("NeoForgeData");
-        if (!data.contains(KEY)) return List.of();
-        if (!image.hasUUID("UUID") || !image.getUUID("UUID").equals(player) || !data.contains(KEY, Tag.TAG_COMPOUND))
-            throw new IllegalStateException("player save has foreign identity or operation bag");
-        var bag = data.getCompound(KEY); var receipts = FrontierV3NativeOperationMarkers.read(bag);
-        for (var receipt : receipts) {
-            var identity = receipt.participant();
-            if (identity.medium() != FrontierV3OperationReceipt.Medium.PLAYER || !identity.identity().equals(player.toString())
-                    || !bag.contains(FrontierV3NativeOperationMarkers.LIFETIME, Tag.TAG_LONG)
-                    || identity.incarnation() != bag.getLong(FrontierV3NativeOperationMarkers.LIFETIME))
-                throw new IllegalStateException("player save has foreign native participant");
+    static List<FrontierV3OperationReceipt.NativeReceipt> receipts(UUID player,CompoundTag image) {
+        var data=image.getCompound("NeoForgeData");var result=new ArrayList<FrontierV3OperationReceipt.NativeReceipt>();
+        for(var aspect:ASPECTS) {
+            if(!data.contains(aspect.key()))continue;
+            if(!image.hasUUID("UUID")||!image.getUUID("UUID").equals(player)||!data.contains(aspect.key(),Tag.TAG_COMPOUND))
+                throw new IllegalStateException("player save has foreign identity or operation aspect");
+            var bag=data.getCompound(aspect.key());
+            for(var receipt:FrontierV3NativeOperationMarkers.read(bag)) {
+                var identity=receipt.participant();
+                if(identity.medium()!=aspect.medium() || !identity.identity().equals(player.toString())
+                        ||!bag.contains(FrontierV3NativeOperationMarkers.LIFETIME,Tag.TAG_LONG)
+                        ||identity.incarnation()!=bag.getLong(FrontierV3NativeOperationMarkers.LIFETIME))
+                    throw new IllegalStateException("player save has foreign native participant");
+                result.add(receipt);
+            }
         }
-        return receipts;
+        return List.copyOf(result);
     }
     /** Native safeReplaceFile returns void and may fail. Read and force the actual
      * target, never acknowledge the intended temp image or PlayerSavingEvent alone. */
@@ -56,13 +67,14 @@ public final class FrontierV3OperationPlayers {
     public static void saved(Player nativePlayer, Path directory) {
         if (!(nativePlayer instanceof ServerPlayer player) || player.getServer() == null) return;
         var data = player.getPersistentData();
-        if (!data.contains(KEY)) return;
+        if (ASPECTS.stream().noneMatch(aspect->data.contains(aspect.key()))) return;
         var level = player.getServer().getLevel(FrontierV3PhysicalWorld.DIMENSION);
         if (level == null || !FrontierV3ServerLifecycle.acceptsNativeOperationSaves(level)) return;
-        var ledger = FrontierV3OperationLedger.get(level); var bag = data.getCompound(KEY);
-        FrontierV3NativeOperationMarkers.prune(bag, ledger);
-        if (FrontierV3NativeOperationMarkers.read(bag).stream().noneMatch(receipt -> ledger.find(receipt.ticket())
-                .map(operation -> !operation.saved().contains(receipt.participant())).orElse(false))) return;
+        var ledger=FrontierV3OperationLedger.get(level);
+        var bags=ASPECTS.stream().filter(aspect->data.contains(aspect.key())).map(aspect->data.getCompound(aspect.key())).toList();
+        bags.forEach(bag->FrontierV3NativeOperationMarkers.prune(bag,ledger));
+        if(bags.stream().flatMap(bag->FrontierV3NativeOperationMarkers.read(bag).stream()).noneMatch(receipt->ledger.find(receipt.ticket())
+                .map(operation->!operation.saved().contains(receipt.participant())).orElse(false)))return;
         var target = directory.resolve(player.getStringUUID() + ".dat");
         if (!Files.isRegularFile(target)) return;
         try {
@@ -72,7 +84,7 @@ public final class FrontierV3OperationPlayers {
                 if (ledger.require(receipt.ticket()).retirable()) ledger.retire(receipt.ticket());
             }
             ledger.persist(level);
-            FrontierV3NativeOperationMarkers.prune(bag, ledger);
+            bags.forEach(bag->FrontierV3NativeOperationMarkers.prune(bag,ledger));
         } catch (java.io.IOException failure) {
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(
                     "Player {} operation save could not be confirmed; receipts retained", player.getUUID(), failure);

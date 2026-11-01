@@ -5,6 +5,11 @@ import java.util.*;
 
 /** Peaceful duty owns interruption semantics, never a combat controller or a body position. */
 final class GuardActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     public ActorActivityKind kind() { return ActorActivityKind.GUARD; }
     public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     public ActorActivityBodyCheckpoint bodyCheckpoint() {
@@ -20,7 +25,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
         var duty = GuardAuthority.require(state, execution);
         return new ActorActivityCheckpoint(state, execution, GuardAuthority.pending(state, duty)
                 ? Optional.of(new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, duty.id()))
-                : state.actorMovements().containsKey(execution.actorId())
+                : state.actorMovements().containsKey(execution.actorId()) || duty.mission().flatMap(io.farfrontier.palemirror.frontier.v3.model.security.GuardMission::response).isPresent()
                     ? Optional.of(new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, duty.id())) : Optional.empty());
     }
     public ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {

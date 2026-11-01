@@ -350,6 +350,9 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onLivingDamage(LivingDamageEvent.Post event) {
         if (event.getNewDamage() <= 0.0F) return;
+        if(event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel level)
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SecurityExecutor.observedDamage(
+                    level,event.getEntity(),event.getSource().getEntity(),event.getNewDamage());
         AdapterRegistry.sourceAdapters().forEach(adapter -> {
             adapter.presentDamage(event.getEntity());
             adapter.presentAttack(event.getSource().getEntity());

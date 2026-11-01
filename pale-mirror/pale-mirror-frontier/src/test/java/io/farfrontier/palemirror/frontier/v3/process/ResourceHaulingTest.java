@@ -69,7 +69,9 @@ class ResourceHaulingTest {
         var resources = initial.inventory().fungibleResources().issue(lot, account);
         resources = resources.rebind(account.id(), 1, FungiblePhysicalObservation.bind(resources, account.id(), 1,
                 List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.WorldEntity(entity), lot.itemKind(), 8))));
-        var state = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var stocked = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var state = new HaulAccumulationReviewed(home.id(),Set.of(new HaulAccumulation.Key(home.id(),account.id(),lot.itemKind())))
+                .apply(stocked,home.id(),0);
         assertTrue(ResourceSourceDiscovery.localHaulSources(initial, home.id()).stream()
                 .noneMatch(source -> source.sourceKind() == ResourceSourceEndpoint.Kind.GROUND));
         assertTrue(ResourceSourceDiscovery.localHaulSources(state, initial.bootstrap().settlements().get(1).id()).stream()
@@ -112,7 +114,7 @@ class ResourceHaulingTest {
                 var wait = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
                         () -> InternalShipmentPlanning.prepare(state, worker, source, depot.storage().orElseThrow().endpoint(), lot.itemKind(), 8, 1201));
                 assertEquals(status, wait.status());
-                assertFalse(ResourceHaulingPolicy.available(state, worker, 1201));
+                assertTrue(ResourceHaulingPolicy.available(state, worker, 1201), "real due stock is eligible without running a route search");
             }
         }
         assertThrows(IllegalArgumentException.class, () -> InternalShipmentPlanning.prepare(state,

@@ -17,7 +17,7 @@ public final class ActorStorageApproach {
         ShipmentEndpointComposition.validate(state, endpoint);
         var knowledge = declaredJourney.forActor(state, actorId);
         var candidates = java.util.stream.Stream.concat(java.util.stream.Stream.of(endpoint.station()),
-                ShipmentEndpointComposition.stations(state, endpoint).stream()).distinct().toList();
+                ShipmentEndpointComposition.approachStations(state,endpoint,knowledge).stream()).distinct().toList();
         for (var station : candidates) {
             if (!knowledge.clearStation(station)) continue;
             var selected = endpoint.withStation(station);

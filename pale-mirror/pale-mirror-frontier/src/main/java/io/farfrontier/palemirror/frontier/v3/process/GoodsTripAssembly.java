@@ -149,12 +149,8 @@ final class GoodsTripAssembly {
     static List<ProposedEvent> events(TransportMissionStarted declaration, long now) {
         var events = new ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(declaration.mission().id(), declaration));
-        declaration.shipments().forEach(s -> events.add(new ProposedEvent(s.id(),
-                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(ShipmentProcess.progress(s.id(), now + 1)))));
-        events.add(new ProposedEvent(declaration.group().id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
-                UnitGroupProcess.progress(declaration.group().id(), now + 1))));
-        events.add(new ProposedEvent(declaration.mission().id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
-                TransportMissionProcess.progress(declaration.mission().id(), now + 1))));
+        TransportMissionProcess.initialContinuations(declaration.mission(),now+1).forEach(action->events.add(new ProposedEvent(action.subject(),
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(action))));
         return List.copyOf(events);
     }
     private GoodsTripAssembly() { }

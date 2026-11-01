@@ -16,7 +16,8 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
                 throw new IllegalArgumentException("retired shipment continuation has foreign authority");
         }).toList();
     }
-    static final Set<String> TYPES = Set.of("frontier.shipment_storage_retargeted", "frontier.shipment_dispatched", "frontier.shipment_cold_transferred", "frontier.shipment_retired",
+    static final Set<String> TYPES = Set.of(InternalTransportMissionStarted.TYPE, HaulAccumulationReviewed.TYPE, "frontier.shipment_storage_retargeted", "frontier.shipment_dispatched",
+            "frontier.shipment_cold_transferred", "frontier.shipment_retired",
             "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_receipt_acknowledged", "frontier.shipment_cargo_disposition_observed",
             "frontier.internal_shipment_dispatched", "frontier.internal_shipment_received", "frontier.shipment_retired_effect_observed", "frontier.shipment_death_settled");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("shipments",
@@ -31,6 +32,8 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
+            case InternalTransportMissionStarted value -> InternalTransportPlanning.admit(state,event.subject(),value,event.instant().ticks());
+            case HaulAccumulationReviewed value -> value.apply(state, event.subject(), event.instant().ticks());
             case ShipmentStorageRetargeted value -> ResidentActivityProcess.retargetHotResident(value.apply(state, event.subject()),
                     state.shipments().shipments().get(value.shipmentId()).execution().actorId(), event.instant().ticks());
             case InternalShipmentDispatched value -> InternalShipmentStateSupport.dispatch(state, event.subject(), value);

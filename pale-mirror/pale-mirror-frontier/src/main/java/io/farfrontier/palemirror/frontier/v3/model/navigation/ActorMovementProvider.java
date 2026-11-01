@@ -37,7 +37,11 @@ public interface ActorMovementProvider {
                                   long tick, ActorPositionView positions) {
         requireColdRoute(state, movement, route, tick);
     }
-    default long ticksPerEdge(FrontierWorldState state, ActorMovement movement) { return 20L; }
+    default long ticksPerEdge(FrontierWorldState state,ActorMovement movement) {
+        return ActorExecutionComposition.CAPABILITIES
+                .require(movement.executionId().activityKind()).navigationPace(state,movement.executionId())
+                .map(pace->Math.max(1L,(long)Math.ceil(1.0/pace.blocksPerTick()))).orElse(20L);
+    }
     /** Read-only caller constraint; the common navigator remains the only physical actuator. */
     default boolean mayAdvance(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual, long tick) {
         return movementPermission(state, movement, actual, tick, ActorPositionView.canonical(state, tick)).allowed();
@@ -48,7 +52,11 @@ public interface ActorMovementProvider {
         return movementPermission(state, movement, actual, tick, positions).allowed();
     }
     default MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual,
-                                                   long tick, ActorPositionView positions) { return MovementPermission.allow(); }
+                                                   long tick,ActorPositionView positions) {
+        return ActorExecutionComposition.CAPABILITIES
+                .require(movement.executionId().activityKind()).navigationPace(state,movement.executionId())
+                .map(MovementPermission::allow).orElseGet(MovementPermission::allow);
+    }
     /** Previous decision is local steering memory under the same exact command, not domain progress. */
     default MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual,
                                                    long tick, ActorPositionView positions, MovementPermission previous) {

@@ -11,7 +11,7 @@ public final class ActorInventoryInteractionFences {
     private static final List<BiFunction<FrontierWorldState, SubjectId, Optional<SubjectId>>> OWNERS = List.of(
             ExpeditionSupplyAuthority::pendingOwnerForActor, ReferenceContainerCustody::pendingOwnerForActor,
             ExtractionWorkAuthority::pendingOwner, ForestryWorkAuthority::pendingOwner, StationWorkDeathResources::pendingOwner,
-            HarvestDeathResources::pendingOwner, FieldEquipment::pendingOwnerForActor, ResidentMealPhysicalAuthority::pendingOwnerForActor);
+            HarvestDeathResources::pendingOwner, FieldEquipment::pendingOwnerForActor, ResidentMealPhysicalAuthority::pendingOwnerForActor, io.farfrontier.palemirror.frontier.v3.model.security.CombatInventoryFence::pendingOwner);
     private ActorInventoryInteractionFences() { }
     public static boolean pending(FrontierWorldState state, SubjectId actor) {
         return pendingOwner(state, actor).isPresent();

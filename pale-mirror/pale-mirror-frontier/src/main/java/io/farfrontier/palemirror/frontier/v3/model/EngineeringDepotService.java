@@ -81,10 +81,9 @@ public final class EngineeringDepotService {
         var knowledge = knowledge(state, visit.access()).withTaskExclusions(otherPositions(state, owner, visit.actorId()));
         var execution = EngineeringExecutionAuthority.assemblyCurrent(state, owner).requireMember(visit.actorId());
         List<SurfaceAnchor> path = null;
-        for (int offset = 0; offset < targets.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
-            var batch = targets.subList(offset, Math.min(targets.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
-            var order = new MovementOrder(owner.id(), visit.actorId(), execution.generation(), 1L, batch,
-                    TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+        for (var target:targets) {
+            var order = new MovementOrder(owner.id(), visit.actorId(), execution.generation(), 1L, List.of(target),
+                    TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             try { path = knowledge.plannedPath(origin, order); break; }
             catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;

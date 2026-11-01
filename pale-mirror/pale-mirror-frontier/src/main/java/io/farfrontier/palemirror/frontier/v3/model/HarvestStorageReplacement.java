@@ -10,7 +10,7 @@ public final class HarvestStorageReplacement {
     public static boolean retainedAvailable(FrontierWorldState state, ResourceSiteHarvestJob job) {
         if (!job.reservesOutputCapacity()) return true;
         var record = state.inventory().containers().get(job.outputSlot().containerId());
-        return record != null && record.storage().map(policy -> policy.role() == ResourceStorageRole.WAREHOUSE
+        return record != null && record.storage().map(policy -> HarvestStoragePolicy.ROLES.contains(policy.role())
                 && policy.filter().accepts("minecraft:wheat")).orElse(false)
                 && !ReferenceContainerCustody.blocksCanonicalUse(state, record.id())
                 && ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job);
@@ -39,7 +39,7 @@ public final class HarvestStorageReplacement {
         int quantity = job.undeliveredYieldQuantity() == 0 ? 64 : job.undeliveredYieldQuantity();
         var replacement = replacementId(job);
         for (var endpoint : ResourceStorageSelection.receivingCandidates(state, site.settlementId(), "minecraft:wheat", quantity, origin,
-                Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty())) {
+                HarvestStoragePolicy.ROLES, Optional.empty())) {
                     var slot = state.firstFreeContainerSlot(endpoint.containerId());
                     if (slot.isEmpty()) continue;
                     var candidate = job.retargetStorage(new InventoryCustody.ContainerSlot(endpoint.containerId(), slot.getAsInt()), replacement);
@@ -68,7 +68,7 @@ public final class HarvestStorageReplacement {
                 || !state.containerSlotAvailable(event.destination())
                 || ResourceStorageSelection.receivingCandidates(state, state.resourceSite(job.siteId()).settlementId(), "minecraft:wheat",
                         job.undeliveredYieldQuantity() == 0 ? 64 : job.undeliveredYieldQuantity(),
-                        state.actorLocations().get(job.workerId()).supportingSurface(), Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty())
+                        state.actorLocations().get(job.workerId()).supportingSurface(), HarvestStoragePolicy.ROLES, Optional.empty())
                         .stream().noneMatch(endpoint -> endpoint.containerId().equals(event.destination().containerId())))
             throw new IllegalArgumentException("field storage replacement lost its exact safe selection");
         state.actorExecutions().requireCurrent(event.executionId());

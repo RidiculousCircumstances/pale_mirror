@@ -5,6 +5,11 @@ import java.util.Optional;
 
 /** Production owner, not hunger or the lifecycle, decides its physical effect checkpoint. */
 final class ProductionActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     private static final ImmutableInvariantCheck<Void> REFERENCES = new ImmutableInvariantCheck<>();
     @Override public ActorActivityKind kind() { return ActorActivityKind.PRODUCTION; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }

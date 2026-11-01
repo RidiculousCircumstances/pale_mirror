@@ -24,6 +24,8 @@ import io.farfrontier.palemirror.frontier.v3.model.HumanAssignment;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementWorkPolicy;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentWorkKind;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementFoodPolicy;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageSelection;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageRole;
@@ -402,13 +404,20 @@ final class FrontierV3DiagnosticJson {
         int starving = (int) livingResidents.stream()
                 .filter(resident -> state.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.STARVING).count();
         var guards = io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state, subject);
-        return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"guardTarget\":" + io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.target(state)
+        var readyGuard=guards.stream().filter(duty->duty.phase()==io.farfrontier.palemirror.frontier.v3.model.GuardDuty.Phase.ON_DUTY
+                && state.actorLocations().get(duty.execution().actorId()).condition().status()==ActorLifeStatus.ALIVE
+                && io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state,duty)).findFirst();
+        return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"guardTarget\":" + io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.target(state, subject)
+                + ",\"hasArmedGuard\":"+readyGuard.isPresent()
+                + ",\"guardsApproved\":" + SettlementWorkPolicy.permissions(state,subject).workers(ResidentWorkKind.GUARD).size()
+                + ",\"security\":" + FrontierV3SecurityDiagnostic.read(state,subject)
                 + ",\"guardsAssigned\":" + guards.size() + ",\"guardsReady\":" + guards.stream().filter(duty ->
                     state.actorLocations().get(duty.execution().actorId()).condition().status() == ActorLifeStatus.ALIVE
                     && io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state, duty)).count()
                 + ",\"guardActors\":" + strings(guards.stream().map(duty -> duty.execution().actorId().value()).toList())
                 + ",\"guardNames\":" + strings(guards.stream().map(duty -> state.humanPopulation().resident(duty.execution().actorId()).name()).toList())
-                + ",\"firstGuardName\":\"" + quote(guards.isEmpty() ? "" : state.humanPopulation().resident(guards.getFirst().execution().actorId()).name()) + "\""
+                + ",\"firstGuardPosition\":" + readyGuard.map(duty->position(state.actorLocations().get(duty.execution().actorId()).body())).orElse("null")
+                + ",\"firstGuardName\":\"" + quote(readyGuard.map(duty->state.humanPopulation().resident(duty.execution().actorId()).name()).orElse("")) + "\""
                 + ",\"strategic\":" + lane(value.strategic())
                 + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())

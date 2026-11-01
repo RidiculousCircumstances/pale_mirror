@@ -136,9 +136,9 @@ class ExtractionTerrainFactsTest {
         assertSame(retained, retained.invalidate(new BlockPosition(150, 62, 0)));
         assertThrows(UnsupportedOperationException.class, () -> retained.positions().add(new BlockPosition(200, 62, 0)));
         assertThrows(UnsupportedOperationException.class, () -> retained.positions().iterator().remove());
-        var state = FrontierWorldState.initial(known).withChanges(FrontierWorldStateUpdate.begin()
-                .extractionSites(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState(
-                        java.util.Map.of(), java.util.Map.of(), 1, retained)));
+        var initialState=FrontierWorldState.initial(known);
+        var state=initialState.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                initialState.extractionSites().invalidateGeology(retained.positions())));
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         assertEquals(state, codec.decode(codec.encode(state)));
         var invalid = retained.invalidate(new BlockPosition(10000, 62, 0));
@@ -158,8 +158,7 @@ class ExtractionTerrainFactsTest {
         assertEquals(32768, old.positions().size());
         assertTrue(old.additionsSince(next).isEmpty());
         var after = before.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
-                new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState(
-                        java.util.Map.of(), java.util.Map.of(), 1, next)));
+                before.extractionSites().invalidateGeology(next.positions())));
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         assertEquals(after, codec.decode(codec.encode(after)));
         assertEquals(before.inventory(), after.inventory());

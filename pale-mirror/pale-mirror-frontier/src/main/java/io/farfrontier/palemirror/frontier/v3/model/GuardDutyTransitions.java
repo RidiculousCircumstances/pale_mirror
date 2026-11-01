@@ -12,7 +12,7 @@ public final class GuardDutyTransitions {
             if (!subject.equals(duty.id()) || state.strategicPlans().guards().containsKey(subject) || resident == null
                     || !resident.settlementId().equals(duty.home()) || duty.revision() != 1 || duty.phase() != GuardDuty.Phase.EQUIPPING
                     || GuardEquipment.in(state, duty.home()).stream().filter(value -> state.actorLocations()
-                        .get(value.execution().actorId()).condition().status() == ActorLifeStatus.ALIVE).count() >= GuardEquipment.target(state)
+                        .get(value.execution().actorId()).condition().status() == ActorLifeStatus.ALIVE).count() >= GuardEquipment.target(state, duty.home())
                     || !io.farfrontier.palemirror.frontier.v3.process.ResidentWorkComposition.SELECTION.admissible(
                             state, resident, ResidentWorkKind.GUARD, HumanCapability.SECURITY, tick)
                     || !WorkEquipmentSelection.available(state, duty.home(), state.inventory().items().get(duty.weapon()),
@@ -43,14 +43,14 @@ public final class GuardDutyTransitions {
             if (executions.actors().get(duty.execution().actorId()).current().equals(Optional.of(duty.execution())))
                 executions = executions.finish(duty.execution());
             return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().withoutGuard(duty.id()))
-                    .actorExecutions(executions));
+                    .actorExecutions(executions).security(state.security().retired(duty.id())));
         }
         state.actorExecutions().requireCurrent(duty.execution());
         if (changed.change() == GuardDutyEvent.Change.RETURN_SELECTED) {
             var selection = changed.selection().orElseThrow(); var item = state.inventory().items().get(duty.weapon());
             if (!selection.item().equals(duty.weapon()) || item == null
                     || !item.custody().equals(new InventoryCustody.Actor(duty.execution().actorId()))
-                    || GuardEquipment.held(state, duty) || !WorkEquipmentStorage.available(state, item, selection.source()))
+                    || GuardEquipment.held(state, duty) && !GuardStaffingRelease.requested(state,duty) || !WorkEquipmentStorage.available(state, item, selection.source()))
                 throw new IllegalArgumentException("guard return requires its actual unserviceable held equipment and storage");
             return state.withStrategicPlans(state.strategicPlans().withGuard(duty.returning(selection.source())));
         }

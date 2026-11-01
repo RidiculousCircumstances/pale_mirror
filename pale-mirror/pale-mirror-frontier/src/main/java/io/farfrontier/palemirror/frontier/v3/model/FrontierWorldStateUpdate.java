@@ -58,7 +58,7 @@ public final class FrontierWorldStateUpdate {
         EXTRACTION_SITES,
         PRODUCTION_STATIONS,
         NAVIGATION_GEOMETRY,
-        FOREST
+        FOREST, SITE_USES, SECURITY
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -102,6 +102,16 @@ public final class FrontierWorldStateUpdate {
     }
     io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest(FrontierWorldState state) { return changed(Component.FOREST, forest, state.forest()); }
 
+    private io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState siteUses;
+    public FrontierWorldStateUpdate siteUses(io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState next) {
+        mark(Component.SITE_USES); siteUses = require(next, "site uses"); return this;
+    }
+    io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState siteUses(FrontierWorldState state) { return changed(Component.SITE_USES, siteUses, state.siteUses()); }
+    private io.farfrontier.palemirror.frontier.v3.model.security.SecurityState security;
+    public FrontierWorldStateUpdate security(io.farfrontier.palemirror.frontier.v3.model.security.SecurityState next) {
+        mark(Component.SECURITY); security=require(next,"security"); return this;
+    }
+    io.farfrontier.palemirror.frontier.v3.model.security.SecurityState security(FrontierWorldState state) {return changed(Component.SECURITY,security,state.security());}
     private FrontierWorldStateUpdate() { }
 
     public static FrontierWorldStateUpdate begin() { return new FrontierWorldStateUpdate(); }
@@ -164,6 +174,8 @@ public final class FrontierWorldStateUpdate {
                 case PRODUCTION_STATIONS -> productionStations(contribution.productionStations);
                 case NAVIGATION_GEOMETRY -> navigationGeometry(contribution.navigationGeometry);
                 case FOREST -> forest(contribution.forest);
+                case SITE_USES -> siteUses(contribution.siteUses);
+                case SECURITY -> security(contribution.security);
             }
         }
         return this;
@@ -342,6 +354,8 @@ public final class FrontierWorldStateUpdate {
                 case PRODUCTION_STATIONS -> productionStations != state.productionStations();
                 case NAVIGATION_GEOMETRY -> navigationGeometry != state.navigationGeometry();
                 case FOREST -> forest != state.forest();
+                case SITE_USES -> siteUses != state.siteUses();
+                case SECURITY -> security != state.security();
             };
             if (replaced) return true;
         }

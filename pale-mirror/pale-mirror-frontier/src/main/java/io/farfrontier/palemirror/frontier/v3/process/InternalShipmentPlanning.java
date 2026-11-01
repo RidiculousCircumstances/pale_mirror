@@ -30,7 +30,7 @@ final class InternalShipmentPlanning {
         if (quantity == 0) return Optional.empty();
         var selected = FungibleResourceCustodySupport.selectAtAccount(state.inventory().fungibleResources(), account.id(), worker.settlementId(), itemKind, quantity);
         if (selected.isEmpty()) return Optional.empty();
-        String request = account.id().value() + "\n" + destination.containerId().value() + "\n" + worker.id().value() + "\n" + tick;
+        String request = account.id().value() + "\n" + destination.containerId().value() + "\n" + itemKind + "\n" + worker.id().value() + "\n" + tick;
         String token = UUID.nameUUIDFromBytes(request.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
         var id = new SubjectId("shipment:internal/" + token); var claimId = new SubjectId("claim:internal-haul-" + token);
         if (state.shipments().shipments().containsKey(id)) return Optional.empty();

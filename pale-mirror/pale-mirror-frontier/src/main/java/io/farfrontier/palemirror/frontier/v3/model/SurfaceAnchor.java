@@ -21,5 +21,9 @@ public record SurfaceAnchor(BlockPosition support) {
     public int y() { return support.y(); }
     public int z() { return support.z(); }
     public SurfaceAnchor offset(int deltaX, int deltaY, int deltaZ) { return new SurfaceAnchor(support.offset(deltaX, deltaY, deltaZ)); }
+    /** Cheap spatial lower bound; never a route or travel-time proof. */
+    public long manhattanDistance(SurfaceAnchor other) {
+        return Math.abs((long)x()-other.x())+Math.abs((long)y()-other.y())+Math.abs((long)z()-other.z());
+    }
     public BodyPosition standingBody() { return BodyPosition.above(this); }
 }

@@ -391,13 +391,16 @@ public final class FrontierV3AmbientActorGameTests {
         ledger.persist(level, world);
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state(runtime), actor, bodyAt(feet)),
-                FrontierV3AmbientActorExecutor.Result.APPLIED, "ordinary ambient owner must consume the proof-backed permission");
+        helper.startSequence().thenWaitUntil(()->helper.assertValueEqual(
+                FrontierV3AmbientActorExecutor.materialize(level,runtime,state(runtime),actor,bodyAt(feet)),
+                FrontierV3AmbientActorExecutor.Result.APPLIED,"ordinary ambient owner must consume the proof-backed permission"))
+                .thenExecute(()->{
         var pending = ledger.firstAdmission(actor).orElseThrow();
         helper.assertValueEqual(pending.phase(), FrontierV3ActorFirstAdmission.Phase.PENDING,
                 "real entity insertion does not acknowledge an unsaved body");
         helper.assertValueEqual(pending.absenceReceipt().orElseThrow(), "a".repeat(64),
                 "the exact offline proof reference survives admission");
+                }).thenExecute(()->{
         helper.runAfterDelay(1L, () -> {
             try {
                 var body = level.getEntity(declaration.entityId());
@@ -408,6 +411,7 @@ public final class FrontierV3AmbientActorGameTests {
                 body.discard(); helper.succeed();
             } finally { FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); }
         });
+                });
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)

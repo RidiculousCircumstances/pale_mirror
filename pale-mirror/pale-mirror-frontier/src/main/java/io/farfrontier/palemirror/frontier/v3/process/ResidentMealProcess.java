@@ -18,7 +18,6 @@ import java.util.Optional;
 /** Exact edible-portion source, custody and consumption owner; activity hand-off belongs elsewhere. */
 public final class ResidentMealProcess {
     public static final String PROGRESS = "frontier.resident.meal.progress";
-    private static final long COLD_TICKS_PER_EDGE = 20L;
     private ResidentMealProcess() { }
 
     /** Only service-pocket waits are parked; physical custody holds remain directly inspected. */
@@ -118,7 +117,7 @@ public final class ResidentMealProcess {
         if (step.isEmpty()) {
             long retryAt = meal.coldTravel().filter(travel -> firstKnownBarrier(state, travel) < 0
                             && !travel.arrivedBy(now))
-                    .map(TimedKnownRoute::arrivalTick).orElse(Math.addExact(now, COLD_TICKS_PER_EDGE));
+                    .map(TimedKnownRoute::arrivalTick).orElse(Math.addExact(now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()));
             return List.of(new ProposedEvent(meal.residentId(),
                     new ScheduleEffect.Rescheduled(action.id(), progress(meal, retryAt))));
         }
@@ -591,13 +590,13 @@ public final class ResidentMealProcess {
                 && port(state, meal).accessBoundary().cleared(state.actorLocations().get(meal.residentId()).body()))
             return Math.addExact(now, 1L);
         if (meal.phase() != ResidentMeal.Phase.MOVE && !meal.movesToClearance())
-            return Math.addExact(now, COLD_TICKS_PER_EDGE);
+            return Math.addExact(now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
         if (meal.coldTravel().isPresent()) {
             TimedKnownRoute travel = meal.coldTravel().orElseThrow();
             return firstKnownBarrier(state, travel) >= 0 ? Math.addExact(now, 1L)
                     : Math.max(Math.addExact(now, 1L), travel.arrivalTick());
         }
-        return Math.addExact(now, COLD_TICKS_PER_EDGE); // Initial route clock comes from the accepted receipt.
+        return Math.addExact(now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()); // Initial route clock comes from the accepted receipt.
     }
 
     private static TimedKnownRoute timedRoute(FrontierWorldState state, ResidentMeal meal,
@@ -607,7 +606,7 @@ public final class ResidentMealProcess {
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         AmbientActorLease previous = state.ambientLeases().get(meal.residentId());
         long epoch = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
-        return new TimedKnownRoute(order, route, now, COLD_TICKS_PER_EDGE, epoch);
+        return new TimedKnownRoute(order, route, now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge(), epoch);
     }
 
     /** Entrance ends at the semantic station; clearance still witnesses the first exit. */

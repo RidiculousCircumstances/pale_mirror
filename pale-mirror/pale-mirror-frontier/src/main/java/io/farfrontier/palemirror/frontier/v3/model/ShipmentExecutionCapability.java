@@ -5,6 +5,11 @@ import java.util.Optional;
 
 /** Courier owns a transport obligation, never the commercial contract or an independent body. */
 final class ShipmentExecutionCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     private record References(ShipmentState shipments, ActorExecutionState executions) { }
     private static final ImmutableReferenceIndex.Source<References, io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorExecution> EXECUTIONS =
             new ImmutableReferenceIndex.Source<>(c -> c.executions().actors());

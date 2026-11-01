@@ -43,7 +43,7 @@ class CultivationPlanningTest {
         var before = new DevelopmentGroundKnowledge(state);
         var result = FieldLandAdmission.admit(state, state.resourceSites(), remote, other, remoteSurvey,
                 state.bootstrap().ruleset().fields().cultivation().orElseThrow());
-        var changed = state.withResourceSites(result.sites()); var after = new DevelopmentGroundKnowledge(changed);
+        var changed = state.withChanges(FrontierWorldStateUpdate.begin().resourceSites(result.sites()).siteUses(result.rights())); var after = new DevelopmentGroundKnowledge(changed);
         assertEquals(before.regionalReadVersion(localRegion), after.regionalReadVersion(localRegion));
         assertNotEquals(before.regionalReadVersion(remoteRegion), after.regionalReadVersion(remoteRegion));
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PUBLIC, before.at(position).orElseThrow().permission());
@@ -95,6 +95,7 @@ class CultivationPlanningTest {
 
     @Test void separatedSoilPatchesShareOneBoundedReachableWorkAreaAndRejectStaleSurveys() {
         var state = prepared(); var home = new SubjectId("settlement:1");
+        int initialRights=state.siteUses().grants().size();
         for (int turn = 0; turn < 3; turn++) {
             var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home))
                     .sorted(Comparator.comparing(ResourceSite::id)).toList();
@@ -106,7 +107,7 @@ class CultivationPlanningTest {
             var result = FieldLandAdmission.admit(state, state.resourceSites(), home, fields, survey,
                     state.bootstrap().ruleset().fields().cultivation().orElseThrow());
             assertFalse(result.deferred());
-            state = state.withResourceSites(result.sites());
+            state = state.withChanges(FrontierWorldStateUpdate.begin().resourceSites(result.sites()).siteUses(result.rights()));
             var next = state;
             assertThrows(IllegalArgumentException.class, () -> FieldLandAdmission.admit(next, next.resourceSites(), home,
                     fields, survey, next.bootstrap().ruleset().fields().cultivation().orElseThrow()));
@@ -114,6 +115,12 @@ class CultivationPlanningTest {
         var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
         assertEquals(1, fields.size(), "soil islands are not separate worksite declarations");
         assertEquals(256, fields.getFirst().layout().cells().size());
+        assertTrue(state.siteUses().grants().size()>initialRights,"real surveyed expansion must claim previously free natural land");
+        var operation=new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(
+                io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.CULTIVATION,fields.getFirst().id());
+        var rights=state.siteUses();
+        assertTrue(fields.getFirst().layout().cells().stream().allMatch(cell->rights.permits(operation,home,cell.crop())));
+        assertEquals(state,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
     @Test void miningSettlementCanAdmitRealCoarseGroundWithoutPretendingItIsAlreadyTilled() {

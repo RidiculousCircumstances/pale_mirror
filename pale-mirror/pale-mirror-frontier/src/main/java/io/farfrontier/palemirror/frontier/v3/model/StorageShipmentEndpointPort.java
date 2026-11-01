@@ -13,7 +13,7 @@ final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
         var container = state.inventory().containers().get(storage.containerId());
         var surface = state.inventory().surfaces().get(storage.containerId());
         if (container == null || surface == null || !container.ownerId().equals(storage.settlementId())
-                || container.storage().isEmpty() || !container.storage().orElseThrow().endpoint().equals(storage)
+                || container.storage().isEmpty() || !container.storage().orElseThrow().endpoint().withStation(storage.station()).equals(storage)
                 || !surface.fixed() || !BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(storage.station(), surface.position()))
             throw new IllegalArgumentException("storage endpoint lost its exact declared owner, policy or reachable surface");
         return storage;
@@ -43,8 +43,13 @@ final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint) {
         validate(state, endpoint); return ((ShipmentEndpoint.Storage) endpoint).exteriorApproach();
     }
-    @Override public List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        validate(state, endpoint); return declaredStations(state.bootstrap(), endpoint);
+    @Override public List<SurfaceAnchor> stations(FrontierWorldState state,ShipmentEndpoint endpoint) {
+        validate(state,endpoint);return List.of(endpoint.station());
+    }
+    @Override public List<SurfaceAnchor> approachStations(FrontierWorldState state,ShipmentEndpoint endpoint,KnownPedestrianRouteKnowledge actorKnowledge) {
+        validate(state,endpoint);
+        var position=state.inventory().surfaces().get(endpoint.containerId()).position();
+        return actorKnowledge.interactionStations(position,BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN);
     }
     @Override public List<SurfaceAnchor> declaredStations(FrontierBootstrap bootstrap, ShipmentEndpoint endpoint) {
         if (!(endpoint instanceof ShipmentEndpoint.Storage))

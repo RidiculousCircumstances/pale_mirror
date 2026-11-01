@@ -81,7 +81,8 @@ final class FieldDevelopmentLand {
         }
         // Reuse only immutable facts. The admission proof is freshly tied to this
         // exact world state; cached land never grants stale development authority.
-        return new Survey(state, home, fields, cells);
+        return new Survey(state, home, fields, cells.stream().filter(cell -> state.siteUses().candidate(home,
+                io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.CULTIVATION, cell.crop()).isPresent()).toList());
     }
     static List<FieldDevelopmentCell> read(FrontierWorldState state, SubjectId home, List<ResourceSite> fields, int limit) {
         return survey(state, home, fields, limit).cells();

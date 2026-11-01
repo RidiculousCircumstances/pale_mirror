@@ -185,6 +185,11 @@ final class FrontierV3GoalNavigation {
         Objects.requireNonNull(actuation, "navigation actuation");
         if (!actuation.current(actor))
             return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
+        if(pace.isEmpty()) {
+            var basis=actuation.currentState().get().orElseThrow();
+            pace=io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.CAPABILITIES
+                    .require(actuation.id().execution().activityKind()).navigationPace(basis,actuation.id().execution());
+        }
         var previous = ACTUATIONS.get(actor);
         if (previous == null || !previous.id().equals(actuation.id())) {
             clearProvider(actor);

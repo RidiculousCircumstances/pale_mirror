@@ -5,6 +5,11 @@ import java.util.Optional;
 
 /** Optional exit movement is retired by its exact interruption/arrival protocol, not suspended work. */
 final class ServiceExitActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     @Override public ActorActivityKind kind() { return ActorActivityKind.SERVICE_EXIT; }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
     @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return new ActorMovementBodyCheckpoint(); }

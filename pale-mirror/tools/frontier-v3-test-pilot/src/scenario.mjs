@@ -19,7 +19,7 @@ const VISIT_TIMEOUT_MS = 120_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'use_item_on', 'open_container', 'click_menu_button', 'close_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'move_within_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'use_item_on', 'open_container', 'click_menu_button', 'close_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'move_within_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_player_health', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -245,6 +245,12 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.destinationSlot) || action.destinationSlot < 0 || action.destinationSlot > 26
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('move_within_container needs an exact stack, destination slot and timeoutMs 0..120000');
+      }
+      if (action.type === 'wait_until_player_health' && (!Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120000
+          || (action.minimum === undefined && action.maximum === undefined)
+          || ['minimum','maximum'].some(key => action[key] !== undefined && (!Number.isFinite(action[key]) || action[key] < 0 || action[key] > 1024))
+          || (action.minimum !== undefined && action.maximum !== undefined && action.minimum > action.maximum))) {
+        throw new Error('wait_until_player_health needs a finite health range and timeoutMs 0..120000');
       }
       if (action.type === 'wait_until_container_item' && (!requiredId(action.containerId, 'container:') || !validItemKind(action.item)
           || !validStackCount(action.count) || (action.slot !== undefined && (!Number.isInteger(action.slot) || action.slot < 0 || action.slot > 26))
@@ -564,7 +570,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
-        && ['farmAnchor', 'routeSurface'].includes(reference.field))
+        && ['farmAnchor', 'routeSurface', 'firstGuardPosition'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'shipment:') && reference.field === 'actorBody')

@@ -15,9 +15,8 @@ public final class GuardEquipment {
                 && item.custody().equals(new InventoryCustody.Actor(duty.execution().actorId()))
                 && REQUIREMENTS.serviceable(state.bootstrap().ruleset().tools(), item);
     }
-    public static int target(FrontierWorldState state) {
-        var entry = state.bootstrap().ruleset().labour().entries().get(ResidentWorkKind.GUARD);
-        return entry == null ? 0 : entry.targetWorkers();
+    public static int target(FrontierWorldState state, SubjectId home) {
+        return io.farfrontier.palemirror.frontier.v3.model.security.SecurityCoverage.required(state, home);
     }
     public static List<GuardDuty> in(FrontierWorldState state, SubjectId home) {
         return state.strategicPlans().guards().values().stream().filter(duty -> duty.home().equals(home))

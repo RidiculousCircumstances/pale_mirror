@@ -107,7 +107,7 @@ class ForestryFoundationTest {
         assertEquals(total, ForestKnowledge.remaining(FrontierWorldState.initial(BOOTSTRAP), home, tree.species()),
                 "reading changed source facts must preserve the predecessor image");
         var stale = new GrayboxForestPlan.Header(new TreeReference(reference.id(), reference.generation() + 1, reference.region()),
-                header.origin(), header.logs(), header.species());
+                header.origin(), header.logs(), header.species(), header.operation());
         assertThrows(IllegalArgumentException.class, () -> ForestKnowledge.remaining(restored, stale));
         assertThrows(IllegalArgumentException.class, () -> ForestObservation.apply(restored, observation, 3));
         assertThrows(IllegalArgumentException.class, () -> restored.forest().require(new TreeReference(reference.id(),

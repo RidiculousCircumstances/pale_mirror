@@ -38,10 +38,10 @@ final class GrayboxGuardContent {
         var trade = new GoodsTradeRules(base.goodsTrade().reviewInterval(), base.goodsTrade().orderLifetime(), base.goodsTrade().maximumBatch(),
                 base.goodsTrade().maximumPairReviews(), policies, supply, base.goodsTrade().pricing());
         return new FrontierRuleset(base.id(), base.schemaVersion(), base.cadence(), base.spatial(), base.rates(), base.facilityCapacity(),
-                base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.combat(), base.hiveCommand(), base.residentLife(), 10L,
                 base.workCatalog().withDefinition(new WorkCatalog.Definition(sword, WorkOperation.PRODUCE, HumanCapability.INDUSTRY, 160)),
-                trade, base.initialSettlementStocks(), base.labour().with(ResidentWorkKind.GUARD, new SettlementLabourRules.Entry(2, 2, 2)),
-                base.expedition(), base.extraction(), base.execution(), production, base.fields(), new ToolCatalog(definitions), base.worldLayout(), base.forestry());
+                trade, base.initialSettlementStocks(), base.labour().with(ResidentWorkKind.GUARD, new SettlementLabourRules.Entry(6, 0, 3)),
+                base.expedition(), base.extraction(), base.execution(), production, base.fields(), new ToolCatalog(definitions), base.worldLayout().withProductionSites(FrontierWorldLayout.ProductionSites.DISPERSED), base.forestry());
     }
     private GrayboxGuardContent() { }
 }

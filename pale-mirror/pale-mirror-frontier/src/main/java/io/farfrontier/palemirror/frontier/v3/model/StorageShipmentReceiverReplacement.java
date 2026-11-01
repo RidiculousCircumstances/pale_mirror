@@ -7,7 +7,7 @@ final class StorageShipmentReceiverReplacement implements ShipmentReceiverReplac
     static final StorageShipmentReceiverReplacement INSTANCE = new StorageShipmentReceiverReplacement();
     @Override public boolean retainedAvailable(FrontierWorldState state, Shipment shipment) {
         var container = state.inventory().containers().get(shipment.receiver().containerId());
-        return container != null && container.storage().map(policy -> policy.endpoint().equals(shipment.receiver())
+        return container != null && container.storage().map(policy -> policy.endpoint().withStation(shipment.receiver().station()).equals(shipment.receiver())
                 && policy.filter().accepts(shipment.itemKind())).orElse(false)
                 && !ReferenceContainerCustody.blocksCanonicalUse(state, container.id())
                 && ContainerStorageAdmission.receive(state, container.id(), shipment.itemKind(), shipment.quantity(), Optional.of(shipment.id()));

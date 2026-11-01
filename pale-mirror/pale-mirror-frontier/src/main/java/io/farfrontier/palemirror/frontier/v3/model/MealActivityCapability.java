@@ -5,6 +5,11 @@ import java.util.Optional;
 
 /** A portion remains owned until consumption or explicit resource reconciliation. */
 final class MealActivityCapability implements ActorActivityCapability {
+    public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
+            FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+    }
+
     @Override public ActorActivityKind kind() { return ActorActivityKind.MEAL; }
     @Override public boolean permitsNavigationOrder(FrontierWorldState state, ActorExecutionId execution,
             io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {

@@ -24,6 +24,7 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
                 .collect(java.util.stream.Collectors.toSet());
         var plan = GrayboxForestPlan.compile(state.bootstrap());
         var headers = ForestKnowledge.knownBy(state, resident.settlementId()).stream().filter(header -> !reserved.contains(header.tree()))
+                .filter(header -> state.siteUses().permits(header.operation(),resident.settlementId(),header.origin()))
                 .filter(header -> state.forest().find(header.tree()).map(tree -> tree.remaining() > 0).orElse(true))
                 .sorted(Comparator.comparingLong((GrayboxForestPlan.Header header) -> distance(origin.support(), header.origin()))
                         .thenComparing(header -> header.tree().id())).limit(MAX_SOURCE_TRIALS).toList();
@@ -52,7 +53,8 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
                     continue;
                 }
                 for (var store : stores) try {
-                    var target = new ForestryWork.Target(tree.reference(), tree.revision(), station, tree.remaining());
+                    var target = new ForestryWork.Target(tree.reference(), tree.revision(), station, tree.remaining(), header.operation(),
+            state.siteUses().operations().get(header.operation()).stream().filter(grant->state.siteUses().areas().get(grant.area()).extent().contains(header.origin())).findFirst().orElseThrow());
                     var event = declaration(state, resident, selected, tree.declaration(), target, output, store, sourceRoute,
                             receipt(ResourceStorageNavigation.plannedPath(state, station, state.actorLocations().get(resident.id()).navigationProfile(), store)));
                     return Optional.of(new ResidentWorkOffer<>(kind(), resident.id(), event,
@@ -90,7 +92,8 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
                 || job.revision() != 1 || job.cargoPart() != 0 || job.pending().isPresent() || job.labour().isPresent() || job.felling().isPresent())
             throw new IllegalArgumentException("forestry admission lost its current permission, demand or generation");
         var target = job.target().orElseThrow(); var source = ForestKnowledge.require(state, target.tree());
-        if (!source.declaration().equals(start.declaration()) || source.revision() != target.sourceRevision() || source.remaining() != target.expectedLogs()
+        if (!job.home().equals(target.use().holder()) || !state.siteUses().operations().getOrDefault(target.operation(),Set.of()).contains(target.use())
+                || !source.declaration().equals(start.declaration()) || source.revision() != target.sourceRevision() || source.remaining() != target.expectedLogs()
                 || source.remaining() > state.bootstrap().ruleset().forestry().cargoItems()
                 || state.forest().work().values().stream().flatMap(work -> work.target().stream()).anyMatch(value ->
                     value.tree().equals(target.tree()) || value.station().equals(target.station())))

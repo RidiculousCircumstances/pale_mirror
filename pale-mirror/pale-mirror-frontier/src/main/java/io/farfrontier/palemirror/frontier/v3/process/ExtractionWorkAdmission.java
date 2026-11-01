@@ -18,7 +18,9 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
             Optional<PedestrianRouteReceipt> sourceRoute, Optional<PedestrianRouteReceipt> storageRoute) { }
     static Optional<Opportunity> opportunity(FrontierWorldState state, ResidentProfile resident, SubjectId siteId, long tick) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared mining site");
-        if (!resident.settlementId().equals(deposit.site().settlementId())
+        if (!state.siteUses().permits(new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.EXTRACTION,siteId),
+            resident.settlementId(), deposit.site().layout().entrance().support())
+                || !resident.settlementId().equals(deposit.site().settlementId())
                 || !ExtractionWorkPlanning.demanded(state, resident.settlementId(), tick)
                 || state.extractionSites().work().size() >= ExtractionSiteState.MAX_WORK) return Optional.empty();
         var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), tick);
@@ -100,7 +102,9 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
             throw new IllegalArgumentException("mining start lacks its current exact admission facts");
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(job.siteId()), "mining admission site");
         var tool = state.inventory().items().get(job.toolId());
-        if (!resident.settlementId().equals(deposit.site().settlementId()) || !ExtractionToolSelection.eligible(state, resident, tool)
+        if (!state.siteUses().permits(new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.EXTRACTION,job.siteId()),
+            resident.settlementId(),deposit.site().layout().entrance().support())
+                || !resident.settlementId().equals(deposit.site().settlementId()) || !ExtractionToolSelection.eligible(state, resident, tool)
                 || !tool.custody().equals(job.toolReturnSlot())
                 || !state.inventory().containers().get(job.toolReturnSlot().containerId()).storage().orElseThrow().endpoint().equals(job.toolSource()))
             throw new IllegalArgumentException("mining start has a changed tool/source or foreign site");

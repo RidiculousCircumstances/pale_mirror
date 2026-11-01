@@ -60,7 +60,10 @@ final class FrontierWorldInitialState {
         containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27, ContainerPurpose.ROUTE_MAINTENANCE));
         fleet.assets().values().forEach(asset -> containers.put(asset.containerId(),
                 new ContainerRecord(asset.containerId(), asset.homeSettlementId(), asset.stackSlots(), ContainerPurpose.MOBILE_STORAGE)));
+        var fieldBuffers=GrayboxFieldStoragePlan.compile(bootstrap);
+        fieldBuffers.forEach(buffer->containers.put(buffer.container().id(),buffer.container()));
         var surfaces = new LinkedHashMap<>(ContainerSurfaceManifest.initial(bootstrap));
+        fieldBuffers.forEach(buffer->surfaces.put(buffer.surface().containerId(),buffer.surface()));
         extraction.deposits().values().forEach(deposit -> surfaces.put(installation.initialContainers().get(deposit.site().id()),
                 new ContainerSurface(installation.initialContainers().get(deposit.site().id()), deposit.site().layout().container(), ContainerSurfaceStatus.UNMATERIALIZED)));
         fleet.assets().values().forEach(asset -> surfaces.put(asset.containerId(),

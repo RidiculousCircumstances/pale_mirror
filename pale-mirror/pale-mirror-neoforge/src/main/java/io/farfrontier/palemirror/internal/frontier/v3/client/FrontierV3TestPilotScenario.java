@@ -11,7 +11,7 @@ import java.util.Set;
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
-            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "observe_harvest_semantics",
+            "wait", "wait_until_block", "wait_until_player_health", "wait_until_diagnostic", "wait_until_harvest_result", "observe_harvest_semantics",
             "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "use_item_on", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
@@ -66,6 +66,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
                             || !action.get("expect").isJsonObject() || !boundedDiagnosticWait(action) || !validOptionalIncreasePath(action)
                             || !validOptionalDiagnosticPollInterval(action))) ||
+                    (type.equals("wait_until_player_health") && !validPlayerHealth(action)) ||
                     (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
                     (type.equals("observe_harvest_semantics") && !validHarvestSemanticsObservation(action)) ||
@@ -106,6 +107,15 @@ final class FrontierV3TestPilotScenario {
      * admission may use ten minutes only when its exact growth stage must advance from the fresh
      * baseline diagnostic; that preserves a typed liveness oracle instead of hiding a stall.
      */
+    private static boolean validPlayerHealth(JsonObject action) {
+        if(!timeout(action,120_000L) || !action.has("minimum") && !action.has("maximum"))return false;
+        for(var key:java.util.List.of("minimum","maximum")) if(action.has(key)) {
+            var value=action.get(key);
+            if(!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber() || !Double.isFinite(value.getAsDouble())
+                    || value.getAsDouble()<0 || value.getAsDouble()>1024)return false;
+        }
+        return !action.has("minimum") || !action.has("maximum") || action.get("minimum").getAsDouble()<=action.get("maximum").getAsDouble();
+    }
     private static boolean boundedDiagnosticWait(JsonObject action) {
         if (timeout(action, 300_000L)) return true;
         if (!timeout(action, 600_000L) || !action.has("view") || !action.has("id") || !action.has("expect")
@@ -420,7 +430,7 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("actor") && (requiredId(reference, "id", "actor:") || requiredId(reference, "id", "resident:"))
                     && diagnosticField.equals("position"))
                 || (view.equals("settlement") && requiredId(reference, "id", "settlement:")
-                && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface")))
+                && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface") || diagnosticField.equals("firstGuardPosition")))
                 || (view.equals("process") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("cursor.retainedBody") || diagnosticField.equals("goal.station")))
                 || (view.equals("process") && requiredId(reference, "id", "shipment:") && diagnosticField.equals("actorBody"))

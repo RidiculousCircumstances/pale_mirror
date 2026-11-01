@@ -8,6 +8,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3TestPilotScenarioTest {
+    @Test void acceptsReadOnlyPlayerHealthObservationButRejectsUnboundedOrInvertedPredicates() {
+        String value="{\"schema\":1,\"actions\":[{\"type\":\"wait_until_player_health\",\"minimum\":1,\"maximum\":19,\"timeoutMs\":30000}]}";
+        assertEquals(1,FrontierV3TestPilotScenario.parse(value).actionCount());
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(value.replace("\"maximum\":19","\"maximum\":0")));
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(value.replace("30000","120001")));
+    }
     @Test void ordinarySaplingGrowthDeclarationHasBoundedNativeItemUse() throws java.io.IOException {
         var source = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",
                 "scenarios", "disposable-forestry-growth-intervention.json"));
