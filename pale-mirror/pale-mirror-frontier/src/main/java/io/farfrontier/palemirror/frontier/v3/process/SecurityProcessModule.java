@@ -24,7 +24,7 @@ final class SecurityProcessModule implements FrontierWorldProcessModule {
                     if(!(movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.GuardMissionLeg)
                             || !movement.executionId().equals(strike.attacker().execution()))
                         return FrontierWorldCommandPlanner.rejected("melee cannot interrupt another activity or mandatory equipment clearance");
-                    var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,movement.executionId(),command.submittedAt().ticks());
+                    var assessment=ActorMovementProcess.ownerTransitionCheckpoint(state,movement.executionId(),command.submittedAt().ticks());
                     if(assessment instanceof ActivityInterruptionPlanner.Waiting)
                         return FrontierWorldCommandPlanner.rejected("melee is waiting for its shared movement checkpoint");
                     var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,movement.order().actorId());

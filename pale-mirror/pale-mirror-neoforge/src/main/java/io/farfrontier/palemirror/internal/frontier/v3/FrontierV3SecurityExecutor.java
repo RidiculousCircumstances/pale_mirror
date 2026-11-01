@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.model.security.*;
-import io.farfrontier.palemirror.frontier.v3.process.ActorMovementInterruptionPlanner;
+import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ActivityInterruptionPlanner;
 import net.minecraft.server.level.*;
 import net.minecraft.world.entity.*;
@@ -107,8 +107,7 @@ public final class FrontierV3SecurityExecutor {
             // An unavailable shared checkpoint is an ordinary wait before any hit.
             // Ask the same sole interruption owner used by canonical admission; do
             // not submit a known-unready proposal or swallow an unexpected rejection.
-            if(approach!=null && new ActorMovementInterruptionPlanner()
-                    .assessForOwnerTransition(state,duty.execution(),tick) instanceof ActivityInterruptionPlanner.Waiting)continue;
+            if(approach!=null && ActorMovementProcess.ownerTransitionCheckpoint(state,duty.execution(),tick) instanceof ActivityInterruptionPlanner.Waiting)continue;
             FrontierV3CommandSubmission.submit(runtime,"combat-prepare",duty.id().value(),new SecurityEvent.Prepared(strike));
             state=runtime.decodedState().orElseThrow();
         }

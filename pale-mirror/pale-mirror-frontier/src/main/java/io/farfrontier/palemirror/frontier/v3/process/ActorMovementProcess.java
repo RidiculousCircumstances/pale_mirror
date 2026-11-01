@@ -53,6 +53,12 @@ public final class ActorMovementProcess {
                 new SimInstant(dueAt), 12, order.actorId(), PROGRESS, 1);
     }
 
+    /** Shared owner-transition assessment; only canonical acceptance applies its planned events. */
+    public static ActivityInterruptionPlanner.Assessment ownerTransitionCheckpoint(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution, long atTick) {
+        return new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,execution,atTick);
+    }
+
     public static BodyPosition bodyAt(FrontierWorldState state, SubjectId actorId, long atTick) {
         return ActorMovementProjection.bodyAt(state, actorId, atTick);
     }
