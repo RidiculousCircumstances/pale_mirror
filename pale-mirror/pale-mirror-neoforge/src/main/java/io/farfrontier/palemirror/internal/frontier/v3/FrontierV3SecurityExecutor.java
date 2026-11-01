@@ -54,9 +54,13 @@ public final class FrontierV3SecurityExecutor {
             int observationRadius=state.bootstrap().ruleset().security().observationRadius();
             var retainedContact=state.security().contacts().get(duty.home());
             if(retainedContact!=null) {
-                var known=level.getEntity(retainedContact.target().entity());
                 var player=retainedContact.target().kind()==CombatTarget.Kind.PLAYER
                         ?level.getServer().getPlayerList().getPlayer(retainedContact.target().entity()):null;
+                // Death removes the body from the level entity index after twenty ticks.
+                // A connected player's actual dead incarnation remains in PlayerList until
+                // respawn/disconnect; use that exact native object, not a missed corpse window.
+                var known=retainedContact.target().kind()==CombatTarget.Kind.PLAYER
+                        ?player:level.getEntity(retainedContact.target().entity());
                 boolean departed=retainedContact.target().kind()==CombatTarget.Kind.PLAYER
                         && (player==null || player.serverLevel()!=level);
                 boolean witnessedDeath=known instanceof LivingEntity living && !living.isAlive()
