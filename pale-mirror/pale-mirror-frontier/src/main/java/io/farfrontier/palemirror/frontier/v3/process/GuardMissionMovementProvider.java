@@ -6,14 +6,14 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState;
 import java.util.*;
 
-/** Declared equipment goals through the common navigator and geometry, never a forest pathfinder. */
+/** Retained security mission goals through the common navigator and geometry. */
 public final class GuardMissionMovementProvider implements ActorMovementProvider {
     @Override public ActorMovementContext.Provider key() { return ActorMovementContext.Provider.GUARD_MISSION; }
     private GuardDuty work(FrontierWorldState state, ActorMovement movement) {
-        if (!(movement.context() instanceof ActorMovementContext.GuardMissionLeg leg)) throw new IllegalArgumentException("foreign guard equipment movement context");
+        if (!(movement.context() instanceof ActorMovementContext.GuardMissionLeg leg)) throw new IllegalArgumentException("foreign guard mission movement context");
         var work = GuardAuthority.require(state, movement.executionId());
         if (!work.id().equals(leg.dutyId()) || work.revision() != leg.revision() || GuardAuthority.pending(state, work)
-                || !work.missionOrder().equals(movement.order())) throw new IllegalArgumentException("stale guard equipment move/goal");
+                || !work.missionOrder().equals(movement.order())) throw new IllegalArgumentException("stale guard mission move/goal");
         state.actorExecutions().requireCurrent(work.execution()); return work;
     }
     @Override public void validate(FrontierWorldState state, ActorMovement movement) { work(state, movement); }
@@ -31,7 +31,7 @@ public final class GuardMissionMovementProvider implements ActorMovementProvider
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         placementKnowledge(state, movement).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
-            throw new IllegalArgumentException("guard equipment route is not its retained goal or bounded prefix");
+            throw new IllegalArgumentException("guard mission route is not its retained goal or bounded prefix");
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         return ServiceApproachSegments.bounded(state, serviceApproach(state, movement), route);

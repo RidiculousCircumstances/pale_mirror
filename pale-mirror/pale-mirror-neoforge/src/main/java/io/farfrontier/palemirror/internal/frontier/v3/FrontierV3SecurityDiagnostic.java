@@ -4,11 +4,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3DiagnosticJson.*;
 /** Read-only family explanation. No role, route, contact or timing mutation. */
 final class FrontierV3SecurityDiagnostic {
-    static String read(FrontierWorldState state, SubjectId home) {
+    static String read(FrontierWorldState state, SubjectId home, long tick) {
         var contact=state.security().contacts().get(home);
         String missions=io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state,home).stream().map(duty->
                 "{\"actor\":\""+quote(duty.execution().actorId().value())+"\",\"phase\":\""+duty.phase()+"\",\"mission\":"
-                +duty.mission().map(mission->"{\"kind\":\""+(mission.response().isPresent()?"RESPOND":"PATROL")
+                +duty.mission().map(mission->"{\"kind\":\""+(mission.response().isEmpty()?"PATROL":io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.contact(state,duty,tick).isPresent()?"RESPOND":"INVESTIGATE")
                         +"\",\"targetKind\":\""+mission.targetKind()+"\",\"target\":\""+quote(mission.target().value())
                         +"\",\"station\":"+position(mission.station().support())+",\"watchUntil\":"+mission.watchUntil()
                         +",\"returnStation\":"+position(mission.post().station().support())+"}").orElse("null")

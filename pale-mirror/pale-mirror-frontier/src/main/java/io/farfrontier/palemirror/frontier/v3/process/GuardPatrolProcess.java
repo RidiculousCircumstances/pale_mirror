@@ -36,6 +36,11 @@ final class GuardPatrolProcess {
             return List.of(scheduled(action,duty,tick+20));
         }
         if(mission.isPresent() && mission.orElseThrow().response().isPresent()) {
+            if (GuardResponse.investigating(state,duty,tick)) {
+                if (!duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()))
+                    return start(state,action,duty,tick);
+                return List.of(scheduled(action,duty,tick+state.bootstrap().ruleset().security().observationInterval()));
+            }
             var resumed=mission.orElseThrow().resume().orElseThrow().mission();
             if(ProtectionObligations.read(state,duty.home()).stream().anyMatch(target->target.kind()==resumed.targetKind() && target.id().equals(resumed.target())))
                 return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),resumed)),GuardContinuation.wake(duty.id(),tick));

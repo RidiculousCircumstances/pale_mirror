@@ -239,3 +239,12 @@ both recur on clean baseline de34b065f. They remain explicit existing gate debt,
 reason to enable or redesign those inactive families. A separate obsolete diagnostic
 assertion expected the removed composite scenes executor; it now checks actual SCENE
 stages after observation. All49 execution rows fit the unchanged8KiB response budget.
+
+
+Native follow-up found a distinct pursuit defect: expiring the60tick live contact
+immediately cancelled the already retained detour to the last-known point. The
+policy now separates live targeting from a bounded400tick investigation. Investigation
+continues only the retained point, can reacquire through ordinary LOS, cannot authorize
+an unseen strike, and ends at its deadline or the pursuit boundary. Diagnostics expose
+INVESTIGATE separately from RESPOND. The restart carrier first establishes local
+visibility; an arbitrary two-block teleport offset had no visibility guarantee.

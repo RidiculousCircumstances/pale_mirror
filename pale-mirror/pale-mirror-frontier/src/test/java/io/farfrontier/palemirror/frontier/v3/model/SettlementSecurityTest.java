@@ -91,7 +91,19 @@ class SettlementSecurityTest {
         var movedContact = new SecurityState.Contact(owner.home(),contact(r).target(),response.station().offset(4,0,0).support(),21002,2);
         var moved = SecurityTransitions.apply(state,owner.home(),new SecurityEvent.Seen(r.body(),movedContact),21002);
         assertTrue(GuardResponse.redirect(moved,owner,21002),"a target outside the admitted adjacent contact must trigger a new approach");
-        state=new GuardMissionSelected(owner.id(),owner.revision(),owner.mission().orElseThrow().post().mission()).apply(state,owner.id(),21100);
+        assertTrue(GuardResponse.contact(state,owner,21100).isEmpty());
+        assertTrue(GuardResponse.investigating(state,owner,21100));
+        var unseenWeapon=state.inventory().items().get(owner.weapon());
+        var unseenStrike=new SecurityState.Strike(owner.id(),owner.revision(),r.body(),contact(r).target(),owner.weapon(),
+                unseenWeapon.condition(),new WeaponProfile(unseenWeapon.itemKind(),6,13,3,1),17,21101,21100);
+        var investigatingState=state;var investigatingDuty=owner;
+        assertThrows(IllegalArgumentException.class,()->SecurityTransitions.apply(investigatingState,investigatingDuty.id(),
+                new SecurityEvent.Prepared(unseenStrike),21100),"an investigation cannot authorize an attack without a live contact");
+        assertFalse(GuardResponse.redirect(state,owner,21100),"loss of sight must not cancel the retained detour before its investigation deadline");
+        long investigationEnd=21001+state.bootstrap().ruleset().security().investigationTicks()+1;
+        assertFalse(GuardResponse.investigating(state,owner,investigationEnd));
+        assertTrue(GuardResponse.redirect(state,owner,investigationEnd));
+        state=new GuardMissionSelected(owner.id(),owner.revision(),owner.mission().orElseThrow().post().mission()).apply(state,owner.id(),investigationEnd);
         var current=state;var duty=state.strategicPlans().guards().get(owner.id());
         assertThrows(IllegalArgumentException.class,()->new GuardMissionSelected(duty.id(),duty.revision(),mission.watching(21260)).apply(current,duty.id(),21100));
         var distant=new GuardMission(target.kind(),target.id(),station.offset(100,0,0),6,0);

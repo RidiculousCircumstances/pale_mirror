@@ -410,7 +410,7 @@ final class FrontierV3DiagnosticJson {
         return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"guardTarget\":" + io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.target(state, subject)
                 + ",\"hasArmedGuard\":"+readyGuard.isPresent()
                 + ",\"guardsApproved\":" + SettlementWorkPolicy.permissions(state,subject).workers(ResidentWorkKind.GUARD).size()
-                + ",\"security\":" + FrontierV3SecurityDiagnostic.read(state,subject)
+                + ",\"security\":" + FrontierV3SecurityDiagnostic.read(state,subject,checkpoint.instant().ticks())
                 + ",\"guardsAssigned\":" + guards.size() + ",\"guardsReady\":" + guards.stream().filter(duty ->
                     state.actorLocations().get(duty.execution().actorId()).condition().status() == ActorLifeStatus.ALIVE
                     && io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state, duty)).count()
