@@ -6,7 +6,7 @@
     "port": 25581
   },
   "pilot": {
-    "username": "PMTestPilot"
+    "username": "PMHotCivilian2"
   },
   "setup": [
     {
@@ -36,6 +36,14 @@
         }
       },
       "settleMs": 0
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
     },
     {
       "type": "command",
@@ -79,7 +87,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 1
+          "hostilePlayers": 2
         }
       },
       "timeoutMs": 60000,
@@ -98,6 +106,19 @@
       "settleMs": 0
     },
     {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
       "type": "wait_until_player_health",
       "maximum": 19,
       "minimum": 1,
@@ -108,7 +129,7 @@
       "dimension": "minecraft:overworld",
       "position": {
         "x": 12,
-        "y": 70,
+        "y": 51,
         "z": -138
       },
       "settleMs": 15000
@@ -120,7 +141,7 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 1,
+          "hostilePlayers": 2,
           "contactKind": null,
           "respondingGuards": 0
         }
@@ -136,13 +157,13 @@
   ],
   "assertions": [
     {
-      "after": 8,
+      "after": 9,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 1,
+          "hostilePlayers": 2,
           "contactKind": null,
           "respondingGuards": 0
         }
