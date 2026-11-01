@@ -8,6 +8,16 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class FrontierV3PilotVisitTargetTest {
     @Test
+    void publicApproachSurfaceBecomesAStandingBodyButActorPositionsRemainBodies() {
+        var declaration=com.google.gson.JsonParser.parseString("""
+                {"diagnostic":{"view":"settlement","id":"settlement:1","field":"routeSurface"}}
+                """).getAsJsonObject();
+        var support=new BlockPos(12,64,17);
+        assertEquals(support.above(),FrontierV3PilotSemanticAnchors.visitTarget(declaration,support).teleportAnchor());
+        declaration.getAsJsonObject("diagnostic").addProperty("field","firstGuardPosition");
+        assertEquals(support,FrontierV3PilotSemanticAnchors.visitTarget(declaration,support).teleportAnchor());
+    }
+    @Test
     void semanticCropBodyRemainsTheDeclaredBodyAndOnlyNormalizesItsClientObservation() {
         BlockPos body = new BlockPos(144, 64, -6);
 

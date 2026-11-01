@@ -16,6 +16,9 @@ final class FrontierV3PilotSemanticAnchors {
         JsonObject reference = declaration.getAsJsonObject("diagnostic");
         String view = reference.get("view").getAsString();
         String field = reference.get("field").getAsString();
+        // SettlementAccessPort publishes the supporting floor, not a standing body.
+        if (view.equals("settlement") && field.equals("routeSurface"))
+            return FrontierV3PilotVisitTarget.fromSemanticBody(resolved.above());
         // Crop slots name exact standing body cells. Support is derived solely by the observer.
         return view.equals("site") && (field.equals("firstCrop") || field.equals("lastCrop"))
                 ? FrontierV3PilotVisitTarget.fromSemanticBody(resolved)
