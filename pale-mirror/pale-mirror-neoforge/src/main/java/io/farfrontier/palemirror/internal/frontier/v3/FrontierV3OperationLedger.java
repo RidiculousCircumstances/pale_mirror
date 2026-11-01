@@ -148,7 +148,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         byProtocol.computeIfAbsent(declaration.protocol(), ignored -> new LinkedHashSet<>()).add(value.ticket());
         pendingParticipants += declaration.participants().size();
         observedSince.put(value.ticket(), System.nanoTime());
-        if (declaration.participants().stream().noneMatch(p -> p.medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT))
+        if (declaration.participants().stream().noneMatch(p -> (p.medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT || p.medium() == FrontierV3OperationReceipt.Medium.OBSERVED_EVENT)))
             unattempted.add(value.ticket());
         changedOperations.add(value.ticket()); setDirty(); return value;
     }

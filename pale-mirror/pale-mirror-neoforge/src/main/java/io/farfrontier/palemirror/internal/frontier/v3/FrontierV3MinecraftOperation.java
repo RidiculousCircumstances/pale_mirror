@@ -31,7 +31,8 @@ final class FrontierV3MinecraftOperation {
         Request {
             Objects.requireNonNull(declaration); participants = List.copyOf(participants);
             Objects.requireNonNull(before); Objects.requireNonNull(effect); Objects.requireNonNull(after);
-            if (participants.stream().anyMatch(p -> p.identity().medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT))
+            if (participants.stream().anyMatch(p -> p.identity().medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT
+                    || p.identity().medium() == FrontierV3OperationReceipt.Medium.OBSERVED_EVENT))
                 throw new IllegalArgumentException("a saved observation is not a mutation port");
             var identities = participants.stream().map(Participant::identity).collect(java.util.stream.Collectors.toSet());
             if (identities.size() != participants.size() || !identities.equals(declaration.participants()))

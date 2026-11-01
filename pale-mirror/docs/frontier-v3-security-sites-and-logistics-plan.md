@@ -191,7 +191,7 @@ not block protection: ordinary player edits keep their existing causal handling.
   and continuous-operation claims retain M0/M1/M2/M3 distinctions. Completion is
   implementation+verified private delivery, not merely this plan's existence.
 
-Implementation status: schema315 source implemented, integration/native acceptance in progress.
+Implementation status: schema316 source implemented, integration/native acceptance in progress.
 The initial site policy keeps existing operating declarations bound for their lifetime;
 unbound reservations may be released, while a bound right cannot disappear under
 work or stored effects. Automatic operating-site decommissioning, contested claims
@@ -255,3 +255,13 @@ construct ActorMovementInterrupted from a guessed current position. A native ala
 caught the former bypass while an old lease still named its prior goal; the existing
 movement invariant correctly rejected it. Family continuation retains a wait until the
 common owner acknowledges the exact checkpoint.
+
+Confirmed one-off native observations now use the existing operation journal's indexed
+NATIVE_OBSERVATION/OBSERVED_EVENT envelope. This is a durable event witness, never a
+Minecraft mutation port or a saved-health image. The existing canonical confirmation
+protocol retains/retries it over PREDECESSOR/DURABILITY waits, protects command receipts,
+and retires it only after durable acceptance. No parallel event queue or resource store.
+A harm victim supplies exact body identity, not permission to actuate its current job;
+current or exactly retained retired-body evidence validates the observation. Schema316
+changes the incident payload explicitly. The carrier confirms settlement hostility after
+its fist packet and captures target health at attack time, avoiding unrelated fall damage.

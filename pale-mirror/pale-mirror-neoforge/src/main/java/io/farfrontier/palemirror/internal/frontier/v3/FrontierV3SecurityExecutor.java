@@ -24,10 +24,13 @@ public final class FrontierV3SecurityExecutor {
         var state=runtime.decodedState().orElseThrow();var declaration=FrontierV3ActorCarrierComposition.declaredBy(victim).orElse(null);
         if(declaration==null || declaration.owner()!=FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY)return;
         var resident=state.humanPopulation().resident(declaration.actorId());if(resident==null)return;
-        var entry=state.actorExecutions().actors().get(resident.id());if(entry==null||entry.current().isEmpty())return;
-        var actuation=new ActorActuationId(new ActorBodyId(resident.id(),declaration.epoch()),entry.current().orElseThrow());
-        FrontierV3CommandSubmission.submit(runtime,"security-harm",resident.id().value(),
-                new SecurityEvent.Incident(resident.settlementId(),actuation,player.getUUID(),damage));
+        var body=new ActorBodyId(resident.id(),declaration.epoch());
+        if(!victim.getUUID().equals(ActorBodyId.entityId(state.bootstrap().worldId(),body.actorId())))return;
+        var binding=state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(body.actorId()));
+        if(binding==null || binding.authorityEpoch()!=body.physicalEpoch())return; // A stale replica is not this resident's body.
+        ActorBodyAuthority.require(state,body); // The victim need not have an active job or a running actuator.
+        FrontierV3ConfirmedNativeEvent.capture(level,resident.settlementId(),
+                new SecurityEvent.Incident(resident.settlementId(),body,player.getUUID(),damage));
     }
     static void tick(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime) {
         var state=runtime.decodedState().orElseThrow();

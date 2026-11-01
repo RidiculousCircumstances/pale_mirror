@@ -12,7 +12,7 @@ final class SecurityPayloadCodecs {
             if(!payload.type().equals(type))throw new IllegalArgumentException("foreign security payload");
             try{var bytes=new ByteArrayOutputStream();var out=new DataOutputStream(bytes);
                 switch((SecurityEvent)payload){
-                    case SecurityEvent.Incident v->{SecurityStateCodec.id(out,v.home());SecurityStateCodec.actuation(out,v.victim());SecurityStateCodec.uuid(out,v.attacker());out.writeDouble(v.observedDamage());}
+                    case SecurityEvent.Incident v->{SecurityStateCodec.id(out,v.home());SecurityStateCodec.body(out,v.victim());SecurityStateCodec.uuid(out,v.attacker());out.writeDouble(v.observedDamage());}
                     case SecurityEvent.Seen v->{SecurityStateCodec.actuation(out,v.observer());SecurityStateCodec.contact(out,v.contact());}
                     case SecurityEvent.Prepared v->SecurityStateCodec.strike(out,v.strike());
                     case SecurityEvent.Completed v->{SecurityStateCodec.id(out,v.duty());out.writeLong(v.attemptOrdinal());out.writeBoolean(v.applied());SecurityStateCodec.condition(out,v.after());}
@@ -21,7 +21,7 @@ final class SecurityPayloadCodecs {
         }
         public FrontierPayload decode(byte[] bytes){try{var in=new DataInputStream(new ByteArrayInputStream(bytes));
             FrontierPayload result=switch(type){
-                case SecurityEvent.Incident.TYPE->new SecurityEvent.Incident(SecurityStateCodec.id(in),SecurityStateCodec.actuation(in),SecurityStateCodec.uuid(in),in.readDouble());
+                case SecurityEvent.Incident.TYPE->new SecurityEvent.Incident(SecurityStateCodec.id(in),SecurityStateCodec.body(in),SecurityStateCodec.uuid(in),in.readDouble());
                 case SecurityEvent.Seen.TYPE->new SecurityEvent.Seen(SecurityStateCodec.actuation(in),SecurityStateCodec.contact(in));
                 case SecurityEvent.Prepared.TYPE->new SecurityEvent.Prepared(SecurityStateCodec.strike(in));
                 case SecurityEvent.Completed.TYPE->new SecurityEvent.Completed(SecurityStateCodec.id(in),in.readLong(),in.readBoolean(),SecurityStateCodec.condition(in));

@@ -7,8 +7,8 @@ public final class SecurityTransitions {
     public static FrontierWorldState apply(FrontierWorldState state,SubjectId subject,SecurityEvent event,long tick){
         var security=state.security();var update=FrontierWorldStateUpdate.begin();
         if(event instanceof SecurityEvent.Incident incident){
-            ActorBodyAuthority.requireActuation(state,incident.victim());
-            var resident=state.humanPopulation().resident(incident.victim().body().actorId());
+            ActorBodyAuthority.requireObservation(state,incident.victim());
+            var resident=state.humanPopulation().resident(incident.victim().actorId());
             if(!subject.equals(incident.home()) || resident==null || !resident.settlementId().equals(incident.home()))
                 throw new IllegalArgumentException("harm report lost its exact victim/home");
             security=security.offence(incident.home(),incident.attacker(),tick);

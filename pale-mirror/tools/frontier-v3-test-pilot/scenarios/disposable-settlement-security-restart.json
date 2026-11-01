@@ -86,6 +86,17 @@
       "causalMilestone": "player_harmed_declared_guard"
     },
     {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
       "type": "wait_until_player_health",
       "maximum": 19,
       "minimum": 1,
@@ -169,7 +180,7 @@
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 6,
+    "afterAction": 7,
     "resumeSetup": [
       {
         "type": "command",
@@ -221,7 +232,7 @@
   },
   "assertions": [
     {
-      "after": 6,
+      "after": 7,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -233,7 +244,7 @@
       }
     },
     {
-      "after": 11,
+      "after": 12,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {

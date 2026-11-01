@@ -100,6 +100,16 @@ public final class ActorBodyAuthority {
         Objects.requireNonNull(state, "body authority state"); Objects.requireNonNull(body, "body identity");
         return require(state.fencedRecovery(), body);
     }
+    /** Historical physical observation does not grant a live actuator or depend on its current job. */
+    public static void requireObservation(FrontierWorldState state, ActorBodyId body) {
+        Objects.requireNonNull(body); var key=ActorBodyId.recoveryBindingId(body.actorId());
+        var current=state.fencedRecovery().current().get(key);
+        if(current!=null && current.authorityEpoch()==body.physicalEpoch()) { require(state,body); return; }
+        var retired=state.fencedRecovery().tombstones().get(key);
+        if(retired==null || retired.asset()!=FencedRecoveryAsset.BODY || !retired.ownerId().equals(body.actorId())
+                || retired.ownerRevision()!=0 || retired.retiredEpoch()!=body.physicalEpoch())
+            throw new IllegalArgumentException("observation lost its exact current or retired body identity");
+    }
     /**
      * Read-only identity fence for a dependent owner's saved-departure checkpoint.
      * Retirement ends actuation, not the exact physical evidence retained by that owner.

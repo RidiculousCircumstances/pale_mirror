@@ -8,6 +8,7 @@ final class FrontierV3PhysicalExecutors {
     private static final FrontierV3PhysicalExecutorRegistry REGISTRY = compose();
     private static FrontierV3PhysicalExecutorRegistry compose() {
         var stages = new java.util.ArrayList<>(List.of(
+            executor("confirmed-native-events", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "confirmed-native-events", FrontierV3ConfirmedNativeEvent::tick),
             executor("meal-departure-recovery", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "meal-departure-recovery", FrontierV3ResidentMealDepartureRecovery::tick),
             executor("field-equipment-recovery", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "field-equipment-recovery", FrontierV3FieldEquipmentExecutor::recoverDeparture),
             executor("forest-generation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "forest-generation-observation", FrontierV3ForestryObservation::tick),

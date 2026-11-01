@@ -19,7 +19,7 @@ class SettlementSecurityTest {
         return new Ready(state,duty,new ActorActuationId(body,duty.execution()),new UUID(42,17));
     }
     private static FrontierWorldState offence(Ready ready){return SecurityTransitions.apply(ready.state(),ready.duty().home(),
-            new SecurityEvent.Incident(ready.duty().home(),ready.body(),ready.offender(),1),21000);}
+            new SecurityEvent.Incident(ready.duty().home(),ready.body().body(),ready.offender(),1),21000);}
     private static SecurityState.Contact contact(Ready ready){return new SecurityState.Contact(ready.duty().home(),
             new CombatTarget(CombatTarget.Kind.PLAYER,ready.offender(),"pale_mirror:frontier_graybox"),
             ready.state().actorLocations().get(ready.body().body().actorId()).supportingSurface().support().offset(1,0,0),21001,1);}
@@ -32,7 +32,7 @@ class SettlementSecurityTest {
         assertTrue(GuardResponse.contact(state,r.duty(),21002).isPresent());
         assertTrue(GuardResponse.contact(state,r.duty(),21100).isEmpty());
         assertTrue(state.security().hostile(r.duty().home(),r.offender()));
-        assertThrows(IllegalArgumentException.class,()->new SecurityEvent.Incident(r.duty().home(),r.body(),r.offender(),0));
+        assertThrows(IllegalArgumentException.class,()->new SecurityEvent.Incident(r.duty().home(),r.body().body(),r.offender(),0));
         assertThrows(IllegalArgumentException.class,()->SecurityTransitions.apply(r.state(),r.duty().home(),seen,21001));
     }
     @Test void oneGuardObservationWakesEveryAppointmentThroughTheRealRegisteredCommandBoundary(){
@@ -132,6 +132,18 @@ class SettlementSecurityTest {
                 lease.withGoal(AmbientGoalKind.ACTOR_MOVEMENT,move.order().legalStations().getFirst().standingBody()))));
         var readyEvents=GuardWorkProcess.progress(state,action,21002);
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted.class,readyEvents.getFirst().payload());
+    }
+
+    @Test void harmObservesTheBodyEvenBeforeItsActuatorRunsAndRejectsAFalseEpoch() {
+        var base=Fixture.ARMED;var duty=base.strategicPlans().guards().values().iterator().next();
+        var state=ActorBodyAuthority.demand(base,duty.execution().actorId());var body=ActorBodyAuthority.current(state,duty.execution().actorId());
+        assertThrows(IllegalArgumentException.class,()->ActorBodyAuthority.requireActuation(state,new ActorActuationId(body,duty.execution())));
+        var fact=new SecurityEvent.Incident(duty.home(),body,new UUID(17,45),1);
+        var codecs=FrontierWorldRuntimeDefinition.payloadCodecs();assertEquals(fact,codecs.decode(fact.type(),codecs.encode(fact)));
+        var harmed=SecurityTransitions.apply(state,duty.home(),fact,21001);assertTrue(harmed.security().hostile(duty.home(),fact.attacker()));
+        var falseBody=new ActorBodyId(body.actorId(),body.physicalEpoch()+1);
+        assertThrows(IllegalArgumentException.class,()->SecurityTransitions.apply(state,duty.home(),
+                new SecurityEvent.Incident(duty.home(),falseBody,fact.attacker(),1),21001));
     }
 
 }

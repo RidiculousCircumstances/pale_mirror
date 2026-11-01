@@ -10,6 +10,8 @@ final class SecurityStateCodec {
     static SubjectId id(DataInputStream in)throws IOException{return new SubjectId(in.readUTF());}
     static void uuid(DataOutputStream out,UUID id)throws IOException{out.writeLong(id.getMostSignificantBits());out.writeLong(id.getLeastSignificantBits());}
     static UUID uuid(DataInputStream in)throws IOException{return new UUID(in.readLong(),in.readLong());}
+    static void body(DataOutputStream out,ActorBodyId value)throws IOException{id(out,value.actorId());out.writeLong(value.physicalEpoch());}
+    static ActorBodyId body(DataInputStream in)throws IOException{return new ActorBodyId(id(in),in.readLong());}
     static void actuation(DataOutputStream out,ActorActuationId value)throws IOException{
         id(out,value.body().actorId());out.writeLong(value.body().physicalEpoch());ActorExecutionStateCodec.writeId(out,value.execution());
     }

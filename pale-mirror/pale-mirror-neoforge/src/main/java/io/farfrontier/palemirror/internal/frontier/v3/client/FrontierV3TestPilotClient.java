@@ -708,6 +708,10 @@ public final class FrontierV3TestPilotClient {
         minecraft.options.keyUp.setDown(false);
         long tick = minecraft.level.getGameTime();
         if (entityAttackAttempts < maximumAttempts && (lastEntityAttackTick == Long.MIN_VALUE || tick - lastEntityAttackTick >= 12L)) {
+            if(requireDamage && entityAttackAttempts==0 && target instanceof LivingEntity living) {
+                if(living.hurtTime>0) { timeout(minecraft,action,"waiting for the native hurt invulnerability window"); return; }
+                attackedEntityInitialHealth=living.getHealth();
+            }
             minecraft.gameMode.attack(minecraft.player, target);
             entityAttackAttempts++;
             lastEntityAttackTick = tick;
