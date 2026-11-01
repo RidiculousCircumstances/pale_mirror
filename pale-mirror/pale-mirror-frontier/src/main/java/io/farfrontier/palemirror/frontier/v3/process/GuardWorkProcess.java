@@ -70,7 +70,9 @@ public final class GuardWorkProcess {
         var activeMove = state.actorMovements().get(duty.execution().actorId());
         if (activeMove != null) {
             if(activeMove.context() instanceof ActorMovementContext.GuardMissionLeg
-                    && io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.redirect(state,duty,tick)) {
+                    && io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.redirect(state,duty,tick)
+                    || activeMove.context() instanceof ActorMovementContext.GuardEquipment
+                    && !GuardEquipment.carried(state,duty) && GuardStaffingRelease.requested(state,duty)) {
                 var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,duty.execution(),tick);
                 if(assessment instanceof ActivityInterruptionPlanner.Waiting)return retry(state,action,tick);
                 var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,duty.execution().actorId());
@@ -90,7 +92,10 @@ public final class GuardWorkProcess {
             return cancelled(action);
         }
         var item = state.inventory().items().get(duty.weapon());
-        boolean carried = item != null && item.custody().equals(new InventoryCustody.Actor(duty.execution().actorId()));
+        boolean carried = GuardEquipment.carried(state,duty);
+        if (!carried && duty.phase()!=GuardDuty.Phase.RETURNING && GuardStaffingRelease.requested(state,duty))
+            return List.of(changed(duty,GuardDutyEvent.Change.ENDED),cancel(action),
+                    ResidentActivityProcess.wakeAfterActivity(duty.execution().actorId(),tick));
         if (duty.phase() == GuardDuty.Phase.RETURNING && !carried) {
             var events = new ArrayList<ProposedEvent>();
             var clearance = clearance(state, duty, tick);

@@ -52,6 +52,21 @@ public final class FrontierV3SecurityExecutor {
             if(!(entity instanceof Mob guard))continue;
             visited++;var actuation=FrontierV3ActorActuation.capture(state,guard,duty.execution(),runtime::decodedState).id();
             int observationRadius=state.bootstrap().ruleset().security().observationRadius();
+            var retainedContact=state.security().contacts().get(duty.home());
+            if(retainedContact!=null) {
+                var known=level.getEntity(retainedContact.target().entity());
+                var player=retainedContact.target().kind()==CombatTarget.Kind.PLAYER
+                        ?level.getServer().getPlayerList().getPlayer(retainedContact.target().entity()):null;
+                boolean departed=retainedContact.target().kind()==CombatTarget.Kind.PLAYER
+                        && (player==null || player.serverLevel()!=level);
+                boolean witnessedDeath=known instanceof LivingEntity living && !living.isAlive()
+                        && guard.distanceToSqr(living)<=observationRadius*(double)observationRadius && guard.hasLineOfSight(living);
+                if(departed || witnessedDeath) {
+                    FrontierV3CommandSubmission.submit(runtime,"security-contact-ended",duty.id().value(),
+                            new SecurityEvent.ContactEnded(actuation,duty.home(),retainedContact.target(),retainedContact.revision()));
+                    state=runtime.decodedState().orElseThrow();
+                }
+            }
             var candidates=level.getEntitiesOfClass(LivingEntity.class,guard.getBoundingBox().inflate(observationRadius),
                     target->target!=guard && target.isAlive() && !(target instanceof ServerPlayer p && (p.isCreative()||p.isSpectator())));
             var basis=state;

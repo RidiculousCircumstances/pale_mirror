@@ -94,6 +94,23 @@ class GuardDutyTest {
         assertThrows(IllegalArgumentException.class, () -> finalState.withStrategicPlans(finalState.strategicPlans().withoutGuard(duty.id())));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
+    @Test void withdrawnUnarmedAppointmentReleasesTheResidentButCannotAbandonACarriedSword() {
+        var state=armed();var duty=state.strategicPlans().guards().values().iterator().next();
+        var permissions=SettlementWorkPolicy.permissions(state,duty.home()).withoutResident(duty.execution().actorId());
+        state=state.withStrategicPlans(state.strategicPlans().withWorkPermissions(duty.home(),permissions));
+        var stillArmed=state;
+        var ended=new GuardDutyEvent.Changed(duty.id(),duty.revision(),GuardDutyEvent.Change.ENDED,Optional.empty());
+        assertThrows(IllegalArgumentException.class,()->GuardDutyTransitions.apply(stillArmed,duty.id(),ended,21001));
+        var item=state.inventory().items().get(duty.weapon());
+        state=state.withInventory(state.inventory().moveObservedItem(item.id(),item.custody(),new InventoryCustody.Player(new UUID(23,17))));
+        var acquiring=duty.acquiring(item.id(),duty.source());
+        state=state.withStrategicPlans(state.strategicPlans().withGuard(acquiring));
+        state=apply(state,GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21001),21001),21001);
+        assertFalse(state.strategicPlans().guards().containsKey(duty.id()));
+        assertTrue(state.actorExecutions().actors().get(duty.execution().actorId()).current().isEmpty());
+        assertEquals(new InventoryCustody.Player(new UUID(23,17)),state.inventory().items().get(item.id()).custody());
+        assertEquals(state,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
     @Test void guardEatsFromPocketAndResumesTheSameAppointmentWithTheSameSword() {
         var state = armed(); var duty = state.strategicPlans().guards().values().iterator().next(); var actor = duty.execution().actorId();
         var sword = state.inventory().items().get(duty.weapon());

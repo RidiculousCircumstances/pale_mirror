@@ -17,6 +17,7 @@ final class FrontierV3SecurityDiagnostic {
                 .filter(duty->duty.mission().flatMap(io.farfrontier.palemirror.frontier.v3.model.security.GuardMission::response).isPresent()).count()
                 +",\"missions\":"+missions+",\"hostilePlayers\":"+state.security().hostility().keySet().stream().filter(relation->relation.home().equals(home)).count()
                 +",\"contactAt\":"+(contact==null?"null":Long.toString(contact.atTick()))
+                +",\"contactKind\":"+(contact==null?"null":"\""+contact.target().kind()+"\"")
                 +",\"contactTarget\":"+(contact==null?"null":"\""+quote(contact.target().entity().toString())+"\"")
                 +",\"heldSites\":"+strings(state.siteUses().held(home).stream().map(area->area.id().value()).toList())+"}";
     }

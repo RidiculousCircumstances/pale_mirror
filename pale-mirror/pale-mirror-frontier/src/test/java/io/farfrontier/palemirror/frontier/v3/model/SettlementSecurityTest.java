@@ -51,6 +51,8 @@ class SettlementSecurityTest {
         var strike=new SecurityState.Strike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),
                 new WeaponProfile(item.itemKind(),6,13,3,1),17,21002,21001);
         state=SecurityTransitions.apply(state,r.duty().id(),new SecurityEvent.Prepared(strike),21001);
+        state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.ContactEnded(r.body(),r.duty().home(),strike.target(),1),21002);
+        assertEquals(strike,state.security().pending().get(r.duty().id()),"ending contact cannot discard an unsettled native effect");
         assertEquals(Optional.of(r.duty().id()),ActorInventoryInteractionFences.pendingOwner(state,r.body().body().actorId()));
         assertFalse(ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD).checkpoint(state,r.duty().execution()).ready());
         var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));var pending=state;
@@ -58,6 +60,22 @@ class SettlementSecurityTest {
         state=SecurityTransitions.apply(state,r.duty().id(),new SecurityEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21002);
         assertTrue(state.security().pending().isEmpty());assertEquals(item.condition().wear(1),state.inventory().items().get(item.id()).condition());
         assertEquals(21015L,state.security().nextAttack().get(r.duty().id()));
+    }
+    @Test void endedOpportunityWakesTheWholeCohortWithoutErasingHostilityOrANewerContact() {
+        var r=ready();var state=offence(r);
+        state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        var ended=new SecurityEvent.ContactEnded(r.body(),r.duty().home(),contact(r).target(),1);
+        var codecs=FrontierWorldRuntimeDefinition.payloadCodecs();assertEquals(ended,codecs.decode(ended.type(),codecs.encode(ended)));
+        var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,new CommandId("test:contact-ended"),state.bootstrap().worldId(),Revision.ZERO,
+                new SimInstant(21002),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(new CommandId("test:contact-ended")),ended);
+        var plan=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                FrontierWorldProcessCatalog.planCommand("security",state,command));
+        assertEquals(1+GuardEquipment.in(state,r.duty().home()).size(),plan.events().size());
+        var current=SecurityTransitions.apply(state,r.duty().home(),ended,21002);
+        assertTrue(current.security().contacts().isEmpty());assertTrue(current.security().hostile(r.duty().home(),r.offender()));
+        var newer=new SecurityState.Contact(contact(r).home(),contact(r).target(),contact(r).position(),21002,2);
+        var refreshed=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),newer),21002);
+        assertThrows(IllegalArgumentException.class,()->SecurityTransitions.apply(refreshed,r.duty().home(),ended,21003));
     }
     @Test void patrolTravelsAndWatchesThroughTheRealQueueWithRetainedPostsAcrossSnapshot() {
         var state=Fixture.ARMED;

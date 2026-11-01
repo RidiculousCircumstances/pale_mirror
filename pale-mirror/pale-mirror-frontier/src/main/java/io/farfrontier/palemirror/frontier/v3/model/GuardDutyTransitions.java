@@ -36,8 +36,8 @@ public final class GuardDutyTransitions {
         }
         if (changed.change() == GuardDutyEvent.Change.ENDED) {
             if (state.actorLocations().get(duty.execution().actorId()).condition().status() == ActorLifeStatus.ALIVE
-                    && (duty.phase() != GuardDuty.Phase.RETURNING || state.inventory().items().get(duty.weapon()) != null
-                        && state.inventory().items().get(duty.weapon()).custody().equals(new InventoryCustody.Actor(duty.execution().actorId()))))
+                    && (GuardEquipment.carried(state,duty) || duty.phase() != GuardDuty.Phase.RETURNING
+                        && !GuardStaffingRelease.requested(state,duty)))
                 throw new IllegalArgumentException("living guard cannot abandon its appointment or carried equipment");
             var executions = state.actorExecutions();
             if (executions.actors().get(duty.execution().actorId()).current().equals(Optional.of(duty.execution())))

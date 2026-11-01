@@ -23,6 +23,14 @@ public final class SecurityTransitions {
             if(SecurityCoverage.distance(origin,new SurfaceAnchor(contact.position()))>state.bootstrap().ruleset().security().observationRadius()*2L)
                 throw new IllegalArgumentException("security contact lies beyond bounded observation");
             security=security.observed(contact);
+        }else if(event instanceof SecurityEvent.ContactEnded ended){
+            ActorBodyAuthority.requireActuation(state,ended.observer());
+            var guard=GuardAuthority.require(state,ended.observer().execution());
+            var contact=security.contacts().get(ended.home());
+            if(!subject.equals(ended.home()) || !guard.home().equals(ended.home()) || guard.phase()!=GuardDuty.Phase.ON_DUTY
+                    || contact==null || !contact.target().equals(ended.target()) || contact.revision()!=ended.expectedRevision())
+                throw new IllegalArgumentException("ended contact lost its exact observer or predecessor");
+            security=security.contactEnded(ended.home());
         }else if(event instanceof SecurityEvent.Prepared prepared){
             var strike=prepared.strike();ActorBodyAuthority.requireActuation(state,strike.attacker());
             var guard=GuardAuthority.require(state,strike.attacker().execution());var contact=security.contacts().get(guard.home());

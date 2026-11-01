@@ -9,10 +9,14 @@ public final class GuardEquipment {
     public static final String MELEE_WEAPON = "pale_mirror:melee_weapon";
     public static final EquipmentRequirement.Capability CAPABILITY = new EquipmentRequirement.Capability(MELEE_WEAPON, 0);
     public static final EquipmentRequirements REQUIREMENTS = EquipmentRequirements.all(Set.of(CAPABILITY));
+    public static boolean carried(FrontierWorldState state, GuardDuty duty) {
+        var item = state.inventory().items().get(duty.weapon());
+        return item != null && item.custody().equals(new InventoryCustody.Actor(duty.execution().actorId()));
+    }
     public static boolean held(FrontierWorldState state, GuardDuty duty) {
         var item = state.inventory().items().get(duty.weapon());
         return item != null && item.economicOwnerId().equals(duty.home())
-                && item.custody().equals(new InventoryCustody.Actor(duty.execution().actorId()))
+                && carried(state, duty)
                 && REQUIREMENTS.serviceable(state.bootstrap().ruleset().tools(), item);
     }
     public static int target(FrontierWorldState state, SubjectId home) {

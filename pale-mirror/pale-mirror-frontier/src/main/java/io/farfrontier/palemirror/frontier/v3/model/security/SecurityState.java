@@ -49,6 +49,9 @@ public record SecurityState(Map<Relation, Offence> hostility, Map<SubjectId, Con
         if(pending.containsKey(strike.duty()))throw new IllegalArgumentException("guard already retains a strike");
         return new SecurityState(hostility,contacts,ImmutableLookupMap.withEntry(pending,strike.duty(),strike),nextAttack);
     }
+    public SecurityState contactEnded(SubjectId home) {
+        return new SecurityState(hostility,ImmutableLookupMap.withoutEntry(contacts,home),pending,nextAttack);
+    }
     public SecurityState retired(SubjectId duty) {
         if(pending.containsKey(duty))throw new IllegalArgumentException("cannot retire an unsettled combat owner");
         return new SecurityState(hostility,contacts,pending,ImmutableLookupMap.withoutEntry(nextAttack,duty));
