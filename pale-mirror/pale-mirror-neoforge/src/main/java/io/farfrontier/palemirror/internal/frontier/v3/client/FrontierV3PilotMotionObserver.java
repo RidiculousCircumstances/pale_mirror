@@ -188,7 +188,7 @@ final class FrontierV3PilotMotionObserver {
     private static boolean matches(Entity body, ResourceLocation expectedType, String expectedName, UUID expectedUuid) {
         return body != null && !body.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(body.getType()).equals(expectedType)
                 && (expectedUuid == null || expectedUuid.equals(body.getUUID()))
-                && (expectedName.isBlank() || body.isCustomNameVisible() && body.getCustomName() != null && body.getCustomName().getString().contains(expectedName));
+                && (expectedName.isBlank() || body.getCustomName() != null && body.getCustomName().getString().contains(expectedName));
     }
     private static Entity exactVisibleEntity(Minecraft minecraft, ResourceLocation expectedType, String expectedName, UUID expectedUuid, double maximum) {
         return minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->

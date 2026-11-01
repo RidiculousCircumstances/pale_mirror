@@ -38,7 +38,7 @@ final class FrontierV3TestPilotPresentation {
     static Entity nearestVisibleNamedEntity(Minecraft minecraft, ResourceLocation expectedType, String expectedName, double maximum) {
         return minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
                         !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
-                                && (entity instanceof Display.TextDisplay || entity.isCustomNameVisible())
+                                // A hover-only name does not make the locally rendered body invisible.
                                 && entity.getCustomName() != null && entity.getCustomName().getString().contains(expectedName)
                                 && minecraft.player.hasLineOfSight(entity))
                 .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
