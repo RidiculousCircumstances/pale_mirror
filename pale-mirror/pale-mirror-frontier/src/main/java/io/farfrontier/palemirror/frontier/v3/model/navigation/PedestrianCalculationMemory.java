@@ -64,12 +64,22 @@ public final class PedestrianCalculationMemory {
     }
     static boolean capturable(PedestrianRouteResult result) { return result.status() != PedestrianRouteResult.Status.PLANNING && !result.awaitable(); }
     private final List<Read> reads;
-    private PedestrianCalculationMemory(List<Read> reads) { this.reads = List.copyOf(reads); }
+    /** Derived lookup over these same immutable facts, never a second result authority. */
+    private final Map<PedestrianDemandKey, Read> byDemand;
+    private PedestrianCalculationMemory(List<Read> reads) {
+        this.reads = List.copyOf(reads);
+        var index = new HashMap<PedestrianDemandKey, Read>();
+        for (var read : this.reads) index.put(read.key, read);
+        byDemand = Collections.unmodifiableMap(index);
+    }
     public static PedestrianCalculationMemory empty() { return EMPTY; }
-    Optional<Read> find(PedestrianRouteRequest request) { return reads.stream().filter(read -> read.matches(request)).findFirst(); }
+    Optional<Read> find(PedestrianRouteRequest request) {
+        var read = byDemand.get(PedestrianDemandKey.of(request));
+        return read != null && read.fence.matches(request.geometry()) ? Optional.of(read) : Optional.empty();
+    }
     /** Delivery acknowledgment is independent of later geometry validity or business time. */
     public boolean holdsReadFor(PedestrianRouteRequest request) {
-        var key = PedestrianDemandKey.of(request); return reads.stream().anyMatch(read -> read.key.equals(key));
+        return byDemand.containsKey(PedestrianDemandKey.of(request));
     }
     public PedestrianCalculationMemory including(Read read) {
         var builder = new Builder(); builder.addAll(this); builder.add(Objects.requireNonNull(read)); return builder.snapshot();

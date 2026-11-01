@@ -29,7 +29,10 @@ public final class ServiceClearanceRoutes {
                         ignored -> ServiceBoundaryComposition.geometry(state, declaration.identity())))
                 .anyMatch(point -> ServiceAreaDestinations.temporary(point, surface));
     }
-    public boolean publicDestination(SurfaceAnchor surface) { return publicGeometry.traversable(List.of(surface)); }
+    public boolean publicDestination(SurfaceAnchor surface) {
+        return !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(surface.support())
+                && publicGeometry.traversable(List.of(surface));
+    }
 
     public boolean allows(List<SurfaceAnchor> route) {
         if (route.isEmpty() || !route.getFirst().equals(origin) || !publicDestination(route.getLast())) return false;

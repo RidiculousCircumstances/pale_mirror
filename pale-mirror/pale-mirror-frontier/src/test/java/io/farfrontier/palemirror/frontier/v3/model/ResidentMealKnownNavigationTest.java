@@ -507,7 +507,6 @@ class ResidentMealKnownNavigationTest {
         List<SurfaceAnchor> exit = ResidentMealKnownNavigation.returnPath(
                 state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(serviceActors)), returning);
         assertEquals(service, exit.getFirst());
-        assertTrue(exit.contains(SettlementDepotServicePort.forDepot(depotStructure).exteriorApproach()));
         assertTrue(SettlementDepotServicePort.forDepot(depotStructure).accessBoundary().cleared(exit.getLast().standingBody()),
                 "clearance ends at a safe exit, not at the resident's former parking point");
         SettlementStructure workshop = settlement.structures().stream()

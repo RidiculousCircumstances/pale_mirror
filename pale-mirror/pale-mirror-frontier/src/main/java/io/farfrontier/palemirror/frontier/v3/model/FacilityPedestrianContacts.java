@@ -18,7 +18,9 @@ public final class FacilityPedestrianContacts {
                 publicSurfaces.addAll(FrontierGrayboxPlan.publicAccessSurfaces(facility));
                 port.stations().stream().filter(surface->!publicSurfaces.contains(surface))
                         .forEach(surface->stations.add(surface.support()));
-                port.ingressSurfaces().stream().filter(surface->!publicSurfaces.contains(surface))
+                // Facility interiors are transit/work space, not fallback idle parking.
+                SettlementStructureFootprint.supportSurfaces(facility).stream()
+                        .filter(surface->!publicSurfaces.contains(surface))
                         .forEach(surface->noParking.add(surface.support()));
             });
         noParking.addAll(stations);cached.bootstrap=bootstrap;
