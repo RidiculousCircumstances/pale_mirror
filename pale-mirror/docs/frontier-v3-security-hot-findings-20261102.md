@@ -516,3 +516,90 @@ Snapshot1753/tick1400 binds actual seed/ruleset; summaries687->3813 green,
 required conflicts0, ordinary pending0/fastforward0 in sampled performance.
 No client publication/update or push. PACK tracked unchanged; preserve existing
 .f0v-baseline/. This is a verified technical deployment, not HUMAN_CANDIDATE.
+
+## Post-delivery bug closure — ef9f64c85
+
+The earlier native field conflict20659 was an incompatible test-world generator,
+not evidence that declared soil should accept arbitrary concrete. The retained
+world's installed sibling datapack declares minecraft:flat/light_gray_concrete;
+its canonical r31 agriculture declares coarse dirt at(-1453,63,-1365). MAIN's
+current companion pack already uses pale_mirror:agricultural_flat/r31. Startup
+now checks the exact optional agricultural map against the actual generator
+before runtime/genesis, retaining the existing independent geological check.
+A missing/different declared map fails closed with an actionable datapack error.
+No soil overwrite, semantic recovery guess or schema change was added.
+
+Three GameTest defects were independently classified and corrected: patrol
+observer loss occurred on fixed tick30 before native admission was guaranteed;
+mock disconnection now actually discards the fixture observer. Prepared ambient
+body recovery now awaits real insertion and common body confirmation rather
+than declaring HOT immediately after an asynchronous effect. The sixteen-seed
+assault calibration now advances through actual PREPARED/RUNNING/CONFIRMED stages
+with bounded real no-progress watchdogs, not fixed unpaced GameTest turns.
+All exact identities, foreign rejection, effect/formation/cursor assertions and
+calibration tolerances remain. Scoped patrol4/4, ambient3/3 and body/recovery/
+calibration27/27 pass; HOT damage is independently measured in all16samples.
+The graphical restart carrier additionally requires productive field progress;
+its new world explicitly installs the current companion datapack before genesis.
+Full aggregate/native/deployment evidence is recorded in the active ledger and
+IMPL/build/post-threat-bugs; no production or visual claim follows from a fixture
+correction alone.
+
+### Native save race — 246089340
+
+The correct-datapack retest44c338c4 follows the retained failed worldcc1801c2.
+In cc1801c2, real farmer1-13 was INDEXED/RUNNING on its actual expanded field;
+its first-admission history remained PENDING until native entity persistence.
+The old graphical setup incorrectly required ESTABLISHED before any native
+save. It now requires the actual indexed RUNNING body and preserves the exact
+actor/job fixture; it does not forge a save or weaken actual damage checks.
+
+The aborted run also exposed a product defect during normal shutdown:
+ConcurrentModificationException in AmbientCarrierLedger.submitRows, reached
+from EntityStorage.storeEntities/writePrerequisite. The EntityStorage
+deserializer's stored-return fence independently mutated the same unsynchronized
+carrier maps and dirty-key set. A key copy alone could still lose a changed row.
+The read-admission boundary now retains the exact ledger on the server thread;
+the deserializer atomically selects/marks its exact stored bodies and submits
+immutable journal rows under that ledger's monitor. All aggregate accesses use
+the same monitor. The storage worker never consumes mutable carrier state or
+acquires this monitor. Native deserialization still awaits its exact durable
+receipt on its own mailbox; it cannot depend on a server queue blocked in flush.
+First-save history and body authority remain separate. No schema, resource or
+physical permission was changed. Focused116 and full detached NeoForge898/
+GameTest416 plus guardrails/build/package pass. Native terminal evidence remains
+separately identity-bound below/in the active ledger; cc1801c2 failed save is
+never reused or edited into recovery acceptance.
+
+### Final scoped evidence — 4e48a32a0
+
+A further rendezvous failure in2ffc2096 was fixture interference: the ordinary
+player occupied the exact uncreated farmer's body cell. Read-only diagnostics
+showed BODY_SPACE_OCCUPIED; moving only the player4blocks changed it to READY,
+then the same UUID became INDEXED/RUNNING. The checked-in observer setup now
+waits horizontally outside that cell. No production collision bypass was added.
+
+On sourcea0, the native same-client episode completed all6 harm/escape actions,
+normal save/restart22:07:56 and the4 quiet/resume actions. Exact actor1-13 was
+ALIVE, safety cleared, continuation depth0 and its prior field owner restored.
+The original aggregate was deliberately stopped in an unnecessary whole-field
+completion wait; its manifest remains failed, never relabelled13/13. That
+follow-up is now the existing bounded field-progress oracle. A separate small
+checked-in live declaration verifies it on the normally saved same world using
+the current4e48 artifact: live-progress.json PASS6/6,400canonical ticks, same
+worker/job, completed-cell tail67->69 plus actual physical movement. It proves
+resumed processing, not a complete harvest or delivered grain. Final actor
+health17, same UUID, FIELD_HARVEST, depth0, safety false, body RUNNING and first
+save history ESTABLISHED. Both retained frames reviewed; no human M3 claim.
+Private stop22:17:36 saved all dimensions, unused proofs0, retained pending18;
+no CME. All task clients/Xvfb/JVMs and25583/4 stopped. Pending18 is not0.
+
+Final detached source4e48: parser/guardrails/JAR verification PASS17s. NeoForge898
+passed at a0; all416GameTests passed at246. All6426 packaged class files are
+byte-identical between246 and final4e48; subsequent edits are scenario data and
+source metadata. Native/release JARs match. Full binding and honest scope are in
+IMPL/build/post-threat-bugs/verified.json and class-reuse.json.
+MAIN updated to exact4e48 artifact, same compatible seed134/schema321/r31 world;
+Java22PID3366965/wrapper3366916, start1793639948. Root preflight/shared pinned
+installer/deploy-verify pass. Summaryrevision491006/tick151250 green, required
+and inventory conflicts0. No pack/client publication changes or push.
