@@ -7,6 +7,33 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductionStationLifecycleTest {
+    @Test void suspensionPreservesPendingPhysicalEffectIdentityAndCannotResumeOrAwardWork() {
+        var station = new SubjectId("station:pending-suspension"); var job = new SubjectId("job:pending-suspension");
+        var operation = new ProductionOperation(new ProductionOperation.Id(new SubjectId("operation:pending-suspension")), station, job,
+                BakeryRecipes.BREAD, new ProductionOperation.ExactInput(new SubjectId("item:pending-input")), new SubjectId("item:pending-output"),
+                3, 1, Optional.of(WorkProgress.pending(100, 10).resume(10, 1_000, 110)), false,
+                new ProductionOperation.OrderInitiator(ProductionOrderKind.STATION_WORK, job),
+                Optional.of(new ProductionStationClock.Attendance(1_000, 110)));
+        var machine = ProductionStations.Machine.installed(station).start(operation);
+        var burn = new ProductionStationFuelBurn(station, new SubjectId("container:pending"), new SubjectId("account:pending"),
+                machine.revision(), 0, "minecraft:coal", Map.of(new SubjectId("lot:pending"), 1), 1_600, List.of(), 10);
+        var pendingFuel = machine.prepareFuel(burn);
+        var paused = pendingFuel.suspendAttendance(operation, operation.progress().orElseThrow().pause(20));
+        assertEquals(pendingFuel.revision(), paused.revision()); assertEquals(pendingFuel.pendingFuel(), paused.pendingFuel());
+        assertTrue(paused.operation().orElseThrow().attendance().isEmpty());
+        assertEquals(10_000, paused.operation().orElseThrow().progress().orElseThrow().completedAt(1_000));
+        assertThrows(IllegalArgumentException.class, () -> pendingFuel.replace(operation, paused.operation().orElseThrow()));
+        assertThrows(IllegalArgumentException.class, () -> pendingFuel.suspendAttendance(operation,
+                new WorkProgress(100_000, 11_000, 20, 0, 20)), "suspension cannot award invented work");
+        var complete = operation.withProgress(operation.progress().orElseThrow().pause(110));
+        var ready = machine.replace(operation, complete);
+        var boundary = new ProductionStationRecipeBoundary(station, burn.containerId(), operation.id(), ready.revision(), 0, List.of(), List.of());
+        var pendingRecipe = ready.prepareRecipe(boundary);
+        var settled = pendingRecipe.suspendAttendance(complete, complete.progress().orElseThrow().pause(120));
+        assertEquals(pendingRecipe.revision(), settled.revision()); assertEquals(pendingRecipe.pendingRecipe(), settled.pendingRecipe());
+        assertTrue(settled.operation().orElseThrow().complete()); assertTrue(settled.operation().orElseThrow().attendance().isEmpty());
+        assertTrue(settled.completeRecipe(settled.operation().orElseThrow()).operation().orElseThrow().transformed());
+    }
     @Test void anIdleMachineCannotReuseAValidationAfterItsInstallationDisappears() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:machine-reads"), 41,
                 FrontierRulesets.fuelledQuarryGraybox()));

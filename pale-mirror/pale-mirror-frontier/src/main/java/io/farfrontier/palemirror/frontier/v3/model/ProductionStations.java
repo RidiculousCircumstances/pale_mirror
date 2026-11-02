@@ -38,6 +38,17 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
                 throw new IllegalArgumentException("machine update has stale operation evidence");
             return new Machine(stationId, combustion, Optional.of(next), Math.addExact(revision, 1), Optional.empty());
         }
+        /** Attendance is not the physical effect's preimage. Only settle old work and revoke attendance;
+         * retain the pinned effect revision and exact fuel/recipe receipt through handoff/restart. */
+        Machine suspendAttendance(ProductionOperation previous, WorkProgress paused) {
+            if (!operation.equals(Optional.of(previous)) || previous.transformed()
+                    || previous.progress().isEmpty()
+                    || !previous.progress().orElseThrow().pause(paused.evaluatedAtTick()).equals(paused))
+                throw new IllegalArgumentException("attendance suspension has stale work or awards new labour");
+            var next = previous.withAttendance(paused, Optional.empty());
+            if (pendingFuel.isEmpty() && pendingRecipe.isEmpty()) return replace(previous, next);
+            return new Machine(stationId, combustion, Optional.of(next), revision, pendingFuel, pendingRecipe);
+        }
         public Machine release(ProductionOperation.Id id) {
             if (pendingFuel.isPresent() || pendingRecipe.isPresent() || !operation.orElseThrow().id().equals(id) || !operation.orElseThrow().transformed())
                 throw new IllegalArgumentException("machine release lacks confirmed output removal");

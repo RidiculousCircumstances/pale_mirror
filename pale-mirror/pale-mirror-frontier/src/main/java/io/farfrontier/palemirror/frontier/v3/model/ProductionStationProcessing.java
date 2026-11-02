@@ -51,8 +51,10 @@ public final class ProductionStationProcessing {
     }
     public static ProductionStations progress(FrontierWorldState state, ProductionOperation previous, WorkProgress next,
             Optional<ProductionStationClock.Attendance> attendance) {
-        return state.productionStations().with(state.productionStations().require(previous.stationId())
-                .replace(previous, previous.withAttendance(next, attendance)));
+        var machine = state.productionStations().require(previous.stationId());
+        return state.productionStations().with(attendance.isEmpty() && (machine.pendingFuel().isPresent() || machine.pendingRecipe().isPresent())
+                ? machine.suspendAttendance(previous, next)
+                : machine.replace(previous, previous.withAttendance(next, attendance)));
     }
     /** Loading hands the allocation lifecycle to the installed operation without changing any lot, address or epoch. */
     public static ExactInventory adoptInputOwnership(ExactInventory inventory, ProductionOperation operation) {
