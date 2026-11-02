@@ -59,8 +59,7 @@ public final class FrontierV3SecurityExecutor {
             if(!(entity instanceof Mob guard))continue;
             visited++;var actuation=FrontierV3ActorActuation.capture(state,guard,duty.execution(),runtime::decodedState).id();
             int observationRadius=state.bootstrap().ruleset().security().observationRadius();
-            var retainedContact=state.security().contacts().get(duty.home());
-            if(retainedContact!=null) {
+            for(var retainedContact:state.security().contactsIn(duty.home())) {
                 var player=retainedContact.target().kind()==CombatTarget.Kind.PLAYER
                         ?level.getServer().getPlayerList().getPlayer(retainedContact.target().entity()):null;
                 // Death removes the body from the level entity index after twenty ticks.
@@ -81,17 +80,20 @@ public final class FrontierV3SecurityExecutor {
             var candidates=level.getEntitiesOfClass(LivingEntity.class,guard.getBoundingBox().inflate(observationRadius),
                     target->target!=guard && target.isAlive() && !(target instanceof ServerPlayer p && (p.isCreative()||p.isSpectator())));
             var basis=state;
-            var target=candidates.stream().filter(candidate->candidate instanceof ServerPlayer
+            var visible=candidates.stream().filter(candidate->candidate instanceof ServerPlayer
                     ?basis.security().hostile(duty.home(),candidate.getUUID()):candidate instanceof Enemy)
                     .filter(candidate->guard.distanceToSqr(candidate)<=observationRadius*(double)observationRadius)
-                    .filter(guard::hasLineOfSight).min(Comparator.comparingDouble((LivingEntity candidate)->guard.distanceToSqr(candidate)).thenComparing(Entity::getUUID)).orElse(null);
+                    .filter(guard::hasLineOfSight).sorted(Comparator.comparingDouble((LivingEntity candidate)->guard.distanceToSqr(candidate))
+                            .thenComparing(Entity::getUUID)).limit(SecurityState.MAX_CONTACTS_PER_HOME).toList();
             long tick=runtime.executionView().orElseThrow().instant().ticks();
-            if(target!=null) {
+            for(var target:visible) {
                 var key=new CombatTarget(target instanceof ServerPlayer?CombatTarget.Kind.PLAYER:CombatTarget.Kind.HOSTILE_MOB,
                         target.getUUID(),level.dimension().location().toString());
-                var previous=state.security().contacts().get(duty.home());var pos=target.blockPosition().below();
-                var contact=new SecurityState.Contact(duty.home(),key,new BlockPosition(pos.getX(),pos.getY(),pos.getZ()),tick,previous==null?1:previous.revision()+1);
-                if(previous==null || !previous.target().equals(key) || !previous.position().equals(contact.position()) || tick-previous.atTick()>=state.bootstrap().ruleset().security().contactRefreshTicks()) {
+                var previous=state.security().contact(duty.home(),key);var pos=target.blockPosition().below();
+                if(previous==null && state.security().contactsIn(duty.home()).size()>=SecurityState.MAX_CONTACTS_PER_HOME)continue;
+                var contact=new SecurityState.Contact(duty.home(),key,new BlockPosition(pos.getX(),pos.getY(),pos.getZ()),tick,
+                        Math.incrementExact(state.security().observationRevision()));
+                if(previous==null || !previous.position().equals(contact.position()) || tick-previous.atTick()>=state.bootstrap().ruleset().security().contactRefreshTicks()) {
                     FrontierV3CommandSubmission.submit(runtime,"security-contact",duty.id().value(),new SecurityEvent.Seen(actuation,contact));
                     state=runtime.decodedState().orElseThrow();
                 }
@@ -180,7 +182,7 @@ public final class FrontierV3SecurityExecutor {
                         // window and possible departure of the last presentation observer.
                         var after=runtime.decodedState().orElseThrow();
                         var duty=after.strategicPlans().guards().get(strike.duty());
-                        var contact=after.security().contacts().get(duty.home());
+                        var contact=after.security().contact(duty.home(),strike.target());
                         if(contact!=null && contact.target().equals(strike.target()))
                             FrontierV3ConfirmedNativeEvent.capture(level,duty.home(),new SecurityEvent.ContactEnded(
                                     strike.attacker(),duty.home(),strike.target(),contact.revision()));

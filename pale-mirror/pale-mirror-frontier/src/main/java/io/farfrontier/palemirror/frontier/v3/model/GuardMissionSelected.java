@@ -18,10 +18,41 @@ public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardM
                 .orElseThrow(()->new IllegalArgumentException("guard mission lacks its declared protected target"));
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(),mission.station().support());
         if(mission.response().isPresent()) {
-            var contact=io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.contact(state,owner,tick).orElse(null);
+            var allocated=state.security().response(owner.id()).orElseThrow(()->new IllegalArgumentException("guard has no response allocation"));
+            var contact=state.security().contacts().get(allocated.contact());
+            boolean intercept=mission.stage()==GuardMission.Stage.INTERCEPT;
+            int radius=intercept?io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.MAX_CONTACT_STATION_DISTANCE
+                    :state.bootstrap().ruleset().security().searchRadius();
             if(contact==null || !contact.target().equals(mission.response().orElseThrow())
-                    || mission.station().manhattanDistance(new SurfaceAnchor(contact.position()))>io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.MAX_CONTACT_STATION_DISTANCE)
-                throw new IllegalArgumentException("guard response lacks its exact current bounded contact");
+                    || intercept && io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.contact(state,owner,tick).isEmpty()
+                    || !intercept && !io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.investigating(state,owner,tick)
+                    || mission.station().manhattanDistance(new SurfaceAnchor(contact.position()))>radius)
+                throw new IllegalArgumentException("guard response lacks its exact allocated bounded contact");
+            if(mission.search().isPresent()) {
+                var search=mission.search().orElseThrow();var previous=owner.mission().orElseThrow();
+                if(search.sightingRevision()!=contact.revision() || search.probe()>state.bootstrap().ruleset().security().searchProbes())
+                    throw new IllegalArgumentException("guard search exceeds its probe budget");
+                if(previous.stage()!=GuardMission.Stage.SEARCH || previous.search().orElseThrow().sightingRevision()!=search.sightingRevision()) {
+                    if(search.probe()!=0 || search.pauseUntil()!=0
+                            || mission.station().manhattanDistance(new SurfaceAnchor(contact.position()))>
+                                io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.MAX_CONTACT_STATION_DISTANCE
+                            || !search.visited().equals(List.of(mission.station())))throw new IllegalArgumentException("search lost its last-known approach");
+                } else {
+                    var before=previous.search().orElseThrow();var visited=new ArrayList<>(before.visited());
+                    if(mission.station().equals(previous.station())) {
+                        if(search.probe()!=before.probe() || !search.visited().equals(before.visited()) || before.pauseUntil()!=0
+                                || search.pauseUntil()!=tick+state.bootstrap().ruleset().security().searchPauseTicks()
+                                || !mission.station().equals(state.actorLocations().get(owner.execution().actorId()).supportingSurface()))
+                            throw new IllegalArgumentException("guard search has no bounded observed pause");
+                    } else {
+                        visited.add(mission.station());
+                        if(search.probe()!=before.probe()+1 || search.pauseUntil()!=0 || !search.visited().equals(visited)
+                                || before.pauseUntil()==0 || tick<before.pauseUntil()
+                                || !previous.station().equals(state.actorLocations().get(owner.execution().actorId()).supportingSurface()))
+                            throw new IllegalArgumentException("guard search advanced without its completed observation pause");
+                    }
+                }
+            }
         } else if(!io.farfrontier.palemirror.frontier.v3.model.security.SecurityCoverage.permitsPost(target,mission.station()))
             throw new IllegalArgumentException("guard post lies outside its protected observation area");
         if(mission.response().isPresent() && (owner.mission().isEmpty()

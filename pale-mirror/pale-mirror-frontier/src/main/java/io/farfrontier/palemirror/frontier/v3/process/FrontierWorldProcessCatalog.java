@@ -205,6 +205,8 @@ public final class FrontierWorldProcessCatalog {
         };
     }
     private static final Map<String, FrontierScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry(io.farfrontier.palemirror.frontier.v3.model.security.SecurityReview.KIND, coalescedReview(atExecutionTime(
+                    (state,action,instant) -> SecurityProcessModule.review(state,action,instant.ticks())))),
             Map.entry(GuardContinuation.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(
                     (state, action, instant) -> GuardWorkProcess.review(state, action, instant.ticks()))))),
             Map.entry(GuardContinuation.PROGRESS, ScheduledReviewAdmission.coalescedContinuation(withPlanningRecovery(atExecutionTime(
@@ -843,7 +845,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
                     "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
                     "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_storage_retargeted", "frontier.bakery_hot_effect_prepared",
-                    "frontier.bakery_hot_effect_observed", "frontier.bakery_retired_effect_observed", "frontier.bakery_death_settled", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_work_changed", "frontier.bakery_hot_hand_release",
+                    "frontier.bakery_hot_effect_observed", "frontier.bakery_retired_effect_observed", "frontier.bakery_death_settled", "frontier.bakery_hot_delivery_aborted",
+                "frontier.bakery_work_changed", "frontier.bakery_hot_hand_release",
                     "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
                     "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",

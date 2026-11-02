@@ -23,13 +23,7 @@ final class GuardPatrolProcess {
                 return List.of(scheduled(action,duty,tick+10));
             }
             var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,duty.execution().actorId());
-            var stations=new ArrayList<SurfaceAnchor>();var position=contact.position();
-            var reserved=GuardEquipment.in(state,duty.home()).stream().filter(other->!other.id().equals(duty.id()))
-                    .flatMap(other->other.mission().stream()).map(GuardMission::station).collect(java.util.stream.Collectors.toSet());
-            stations.addAll(PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(position),
-                    GuardResponse.MAX_CONTACT_STATION_DISTANCE,reserved));
-            stations.sort(Comparator.comparingLong(station->SecurityCoverage.distance(station,state.actorLocations().get(duty.execution().actorId()).supportingSurface())));
-            var selected=reachable(knowledge,state.actorLocations().get(duty.execution().actorId()).supportingSurface(),stations);
+            var selected=approach(state,duty,knowledge,contact.position());
             if(selected.isPresent()) {
                 var response=mission.orElseThrow().responding(selected.orElseThrow(),contact.target());
                 return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),response)),GuardContinuation.wake(duty.id(),tick));
@@ -37,14 +31,11 @@ final class GuardPatrolProcess {
             return List.of(scheduled(action,duty,tick+20));
         }
         if(mission.isPresent() && mission.orElseThrow().response().isPresent()) {
-            if (GuardResponse.investigating(state,duty,tick)) {
-                if (!duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()))
-                    return start(state,action,duty,tick);
-                return List.of(scheduled(action,duty,tick+state.bootstrap().ruleset().security().observationInterval()));
-            }
+            if (GuardResponse.investigating(state,duty,tick)) return search(state,action,duty,tick);
             var resumed=mission.orElseThrow().resume().orElseThrow().mission();
             if(ProtectionObligations.read(state,duty.home()).stream().anyMatch(target->target.kind()==resumed.targetKind() && target.id().equals(resumed.target())))
-                return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),resumed)),GuardContinuation.wake(duty.id(),tick));
+                return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),resumed)),
+                        SecurityReview.wake(duty.home(),tick),GuardContinuation.wake(duty.id(),tick));
             mission=Optional.empty();
         }
         if (mission.isPresent()) {
@@ -59,6 +50,54 @@ final class GuardPatrolProcess {
             if (tick < goal.watchUntil()) return List.of(scheduled(action, duty, goal.watchUntil()));
         }
         return selectPost(state,action,duty,tick,mission.map(value->value.visitOrdinal()+1).orElse(0L));
+    }
+    private static List<ProposedEvent> search(FrontierWorldState state,ScheduledAction action,GuardDuty duty,long tick) {
+        var mission=duty.mission().orElseThrow();var rules=state.bootstrap().ruleset().security();
+        var sighting=state.security().contact(duty.home(),mission.response().orElseThrow());
+        if(mission.stage()!=GuardMission.Stage.SEARCH || mission.search().orElseThrow().sightingRevision()!=sighting.revision()) {
+            var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,duty.execution().actorId());
+            var station=approach(state,duty,knowledge,sighting.position());
+            if(station.isEmpty())return List.of(scheduled(action,duty,tick+rules.observationInterval()));
+            var searching=mission.searching(station.orElseThrow(),0,0,sighting.revision());
+            return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),searching)),GuardContinuation.wake(duty.id(),tick));
+        }
+        if(!duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()))
+            return start(state,action,duty,tick);
+        var search=mission.search().orElseThrow();
+        if(search.pauseUntil()==0) {
+            long until=tick+rules.searchPauseTicks();
+            return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),
+                    mission.searching(mission.station(),search.probe(),until,search.sightingRevision()))),scheduled(action,duty,until));
+        }
+        if(tick<search.pauseUntil())return List.of(scheduled(action,duty,search.pauseUntil()));
+        if(search.probe()<rules.searchProbes()) {
+            var contact=state.security().contact(duty.home(),mission.response().orElseThrow());
+            var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,duty.execution().actorId());
+            var excluded=new HashSet<>(search.visited());
+            GuardEquipment.in(state,duty.home()).stream().filter(g -> !g.id().equals(duty.id()))
+                    .flatMap(g -> g.mission().stream()).map(GuardMission::station).forEach(excluded::add);
+            var candidates=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(contact.position()),rules.searchRadius(),excluded)
+                    .stream().filter(surface -> !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(surface.support())
+                            && ServiceBoundaryComposition.turnoverPoint(state,surface).isEmpty())
+                    .sorted(Comparator.comparingLong((SurfaceAnchor surface) -> -SecurityCoverage.distance(surface,new SurfaceAnchor(contact.position())))
+                            .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
+            var selected=reachable(knowledge,mission.station(),candidates);
+            if(selected.isPresent())return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),
+                    mission.searching(selected.orElseThrow(),search.probe()+1,0,search.sightingRevision()))),GuardContinuation.wake(duty.id(),tick));
+        }
+        var resumed=mission.post().mission();
+        return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),resumed)),
+                SecurityReview.wake(duty.home(),tick),GuardContinuation.wake(duty.id(),tick));
+    }
+    private static Optional<SurfaceAnchor> approach(FrontierWorldState state,GuardDuty duty,
+            KnownPedestrianRouteKnowledge knowledge,BlockPosition position) {
+        var reserved=GuardEquipment.in(state,duty.home()).stream().filter(other -> !other.id().equals(duty.id()))
+                .flatMap(other -> other.mission().stream()).map(GuardMission::station).collect(java.util.stream.Collectors.toSet());
+        var origin=state.actorLocations().get(duty.execution().actorId()).supportingSurface();
+        var stations=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(position),
+                GuardResponse.MAX_CONTACT_STATION_DISTANCE,reserved).stream()
+                .sorted(Comparator.comparingLong(station -> SecurityCoverage.distance(station,origin))).toList();
+        return reachable(knowledge,origin,stations);
     }
     private static List<ProposedEvent> selectPost(FrontierWorldState state,ScheduledAction action,GuardDuty duty,long tick,long ordinal) {
         var targets=SecurityCoverage.posts(state,duty.home());
@@ -82,7 +121,7 @@ final class GuardPatrolProcess {
                     .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y));
             var selected=reachable(knowledge,state.actorLocations().get(duty.execution().actorId()).supportingSurface(),stations.stream().limit(8).toList());
             if(selected.isEmpty())continue;
-            var next = new GuardMission(target.kind(), target.id(), selected.orElseThrow(), ordinal, 0);
+            var next = new GuardMission(target.kind(), target.id(), selected.orElseThrow(), ordinal, 0, GuardMission.Stage.PATROL);
             return List.of(new ProposedEvent(duty.id(), new GuardMissionSelected(duty.id(), duty.revision(), next)), GuardContinuation.wake(duty.id(), tick));
         }
         return List.of(scheduled(action, duty, tick + state.bootstrap().ruleset().security().watchTicks()));

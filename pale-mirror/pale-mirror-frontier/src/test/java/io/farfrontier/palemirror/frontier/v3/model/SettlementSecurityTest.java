@@ -13,6 +13,8 @@ class SettlementSecurityTest {
     private record Ready(FrontierWorldState state,GuardDuty duty,ActorActuationId body,UUID offender){}
     private Ready ready(){
         var state=Fixture.ARMED;var duty=state.strategicPlans().guards().values().iterator().next();
+        for(var other:GuardEquipment.in(state,duty.home()))if(!other.id().equals(duty.id()))
+            state=state.withActorBody(other.execution().actorId(),state.actorLocations().get(other.execution().actorId()).body().offset(40,0,0));
         assertFalse(state.actorMovements().containsKey(duty.execution().actorId()));
         state=ActorBodyAuthority.demand(state,duty.execution().actorId());var body=ActorBodyAuthority.current(state,duty.execution().actorId());
         state=ActorBodyAuthority.running(state,body);
@@ -23,10 +25,15 @@ class SettlementSecurityTest {
     private static SecurityState.Contact contact(Ready ready){return new SecurityState.Contact(ready.duty().home(),
             new CombatTarget(CombatTarget.Kind.PLAYER,ready.offender(),"pale_mirror:frontier_graybox"),
             ready.state().actorLocations().get(ready.body().body().actorId()).supportingSurface().support().offset(1,0,0),21001,1);}
+    private static FrontierWorldState allocated(FrontierWorldState state,long tick) {
+        var home=state.bootstrap().settlements().getFirst().id();
+        return new SecurityResponsesAllocated(home,SecurityDispatch.plan(state,home,tick)).apply(state,home,tick);
+    }
     @Test void confirmedIncidentPersistsByPlayerUuidButDoesNotCreateAnEternalPhysicalContact(){
         var r=ready();var state=offence(r);assertTrue(state.security().hostile(r.duty().home(),r.offender()));
         var seen=new SecurityEvent.Seen(r.body(),contact(r));
         state=SecurityTransitions.apply(state,r.duty().home(),seen,21001);
+        state=allocated(state,21001);
         var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));
         assertTrue(state.security().hostile(r.duty().home(),r.offender()));
         assertTrue(GuardResponse.contact(state,r.duty(),21002).isPresent());
@@ -40,12 +47,12 @@ class SettlementSecurityTest {
         var oldOrigin=state.actorLocations().get(actor).body().offset(100,0,0);
         state=state.withActorBody(actor,oldOrigin);
         var observed=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
-        assertEquals(contact(r),observed.security().contacts().get(r.duty().home()));
+        assertEquals(contact(r),observed.security().contact(r.duty().home(),contact(r).target()));
         assertEquals(oldOrigin,observed.actorLocations().get(actor).body(),"perception cannot install a body pose or invent movement arrival");
-        assertTrue(GuardResponse.contact(observed,r.duty(),21001).isPresent());
+        assertTrue(observed.security().contact(r.duty().home(),contact(r).target()).current(21001,60));
         var beyondHome=new SecurityState.Contact(r.duty().home(),contact(r).target(),contact(r).position().offset(1000,0,0),21002,2);
         var distant=SecurityTransitions.apply(observed,r.duty().home(),new SecurityEvent.Seen(r.body(),beyondHome),21002);
-        assertTrue(GuardResponse.contact(distant,r.duty(),21002).isEmpty(),"native perception does not relax the domain pursuit envelope");
+        assertTrue(SecurityDispatch.plan(distant,r.duty().home(),21002).isEmpty(),"native perception does not relax the domain pursuit envelope");
     }
     @Test void oneGuardObservationWakesEveryAppointmentThroughTheRealRegisteredCommandBoundary(){
         var r=ready();var state=offence(r);var payload=new SecurityEvent.Seen(r.body(),contact(r));
@@ -55,10 +62,11 @@ class SettlementSecurityTest {
         var accepted=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
                 FrontierWorldProcessCatalog.planCommand("security",state,command));
         var events=registry.validateEmissions("security",accepted.events());
-        assertEquals(1+GuardEquipment.in(state,r.duty().home()).size(),events.size());
+        assertEquals(2,events.size(),"a new contact wakes its settlement allocator, not every guard");
     }
     @Test void strikeRetainsExactBodyWeaponAndOutcomeAcrossRecoveryAndRejectsForgedWear(){
         var r=ready();var state=offence(r);state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        state=allocated(state,21001);
         var item=state.inventory().items().get(r.duty().weapon());
         var strike=new SecurityState.Strike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),
                 new WeaponProfile(item.itemKind(),6,13,3,1),17,21002,21001);
@@ -76,19 +84,20 @@ class SettlementSecurityTest {
     @Test void endedOpportunityWakesTheWholeCohortWithoutErasingHostilityOrANewerContact() {
         var r=ready();var state=offence(r);
         state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        state=allocated(state,21001);
         var ended=new SecurityEvent.ContactEnded(r.body(),r.duty().home(),contact(r).target(),1);
         var codecs=FrontierWorldRuntimeDefinition.payloadCodecs();assertEquals(ended,codecs.decode(ended.type(),codecs.encode(ended)));
         var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,new CommandId("test:contact-ended"),state.bootstrap().worldId(),Revision.ZERO,
                 new SimInstant(21002),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(new CommandId("test:contact-ended")),ended);
         var plan=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
                 FrontierWorldProcessCatalog.planCommand("security",state,command));
-        assertEquals(1+GuardEquipment.in(state,r.duty().home()).size(),plan.events().size());
+        assertEquals(2+state.security().responses().size(),plan.events().size(),"only allocated responders are woken directly");
         var current=SecurityTransitions.apply(state,r.duty().home(),ended,21002);
         assertTrue(current.security().contacts().isEmpty());assertTrue(current.security().hostile(r.duty().home(),r.offender()));
         var newer=new SecurityState.Contact(contact(r).home(),contact(r).target(),contact(r).position(),21002,2);
         var refreshed=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),newer),21002);
         var superseded=SecurityTransitions.apply(refreshed,r.duty().home(),ended,21003);
-        assertEquals(newer,superseded.security().contacts().get(r.duty().home()));
+        assertEquals(newer,superseded.security().contact(r.duty().home(),newer.target()));
         assertEquals(current,SecurityTransitions.apply(current,r.duty().home(),ended,21003));
         assertTrue(ended.requiresDurableBeforeEffect());
         var retired=ActorBodyAuthority.released(current,r.body().body());
@@ -100,7 +109,7 @@ class SettlementSecurityTest {
         var target = SecurityCoverage.posts(state,duty.home()).getFirst();
         // An existing target may move as its worksite develops; identity survives.
         var formerPost = target.observationAnchor().offset(40,0,0);
-        var mission = new GuardMission(target.kind(),target.id(),formerPost,5,0);
+        var mission = new GuardMission(target.kind(),target.id(),formerPost,5,0, GuardMission.Stage.PATROL);
         var stale = duty.withMission(mission);
         state = state.withStrategicPlans(state.strategicPlans().withGuard(stale))
                 .withActorBody(duty.execution().actorId(),formerPost.standingBody());
@@ -137,9 +146,10 @@ class SettlementSecurityTest {
     @Test void responsePreservesTheExactPostAndCannotInventAWatchArrivalOrDistantGoal() {
         var r=ready();var state=offence(r);
         state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        state=allocated(state,21001);
         var target=SecurityCoverage.posts(state,r.duty().home()).getFirst();
         var station=target.observationAnchor().offset(3,0,0);
-        var mission=new GuardMission(target.kind(),target.id(),station,5,0);
+        var mission=new GuardMission(target.kind(),target.id(),station,5,0, GuardMission.Stage.PATROL);
         state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),mission).apply(state,r.duty().id(),21001);
         var owner=state.strategicPlans().guards().get(r.duty().id());
         var response=mission.responding(new SurfaceAnchor(contact(r).position()).offset(1,0,0),contact(r).target());
@@ -164,7 +174,7 @@ class SettlementSecurityTest {
         state=new GuardMissionSelected(owner.id(),owner.revision(),owner.mission().orElseThrow().post().mission()).apply(state,owner.id(),investigationEnd);
         var current=state;var duty=state.strategicPlans().guards().get(owner.id());
         assertThrows(IllegalArgumentException.class,()->new GuardMissionSelected(duty.id(),duty.revision(),mission.watching(21260)).apply(current,duty.id(),21100));
-        var distant=new GuardMission(target.kind(),target.id(),station.offset(100,0,0),6,0);
+        var distant=new GuardMission(target.kind(),target.id(),station.offset(100,0,0),6,0, GuardMission.Stage.PATROL);
         assertThrows(IllegalArgumentException.class,()->new GuardMissionSelected(duty.id(),duty.revision(),distant).apply(current,duty.id(),21100));
         assertTrue(GuardResponse.contact(state,duty,21100).isEmpty());
         assertTrue(state.security().hostile(duty.home(),r.offender()));
@@ -173,8 +183,9 @@ class SettlementSecurityTest {
     @Test void alarmWaitsForTheSharedHotMovementCheckpointBeforeRedirecting() {
         var r=ready();var state=offence(r);
         state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        state=allocated(state,21001);
         var target=SecurityCoverage.posts(state,r.duty().home()).getFirst();
-        var mission=new GuardMission(target.kind(),target.id(),target.observationAnchor().offset(3,0,0),0,0);
+        var mission=new GuardMission(target.kind(),target.id(),target.observationAnchor().offset(3,0,0),0,0, GuardMission.Stage.PATROL);
         state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),mission).apply(state,r.duty().id(),21001);
         var duty=state.strategicPlans().guards().get(r.duty().id());var actor=duty.execution().actorId();
         var move=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(duty.missionOrder(),21001,
@@ -207,8 +218,9 @@ class SettlementSecurityTest {
     @Test void meleeRecoveryDoesNotRestartAnApproachWhileNativeSensingCanContinueAttacking() {
         var r=ready();var state=offence(r);
         state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        state=allocated(state,21001);
         var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();
-        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor().offset(3,0,0),0,0);
+        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor().offset(3,0,0),0,0, GuardMission.Stage.PATROL);
         state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),21001);
         var duty=state.strategicPlans().guards().get(r.duty().id());
         var response=patrol.responding(new SurfaceAnchor(contact(r).position()).offset(1,0,0),contact(r).target());
@@ -224,6 +236,83 @@ class SettlementSecurityTest {
         assertFalse(result.stream().anyMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted));
         long end=state.security().nextAttack().get(duty.id())+state.bootstrap().ruleset().security().observationInterval()+1;
         assertFalse(GuardResponse.recoveringAfterAttack(state,duty,end),"a missed native opportunity must release the bounded recovery hold");
+    }
+
+    @Test void lostSightSearchRetainsPausesAndProbesAcrossSnapshotThenReturnsThroughTheRealQueue() {
+        var r=ready();var state=offence(r);long observedAt=21001, lostAt=21062;
+        state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),observedAt);
+        state=allocated(state,observedAt);
+        var target=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var patrol=new GuardMission(target.kind(),target.id(),target.observationAnchor().offset(3,0,0),0,0,GuardMission.Stage.PATROL);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),observedAt);
+        var duty=state.strategicPlans().guards().get(r.duty().id());
+        var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,duty.execution().actorId());
+        var approach=io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianInteractionStations.within(
+                knowledge.geometry(),new SurfaceAnchor(contact(r).position()),2,Set.of()).getFirst();
+        state=new GuardMissionSelected(duty.id(),duty.revision(),patrol.responding(approach,contact(r).target())).apply(state,duty.id(),observedAt);
+        state=state.withActorBody(duty.execution().actorId(),approach.standingBody());
+        state=selectMission(state,r.duty().id(),lostAt);
+        assertEquals(GuardMission.Stage.SEARCH,state.strategicPlans().guards().get(duty.id()).mission().orElseThrow().stage());
+        assertEquals("Search last known area",ResidentPresentation.from(state,duty.execution().actorId()).task());
+        state=selectMission(state,r.duty().id(),lostAt+1);
+        var searching=state.strategicPlans().guards().get(duty.id());
+        assertEquals(lostAt+1+40,searching.mission().orElseThrow().search().orElseThrow().pauseUntil());
+        var paused=state;
+        assertThrows(IllegalArgumentException.class,()->new GuardMissionSelected(searching.id(),searching.revision(),
+                searching.mission().orElseThrow().searching(approach.offset(1,0,0),1,0,1)).apply(paused,searching.id(),lostAt+2));
+        var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));
+        assertEquals(searching.mission(),state.strategicPlans().guards().get(duty.id()).mission());
+        var later=new SecurityState.Contact(duty.home(),contact(r).target(),contact(r).position().offset(8,0,0),lostAt+2,2);
+        var missedFreshWindow=SecurityTransitions.apply(state,duty.home(),new SecurityEvent.Seen(r.body(),later),lostAt+2);
+        assertTrue(GuardResponse.redirect(missedFreshWindow,searching,lostAt+63),"a newer but already stale sighting invalidates the old search route");
+        missedFreshWindow=selectMission(missedFreshWindow,duty.id(),lostAt+63);
+        var reset=missedFreshWindow.strategicPlans().guards().get(duty.id()).mission().orElseThrow();
+        assertEquals(2,reset.search().orElseThrow().sightingRevision());
+        assertEquals(0,reset.search().orElseThrow().probe());
+        assertTrue(reset.station().manhattanDistance(new SurfaceAnchor(later.position()))<=2);
+        var refreshed=new SecurityState.Contact(duty.home(),contact(r).target(),contact(r).position(),lostAt+2,2);
+        var reacquired=SecurityTransitions.apply(state,duty.home(),new SecurityEvent.Seen(r.body(),refreshed),lostAt+2);
+        assertTrue(GuardResponse.redirect(reacquired,searching,lostAt+2));
+        reacquired=selectMission(reacquired,duty.id(),lostAt+2);
+        assertEquals(GuardMission.Stage.INTERCEPT,reacquired.strategicPlans().guards().get(duty.id()).mission().orElseThrow().stage());
+        assertEquals(patrol.post(),reacquired.strategicPlans().guards().get(duty.id()).mission().orElseThrow().post());
+        state=ActorBodyAuthority.released(state,r.body().body());
+        var base=FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
+        var engine=io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(
+                new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(),state,new SimInstant(lostAt+1),
+                        base.commandPlanner(),base.scheduledPlanner(),base.reducer(),base.stateCodec(),base.projectionMapper(),base.limits(),
+                        List.of(GuardContinuation.progress(duty.id(),lostAt+41),SecurityReview.at(duty.home(),lostAt+2)),
+                        base.transactionCommitter(),base.stateValidator(),base.executionMetrics(),base.kernelQuarantineReporter()));
+        boolean probed=false;
+        for(long tick=lostAt+100;tick<=lostAt+1200;tick+=100) {
+            var result=engine.advanceTo(new SimInstant(tick),new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1000,1000));
+            assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE,result.status().kind(),result.status().toString());
+            probed|=engine.canonicalState().state().strategicPlans().guards().get(duty.id()).mission()
+                    .flatMap(GuardMission::search).filter(search -> search.probe()>0).isPresent();
+        }
+        var end=engine.canonicalState().state();
+        assertTrue(probed,"search must actually visit a further known point, not merely keep an active label");
+        assertTrue(end.strategicPlans().guards().get(duty.id()).mission().orElseThrow().response().isEmpty());
+        assertTrue(end.security().contacts().isEmpty());assertTrue(end.security().responses().isEmpty());
+    }
+    private static FrontierWorldState selectMission(FrontierWorldState state,SubjectId duty,long tick) {
+        var selected=GuardWorkProcess.progress(state,GuardContinuation.progress(duty,tick),tick).stream()
+                .map(ProposedEvent::payload).filter(GuardMissionSelected.class::isInstance).map(GuardMissionSelected.class::cast).findFirst().orElseThrow();
+        return selected.apply(state,duty,tick);
+    }
+    @Test void allocationPublicationRejectsOverstaffingAndForeignDutyBeforeAnyMissionChanges() {
+        var r=ready();var state=offence(r);
+        state=SecurityTransitions.apply(state,r.duty().home(),new SecurityEvent.Seen(r.body(),contact(r)),21001);
+        var overstaffed=new HashMap<SubjectId,SecurityState.Response>();
+        for(var duty:GuardEquipment.in(state,r.duty().home()))overstaffed.put(duty.id(),
+                new SecurityState.Response(duty.id(),new SecurityState.ContactKey(duty.home(),contact(r).target()),21001));
+        var before=state;
+        assertThrows(IllegalArgumentException.class,()->new SecurityResponsesAllocated(r.duty().home(),overstaffed).apply(before,r.duty().home(),21001));
+        var allocated=allocated(state,21001);var response=allocated.security().responses().values().iterator().next();
+        assertThrows(IllegalArgumentException.class,()->new SecurityResponsesAllocated(new SubjectId("settlement:foreign"),Map.of(response.duty(),response)));
+        var codecs=FrontierWorldRuntimeDefinition.payloadCodecs();var event=new SecurityResponsesAllocated(r.duty().home(),allocated.security().responses());
+        assertEquals(event,codecs.decode(event.type(),codecs.encode(event)));
+        assertTrue(allocated.security().retired(response.duty()).responses().isEmpty());
     }
 
     @Test void harmObservesTheBodyEvenBeforeItsActuatorRunsAndRejectsAFalseEpoch() {

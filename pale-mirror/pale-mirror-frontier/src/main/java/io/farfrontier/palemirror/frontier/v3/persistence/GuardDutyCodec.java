@@ -29,6 +29,11 @@ final class GuardDutyCodec {
         return Map.copyOf(result);
     }
     static void mission(DataOutputStream out, io.farfrontier.palemirror.frontier.v3.model.security.GuardMission mission) throws IOException {
+        out.writeByte(mission.stage().wireTag());
+        out.writeBoolean(mission.search().isPresent());if(mission.search().isPresent()) {
+            var search=mission.search().orElseThrow();out.writeLong(search.sightingRevision());out.writeInt(search.probe());out.writeLong(search.pauseUntil());
+            out.writeInt(search.visited().size());for(var surface:search.visited())FrontierWorldStateCodec.writePosition(out,surface.support());
+        }
         out.writeByte(mission.targetKind().wireTag()); out.writeUTF(mission.target().value());
         FrontierWorldStateCodec.writePosition(out, mission.station().support()); out.writeLong(mission.visitOrdinal()); out.writeLong(mission.watchUntil());
         out.writeBoolean(mission.response().isPresent()); if(mission.response().isPresent()) SecurityStateCodec.target(out,mission.response().orElseThrow());
@@ -38,13 +43,20 @@ final class GuardDutyCodec {
         }
     }
     static io.farfrontier.palemirror.frontier.v3.model.security.GuardMission mission(DataInputStream in) throws IOException {
+        var stage=io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Stage.require(in.readUnsignedByte());
+        var search=Optional.<io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Search>empty();
+        if(in.readBoolean()) {
+            long revision=in.readLong();int probe=in.readInt();long until=in.readLong();int n=UnitGroupStateCodec.count(in,9);var visited=new ArrayList<SurfaceAnchor>();
+            for(int i=0;i<n;i++)visited.add(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));
+            search=Optional.of(new io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Search(revision,probe,until,visited));
+        }
         return new io.farfrontier.palemirror.frontier.v3.model.security.GuardMission(
                 io.farfrontier.palemirror.frontier.v3.model.security.ProtectedTarget.Kind.require(in.readUnsignedByte()), new SubjectId(in.readUTF()),
                 new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), in.readLong(), in.readLong(),
                 in.readBoolean()?Optional.of(SecurityStateCodec.target(in)):Optional.empty(),
                 in.readBoolean()?Optional.of(new io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Post(
                     io.farfrontier.palemirror.frontier.v3.model.security.ProtectedTarget.Kind.require(in.readUnsignedByte()),new SubjectId(in.readUTF()),
-                    new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readLong())):Optional.empty());
+                    new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readLong())):Optional.empty(),stage,search);
     }
     private GuardDutyCodec() { }
 }

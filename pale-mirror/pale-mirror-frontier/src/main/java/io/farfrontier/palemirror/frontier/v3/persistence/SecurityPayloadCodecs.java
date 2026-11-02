@@ -5,7 +5,20 @@ import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import java.io.*;
 import java.util.*;
 final class SecurityPayloadCodecs {
-    static PayloadCodecs create(){return new PayloadCodecs(List.of(codec(SecurityEvent.Incident.TYPE),codec(SecurityEvent.Seen.TYPE),codec(SecurityEvent.ContactEnded.TYPE),codec(SecurityEvent.Prepared.TYPE),codec(SecurityEvent.Completed.TYPE)));}
+    static PayloadCodecs create(){return new PayloadCodecs(List.of(codec(SecurityEvent.Incident.TYPE),codec(SecurityEvent.Seen.TYPE),codec(SecurityEvent.ContactEnded.TYPE),
+                codec(SecurityEvent.Prepared.TYPE),codec(SecurityEvent.Completed.TYPE),allocation()));}
+    private static PayloadCodec allocation(){return new PayloadCodec(){
+        public String type(){return SecurityResponsesAllocated.TYPE;}
+        public byte[] encode(FrontierPayload payload){
+            if(!(payload instanceof SecurityResponsesAllocated value))throw new IllegalArgumentException("foreign allocation payload");
+            try{var bytes=new ByteArrayOutputStream();var out=new DataOutputStream(bytes);SecurityStateCodec.id(out,value.home());
+                SecurityStateCodec.responses(out,value.responses());return bytes.toByteArray();}catch(IOException e){throw new IllegalArgumentException(e);}
+        }
+        public FrontierPayload decode(byte[] bytes){try{var in=new DataInputStream(new ByteArrayInputStream(bytes));
+            var result=new SecurityResponsesAllocated(SecurityStateCodec.id(in),SecurityStateCodec.responses(in));
+            if(in.available()!=0)throw new IllegalArgumentException("trailing allocation payload");return result;
+        }catch(IOException e){throw new IllegalArgumentException("truncated allocation",e);}}
+    };}
     private static PayloadCodec codec(String type){return new PayloadCodec(){
         public String type(){return type;}
         public byte[] encode(FrontierPayload payload){

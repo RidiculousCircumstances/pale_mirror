@@ -11,6 +11,11 @@ final class SecurityReferences {
                 if(contact.target().kind()==CombatTarget.Kind.PLAYER && !security.hostile(contact.home(),contact.target().entity()))
                     throw new IllegalArgumentException("player threat contact has no declared hostile relation");
             }
+            for(var response:security.responses().values()) {
+                var duty=plans.guards().get(response.duty());
+                if(duty==null || !duty.home().equals(response.contact().home()))
+                    throw new IllegalArgumentException("response lost its declared guard/home relationship");
+            }
             for(var strike:security.pending().values()) {
                 var duty=plans.guards().get(strike.duty());
                 if(duty==null || !duty.execution().equals(strike.attacker().execution()) || duty.revision()!=strike.dutyRevision()

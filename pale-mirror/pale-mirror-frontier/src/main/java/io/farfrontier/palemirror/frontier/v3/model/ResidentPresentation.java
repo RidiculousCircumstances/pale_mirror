@@ -19,7 +19,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case PRODUCTION -> "Production";
             case COURIER -> "Transport resources";
             case GROUP_MEMBER -> "Expedition";
-            case GUARD -> "Peaceful guard duty";
+            case GUARD -> io.farfrontier.palemirror.frontier.v3.model.security.GuardPresentation.task(state,assignment.ownerId().orElseThrow());
             case ROUTE_PATROL -> "Route patrol";
             case SETTLEMENT_DEFENCE -> "Settlement defence";
             case ENGINEERING_RECOVERY -> "Repair infrastructure";

@@ -51,6 +51,7 @@ public final class DiagnosticProducerContract {
 
     private static final Set<String> ORDINARY = Set.of(
         "frontier.guard.appointed", "frontier.guard.changed", "frontier.guard.mission_selected",
+        "frontier.security.responses_allocated",
         "frontier.security.incident", "frontier.security.seen", "frontier.security.contact_ended", "frontier.combat.prepared", "frontier.combat.completed", "frontier.haul_accumulation_reviewed", "frontier.internal_transport_mission_started",
         "frontier.forest_generation_observed.v1", "frontier.forest_logs_withdrawn.v1",
         "frontier.forestry_retired_effect.v1", "frontier.forestry_death_settled.v1", "frontier.forestry_hot_prepared.v1", "frontier.forestry_hot_cancelled.v1", "frontier.forestry_hot_observed.v1", "frontier.forestry_hand_boundary.v1",

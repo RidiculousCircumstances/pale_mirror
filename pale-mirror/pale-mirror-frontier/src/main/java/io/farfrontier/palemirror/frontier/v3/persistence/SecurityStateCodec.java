@@ -34,27 +34,45 @@ final class SecurityStateCodec {
         var profile=new WeaponProfile(in.readUTF(),in.readDouble(),in.readLong(),in.readDouble(),in.readInt());
         return new SecurityState.Strike(duty,revision,attacker,target,weapon,before,profile,in.readLong(),in.readLong(),in.readLong());
     }
+    static void response(DataOutputStream out,SecurityState.Response response)throws IOException {
+        id(out,response.duty());id(out,response.contact().home());target(out,response.contact().target());out.writeLong(response.assignedAt());
+    }
+    static SecurityState.Response response(DataInputStream in)throws IOException {
+        return new SecurityState.Response(id(in),new SecurityState.ContactKey(id(in),target(in)),in.readLong());
+    }
+    static void responses(DataOutputStream out,Map<SubjectId,SecurityState.Response> responses)throws IOException {
+        out.writeInt(responses.size());for(var value:responses.values().stream().sorted(Comparator.comparing(SecurityState.Response::duty)).toList())response(out,value);
+    }
+    static Map<SubjectId,SecurityState.Response> responses(DataInputStream in)throws IOException {
+        int n=UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);var result=new LinkedHashMap<SubjectId,SecurityState.Response>();
+        for(int i=0;i<n;i++){var r=response(in);if(result.putIfAbsent(r.duty(),r)!=null)throw new IllegalArgumentException("duplicate response assignment");}return Map.copyOf(result);
+    }
     static void write(DataOutputStream out,SecurityState state)throws IOException{
+        out.writeLong(state.observationRevision());responses(out,state.responses());
         out.writeInt(state.hostility().size());
         for(var row:state.hostility().entrySet().stream().sorted(Comparator.comparing((Map.Entry<SecurityState.Relation,SecurityState.Offence> e)->e.getKey().home())
                 .thenComparing(e->e.getKey().player())).toList()){
             id(out,row.getKey().home());uuid(out,row.getKey().player());var value=row.getValue();out.writeLong(value.firstTick());out.writeLong(value.lastTick());out.writeLong(value.incidents());
         }
-        out.writeInt(state.contacts().size());for(var value:state.contacts().values().stream().sorted(Comparator.comparing(SecurityState.Contact::home)).toList())contact(out,value);
+        out.writeInt(state.contacts().size());
+        for(var value:state.contacts().values().stream().sorted(Comparator.comparing(SecurityState.Contact::home)
+                .thenComparing(c->c.target().kind().wireTag()).thenComparing(c->c.target().entity())
+                .thenComparing(c->c.target().dimension())).toList())contact(out,value);
         out.writeInt(state.pending().size());for(var value:state.pending().values().stream().sorted(Comparator.comparing(SecurityState.Strike::duty)).toList())strike(out,value);
         out.writeInt(state.nextAttack().size());for(var row:state.nextAttack().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){id(out,row.getKey());out.writeLong(row.getValue());}
     }
     static SecurityState read(DataInputStream in)throws IOException{
+        long observationRevision=in.readLong();var responses=responses(in);
         int n=UnitGroupStateCodec.count(in,SecurityState.MAX_RELATIONS);var hostility=new LinkedHashMap<SecurityState.Relation,SecurityState.Offence>();
         for(int i=0;i<n;i++)if(hostility.putIfAbsent(new SecurityState.Relation(id(in),uuid(in)),new SecurityState.Offence(in.readLong(),in.readLong(),in.readLong()))!=null)
             throw new IllegalArgumentException("duplicate hostility relation");
-        n=UnitGroupStateCodec.count(in,SimulationCapacity.MAX_SETTLEMENTS);var contacts=new LinkedHashMap<SubjectId,SecurityState.Contact>();
-        for(int i=0;i<n;i++){var value=contact(in);if(contacts.putIfAbsent(value.home(),value)!=null)throw new IllegalArgumentException("duplicate contact");}
+        n=UnitGroupStateCodec.count(in,SimulationCapacity.MAX_SETTLEMENTS*SecurityState.MAX_CONTACTS_PER_HOME);var contacts=new LinkedHashMap<SecurityState.ContactKey,SecurityState.Contact>();
+        for(int i=0;i<n;i++){var value=contact(in);if(contacts.putIfAbsent(new SecurityState.ContactKey(value.home(),value.target()),value)!=null)throw new IllegalArgumentException("duplicate contact");}
         n=UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);var pending=new LinkedHashMap<SubjectId,SecurityState.Strike>();
         for(int i=0;i<n;i++){var value=strike(in);if(pending.putIfAbsent(value.duty(),value)!=null)throw new IllegalArgumentException("duplicate strike");}
         n=UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);var readiness=new LinkedHashMap<SubjectId,Long>();
         for(int i=0;i<n;i++)if(readiness.putIfAbsent(id(in),in.readLong())!=null)throw new IllegalArgumentException("duplicate readiness");
-        return new SecurityState(hostility,contacts,pending,readiness);
+        return new SecurityState(hostility,contacts,pending,readiness,responses,observationRevision);
     }
     private SecurityStateCodec(){}
 }

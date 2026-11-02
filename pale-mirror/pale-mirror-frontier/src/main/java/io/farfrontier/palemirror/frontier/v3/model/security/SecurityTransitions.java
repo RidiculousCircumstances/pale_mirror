@@ -32,19 +32,19 @@ public final class SecurityTransitions {
             if(!subject.equals(ended.home()) || resident==null || !resident.settlementId().equals(ended.home())
                     || ended.observer().execution().activityKind()!=io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GUARD)
                 throw new IllegalArgumentException("ended contact lost its exact guard observer/home");
-            var contact=security.contacts().get(ended.home());
+            var contact=security.contact(ended.home(),ended.target());
             // A newer sighting/respawn supersedes this fact. Acknowledge history without
             // erasing that successor, just as a repeated end cannot recreate a contact.
             if(contact!=null && contact.target().equals(ended.target()) && contact.revision()==ended.expectedRevision())
-                security=security.contactEnded(ended.home());
+                security=security.contactEnded(new SecurityState.ContactKey(ended.home(),ended.target()));
         }else if(event instanceof SecurityEvent.Prepared prepared){
             var strike=prepared.strike();ActorBodyAuthority.requireActuation(state,strike.attacker());
-            var guard=GuardAuthority.require(state,strike.attacker().execution());var contact=security.contacts().get(guard.home());
+            var guard=GuardAuthority.require(state,strike.attacker().execution());var contact=security.contact(guard.home(),strike.target());
             var item=state.inventory().items().get(strike.weapon());
             if(!subject.equals(strike.duty()) || !guard.id().equals(strike.duty()) || guard.revision()!=strike.dutyRevision()
                     || guard.phase()!=GuardDuty.Phase.ON_DUTY || !GuardEquipment.held(state,guard) || !guard.weapon().equals(strike.weapon())
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
-                    || contact==null || GuardResponse.contact(state,guard,tick).isEmpty() || !contact.target().equals(strike.target()) || strike.preparedAt()!=tick
+                    || contact==null || GuardResponse.contact(state,guard,tick).filter(c -> c.target().equals(strike.target())).isEmpty() || !contact.target().equals(strike.target()) || strike.preparedAt()!=tick
                     || tick<security.nextAttack().getOrDefault(guard.id(),0L) || state.actorMovements().containsKey(guard.execution().actorId()))
                 throw new IllegalArgumentException("combat strike lacks current role/contact/weapon/readiness");
             security=security.prepared(strike);

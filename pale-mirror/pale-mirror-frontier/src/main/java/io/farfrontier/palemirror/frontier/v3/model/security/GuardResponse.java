@@ -6,23 +6,27 @@ public final class GuardResponse {
     /** Admitted standing area includes every known contact within this support-space distance. */
     public static final int MAX_CONTACT_STATION_DISTANCE = 2;
     public static Optional<SecurityState.Contact> contact(FrontierWorldState state,GuardDuty duty,long tick){
-        var contact=state.security().contacts().get(duty.home());
+        var assigned=state.security().response(duty.id());
+        if(assigned.isEmpty() || !assigned.orElseThrow().contact().home().equals(duty.home()))return Optional.empty();
+        var contact=state.security().contacts().get(assigned.orElseThrow().contact());
         if(contact==null || !contact.current(tick,state.bootstrap().ruleset().security().contactLifetime()))return Optional.empty();
-        return inScope(state,duty,contact)?Optional.of(contact):Optional.empty();
+        return inScope(state,duty.home(),contact)?Optional.of(contact):Optional.empty();
     }
-    /** A stale sighting is a bounded investigation goal, never permission to strike an unseen target. */
+    /** The same assigned sighting permits finite search, never live tracking through walls. */
     public static boolean investigating(FrontierWorldState state,GuardDuty duty,long tick) {
         var retained=duty.mission().flatMap(GuardMission::response);
-        var sighting=state.security().contacts().get(duty.home());
-        return retained.isPresent() && sighting!=null && retained.orElseThrow().equals(sighting.target())
-                && sighting.current(tick,state.bootstrap().ruleset().security().investigationTicks())
-                && inScope(state,duty,sighting);
+        var assigned=state.security().response(duty.id());
+        if(retained.isEmpty() || assigned.isEmpty() || !assigned.orElseThrow().contact().home().equals(duty.home())
+                || !assigned.orElseThrow().contact().target().equals(retained.orElseThrow()))return false;
+        var sighting=state.security().contacts().get(assigned.orElseThrow().contact());
+        return sighting!=null && sighting.current(tick,state.bootstrap().ruleset().security().investigationTicks())
+                && inScope(state,duty.home(),sighting);
     }
-    private static boolean inScope(FrontierWorldState state,GuardDuty duty,SecurityState.Contact contact) {
+    static boolean inScope(FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.api.SubjectId homeId,SecurityState.Contact contact) {
         var position=new SurfaceAnchor(contact.position());
-        var home=new SurfaceAnchor(FrontierWorldStateSupport.settlement(state.bootstrap(),duty.home()).anchor());
+        var home=new SurfaceAnchor(FrontierWorldStateSupport.settlement(state.bootstrap(),homeId).anchor());
         return SecurityCoverage.distance(home,position)<=state.bootstrap().ruleset().security().homePursuitLimit()
-                && ProtectionObligations.read(state,duty.home()).stream().anyMatch(target->
+                && ProtectionObligations.read(state,homeId).stream().anyMatch(target->
                 SecurityCoverage.distance(target.observationAnchor(),position)<=state.bootstrap().ruleset().security().pursuitMargin());
     }
     public static boolean targetRetained(FrontierWorldState state,GuardDuty duty) {
@@ -37,8 +41,13 @@ public final class GuardResponse {
         if(!targetRetained(state,duty))return true;
         var mission=duty.mission().orElseThrow();var contact=contact(state,duty,tick);
         if(mission.response().isEmpty())return contact.isPresent();
-        if(contact.isEmpty())return !investigating(state,duty,tick);
-        return !mission.response().orElseThrow().equals(contact.orElseThrow().target())
+        if(contact.isEmpty()) {
+            if(!investigating(state,duty,tick))return true;
+            var last=state.security().contact(duty.home(),mission.response().orElseThrow());
+            return mission.search().map(search -> search.sightingRevision()!=last.revision())
+                    .orElseGet(() -> SecurityCoverage.distance(mission.station(),new SurfaceAnchor(last.position()))>MAX_CONTACT_STATION_DISTANCE);
+        }
+        return mission.stage()!=GuardMission.Stage.INTERCEPT || !mission.response().orElseThrow().equals(contact.orElseThrow().target())
                 || SecurityCoverage.distance(mission.station(),new SurfaceAnchor(contact.orElseThrow().position()))>MAX_CONTACT_STATION_DISTANCE;
     }
     /** Brief recovery gives native sensing one opportunity after cooldown before restarting an approach. */
