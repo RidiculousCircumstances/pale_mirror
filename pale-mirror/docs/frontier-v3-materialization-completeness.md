@@ -460,3 +460,20 @@ aggregate failed its unsafe exit; a later read-only same-world restart confirms
 contact/response/pending-hit closure. Do not relabel failed carriers green. Exact
 receipts, world identities, method limitations and MAIN318 delivery are in the
 schema318 section of docs/frontier-v3-security-hot-findings-20261102.md.
+
+### Reusable melee mechanics and guard integration — schema319
+
+Source799435d7d extracts one CombatState/CombatCapability/process/codec and generic
+native executor. Guard policy nominates exact orders; common tactical positions use
+shared geometry/navigation and declared unit/weapon dimensions. UAE remains the
+sole actor/body controller; existing native operation receipts own hit/wear/recovery.
+COLD supports approaches, never damage. Shared station attendance suspension now
+preserves a pending physical-effect identity across scene restart without extra work.
+Native real hit/departure plus same-world restart/no-new-assault halves pass on the
+retained seed41 world through existing declarative scenario segments. This proves
+those physical effects and closure, not full-cohort tactical M2 or human M3. Initial
+invalid entry aggregate remains failed; two inactive baseline GameTest failures
+remain visible. Exact evidence and reviewed-frame limits are in the schema319
+section of docs/frontier-v3-security-hot-findings-20261102.md and
+IMPL/build/combat-module/retained-carrier.json. MAIN delivery is bound separately in
+the current ledger and build/combat-module/verified.json after deployment.

@@ -1,87 +1,101 @@
 # Active continuity — 2026-11-02
 
-## Current assignment and result
-Accepted local-defence/reinforcement correction is implemented, committed and
-MAIN-deployed. Main alone; no subagents/Terra/API goal/push. Stop after this delivery
-report; no new work stream without a request. Worlds disposable; ordinary scoped
-reset/deploy authority remains. Preserve unrelated histories and governance WIP.
+## Current assignment — reusable HOT melee delivered
+User approved implementing/integrating the common combat module through guards.
+Main alone; no subagents/Terra/API goal/push. Standing commit and verified MAIN
+deploy fulfilled. No COLD combat, civilian combat, ranged attacks or convoy policy.
+No active implementation remains for this cut. Next user may inspect guards or
+request another slice; do not infer an additional goal. Plan in source
+`docs/frontier-v3-combat-module-plan.md`; detailed evidence/classification in
+`docs/frontier-v3-security-hot-findings-20261102.md` schema319 section.
 
-IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
-branch feat/baker-carry-orders-20260926 CLEAN7d952077e6e63ea8ff42a7b9b42153e7228c0ec8.
-Implementation57a704f71, test-worker/visitb72cb8d65, receipt-oracle7d952077e.
-RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached7d952077e.
-PACK /home/rd/proj/minecraft trackedcleanf72713382957, .f0v-baseline/ preserved.
-Governance extensive unrelated WIP; stage only owned security architecture key,
-materialization appendix, HOT findings and this ledger, never bulk add.
+IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror, branch
+feat/baker-carry-orders-20260926 CLEAN799435d7db9cb78cd5b73941e2b65b120f87d37d.
+Core705f58c71; persisted-policy/native-rendezvous03794462c; connected station
+restart fix799435d7d. RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror
+CLEAN detached799. PACK /home/rd/proj/minecraft trackedcleanf72713382957;
+preserve its existing untracked .f0v-baseline/. No client update/publication/push.
+Governance has extensive unrelated WIP; never bulk stage or discard it.
 
-## Boundaries
-Schema318 has CombatAwareness personal native observer/target positions and dated
-harm, distinct shared contacts. Generic pure CombatReactionPolicy selects self,
-ally or permitted-area defence by priority/distance with hysteresis. Exact Response
-names target, purpose and fixed spatial envelope. SecurityDispatch accepts local
-nominations and budgets only remaining distant reinforcements; desired2-person crew
-includes locals, so enough locals release distant help. No quota prohibits local
-defence. Guard mission/search admission and native hit consume this same response;
-UAE/navigation/body/operation journal remain sole execution/effect owners. Eligible
-armed ON_DUTY/current-GUARD appointments only; no new civilian combat or bypass of
-another current activity. Blind harm invents no attacker position, stale contact
-recruits nobody, hostility UUID persists, no COLD hits. Rules hashed, knowledge
-bounded/pruned; no old-world migration. Source plan docs/frontier-v3-local-defence-plan.md.
+## Architecture
+Common model.combat owns CombatState, exact pending MeleeStrike/readiness, weapon
+facts and bounded rejected melee stations. Read-only CombatOrder is permission
+from a closed execution-kind CombatCapability registry, not a second target/body
+controller. GuardCombatCapability owns politics, response references and
+patrol/search/return. Common core imports no security policy. Tactical station
+ranking/reselection uses common geometry/navigation, weapon reach, unit dimensions
+and peer stations; completed negative paths cannot hide later candidates behind
+the outstanding-query budget. Retention consumes persisted hashed MeleeRules.
 
-Prior exact station attendance-release and CONFLICT field pause repairs remain;
-productive permission is still strict. The diagnostic field conflict itself and
-retired native replica reports were not silently declared repaired. Full historical
-findings/evidence remain in docs/frontier-v3-security-hot-findings-20261102.md.
+Separate registered combat process/codec and native executor preserve one UAE,
+body controller, inventory authority and exact native operation journal. Actual
+HOT weapon, LOS/reach, readiness, target incarnation and wear gate every hit.
+Registry weapon definitions permit COLD approaches, never COLD hits. Passive
+CombatStatus performs no route/forecast work. Schema319, fresh-world-only policy.
 
-## Verification and limits
-Focused guardrails+Frontier47+NeoForge48 PASS37s; Node55 PASS. Clean RELEASE b72 full
-guardrails/check/NeoForge build/packaged gate PASS9m11s: Frontier2246,NeoForge895,
-domain324,Visuals79; zero failures/errors/skips. Initial2GiB worker OOM in existing
-geometry fixture; bounded4GiB worker passed. Final7d clean detached package/verify
-PASS8s; production bytes unchanged by final scenario/docs commit. Receipts
-IMPL/build/local-defence/{focused,integration}.json, /tmp/pm-local-release-final.log,
-/tmp/pm-local-final-package.log. Reuse unchanged checks, no confidence rerun.
+Connected recovery fix: scene suspension could call general machine.replace while
+pending fuel/recipe pinned its revision, causing startup quarantine. The common
+station boundary now permits only validated settlement of the previous labour
+clock and withdrawal of attendance while preserving physical effect revision,
+pre/postimage and custody. Resume/new work remains forbidden under pending effect.
+Same failed world restarted successfully without reset. No format/default change.
+Prior local-reaction, authority, station geometry and contact-ending contracts
+remain; historical field CONFLICT and retired-body warnings were not silently
+claimed repaired. Sources/evidence retained in the HOT findings.
 
-Native retained seed41 worldv3-disposable_security_response_restart-c337faca, finite
-forge inputs, no generated equipment/appointments. Existing pilot/segments only,
-frozen source, one20FPS private-Xvfb client. physical-before-receipt.json PASS8actions
-rundc23b7bf-ee27-4006-bc37-153973ad8803: real fist, SELF_DEFENCE, native health100->94,
-departure, bounded SEARCH, contacts/responses0/RETURN/no pending hit. Setup-only
-vanilla teleport of player beside exact existing guard body avoids stale canonical
-origin; no resident/contact/effect injection. Normal saved same-world restart then
-proves remembered UUID and native100->94 without another attack. Its after-half
-aggregate FAILED unsafe Overworld exit/death and executor premature server stop;
-do not relabel it passed. Later same-world restart read-only settlement23823 proves
-hostility1,contact0,response0,no pending strike,patrol/return,NORMAL:
-restart-terminal-settlement.txt. Earlier setup-height/LOS/transient-health failures
-remain retained failed receipts. No native multiplayer, full-pack graphical/human M3,
-industrial M2 or scale/global80ms claim. Existing baseline inactive GameTest debts
-remain; not all416 are claimed green. See current HOT findings for exact methods.
-Private clients/Xvfb/25583/4 and other private servers are STOPPED.
+## Verification
+Clean705 full guardrails/check/NeoForge build/packaged gate PASS8m34s:
+Frontier2253/NeoForge895/domain324/Visuals79, no failures/errors/skips.
+Focused core72/adapter48, registry4, Node56 pass. GameTest414/416; same2 inactive
+legacy assault/patrol failures reproduce on clean baseline de34 and remain debt,
+not a green416 claim. Final037 delta focused/policy/package PASS25s; Neo895 reran
+PASS3m8s. Final799 station/recovery29+guardrails/package PASS47s, clean detached
+package/verify PASS12s. Reuse unchanged gates; no confidence rerun.
+Receipts IMPL/build/combat-module/{focused,executor-registry,integration,gametest,
+station-recovery-focused,retained-carrier,verified}.json; /tmp/pm-combat-*.log.
+
+Initial isolated319 receipt native.json FAILED player-entry setup: routeSurface
+expected feet65 but real player landed64; no offence/hit occurred. Do not relabel
+it passed or claim product geometry fixed. Checked-in scenario uses ordinary
+player-only high entry plus setup-only rendezvous with received named guard.
+Retained seed41 worldv3-disposable_security_response_restart-6369077c, finite forge
+inputs/no sword or appointment injection. Existing restartSegments/run-scenario,
+frozen799, one20FPS private-Xvfb client at a time. Before5e056e4c-f179-4837-bc38-
+10ad4c62d8f1 PASS8actions: real fist -> SELF_DEFENCE -> native player100->94 ->
+safe exit -> bounded search/contact0/responders0/RETURN/no pending strike.
+Normal stop saved all dimensions14:48:28 and closed JVM/ports. Same-world restart
+20c2a565-96a0-461a-b2e5-cfcb414146cf, after11722a98-b415-498f-a3f9-9827cbd7b837
+PASS4actions: remembered hostility, native100->94 without new attack, safe exit,
+contact0/responders0/no pending hit. Final private stop saved all dimensions14:51:55.
+Frame reviewed: actual armed body, dark partial terrain. No full-pack graphical,
+HUMAN/M3, multiplayer/whole-cohort tactics, industrial M2 or scale/global80ms claim.
+Private clients/Xvfb/25583/4 and all other private servers are STOPPED.
 
 ## MAIN delivery
-RUNNING /home/rd/far-frontier-server, far-frontier-v3-live.service, actual Java22
-PID1071462, wrapper1071384, external25565/RCON25575. Source7d952077e, installed SHA512
-56832951238d2c432de5b38b51fdfef5d4c64f72e39b76dee447274a7f6e6df8c72d292950ba503e182c0cbef1153c41b74e768f816b56e2bc8d75bfcc2adfcc.
-Fresh local-defence-schema318-seed131-20261102, actual persisted seed131,
-frontier-v3-simulation-terrain-r31,12town/390residents. Prior317 world preserved.
-Normal RCON stop saved all dimensions and closed JVM/ports; datapack installed
-before genesis; root preflight/shared installer/deploy-verify PASS. Exact binding
-IMPL/build/local-defence/verified.json; actual snapshot4200 in main-world-identity.txt.
-Advancing1321->3785, retained-conflict summary green/required0, pending ordinary0,
-fastforward0. First town at1984 guards0: ordinary manufacture/collection/appointment,
-no fixture weapons or operator warp left on MAIN. Address100.100.78.29:25565 /
-LAN192.168.0.103; first-town support(-1486,64,-1360), teleportfeet(-1486,65,-1360),
-pale_mirror:frontier_graybox. No client update/public publication/push.
+RUNNING /home/rd/far-frontier-server, far-frontier-v3-live.service.
+Actual Java22PID1667411, wrapper1667387;25565/RCON25575. Source799 above; SHA512
+55ecdae4358051aacf327a4123aee93340de981b93db3dad188da5647ac0ee87b6581293958b2dc02b60cb2167f2d7a01ef9d9f679a498652d2158e4ebea0e37.
+Fresh combat-module-schema319-seed132-20261102, actual persisted seed132,
+frontier-v3-simulation-terrain-r31,12town/364residents. Old318 world preserved.
+Normal old stop saved all dimensions and closed JVM/ports; required datapack
+installed before genesis. Root preflight/shared pinned installer/deploy-verify PASS.
+Start epoch1793613160; ready14:52:52/runtime14:52:53. Snapshot1400 proves identity;
+summaries1319->1599 green retained-conflict scope/required0, ordinary pending0,
+fastforward0. Exact binding IMPL/build/combat-module/verified.json. First town at1329
+armed guards0: ordinary manufacture/collection/appointment, no injected roles/items.
+Address100.100.78.29:25565 / LAN192.168.0.103. First-town support(-1486,64,-1360),
+entry above it then land naturally; diagnostic support has a known entry-height
+mismatch in the seed41 carrier, so do not infer exact physical feet from it.
 
 ## Operations
 RCON IMPL/build/forestry-native/query-runtime.mjs reads password silently; never
 print server.properties. Valid pale_mirror v3 inspect summary/performance or
 inspect settlement settlement:1. advance N queues; inspect terminal result.
+Normal RCON stop and native saved-dimensions/process/port closure precede changes.
 Transient unit disappears on stop; recreate with systemd-run --user
 --unit=far-frontier-v3-live --collect --working-directory=/home/rd/far-frontier-server
-/home/rd/far-frontier-server/scripts/run-server-java22.sh. Use root preflight and
-frontier-v3-deploy-verify. Detached build requires
+/home/rd/far-frontier-server/scripts/run-server-java22.sh. Root preflight and
+frontier-v3-deploy-verify required. Detached build property
 -PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt.
 JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; runtime Java22
 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java. Local artifact host

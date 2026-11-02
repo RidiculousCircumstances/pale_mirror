@@ -291,3 +291,64 @@ no fixture weapons on MAIN. Prior317 world preserved for diagnosis. Root pack is
 unchanged; no client update, public publication or push. These are bounded readiness
 and native effect claims, not performance/scale/global80ms, full industrial M2 or
 human M3 acceptance.
+
+
+## Reusable HOT melee module — schema319
+
+Delivered source799435d7d (core705f58c71, persisted-policy/rendezvous03794462c).
+`model.combat` owns generic orders, weapon facts, exact pending strikes/readiness,
+failed stations and bounded tactical positioning; closed CombatCapability adapters
+supply role permission, retained references and family continuation. The guard
+adapter owns hostility/response/patrol/search/return. Common core has no direct
+security dependency. UAE/common navigation own bodies and movement; the common
+native executor checks actual equipped stack, range/LOS and native incarnations,
+then applies hit/wear through the existing operation journal. COLD registry weapon
+definitions enable approaches only; no background hits/civilian combat are enabled.
+
+Full clean705 gates PASS8m34s: Frontier2253/NeoForge895/domain324/Visuals79. Node56,
+physical-executor registry4, targeted combat/core/codec tests and guardrails pass.
+GameTest414/416 retains the same two inactive assault/patrol baseline failures;
+not all416 are green. Final policy delta has focused recovery/package evidence;
+NeoForge895 reran on037. Final station recovery29+guardrails/package PASS47s and
+clean detached799 package/verify PASS12s. Receipts IMPL/build/combat-module/.
+
+Initial isolated run failed before offence: routeSurface diagnostic expected feet65
+but ordinary player landed64. Retain native.json as failed; this is an entry-fixture
+limitation, not evidence of combat failure or repaired product geometry. The fixed
+checked-in scenario uses ordinary player-only high entry over the seed41 town and
+setup-only rendezvous with a received named guard. No resident is teleported, no
+sword/appointment/contact/hit is injected, and native assertions remain strict.
+
+Retained world v3-disposable_security_response_restart-6369077c then exposed a real
+startup defect: scene restart suspension called machine.replace while an exact
+fuel/recipe effect pinned its revision.799 introduces strictly validated attendance
+suspension, settling only the prior work clock and clearing attendance while retaining
+the pending effect revision/preimage. Normal replacement remains forbidden under
+pending effect; no new work or transform is invented. This is common station logic,
+not a forge/guard exception. Same failed world successfully restarted without reset.
+
+Existing restartSegments/run-scenario, frozen799, one20FPS private-Xvfb client at a
+time: before run5e056e4c-f179-4837-bc38-10ad4c62d8f1 PASS8actions: real fist,
+SELF_DEFENCE, native player100->94, safe departure, bounded search, contact0,
+responders0, RETURN/no pending hit. Normal RCON stop saved all dimensions14:48:28,
+closed JVM/25583/4. Same-world restart20c2a565-96a0-461a-b2e5-cfcb414146cf then after
+11722a98-b415-498f-a3f9-9827cbd7b837 PASS4actions: retained hostile UUID, another
+native100->94 without a new assault, safe departure, contact0/responders0 and no
+pending strike. Exact targeted combined receipt retained-carrier.json names both
+halves and parent checked-in declaration; the original failed isolated aggregate
+is not relabelled green. Final private stop saved all dimensions14:51:55 and closed
+private process/ports. The reviewed local-melee-approach frame shows the actual armed
+body but dark partial terrain; no full-pack graphical/HUMAN/M3, native multiplayer,
+whole-cohort tactics, industrial M2 or scale/80ms performance claim is made.
+
+
+MAIN799 delivered after normal saved stop of318. Fresh combat-module-schema319-
+seed132-20261102 has persisted seed132/r31/12town,364residents. Java22PID1667411,
+wrapper1667387, far-frontier-v3-live.service,25565/RCON25575. Pinned SHA512
+55ecdae4358051aacf327a4123aee93340de981b93db3dad188da5647ac0ee87b6581293958b2dc02b60cb2167f2d7a01ef9d9f679a498652d2158e4ebea0e37.
+Root preflight/shared installer/deploy-verify pass, snapshot1400 binds seed/ruleset;
+healthy summaries1319->1599, required conflicts0, ordinary pending0, fastforward0.
+First town armed guards0 at1329: ordinary manufacture/collection, no injected items.
+Old318 world retained. Exact delivery binding build/combat-module/verified.json;
+source and detached release clean, pack trackedclean with preserved .f0v-baseline/.
+No client artifact publication or push.
