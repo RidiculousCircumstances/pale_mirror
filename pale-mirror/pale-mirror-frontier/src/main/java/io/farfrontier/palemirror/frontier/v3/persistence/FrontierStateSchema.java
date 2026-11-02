@@ -20,7 +20,7 @@ final class FrontierStateSchema {
     // Compaction retains the durable epoch floor; erased history cannot be reconstructed.
     // Atomic COLD cell receipts change the closed process event inventory.
     // Peaceful guard appointments retain exact equipment and execution declarations.
-    static final int VERSION = 321;
+    static final int VERSION = 322;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

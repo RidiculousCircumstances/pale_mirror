@@ -18,6 +18,7 @@ public final class PaleMirrorNetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar("1");
+        registrar.playToClient(CombatGesturePayload.TYPE,CombatGesturePayload.STREAM_CODEC,PaleMirrorNetwork::receiveCombatGesture);
         registrar.playToClient(AtlasSnapshotPayload.TYPE, AtlasSnapshotPayload.STREAM_CODEC,
                 PaleMirrorNetwork::receiveSnapshot);
         registrar.playToClient(PlayerContextCardPayload.TYPE, PlayerContextCardPayload.STREAM_CODEC,
@@ -112,6 +113,10 @@ public final class PaleMirrorNetwork {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             io.farfrontier.palemirror.internal.client.PaleMirrorContextCardClient.receive(payload);
         }
+    }
+
+    private static void receiveCombatGesture(CombatGesturePayload payload,IPayloadContext context) {
+        if(FMLEnvironment.dist==Dist.CLIENT)io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.receive(payload);
     }
 
     private static void receiveStationWorkGesture(StationWorkGesturePayload payload, IPayloadContext context) {

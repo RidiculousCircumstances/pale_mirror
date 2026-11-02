@@ -24,6 +24,7 @@ public final class PaleMirrorAtlasClientEvents {
     public static void clientTick(ClientTickEvent.Post event) {
         PaleMirrorContextCardClient.tick();
         PaleMirrorStationWorkGestureClient.tick();
+        PaleMirrorCombatClient.tick();
         while (OPEN_ATLAS.consumeClick()) {
             if (Minecraft.getInstance().player != null) PaleMirrorNetwork.requestAtlas();
         }
@@ -39,6 +40,7 @@ public final class PaleMirrorAtlasClientEvents {
         PaleMirrorAtlasClient.clear();
         PaleMirrorContextCardClient.clear();
         PaleMirrorStationWorkGestureClient.clear();
+        PaleMirrorCombatClient.clear();
     }
 
     static KeyMapping openAtlasKey() { return OPEN_ATLAS; }

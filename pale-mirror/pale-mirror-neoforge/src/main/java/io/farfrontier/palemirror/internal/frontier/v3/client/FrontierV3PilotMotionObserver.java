@@ -73,6 +73,7 @@ final class FrontierV3PilotMotionObserver {
             }
             return false;
         }
+        if(action.has("requiredCombatAttacks"))FrontierV3TestPilotClient.look(minecraft,body.getEyePosition());
         if (entityRuntimeId < 0) { entityRuntimeId = body.getId(); samples = new ArrayList<>(); sampledTicks = new HashSet<>(); }
         int interval = action.get("sampleEveryTicks").getAsInt();
         long gameTime = minecraft.level.getGameTime();
@@ -83,7 +84,7 @@ final class FrontierV3PilotMotionObserver {
             // Read the already-delivered process result and periodically renew it through the
             // same ordinary player diagnostic path.  A rendered pose alone must never be
             // mistaken for a semantic work duty.
-            if (clientTick % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect process " + action.get("id").getAsString());
+            if (!action.has("requiredCombatAttacks") && clientTick % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect process " + action.get("id").getAsString());
             // This is a bounded diagnostic correlation, not a second pose source: it answers
             // whether a visually held remote body was also held by the authoritative server.
             // The actor receipt pairs a read-only authoritative position with the rendered one.
@@ -103,10 +104,28 @@ final class FrontierV3PilotMotionObserver {
             Vec3 authoritative = authoritativePosition(action);
             samples.add(new Pose(clientTick, gameTime, body.getX(), body.getY(), body.getZ(), velocity.x, velocity.z,
                     authoritative == null ? null : authoritative.x, authoritative == null ? null : authoritative.z,
-                    workAnimation, semanticPhase(action, body.getId())));
+                    workAnimation, semanticPhase(action, body.getId()),io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body)));
         }
         if (clientTick < action.get("durationTicks").getAsLong()) return false;
-        emit(action, expectedType, interval, actionStep, milestone); return true;
+        requireCombat(action);emit(action, expectedType, interval, actionStep, milestone); return true;
+    }
+
+    /** Optional combat assertion consumes the same actually rendered bounded pose series. */
+    private static void requireCombat(JsonObject action){
+        if(!action.has("requiredCombatAttacks"))return;
+        var observed=new HashSet<String>();boolean moving=false;
+        for(int i=0;i<samples.size();i++){
+            var sample=samples.get(i);var combat=sample.combat();if(combat==null)continue;
+            if(combat.age()<=combat.preparation()+1)observed.add(combat.attack());
+            if(i==0 || combat.age()>=combat.preparation())continue;
+            var before=samples.get(i-1);var prior=before.combat();
+            if(prior!=null && prior.attempt()==combat.attempt() && prior.age()<prior.preparation()
+                    && Math.hypot(sample.x()-before.x(),sample.z()-before.z())>0.005)moving=true;
+        }
+        for(var required:action.getAsJsonArray("requiredCombatAttacks"))if(!observed.contains(required.getAsString()))
+            throw new IllegalStateException("client did not render required attack "+required+"; observed="+observed);
+        if(action.has("requireWindupMotion") && action.get("requireWindupMotion").getAsBoolean() && !moving)
+            throw new IllegalStateException("no actual body motion during the rendered preparation");
     }
 
     static void reset() { actionStartedTick = Long.MIN_VALUE; entityRuntimeId = -1; samples = List.of(); sampledTicks = Set.of(); elapsedClientTicks = 0L; }
@@ -205,6 +224,9 @@ final class FrontierV3PilotMotionObserver {
             sample.addProperty("x", pose.x()); sample.addProperty("y", pose.y()); sample.addProperty("z", pose.z());
             sample.addProperty("velocityX", pose.velocityX()); sample.addProperty("velocityZ", pose.velocityZ()); sample.addProperty("workAnimation", pose.workAnimation());
             if (pose.authoritativeX() != null) { sample.addProperty("authoritativeX", pose.authoritativeX()); sample.addProperty("authoritativeZ", pose.authoritativeZ()); }
+            if(pose.combat()!=null){var combat=pose.combat();var rendered=new JsonObject();rendered.addProperty("attack",combat.attack());
+                rendered.addProperty("attempt",combat.attempt());rendered.addProperty("age",combat.age());rendered.addProperty("preparation",combat.preparation());
+                rendered.addProperty("shoulder",combat.shoulder());rendered.addProperty("elbow",combat.elbow());sample.add("combat",rendered);}
             sample.addProperty("semanticPhase", pose.semanticPhase()); values.add(sample); }
         value.add("samples", values); FrontierV3PilotSessionControl.stampDiagnostic(value, actionStep, milestone);
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
@@ -214,5 +236,5 @@ final class FrontierV3PilotMotionObserver {
         return minecraft.level == null || entityRuntimeId < 0 ? null : minecraft.level.getEntity(entityRuntimeId);
     }
     private record Pose(long tick, long serverTick, double x, double y, double z, double velocityX, double velocityZ,
-                        Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase) { }
+                        Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase,io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.Rendered combat) { }
 }

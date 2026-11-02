@@ -1,0 +1,182 @@
+{
+  "schema": 1,
+  "id": "live_melee_hostility_recovery",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583,
+    "profile": "peaceful-guards"
+  },
+  "pilot": {
+    "username": "pmresponse"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 240 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 5 true"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 4,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "security": {
+              "hostilePlayers": 1
+            },
+            "hasArmedGuard": true
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok"
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_player_health",
+      "maximum": 99,
+      "minimum": 1,
+      "timeoutMs": 60000,
+      "causalMilestone": "remembered_player_targeted_after_restart"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 66,
+        "z": -138
+      },
+      "settleMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0,
+          "contactCount": 0
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 4,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0,
+          "contactCount": 0
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 1,
+      "name": "remembered-threat-after-server-restart",
+      "presentation": "clean"
+    }
+  ]
+}

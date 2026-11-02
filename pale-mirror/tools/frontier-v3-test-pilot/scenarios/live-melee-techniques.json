@@ -1,0 +1,352 @@
+{
+  "schema": 1,
+  "id": "live_melee_techniques",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583,
+    "profile": "peaceful-guards"
+  },
+  "pilot": {
+    "username": "pmresponse"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/execute in minecraft:overworld run fill 10 62 -140 14 65 -136 minecraft:stone"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 240 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 100"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 5 true"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 4,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 120000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "hasArmedGuard": true
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok"
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "attack_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 32,
+      "maxAttacks": 1,
+      "requireRemoval": false,
+      "requireDamage": true,
+      "timeoutMs": 30000,
+      "causalMilestone": "player_harmed_declared_guard"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "contactCount": 1,
+          "responseStatus": "ENGAGED",
+          "selfDefenders": 1
+        }
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100,
+      "causalMilestone": "confirmed_local_self_defence"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "windupInProgress": true
+        }
+      },
+      "pollIntervalMs": 100,
+      "timeoutMs": 30000,
+      "causalMilestone": "combat_preparation_started"
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "quick-melee-rendered",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "durationTicks": 120,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 30000,
+      "maxDistance": 48,
+      "requiredCombatAttacks": [
+        "QUICK"
+      ],
+      "requireWindupMotion": false,
+      "causalMilestone": "quick_melee_rendered"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 4,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 48,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "lunge-melee-rendered",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "durationTicks": 120,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 30000,
+      "maxDistance": 48,
+      "requiredCombatAttacks": [
+        "LUNGE"
+      ],
+      "requireWindupMotion": true,
+      "causalMilestone": "lunge_melee_rendered"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "windupInProgress": true
+        }
+      },
+      "pollIntervalMs": 100,
+      "timeoutMs": 30000,
+      "causalMilestone": "native_windup_visible_before_dodge"
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 100,
+      "captureAs": "before-dodge",
+      "timeoutMs": 1000
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 66,
+        "z": -138
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimumFrom": "before-dodge",
+      "timeoutMs": 1000,
+      "causalMilestone": "escaped_windup_caused_no_additional_native_damage"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0,
+          "contactCount": 0
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 16,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0,
+          "contactCount": 0
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 1,
+      "name": "armed-guard-patrol-before-player-offence"
+    }
+  ]
+}

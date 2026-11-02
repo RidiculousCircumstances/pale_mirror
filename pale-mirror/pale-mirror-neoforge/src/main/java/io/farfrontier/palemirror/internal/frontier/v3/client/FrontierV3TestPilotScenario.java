@@ -192,10 +192,22 @@ final class FrontierV3TestPilotScenario {
                 && wholeWithin(action, "durationTicks", 1, 12_000L)
                 && action.has("sampleEveryTicks") && action.get("sampleEveryTicks").isJsonPrimitive()
                 && action.get("sampleEveryTicks").getAsInt() >= 1 && action.get("sampleEveryTicks").getAsInt() <= 20
-                && timeout(action, 180_000L)
+                && timeout(action, 180_000L) && validCombatObservation(action)
                 && (!action.has("maxDistance") || action.get("maxDistance").isJsonPrimitive()
                     && action.get("maxDistance").getAsDouble() > 0.0D && action.get("maxDistance").getAsDouble() <= 128.0D)
                 && (!action.has("anchor") || position(action.getAsJsonObject("anchor")));
+    }
+
+    private static boolean validCombatObservation(JsonObject action){
+        if(action.has("requireWindupMotion") && (!action.has("requiredCombatAttacks") || !action.get("requireWindupMotion").isJsonPrimitive()
+                || !action.get("requireWindupMotion").getAsJsonPrimitive().isBoolean()))return false;
+        if(!action.has("requiredCombatAttacks"))return true;
+        if(!action.get("requiredCombatAttacks").isJsonArray() || action.getAsJsonArray("requiredCombatAttacks").size()<1
+                || action.getAsJsonArray("requiredCombatAttacks").size()>2)return false;
+        var values=new java.util.HashSet<String>();
+        for(var value:action.getAsJsonArray("requiredCombatAttacks"))if(!value.isJsonPrimitive()
+                || !Set.of("QUICK","LUNGE").contains(value.getAsString()) || !values.add(value.getAsString()))return false;
+        return true;
     }
 
     private static boolean validPopulationObservation(JsonObject action) {

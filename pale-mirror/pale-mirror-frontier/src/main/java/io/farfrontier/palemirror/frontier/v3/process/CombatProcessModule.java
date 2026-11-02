@@ -30,9 +30,6 @@ final class CombatProcessModule implements FrontierWorldProcessModule {
                 if(move!=null){
                     if(!move.executionId().equals(execution) || !capabilities.require(execution).permitsApproach(state,move))
                         return FrontierWorldCommandPlanner.rejected("melee cannot interrupt another activity or mandatory clearance");
-                    var assessment=ActorMovementProcess.ownerTransitionCheckpoint(state,execution,tick);
-                    if(assessment instanceof ActivityInterruptionPlanner.Waiting)return FrontierWorldCommandPlanner.rejected("melee waits for its movement checkpoint");
-                    var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,execution.actorId());events.addAll(ready.events());state=ready.following();
                 }
             }
             CombatTransitions.apply(state,owner,event,tick,capabilities);

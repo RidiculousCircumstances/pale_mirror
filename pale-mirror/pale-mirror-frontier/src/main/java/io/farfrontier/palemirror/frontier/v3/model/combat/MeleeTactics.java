@@ -7,6 +7,16 @@ public final class MeleeTactics {
     public record Facts(long tick,boolean targetAlive,boolean visible,boolean inReach,boolean pending,long readyAt,boolean usableWeapon) {
         public Facts {if(tick<0 || readyAt<0)throw new IllegalArgumentException("invalid melee fact time");}
     }
+    /** Native boundary supplies observed separation, never a player's future inputs. */
+    public static MeleeAttack attack(WeaponProfile weapon,double distance,double separatingSpeed,MeleeRules rules){
+        if(!Double.isFinite(distance) || distance<0 || !Double.isFinite(separatingSpeed))
+            throw new IllegalArgumentException("invalid observed melee separation");
+        return distance<=Math.min(rules.techniques().quickDistanceMicros()/1_000_000.0,weapon.reach()*rules.techniques().quickReachPermille()/1000.0)
+                && separatingSpeed<rules.techniques().retreatSpeedMicros()/1_000_000.0?MeleeAttack.QUICK:MeleeAttack.LUNGE;
+    }
+    public static boolean opportunity(WeaponProfile weapon,MeleeAttack attack,double distance,MeleeRules rules){
+        return Double.isFinite(distance) && distance>=0 && distance<=weapon.reach()+rules.techniques().require(attack).approachAllowance();
+    }
     public static Decision decide(CombatOrder order,Facts facts){
         if(!order.current(facts.tick()) || !facts.targetAlive())return Decision.FINISHED;
         if(facts.pending() || !facts.usableWeapon())return Decision.WAIT;

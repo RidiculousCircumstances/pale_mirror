@@ -852,7 +852,7 @@ public final class FrontierV3TestPilotClient {
         look(minecraft, Vec3.atCenterOf(target));
     }
     /** Updates the local render camera only; no target UUID or server selection is involved. */
-    private static void look(Minecraft minecraft, Vec3 target) {
+    static void look(Minecraft minecraft, Vec3 target) {
         Vec3 eye = minecraft.player.getEyePosition();
         Vec3 delta = target.subtract(eye);
         minecraft.player.setYRot((float) (Mth.atan2(-delta.x, delta.z) * Mth.RAD_TO_DEG));

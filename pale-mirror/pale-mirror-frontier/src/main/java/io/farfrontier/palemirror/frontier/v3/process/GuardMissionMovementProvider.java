@@ -12,7 +12,7 @@ public final class GuardMissionMovementProvider implements ActorMovementProvider
     private GuardDuty work(FrontierWorldState state, ActorMovement movement) {
         if (!(movement.context() instanceof ActorMovementContext.GuardMissionLeg leg)) throw new IllegalArgumentException("foreign guard mission movement context");
         var work = GuardAuthority.require(state, movement.executionId());
-        if (!work.id().equals(leg.dutyId()) || work.revision() != leg.revision() || GuardAuthority.pending(state, work)
+        if (!work.id().equals(leg.dutyId()) || work.revision() != leg.revision() || GuardAuthority.equipmentPending(state, work)
                 || !work.missionOrder().equals(movement.order())) throw new IllegalArgumentException("stale guard mission move/goal");
         state.actorExecutions().requireCurrent(work.execution()); return work;
     }

@@ -27,7 +27,9 @@ final class GuardCombatCapability implements CombatCapability {
     public boolean permitsApproach(FrontierWorldState state,ActorMovement movement){
         var duty=GuardAuthority.require(state,movement.executionId());
         return movement.context() instanceof ActorMovementContext.GuardMissionLeg leg && leg.dutyId().equals(duty.id())
-                && leg.revision()==duty.revision() && movement.order().equals(duty.missionOrder());
+                && leg.revision()==duty.revision() && movement.order().equals(duty.missionOrder())
+                && duty.mission().filter(m->m.stage()==GuardMission.Stage.INTERCEPT).flatMap(GuardMission::response)
+                    .filter(target->state.security().response(duty.id()).filter(response->response.contact().target().equals(target)).isPresent()).isPresent();
     }
     public List<ProposedEvent> wake(FrontierWorldState state,ActorExecutionId execution,long tick){
         var duty=GuardAuthority.require(state,execution);

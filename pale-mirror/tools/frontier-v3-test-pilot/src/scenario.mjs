@@ -282,7 +282,12 @@ export function validateScenario(scenario) {
           || (action.nameContains !== undefined && !validEntityName(action.nameContains))
           || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:') && !requiredId(action.workerId, 'actor:'))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
-          || (action.anchor !== undefined && !validPosition(action.anchor)))) {
+          || (action.anchor !== undefined && !validPosition(action.anchor))
+          || (action.requiredCombatAttacks !== undefined && (!Array.isArray(action.requiredCombatAttacks)
+            || action.requiredCombatAttacks.length < 1 || action.requiredCombatAttacks.length > 2
+            || new Set(action.requiredCombatAttacks).size !== action.requiredCombatAttacks.length
+            || action.requiredCombatAttacks.some(value => !['QUICK', 'LUNGE'].includes(value))))
+          || (action.requireWindupMotion !== undefined && (typeof action.requireWindupMotion !== 'boolean' || action.requiredCombatAttacks === undefined)))) {
         throw new Error('observe_entity_motion needs one bounded locally rendered entity and exact sampling window');
       }
       if (action.type === 'observe_settlement_population' && (!requiredId(action.settlementId, 'settlement:')

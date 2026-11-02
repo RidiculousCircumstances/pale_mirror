@@ -64,7 +64,11 @@ public final class GuardWorkProcess {
     public static List<ProposedEvent> progress(FrontierWorldState state, ScheduledAction action, long tick) {
         var duty = state.strategicPlans().guards().get(action.subject());
         if (duty == null) return cancelled(action);
-        if (GuardAuthority.pending(state, duty)) return retry(state, action, tick);
+        if (state.combat().pending().containsKey(duty.id())) {
+            try { return GuardPatrolProcess.preparing(state,action,duty,tick); }
+            catch(KnownPedestrianNavigation.RouteUnavailable waiting) { return retry(state,action,tick); }
+        }
+        if (GuardAuthority.equipmentPending(state, duty)) return retry(state, action, tick);
         if (!alive(state, duty)) return List.of(changed(duty, GuardDutyEvent.Change.ENDED), cancel(action));
         if (!state.actorExecutions().actors().get(duty.execution().actorId()).current().equals(Optional.of(duty.execution()))) return cancelled(action);
         var activeMove = state.actorMovements().get(duty.execution().actorId());

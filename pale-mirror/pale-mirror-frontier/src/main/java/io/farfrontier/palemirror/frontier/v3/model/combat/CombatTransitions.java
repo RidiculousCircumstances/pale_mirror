@@ -16,7 +16,9 @@ public final class CombatTransitions {
             if(!subject.equals(strike.owner()) || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
                     || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon()) || strike.preparedAt()!=tick
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
-                    || tick<combat.nextAttack().getOrDefault(strike.owner(),0L) || state.actorMovements().containsKey(order.execution().actorId()))
+                    || tick<combat.nextAttack().getOrDefault(strike.owner(),0L)
+                    || state.actorMovements().containsKey(order.execution().actorId())
+                        && !capabilities.require(order.execution()).permitsApproach(state,state.actorMovements().get(order.execution().actorId())))
                 throw new IllegalArgumentException("melee lacks current owner/target/weapon/readiness");
             combat=combat.prepared(strike);
         }else if(event instanceof CombatEvent.Completed outcome){
@@ -31,7 +33,7 @@ public final class CombatTransitions {
                     throw new IllegalArgumentException("melee receipt conflicts with current exact weapon condition");
                 if(!item.condition().equals(outcome.after()))update.inventory(state.inventory().changeCondition(item,outcome.after()));
             }
-            combat=combat.completed(strike,tick);
+            combat=combat.completed(strike,tick,state.bootstrap().ruleset().melee());
         }else if(event instanceof CombatEvent.PositionPlanned position){
             state.actorExecutions().requireCurrent(position.execution());
             var order=capabilities.current(state,position.execution(),tick).filter(value->value.current(tick)).orElseThrow(()->new IllegalArgumentException("expired melee position consumer"));

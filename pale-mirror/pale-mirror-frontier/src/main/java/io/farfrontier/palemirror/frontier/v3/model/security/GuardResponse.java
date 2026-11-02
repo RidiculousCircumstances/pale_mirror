@@ -71,10 +71,5 @@ public final class GuardResponse {
         }
         return mission.stage()!=GuardMission.Stage.INTERCEPT || !mission.response().orElseThrow().equals(contact.orElseThrow().target());
     }
-    /** Brief recovery gives native sensing one opportunity after cooldown before restarting an approach. */
-    public static boolean recoveringAfterAttack(FrontierWorldState state,GuardDuty duty,long tick) {
-        var next=state.combat().nextAttack().get(duty.id());
-        return next!=null && tick<=Math.addExact(next,state.bootstrap().ruleset().security().observationInterval());
-    }
     private GuardResponse(){}
 }

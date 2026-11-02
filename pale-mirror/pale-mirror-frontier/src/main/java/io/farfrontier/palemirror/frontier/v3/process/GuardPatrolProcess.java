@@ -8,6 +8,22 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.*;
 /** Guard coverage continuation. No body writer or path-search implementation. */
 final class GuardPatrolProcess {
+    /** Keep the exact admitted approach during windup; no retarget, role switch or body handoff. */
+    static List<ProposedEvent> preparing(FrontierWorldState state,ScheduledAction action,GuardDuty duty,long tick) {
+        var strike=state.combat().pending().get(duty.id());
+        if(strike==null || !strike.attacker().execution().equals(duty.execution()))throw new IllegalArgumentException("foreign preparing guard");
+        var move=state.actorMovements().get(duty.execution().actorId());
+        if(state.actorLocations().get(duty.execution().actorId()).condition().status()!=ActorLifeStatus.ALIVE
+                || !state.actorExecutions().actors().get(duty.execution().actorId()).current().equals(Optional.of(duty.execution()))
+                || CombatComposition.CAPABILITIES.current(state,duty.execution(),tick).filter(order->order.target().equals(strike.target())).isEmpty()
+                || move!=null || tick>=strike.impactAt(state.bootstrap().ruleset().melee()) || duty.mission().isEmpty()
+                || !duty.mission().orElseThrow().response().equals(Optional.of(strike.target()))
+                || duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()))
+            return List.of(scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));
+        // No mission reselection while an exact effect is retained. The shared navigator
+        // owns route waiting/blockage for this already admitted goal.
+        return admit(action,duty,tick);
+    }
     static List<ProposedEvent> progress(FrontierWorldState state, ScheduledAction action, GuardDuty duty, long tick) {
         var mission = duty.mission();
         if(mission.isPresent() && !GuardResponse.targetRetained(state,duty)) mission=Optional.empty();
@@ -18,10 +34,6 @@ final class GuardPatrolProcess {
             return List.of(scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));
         if(threat.isPresent() && mission.isPresent()) {
             var contact=threat.orElseThrow();
-            if(mission.orElseThrow().response().equals(Optional.of(contact.target()))
-                    && GuardResponse.recoveringAfterAttack(state,duty,tick) && !GuardResponse.redirect(state,duty,tick))
-                return List.of(scheduled(action,duty,Math.addExact(state.combat().nextAttack().get(duty.id()),
-                        state.bootstrap().ruleset().security().observationInterval()+1L)));
             if(mission.isPresent() && mission.orElseThrow().response().equals(Optional.of(contact.target()))
                     && !GuardResponse.redirect(state,duty,tick)) {
                 if(!duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface())) return start(state,action,duty,tick);
@@ -145,6 +157,9 @@ final class GuardPatrolProcess {
                 return combatChoice(state,action,duty,combat.orElseThrow(),knowledge,tick,Set.of(duty.mission().orElseThrow().station()));
             return selectPost(state,action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);
         }
+        return admit(action,duty,tick);
+    }
+    private static List<ProposedEvent> admit(ScheduledAction action,GuardDuty duty,long tick){
         var move = new ActorMovement(duty.missionOrder(), tick, new ActorMovementContext.GuardMissionLeg(duty.id(), duty.revision()), duty.execution());
         var result = new ArrayList<>(ActorMovementProcess.planStart(move));
         result.add(scheduled(action,duty,tick+20)); return List.copyOf(result);

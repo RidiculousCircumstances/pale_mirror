@@ -47,10 +47,11 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
         var armed=observed(new Armament(value.attacker().execution(),value.weapon(),value.profile()));
         return new CombatState(ImmutableLookupMap.withEntry(pending,value.owner(),value),nextAttack,armed.armaments,obstructions,stances,positions,evasions);
     }
-    public CombatState completed(MeleeStrike value,long tick){
+    public CombatState completed(MeleeStrike value,long tick,MeleeRules rules){
         if(!value.equals(pending.get(value.owner())) || tick<value.preparedAt())throw new IllegalArgumentException("stale melee completion");
         return new CombatState(ImmutableLookupMap.withoutEntry(pending,value.owner()),
-                ImmutableLookupMap.withEntry(nextAttack,value.owner(),Math.max(Math.addExact(tick,1),Math.addExact(value.preparedAt(),value.profile().attackIntervalTicks()))),armaments,obstructions,stances,positions,evasions);
+                ImmutableLookupMap.withEntry(nextAttack,value.owner(),Math.max(Math.addExact(tick,rules.techniques().require(value.attack()).recoveryTicks()),
+                        Math.addExact(value.preparedAt(),value.profile().attackIntervalTicks()))),armaments,obstructions,stances,positions,evasions);
     }
     public CombatState blocked(CombatOrder order,SurfaceAnchor station,long tick,MeleeRules rules){
         var prior=obstructions.get(order.owner());var points=new ArrayList<SurfaceAnchor>();

@@ -17,6 +17,9 @@ final class GuardActivityCapability implements ActorActivityCapability {
                         state.actorLocations().get(execution.actorId()).supportingSurface(),point.targetPosition())<=arm.profile().reach()
                         ?io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.CAREFUL:io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
         }
+        var strike=state.combat().pending().get(duty.id());
+        if(strike!=null && strike.attack()==io.farfrontier.palemirror.frontier.v3.model.combat.MeleeAttack.LUNGE)
+            mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
         return java.util.Optional.of(ResidentWalkingPace.read(state,execution.actorId(),mode));
     }
 

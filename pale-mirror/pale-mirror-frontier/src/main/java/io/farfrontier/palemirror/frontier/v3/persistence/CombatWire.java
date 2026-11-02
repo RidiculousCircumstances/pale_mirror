@@ -23,13 +23,13 @@ final class CombatWire {
     static CombatTarget target(DataInputStream in)throws IOException{return new CombatTarget(CombatTarget.Kind.require(in.readUnsignedByte()),uuid(in),in.readUTF());}
     static void strike(DataOutputStream out,MeleeStrike value)throws IOException{
         id(out,value.owner());out.writeLong(value.ownerRevision());actuation(out,value.attacker());target(out,value.target());id(out,value.weapon());condition(out,value.before());
-        profile(out,value.profile());
+        profile(out,value.profile());out.writeByte(value.attack().wireTag());
         out.writeLong(value.targetIncarnation());out.writeLong(value.attemptOrdinal());out.writeLong(value.preparedAt());
     }
     static MeleeStrike strike(DataInputStream in)throws IOException{
         var duty=id(in);long revision=in.readLong();var attacker=actuation(in);var target=target(in);var weapon=id(in);var before=condition(in);
-        var profile=profile(in);
-        return new MeleeStrike(duty,revision,attacker,target,weapon,before,profile,in.readLong(),in.readLong(),in.readLong());
+        var profile=profile(in);var attack=MeleeAttack.require(in.readUnsignedByte());
+        return new MeleeStrike(duty,revision,attacker,target,weapon,before,profile,attack,in.readLong(),in.readLong(),in.readLong());
     }
     static void engagement(DataOutputStream out,CombatEngagement value)throws IOException {
         target(out,value.target());out.writeByte(value.kind().wireTag());FrontierWorldStateCodec.writePosition(out,value.anchor().support());out.writeInt(value.radius());

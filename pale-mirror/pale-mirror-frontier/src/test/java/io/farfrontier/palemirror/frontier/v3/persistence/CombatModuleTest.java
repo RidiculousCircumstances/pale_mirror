@@ -33,6 +33,20 @@ class CombatModuleTest {
         assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
         assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,second,182,rules).role());
     }
+    @Test void attackChoiceUsesObservedDistanceAndRetreatButNeverGrantsExtraDamageReach() throws IOException {
+        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,1.2,0,MeleeRules.initial()));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,1.2,0.2,MeleeRules.initial()));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,3.4,0,MeleeRules.initial()));
+        assertTrue(MeleeTactics.opportunity(SWORD,MeleeAttack.LUNGE,3.4,MeleeRules.initial()));
+        assertFalse(MeleeTactics.opportunity(SWORD,MeleeAttack.LUNGE,4.2,MeleeRules.initial()));
+        var order=order(1,Optional.empty());var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var strike=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100);
+        var state=CombatState.empty().prepared(strike);var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        var restored=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        assertEquals(strike,restored.pending().get(order.owner()));assertEquals(110,strike.impactAt(MeleeRules.initial()));
+        assertEquals(120L,restored.completed(strike,110,MeleeRules.initial()).nextAttack().get(order.owner()));
+        assertThrows(IllegalArgumentException.class,()->MeleeAttack.require(0));
+    }
     @Test void immediateDecisionHonoursVisibilityReadinessPendingEffectsAndExpiry(){
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.ATTACK,MeleeTactics.decide(order,new MeleeTactics.Facts(100,true,true,true,false,100,true)));
@@ -52,18 +66,18 @@ class CombatModuleTest {
     @Test void nonGuardPendingHitAndBoundedPositionFeedbackSurviveRecoveryAndRetireExactly()throws IOException{
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));
         var body=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var strike=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,1,101,100);
+        var strike=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100);
         var rules=new MeleeRules(10,8,8,80);
         var state=CombatState.empty().prepared(strike).blocked(order,order.station().orElseThrow(),100,rules);
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));assertEquals(state,recovered);
         assertTrue(recovered.rejected(order,order.station().orElseThrow(),141,rules));assertFalse(recovered.rejected(order,order.station().orElseThrow(),181,rules));
         assertThrows(IllegalArgumentException.class,()->recovered.retired(order.owner()));
-        var completed=recovered.completed(strike,101);assertEquals(113L,completed.nextAttack().get(order.owner()));
+        var completed=recovered.completed(strike,101,MeleeRules.initial());assertEquals(113L,completed.nextAttack().get(order.owner()));
         assertTrue(completed.retired(order.owner()).armaments().isEmpty());
-        assertThrows(IllegalArgumentException.class,()->completed.completed(strike,102));
-        var changed=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),strike.before(),SWORD,2,102,100);
-        assertThrows(IllegalArgumentException.class,()->recovered.completed(changed,101));
+        assertThrows(IllegalArgumentException.class,()->completed.completed(strike,102,MeleeRules.initial()));
+        var changed=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),strike.before(),SWORD,MeleeAttack.QUICK,2,102,100);
+        assertThrows(IllegalArgumentException.class,()->recovered.completed(changed,101,MeleeRules.initial()));
     }
     @Test void completedNegativeRoutesCannotPermanentlyHideTheNextAttackStation(){
         var candidates=java.util.stream.IntStream.range(1,10).mapToObj(i->TARGET.offset(i,0,0)).toList();
@@ -94,8 +108,8 @@ class CombatModuleTest {
         assertThrows(IllegalArgumentException.class,()->MeleePosition.Reason.require(99));
     }
     @Test void holdingUsesTwoStrictWeaponBoundariesAndCannotExpandAttackReach(){
-        var rules=MeleeRules.initial();assertEquals(2.65,rules.holdReach(SWORD,false),0.0001);assertEquals(3.0,rules.holdReach(SWORD,true));
-        assertEquals(8,rules.windup(SWORD));
+        var rules=MeleeRules.initial();assertEquals(1.65,rules.holdReach(SWORD,false),0.0001);assertEquals(2.0,rules.holdReach(SWORD,true));
+        assertEquals(4,rules.windup(MeleeAttack.QUICK));assertEquals(10,rules.windup(MeleeAttack.LUNGE));
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.APPROACH,MeleeTactics.decide(order,new MeleeTactics.Facts(101,true,true,false,false,100,true)));
     }
