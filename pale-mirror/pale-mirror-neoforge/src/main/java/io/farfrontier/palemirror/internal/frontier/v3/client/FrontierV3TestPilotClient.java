@@ -48,6 +48,7 @@ public final class FrontierV3TestPilotClient {
     private static final String SERVER_PROPERTY = "pale_mirror.frontier_v3.test_pilot.server";
     private static final long CAPTURE_SETTLE_TICKS = 10L;
     private static JsonArray actions, setup, frames;
+    private static final FrontierV3PilotPlayerHealth PLAYER_HEALTH=new FrontierV3PilotPlayerHealth();
     private static boolean runningSetup;
     private static int index;
     static long actionStartedTick = -1L;
@@ -112,7 +113,7 @@ public final class FrontierV3TestPilotClient {
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
-            captureBarrier = null; captureFocus = null; diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset();
+            captureBarrier = null; captureFocus = null; diagnostics.clear(); PLAYER_HEALTH.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset();
             harvestSemanticOracle = null;
             FrontierV3TestPilotPresentation.clear(Minecraft.getInstance());
             if (FrontierV3PilotSessionControl.resumed()) {
@@ -164,7 +165,7 @@ public final class FrontierV3TestPilotClient {
             }
             Minecraft.getInstance().options.keyUp.setDown(false);
             captureBarrier = null;
-            diagnostics.clear();
+            diagnostics.clear(); PLAYER_HEALTH.clear();
             if (FrontierV3PilotSessionControl.finalCloseRequested()) {
                 // This was a protocol-directed ordinary disconnect, not a supervisor SIGINT.
                 Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
@@ -273,8 +274,8 @@ public final class FrontierV3TestPilotClient {
             switch (type) {
                 case "wait" -> { if (tick - actionStartedTick >= action.get("ms").getAsLong() / 50L) advance(type); }
                 case "wait_until_player_health" -> {
-                    if(FrontierV3PilotPlayerHealth.reached(minecraft,action))advance(type);
-                    else timeout(minecraft,action,"server health packet did not reach the declared range");
+                    if(PLAYER_HEALTH.reached(minecraft.player.getHealth(),action))advance(type);
+                    else timeout(minecraft,action,"server health packet did not reach the declared range: "+minecraft.player.getHealth());
                 }
                 case "wait_until_block" -> waitUntilBlock(minecraft, action);
                 case "assert_complete_resource_site" -> assertCompleteResourceSite(minecraft, action);
@@ -979,7 +980,7 @@ public final class FrontierV3TestPilotClient {
                     quickMoveAttempted =
                 false; inspectSent = false; inspectBaseline = null;
         boardInteractionAttempted = false; entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE;
-        diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); FrontierV3PilotSessionControl.reset();
+        diagnostics.clear(); PLAYER_HEALTH.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); FrontierV3PilotSessionControl.reset();
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; currentCausalMilestone = null; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
     }
     private static void clearExpectedLossTransientState() {
@@ -991,7 +992,7 @@ public final class FrontierV3TestPilotClient {
         quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
-        diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); inspectBaseline = null;
+        diagnostics.clear(); PLAYER_HEALTH.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); inspectBaseline = null;
     }
     /** Client-only state; it has no authority to select a worker or mutate canonical work. */
     record DiagnosticIdentity(String view, String id) { } record ObservedDiagnostic(long tick, long receiptSequence, JsonObject value) { }

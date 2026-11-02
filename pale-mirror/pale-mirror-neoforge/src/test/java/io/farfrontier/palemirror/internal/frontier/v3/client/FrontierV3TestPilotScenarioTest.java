@@ -14,6 +14,22 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(value.replace("\"maximum\":19","\"maximum\":0")));
         assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(value.replace("30000","120001")));
     }
+    @Test void healthBaselineChecksTheObservedPacketRatherThanAssumingNoEarlierHit() throws java.io.IOException {
+        var observer=new FrontierV3PilotPlayerHealth();
+        var capture=JsonParser.parseString("{\"minimum\":1,\"captureAs\":\"dodge\"}").getAsJsonObject();
+        var check=JsonParser.parseString("{\"minimumFrom\":\"dodge\"}").getAsJsonObject();
+        assertThrows(IllegalArgumentException.class,()->observer.reached(94,check));
+        org.junit.jupiter.api.Assertions.assertTrue(observer.reached(94,capture));
+        org.junit.jupiter.api.Assertions.assertFalse(observer.reached(88,check));
+        org.junit.jupiter.api.Assertions.assertTrue(observer.reached(94,check));
+        org.junit.jupiter.api.Assertions.assertTrue(observer.reached(95,check));
+        observer.clear();
+        assertThrows(IllegalArgumentException.class,()->observer.reached(95,check));
+        var declaration=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
+                "scenarios","disposable-melee-tactics-restart.json"));
+        assertEquals(14,FrontierV3TestPilotScenario.parse(declaration).actionCount());
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(declaration.replace("before-dodge","")));
+    }
     @Test void actualLocalDefenceAndRestartCarrierIsAcceptedBeforeLaunchingAClient() throws java.io.IOException {
         var declaration=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
                 "scenarios","disposable-security-response-restart.json"));

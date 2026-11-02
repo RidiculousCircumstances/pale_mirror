@@ -109,7 +109,12 @@ final class FrontierV3TestPilotScenario {
      * baseline diagnostic; that preserves a typed liveness oracle instead of hiding a stall.
      */
     private static boolean validPlayerHealth(JsonObject action) {
-        if(!timeout(action,120_000L) || !action.has("minimum") && !action.has("maximum"))return false;
+        if(!timeout(action,120_000L) || !action.has("minimum") && !action.has("maximum") && !action.has("minimumFrom"))return false;
+        for(var key:java.util.List.of("captureAs","minimumFrom")) if(action.has(key)) {
+            var value=action.get(key);
+            if(!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()
+                    || !value.getAsString().matches("[a-zA-Z][a-zA-Z0-9_-]{0,63}"))return false;
+        }
         for(var key:java.util.List.of("minimum","maximum")) if(action.has(key)) {
             var value=action.get(key);
             if(!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber() || !Double.isFinite(value.getAsDouble())

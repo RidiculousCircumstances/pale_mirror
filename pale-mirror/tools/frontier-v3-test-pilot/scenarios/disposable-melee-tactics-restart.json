@@ -141,6 +141,13 @@
       "causalMilestone": "native_windup_visible_before_dodge"
     },
     {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 100,
+      "captureAs": "before-dodge",
+      "timeoutMs": 1000
+    },
+    {
       "type": "visit",
       "dimension": "minecraft:overworld",
       "position": {
@@ -148,14 +155,13 @@
         "y": 66,
         "z": -138
       },
-      "settleMs": 15000
+      "settleMs": 1000
     },
     {
       "type": "wait_until_player_health",
-      "minimum": 100,
-      "maximum": 100,
-      "timeoutMs": 10000,
-      "causalMilestone": "escaped_windup_caused_no_native_damage"
+      "minimumFrom": "before-dodge",
+      "timeoutMs": 1000,
+      "causalMilestone": "escaped_windup_caused_no_additional_native_damage"
     },
     {
       "type": "wait_until_diagnostic",
@@ -213,7 +219,7 @@
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 9,
+    "afterAction": 10,
     "resumeSetup": [
       {
         "type": "command",
@@ -265,7 +271,7 @@
   },
   "assertions": [
     {
-      "after": 9,
+      "after": 10,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -278,7 +284,7 @@
       }
     },
     {
-      "after": 13,
+      "after": 14,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {

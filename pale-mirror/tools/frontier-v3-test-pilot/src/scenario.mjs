@@ -247,7 +247,8 @@ export function validateScenario(scenario) {
         throw new Error('move_within_container needs an exact stack, destination slot and timeoutMs 0..120000');
       }
       if (action.type === 'wait_until_player_health' && (!Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120000
-          || (action.minimum === undefined && action.maximum === undefined)
+          || (action.minimum === undefined && action.maximum === undefined && action.minimumFrom === undefined)
+          || ['captureAs','minimumFrom'].some(key => action[key] !== undefined && (typeof action[key] !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(action[key])))
           || ['minimum','maximum'].some(key => action[key] !== undefined && (!Number.isFinite(action[key]) || action[key] < 0 || action[key] > 1024))
           || (action.minimum !== undefined && action.maximum !== undefined && action.minimum > action.maximum))) {
         throw new Error('wait_until_player_health needs a finite health range and timeoutMs 0..120000');
