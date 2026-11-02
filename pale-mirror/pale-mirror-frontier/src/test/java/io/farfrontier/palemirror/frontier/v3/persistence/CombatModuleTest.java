@@ -39,10 +39,11 @@ class CombatModuleTest {
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));
         var body=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var strike=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,1,101,100);
-        var state=CombatState.empty().prepared(strike).blocked(order,order.station().orElseThrow(),100);
+        var rules=new MeleeRules(10,8,8,80);
+        var state=CombatState.empty().prepared(strike).blocked(order,order.station().orElseThrow(),100,rules);
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));assertEquals(state,recovered);
-        assertTrue(recovered.rejected(order,order.station().orElseThrow(),101));assertFalse(recovered.rejected(order,order.station().orElseThrow(),141));
+        assertTrue(recovered.rejected(order,order.station().orElseThrow(),141,rules));assertFalse(recovered.rejected(order,order.station().orElseThrow(),181,rules));
         assertThrows(IllegalArgumentException.class,()->recovered.retired(order.owner()));
         var completed=recovered.completed(strike,101);assertEquals(114L,completed.nextAttack().get(order.owner()));
         assertTrue(completed.retired(order.owner()).armaments().isEmpty());

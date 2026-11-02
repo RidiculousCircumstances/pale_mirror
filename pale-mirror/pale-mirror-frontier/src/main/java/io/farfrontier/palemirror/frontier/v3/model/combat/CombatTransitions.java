@@ -54,7 +54,7 @@ public final class CombatTransitions {
                 var blocked=(CombatEvent.PositionBlocked)event;
                 if(!blocked.target().equals(order.target()) || !order.station().equals(Optional.of(blocked.station())))
                     throw new IllegalArgumentException("rejected melee station lost its exact target/goal");
-                combat=combat.blocked(order,blocked.station(),tick);
+                combat=combat.blocked(order,blocked.station(),tick,state.bootstrap().ruleset().melee());
             }
         }
         return state.withChanges(update.combat(combat));

@@ -15,8 +15,8 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
             Objects.requireNonNull(execution);Objects.requireNonNull(target);Objects.requireNonNull(targetPosition);stations=List.copyOf(stations);
             if(atTick<0 || stations.isEmpty() || stations.size()>8 || stations.stream().distinct().count()!=stations.size())throw new IllegalArgumentException("invalid rejected melee stations");
         }
-        public boolean matches(CombatOrder order,long tick){return execution.equals(order.execution()) && target.equals(order.target())
-                && targetPosition.equals(order.targetPosition()) && tick>=atTick && tick-atTick<=MeleeRules.initial().obstructionTicks();}
+        public boolean matches(CombatOrder order,long tick,MeleeRules rules){return execution.equals(order.execution()) && target.equals(order.target())
+                && targetPosition.equals(order.targetPosition()) && tick>=atTick && tick-atTick<=rules.obstructionTicks();}
     }
     public CombatState {
         pending=ImmutableLookupMap.copyOf(pending);nextAttack=ImmutableLookupMap.copyOf(nextAttack);
@@ -41,15 +41,15 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
         return new CombatState(ImmutableLookupMap.withoutEntry(pending,value.owner()),
                 ImmutableLookupMap.withEntry(nextAttack,value.owner(),Math.addExact(tick,value.profile().attackIntervalTicks())),armaments,obstructions);
     }
-    public CombatState blocked(CombatOrder order,SurfaceAnchor station,long tick){
+    public CombatState blocked(CombatOrder order,SurfaceAnchor station,long tick,MeleeRules rules){
         var prior=obstructions.get(order.owner());var points=new ArrayList<SurfaceAnchor>();
-        if(prior!=null && prior.matches(order,tick))points.addAll(prior.stations());
+        if(prior!=null && prior.matches(order,tick,rules))points.addAll(prior.stations());
         if(!points.contains(station)){if(points.size()==8)points.removeFirst();points.add(station);}
         return new CombatState(pending,nextAttack,armaments,ImmutableLookupMap.withEntry(obstructions,order.owner(),
                 new Obstruction(order.execution(),order.target(),order.targetPosition(),points,tick)));
     }
-    public boolean rejected(CombatOrder order,SurfaceAnchor station,long tick){
-        var prior=obstructions.get(order.owner());return prior!=null && prior.matches(order,tick) && prior.stations().contains(station);
+    public boolean rejected(CombatOrder order,SurfaceAnchor station,long tick,MeleeRules rules){
+        var prior=obstructions.get(order.owner());return prior!=null && prior.matches(order,tick,rules) && prior.stations().contains(station);
     }
     public CombatState retired(SubjectId owner){
         if(pending.containsKey(owner))throw new IllegalArgumentException("cannot retire unsettled melee effects");

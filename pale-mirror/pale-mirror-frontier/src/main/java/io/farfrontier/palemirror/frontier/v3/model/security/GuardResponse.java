@@ -52,7 +52,7 @@ public final class GuardResponse {
                 .filter(r -> !r.engagement().contains(mission.station())).isPresent())return true;
         if(mission.response().isEmpty())return contact.isPresent();
         if(contact.isPresent() && io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES.current(state,duty.execution(),tick)
-                .filter(order->MeleePositions.needsReplacement(state.combat(),order,tick)).isPresent())return true;
+                .filter(order->MeleePositions.needsReplacement(state.combat(),order,tick,state.bootstrap().ruleset().melee())).isPresent())return true;
         if(contact.isEmpty()) {
             if(!investigating(state,duty,tick))return true;
             var last=state.security().contact(duty.home(),mission.response().orElseThrow());

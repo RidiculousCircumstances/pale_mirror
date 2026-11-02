@@ -9,7 +9,7 @@ public enum CombatStatus {
         var order=capabilities.current(state,execution,tick).orElse(null);if(order==null)return IDLE;
         if(MeleePositions.weapon(state.combat(),order).isEmpty())return WEAPON_FACTS_PENDING;
         if(order.station().isEmpty())return POSITION_PENDING;
-        if(state.combat().rejected(order,order.station().orElseThrow(),tick))return REPOSITIONING;
+        if(state.combat().rejected(order,order.station().orElseThrow(),tick,state.bootstrap().ruleset().melee()))return REPOSITIONING;
         var move=state.actorMovements().get(execution.actorId());
         if(move!=null && move.executionId().equals(execution))return APPROACHING;
         return tick<state.combat().nextAttack().getOrDefault(order.owner(),0L)?RECOVERING:READY_FOR_NATIVE_CHECK;

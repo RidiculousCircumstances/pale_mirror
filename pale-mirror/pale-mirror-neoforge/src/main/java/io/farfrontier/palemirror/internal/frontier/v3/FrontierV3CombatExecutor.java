@@ -59,7 +59,7 @@ public final class FrontierV3CombatExecutor {
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),item.condition().remaining()>=profile.wear()));
             if(decision==MeleeTactics.Decision.APPROACH){
                 var station=order.station().orElse(null);
-                if(station!=null && FrontierV3SemanticMovement.at(level,fighter,station)==SemanticTraversalArrival.Disposition.ARRIVED && !state.combat().rejected(order,station,tick))
+                if(station!=null && FrontierV3SemanticMovement.at(level,fighter,station)==SemanticTraversalArrival.Disposition.ARRIVED && !state.combat().rejected(order,station,tick,state.bootstrap().ruleset().melee()))
                     FrontierV3CommandSubmission.submit(runtime,"combat-blocked-position",order.owner().value(),new CombatEvent.PositionBlocked(actuation,order.target(),station));
                 continue;
             }

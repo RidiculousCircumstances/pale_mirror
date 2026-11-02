@@ -11,8 +11,8 @@ public final class MeleePositions {
         long dx=(long)station.x()-order.targetPosition().x(),dy=(long)station.y()-order.targetPosition().y(),dz=(long)station.z()-order.targetPosition().z();
         return order.engagement().contains(station) && (dx!=0 || dz!=0) && dx*dx+dy*dy+dz*dz<=weapon.reach()*weapon.reach();
     }
-    public static boolean needsReplacement(CombatState state,CombatOrder order,long tick){
-        return order.station().filter(station->!state.rejected(order,station,tick)
+    public static boolean needsReplacement(CombatState state,CombatOrder order,long tick,MeleeRules rules){
+        return order.station().filter(station->!state.rejected(order,station,tick,rules)
                 && weapon(state,order).filter(profile->legal(order,profile,station)).isPresent()).isEmpty();
     }
     public static Optional<SurfaceAnchor> select(FrontierWorldState state,CombatOrder order,KnownPedestrianRouteKnowledge knowledge,
@@ -21,11 +21,11 @@ public final class MeleePositions {
         var weapon=profile.orElseThrow();var rules=state.bootstrap().ruleset().melee();
         var occupied=peers.stream().filter(peer->!peer.execution().equals(order.execution())).flatMap(peer->peer.station().stream()).collect(java.util.stream.Collectors.toSet());
         var retained=order.station().filter(station->!failed.contains(station) && !occupied.contains(station)
-                && !state.combat().rejected(order,station,tick) && legal(order,weapon,station) && knowledge.clearStation(station));
+                && !state.combat().rejected(order,station,tick,state.bootstrap().ruleset().melee()) && legal(order,weapon,station) && knowledge.clearStation(station));
         if(retained.isPresent())return retained;
         int radius=Math.min(rules.maximumRadius(),Math.max(1,(int)Math.ceil(weapon.reach())));
         var stations=PedestrianInteractionStations.within(knowledge.geometry(),order.targetPosition(),radius,occupied).stream()
-                .filter(station->!failed.contains(station) && !state.combat().rejected(order,station,tick) && legal(order,weapon,station)
+                .filter(station->!failed.contains(station) && !state.combat().rejected(order,station,tick,state.bootstrap().ruleset().melee()) && legal(order,weapon,station)
                         && knowledge.clearStation(station) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(station.support())
                         && ServiceBoundaryComposition.turnoverPoint(state,station).isEmpty())
                 .toList();

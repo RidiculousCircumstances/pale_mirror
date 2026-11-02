@@ -177,7 +177,7 @@ class SettlementSecurityTest {
         assertTrue(GuardResponse.redirect(state,owner,21001),"failed physical melee position must trigger common reselection");
         assertEquals(beforeBody,state.actorLocations().get(owner.execution().actorId()).body(),"feedback cannot relocate the actor or award arrival");
         var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));owner=state.strategicPlans().guards().get(owner.id());
-        assertTrue(state.combat().rejected(CombatComposition.CAPABILITIES.current(state,owner.execution(),21001).orElseThrow(),response.station(),21001));
+        assertTrue(state.combat().rejected(CombatComposition.CAPABILITIES.current(state,owner.execution(),21001).orElseThrow(),response.station(),21001,state.bootstrap().ruleset().melee()));
         assertEquals(mission.post(),owner.mission().orElseThrow().post());
         var movedContact = new SecurityState.Contact(owner.home(),contact(r).target(),response.station().offset(4,0,0).support(),21002,2);
         var moved = apply(state,owner.home(),seen(r,movedContact),21002);

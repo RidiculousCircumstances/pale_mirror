@@ -66,3 +66,18 @@ Logs/receipts: build/combat-module/focused.json, executor-registry.json and
 /tmp/pm-combat-final-focused.log. Compiled native semantic-station feedback reuses
 FrontierV3SemanticMovement.at rather than defining another feet/arrival rule.
 Native outcomes and final delivery belong in canonical governance after execution.
+
+
+## Release integration checkpoint
+
+Clean705f58c71 full guardrails/check/build/packaged gate PASS8m34s:
+Frontier2253, NeoForge895, domain324, Visuals79. GameTest414/416;
+the same two inactive assault/patrol baseline failures remain explicit debt.
+The first isolated native run stopped in setup: immutable routeSurface Y was one
+above actual support. Retained receipt build/combat-module/native.json remains
+failed. The seeded fixture now uses ordinary player-only high entry above the
+settlement, then rendezvous with the received named guard, avoiding an unrelated
+exact authored-floor assumption. Continue on the saved prepared world through
+existing restartSegments/run-scenario, with normal saved restart between halves.
+Obstruction retention consumes the persisted MeleeRules on every caller; focused
+recovery verifies a nondefault80-tick lifetime. No state format or default changed.
