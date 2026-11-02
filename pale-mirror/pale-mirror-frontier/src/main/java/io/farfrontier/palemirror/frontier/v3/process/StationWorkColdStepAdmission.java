@@ -32,6 +32,8 @@ final class StationWorkColdStepAdmission {
         } else {
             boolean pause = step.action() == BakeryColdStep.Action.LABOUR
                     && !step.labourChange().orElseThrow().next().running();
+            if (pause && work.phase() != StationWorkState.Phase.PROCESSING)
+                throw new IllegalArgumentException("station attendance release needs its processing phase");
             if (pause && (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                     || ActorExecutionCoordinator.sceneOwns(state, job.workerId())
                     || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))))
@@ -41,7 +43,10 @@ final class StationWorkColdStepAdmission {
             boolean atGoal = actor.supportingSurface().equals(StationWorkGoal.current(state, job).station());
             if (!pause && !atGoal)
                 throw new IllegalArgumentException("bakery movement/work is not at its phase boundary");
-            if (step.action() != stationAction(state, job) || !step.nextSurface().equals(actor.supportingSurface()))
+            // Releasing attendance is independent of recipe conversion. The machine can
+            // settle the final work before a physical hold permits that conversion.
+            if (!pause && step.action() != stationAction(state, job)
+                    || !step.nextSurface().equals(actor.supportingSurface()))
                 throw new IllegalArgumentException("bakery station step has a foreign phase or body");
         }
     }

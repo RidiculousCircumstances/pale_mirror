@@ -122,6 +122,43 @@ class BakeryLabourIntegrationTest {
                 .noneMatch(event -> event.payload() instanceof BakeryColdStep));
     }
 
+    @Test void completedStationCanReleaseAttendanceUnderHoldWithoutConvertingOrMoving() {
+        var f = loadedStation();
+        var running = ProductionProcess.reduceBakeryColdStep(f.state(), f.job().settlementId(),
+                step(f.state(), f.job(), f.tick()));
+        var job = running.productionJobs().get(f.job().id());
+        var operation = StationWorkOperation.require(running, job);
+        long finishedAt = operation.progress().orElseThrow().activeUntilTick();
+        var completed = ProductionStationClock.next(running, operation, finishedAt, operation.attendance());
+        assertTrue(completed.complete());
+        // The independent machine clock settles work while the job still holds attendance.
+        var settled = running.withChanges(FrontierWorldStateUpdate.begin().productionStations(
+                ProductionStationProcessing.progress(running, operation, completed, operation.attendance())));
+        var work = job.stationWork().orElseThrow();
+        var hold = new BakeryWorkBlock(BakeryWorkBlock.Reason.MACHINE_UNAVAILABLE,
+                work.stationId(), -1, "minecraft:air", 0);
+        var blocked = settled.withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(job.id(),
+                job.withStationWork(work.withBlock(Optional.of(hold))))));
+        var release = step(blocked, job, finishedAt);
+        assertEquals(BakeryColdStep.Action.LABOUR, release.action());
+        assertTrue(release.labourChange().orElseThrow().next().complete());
+        assertTrue(release.labourChange().orElseThrow().attendance().isEmpty());
+        var codec = new FrontierWorldStateCodec();
+        var released = ProductionProcess.reduceBakeryColdStep(codec.decode(codec.encode(blocked)), job.settlementId(), release);
+        assertEquals(blocked.inventory(), released.inventory());
+        assertEquals(blocked.actorLocations(), released.actorLocations());
+        assertEquals(Optional.of(hold), released.productionJobs().get(job.id()).stationWork().orElseThrow().block());
+        assertFalse(StationWorkLabour.holdsAttendance(released, job));
+        assertTrue(ProductionProcess.planCompletion(released, ProductionProcess.complete(job, finishedAt + 1)).stream()
+                .noneMatch(event -> event.payload() instanceof BakeryColdStep));
+        var forgedRecipe = new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.RECIPE,
+                release.nextSurface(), release.executionId(), Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(blocked, job.settlementId(), forgedRecipe));
+        var wrongBody = new BakeryColdStep(job.id(), work.phase(), release.action(),
+                new SurfaceAnchor(release.nextSurface().support().offset(1, 0, 0)), release.executionId(), release.labourChange());
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(blocked, job.settlementId(), wrongBody));
+    }
+
     @Test void stationCannotConvertEarlyAndLabourCannotForgeRateOrPredecessor() {
         var f = loadedStation();
         var start = step(f.state(), f.job(), f.tick());
