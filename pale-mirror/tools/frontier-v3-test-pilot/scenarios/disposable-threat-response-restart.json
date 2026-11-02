@@ -78,18 +78,22 @@
       "timeoutMs": 30000
     },
     {
-      "type": "wait_until_diagnostic",
-      "view": "actor",
-      "id": "resident:1-13",
-      "expect": {
-        "physicalAdmission": {
-          "bodyCustody": {
-            "phase": "RUNNING",
-            "firstAdmission": "ESTABLISHED"
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "actor",
+          "id": "resident:1-13",
+          "expect": {
+            "physicalAdmission": {
+              "bodyCustody": {
+                "phase": "RUNNING",
+                "firstAdmission": "ESTABLISHED"
+              }
+            }
           }
         }
-      },
-      "timeoutMs": 30000
+      ]
     },
     {
       "type": "command",
