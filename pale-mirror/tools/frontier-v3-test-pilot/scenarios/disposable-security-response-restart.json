@@ -159,19 +159,6 @@
       "id": "settlement:1"
     },
     {
-      "type": "look_nearest_entity",
-      "entityType": "minecraft:villager",
-      "nameContains": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "firstGuardName"
-        }
-      },
-      "maxDistance": 24,
-      "timeoutMs": 30000
-    },
-    {
       "type": "wait_until_player_health",
       "maximum": 99,
       "minimum": 1,
@@ -291,7 +278,7 @@
       }
     },
     {
-      "after": 13,
+      "after": 12,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
