@@ -52,6 +52,18 @@
       "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
     },
     {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "settleMs": 0
+    },
+    {
       "type": "visit_nearest_entity",
       "entityType": "minecraft:villager",
       "nameContains": {
@@ -249,6 +261,18 @@
       {
         "type": "command",
         "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+      },
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "settlement",
+            "id": "settlement:1",
+            "field": "firstGuardPosition"
+          }
+        },
+        "settleMs": 0
       },
       {
         "type": "visit_nearest_entity",
