@@ -23,7 +23,8 @@ var value=prior==null?new Evasion(new SubjectId("safety:"+actor.value().replace(
             return state.withChanges(FrontierWorldStateUpdate.begin().combat(state.combat().withEvasion(prior.observed(prior.threat(),Optional.of(seen.threatPosition()),prior.incidentPosition(),tick,rules,seen.dangerous()))));
         }
         if(event instanceof EvasionEvent.Started started){
-            if(!actor.equals(started.actor()) || !prior.id().equals(started.episode()) || prior.execution().isPresent())throw new IllegalArgumentException("stale safety admission");
+            if(!actor.equals(started.actor()) || !prior.id().equals(started.episode()) || prior.execution().isPresent()
+                    || ActorExecutionCoordinator.sceneOwns(state,actor))throw new IllegalArgumentException("stale or physically held safety admission");
             var value=prior.started(started.execution());
             return ActorExecutionComposition.LIFECYCLE.prepareBegin(state,started.execution(),tick).commit(state,FrontierWorldStateUpdate.begin().combat(state.combat().withEvasion(value)));
         }

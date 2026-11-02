@@ -33,12 +33,13 @@ public final class ActorMovementProcess {
         ActorLocation actor = state.actorLocations().get(subject);
         if (!subject.equals(movement.order().actorId())
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                || state.actorMovements().containsKey(subject) || state.humanPopulation().meals().containsKey(subject)
+                || state.actorMovements().containsKey(subject)
                 || ActorExecutionCoordinator.sceneOwns(state, subject))
             throw new IllegalArgumentException("movement start lacks exclusive living actor authority");
         // Admission retains an exact goal, not an assertion that a route has already executed.
         if (!actor.navigationProfile().capabilities().contains(movement.order().capability()))
             throw new IllegalArgumentException("movement requires a capability absent from the actor's declared navigation profile");
+        state.actorExecutions().requireCurrent(movement.executionId());
         ActorMovementProviders.require(movement).validate(state, movement);
         var movements = ImmutableLookupMap.withEntry(state.actorMovements(), subject, movement);
         return ResidentActivityProcess.retargetHotResident(ActorMovementProviders.require(movement).start(state, movement,

@@ -25,6 +25,8 @@ public final class EvasionProcess {
             events.add(new ProposedEvent(actor,new ScheduleEffect.Cancelled(action.id())));events.add(ResidentActivityProcess.wakeAfterActivity(actor,tick));return List.copyOf(events);
         }
         if(value.execution().isEmpty()){
+            // A requested purpose asks its family to yield; readiness alone does not release physical scene custody.
+            if(ActorExecutionCoordinator.sceneOwns(state,actor))return later(action,tick+rules.reviewTicks());
             var retained=state.actorExecutions().actors().get(actor);
             if(retained!=null && retained.current().isPresent()){
                 var current=retained.current().orElseThrow();var checkpoint=ActorMovementProcess.ownerTransitionCheckpoint(state,current,tick);

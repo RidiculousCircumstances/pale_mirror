@@ -14,6 +14,9 @@ class EvasionLifecycleTest {
         var fixture=ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);var state=fixture.state();var job=fixture.job();
         state=HarvestObservationFixture.inspectGoal(state,fixture.site(),job,fixture.lease().id());
         state=ResourceSiteHarvestProcessTest.completeLabourHot(state,fixture.site(),fixture.lease().id());
+        var actual=state.actorLocations().get(job.workerId());
+        state=state.transitionSceneLease(fixture.lease().id(),SceneLeaseStatus.DRAINING);
+        state=state.releaseSceneLease(fixture.lease().id(),List.of(new SceneMemberPosition(job.workerId(),actual.body(),actual.condition().health())));
         var home=new SubjectId("settlement:1");var stock=state.inventory().fungibleResources().transformCold(
                 ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home)),Map.of(new SubjectId("lot:bootstrap-1-wheat"),64),Map.of(),
                 new ResourceLot(new SubjectId("lot:safety-bread"),home,"minecraft:bread",64,"test",List.of()));
@@ -37,6 +40,13 @@ class EvasionLifecycleTest {
         assertEquals(List.of(workExecution),lost.executions().actors().get(actor).continuations());
         assertFalse(lost.population().meals().containsKey(actor));
         assertEquals(ResidentActivityChoice.Kind.SAFETY,ResidentActivityCoordinator.assess(state,actor,27002).kind());
+        // Paused food is retained custody, not a second current movement owner.
+        var destination=position.offset(-2,0,0);
+        var travelling=EvasionTransitions.apply(state,actor,new EvasionEvent.Destination(escape,episode.revision(),destination),27002);
+        var escapeLeg=travelling.combat().evasions().get(actor);
+        var movement=new ActorMovement(escapeLeg.order(),27002,new ActorMovementContext.EvasionLeg(escapeLeg.id(),escapeLeg.revision()),escape);
+        travelling=io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.reduceStarted(travelling,actor,new ActorMovementStarted(movement));
+        assertEquals(movement,travelling.actorMovements().get(actor));assertEquals(meal,travelling.humanPopulation().meals().get(actor));
         var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));
         assertEquals(List.of(meal.executionId(),workExecution),state.actorExecutions().actors().get(actor).continuations());
         var waiting=state;assertThrows(IllegalArgumentException.class,()->EvasionTransitions.apply(waiting,actor,new EvasionEvent.Ended(actor,episode.id(),episode.revision()),27002));
@@ -49,6 +59,20 @@ class EvasionLifecycleTest {
         assertEquals(meal.portion(),state.humanPopulation().meals().get(actor).portion());assertEquals(inventory,state.inventory());
         assertTrue(state.actorExecutions().retainsSuspended(actor,workExecution.activityKind(),job.id()));
         assertEquals(state,codec.decode(codec.encode(state)));
+    }
+    @Test void requestedSafetyWaitsForTheExactPhysicalSceneToReleaseTheBody(){
+        var fixture=ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);var state=fixture.state();var actor=fixture.job().workerId();
+        var point=state.actorLocations().get(actor).supportingSurface();
+        state=EvasionTransitions.apply(state,actor,new EvasionEvent.Threatened(new SubjectId("settlement:1"),ActorBodyAuthority.current(state,actor),
+                new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(23,45),"pale_mirror:frontier_graybox"),point,Optional.of(point.offset(1,0,0))),27001);
+        assertTrue(ActorExecutionCoordinator.sceneOwns(state,actor));
+        var held=state;var episode=state.combat().evasions().get(actor);
+        var successor=state.actorExecutions().next(actor,ActorActivityKind.SAFETY,episode.id());
+        assertThrows(IllegalArgumentException.class,()->EvasionTransitions.apply(held,actor,new EvasionEvent.Started(actor,episode.id(),successor),27002));
+        var events=io.farfrontier.palemirror.frontier.v3.process.EvasionProcess.review(state,
+                io.farfrontier.palemirror.frontier.v3.process.EvasionProcess.at(actor,27002),27002);
+        assertTrue(events.stream().noneMatch(e->e.payload() instanceof EvasionEvent.Started));
+        assertTrue(ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state,actor,27002));
     }
     @Test void saferDestinationsIncreaseThreatSeparationAndStillPreferShortReachableShelter(){
         var origin=SurfaceAnchor.at(0,63,0);var threat=origin.offset(2,0,0);
