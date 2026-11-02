@@ -52,15 +52,33 @@ public final class MeleePositions {
                 .filter(station->!failed.contains(station) && !state.combat().rejected(order,station,tick,rules) && legal(order,weapon,station)
                         && knowledge.clearStation(station) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(station.support())
                         && ServiceBoundaryComposition.turnoverPoint(state,station).isEmpty()).toList();
-        if(physical.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.NO_POSITION);
+        boolean missing=knowledgeMissing(knowledge.geometry(),order,weapon,radius);
+        if(physical.isEmpty())return missing?pendingGeometry(knowledge,order):new Choice(Optional.empty(),MeleePosition.Reason.NO_POSITION);
         var candidates=physical.stream().filter(station->available(state,order,station,tick)).toList();
         if(candidates.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.SPACE_OCCUPIED);
         try{var selected=reachable(rank(order,weapon,candidates,activePeers),rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
+            if(selected.isEmpty() && missing)return pendingGeometry(knowledge,order);
             return new Choice(selected,selected.isPresent()?MeleePosition.Reason.RESERVED:MeleePosition.Reason.NO_PATH);
         }catch(KnownPedestrianNavigation.RouteUnavailable pending){
             if(pending.status()==PedestrianRouteResult.Status.NO_PATH)throw pending;
             return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
         }
+    }
+    /** Missing columns/clearance cannot establish that every attack station is impossible. */
+    public static boolean knowledgeMissing(PedestrianRouteGeometry geometry,CombatOrder order,WeaponProfile weapon,int radius){
+        for(int dx=-radius;dx<=radius;dx++)for(int dz=-radius;dz<=radius;dz++){
+            if(Math.abs(dx)+Math.abs(dz)==0 || Math.abs(dx)+Math.abs(dz)>radius)continue;
+            var levels=geometry.surfacesAt(order.targetPosition().x()+dx,order.targetPosition().z()+dz);
+            if(levels.isEmpty())return true;
+            if(levels.stream().anyMatch(point->legal(order,weapon,point) && !geometry.clearanceKnown(point)))return true;
+        }
+        return false;
+    }
+    private static Choice pendingGeometry(KnownPedestrianRouteKnowledge knowledge,CombatOrder order){
+        // Request ordinary knowledge along the actual observed target, never invent a floor for a missing column.
+        try{knowledge.plannedBetween(order.actorPosition(),order.targetPosition());}
+        catch(KnownPedestrianNavigation.RouteUnavailable pending){ /* Shared planner retains the dependency. */ }
+        return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
     }
     /** Completed negative answers do not consume the outstanding-query budget or hide later candidates. */
     public static Optional<SurfaceAnchor> reachable(List<SurfaceAnchor> ranked,int requestLimit,java.util.function.Consumer<SurfaceAnchor> requireRoute){

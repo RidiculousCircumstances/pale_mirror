@@ -417,6 +417,26 @@ class SettlementSecurityTest {
         MeleePositions.requireClaim(occupied,contender,station,21082);
         assertTrue(occupied.combat().retired(first.owner()).positions().isEmpty());
     }
+    @Test void queuedApproachPublishesItsTypedWaitThroughTheDeclaredGuardProducer() throws Exception {
+        var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
+        var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor().offset(3,0,0),0,0,GuardMission.Stage.PATROL);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),21001);
+        var duty=state.strategicPlans().guards().get(r.duty().id());
+        state=new GuardMissionSelected(duty.id(),duty.revision(),patrol.responding(new SurfaceAnchor(contact(r).position()).offset(1,0,0),contact(r).target())).apply(state,duty.id(),21001);
+        duty=state.strategicPlans().guards().get(duty.id());
+        try(var ignored=io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry,from,to)->{
+            throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,"queued shared dependency");
+        })){
+            var events=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21002),21002);
+            FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("guard",events);
+            var wait=events.stream().map(ProposedEvent::payload).filter(CombatEvent.PositionPlanned.class::isInstance)
+                    .map(CombatEvent.PositionPlanned.class::cast).findFirst().orElseThrow();
+            assertEquals(MeleePosition.Reason.ROUTE_PENDING,wait.reason());
+            assertTrue(events.stream().noneMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted));
+        }
+    }
     @Test void coldWeaponDefinitionEnablesPlanningButCannotAuthorizeANativeHit(){
         var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
         state=ActorBodyAuthority.released(state,r.body().body());state=state.withChanges(FrontierWorldStateUpdate.begin().combat(CombatState.empty()));

@@ -132,8 +132,15 @@ final class GuardPatrolProcess {
         var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,duty.execution().actorId());
         try { knowledge.plannedBetween(state.actorLocations().get(duty.execution().actorId()).supportingSurface(),duty.mission().orElseThrow().station()); }
         catch(KnownPedestrianNavigation.RouteUnavailable failure) {
-            if(failure.status()!=PedestrianRouteResult.Status.NO_PATH)throw failure;
             var combat=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick);
+            if(failure.status()!=PedestrianRouteResult.Status.NO_PATH){
+                if(combat.isPresent() && duty.mission().orElseThrow().response().isPresent()){
+                    var order=combat.orElseThrow();
+                    return List.of(new ProposedEvent(duty.id(),new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),Optional.empty(),MeleePosition.Reason.ROUTE_PENDING)),
+                            scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));
+                }
+                throw failure;
+            }
             if(combat.isPresent() && duty.mission().orElseThrow().response().isPresent())
                 return combatChoice(state,action,duty,combat.orElseThrow(),knowledge,tick,Set.of(duty.mission().orElseThrow().station()));
             return selectPost(state,action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);

@@ -85,6 +85,21 @@ class CombatModuleTest {
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.APPROACH,MeleeTactics.decide(order,new MeleeTactics.Facts(101,true,true,false,false,100,true)));
     }
+    @Test void missingColumnsAreNotEvidenceThatEveryAttackPositionIsImpossible(){
+        var unknown=new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry(){
+            public WorldBounds bounds(){return new WorldBounds(-16,-16,32,32);}
+            public SurfaceAnchor supportAt(int x,int z){return null;}
+            public boolean blocked(SurfaceAnchor surface){return false;}
+        };
+        assertTrue(MeleePositions.knowledgeMissing(unknown,order(1,Optional.empty()),SWORD,3));
+        var multiLevel=new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry(){
+            public WorldBounds bounds(){return new WorldBounds(-16,-16,32,32);}
+            public SurfaceAnchor supportAt(int x,int z){return SurfaceAnchor.at(x,63,z);}
+            public List<SurfaceAnchor> surfacesAt(int x,int z){return List.of(SurfaceAnchor.at(x,63,z),SurfaceAnchor.at(x,66,z));}
+            public boolean blocked(SurfaceAnchor surface){return true;}
+        };
+        assertFalse(MeleePositions.knowledgeMissing(multiLevel,order(1,Optional.empty()),SWORD,3));
+    }
     @Test void allMechanicalIngressHasAnExactCodecAndRejectsTruncation(){
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var events=List.<CombatEvent>of(new CombatEvent.WeaponDefined(order.execution(),order.weapon(),SWORD),new CombatEvent.WeaponObserved(actor,order.weapon(),SWORD),
