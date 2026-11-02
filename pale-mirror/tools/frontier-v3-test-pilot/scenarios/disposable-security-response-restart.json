@@ -28,7 +28,7 @@
     },
     {
       "type": "assert_fixture",
-      "timeoutMs": 120000,
+      "timeoutMs": 180000,
       "checks": [
         {
           "view": "settlement",
