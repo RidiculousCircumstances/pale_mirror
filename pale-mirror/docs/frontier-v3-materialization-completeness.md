@@ -420,3 +420,25 @@ Detailed causes, connected fixes and proof limits are in
 [the HOT findings](frontier-v3-security-hot-findings-20261102.md).
 This adds cohort endpoint/contact and retained-motion recovery evidence, not full
 industrial/mixed-freight M2, human M3, formation visuals or scale acceptance.
+
+### Independent bounded security responses — 2026-11-02
+
+Schema317 adds exact per-home/target contacts and duty/contact allocations; a pure
+bounded policy retains responders and patrol reserve. Explicit INTERCEPT/SEARCH/
+RETURN uses the same UAE/body/navigation owner. Search retains sighting revision,
+finite distinct probes and observed pauses. Contact loss/retirement/pending hit
+closure and snapshot/queue negatives are covered at the canonical boundary.
+
+Segmented native before91ba59a5e and aftera3c701b12 evidence is retained in
+IMPL/build/security-response/resumed-before-current.json and memory-after-final.json.
+Real fist ->3armed/1responding/2patrol ->native health100->94 ->distinct search probes
+->contact0/RETURN; ordinary same-world restart ->remembered UUID without another
+assault ->native health100->94 ->contact0/no pending strike/retained patrol. Reviewed
+night frame shows one entire armed native guard; no visual cohort/M3 inference.
+The original isolated aggregate failed setup; it is not relabelled passed. Existing
+restartSegments/run-scenario supplied the halves without resetting the failing world.
+Two adjacent actual HOT/recovery failures were repaired on saved inputs: station
+attendance release after completed work under physical hold, and exact field-clock
+suspension while its site remains CONFLICT. Productive effects remain gated.
+Detailed classifications and limits: docs/frontier-v3-security-hot-findings-20261102.md.
+Native multi-enemy, full industrial/freight M2, human M3 and scale remain unclaimed.

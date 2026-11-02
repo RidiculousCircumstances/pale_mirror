@@ -1,137 +1,110 @@
 # Active continuity — 2026-11-02
 
-## Assignment and authority
-User: «проверь фичу в хот подробно и пофиксь баги». Main alone; no subagents,
-Terra, API goal or push. Historical assignment kept MAIN25565/25575 and100town25579/25580 stopped;
-latest user authorization starts MAIN for manual testing as recorded below.
-Private delivery authorized. Keep developed schema316 seed129 world; no reset
-hiding failures. Finish native patrol/recovery, scoped notes/commits and verified
-private delivery. Root pack trackedclean f72713382957; preserve .f0v-baseline/.
+## Current assignment and result
+Accepted security cut implemented, committed and deployed: independently tracked
+threats, bounded responding crews, retained patrol coverage, explicit intercept/search/
+return. Main alone; no subagents/Terra/API goal/push. Standing scoped commit and
+verified MAIN deployment applies. User authorized MAIN for manual play. Do not start
+another work stream without a new request. Disposable worlds may be replaced when
+needed, never reset merely to hide a failure. Preserve all unrelated histories/WIP.
 
 IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
-branch feat/baker-carry-orders-20260926, CLEAN27d9cc85e2e2d6d3c7640356b1447603f4d8f0a9.
-RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same ref.
-Governance has extensive unrelated WIP; never bulk stage. Own changes: security
-architecture key, materialization appendix, ledger and new scoped findings report.
+branch feat/baker-carry-orders-20260926 CLEAN a3c701b12171d59fc8ce738591bbba8febea3d41.
+Feature caf97a98c, adjacent station6c5785476 and fielda3c701b12 fixes. Intermediate
+scenario-only method corrections are retained, not product fixes. RELEASE
+/home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same a3c701b12.
+PACK /home/rd/proj/minecraft trackedclean f72713382957, preserve .f0v-baseline/.
+Governance unrelated extensive WIP remains; never bulk stage. Only owned security
+architecture key, materialization appendix, HOT findings and ledger are in this cut.
+Implementation plan IMPL/docs/frontier-v3-security-response-plan.md.
 
-## Latest — manual server is live (user explicitly authorized starting MAIN)
-2026-11-02 user: «подними серв для ручной проверки если не поднял» supersedes the
-older MAIN-stopped assignment. MAIN /home/rd/far-frontier-server is now RUNNING via
-far-frontier-v3-live.service on all interfaces25565/RCON25575; actual Java22PID4076573
-(systemd wrapper4076548).100town/private25579/25581 remain stopped.
-Latest CLEAN IMPL/RELEASE ref4da00209510435ff613f0613edb48633773df517; package/verify
-PASS8s, affected security tests+guardrails PASS18s. Root pack unchanged.
-World security-hot-manual-schema316-seed129-20261102 is an offline copy of the
-previous developed private world, not a reset. Original preserved. Initial27d launch
-revealed later-world guard post failure at255586; fixed on SAME failing copied
-world. A developed site's observation anchor can move; retained post validation
-checked only target ID, while mission admission correctly checked current area.
-Shared SecurityCoverage.permitsPost now governs selection, retained patrol/response
-return bookmark and event admission. Invalidated posts redirect via existing UAE
-checkpoint/reselection, no validator suppression or world reset. New snapshot test
-covers stale post/watch/reentry plus response bookmark. Normal startup advances past
-failed255586 to256184, quarantine NORMAL, six armed guards, zero response contact.
-Verified root deploy preflight/verify scripts and real process/artifact binding:
-IMPL/build/security-hot/manual-delivery/verified.json. Manual address
-100.100.78.29:25565 (LAN192.168.0.103:25565); settlement1 public support(-1486,64,-1360).
-No client update or public artifact publication/push. Historical private delivery
-below remains evidence only; it is no longer the live server identity.
+## Implemented boundaries
+Schema317 (fresh-world only, rejects316) retains ContactKey(home,CombatTarget),
+monotonic global observation revision and exact duty/contact allocations. Independent
+contact end, hostility, pending strikes and duty retirement. SecurityDispatch is pure,
+route-free policy: retain crews, first responders across fresh threats before
+reinforcement, default50percent available armed duties (at least1), max2 per threat.
+Stale contacts retain existing investigators only. One coalesced home SecurityReview
+runs20tick reviews only with active contacts and expires400tick observations. Sensors
+publish bounded actual range/LOS facts, not whole-cohort actuation.
+GuardMission explicitly persists PATROL/WATCH/INTERCEPT/SEARCH/RETURN; search retains
+exact sighting revision, at most4 distinct known/legal probes within radius4 with
+40tick observed pauses. New sighting invalidates old search via normal interruption,
+including an already-stale newer observation. Return revalidates protected geometry.
+Shared UAE/navigation/body/operation journal remain sole owners. Assigned guards
+alone prepare native hits; existing weapon/reach/LOS/wear/target-incarnation fences
+remain. Guard-owned presentation explains phases and per-target reserve/budget.
 
-## Current result / delivery
-Completed scoped HOT hardening. Source27d9cc85e and detached RELEASE are clean,
-package/verify PASS7s. Verified private Java22 PID3133061, loopback25581/RCON25582,
-SAME developed schema316 seed129/r31 12town world. Source/hash/process/startup and
-health binding: IMPL/build/security-hot/deploy-footprint/verified.json. MAIN/100town
-remain stopped. Task client/private Xvfb exited; no push/public pack update.
+Two confirmed adjacent failures were repaired on SAME retained native world. Station
+clock finished while attendance remained under physical conversion hold; planner's
+stop was wrongly rejected as if it must convert recipe. PROCESSING-only attendance
+release now independent of productive permission; exact actor/body/predecessor and
+physical holds stay strict. Field CONFLICT retained exact job but productive-phase
+check wrongly prevented safe pause for food. One exact-retained stop-only boundary
+is shared by family labour, typed suspension and death acknowledgement; starts and
+productive transitions still require HARVESTING. No common coordinator learned family
+business. Exact saved snapshot/WAL probes before/after prove both causes and repairs.
 
-Corrected declarative private-security-hot-patrol.json PASSED source27d, run
- d60bb69f-750c-4dc5-aa8f-b491fc382a81, no external intervention. Same Owen Ash native
-UUID;65 motion samples/320ticks,23.85block maximum displacement,321native server
-ticks during capture. Terminal contactnull/responding0/quarantine NORMAL;29nourished,
-0hungry. Frame reviewed but close-up, not formation/equipment visual acceptance.
-Normal restart retained11 hostile UUIDs and ended contact without resetting world.
-Final bounded health199379→200679,pending0/navwaiting0; last64server ticks max5.03ms.
-Whole-run native max102.8ms/ready max132.7ms/background preparation max507.3ms;
-no global80ms or scale acceptance claim. Detailed report:
-docs/frontier-v3-security-hot-findings-20261102.md. No required implementation remains
-for this scoped repair; broader M2/M3 and inactive baseline debt remain explicit below.
+## Verification and native limits
+Full guardrails/check/NeoForge build/packaged JAR PASS9m29
+/tmp/pm-response-integration.log: NeoForge894/domain324/visuals79 zero failures;
+frontier full task PASS, XML later overwritten (no invented full count). Later39
+security/dispatch/guard/codec +guardrails/compile PASS52s. Node55/55 PASS. Station
+repair49 actual focused tests+guardrails PASS54s; field/life/execution/station95 actual
+focused tests+guardrails PASS39s. Reuse unchanged broader evidence; no confidence rerun.
+Clean detached final package/verify PASS9s, /tmp/pm-response-release.log.
 
-## Confirmed HOT result
-build/security-hot/cohort-indexed-progress.json PASSED source41742c731, run
- d4d79385-61d7-43ac-b135-5277403d15b3: naturally manufactured four armed guards,
-actual player11 fist incident, common hostility/contact, four responding guards,
-40→0 player health, killed by Eli Stone, durable ContactEnded, responding0,
-all pending strikesfalse and retained PATROL missions. Terminalrev646820/tick195459.
-Reviewed death frame visibly confirms named killer; first pre-assault frame is an
-unhelpful close-up, not a visual cohort proof. No quarantine. Client/Xvfb exited.
-Subsequent patrol exploratory carrier showed retained same Owen Ash native UUID,
-blocked materialization while observer stood in exact cell; ordinary observer
-sidestep released it. Actual motion later~4blocks. Initial PATH_UNAVAILABLE for
-142block post/meal resolved after asynchronous hints; no permanent navigator defect
-established. Do not invent another path system. Retained process captures in
-build/security-hot/patrol-after-combat.json/.pmv3.jsonl (not formal acceptance due
-external setup action).
+Native segmented before91ba59a5e run991289cb-5d13-4469-ac59-fb6025b3ea47 PASS:
+IMPL/build/security-response/resumed-before-current.json. Real fist ->3armed,
+1responding/2patrol ->native health100->94 ->depart ->SEARCH with distinct probes
+->contact0/RETURN at18097. Reviewed linked night frame shows one entire armed guard,
+not visual cohort/M3. Final aftera3c701b12 run40ebad7e-45af-4562-af45-310ebf3d6205 PASS:
+memory-after-final.json. Ordinary same-world restart, heal/survival, remembered UUID
+without another assault ->native health100->94 ->depart ->contact0/no pending hit/
+retained PATROL/WATCH at23459; quarantine NORMAL. Previously failed21772 and22408
+passed without reset. Existing restartSegments/run-scenario halves, frozen source,
+one20FPS private-Xvfb client; ordinary external graceful restart. Original isolated
+aggregate failed fixture prep and stays failed. See method classifications, source
+identities and exact probes in docs/frontier-v3-security-hot-findings-20261102.md.
+Private baseline world's local field conflict remains inspectable, not declared
+repaired by pause. Multiple concurrent enemies canonical-tested, not native
+multiplayer-tested. No full industrial/freight M2, human M3, formation/scale/global80ms
+claim or formal full-pack HUMAN_CANDIDATE. Two old inactive native assault/patrol
+failures reproduce clean de34; explicit debt, not all416green.
 
-## Product repairs in this request
-8b0ee24d7 exact contact end wakes guards without erasing hostility/pending hit;
-unarmed withdrawn appointment may release, held sword cannot be abandoned.
-5202586d0 actual native reach/LOS may interrupt guard approach at shared checkpoint
-within same Prepared transaction; exact station is not a hit prerequisite.
-5b1ea6c64 connected dead player comes from PlayerList beyond corpse-index lifetime.
-419b8bc45 native sensor alone owns measured range/LOS; stale canonical travel origin
-cannot disprove actual perception. Exact authority/time/pursuit limits remain.
-2b37e4350 actual lethal hit durably journals ContactEnded through common confirmed
-native-event protocol; stale/repeated end cannot erase a newer sighting.
-b8cded7b5 meal HOT-effect cancellation declares required durable confirmation,
-fixing crash on last-observer departure after a kill.
-48cbd72e9 common interaction stations enumerate full original Manhattan distance2,
-not four cardinal neighbours; bounded guard response/patrol uses shared mechanism.
-daf5/a329 common checkpoint facade preflights native Prepared; typed Waiting waits,
-unexpected rejection remains strict. daf5 alone did not compile; a329 verified.
-71a1537c3 shared known geometry distinguishes physical floor support, private
-workstations and no-idle contacts. ALL authored solid positions were wrongly denied
-as support, trapping guards approaching player on hall floor. Offline same snapshot
-proved no candidates before; corrected four routes lengths4/5/7/8. Actual walls,
-headroom, private stations/chest-top negatives remain. Sensor uses due interval
-instead of modulo gate that cooperative passes could always miss.
-41742c731 immutable calculation memory indexes exact demand keys/fences, removing
-repeated full scan; facility interiors remain transit/work, not idle destinations.
-KnownServiceExitNavigation clearance releases boundary; it is not idle placement.
-27d9cc85e service index compares compact producer SearchFootprints before expanding
-columns; ordinary stock/priority/resident revision does not rebuild unchanged areas.
-MapN linear probes over clustered column hashes caused expensive repeated rebuilds;
-retains immutable HashMap index instead. Exact declaration/population/area changes
-still invalidate; no stock/access/actor authority cached. Focused priority-reuse
-plus existing destruction/obstruction/restart negatives pass.
+## Live MAIN delivery
+MAIN /home/rd/far-frontier-server RUNNING via far-frontier-v3-live.service,
+actual Java22PID464773 (wrapper464749), external25565/RCON25575. Installed finala3c701b12
+SHA5125df88a073744122473fde919e802f568ec34d72668d23789a385c0400c74b1f1a5f79ab27a973da4626991f3811421cbf53203cdee9e7e4ec13a8c3fe1ed3510.
+Fresh world security-response-schema317-seed130-20261102, actual persisted seed130,
+frontier-v3-simulation-terrain-r31,12town/374residents. Previous developed316 world
+security-hot-manual-schema316-seed129-20261102 preserved. Old normal RCON stop confirms
+all dimensions saved+JVM/socket exit before installation. Required datapack installed
+before new genesis. Root clean-detached preflight/shared pinned installer/deploy-verify
+PASS. Actual Java/exe/cwd/hash/source/world/seed and health binding:
+IMPL/build/security-response/verified.json. Simulation1535->2724, pending ordinary0,
+fastforward0, summary green/required conflicts0 (bounded sample, not scale proof).
+Later saved checkpoint3600 confirms actual seed/ruleset. Last first-town sample
+at1540 guards0: fresh world must manufacture swords/appoint guards ordinarily, no
+fixture weapons/appointments on MAIN. No operator warp left running.
 
-## Evidence and limits
-Prior serial clean release check PASS9m34: frontier2219/NeoForge891/domain324/
-visuals79; body-first native25/25 +scene-handoff3/3. Two inactive legacy native
-assault/patrol failures reproduce clean de34; explicit debt, not all416green.
-This request affected focused guard/perception/meal/geometry/planning/access tests,
-guardrails and NeoForge compile PASS. Latest footprint focused guard/access/geometry
-PASS22s; added non-geometric warehouse-priority reuse negative PASS11s. Packaged
-clean27d verified. Reuse unchanged full gates; do not repeat per small edit.
-Earlier b622 one-guard declarative native carrier passed manufacture→attack20→14→
-departure/return→graceful restart→remembered UUID without another assault20→14→
-departure/patrol (build/security-native/verification-summary.json). Current native
-cohort417 adds lethal terminal proof. These are M1/recovery, not full industrial or
-mixed-freight M2, human M3 or scale acceptance.
+User address100.100.78.29:25565 (LAN192.168.0.103); settlement1 public support
+(-1486,64,-1360), teleport feet(-1486,65,-1360), pale_mirror:frontier_graybox.
+No client update, public artifact publication or push. Private lite25583/4, fullpack
+25581/2 and100town25579/80 STOPPED. Automated clients/Xvfb stopped between checks.
+Local artifact HTTP127.0.0.1:18092 serves RELEASE/build/libs.
 
-## Operations / retained diagnosis
-Runtime build/simulation-throughput/fifty-settlements/server, source-level316,
-seed129, ruleset frontier-v3-simulation-terrain-r31 (12town despite folder name).
-JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; runtime Java22
-/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java. HTTP127.0.0.1:18092
-serves RELEASE build/libs (task PID1676028). Root preflight and shared checksum-pinned
-installer own installation. RCON helper build/forestry-native/query-runtime.mjs
-silently reads properties; NEVER print credentials. Valid v3 inspect performance.
-Systemd user bus unavailable: verify actual process rather than fabricate success.
-Owned JDK21jcmd attaches actual Java22 for bounded thread dumps. Original blocked
-prep dump build/security-hot/blocked-preparation-threads.txt shows132s in linear
-calculation-memory.find; later patrol-preparation-threads.txt shows MapN.probe in
-ServiceBoundaryComposition.columnIndex. Both are actual connected call paths.
-Post417 no-client recent64tick max30.8ms/pending0; startup/HOT transition peak1.04s
-remains no global80ms acceptance claim. Re-measure after27d only if useful.
-Older broader feature details / recovery are in docs/archive/CONTINUITY_2026-11-01_guard_integration_before_terminal.md
-and Git8eaacd408. Feature plan IMPL/docs/frontier-v3-security-sites-and-logistics-plan.md.
+## Operations and retained evidence
+RCON IMPL/build/forestry-native/query-runtime.mjs reads password silently; never
+print server.properties. Valid pale_mirror v3 inspect performance /summary or
+inspect settlement settlement:1 (not v3 status). Output PMV3_DIAG then JSON.
+advance N queues a request; inspect terminal rather than acknowledgement.
+Transient user unit disappears after normal stop; recreate via systemd-run --user
+--unit=far-frontier-v3-live --collect --working-directory=/home/rd/far-frontier-server
+/home/rd/far-frontier-server/scripts/run-server-java22.sh. Use root preflight and
+frontier-v3-deploy-verify. Detached build needs explicit graybox disabled-mod catalog:
+-PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt.
+JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; fullpack Java22
+/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
+Earlier4da guard-post repair and old b622/417/27d native evidence remain in the HOT
+findings, not current delivery identity. No need repeat unchanged historical gates.
