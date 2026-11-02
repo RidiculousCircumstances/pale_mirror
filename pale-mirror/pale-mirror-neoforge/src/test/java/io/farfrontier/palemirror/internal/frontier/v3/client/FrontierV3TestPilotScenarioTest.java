@@ -30,7 +30,7 @@ class FrontierV3TestPilotScenarioTest {
         assertEquals(14,FrontierV3TestPilotScenario.parse(declaration).actionCount());
         var escape=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
                 "scenarios","disposable-threat-response-restart.json"));
-        assertEquals(10,FrontierV3TestPilotScenario.parse(escape).actionCount());
+        assertEquals(13,FrontierV3TestPilotScenario.parse(escape).actionCount());
         assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(declaration.replace("before-dodge","")));
     }
     @Test void actualLocalDefenceAndRestartCarrierIsAcceptedBeforeLaunchingAClient() throws java.io.IOException {

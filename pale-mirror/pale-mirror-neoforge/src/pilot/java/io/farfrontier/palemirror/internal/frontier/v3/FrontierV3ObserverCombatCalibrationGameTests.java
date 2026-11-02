@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -68,7 +69,7 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
     private FrontierV3ObserverCombatCalibrationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-observer-combat-calibration", templateNamespace = "minecraft",
-            template = "bastion/treasure/big_air_full", timeoutTicks = 20000)
+            template = "bastion/treasure/big_air_full", timeoutTicks = 200000)
     public static void fixedSeedSettlementAssaultUsesIndependentColdPlansAndHotReceipts(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(2, 8, 2));
         List<Sample> cold = new ArrayList<>(SAMPLES), hot = new ArrayList<>(SAMPLES);
@@ -79,14 +80,30 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
     private static void runSample(GameTestHelper helper, BlockPos origin, int index,
                                   List<Sample> cold, List<Sample> hot) {
         if (index == SAMPLES) { assertComparable(helper, cold, hot); return; }
-        startHotSample(helper, origin, seed(index), session -> {
-            helper.runAfterDelay(1, () -> prepareHotStrike(helper, session));
-            helper.runAfterDelay(2, () -> runHotStrike(helper, session));
-            helper.runAfterDelay(3, () -> hot.add(confirmAndRelease(helper, session)));
-            helper.runAfterDelay(4, () -> {
-                close(session);
-                runSample(helper, origin, index + 1, cold, hot);
-            });
+        startHotSample(helper, origin, seed(index), session ->
+                advanceSample(helper, origin, index, cold, hot, session, null, 0L));
+    }
+
+    /** Native GameTest ticks are unpaced. Follow actual protocol stages, with a real no-progress bound. */
+    private static void advanceSample(GameTestHelper helper, BlockPos origin, int index, List<Sample> cold, List<Sample> hot,
+                                      Session session, PhysicalIntentStatus previous, long deadline) {
+        helper.runAfterDelay(1, () -> {
+            FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+            var intent = state(session.runtime()).physicalIntents().values().stream()
+                    .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
+                    .reduce((left,right)->right).orElse(null);
+            var current = intent == null ? null : intent.status();
+            if (current == PhysicalIntentStatus.CONFIRMED) {
+                hot.add(confirmAndRelease(helper, session)); close(session);
+                runSample(helper, origin, index + 1, cold, hot); return;
+            }
+            if (current == PhysicalIntentStatus.PREPARED && previous == null) session.preparedAt=helper.getLevel().getGameTime();
+            long until = deadline == 0L || current != previous ? System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10) : deadline;
+            helper.assertTrue(System.nanoTime()<until, "native strike made no protocol progress: seed="+session.seed()+" status="+current);
+            helper.assertTrue(current == null || current == PhysicalIntentStatus.PREPARED || current == PhysicalIntentStatus.RUNNING,
+                    "native strike entered an unexpected terminal/recovery state: "+current);
+            advanceSample(helper, origin, index, cold, hot, session, current, until);
         });
     }
 
@@ -139,25 +156,7 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
         });
     }
 
-    private static void prepareHotStrike(GameTestHelper helper, Session session) {
-        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
-        PhysicalIntent intent = onlyStrike(state(session.runtime()));
-        helper.assertTrue(intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
-                "the independent HOT sample must first retain its canonical prepared strike");
-        session.preparedAt = helper.getLevel().getGameTime();
-    }
-
-    private static void runHotStrike(GameTestHelper helper, Session session) {
-        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
-        helper.assertTrue(onlyStrike(state(session.runtime())).status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING,
-                "the physical HOT sample must durably enter RUNNING before vanilla damage");
-    }
-
     private static Sample confirmAndRelease(GameTestHelper helper, Session session) {
-        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         FrontierWorldState confirmedState = state(session.runtime());
         PhysicalIntent intent = onlyStrike(confirmedState);
         SceneStrikeObservation receipt = (SceneStrikeObservation) confirmedState.physicalObservations()

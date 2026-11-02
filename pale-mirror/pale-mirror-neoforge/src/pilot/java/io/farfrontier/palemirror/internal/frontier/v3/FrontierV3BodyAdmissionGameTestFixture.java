@@ -13,6 +13,41 @@ import java.util.function.Supplier;
  */
 final class FrontierV3BodyAdmissionGameTestFixture {
     private FrontierV3BodyAdmissionGameTestFixture() { }
+    static void ambientWhenReady(net.minecraft.gametest.framework.GameTestHelper helper,
+            Supplier<FrontierV3AmbientActorExecutor.Result> attempt,
+            java.util.function.Consumer<FrontierV3AmbientActorExecutor.Result> complete) {
+        awaitAmbient(helper,attempt,complete,0L);
+    }
+    private static void awaitAmbient(net.minecraft.gametest.framework.GameTestHelper helper,
+            Supplier<FrontierV3AmbientActorExecutor.Result> attempt,
+            java.util.function.Consumer<FrontierV3AmbientActorExecutor.Result> complete,long deadline) {
+        helper.runAfterDelay(1,()->{
+            long until=deadline==0L?System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10):deadline;
+            var result=attempt.get();
+            if(result!=FrontierV3AmbientActorExecutor.Result.DEFERRED && result!=FrontierV3AmbientActorExecutor.Result.PENDING){complete.accept(result);return;}
+            helper.assertTrue(System.nanoTime()<until,"ambient native admission made no progress: "+result);
+            awaitAmbient(helper,attempt,complete,until);
+        });
+    }
+    static void observeWhenReady(net.minecraft.gametest.framework.GameTestHelper helper,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, net.minecraft.world.entity.Mob body,
+            Runnable complete) {
+        awaitObservation(helper,runtime,body,complete,0L);
+    }
+    private static void awaitObservation(net.minecraft.gametest.framework.GameTestHelper helper,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, net.minecraft.world.entity.Mob body,
+            Runnable complete,long deadline) {
+        helper.runAfterDelay(1,()->{
+            long until=deadline==0L?System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10):deadline;
+            FrontierV3ActorBodyController.confirmPresent(helper.getLevel(),runtime,body);
+            var state=runtime.decodedState().orElseThrow();
+            var declaration=FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
+            var id=io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state,declaration.actorId());
+            if(FrontierV3ActorBodyController.readyForExecution(helper.getLevel(),state,java.util.List.of(id))){complete.run();return;}
+            helper.assertTrue(System.nanoTime()<until,"indexed native body observation made no progress: "+declaration.actorId());
+            awaitObservation(helper,runtime,body,complete,until);
+        });
+    }
     static FrontierV3AmbientActorExecutor.Result ambient(ServerLevel level, FrontierWorldState state,
             SubjectId actor, BodyPosition position) {
         return ambient(level, state.bootstrap().worldId(),

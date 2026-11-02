@@ -222,6 +222,37 @@
       "type": "inspect",
       "view": "actor",
       "id": "resident:1-13"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": 0,
+        "z": 9
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "observe_harvest_semantics",
+      "siteId": "site:1-wheat-field",
+      "durationTicks": 400,
+      "sampleEveryTicks": 20,
+      "maxCanonicalStallTicks": 1200,
+      "timeoutMs": 180000,
+      "causalMilestone": "productive_field_after_safety_recovery"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:1-wheat-field"
     }
   ],
   "restart": {
@@ -247,6 +278,15 @@
           "requested": false
         }
       }
+    },
+    {
+      "after": 13,
+      "view": "site",
+      "id": "site:1-wheat-field",
+      "expect": {
+        "status": "ok",
+        "conflictDisposition": null
+      }
     }
   ],
   "zeroPlayerPrelude": {
@@ -258,6 +298,10 @@
     {
       "after": 5,
       "name": "named-farmer-escaping-real-player-harm"
+    },
+    {
+      "after": 12,
+      "name": "productive-field-after-threat-recovery"
     }
   ]
 }

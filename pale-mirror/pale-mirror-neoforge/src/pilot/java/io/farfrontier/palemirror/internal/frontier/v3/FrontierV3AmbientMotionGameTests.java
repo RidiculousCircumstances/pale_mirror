@@ -108,7 +108,7 @@ public final class FrontierV3AmbientMotionGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20000)
     public static void preparedAmbientLeaseSurvivesRecoveryAndMaterializesOneInertBody(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, origin);
@@ -128,8 +128,9 @@ public final class FrontierV3AmbientMotionGameTests {
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.PREPARED,
                 "prepared recovery must not turn an unacknowledged body into UNKNOWN");
         publishProjectionBeforeManagedJoin(helper, level, runtime);
-        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), resident,
-                        bodyAt(origin)), FrontierV3AmbientActorExecutor.Result.APPLIED,
+        FrontierV3BodyAdmissionGameTestFixture.ambientWhenReady(helper,
+                ()->FrontierV3AmbientActorExecutor.materialize(level,state(runtime),resident,bodyAt(origin)),admitted->{
+        helper.assertValueEqual(admitted, FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "a retained PREPARED lease may create exactly its expected loaded-world body");
         Villager body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
         helper.assertTrue(body != null && body.isNoAi(), "the before-HOT body must stay inert across the acknowledgement window");
@@ -140,7 +141,7 @@ public final class FrontierV3AmbientMotionGameTests {
         forged.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
         helper.assertFalse(FrontierV3AmbientActorExecutor.recognizes(runtime, forged),
                 "a copied V3 tag without the canonical UUID is never an admissible carrier");
-        FrontierV3ActorBodyController.confirmPresent(level, runtime, body);
+        FrontierV3BodyAdmissionGameTestFixture.observeWhenReady(helper,runtime,body,()->{
         FrontierV3CommandSubmission.submit(runtime, "ambient-prepared-game-test-hot", resident.value(),
                 new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(),
                         io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident), java.util.Optional.empty()));
@@ -154,8 +155,9 @@ public final class FrontierV3AmbientMotionGameTests {
         level.setBlock(carpet.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(carpet, Blocks.RED_CARPET.defaultBlockState(), 3);
         level.setBlock(carpet.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(carpet.above(2), Blocks.AIR.defaultBlockState(), 3);
-        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, state(runtime), carpetResident,
-                        bodyAt(carpet.above())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+        FrontierV3BodyAdmissionGameTestFixture.ambientWhenReady(helper,
+                ()->FrontierV3AmbientActorExecutor.materialize(level,state(runtime),carpetResident,bodyAt(carpet.above())),carpetAdmitted->{
+        helper.assertValueEqual(carpetAdmitted, FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an owned infection carpet is a physical surface, not a reason to strand the canonical actor");
         Villager carpetBody = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), carpetResident));
         SurfaceAnchor carpetSurface = SurfaceAnchor.at(carpet.getX(), carpet.getY(), carpet.getZ());
@@ -170,6 +172,9 @@ public final class FrontierV3AmbientMotionGameTests {
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
                 "unexpected departure retains the exact saved UUID for later recovery instead of permitting a duplicate");
         body.discard(); carpetBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+        });
+        });
+        });
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

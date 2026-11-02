@@ -5,13 +5,21 @@ import io.farfrontier.palemirror.internal.agriculture.AgriculturalFlatGenerator;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.FlatLevelSource;
 
-/** No-load validation of the explicitly configured uniform geological content provider. */
-final class FrontierV3GeologicalBaseline {
-    private FrontierV3GeologicalBaseline() { }
+/** No-load agreement between declared COLD terrain and the actual native generator. */
+final class FrontierV3GeneratedTerrainBaseline {
+    private FrontierV3GeneratedTerrainBaseline() { }
+    static void requireAgriculture(
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture> declared,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture> generated) {
+        if (declared.isPresent() && !declared.equals(generated))
+            throw new IllegalStateException("declared agricultural terrain disagrees with the native generator; install the matching companion-pack graybox datapack before world creation");
+    }
     static void require(ServerLevel level, FrontierBootstrap bootstrap) {
+        var generator = level.getChunkSource().getGenerator();
+        requireAgriculture(bootstrap.ruleset().fields().agriculture(),
+                generator instanceof AgriculturalFlatGenerator agricultural ? java.util.Optional.of(agricultural.agriculture()) : java.util.Optional.empty());
         var declaration = bootstrap.ruleset().extraction().geology();
         if (declaration.isEmpty()) return;
-        var generator = level.getChunkSource().getGenerator();
         // Both implementations retain uniform subsurface layers. Agricultural
         // surface decoration is above the declared stone stratum checked below.
         if (!(generator instanceof FlatLevelSource) && !(generator instanceof AgriculturalFlatGenerator))

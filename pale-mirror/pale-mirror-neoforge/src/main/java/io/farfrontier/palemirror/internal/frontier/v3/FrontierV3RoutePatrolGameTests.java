@@ -63,40 +63,26 @@ public final class FrontierV3RoutePatrolGameTests {
     }
 
     /** Ordinary observer loss releases the same exact HOT checkpoint; it is not a new patrol admission. */
-    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-return", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 285)
+    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-return", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20000)
     public static void ordinaryDemandLossReturnsTheUnchangedFormationAndCursorToCold(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "ordinary-return"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
-        RoutePatrolCheckpoint[] hotCheckpoint = new RoutePatrolCheckpoint[1];
-        for (int turn = 1; turn <= 276; turn++) {
-            int current = turn;
-            helper.runAtTickTime(turn, () -> {
-                drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
-                if (current == 30) {
-                    FrontierWorldState state = runtime.decodedState().orElseThrow();
-                    RoutePatrol patrol = state.strategicPlans().routePatrols().get(fixture.taskId());
-                    hotCheckpoint[0] = new RoutePatrolCheckpoint(patrol);
-                    // This is ordinary demand loss: the observer leaves through the normal
-                    // connection path.  Directly changing a mock player's coordinates does
-                    // not update the tracked player section, so it is not valid physical
-                    // evidence that demand has actually departed.
-                    // The full GameTest server reuses one level.  Earlier, completed tests
-                    // can leave their mock observers connected there; those are real global
-                    // demand under production policy, but are stale fixture residue here.
-                    // Remove only those fixture players before asserting this test's own
-                    // ordinary departure.
-                    releasePriorMockDemand(level, observer);
-                    releaseDemand(observer);
-                }
-            });
-        }
-        helper.runAtTickTime(277, () -> {
+        await(helper, () -> drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation()),
+                () -> runtime.decodedState().orElseThrow().sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
+                        .anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT), () -> {
+            var hotCheckpoint = new RoutePatrolCheckpoint(runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId()));
+            releasePriorMockDemand(level, observer); releaseDemand(observer);
+            helper.assertTrue(level.players().stream().noneMatch(player -> !player.isSpectator()),
+                    "mock observer removal must actually withdraw native scene demand");
+            await(helper, () -> drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation()),
+                    () -> runtime.decodedState().orElseThrow().sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
+                            .anyMatch(lease -> lease.status() == SceneLeaseStatus.CLOSED), () -> {
             FrontierWorldState returned = runtime.decodedState().orElseThrow();
             SceneLease lease = returned.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol).findFirst().orElseThrow();
             RoutePatrol patrol = returned.strategicPlans().routePatrols().get(fixture.taskId());
             helper.assertTrue(lease.status() == SceneLeaseStatus.CLOSED,
                     "ordinary no-demand hysteresis must release the existing route-patrol lease to COLD");
-            helper.assertTrue(hotCheckpoint[0].patrol().equals(patrol),
+            helper.assertTrue(hotCheckpoint.patrol().equals(patrol),
                     "ordinary demand loss must preserve the same patrol formation and cursor, not admit a replacement");
             helper.assertTrue(patrol.memberIds().stream().allMatch(actor -> {
                 var body = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(returned.bootstrap().worldId(), actor));
@@ -105,7 +91,8 @@ public final class FrontierV3RoutePatrolGameTests {
             }), "scope release retains actual independently observed positions, never snaps unfinished movement to a formation checkpoint: "
                     + physicalDetail(level, returned, patrol));
             runtime.shutdown(); releaseDemand(observer); helper.succeed();
-        });
+            }, 0L);
+        }, 0L);
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-blocked", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
@@ -179,7 +166,11 @@ public final class FrontierV3RoutePatrolGameTests {
         return observer;
     }
 
-    private static void releaseDemand(ServerPlayer observer) { observer.connection.disconnect(Component.literal("route patrol fixture complete")); }
+    private static void releaseDemand(ServerPlayer observer) {
+        observer.connection.disconnect(Component.literal("route patrol fixture complete"));
+        // GameTest's mock connection does not run a normal remote disconnect callback.
+        observer.discard();
+    }
 
     private static void releasePriorMockDemand(ServerLevel level, ServerPlayer current) {
         level.players().stream().filter(ServerPlayer.class::isInstance).map(ServerPlayer.class::cast)

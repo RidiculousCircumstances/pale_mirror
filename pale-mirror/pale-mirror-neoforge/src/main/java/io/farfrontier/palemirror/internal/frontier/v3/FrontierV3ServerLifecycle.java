@@ -197,7 +197,7 @@ public final class FrontierV3ServerLifecycle {
         try {
             RecoveryImage recovery = store.recover(configuration.worldId());
             configuration = FrontierWorldRecoveryConfiguration.select(configuration, recovery.checkpoint().map(io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord::checkpoint));
-            FrontierV3GeologicalBaseline.require(physicalWorld, configuration.initialState().bootstrap());
+            FrontierV3GeneratedTerrainBaseline.require(physicalWorld, configuration.initialState().bootstrap());
             FrontierV3NativeProductionDefinitions.validate(server, configuration.initialState().bootstrap().ruleset().production());
             if (recovery.checkpoint().isEmpty() && recovery.walTail().isEmpty()) {
                 var firstLedger = FrontierV3AmbientCarrierLedger.get(physicalWorld, configuration.worldId());
