@@ -21,6 +21,13 @@ public final class SecurityCoverage {
             if(posts.stream().noneMatch(post->distance(post.observationAnchor(),target.observationAnchor())<=state.bootstrap().ruleset().security().observationRadius()/2)) posts.add(target);
         return List.copyOf(posts);
     }
+    /** Same current protected-area contract for selection, retained posts and admission. */
+    public static boolean permitsPost(ProtectedTarget target, SurfaceAnchor station) {
+        var anchor = target.observationAnchor();
+        return Math.abs((long) station.x() - anchor.x()) <= 6
+                && Math.abs((long) station.z() - anchor.z()) <= 6
+                && Math.abs((long) station.y() - anchor.y()) <= 4;
+    }
     public static long distance(SurfaceAnchor a, SurfaceAnchor b) {
         return a.manhattanDistance(b);
     }

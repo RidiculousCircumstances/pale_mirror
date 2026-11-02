@@ -26,8 +26,11 @@ public final class GuardResponse {
                 SecurityCoverage.distance(target.observationAnchor(),position)<=state.bootstrap().ruleset().security().pursuitMargin());
     }
     public static boolean targetRetained(FrontierWorldState state,GuardDuty duty) {
-        return duty.mission().isPresent() && ProtectionObligations.read(state,duty.home()).stream().anyMatch(target->
-                target.kind()==duty.mission().orElseThrow().targetKind() && target.id().equals(duty.mission().orElseThrow().target()));
+        if (duty.mission().isEmpty()) return false;
+        var post = duty.mission().orElseThrow().post();
+        return ProtectionObligations.read(state,duty.home()).stream().anyMatch(target ->
+                target.kind() == post.kind() && target.id().equals(post.target())
+                        && SecurityCoverage.permitsPost(target, post.station()));
     }
     public static boolean redirect(FrontierWorldState state,GuardDuty duty,long tick){
         if(duty.mission().isEmpty())return contact(state,duty,tick).isPresent();

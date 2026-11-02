@@ -22,9 +22,7 @@ public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardM
             if(contact==null || !contact.target().equals(mission.response().orElseThrow())
                     || mission.station().manhattanDistance(new SurfaceAnchor(contact.position()))>io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.MAX_CONTACT_STATION_DISTANCE)
                 throw new IllegalArgumentException("guard response lacks its exact current bounded contact");
-        } else if(Math.abs((long)mission.station().x()-target.observationAnchor().x())>6
-                || Math.abs((long)mission.station().z()-target.observationAnchor().z())>6
-                || Math.abs((long)mission.station().y()-target.observationAnchor().y())>4)
+        } else if(!io.farfrontier.palemirror.frontier.v3.model.security.SecurityCoverage.permitsPost(target,mission.station()))
             throw new IllegalArgumentException("guard post lies outside its protected observation area");
         if(mission.response().isPresent() && (owner.mission().isEmpty()
                 || !owner.mission().orElseThrow().post().equals(mission.resume().orElseThrow())))

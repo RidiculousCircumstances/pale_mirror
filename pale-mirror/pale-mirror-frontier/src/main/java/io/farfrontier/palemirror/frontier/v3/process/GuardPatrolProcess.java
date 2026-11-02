@@ -73,7 +73,7 @@ final class GuardPatrolProcess {
             for (int dx=-6; dx<=6; dx++) for (int dz=-6; dz<=6; dz++) {
                 if (Math.max(Math.abs(dx),Math.abs(dz))<3) continue;
                 for (var station : knowledge.surfacesAt(origin.x()+dx, origin.z()+dz)) {
-                    if (Math.abs(station.y()-origin.y()) <= 4 && !knowledge.geometry().blocked(station)
+                    if (SecurityCoverage.permitsPost(target,station) && !knowledge.geometry().blocked(station)
                             && !reserved.contains(station) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(station.support())
                             && ServiceBoundaryComposition.turnoverPoint(state, station).isEmpty()) stations.add(station);
                 }

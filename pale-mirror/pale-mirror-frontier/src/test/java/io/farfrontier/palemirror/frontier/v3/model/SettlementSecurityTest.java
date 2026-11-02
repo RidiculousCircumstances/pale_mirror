@@ -94,6 +94,29 @@ class SettlementSecurityTest {
         var retired=ActorBodyAuthority.released(current,r.body().body());
         assertEquals(retired,SecurityTransitions.apply(retired,r.duty().home(),ended,21004),"observed end remains valid after exact body departure");
     }
+    @Test void aRetainedPostOutsideTheCurrentProtectedAreaIsReplacedBeforeWatchingOrResuming() {
+        var state = Fixture.ARMED;
+        var duty = state.strategicPlans().guards().values().iterator().next();
+        var target = SecurityCoverage.posts(state,duty.home()).getFirst();
+        // An existing target may move as its worksite develops; identity survives.
+        var formerPost = target.observationAnchor().offset(40,0,0);
+        var mission = new GuardMission(target.kind(),target.id(),formerPost,5,0);
+        var stale = duty.withMission(mission);
+        state = state.withStrategicPlans(state.strategicPlans().withGuard(stale))
+                .withActorBody(duty.execution().actorId(),formerPost.standingBody());
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertFalse(GuardResponse.targetRetained(state,stale));
+        assertTrue(GuardResponse.redirect(state,stale,21001));
+        var responding = stale.withMission(mission.responding(formerPost.offset(1,0,0),
+                new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(7,9),"pale_mirror:frontier_graybox")));
+        assertFalse(GuardResponse.targetRetained(state,responding),"response must also revalidate its retained return post");
+        var events = GuardWorkProcess.progress(state,GuardContinuation.progress(stale.id(),21001),21001);
+        var selected = events.stream().map(ProposedEvent::payload).filter(GuardMissionSelected.class::isInstance)
+                .map(GuardMissionSelected.class::cast).findFirst().orElseThrow();
+        assertEquals(0,selected.mission().watchUntil(),"a stale arrival cannot begin watching the old post");
+        var updated = selected.apply(state,stale.id(),21001);
+        assertTrue(GuardResponse.targetRetained(updated,updated.strategicPlans().guards().get(stale.id())));
+    }
     @Test void patrolTravelsAndWatchesThroughTheRealQueueWithRetainedPostsAcrossSnapshot() {
         var state=Fixture.ARMED;
         var base=FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
