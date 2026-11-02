@@ -39,7 +39,11 @@ final class FrontierV3TestPilotPresentation {
         String name=FrontierV3PilotPresentationName.resolve(minecraft,action);if(name==null)return null;
         var type=ResourceLocation.parse(action.get("entityType").getAsString());
         double maximum=action.has("maxDistance")?action.get("maxDistance").getAsDouble():64.0;
-        return nearestVisibleNamedEntity(minecraft,type,name,maximum);
+        return minecraft.level.getEntitiesOfClass(Entity.class,minecraft.player.getBoundingBox().inflate(maximum),entity->
+                FrontierV3PilotEntityIdentity.matches(minecraft,action,entity) && !entity.isRemoved()
+                && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(type) && entity.getCustomName()!=null
+                && entity.getCustomName().getString().contains(name) && minecraft.player.hasLineOfSight(entity))
+                .stream().min(java.util.Comparator.comparingDouble((Entity e)->e.distanceToSqr(minecraft.player)).thenComparing(Entity::getUUID)).orElse(null);
     }
     static Entity nearestVisibleNamedEntity(Minecraft minecraft, ResourceLocation expectedType, String expectedName, double maximum) {
         return minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->

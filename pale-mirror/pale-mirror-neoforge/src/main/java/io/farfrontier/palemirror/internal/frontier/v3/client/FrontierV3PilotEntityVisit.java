@@ -16,7 +16,7 @@ final class FrontierV3PilotEntityVisit {
         if(expectedName==null)return false;
         double maximum=action.has("maxDistance")?action.get("maxDistance").getAsDouble():64.0;
         Entity target=targetId<0?minecraft.level.getEntitiesOfClass(Entity.class,minecraft.player.getBoundingBox().inflate(maximum),
-                entity->entity.isAlive() && !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
+                entity->FrontierV3PilotEntityIdentity.matches(minecraft,action,entity) && entity.isAlive() && !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
                         && entity.getCustomName()!=null && entity.getCustomName().getString().contains(expectedName)).stream()
                 .min(Comparator.comparingDouble((Entity entity)->entity.distanceToSqr(minecraft.player)).thenComparing(Entity::getUUID)).orElse(null)
                 :minecraft.level.getEntity(targetId);

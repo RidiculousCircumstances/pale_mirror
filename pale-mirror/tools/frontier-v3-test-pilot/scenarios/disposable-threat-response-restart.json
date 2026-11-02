@@ -75,7 +75,8 @@
         }
       },
       "maxDistance": 64,
-      "timeoutMs": 30000
+      "timeoutMs": 30000,
+      "workerId": "resident:1-13"
     },
     {
       "type": "assert_fixture",
@@ -112,7 +113,8 @@
         }
       },
       "maxDistance": 64,
-      "timeoutMs": 30000
+      "timeoutMs": 30000,
+      "workerId": "resident:1-13"
     },
     {
       "type": "attack_nearest_entity",
@@ -129,7 +131,8 @@
       "requireRemoval": false,
       "requireDamage": true,
       "timeoutMs": 30000,
-      "causalMilestone": "real_harm_to_current_farmer"
+      "causalMilestone": "real_harm_to_current_farmer",
+      "workerId": "resident:1-13"
     },
     {
       "type": "wait_until_diagnostic",
@@ -169,7 +172,8 @@
         }
       },
       "maxDistance": 96,
-      "timeoutMs": 10000
+      "timeoutMs": 10000,
+      "workerId": "resident:1-13"
     },
     {
       "type": "inspect",

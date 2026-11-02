@@ -662,6 +662,7 @@ public final class FrontierV3TestPilotClient {
         if (attackedEntityRuntimeId < 0) {
             target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
                             !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
+                                    && FrontierV3PilotEntityIdentity.matches(minecraft,action,entity)
                                     && (expectedName == null || entity.getCustomName() != null && entity.getCustomName().getString().contains(expectedName)))
                     .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
                             .thenComparing(Entity::getUUID)).findFirst().orElse(null);

@@ -321,6 +321,8 @@ export function validateScenario(scenario) {
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 64)))) {
         throw new Error('attack_nearest_entity needs a namespaced entity type, bounded local range and 1..40 attacks');
       }
+      if (['attack_nearest_entity','look_nearest_entity','visit_nearest_entity','interact_nearest_entity'].includes(action.type) && action.workerId !== undefined
+          && !requiredId(action.workerId,'resident:') && !requiredId(action.workerId,'actor:')) throw new Error('invalid exact actor selector');
       if (action.type === 'wait' && (!Number.isInteger(action.ms) || action.ms < 0 || action.ms > 120_000)) {
         throw new Error('wait duration must be 0..120000 milliseconds');
       }

@@ -45,7 +45,7 @@ final class FrontierV3PilotMotionObserver {
         }
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
         Vec3 anchor = action.has("anchor") ? position(action.getAsJsonObject("anchor")) : null;
-        UUID expectedUuid = expectedEntityUuid(worker);
+        UUID expectedUuid = FrontierV3PilotEntityIdentity.expectedEntityUuid(worker);
         // A terminal receipt legitimately retires its process diagnostic, but it does not
         // retire the actor identity.  Bind to the actor's read-only UUID admission before
         // choosing a visible body, so an adjacent similarly named farmer cannot satisfy a
@@ -177,14 +177,6 @@ final class FrontierV3PilotMotionObserver {
                 ? new Vec3(observed.get("x").getAsDouble(), observed.get("y").getAsDouble(), observed.get("z").getAsDouble()) : null;
     }
 
-    private static UUID expectedEntityUuid(String worker) {
-        JsonObject actor = worker == null ? null : receivedDiagnostic("actor", worker);
-        if (actor == null || !actor.has("physicalAdmission") || !actor.get("physicalAdmission").isJsonObject()) return null;
-        JsonObject admission = actor.getAsJsonObject("physicalAdmission");
-        if (!admission.has("entityUuid") || !admission.get("entityUuid").isJsonPrimitive()) return null;
-        try { return UUID.fromString(admission.get("entityUuid").getAsString()); }
-        catch (IllegalArgumentException invalid) { return null; }
-    }
     private static boolean matches(Entity body, ResourceLocation expectedType, String expectedName, UUID expectedUuid) {
         return body != null && !body.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(body.getType()).equals(expectedType)
                 && (expectedUuid == null || expectedUuid.equals(body.getUUID()))

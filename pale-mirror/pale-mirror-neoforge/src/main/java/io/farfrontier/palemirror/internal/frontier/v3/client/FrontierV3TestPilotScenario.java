@@ -344,7 +344,7 @@ final class FrontierV3TestPilotScenario {
     private static boolean validVisibleEntity(JsonObject action) {
         return action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && validEntityName(action.get("nameContains"))
+                && validEntityName(action.get("nameContains")) && validWorkerSelector(action)
                 && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
                 && boundedOptionalNumber(action, "maxAngleDeg", 1.0D, 90.0D);
     }
@@ -353,7 +353,7 @@ final class FrontierV3TestPilotScenario {
     private static boolean validLookNearestEntity(JsonObject action) {
         return action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && validEntityName(action.get("nameContains"))
+                && validEntityName(action.get("nameContains")) && validWorkerSelector(action)
                 && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D);
     }
 
@@ -367,11 +367,15 @@ final class FrontierV3TestPilotScenario {
     private static boolean validEntityInteraction(JsonObject action) {
         return action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 64.0D)
+                && validWorkerSelector(action) && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 64.0D)
                 && (!action.has("nameContains") || validEntityName(action.get("nameContains")));
     }
 
     /** Bounded ordinary local attacks; the scenario deliberately contains no entity identity. */
+    private static boolean validWorkerSelector(JsonObject action) {
+        return !action.has("workerId") || requiredId(action,"workerId","resident:") || requiredId(action,"workerId","actor:");
+    }
+
     private static boolean validEntityAttack(JsonObject action) {
         return validEntityInteraction(action) && wholeWithin(action, "maxAttacks", 1, 40)
                 && (!action.has("requireRemoval") || action.get("requireRemoval").isJsonPrimitive()
