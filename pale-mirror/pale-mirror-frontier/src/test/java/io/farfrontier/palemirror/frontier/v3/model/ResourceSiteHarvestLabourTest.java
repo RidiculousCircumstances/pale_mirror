@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentWorkModifiersProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import java.util.*;
@@ -12,6 +13,36 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceSiteHarvestLabourTest {
+    @Test void conflictedSiteCanPauseExactRetainedWorkButCannotAuthorizeMoreWork() {
+        var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
+        var original = fixture.job();
+        var state = fixture.state().withActorBody(original.workerId(), ResourceSiteHarvestGoal.current(fixture.state(), original)
+                .representative().standingBody());
+        var binding = ResourceSiteHarvestProcess.coldProgress(original, 22_301);
+        state = ResourceSiteHarvestWorkProcess.reduce(state, original.siteId(),
+                ResourceSiteHarvestWorkProcess.change(state, original, 22_301, true, binding, Optional.empty()));
+        var job = state.resourceSites().harvestJob(original.id()).orElseThrow();
+        var conflicted = ResourceSiteProcess.reduceConflict(state, job.siteId(), new ResourceSiteConflictObserved(job.siteId(),
+                state.resourceSite(job.siteId()).cropSlots().getFirst(), ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH));
+        var execution = conflicted.actorExecutions().actors().get(job.workerId()).current().orElseThrow();
+        var paused = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind()).pause(conflicted, execution, 22_321);
+        var lifecycle = paused.resourceSites().site(job.siteId());
+        var stopped = lifecycle.harvestJob(job.id()).orElseThrow();
+        assertEquals(ResourceSitePhase.CONFLICT, lifecycle.phase());
+        assertEquals(conflicted.inventory(), paused.inventory());
+        assertEquals(conflicted.actorExecutions(), paused.actorExecutions());
+        assertEquals(conflicted.resourceSites().cycles(), paused.resourceSites().cycles());
+        assertFalse(stopped.progress().work().orElseThrow().running());
+        assertEquals(job.progress().work().orElseThrow().completedAt(22_321), stopped.progress().work().orElseThrow().completedMilliWork());
+        var suspended = ResourceSiteHarvestWorkProcess.change(conflicted, job, 22_321, false, binding, Optional.empty());
+        assertEquals(paused, ResourceSiteHarvestWorkProcess.reduce(conflicted, job.siteId(), suspended));
+        assertThrows(IllegalArgumentException.class, () -> lifecycle.pauseHarvestLabour(original, 22_322));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestLabour.next(paused, stopped, 22_322, true));
+        assertThrows(IllegalArgumentException.class, () -> lifecycle.withHarvestLabour(stopped, stopped.progress().work().orElseThrow()));
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(paused, codec.decode(codec.encode(paused)));
+    }
+
     @Test void economicWithdrawalOfSowingCanSuspendAlreadyStartedSowing() {
         var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
         var job = fixture.job(); var state = fixture.state();

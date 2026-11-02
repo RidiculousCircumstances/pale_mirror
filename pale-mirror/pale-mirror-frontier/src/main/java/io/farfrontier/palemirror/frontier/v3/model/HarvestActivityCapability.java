@@ -45,7 +45,7 @@ final class HarvestActivityCapability implements ActorActivityCapability {
     private static FrontierWorldStateUpdate acknowledgeWorkerDeath(FrontierWorldState state, ResourceSiteHarvestJob job, long tick) {
         var lifecycle = state.resourceSites().site(job.siteId());
         if (job.progress().work().filter(WorkProgress::running).isPresent())
-            lifecycle = lifecycle.withHarvestLabour(job, job.progress().work().orElseThrow().pause(tick));
+            lifecycle = lifecycle.pauseHarvestLabour(job, tick);
         // Death retires this worker's authority, not the field or its other workers.
         // Keep this exact job/cell/cargo until its physical aftermath is acknowledged.
         var sites = state.resourceSites().replace(lifecycle);

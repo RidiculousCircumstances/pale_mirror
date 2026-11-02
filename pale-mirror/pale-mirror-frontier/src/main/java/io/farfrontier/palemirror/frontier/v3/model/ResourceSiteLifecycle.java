@@ -129,7 +129,12 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
                 Math.addExact(harvestSequence, 1));
     }
     private ResourceSiteHarvestJob require(ResourceSiteHarvestJob expected) {
-        if (phase != ResourceSitePhase.HARVESTING || !expected.equals(harvestJobs.get(expected.id())))
+        if (phase != ResourceSitePhase.HARVESTING)
+            throw new IllegalArgumentException("field work requires an operational harvesting phase");
+        return requireRetained(expected);
+    }
+    private ResourceSiteHarvestJob requireRetained(ResourceSiteHarvestJob expected) {
+        if (!expected.equals(harvestJobs.get(expected.id())))
             throw new IllegalArgumentException("field transition has a stale exact execution");
         return expected;
     }
@@ -170,6 +175,13 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     }
     public ResourceSiteLifecycle skipBlockedHarvestCell(ResourceSiteHarvestJob job, int count) { return replace(require(job).withBlockedCellsSkipped(count)); }
     public ResourceSiteLifecycle withHarvestLabour(ResourceSiteHarvestJob job, WorkProgress work) { return replace(require(job).withWork(work)); }
+    /** A conflicted site retains its exact obligations. Stopping their clock is
+     * permitted independently of permission to work, transform a cell or deliver. */
+    public ResourceSiteLifecycle pauseHarvestLabour(ResourceSiteHarvestJob expected, long tick) {
+        var job = requireRetained(expected);
+        return job.progress().work().filter(WorkProgress::running)
+                .map(work -> replace(job.withWork(work.pause(tick)))).orElse(this);
+    }
     public ResourceSiteLifecycle withHarvestEquipment(ResourceSiteHarvestJob job, WorkToolAssignment equipment) {
         return replace(require(job).withEquipment(equipment));
     }

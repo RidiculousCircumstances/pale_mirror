@@ -23,7 +23,8 @@ public final class ResourceSiteHarvestLabour {
         if (prior.requiredMilliWork() != Math.multiplyExact(units, 1_000L))
             throw new IllegalArgumentException("retained labour belongs to a different operation");
         if (!run) return prior.pause(tick);
-        if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job) || job.navigationBlock().isPresent()
+        if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING
+                || !ResourceSiteHarvestGoal.actorAtWorkCell(state, job) || job.navigationBlock().isPresent()
                 || !state.actorExecutions().owns(job.workerId(),
                         io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id())
                 || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), tick))
@@ -60,7 +61,7 @@ public final class ResourceSiteHarvestLabour {
     }
     public static FrontierWorldState pauseJob(FrontierWorldState state, ResourceSiteHarvestJob job, long tick) {
         if (job.progress().work().isEmpty() || !job.progress().work().orElseThrow().running()) return state;
-        var work = job.progress().work().orElseThrow().pause(tick);
-        return state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(job.siteId()).withHarvestLabour(job, work)));
+        return state.withResourceSites(state.resourceSites().replace(
+                state.resourceSites().site(job.siteId()).pauseHarvestLabour(job, tick)));
     }
 }

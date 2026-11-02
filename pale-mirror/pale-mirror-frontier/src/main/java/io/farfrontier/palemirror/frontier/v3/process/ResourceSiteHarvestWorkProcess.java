@@ -48,7 +48,9 @@ public final class ResourceSiteHarvestWorkProcess {
                 : ResourceSiteHarvestLabour.next(state, job, changed.atTick(), changed.next().running());
         if (!changed.next().equals(expected))
             throw new IllegalArgumentException("labour transition changes its admitted rate or work amount");
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.withHarvestLabour(job, changed.next())));
+        var successor = changed instanceof ResourceSiteHarvestWorkSuspended
+                ? lifecycle.pauseHarvestLabour(job, changed.atTick()) : lifecycle.withHarvestLabour(job, changed.next());
+        return state.withResourceSites(state.resourceSites().replace(successor));
     }
     public static List<ProposedEvent> events(FrontierWorldState state, ResourceSiteHarvestLabourChange changed,
                                             ScheduledAction binding) {
