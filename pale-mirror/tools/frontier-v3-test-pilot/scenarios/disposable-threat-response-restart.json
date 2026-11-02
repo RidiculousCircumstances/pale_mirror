@@ -43,8 +43,7 @@
             "assignment": "FIELD_HARVEST",
             "safety": {
               "requested": false
-            },
-            "assignmentOwner": "job:site-harvest-cultivation-settlement-1-3-1"
+            }
           }
         }
       ]
@@ -230,7 +229,7 @@
       "position": {
         "diagnostic": {
           "view": "site",
-          "id": "site:cultivation-settlement-1-3",
+          "id": "site:1-wheat-field",
           "field": "firstCrop"
         }
       },
@@ -243,17 +242,17 @@
     },
     {
       "type": "wait_until_harvest_result",
-      "siteId": "site:cultivation-settlement-1-3",
-      "intentId": "intent:site-harvest-cultivation-settlement-1-3-1",
-      "itemId": "item:site-harvest-cultivation-settlement-1-3-1-wheat",
+      "siteId": "site:1-wheat-field",
+      "intentId": "intent:site-harvest-1-wheat-field-1",
+      "itemId": "item:site-harvest-1-wheat-field-1-wheat",
       "workerId": "resident:1-13",
       "timeoutMs": 300000,
-      "causalMilestone": "productive_field_after_safety_recovery"
+      "causalMilestone": "confirmed_field_result_with_matching_native_terrain"
     },
     {
       "type": "inspect",
       "view": "site",
-      "id": "site:cultivation-settlement-1-3"
+      "id": "site:1-wheat-field"
     }
   ],
   "restart": {
@@ -283,7 +282,7 @@
     {
       "after": 13,
       "view": "site",
-      "id": "site:cultivation-settlement-1-3",
+      "id": "site:1-wheat-field",
       "expect": {
         "status": "ok",
         "conflictDisposition": null
