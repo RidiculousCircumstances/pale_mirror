@@ -39,7 +39,6 @@ public final class ActorMovementProcess {
         // Admission retains an exact goal, not an assertion that a route has already executed.
         if (!actor.navigationProfile().capabilities().contains(movement.order().capability()))
             throw new IllegalArgumentException("movement requires a capability absent from the actor's declared navigation profile");
-        state.actorExecutions().requireCurrent(movement.executionId());
         ActorMovementProviders.require(movement).validate(state, movement);
         var movements = ImmutableLookupMap.withEntry(state.actorMovements(), subject, movement);
         return ResidentActivityProcess.retargetHotResident(ActorMovementProviders.require(movement).start(state, movement,
