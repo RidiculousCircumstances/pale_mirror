@@ -221,3 +221,73 @@ green retained-conflict summary. No claim of scale or full-pack graphical prefli
 Old developed316 world preserved. Fresh MAIN had no armed guard at1540: ordinary
 manufacture/collection/appointment must occur; no fixture inputs or results injected.
 Private clients/25583/4 stopped. Root pack unchanged; unrelated governance WIP retained.
+
+## Local defence and distant reinforcement — schema318, 2026-11-02
+
+Implemented source57a704f71; final source7d952077e6e63ea8ff42a7b9b42153e7228c0ec8
+also contains finite verification-fixture corrections. CombatAwareness separates
+personal native observer/target poses and dated harm from shared contacts. Generic
+CombatReactionPolicy owns self/ally/area choice, priority and distance hysteresis;
+SecurityDispatch composes it with distant assistance. Only reinforcements spend the
+remaining eligible-guard quota; their desired crew includes local defenders. Exact
+Response declares purpose and fixed envelope. Mission/search station admission,
+safe redirection and ordinary native hit use it. No second controller, invisible
+target tracking, invented harm location or COLD hit. Readiness still requires the
+current armed ON_DUTY guard execution; this cut does not add civilian combat or
+interrupt an unrelated activity with a second actuator. Rules are hashed, transient
+knowledge pruned, and schema317 is rejected rather than migrated.
+
+Verification: focused guardrails+Frontier47+NeoForge48 PASS37s and Node55/55. On clean
+RELEASE b72cb8d65, guardrails/check/NeoForge build/packaged gate PASS9m11s: Frontier2246,
+NeoForge895, domain324, Visuals79, no failures/errors/skips. Initial full suite exhausted
+its2GiB worker in existing geometry/GuardDuty fixtures; a bounded4GiB full-suite
+worker passed. Final clean detached7d952077e package+verification PASS8s. Final
+commit changes only scenario/docs, so unchanged production checks are reused.
+Receipts: IMPL/build/local-defence/{focused,integration}.json and /tmp/pm-local-*.log.
+
+Native retained worldv3-disposable_security_response_restart-c337faca, seed41,
+peaceful-guards finite forge inputs, no invented swords or appointments. Original
+isolated run7fc3c1f9 failed setup: +3X from a moving guard's canonical origin landed
+one block lower. Zero offset fixes that height assumption, but does not guarantee
+LOS to an already moving physical body. First continued runfed74cd7 made an actual
+confirmed incident/SELF_DEFENCE but timed out observing transient target health.
+The carrier now uses its immediately following durable offence/self-defence oracle;
+a packet without applied native damage cannot create that offence. Another continued
+attempt failed LOS behind a building. These failures remain failed receipts.
+
+Terminal before-half dc23b7bf-ee27-4006-bc37-153973ad8803 PASS8actions:
+IMPL/build/local-defence/physical-before-receipt.json. Same frozen source7d952077e,
+one20FPS private-Xvfb ordinary client, existing restartSegments/run-scenario. A
+setup-only vanilla player teleport beside the existing exact registered guard body
+(UUIDf786e0b1-0619-31ad-aafa-5993d44220f0) removes the stale canonical-origin assumption;
+no resident is moved and no combat role/contact/effect is injected. Real fist,
+SELF_DEFENCE, native health100->94, departure, finite SEARCH, contact0/RETURN and no
+pending hit are observed. Normal stop saved all dimensions before same-world restart.
+
+After-half run is not a green aggregate: it did prove remembered hostility and
+native health100->94 without another attack after ordinary restart, then its
+Overworld visit drifted into water and reached DeathScreen. The executor stopped
+the server before the client exited, producing connection-loss failure. Do not
+present that run as a passed4-action half. Subsequent normal same-world restart,
+read-only terminal settlement at23823, proves hostility1, contacts0, responses0,
+no pending strike, patrol/return and quarantine NORMAL:
+IMPL/build/local-defence/restart-terminal-settlement.txt. Player placement and the
+unsafe Overworld exit remain carrier limitations; no native multiplayer/whole-cohort
+or full-pack graphical acceptance is inferred. The reviewed earlier frame has partial
+terrain presentation and supports no visual-completeness claim. Old field conflicts,
+retired-body join reports and wound-presentation uncertainty are not silently closed.
+Private client/server/Xvfb are stopped; no source edits/builds occurred while they ran.
+
+MAIN delivered7d952077e on a fresh local-defence-schema318-seed131-20261102 world.
+Actual Java22PID1071462, wrapper1071384, far-frontier-v3-live.service,25565/RCON25575.
+Persisted snapshot4200 proves seed131/r31/12town; residents390. Normal prior stop
+saved all dimensions and closed process/ports. New world received the required
+datapack before genesis; root preflight/shared pinned installer/deploy verification
+pass. Installed SHA51256832951238d2c432de5b38b51fdfef5d4c64f72e39b76dee447274a7f6e6df8c72d292950ba503e182c0cbef1153c41b74e768f816b56e2bc8d75bfcc2adfcc.
+IMPL/build/local-defence/verified.json binds source/JAR/process/world and advancing
+1321->3785, green retained-conflict summary, ordinary pending0, fastforward0. First
+settlement at1984 has0armed guards: manufacture/collection remain ordinary work,
+no fixture weapons on MAIN. Prior317 world preserved for diagnosis. Root pack is
+unchanged; no client update, public publication or push. These are bounded readiness
+and native effect claims, not performance/scale/global80ms, full industrial M2 or
+human M3 acceptance.

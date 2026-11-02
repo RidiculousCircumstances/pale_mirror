@@ -442,3 +442,21 @@ attendance release after completed work under physical hold, and exact field-clo
 suspension while its site remains CONFLICT. Productive effects remain gated.
 Detailed classifications and limits: docs/frontier-v3-security-hot-findings-20261102.md.
 Native multi-enemy, full industrial/freight M2, human M3 and scale remain unclaimed.
+
+### Local guard reactions and coordinated reinforcement — schema318
+
+Source7d952077e persists personal native observer/target poses, recent harm and exact
+response purpose/envelope. Generic local reaction owns self/ally/area defence;
+SecurityDispatch limits only distant help. Enough local guards release distant
+reinforcements. One UAE mission/navigation/hit protocol and strict pending effect
+closure remain. Blind incidents invent no target location; old sightings recruit
+nobody. Civilian combat and interruption of other current activities are outside
+this guard-readiness cut.
+
+Full canonical/adapter check and package gates passed; native before-half confirms
+real fist -> SELF_DEFENCE -> player health100->94 -> bounded search/return. Same-world
+restart confirms memory and another native hit without a new assault. After-half
+aggregate failed its unsafe exit; a later read-only same-world restart confirms
+contact/response/pending-hit closure. Do not relabel failed carriers green. Exact
+receipts, world identities, method limitations and MAIN318 delivery are in the
+schema318 section of docs/frontier-v3-security-hot-findings-20261102.md.
