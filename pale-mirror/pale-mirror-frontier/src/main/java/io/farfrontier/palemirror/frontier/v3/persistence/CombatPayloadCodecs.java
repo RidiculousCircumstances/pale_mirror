@@ -8,7 +8,7 @@ import java.util.*;
 import static io.farfrontier.palemirror.frontier.v3.persistence.CombatWire.*;
 final class CombatPayloadCodecs {
     static PayloadCodecs create(){return new PayloadCodecs(List.of(codec(CombatEvent.Prepared.TYPE),codec(CombatEvent.Completed.TYPE),
-                    codec(CombatEvent.WeaponObserved.TYPE),codec(CombatEvent.PositionBlocked.TYPE),codec(CombatEvent.WeaponDefined.TYPE)));
+                    codec(CombatEvent.WeaponObserved.TYPE),codec(CombatEvent.PositionBlocked.TYPE),codec(CombatEvent.WeaponDefined.TYPE),codec(CombatEvent.StanceObserved.TYPE),codec(CombatEvent.PositionPlanned.TYPE)));
                     }
     private static PayloadCodec codec(String type){return new PayloadCodec(){
         public String type(){return type;}
@@ -16,6 +16,9 @@ final class CombatPayloadCodecs {
             if(!payload.type().equals(type))throw new IllegalArgumentException("foreign combat payload");
             try{var bytes=new ByteArrayOutputStream();var out=new DataOutputStream(bytes);
                 switch((CombatEvent)payload){
+                    case CombatEvent.StanceObserved value->{actuation(out,value.stance().observer());target(out,value.stance().target());out.writeBoolean(value.stance().holding());out.writeLong(value.stance().atTick());}
+                    case CombatEvent.PositionPlanned value->{ActorExecutionStateCodec.writeId(out,value.execution());target(out,value.target());FrontierWorldStateCodec.writePosition(out,value.targetPosition().support());
+                        out.writeBoolean(value.station().isPresent());if(value.station().isPresent())FrontierWorldStateCodec.writePosition(out,value.station().orElseThrow().support());out.writeByte(value.reason().wireTag());}
                     case CombatEvent.Prepared value->strike(out,value.strike());
                     case CombatEvent.Completed value->{id(out,value.owner());out.writeLong(value.attemptOrdinal());out.writeBoolean(value.applied());condition(out,value.after());}
                     case CombatEvent.WeaponObserved value->{actuation(out,value.observer());id(out,value.weapon());profile(out,value.profile());}
@@ -26,6 +29,9 @@ final class CombatPayloadCodecs {
         }
         public FrontierPayload decode(byte[] bytes){try{var in=new DataInputStream(new ByteArrayInputStream(bytes));
             FrontierPayload value=switch(type){
+                case CombatEvent.StanceObserved.TYPE->new CombatEvent.StanceObserved(new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readLong()));
+                case CombatEvent.PositionPlanned.TYPE->new CombatEvent.PositionPlanned(ActorExecutionStateCodec.readId(in),target(in),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
+                        in.readBoolean()?Optional.of(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in))):Optional.empty(),MeleePosition.Reason.require(in.readUnsignedByte()));
                 case CombatEvent.Prepared.TYPE->new CombatEvent.Prepared(strike(in));
                 case CombatEvent.Completed.TYPE->new CombatEvent.Completed(id(in),in.readLong(),in.readBoolean(),condition(in));
                 case CombatEvent.WeaponObserved.TYPE->new CombatEvent.WeaponObserved(actuation(in),id(in),profile(in));

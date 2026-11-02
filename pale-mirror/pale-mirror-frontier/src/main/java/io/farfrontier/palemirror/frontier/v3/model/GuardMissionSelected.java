@@ -68,6 +68,12 @@ public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardM
                 || !owner.mission().orElseThrow().post().equals(mission.post())
                 || !owner.missionOrder().arrivedAt(state.actorLocations().get(owner.execution().actorId()).supportingSurface())))
             throw new IllegalArgumentException("guard watch lacks exact arrival at its retained post");
-        return state.withStrategicPlans(state.strategicPlans().withGuard(owner.withMission(mission)));
+        var combat=state.combat();
+        if(mission.stage()==GuardMission.Stage.INTERCEPT){
+            var order=CombatComposition.CAPABILITIES.current(state,owner.execution(),tick).orElseThrow();
+            MeleePositions.requireClaim(state,order,mission.station(),tick);
+            combat=combat.positioned(order,Optional.of(mission.station()),MeleePosition.Reason.RESERVED,tick,state.bootstrap().ruleset().melee());
+        }else combat=combat.releasePosition(owner.id());
+        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().withGuard(owner.withMission(mission))).combat(combat));
     }
 }

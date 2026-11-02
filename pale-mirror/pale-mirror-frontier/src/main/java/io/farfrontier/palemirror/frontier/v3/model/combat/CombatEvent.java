@@ -4,7 +4,19 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 import java.util.*;
 /** Native facts and exact hit lifecycle. No role receives its own parallel melee protocol. */
-public sealed interface CombatEvent extends FrontierPayload permits CombatEvent.Prepared,CombatEvent.Completed,CombatEvent.WeaponObserved,CombatEvent.PositionBlocked,CombatEvent.WeaponDefined {
+public sealed interface CombatEvent extends FrontierPayload permits CombatEvent.Prepared,CombatEvent.Completed,CombatEvent.WeaponObserved,CombatEvent.PositionBlocked,CombatEvent.WeaponDefined,CombatEvent.StanceObserved,
+        CombatEvent.PositionPlanned {
+    record StanceObserved(MeleeStance stance) implements CombatEvent {
+        public static final String TYPE="frontier.combat.stance_observed";
+        public StanceObserved{Objects.requireNonNull(stance);}public String type(){return TYPE;}
+    }
+    record PositionPlanned(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution,CombatTarget target,
+            SurfaceAnchor targetPosition,Optional<SurfaceAnchor> station,MeleePosition.Reason reason) implements CombatEvent {
+        public static final String TYPE="frontier.combat.position_planned";
+        public PositionPlanned{Objects.requireNonNull(execution);Objects.requireNonNull(target);Objects.requireNonNull(targetPosition);Objects.requireNonNull(station);Objects.requireNonNull(reason);
+            if((reason==MeleePosition.Reason.RESERVED)!=station.isPresent() || reason==MeleePosition.Reason.UNREACHABLE)throw new IllegalArgumentException("invalid position proposal");}
+        public String type(){return TYPE;}
+    }
     record Prepared(MeleeStrike strike) implements CombatEvent {
         public static final String TYPE="frontier.combat.prepared";
         public Prepared {Objects.requireNonNull(strike);} public String type(){return TYPE;}

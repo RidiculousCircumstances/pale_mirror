@@ -6,6 +6,7 @@ import java.util.Objects;
 /** Exact mechanical attempt, independent of the caller's role. */
 public record MeleeStrike(SubjectId owner,long ownerRevision,ActorActuationId attacker,CombatTarget target,
         SubjectId weapon,ItemCondition before,WeaponProfile profile,long targetIncarnation,long attemptOrdinal,long preparedAt) {
+    public long impactAt(MeleeRules rules){return Math.addExact(preparedAt,rules.windup(profile));}
     public MeleeStrike {
         Objects.requireNonNull(owner);Objects.requireNonNull(attacker);Objects.requireNonNull(target);
         Objects.requireNonNull(weapon);Objects.requireNonNull(before);Objects.requireNonNull(profile);

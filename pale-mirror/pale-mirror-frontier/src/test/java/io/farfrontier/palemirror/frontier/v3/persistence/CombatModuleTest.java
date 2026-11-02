@@ -45,7 +45,7 @@ class CombatModuleTest {
         var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));assertEquals(state,recovered);
         assertTrue(recovered.rejected(order,order.station().orElseThrow(),141,rules));assertFalse(recovered.rejected(order,order.station().orElseThrow(),181,rules));
         assertThrows(IllegalArgumentException.class,()->recovered.retired(order.owner()));
-        var completed=recovered.completed(strike,101);assertEquals(114L,completed.nextAttack().get(order.owner()));
+        var completed=recovered.completed(strike,101);assertEquals(113L,completed.nextAttack().get(order.owner()));
         assertTrue(completed.retired(order.owner()).armaments().isEmpty());
         assertThrows(IllegalArgumentException.class,()->completed.completed(strike,102));
         var changed=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),strike.before(),SWORD,2,102,100);
@@ -61,10 +61,36 @@ class CombatModuleTest {
                         io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,"retained async dependency");}));
         assertEquals(3,requested.get());
     }
+    @Test void positionLeasesExpireAndConfirmedUnavailabilityDiffersFromAQueuedRoute() throws IOException {
+        var order=order(1,Optional.of(TARGET.offset(1,0,0)));var rules=MeleeRules.initial();
+        var state=CombatState.empty().positioned(order,order.station(),MeleePosition.Reason.RESERVED,100,rules);
+        var claim=state.positions().get(order.owner());assertTrue(claim.active(180,rules));assertFalse(claim.active(181,rules));
+        assertTrue(claim.overlaps(order.station().orElseThrow().offset(1,0,0),1_500_000,1_950_000),"wide units reserve their actual footprint");
+        assertFalse(claim.overlaps(order.station().orElseThrow().offset(0,3,0),600_000,1_950_000),"separate floors do not share a slot");
+        state=state.positioned(order,Optional.empty(),MeleePosition.Reason.ROUTE_PENDING,101,rules)
+                .positioned(order,Optional.empty(),MeleePosition.Reason.ROUTE_PENDING,1000,rules);
+        assertFalse(state.deferred(order,1000),"a slow calculation is never a proof of no path");
+        state=state.positioned(order,Optional.empty(),MeleePosition.Reason.NO_PATH,1001,rules)
+                .positioned(order,Optional.empty(),MeleePosition.Reason.NO_POSITION,1101,rules);
+        assertTrue(state.deferred(order,1102));assertFalse(state.deferred(order,1201));
+        var moved=new CombatOrder(order.execution(),order.revision(),order.weapon(),order.engagement(),TARGET.offset(1,0,0),100,2000,order.actorPosition(),order.navigation(),order.station());
+        assertFalse(state.deferred(moved,1102),"target movement reopens tactical admission");
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
+        assertThrows(IllegalArgumentException.class,()->MeleePosition.Reason.require(99));
+    }
+    @Test void holdingUsesTwoStrictWeaponBoundariesAndCannotExpandAttackReach(){
+        var rules=MeleeRules.initial();assertEquals(2.65,rules.holdReach(SWORD,false),0.0001);assertEquals(3.0,rules.holdReach(SWORD,true));
+        assertEquals(8,rules.windup(SWORD));
+        var order=order(1,Optional.empty());
+        assertEquals(MeleeTactics.Decision.APPROACH,MeleeTactics.decide(order,new MeleeTactics.Facts(101,true,true,false,false,100,true)));
+    }
     @Test void allMechanicalIngressHasAnExactCodecAndRejectsTruncation(){
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var events=List.<CombatEvent>of(new CombatEvent.WeaponDefined(order.execution(),order.weapon(),SWORD),new CombatEvent.WeaponObserved(actor,order.weapon(),SWORD),
-                new CombatEvent.PositionBlocked(actor,order.target(),order.station().orElseThrow()));
+                new CombatEvent.PositionBlocked(actor,order.target(),order.station().orElseThrow()),
+                new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,100)),
+                new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),order.station(),MeleePosition.Reason.RESERVED));
         var codecs=CombatPayloadCodecs.create();
         for(var event:events){var bytes=codecs.encode(event);assertEquals(event,codecs.decode(event.type(),bytes));
             assertThrows(IllegalArgumentException.class,()->codecs.decode(event.type(),Arrays.copyOf(bytes,bytes.length-1)));}

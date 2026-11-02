@@ -33,7 +33,9 @@ final class FrontierV3SecurityDiagnostic {
                         +",\"returnStation\":"+position(mission.post().station().support())+"}").orElse("null")
                 +",\"combat\":\""+CombatStatus.read(state,CombatComposition.CAPABILITIES,duty.execution(),tick)+"\""
                 +",\"strikePending\":"+state.combat().pending().containsKey(duty.id())+"}").collect(java.util.stream.Collectors.joining(",","[","]"));
-        return "{\"respondingGuards\":"+responses.size()+",\"postedGuards\":"+posted
+        long winding=io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state,home).stream()
+                .filter(duty->CombatStatus.read(state,CombatComposition.CAPABILITIES,duty.execution(),tick)==CombatStatus.WINDING_UP).count();
+        return "{\"windupInProgress\":"+(winding>0)+",\"windingUpGuards\":"+winding+",\"respondingGuards\":"+responses.size()+",\"postedGuards\":"+posted
                 +",\"localDefenders\":"+locals+",\"reinforcements\":"+reinforcements
                 +",\"selfDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.SELF_DEFENCE).count()
                 +",\"allyDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.ALLY_DEFENCE).count()

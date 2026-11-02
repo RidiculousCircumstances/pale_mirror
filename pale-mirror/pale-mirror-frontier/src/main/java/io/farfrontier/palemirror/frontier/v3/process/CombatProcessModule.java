@@ -6,7 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
 import java.util.*;
 final class CombatProcessModule implements FrontierWorldProcessModule {
-    static final Set<String> TYPES=Set.of(CombatEvent.Prepared.TYPE,CombatEvent.Completed.TYPE,CombatEvent.WeaponObserved.TYPE,CombatEvent.PositionBlocked.TYPE,CombatEvent.WeaponDefined.TYPE);
+    static final Set<String> TYPES=Set.of(CombatEvent.Prepared.TYPE,CombatEvent.Completed.TYPE,CombatEvent.WeaponObserved.TYPE,CombatEvent.PositionBlocked.TYPE,CombatEvent.WeaponDefined.TYPE,CombatEvent.StanceObserved.TYPE,
+        CombatEvent.PositionPlanned.TYPE);
     static final DeterministicProcessDescriptor DESCRIPTOR=new DeterministicProcessDescriptor("combat",TYPES,Set.of(),TYPES,
             java.util.stream.Stream.concat(TYPES.stream(),java.util.stream.Stream.of("kernel.reconsideration_requested","frontier.actor_movement_interrupted",
                     "kernel.schedule_cancelled","kernel.schedule_rescheduled")).collect(java.util.stream.Collectors.toUnmodifiableSet()),TYPES);
@@ -19,6 +20,8 @@ final class CombatProcessModule implements FrontierWorldProcessModule {
             owner=outcome.owner();var pending=state.combat().pending().get(owner);
             if(pending==null)return FrontierWorldCommandPlanner.rejected("no exact pending melee outcome");execution=pending.attacker().execution();
         }else if(event instanceof CombatEvent.WeaponDefined defined){execution=defined.execution();owner=execution.activityOwnerId();
+        }else if(event instanceof CombatEvent.PositionPlanned position){execution=position.execution();owner=execution.activityOwnerId();
+        }else if(event instanceof CombatEvent.StanceObserved stance){execution=stance.stance().observer().execution();owner=execution.activityOwnerId();
         }else{var observer=event instanceof CombatEvent.WeaponObserved value?value.observer():((CombatEvent.PositionBlocked)event).observer();
             execution=observer.execution();owner=execution.activityOwnerId();}
         try{

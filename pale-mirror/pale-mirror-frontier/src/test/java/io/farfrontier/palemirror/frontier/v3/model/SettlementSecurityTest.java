@@ -94,9 +94,9 @@ class SettlementSecurityTest {
                 strike.targetIncarnation(),strike.attemptOrdinal(),strike.preparedAt());
         assertThrows(IllegalArgumentException.class,()->pending.withChanges(FrontierWorldStateUpdate.begin().combat(CombatState.empty().prepared(forged))));
         assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition()),21002));
-        state=apply(state,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21002);
+        state=apply(state,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21009);
         assertTrue(state.combat().pending().isEmpty());assertEquals(item.condition().wear(1),state.inventory().items().get(item.id()).condition());
-        assertEquals(21015L,state.combat().nextAttack().get(r.duty().id()));
+        assertEquals(21014L,state.combat().nextAttack().get(r.duty().id()));
     }
     @Test void endedOpportunityWakesTheWholeCohortWithoutErasingHostilityOrANewerContact() {
         var r=ready();var state=offence(r);
@@ -252,9 +252,9 @@ class SettlementSecurityTest {
         var strike=new MeleeStrike(duty.id(),duty.revision(),r.body(),contact(r).target(),duty.weapon(),item.condition(),
                 new WeaponProfile(item.itemKind(),6,13,3,1),17,21002,21001);
         state=apply(state,duty.id(),new CombatEvent.Prepared(strike),21001);
-        state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21002);
+        state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21009);
         assertFalse(duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()));
-        var result=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21003),21003);
+        var result=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21010),21010);
         assertTrue(result.stream().anyMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled));
         assertFalse(result.stream().anyMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted));
         long end=state.combat().nextAttack().get(duty.id())+state.bootstrap().ruleset().security().observationInterval()+1;
@@ -353,6 +353,70 @@ class SettlementSecurityTest {
         assertTrue(expired.security().hostile(r.duty().home(),r.offender()));
     }
 
+    @Test void windupRejectsEarlyDamageAndCancellationReleasesTheActorWithoutWear(){
+        var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
+        var item=state.inventory().items().get(r.duty().weapon());
+        var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),new WeaponProfile(item.itemKind(),6,13,3,1),17,21002,21001);
+        var pending=apply(state,r.duty().id(),new CombatEvent.Prepared(strike),21001);
+        assertEquals(CombatStatus.WINDING_UP,CombatStatus.read(pending,CombatComposition.CAPABILITIES,r.duty().execution(),21002));
+        assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21002));
+        var cancelled=apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),false,item.condition()),21002);
+        assertEquals(item,cancelled.inventory().items().get(item.id()));assertTrue(cancelled.combat().pending().isEmpty());
+        assertEquals(21014L,cancelled.combat().nextAttack().get(r.duty().id()));
+    }
+    @Test void nativeHoldingWithdrawsAnApproachWithoutInventingArrivalAndRejectsAForeignBody(){
+        var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
+        var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor().offset(3,0,0),0,0,GuardMission.Stage.PATROL);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),21001);
+        var duty=state.strategicPlans().guards().get(r.duty().id());
+        state=new GuardMissionSelected(duty.id(),duty.revision(),patrol.responding(new SurfaceAnchor(contact(r).position()).offset(1,0,0),contact(r).target())).apply(state,duty.id(),21001);
+        duty=state.strategicPlans().guards().get(duty.id());var body=state.actorLocations().get(duty.execution().actorId()).body();
+        var before=state;
+        var foreign=new ActorActuationId(new ActorBodyId(duty.execution().actorId(),999),duty.execution());
+        assertThrows(IllegalArgumentException.class,()->apply(before,r.duty().id(),new CombatEvent.StanceObserved(new MeleeStance(foreign,contact(r).target(),true,21002)),21002));
+        state=apply(state,duty.id(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),contact(r).target(),true,21002)),21002);
+        assertEquals(body,state.actorLocations().get(duty.execution().actorId()).body());
+        assertTrue(state.combat().positions().isEmpty(),"native holding releases unused approach reservations");
+        var events=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21003),21003);
+        assertTrue(events.stream().noneMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted));
+        assertFalse(duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()));
+    }
+    @Test void confirmedUnavailabilityReturnsToThePostWithoutCancellingItsReturnForTheSameDeferredTarget(){
+        var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
+        var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor().offset(3,0,0),0,0,GuardMission.Stage.PATROL);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),21001);
+        var duty=state.strategicPlans().guards().get(r.duty().id());
+        state=new GuardMissionSelected(duty.id(),duty.revision(),patrol.responding(new SurfaceAnchor(contact(r).position()).offset(1,0,0),contact(r).target())).apply(state,duty.id(),21001);
+        duty=state.strategicPlans().guards().get(duty.id());var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),21001).orElseThrow();
+        var noPath=new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),Optional.empty(),MeleePosition.Reason.NO_PATH);
+        state=apply(state,duty.id(),noPath,21001);
+        state=apply(state,duty.home(),seen(r,new SecurityState.Contact(duty.home(),order.target(),contact(r).position(),21101,2)),21101);
+        state=apply(state,duty.id(),noPath,21101);
+        assertTrue(state.combat().deferred(CombatComposition.CAPABILITIES.current(state,duty.execution(),21101).orElseThrow(),21101));
+        state=selectMission(state,duty.id(),21102);duty=state.strategicPlans().guards().get(duty.id());
+        assertTrue(duty.mission().orElseThrow().response().isEmpty());
+        assertFalse(GuardResponse.redirect(state,duty,21103),"the same deferred target must not immediately cancel return travel");
+        var move=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(duty.missionOrder(),21103,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.GuardMissionLeg(duty.id(),duty.revision()),duty.execution());
+        state=state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(duty.execution().actorId(),move)));
+        var returning=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21104),21104);
+        assertTrue(returning.stream().map(ProposedEvent::payload).filter(GuardMissionSelected.class::isInstance)
+                .map(GuardMissionSelected.class::cast).noneMatch(value->value.mission().response().isPresent()),"return travel is not another melee approach claim");
+    }
+    @Test void anotherCurrentFighterCannotClaimTheSameSpaceUntilTheFirstLeaseExpires(){
+        var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
+        var first=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
+        var other=GuardEquipment.in(state,r.duty().home()).stream().filter(duty->!duty.id().equals(r.duty().id()) && GuardEquipment.held(r.state(),duty)).findFirst().orElseThrow();
+        var station=new SurfaceAnchor(contact(r).position()).offset(1,0,0);
+        var contender=new CombatOrder(other.execution(),other.revision(),other.weapon(),first.engagement(),first.targetPosition(),21001,1000,
+                state.actorLocations().get(other.execution().actorId()).supportingSurface(),state.actorLocations().get(other.execution().actorId()).navigationProfile(),Optional.of(station));
+        var occupied=apply(state,first.owner(),new CombatEvent.PositionPlanned(first.execution(),first.target(),first.targetPosition(),Optional.of(station),MeleePosition.Reason.RESERVED),21001);
+        assertThrows(IllegalArgumentException.class,()->MeleePositions.requireClaim(occupied,contender,station,21002));
+        MeleePositions.requireClaim(occupied,contender,station,21082);
+        assertTrue(occupied.combat().retired(first.owner()).positions().isEmpty());
+    }
     @Test void coldWeaponDefinitionEnablesPlanningButCannotAuthorizeANativeHit(){
         var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
         state=ActorBodyAuthority.released(state,r.body().body());state=state.withChanges(FrontierWorldStateUpdate.begin().combat(CombatState.empty()));

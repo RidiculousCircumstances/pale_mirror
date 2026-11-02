@@ -22,7 +22,7 @@ public final class CombatTransitions {
         }else if(event instanceof CombatEvent.Completed outcome){
             var strike=Objects.requireNonNull(combat.pending().get(outcome.owner()),"pending melee attempt");
             capabilities.require(strike.attacker().execution()).requirePending(state,strike);
-            if(!subject.equals(outcome.owner()) || outcome.attemptOrdinal()!=strike.attemptOrdinal()
+            if(!subject.equals(outcome.owner()) || outcome.applied() && tick<strike.impactAt(state.bootstrap().ruleset().melee()) || outcome.attemptOrdinal()!=strike.attemptOrdinal()
                     || !outcome.after().equals(outcome.applied() && strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before()))
                 throw new IllegalArgumentException("melee outcome lost its exact effect/wear declaration");
             var item=state.inventory().items().get(strike.weapon());
@@ -32,6 +32,18 @@ public final class CombatTransitions {
                 if(!item.condition().equals(outcome.after()))update.inventory(state.inventory().changeCondition(item,outcome.after()));
             }
             combat=combat.completed(strike,tick);
+        }else if(event instanceof CombatEvent.PositionPlanned position){
+            state.actorExecutions().requireCurrent(position.execution());
+            var order=capabilities.current(state,position.execution(),tick).filter(value->value.current(tick)).orElseThrow(()->new IllegalArgumentException("expired melee position consumer"));
+            if(!subject.equals(order.owner()) || !position.target().equals(order.target()) || !position.targetPosition().equals(order.targetPosition()))
+                throw new IllegalArgumentException("foreign melee position target");
+            if(position.station().isPresent())MeleePositions.requireClaim(state,order,position.station().orElseThrow(),tick);
+            combat=combat.positioned(order,position.station(),position.reason(),tick,state.bootstrap().ruleset().melee());
+        }else if(event instanceof CombatEvent.StanceObserved observed){
+            var stance=observed.stance();var order=requireOrder(state,capabilities,stance.observer(),tick);
+            if(!subject.equals(order.owner()) || !stance.target().equals(order.target()) || stance.atTick()!=tick)
+                throw new IllegalArgumentException("stale or foreign native stance");
+            combat=combat.stance(stance);
         }else if(event instanceof CombatEvent.WeaponDefined defined){
             state.actorExecutions().requireCurrent(defined.execution());
             var order=capabilities.current(state,defined.execution(),tick).filter(value->value.current(tick))

@@ -12,6 +12,10 @@ final class GuardPatrolProcess {
         var mission = duty.mission();
         if(mission.isPresent() && !GuardResponse.targetRetained(state,duty)) mission=Optional.empty();
         var threat = GuardResponse.contact(state,duty,tick);
+        var combatOrder=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick);
+        if(combatOrder.filter(order->state.combat().deferred(order,tick)).isPresent())threat=Optional.empty();
+        if(threat.isPresent() && combatOrder.filter(order->MeleePositions.holding(state,order,tick)).isPresent())
+            return List.of(scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));
         if(threat.isPresent() && mission.isPresent()) {
             var contact=threat.orElseThrow();
             if(mission.orElseThrow().response().equals(Optional.of(contact.target()))
@@ -21,19 +25,15 @@ final class GuardPatrolProcess {
             if(mission.isPresent() && mission.orElseThrow().response().equals(Optional.of(contact.target()))
                     && !GuardResponse.redirect(state,duty,tick)) {
                 if(!duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface())) return start(state,action,duty,tick);
-                return List.of(scheduled(action,duty,tick+10));
+                return retainPosition(state,action,duty,combatOrder.orElseThrow(),tick);
             }
             var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,duty.execution().actorId());
             var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick).orElseThrow();
-            var selected=MeleePositions.select(state,order,knowledge,CombatComposition.CAPABILITIES.orders(state,tick),tick,Set.of());
-            if(selected.isPresent()) {
-                var response=mission.orElseThrow().responding(selected.orElseThrow(),contact.target());
-                return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),response)),GuardContinuation.wake(duty.id(),tick));
-            }
-            return List.of(scheduled(action,duty,tick+20));
+            return combatChoice(state,action,duty,order,knowledge,tick,Set.of());
         }
         if(mission.isPresent() && mission.orElseThrow().response().isPresent()) {
-            if (GuardResponse.investigating(state,duty,tick)) return search(state,action,duty,tick);
+            if (combatOrder.filter(order->state.combat().deferred(order,tick)).isEmpty()
+                    && GuardResponse.investigating(state,duty,tick)) return search(state,action,duty,tick);
             var resumed=mission.orElseThrow().resume().orElseThrow().mission();
             if(ProtectionObligations.read(state,duty.home()).stream().anyMatch(target->target.kind()==resumed.targetKind() && target.id().equals(resumed.target())))
                 return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),resumed)),
@@ -133,6 +133,9 @@ final class GuardPatrolProcess {
         try { knowledge.plannedBetween(state.actorLocations().get(duty.execution().actorId()).supportingSurface(),duty.mission().orElseThrow().station()); }
         catch(KnownPedestrianNavigation.RouteUnavailable failure) {
             if(failure.status()!=PedestrianRouteResult.Status.NO_PATH)throw failure;
+            var combat=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick);
+            if(combat.isPresent() && duty.mission().orElseThrow().response().isPresent())
+                return combatChoice(state,action,duty,combat.orElseThrow(),knowledge,tick,Set.of(duty.mission().orElseThrow().station()));
             return selectPost(state,action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);
         }
         var move = new ActorMovement(duty.missionOrder(), tick, new ActorMovementContext.GuardMissionLeg(duty.id(), duty.revision()), duty.execution());
@@ -142,24 +145,43 @@ final class GuardPatrolProcess {
     static List<ProposedEvent> moving(FrontierWorldState state,ScheduledAction action,GuardDuty duty,ActorMovement movement,long tick) {
         var knowledge=new GuardMissionMovementProvider().placementKnowledge(state,movement);
         var body=ActorMovementProcess.bodyAt(state,duty.execution().actorId(),tick);var goal=duty.mission().orElseThrow().station();
-        boolean blocked=knowledge.geometry().clearanceKnown(goal) && !knowledge.clearStation(goal)
+        var combat=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick);
+        boolean hold=combat.filter(order->MeleePositions.holding(state,order,tick)).isPresent();
+        boolean blocked=hold || combat.filter(order->state.combat().deferred(order,tick) && duty.mission().orElseThrow().response().isPresent() || GuardResponse.redirect(state,duty,tick)).isPresent()
+        ||knowledge.geometry().clearanceKnown(goal) && !knowledge.clearStation(goal)
                 || PedestrianRoutePlanning.peek(knowledge.geometry(),body.supportingSurface(),goal)
                         .filter(result->result.status()==PedestrianRouteResult.Status.NO_PATH).isPresent();
-        if(!blocked)return List.of(scheduled(action,duty,tick+20));
+        if(!blocked)return combat.isPresent() && duty.mission().orElseThrow().response().isPresent()?retainPosition(state,action,duty,combat.orElseThrow(),tick):List.of(scheduled(action,duty,tick+20));
         var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,duty.execution(),tick);
         if(assessment instanceof ActivityInterruptionPlanner.Waiting)return List.of(scheduled(action,duty,tick+20));
         var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,duty.execution().actorId());
         var after=ready.following();List<ProposedEvent> replacement;
+        if(hold){var events=new ArrayList<>(ready.events());events.add(scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));return List.copyOf(events);}
         var order=CombatComposition.CAPABILITIES.current(after,duty.execution(),tick);
-        if(order.isPresent()){
+        if(order.isPresent() && (!after.combat().deferred(order.orElseThrow(),tick) || duty.mission().orElseThrow().response().isPresent())){
             var space=new GuardMissionMovementProvider().placementKnowledge(after,movement);
-            var station=MeleePositions.select(after,order.orElseThrow(),space,CombatComposition.CAPABILITIES.orders(after,tick),tick,Set.of(goal));
-            replacement=station.map(point->List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),
-                    duty.mission().orElseThrow().responding(point,order.orElseThrow().target()))),GuardContinuation.wake(duty.id(),tick)))
-                    .orElseGet(()->List.of(scheduled(action,duty,tick+20)));
+            replacement=combatChoice(after,action,duty,order.orElseThrow(),space,tick,Set.of(goal));
         }else replacement=selectPost(after,action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);
         var events=new ArrayList<>(ready.events());
         events.addAll(replacement);return List.copyOf(events);
+    }
+    private static List<ProposedEvent> combatChoice(FrontierWorldState state,ScheduledAction action,GuardDuty duty,CombatOrder order,
+            KnownPedestrianRouteKnowledge knowledge,long tick,Set<SurfaceAnchor> failed){
+        if(state.combat().deferred(order,tick)){
+            var resumed=duty.mission().orElseThrow().post().mission();
+            return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),resumed)),GuardContinuation.wake(duty.id(),tick));
+        }
+        var choice=MeleePositions.plan(state,order,knowledge,CombatComposition.CAPABILITIES.orders(state,tick),tick,failed);
+        if(choice.station().isPresent())return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),
+                duty.mission().orElseThrow().responding(choice.station().orElseThrow(),order.target()))),GuardContinuation.wake(duty.id(),tick));
+        return List.of(new ProposedEvent(duty.id(),choice.event(order)),scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));
+    }
+    private static List<ProposedEvent> retainPosition(FrontierWorldState state,ScheduledAction action,GuardDuty duty,CombatOrder order,long tick){
+        var prior=state.combat().positions().get(order.owner());var rules=state.bootstrap().ruleset().melee();
+        if(prior==null || !prior.matches(order) || tick-prior.atTick()>=rules.positionLeaseTicks()/2)
+            return List.of(new ProposedEvent(duty.id(),new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),order.station(),MeleePosition.Reason.RESERVED)),
+                    scheduled(action,duty,tick+rules.sensingInterval()));
+        return List.of(scheduled(action,duty,tick+rules.sensingInterval()));
     }
     private static Optional<SurfaceAnchor> reachable(KnownPedestrianRouteKnowledge knowledge,SurfaceAnchor origin,List<SurfaceAnchor> candidates) {
         for(var station:candidates)try { knowledge.plannedBetween(origin,station);return Optional.of(station); }

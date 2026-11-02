@@ -12,6 +12,7 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import java.util.*;
 /** Role-independent native weapon/LOS facts and exact melee effects. Never owns locomotion. */
 public final class FrontierV3CombatExecutor {
+    private static final String WINDUP="pm_v3_combat_windup";
     private static final String ATTEMPT="pm_v3_combat_attempt";
     private static final int MAX_PER_PASS=32;
     private static final Map<ServerLevel,Long> NEXT=new WeakHashMap<>();
@@ -55,6 +56,16 @@ public final class FrontierV3CombatExecutor {
             var actual=level.getEntity(order.target().entity());
             if(!(actual instanceof LivingEntity target) || !target.isAlive())continue;
             boolean visible=fighter.hasLineOfSight(target),inReach=FrontierV3MeleeReach.contains(fighter,target,profile);
+            var rules=state.bootstrap().ruleset().melee();var previous=state.combat().stances().get(order.owner());
+            boolean wasHolding=previous!=null && previous.observer().equals(actuation) && previous.current(order,tick,rules) && previous.holding();
+            double holdReach=rules.holdReach(profile,wasHolding);
+            boolean holding=visible && target.getBoundingBox().distanceToSqr(fighter.getEyePosition())<=holdReach*holdReach;
+            if(previous==null || !previous.observer().equals(actuation) || !previous.target().equals(order.target())
+                    || previous.holding()!=holding || tick-previous.atTick()>=2L*rules.sensingInterval()){
+                FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,tick)));
+                state=runtime.decodedState().orElseThrow();
+                order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
+            }
             var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,inReach,
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),item.condition().remaining()>=profile.wear()));
             if(decision==MeleeTactics.Decision.APPROACH){
@@ -98,6 +109,29 @@ public final class FrontierV3CombatExecutor {
         if(retained.isEmpty() && (!canActuate(state,strike) || !fighter.isAlive() || !target.isAlive()
                 || targetPort(target).identity().incarnation()!=strike.targetIncarnation())) {
             FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.owner().value(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));return;
+        }
+        if(retained.isEmpty()){
+            var permission=CombatComposition.CAPABILITIES.current(state,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks());
+            if(permission.filter(order->order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isEmpty()
+                    || !fighter.hasLineOfSight(target) || !FrontierV3MeleeReach.contains(fighter,target,strike.profile())){
+                FrontierV3CommandSubmission.submit(runtime,"combat-windup-cancelled",strike.owner().value(),
+                        new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));return;
+            }
+            long now=runtime.executionView().orElseThrow().instant().ticks();
+            var marker=fighter.getPersistentData().getCompound(WINDUP);
+            if(!marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal()){
+                fighter.swing(InteractionHand.MAIN_HAND);
+                level.sendParticles(new net.minecraft.core.particles.DustParticleOptions(new org.joml.Vector3f(1.0f,0.65f,0.1f),1.0f),
+                        fighter.getX(),fighter.getEyeY(),fighter.getZ(),6,0.2,0.15,0.2,0);
+                marker.putString("owner",strike.owner().value());marker.putLong("ordinal",strike.attemptOrdinal());marker.putLong("startedAtTick",level.getGameTime());
+                fighter.getPersistentData().put(WINDUP,marker);return;
+            }
+            // A late physical pass cannot turn an unseen preparation into an immediate hit.
+            // Native presentation may delay the effect; it never advances the canonical deadline.
+            if(now<strike.impactAt(state.bootstrap().ruleset().melee())
+                    || level.getGameTime()-marker.getLong("startedAtTick")<state.bootstrap().ruleset().melee().windup(strike.profile())){
+                fighter.getLookControl().setLookAt(target,30,30);return;
+            }
         }
         // Continuation retains the exact declaration and native incarnations admitted before the effect.
         // A respawned player or replacement body cannot become the participant of an old strike.

@@ -47,10 +47,20 @@ public final class GuardResponse {
     public static boolean redirect(FrontierWorldState state,GuardDuty duty,long tick){
         if(duty.mission().isEmpty())return contact(state,duty,tick).isPresent();
         if(!targetRetained(state,duty))return true;
-        var mission=duty.mission().orElseThrow();var contact=contact(state,duty,tick);
+        var mission=duty.mission().orElseThrow();
+        boolean deferred=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick).filter(order->state.combat().deferred(order,tick)).isPresent();
+        var contact=contact(state,duty,tick).filter(ignored->!deferred);
+        if(deferred && mission.response().isPresent())return true;
         if(mission.response().isPresent() && state.security().response(duty.id())
                 .filter(r -> !r.engagement().contains(mission.station())).isPresent())return true;
         if(mission.response().isEmpty())return contact.isPresent();
+        if(contact.isPresent()){
+            var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick).orElseThrow();
+            if(MeleePositions.holding(state,order,tick))return false;
+            var claim=state.combat().positions().get(duty.id());
+            if(claim==null || !claim.matches(order) || !claim.active(tick,state.bootstrap().ruleset().melee())
+                    || !MeleePositions.available(state,order,mission.station(),tick))return true;
+        }
         if(contact.isPresent() && io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES.current(state,duty.execution(),tick)
                 .filter(order->MeleePositions.needsReplacement(state.combat(),order,tick,state.bootstrap().ruleset().melee())).isPresent())return true;
         if(contact.isEmpty()) {

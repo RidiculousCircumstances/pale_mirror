@@ -15,21 +15,52 @@ public final class MeleePositions {
         return order.station().filter(station->!state.rejected(order,station,tick,rules)
                 && weapon(state,order).filter(profile->legal(order,profile,station)).isPresent()).isEmpty();
     }
+    public static boolean holding(FrontierWorldState state,CombatOrder order,long tick){
+        var stance=state.combat().stances().get(order.owner());
+        return stance!=null && state.combat().holding(order,tick,state.bootstrap().ruleset().melee())
+                && ActorBodyAuthority.retainsPhysicalCustody(state,order.execution().actorId())
+                && ActorBodyAuthority.current(state,order.execution().actorId()).equals(stance.observer().body());
+    }
+    public record Choice(Optional<SurfaceAnchor> station,MeleePosition.Reason reason){
+        public CombatEvent.PositionPlanned event(CombatOrder order){return new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),station,reason);}
+    }
+    public static void requireClaim(FrontierWorldState state,CombatOrder order,SurfaceAnchor station,long tick){
+        if(weapon(state.combat(),order).filter(profile->legal(order,profile,station)).isEmpty() || !available(state,order,station,tick))
+            throw new IllegalArgumentException("melee position has foreign reach or a competing spatial claim");
+    }
+    public static boolean available(FrontierWorldState state,CombatOrder order,SurfaceAnchor station,long tick){
+        var rules=state.bootstrap().ruleset().melee();
+        return state.combat().positions().values().stream().filter(point->!point.execution().equals(order.execution()) && point.active(tick,rules)
+                && point.execution().equals(state.actorExecutions().current(point.execution().activityKind()).get(point.execution().actorId())))
+                .noneMatch(point->point.overlaps(station,order.navigation().widthMicros(),order.navigation().heightMicros()));
+    }
     public static Optional<SurfaceAnchor> select(FrontierWorldState state,CombatOrder order,KnownPedestrianRouteKnowledge knowledge,
+            List<CombatOrder> peers,long tick,Set<SurfaceAnchor> failed){return plan(state,order,knowledge,peers,tick,failed).station();}
+    public static Choice plan(FrontierWorldState state,CombatOrder order,KnownPedestrianRouteKnowledge knowledge,
             List<CombatOrder> peers,long tick,Set<SurfaceAnchor> failed){
-        var profile=weapon(state.combat(),order);if(profile.isEmpty())return Optional.empty();
+        var profile=weapon(state.combat(),order);if(profile.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
         var weapon=profile.orElseThrow();var rules=state.bootstrap().ruleset().melee();
-        var occupied=peers.stream().filter(peer->!peer.execution().equals(order.execution())).flatMap(peer->peer.station().stream()).collect(java.util.stream.Collectors.toSet());
-        var retained=order.station().filter(station->!failed.contains(station) && !occupied.contains(station)
-                && !state.combat().rejected(order,station,tick,state.bootstrap().ruleset().melee()) && legal(order,weapon,station) && knowledge.clearStation(station));
-        if(retained.isPresent())return retained;
+        var activePeers=peers.stream().filter(peer->{var point=state.combat().positions().get(peer.owner());return point!=null && point.active(tick,rules);}).toList();
+        var retained=order.station().filter(station->!failed.contains(station) && available(state,order,station,tick)
+                && !state.combat().rejected(order,station,tick,rules) && legal(order,weapon,station) && knowledge.clearStation(station));
+        if(retained.isPresent())try{knowledge.plannedBetween(order.actorPosition(),retained.orElseThrow());return new Choice(retained,MeleePosition.Reason.RESERVED);}
+        catch(KnownPedestrianNavigation.RouteUnavailable waiting){
+            if(waiting.status()!=PedestrianRouteResult.Status.NO_PATH)return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
+        }
         int radius=Math.min(rules.maximumRadius(),Math.max(1,(int)Math.ceil(weapon.reach())));
-        var stations=PedestrianInteractionStations.within(knowledge.geometry(),order.targetPosition(),radius,occupied).stream()
-                .filter(station->!failed.contains(station) && !state.combat().rejected(order,station,tick,state.bootstrap().ruleset().melee()) && legal(order,weapon,station)
+        var physical=PedestrianInteractionStations.within(knowledge.geometry(),order.targetPosition(),radius,Set.of()).stream()
+                .filter(station->!failed.contains(station) && !state.combat().rejected(order,station,tick,rules) && legal(order,weapon,station)
                         && knowledge.clearStation(station) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(station.support())
-                        && ServiceBoundaryComposition.turnoverPoint(state,station).isEmpty())
-                .toList();
-        return reachable(rank(order,weapon,stations,peers),rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
+                        && ServiceBoundaryComposition.turnoverPoint(state,station).isEmpty()).toList();
+        if(physical.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.NO_POSITION);
+        var candidates=physical.stream().filter(station->available(state,order,station,tick)).toList();
+        if(candidates.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.SPACE_OCCUPIED);
+        try{var selected=reachable(rank(order,weapon,candidates,activePeers),rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
+            return new Choice(selected,selected.isPresent()?MeleePosition.Reason.RESERVED:MeleePosition.Reason.NO_PATH);
+        }catch(KnownPedestrianNavigation.RouteUnavailable pending){
+            if(pending.status()==PedestrianRouteResult.Status.NO_PATH)throw pending;
+            return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
+        }
     }
     /** Completed negative answers do not consume the outstanding-query budget or hide later candidates. */
     public static Optional<SurfaceAnchor> reachable(List<SurfaceAnchor> ranked,int requestLimit,java.util.function.Consumer<SurfaceAnchor> requireRoute){
