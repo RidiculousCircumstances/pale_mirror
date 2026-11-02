@@ -246,13 +246,13 @@
       "settleMs": 1000
     },
     {
-      "type": "wait_until_harvest_result",
+      "type": "observe_harvest_semantics",
       "siteId": "site:1-wheat-field",
-      "intentId": "intent:site-harvest-1-wheat-field-1",
-      "itemId": "item:site-harvest-1-wheat-field-1-wheat",
-      "workerId": "resident:1-13",
-      "timeoutMs": 300000,
-      "causalMilestone": "confirmed_field_result_with_matching_native_terrain"
+      "durationTicks": 400,
+      "sampleEveryTicks": 20,
+      "maxCanonicalStallTicks": 1200,
+      "timeoutMs": 120000,
+      "causalMilestone": "field_progress_after_safety_recovery"
     },
     {
       "type": "inspect",

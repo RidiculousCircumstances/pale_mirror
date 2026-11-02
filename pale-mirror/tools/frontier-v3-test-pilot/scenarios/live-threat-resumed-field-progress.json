@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "id": "live_threat_resumed_field_progress",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583
+  },
+  "pilot": {
+    "username": "pmresponse"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "actor",
+          "id": "resident:1-13",
+          "expect": {
+            "status": "ok",
+            "life": "ALIVE",
+            "assignment": "FIELD_HARVEST",
+            "continuationDepth": 0,
+            "safety": {
+              "requested": false
+            }
+          }
+        },
+        {
+          "view": "process",
+          "id": "job:site-harvest-1-wheat-field-1",
+          "expect": {
+            "status": "ok",
+            "identity": {
+              "worker": "resident:1-13"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-13",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 4,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "actor",
+      "id": "resident:1-13",
+      "expect": {
+        "status": "ok",
+        "physicalAdmission": {
+          "status": "INDEXED",
+          "bodyCustody": {
+            "phase": "RUNNING"
+          }
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-13",
+          "field": "name"
+        }
+      },
+      "workerId": "resident:1-13",
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_harvest_semantics",
+      "siteId": "site:1-wheat-field",
+      "jobId": "job:site-harvest-1-wheat-field-1",
+      "durationTicks": 400,
+      "sampleEveryTicks": 20,
+      "maxCanonicalStallTicks": 1200,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:1-13"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:1-wheat-field"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 5,
+      "view": "actor",
+      "id": "resident:1-13",
+      "expect": {
+        "status": "ok",
+        "life": "ALIVE",
+        "continuationDepth": 0,
+        "safety": {
+          "requested": false
+        }
+      }
+    },
+    {
+      "after": 6,
+      "view": "site",
+      "id": "site:1-wheat-field",
+      "expect": {
+        "status": "ok",
+        "conflictDisposition": null
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "same-farmer-resumed-field-progress"
+    }
+  ]
+}
