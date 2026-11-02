@@ -83,3 +83,18 @@ Final post-check sample: simulation199379→200679, pending ordinary ticks0, nav
 waiting0. Latest64 native server ticks maximum5.03ms; whole-run native maximum102.8ms,
 ready continuation maximum132.7ms, background preparation maximum507.3ms. This is a
 bounded12town/private measurement, not a controlled full-scale performance claim.
+
+## Manual-server follow-up — 2026-11-02
+
+User authorized MAIN startup for manual play. Its first27d launch from an offline
+copy of the retained developed world failed at tick255586: an existing guard post
+was outside its target's changed observation area. Retention checked target identity
+alone while mission admission checked current geometry. Source4da002095 centralizes
+that same post-area rule in SecurityCoverage and applies it before watching,
+continuation and response bookmark reuse; normal UAE interruption/reselection handles
+an invalidated post. The strict event validator remains. Snapshot/continuation
+negative and affected guard suite/guardrails PASS18s; clean package PASS8s.
+No reset: the same failing copied world advances to256184 after fix, quarantine
+NORMAL, six armed guards. MAIN now listens externally25565, actual JavaPID4076573;
+root preflight+deployment verification PASS. Private/100town servers remain stopped.
+Exact delivery receipt: IMPL/build/security-hot/manual-delivery/verified.json.

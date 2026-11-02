@@ -2,7 +2,8 @@
 
 ## Assignment and authority
 User: «проверь фичу в хот подробно и пофиксь баги». Main alone; no subagents,
-Terra, API goal or push. MAIN25565/25575 and100town25579/25580 stay STOPPED.
+Terra, API goal or push. Historical assignment kept MAIN25565/25575 and100town25579/25580 stopped;
+latest user authorization starts MAIN for manual testing as recorded below.
 Private delivery authorized. Keep developed schema316 seed129 world; no reset
 hiding failures. Finish native patrol/recovery, scoped notes/commits and verified
 private delivery. Root pack trackedclean f72713382957; preserve .f0v-baseline/.
@@ -12,6 +13,29 @@ branch feat/baker-carry-orders-20260926, CLEAN27d9cc85e2e2d6d3c7640356b1447603f4
 RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same ref.
 Governance has extensive unrelated WIP; never bulk stage. Own changes: security
 architecture key, materialization appendix, ledger and new scoped findings report.
+
+## Latest — manual server is live (user explicitly authorized starting MAIN)
+2026-11-02 user: «подними серв для ручной проверки если не поднял» supersedes the
+older MAIN-stopped assignment. MAIN /home/rd/far-frontier-server is now RUNNING via
+far-frontier-v3-live.service on all interfaces25565/RCON25575; actual Java22PID4076573
+(systemd wrapper4076548).100town/private25579/25581 remain stopped.
+Latest CLEAN IMPL/RELEASE ref4da00209510435ff613f0613edb48633773df517; package/verify
+PASS8s, affected security tests+guardrails PASS18s. Root pack unchanged.
+World security-hot-manual-schema316-seed129-20261102 is an offline copy of the
+previous developed private world, not a reset. Original preserved. Initial27d launch
+revealed later-world guard post failure at255586; fixed on SAME failing copied
+world. A developed site's observation anchor can move; retained post validation
+checked only target ID, while mission admission correctly checked current area.
+Shared SecurityCoverage.permitsPost now governs selection, retained patrol/response
+return bookmark and event admission. Invalidated posts redirect via existing UAE
+checkpoint/reselection, no validator suppression or world reset. New snapshot test
+covers stale post/watch/reentry plus response bookmark. Normal startup advances past
+failed255586 to256184, quarantine NORMAL, six armed guards, zero response contact.
+Verified root deploy preflight/verify scripts and real process/artifact binding:
+IMPL/build/security-hot/manual-delivery/verified.json. Manual address
+100.100.78.29:25565 (LAN192.168.0.103:25565); settlement1 public support(-1486,64,-1360).
+No client update or public artifact publication/push. Historical private delivery
+below remains evidence only; it is no longer the live server identity.
 
 ## Current result / delivery
 Completed scoped HOT hardening. Source27d9cc85e and detached RELEASE are clean,
