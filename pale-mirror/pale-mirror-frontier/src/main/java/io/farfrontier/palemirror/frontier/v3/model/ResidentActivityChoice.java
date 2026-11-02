@@ -9,7 +9,7 @@ import java.util.Optional;
 public record ResidentActivityChoice(SubjectId residentId, Kind kind,
                                      Optional<SubjectId> retainedWorkOwner,
                                      Optional<Wait> pending) {
-    public enum Kind { WORK, EAT, IDLE }
+    public enum Kind { WORK, EAT, IDLE, SAFETY }
     public enum Wait { SAFE_CHECKPOINT, SOURCE_UNAVAILABLE, ROUTE_BLOCKED, HAND_OCCUPIED }
 
     public ResidentActivityChoice {

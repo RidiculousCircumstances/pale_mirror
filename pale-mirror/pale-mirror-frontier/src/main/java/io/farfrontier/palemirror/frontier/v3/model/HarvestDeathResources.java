@@ -11,7 +11,7 @@ public final class HarvestDeathResources {
         var authority = state.actorExecutions().actors().get(actor);
         if (authority == null) return Optional.empty();
         return authority.current().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST)
-                .or(() -> authority.suspended().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST));
+                .or(() -> authority.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST).findFirst());
     }
     public static Optional<ResourceSiteHarvestJob> work(FrontierWorldState state, SubjectId actor) {
         return execution(state, actor).map(id -> state.resourceSites().harvestJob(id.activityOwnerId())

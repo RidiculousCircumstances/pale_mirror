@@ -22,7 +22,7 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
                                      UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
                                      ForestState forest, Map<SubjectId, ProductionJob> productionJobs,
                                      Map<SubjectId, ActorLocation> actors,
-                                     ActorExecutionState executions) {
+                                     ActorExecutionState executions, io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat) {
     public ActorMovementReferences {
         Objects.requireNonNull(people); Objects.requireNonNull(inventory); Objects.requireNonNull(shipments);
         Objects.requireNonNull(groups); Objects.requireNonNull(extractionSites);
@@ -58,8 +58,10 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
             EXECUTIONS = new Source<>(r -> r.executions().actors());
     public static final Source<ActorMovementReferences, SubjectId, ResidentMeal>
             MEALS = new Source<>(r -> r.people().meals());
+    public static final Source<ActorMovementReferences,SubjectId,io.farfrontier.palemirror.frontier.v3.model.combat.Evasion>
+            EVASIONS=new Source<>(r->r.combat().evasions());
     public static final List<Source<ActorMovementReferences, ?, ?>> SOURCES = List.of(
-            PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
+            EVASIONS, PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
     public List<Read<ActorMovementReferences>> reads(ActorMovement movement) {
         var actor = movement.order().actorId();
         var result = new java.util.ArrayList<Read<ActorMovementReferences>>();

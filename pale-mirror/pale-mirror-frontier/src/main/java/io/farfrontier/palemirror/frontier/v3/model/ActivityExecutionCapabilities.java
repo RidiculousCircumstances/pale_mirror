@@ -106,7 +106,7 @@ public final class ActivityExecutionCapabilities {
             throw new IllegalArgumentException("assignment checkpoint has a foreign execution declaration");
         var retained = state.actorExecutions().actors().get(assignment.residentId());
         if (retained == null || !retained.current().equals(java.util.Optional.of(execution))
-                && !retained.suspended().equals(java.util.Optional.of(execution)))
+                && !retained.continuations().contains(execution))
             return new ActivityExecutionCheckpoint(state, assignment, ResidentWorkYield.Status.OWNER_NOT_CURRENT);
         var owner = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind());
         owner.validateReference(state, execution);
@@ -153,7 +153,7 @@ public final class ActivityExecutionCapabilities {
             @Override public boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) {
                 var retained = state.actorExecutions().actors().get(assignment.residentId());
                 if (retained == null) return false;
-                var execution = java.util.stream.Stream.concat(retained.current().stream(), retained.suspended().stream())
+                var execution = java.util.stream.Stream.concat(retained.current().stream(), retained.continuations().stream())
                         .filter(value -> declared.contains(value.activityKind())
                                 && assignment.ownerId().equals(java.util.Optional.of(value.activityOwnerId())))
                         .findFirst().orElse(null);

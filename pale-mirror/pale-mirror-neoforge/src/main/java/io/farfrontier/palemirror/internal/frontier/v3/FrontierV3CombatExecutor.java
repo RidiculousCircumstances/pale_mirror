@@ -59,14 +59,15 @@ public final class FrontierV3CombatExecutor {
             var rules=state.bootstrap().ruleset().melee();var previous=state.combat().stances().get(order.owner());
             boolean wasHolding=previous!=null && previous.observer().equals(actuation) && previous.current(order,tick,rules) && previous.holding();
             double holdReach=rules.holdReach(profile,wasHolding);
-            boolean holding=visible && target.getBoundingBox().distanceToSqr(fighter.getEyePosition())<=holdReach*holdReach;
+            boolean tacticalReady=MeleeTactics.readyAt(state.combat(),order,new SurfaceAnchor(new BlockPosition(fighter.getOnPos().getX(),fighter.getOnPos().getY(),fighter.getOnPos().getZ())),tick,rules);
+            boolean holding=tacticalReady && visible && target.getBoundingBox().distanceToSqr(fighter.getEyePosition())<=holdReach*holdReach;
             if(previous==null || !previous.observer().equals(actuation) || !previous.target().equals(order.target())
                     || previous.holding()!=holding || tick-previous.atTick()>=2L*rules.sensingInterval()){
                 FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,tick)));
                 state=runtime.decodedState().orElseThrow();
                 order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
             }
-            var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,inReach,
+            var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,inReach && tacticalReady,
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),item.condition().remaining()>=profile.wear()));
             if(decision==MeleeTactics.Decision.APPROACH){
                 var station=order.station().orElse(null);

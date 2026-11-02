@@ -76,7 +76,7 @@ public final class ActorExecutionLifecycle {
         capability.validateReference(state, current);
         var checkpoint = checkpoint(state, current, capability);
         checkpoint.validate(state, current);
-        if (!capability.supportsContinuation() || !checkpoint.ready() || retained.suspended().isPresent())
+        if (!capability.supportsContinuation() || !checkpoint.ready() || retained.continuations().size()>=ActorExecution.MAX_CONTINUATIONS)
             throw new IllegalArgumentException("execution owner has not released a safe bounded continuation");
         var paused = Objects.requireNonNull(capability.pause(state, current, atTick));
         capability.validateReference(paused, current);
@@ -221,7 +221,7 @@ public final class ActorExecutionLifecycle {
         if (retained == null) return changes;
         var claims = new java.util.ArrayList<ActorExecutionId>(2);
         retained.current().ifPresent(claims::add);
-        retained.suspended().ifPresent(claims::add);
+        claims.addAll(retained.continuations());
         for (var id : claims) {
             var capability = capabilities.require(id.activityKind());
             capability.validateReference(state, id);
@@ -251,7 +251,7 @@ public final class ActorExecutionLifecycle {
         if (retained == null) return new ActorDeathConsequences.Settlement(state, acknowledged, ownedRetirements);
         var claims = new java.util.ArrayList<ActorExecutionId>(2);
         retained.current().ifPresent(claims::add);
-        retained.suspended().ifPresent(claims::add);
+        claims.addAll(retained.continuations());
         for (var id : claims) {
             var capability = capabilities.require(id.activityKind());
             var death = capability.deathAcknowledgement();
@@ -327,7 +327,7 @@ public final class ActorExecutionLifecycle {
         if (retained == null) throw new IllegalArgumentException("activity retirement has no execution");
         var current = retained.current().filter(id -> id.activityKind() == kind && id.activityOwnerId().equals(owner));
         if (current.isPresent()) return executions.finish(current.orElseThrow());
-        var suspended = retained.suspended().filter(id -> id.activityKind() == kind && id.activityOwnerId().equals(owner));
+        var suspended = retained.continuations().stream().filter(id -> id.activityKind() == kind && id.activityOwnerId().equals(owner)).findFirst();
         if (suspended.isEmpty()) throw new IllegalArgumentException("activity retirement has no exact owner authority");
         return executions.retireSuspended(suspended.orElseThrow());
     }

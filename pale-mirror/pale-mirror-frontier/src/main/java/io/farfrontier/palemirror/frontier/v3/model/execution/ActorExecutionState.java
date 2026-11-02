@@ -26,7 +26,7 @@ public final class ActorExecutionState {
             if (!actor.equals(execution.actorId())) throw new IllegalArgumentException("execution index has foreign actor");
             order.put(actor, order.size());
             execution.current().ifPresent(id -> current.computeIfAbsent(id.activityKind(), ignored -> new LinkedHashMap<>()).put(actor, id));
-            execution.suspended().ifPresent(continuations::add);
+            continuations.addAll(execution.continuations());
         });
         current.replaceAll((kind, values) -> ImmutableLookupMap.copyOf(values));
         ranks = ImmutableLookupMap.copyOf(order);
@@ -47,8 +47,8 @@ public final class ActorExecutionState {
     public boolean retainsSuspended(SubjectId actor, ActorActivityKind kind, SubjectId owner) {
         var execution = actors.get(Objects.requireNonNull(actor));
         Objects.requireNonNull(kind); Objects.requireNonNull(owner);
-        return execution != null && execution.suspended().filter(id ->
-                id.activityKind() == kind && id.activityOwnerId().equals(owner)).isPresent();
+        return execution != null && execution.continuations().stream().anyMatch(id ->
+                id.activityKind() == kind && id.activityOwnerId().equals(owner));
     }
     public java.util.List<ActorExecutionId> suspended() { return suspended; }
     @Override public boolean equals(Object other) { return other instanceof ActorExecutionState state && actors.equals(state.actors); }
@@ -72,7 +72,7 @@ public final class ActorExecutionState {
     public void requireRetained(ActorExecutionId id) {
         Objects.requireNonNull(id, "retained execution identity");
         var execution = actors.get(id.actorId());
-        if (execution == null || !execution.current().equals(Optional.of(id)) && !execution.suspended().equals(Optional.of(id)))
+        if (execution == null || !execution.current().equals(Optional.of(id)) && !execution.continuations().contains(id))
             throw new IllegalArgumentException("retained execution is absent, stale or foreign");
     }
     public ActorExecutionState begin(ActorExecutionId id, long expectedGeneration) {
@@ -82,20 +82,21 @@ public final class ActorExecutionState {
                 || previous != null && previous.current().isPresent())
             throw new IllegalArgumentException("execution start lacks exact vacant authority");
         return put(new ActorExecution(id.actorId(), id.generation(), Optional.of(id),
-                previous == null ? Optional.empty() : previous.suspended()));
+                previous == null ? java.util.List.of() : previous.continuations()));
     }
     public ActorExecutionState finish(ActorExecutionId id) {
         requireCurrent(id);
         ActorExecution previous = actors.get(id.actorId());
-        return put(new ActorExecution(id.actorId(), previous.generation(), Optional.empty(), previous.suspended()));
+        return put(new ActorExecution(id.actorId(), previous.generation(), Optional.empty(), previous.continuations()));
     }
     ActorExecutionState suspendAndBegin(ActorExecutionId current, ActorExecutionId successor) {
         requireCurrent(current);
         ActorExecution previous = actors.get(current.actorId());
-        if (previous.suspended().isPresent() || !current.actorId().equals(successor.actorId())
+        if (previous.continuations().size()>=ActorExecution.MAX_CONTINUATIONS || !current.actorId().equals(successor.actorId())
                 || successor.generation() != Math.addExact(previous.generation(), 1L))
             throw new IllegalArgumentException("interruption requires one exact bounded continuation and successor");
-        return put(new ActorExecution(current.actorId(), successor.generation(), Optional.of(successor), Optional.of(current)));
+        var chain=new java.util.ArrayList<ActorExecutionId>();chain.add(current);chain.addAll(previous.continuations());
+        return put(new ActorExecution(current.actorId(), successor.generation(), Optional.of(successor), chain));
     }
     ActorExecutionState resume(ActorExecutionId suspended, ActorExecutionId successor) {
         ActorExecution previous = actors.get(suspended.actorId());
@@ -104,13 +105,14 @@ public final class ActorExecutionState {
                 || !suspended.activityOwnerId().equals(successor.activityOwnerId())
                 || successor.generation() != Math.addExact(previous.generation(), 1L))
             throw new IllegalArgumentException("resume lacks the exact vacant continuation authority");
-        return put(new ActorExecution(successor.actorId(), successor.generation(), Optional.of(successor), Optional.empty()));
+        return put(new ActorExecution(successor.actorId(), successor.generation(), Optional.of(successor), previous.continuations().subList(1,previous.continuations().size())));
     }
     ActorExecutionState retireSuspended(ActorExecutionId suspended) {
         ActorExecution previous = actors.get(suspended.actorId());
-        if (previous == null || !previous.suspended().equals(Optional.of(suspended)))
+        if (previous == null || !previous.continuations().contains(suspended))
             throw new IllegalArgumentException("retirement has a foreign suspended execution");
-        return put(new ActorExecution(previous.actorId(), previous.generation(), previous.current(), Optional.empty()));
+        var chain=new java.util.ArrayList<>(previous.continuations());chain.remove(suspended);
+        return put(new ActorExecution(previous.actorId(), previous.generation(), previous.current(), chain));
     }
     private ActorExecutionState(ActorExecutionState previous, ActorExecution execution) {
         var actor = execution.actorId();
@@ -138,19 +140,15 @@ public final class ActorExecutionState {
             }
             currentByKind = Map.copyOf(current);
         }
-        var paused = before == null ? Optional.<ActorExecutionId>empty() : before.suspended();
-        if (paused.equals(execution.suspended())) suspended = previous.suspended;
-        else {
-            var continuations = new java.util.ArrayList<>(previous.suspended);
-            paused.ifPresent(continuations::remove);
-            execution.suspended().ifPresent(id -> {
-                int position = 0;
-                while (position < continuations.size() && ranks.get(continuations.get(position).actorId()) < ranks.get(actor)) position++;
-                continuations.add(position, id);
-            });
-            suspended = java.util.List.copyOf(continuations);
+        var paused=before==null?java.util.List.<ActorExecutionId>of():before.continuations();
+        if(paused.equals(execution.continuations()))suspended=previous.suspended;
+        else{
+            var chain=new java.util.ArrayList<>(previous.suspended);chain.removeAll(paused);
+            int at=0;while(at<chain.size() && ranks.get(chain.get(at).actorId())<ranks.get(actor))at++;
+            chain.addAll(at,execution.continuations());suspended=java.util.List.copyOf(chain);
         }
     }
+
     private Map<SubjectId, ActorExecutionId> insertOrdered(Map<SubjectId, ActorExecutionId> values,
                                                           SubjectId actor, ActorExecutionId execution) {
         var result = new LinkedHashMap<SubjectId, ActorExecutionId>(); boolean inserted = false;

@@ -44,7 +44,7 @@ public final class ActorActivityCapabilities {
         if (retained == null) return;
         var claims = new java.util.ArrayList<ActorExecutionId>(2);
         retained.current().ifPresent(claims::add);
-        retained.suspended().ifPresent(claims::add);
+        claims.addAll(retained.continuations());
         for (var id : claims) {
             var capability = require(id.activityKind());
             capability.validateReference(state, id);

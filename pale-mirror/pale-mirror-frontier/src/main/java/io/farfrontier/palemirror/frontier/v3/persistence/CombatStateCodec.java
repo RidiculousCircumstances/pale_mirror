@@ -23,8 +23,10 @@ final class CombatStateCodec {
         out.writeInt(state.positions().size());for(var v:state.positions().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){
             id(out,v.getKey());var point=v.getValue();ActorExecutionStateCodec.writeId(out,point.execution());target(out,point.target());FrontierWorldStateCodec.writePosition(out,point.targetPosition().support());
             out.writeBoolean(point.station().isPresent());if(point.station().isPresent())FrontierWorldStateCodec.writePosition(out,point.station().orElseThrow().support());
-            out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeByte(point.reason().wireTag());out.writeLong(point.sinceTick());out.writeLong(point.atTick());out.writeLong(point.retryAt());
+out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeByte(point.reason().wireTag());out.writeLong(point.sinceTick());out.writeLong(point.atTick());out.writeLong(point.retryAt());
+                out.writeByte(point.sector().role().wireTag());out.writeInt(point.sector().axisX());out.writeInt(point.sector().axisZ());
         }
+        out.writeInt(state.evasions().size());for(var value:state.evasions().values().stream().sorted(Comparator.comparing(Evasion::actor)).toList())EvasionWire.write(out,value);
     }
     static CombatState read(DataInputStream in)throws IOException{
         int n=count(in);var pending=new LinkedHashMap<SubjectId,MeleeStrike>();
@@ -44,9 +46,12 @@ final class CombatStateCodec {
         for(int i=0;i<n;i++){
             var key=id(in);var execution=ActorExecutionStateCodec.readId(in);var target=target(in);var point=new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
             var station=in.readBoolean()?Optional.of(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in))):Optional.<SurfaceAnchor>empty();
-            unique(positions,key,new MeleePosition(execution,target,point,station,in.readInt(),in.readInt(),MeleePosition.Reason.require(in.readUnsignedByte()),in.readLong(),in.readLong(),in.readLong()));
+unique(positions,key,new MeleePosition(execution,target,point,station,in.readInt(),in.readInt(),MeleePosition.Reason.require(in.readUnsignedByte()),in.readLong(),in.readLong(),in.readLong(),
+                new MeleeSector(MeleeSector.Role.require(in.readUnsignedByte()),in.readInt(),in.readInt())));
         }
-        return new CombatState(pending,ready,arms,blocked,stances,positions);
+        n=count(in);var evasions=new LinkedHashMap<SubjectId,Evasion>();
+        for(int i=0;i<n;i++){var value=EvasionWire.read(in);unique(evasions,value.actor(),value);}
+        return new CombatState(pending,ready,arms,blocked,stances,positions,evasions);
     }
     private static int count(DataInputStream in)throws IOException{return UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);}
     private static <T> void unique(Map<SubjectId,T> values,SubjectId key,T value){if(values.putIfAbsent(key,value)!=null)throw new IllegalArgumentException("duplicate combat entry");}

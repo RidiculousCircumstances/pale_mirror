@@ -94,7 +94,7 @@ final class ResourceSiteHarvestPlanning {
             }
             events.add(new ProposedEvent(site.id(), started));
             events.add(new ProposedEvent(site.id(), new PhysicalIntentPrepared(intent)));
-            long due = Math.addExact(atTick, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
+            long due = Math.addExact(atTick, ResidentWalkingPace.ticksPerEdge(state,job.workerId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK));
             events.add(schedule(coldProgress(job, due)));
             // Validate subsequent offers against exactly the successor produced by admission.
             // This is immutable transaction planning, not a parallel reservation cache.

@@ -146,7 +146,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         for (var member : group.members()) {
             var retained = executions.actors().get(member.actorId());
             if (retained == null) continue;
-            for (var execution : java.util.stream.Stream.concat(retained.current().stream(), retained.suspended().stream()).toList()) {
+            for (var execution : java.util.stream.Stream.concat(retained.current().stream(), retained.continuations().stream()).toList()) {
                 if (execution.activityKind() != ActorActivityKind.GROUP_MEMBER) continue;
                 // A closed roster is history, not an exclusive claim on its former members.
                 // Still reject a retained execution of THIS closed group (including suspended work).

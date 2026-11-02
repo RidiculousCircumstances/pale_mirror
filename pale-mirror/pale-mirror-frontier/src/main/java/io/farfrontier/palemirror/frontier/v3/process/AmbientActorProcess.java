@@ -182,7 +182,7 @@ public final class AmbientActorProcess {
             if (movement != null) return new AmbientGoal(AmbientGoalKind.ACTOR_MOVEMENT,
                     movement.order().legalStations().getFirst().support());
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
-            if (meal != null) return new AmbientGoal(AmbientGoalKind.MEAL,
+            if (meal != null && state.actorExecutions().owns(actorId,meal.executionId().activityKind(),meal.claimId())) return new AmbientGoal(AmbientGoalKind.MEAL,
                     ResidentMealProcess.goalSurface(state, meal).support());
             var execution = state.actorExecutions().actors().get(actorId);
             var stationary = execution == null ? Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityAmbientTarget>empty()

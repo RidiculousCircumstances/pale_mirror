@@ -103,6 +103,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 worker.getUUID(), slices, -1);
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
         if (pending == null) {
+            if(state.combat().evasions().containsKey(meal.residentId()))return false;
             if (!transfer.before()) return false;
             ResidentMealPhysicalStep step = new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE,
                     sourceCounts, 0, slices.getFirst().epoch(),
@@ -152,6 +153,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                         meal.residentId(), worker, meal.inventorySlot()))) return false;
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
         if (pending == null) {
+            if(state.combat().evasions().containsKey(meal.residentId()))return false;
             if (!before) return false;
             var step = new ResidentMealPhysicalStep(
                             ResidentMeal.Phase.CONSUME, -1, meal.portion().quantity(), bindings.getFirst().authorityEpoch(),

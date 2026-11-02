@@ -19,6 +19,20 @@ class CombatModuleTest {
         return new CombatOrder(execution,1,new SubjectId("item:sword-"+id),new CombatEngagement(enemy,CombatEngagement.Kind.SELF_DEFENCE,TARGET,24),
                 TARGET,100,60,TARGET.offset(3,0,0),UnitNavigationProfile.VILLAGER,station);
     }
+    @Test void tacticalSectorsSpreadAndStayStableAcrossTargetCellChangesAndHydration() throws Exception {
+        var rules=MeleeRules.initial();var state=CombatState.empty();var first=order(1,Optional.empty());
+        state=state.positioned(first,Optional.of(TARGET.offset(2,0,0)),MeleePosition.Reason.RESERVED,100,rules);
+        assertEquals(MeleeSector.Role.PRESSURE,state.positions().get(first.owner()).sector().role());
+        var second=order(2,Optional.empty());var sector=MeleeTactics.sector(state,second,101,rules);
+        assertEquals(MeleeSector.Role.FLANK_LEFT,sector.role());
+        state=state.positioned(second,Optional.of(TARGET.offset(0,0,2)),MeleePosition.Reason.RESERVED,101,rules);
+        assertFalse(MeleeTactics.readyAt(state,second,TARGET.offset(2,0,0),102,rules));
+        assertTrue(MeleeTactics.readyAt(state,second,TARGET.offset(0,0,2),102,rules));
+        var third=order(3,Optional.empty());assertEquals(MeleeSector.Role.FLANK_RIGHT,MeleeTactics.sector(state,third,102,rules).role());
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
+        assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,second,182,rules).role());
+    }
     @Test void immediateDecisionHonoursVisibilityReadinessPendingEffectsAndExpiry(){
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.ATTACK,MeleeTactics.decide(order,new MeleeTactics.Facts(100,true,true,true,false,100,true)));
@@ -30,10 +44,10 @@ class CombatModuleTest {
     @Test void attackStationsSpreadAroundTheEnemyAndExcludeOverlapsAndOutOfRangeCells(){
         var east=TARGET.offset(1,0,0);var west=TARGET.offset(-1,0,0);var north=TARGET.offset(0,0,-1);
         var peer=order(2,Optional.of(east));var candidates=List.of(TARGET,east,west,north,TARGET.offset(4,0,0));
-        var ranked=MeleePositions.rank(order(1,Optional.empty()),SWORD,candidates,List.of(peer));
-        assertEquals(west,ranked.getFirst());assertFalse(ranked.contains(east));assertFalse(ranked.contains(TARGET));assertFalse(ranked.contains(TARGET.offset(4,0,0)));
+        var ranked=MeleePositions.rank(order(1,Optional.empty()),SWORD,candidates,List.of(peer),new MeleeSector(MeleeSector.Role.FLANK_RIGHT,1000,0),MeleeRules.initial());
+        assertEquals(north,ranked.getFirst());assertFalse(ranked.contains(east));assertFalse(ranked.contains(TARGET));assertFalse(ranked.contains(TARGET.offset(4,0,0)));
         var reversed=new ArrayList<>(candidates);Collections.reverse(reversed);
-        assertEquals(ranked,MeleePositions.rank(order(1,Optional.empty()),SWORD,reversed,List.of(peer)));
+        assertEquals(ranked,MeleePositions.rank(order(1,Optional.empty()),SWORD,reversed,List.of(peer),new MeleeSector(MeleeSector.Role.FLANK_RIGHT,1000,0),MeleeRules.initial()));
     }
     @Test void nonGuardPendingHitAndBoundedPositionFeedbackSurviveRecoveryAndRetireExactly()throws IOException{
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));

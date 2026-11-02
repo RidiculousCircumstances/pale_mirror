@@ -181,7 +181,7 @@ public final class ShipmentStateSupport {
                 && state.actorMovements().values().stream().noneMatch(m -> m.order().ownerId().equals(shipment.id()))
                 && state.actorExecutions().actors().values().stream().noneMatch(a ->
                     a.current().filter(e -> e.activityOwnerId().equals(shipment.id())).isPresent()
-                    || a.suspended().filter(e -> e.activityOwnerId().equals(shipment.id())).isPresent());
+                    || a.continuations().stream().filter(e -> e.activityOwnerId().equals(shipment.id())).findFirst().isPresent());
     }
     public static void validate(FrontierWorldState state) {
         ShipmentExecutionCapability.validateReferences(state.shipments(), state.actorExecutions());

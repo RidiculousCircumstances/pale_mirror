@@ -12,7 +12,7 @@ public final class ExtractionDeathResources {
         var authority = state.actorExecutions().actors().get(actor);
         if (authority == null) return Optional.empty();
         return authority.current().filter(id -> id.activityKind() == ActorActivityKind.EXTRACTION)
-                .or(() -> authority.suspended().filter(id -> id.activityKind() == ActorActivityKind.EXTRACTION))
+                .or(() -> authority.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.EXTRACTION).findFirst())
                 .map(id -> ExtractionWorkAuthority.require(state, id));
     }
     public static boolean resourcesSettled(FrontierWorldState state, ExtractionWork job) {

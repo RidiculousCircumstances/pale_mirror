@@ -40,7 +40,7 @@ public final class GuardMissionMovementProvider implements ActorMovementProvider
         placementKnowledge(state, movement).requireRoute(route); ServiceApproachSegments.require(state, movement.order(), serviceApproach(state, movement), route);
     }
     @Override public long ticksPerEdge(FrontierWorldState state, ActorMovement movement) {
-        validate(state, movement); return state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge();
+        validate(state, movement); return ActorMovementProvider.super.ticksPerEdge(state,movement);
     }
     @Override public Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
         work(state, movement); return Optional.empty();

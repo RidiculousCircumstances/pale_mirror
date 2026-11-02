@@ -422,6 +422,11 @@ final class HumanPopulationStateCodec {
             output.writeInt(entry.getValue().deltaPermille());
         }
         WorkStateCodec.writeModifiers(output, characteristics.workModifiers());
+        output.writeInt(characteristics.movementModifiers().basePermille());
+        output.writeInt(characteristics.movementModifiers().factors().size());
+        for(var factor:characteristics.movementModifiers().factors().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output,factor.getKey().value()); output.writeInt(factor.getValue());
+        }
     }
 
     private static ResidentProfile readProfile(DataInputStream input, boolean hasCapabilityProfile) throws IOException {
@@ -441,7 +446,13 @@ final class HumanPopulationStateCodec {
             var modifier = new ResidentCharacteristics.MetabolismModifier(source, input.readInt());
             if (modifiers.put(source, modifier) != null) throw new IllegalArgumentException("duplicate resident characteristic modifier");
         }
+        var work=WorkStateCodec.readModifiers(input); int movementBase=input.readInt();
+        int movementCount=UnitGroupStateCodec.count(input,ResidentCharacteristics.MAX_MODIFIERS);
+        var movement=new LinkedHashMap<SubjectId,Integer>();
+        for(int i=0;i<movementCount;i++) if(movement.putIfAbsent(new SubjectId(FrontierWorldStateCodec.readString(input)),input.readInt())!=null)
+            throw new IllegalArgumentException("duplicate movement modifier");
         return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), name,
-                birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers, WorkStateCodec.readModifiers(input)));
+                birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers, work,
+                    new ResidentMovementModifiers(movementBase,movement)));
     }
 }

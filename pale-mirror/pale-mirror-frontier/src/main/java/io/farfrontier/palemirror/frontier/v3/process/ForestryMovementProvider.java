@@ -41,7 +41,7 @@ public final class ForestryMovementProvider implements ActorMovementProvider {
         placementKnowledge(state, movement).requireRoute(route); ServiceApproachSegments.require(state, movement.order(), serviceApproach(state, movement), route);
     }
     @Override public long ticksPerEdge(FrontierWorldState state, ActorMovement movement) {
-        validate(state, movement); return state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge();
+        validate(state, movement); return ActorMovementProvider.super.ticksPerEdge(state,movement);
     }
     @Override public Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
         var work = work(state, movement); return ForestryServiceAccess.needsAccess(work) ? Optional.of(ForestryServiceAccess.identity(work)) : Optional.empty();

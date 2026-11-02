@@ -34,6 +34,18 @@ class ActorExecutionStateTest {
         assertThrows(IllegalArgumentException.class, () -> published.finish(first));
         assertFullImage(published);
     }
+    @Test void nestedContinuationsResumeInOrderAndCannotDuplicateAnOwner(){
+        var state=ActorExecutionState.empty();var work=state.next(ACTOR,ActorActivityKind.FIELD_HARVEST,OWNER);state=state.begin(work,0);
+        var meal=state.next(ACTOR,ActorActivityKind.MEAL,new SubjectId("claim:nested-food"));state=state.suspendAndBegin(work,meal);
+        var safety=state.next(ACTOR,ActorActivityKind.SAFETY,new SubjectId("safety:nested"));state=state.suspendAndBegin(meal,safety);assertFullImage(state);
+        state.requireRetained(work);state.requireRetained(meal);assertEquals(java.util.List.of(meal,work),state.actors().get(ACTOR).continuations());
+        var vacant=state.finish(safety);var skipped=vacant.next(ACTOR,ActorActivityKind.FIELD_HARVEST,OWNER);
+        assertThrows(IllegalArgumentException.class,()->vacant.resume(work,skipped));
+        var resumed=vacant.next(ACTOR,ActorActivityKind.MEAL,meal.activityOwnerId());state=vacant.resume(meal,resumed);assertFullImage(state);
+        assertEquals(java.util.List.of(work),state.actors().get(ACTOR).continuations());
+        var duplicate=state.next(ACTOR,work.activityKind(),work.activityOwnerId());var current=state;
+        assertThrows(IllegalArgumentException.class,()->current.suspendAndBegin(resumed,duplicate));
+    }
     private static void assertFullImage(ActorExecutionState state) {
         var recovered = new ActorExecutionState(state.actors());
         assertEquals(recovered, state); assertEquals(recovered.currentKinds(), state.currentKinds());
@@ -44,7 +56,7 @@ class ActorExecutionStateTest {
         assertEquals(recovered.suspended(), state.suspended());
     }
 
-    @Test void interruptionKeepsOnlyOneContinuationAndResumeNeedsVacantExactNewGeneration() {
+    @Test void interruptionRetainsAChainAndResumeNeedsVacantExactNewGeneration() {
         var empty = ActorExecutionState.empty();
         var work = empty.next(ACTOR, ActorActivityKind.FIELD_HARVEST, OWNER);
         var running = empty.begin(work, 0L);
@@ -55,7 +67,7 @@ class ActorExecutionStateTest {
         var successor = paused.next(ACTOR, work.activityKind(), work.activityOwnerId());
         assertThrows(IllegalArgumentException.class, () -> paused.resume(work, successor));
         var another = paused.next(ACTOR, ActorActivityKind.SERVICE_EXIT, ACTOR);
-        assertThrows(IllegalArgumentException.class, () -> paused.suspendAndBegin(meal, another));
+        assertEquals(2,paused.suspendAndBegin(meal,another).actors().get(ACTOR).continuations().size());
         var vacancy = paused.finish(meal);
         var stale = new ActorExecutionId(ACTOR, work.activityKind(), work.activityOwnerId(), 2L);
         assertThrows(IllegalArgumentException.class, () -> vacancy.resume(work, stale));

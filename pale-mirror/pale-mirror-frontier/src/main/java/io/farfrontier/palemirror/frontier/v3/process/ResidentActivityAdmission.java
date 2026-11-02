@@ -18,7 +18,7 @@ public sealed interface ResidentActivityAdmission {
     }
 
     enum Reason {
-        RETAINED_MEAL,
+        SAFETY, RETAINED_MEAL,
         MOVEMENT_HANDOFF,
         RESIDENT_STATE,
         CONTAINER_CUSTODY,

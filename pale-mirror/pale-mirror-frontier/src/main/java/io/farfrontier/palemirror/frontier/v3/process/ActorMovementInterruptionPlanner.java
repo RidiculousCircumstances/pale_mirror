@@ -69,7 +69,7 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
 
     private static Optional<BodyPosition> checkpoint(FrontierWorldState state, ActorMovement movement, long atTick) {
         SubjectId actorId = movement.order().actorId();
-        if (atTick < movement.issuedAtTick() || state.humanPopulation().meals().containsKey(actorId)
+        if (atTick < movement.issuedAtTick()
                 || ActorExecutionCoordinator.sceneOwns(state, actorId)) return Optional.empty();
         // Admission may inspect an older parked activity wake after this route was committed.
         // That historical instant cannot authorize interrupting the newer travel checkpoint.

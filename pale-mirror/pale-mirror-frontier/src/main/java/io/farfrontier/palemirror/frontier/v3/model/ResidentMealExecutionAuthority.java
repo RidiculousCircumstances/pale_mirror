@@ -14,7 +14,7 @@ final class ResidentMealExecutionAuthority {
     private static final ImmutableReferenceIndex<ActorExecutionState, SubjectId, ResidentMeal> FORWARD = new ImmutableReferenceIndex<>(
             HumanPopulation.MAX_RESIDENTS, 1, List.of(EXECUTIONS),
             (executions, meal) -> List.of(EXECUTIONS.at(meal.executionId().actorId())),
-            (executions, actor, meal) -> executions.requireCurrent(meal.executionId()));
+            (executions, actor, meal) -> executions.requireRetained(meal.executionId()));
     private static final ImmutableReferenceIndex.Source<HumanPopulation, SubjectId, ResidentMeal> MEALS =
             new ImmutableReferenceIndex.Source<>(HumanPopulation::meals);
     private static final ImmutableReferenceIndex<HumanPopulation, SubjectId, ActorExecutionId> REVERSE = new ImmutableReferenceIndex<>(
@@ -28,5 +28,8 @@ final class ResidentMealExecutionAuthority {
     static void validate(HumanPopulation people, ActorExecutionState executions) {
         FORWARD.validate(ResidentMealExecutionAuthority.class, people.meals(), executions);
         REVERSE.validate(ResidentMealExecutionAuthority.class, executions.current(ActorActivityKind.MEAL), people);
+        for(var execution:executions.suspended())if(execution.activityKind()==ActorActivityKind.MEAL){
+            var meal=people.meals().get(execution.actorId());if(meal==null || !meal.executionId().equals(execution))throw new IllegalArgumentException("suspended meal lost its exact portion");
+        }
     }
 }

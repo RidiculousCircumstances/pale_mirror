@@ -7,7 +7,7 @@ import java.util.Optional;
 final class ShipmentExecutionCapability implements ActorActivityCapability {
     public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, ActorExecutionId execution) {
-        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state,execution.actorId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK));
     }
 
     private record References(ShipmentState shipments, ActorExecutionState executions) { }
@@ -34,12 +34,12 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
                 var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<References>>();
                 execution.current().filter(id -> id.activityKind() == ActorActivityKind.COURIER)
                         .ifPresent(id -> reads.add(SHIPMENTS.at(id.activityOwnerId())));
-                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.COURIER)
+                execution.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.COURIER).findFirst()
                         .ifPresent(id -> reads.add(SHIPMENTS.at(id.activityOwnerId())));
                 return reads;
             }, (c, actor, execution) -> {
                 execution.current().filter(id -> id.activityKind() == ActorActivityKind.COURIER).ifPresent(id -> validateCourier(c, id));
-                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.COURIER).ifPresent(id -> validateCourier(c, id));
+                execution.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.COURIER).findFirst().ifPresent(id -> validateCourier(c, id));
             });
     @Override public ActorActivityKind kind() { return ActorActivityKind.COURIER; }
     @Override public boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) {

@@ -31,7 +31,7 @@ public final class FrontierWireTags {
                     tag(22, ActorActivityKind.SCOUT_PATROL), tag(23, ActorActivityKind.HIVE_TASK_ASSEMBLY), tag(24, ActorActivityKind.HIVE_TASK_RETURN),
                     tag(26, ActorActivityKind.ENGINEERING_ASSEMBLY),
                     tag(28, ActorActivityKind.COURIER), tag(29, ActorActivityKind.GROUP_MEMBER), tag(30, ActorActivityKind.EXTRACTION),
-                    tag(31, ActorActivityKind.EQUIPMENT_SERVICE), tag(32, ActorActivityKind.FORESTRY), tag(33, ActorActivityKind.GUARD)),
+                    tag(31, ActorActivityKind.EQUIPMENT_SERVICE), tag(32, ActorActivityKind.FORESTRY), tag(33, ActorActivityKind.GUARD), tag(34, ActorActivityKind.SAFETY)),
             entry(DefenderEquipmentReturnVisit.Phase.class,
                     tag(1, DefenderEquipmentReturnVisit.Phase.SELECTED), tag(2, DefenderEquipmentReturnVisit.Phase.APPROACH),
                     tag(3, DefenderEquipmentReturnVisit.Phase.SERVICE), tag(4, DefenderEquipmentReturnVisit.Phase.CLEARANCE)),

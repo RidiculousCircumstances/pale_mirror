@@ -7,7 +7,7 @@ import java.util.Optional;
 final class HarvestActivityCapability implements ActorActivityCapability {
     public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, ActorExecutionId execution) {
-        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state,execution.actorId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK));
     }
 
     private static final ImmutableReferenceIndex.Source<ResourceSiteState, io.farfrontier.palemirror.frontier.v3.api.SubjectId,
@@ -17,12 +17,12 @@ final class HarvestActivityCapability implements ActorActivityCapability {
                 var reads = new java.util.ArrayList<ImmutableReferenceIndex.Read<ResourceSiteState>>();
                 execution.current().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST)
                         .ifPresent(id -> reads.add(JOBS.at(id.activityOwnerId())));
-                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST)
+                execution.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST).findFirst()
                         .ifPresent(id -> reads.add(JOBS.at(id.activityOwnerId())));
                 return reads;
             }, (sites, actor, execution) -> {
                 execution.current().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST).ifPresent(id -> job(sites, id));
-                execution.suspended().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST).ifPresent(id -> job(sites, id));
+                execution.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.FIELD_HARVEST).findFirst().ifPresent(id -> job(sites, id));
             });
     @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder> navigationOrder(
             FrontierWorldState state, ActorExecutionId execution) {

@@ -122,16 +122,16 @@ class StationWorkMovementTest {
         var state = ActorMovementProcess.reduceStarted(fixture.state(), job.workerId(), start);
         ActorMovementStateSupport.validate(state.bootstrap(), state.actorMovements(), state.actorLocations(), state.humanPopulation(),
                 state.inventory(), state.actorExecutions(), state.shipments(), state.unitGroups(), state.extractionSites(),
-                state.strategicPlans(), state.forest(), state.productionJobs());
+                state.strategicPlans(), state.forest(), state.productionJobs(),state.combat());
         var jobs = new HashMap<>(state.productionJobs()); jobs.remove(job.id());
         assertThrows(IllegalArgumentException.class, () -> ActorMovementStateSupport.validate(state.bootstrap(), state.actorMovements(),
                 state.actorLocations(), state.humanPopulation(), state.inventory(), state.actorExecutions(), state.shipments(), state.unitGroups(),
-                state.extractionSites(), state.strategicPlans(), state.forest(), jobs),
+                state.extractionSites(), state.strategicPlans(), state.forest(), jobs,state.combat()),
                 "unchanged movement and execution cannot retain an absent producer job");
         assertDoesNotThrow(() -> ImmutableInvariantCheck.full(() -> {
             ActorMovementStateSupport.validate(state.bootstrap(), state.actorMovements(), state.actorLocations(), state.humanPopulation(),
                     state.inventory(), state.actorExecutions(), state.shipments(), state.unitGroups(), state.extractionSites(),
-                    state.strategicPlans(), state.forest(), state.productionJobs()); return null;
+                    state.strategicPlans(), state.forest(), state.productionJobs(),state.combat()); return null;
         }));
     }
     @Test void wholeLegRetainsOneClockAndRestartsWithoutAwardingItemsOrPerCellWork() throws Exception {

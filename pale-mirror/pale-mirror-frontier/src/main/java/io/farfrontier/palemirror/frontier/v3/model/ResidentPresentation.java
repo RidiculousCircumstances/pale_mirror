@@ -71,7 +71,9 @@ public record ResidentPresentation(String name, String settlement, String task, 
         }
         var meal = state.humanPopulation().meals().get(actor);
         String activity;
-        if (meal != null) activity = switch (meal.phase()) {
+        var safety=state.combat().evasions().get(actor);
+        if(safety!=null)activity=safety.execution().isEmpty()?"Preparing to escape":state.actorMovements().containsKey(actor)?"Escaping threat":"Seeking safety";
+        else if (meal != null) activity = switch (meal.phase()) {
             case MOVE -> "Going for food";
             case TAKE -> "Taking food";
             case CLEAR_ACCESS -> "Leaving service point";

@@ -17,14 +17,14 @@ final class ActorMovementStateSupport {
     static void validate(FrontierWorldState state) {
         validate(state.bootstrap(), state.actorMovements(), state.actorLocations(), state.humanPopulation(), state.inventory(),
                 state.actorExecutions(), state.shipments(), state.unitGroups(), state.extractionSites(), state.strategicPlans(),
-                state.forest(), state.productionJobs());
+                state.forest(), state.productionJobs(),state.combat());
     }
     static void validate(FrontierBootstrap bootstrap, Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
                          HumanPopulation people, ExactInventory inventory, ActorExecutionState executions,
                          ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
-                         io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest, Map<SubjectId, ProductionJob> productionJobs) {
+                         io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest, Map<SubjectId, ProductionJob> productionJobs,io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat) {
         if (movements.size() > SimulationCapacity.MAX_ACTORS) throw new IllegalArgumentException("actor movement retention bound exceeded");
-        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans, forest, productionJobs, actors, executions);
+        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans, forest, productionJobs, actors, executions,combat);
         for (var id : executions.current(ActorActivityKind.SERVICE_EXIT).values()) {
             var movement = movements.get(id.actorId());
             if (movement == null || !movement.executionId().equals(id))
@@ -34,7 +34,7 @@ final class ActorMovementStateSupport {
     }
     private static void validateMovement(ActorMovementReferences references, SubjectId id, ActorMovement movement) {
         references.executions().requireCurrent(movement.executionId());
-        if (!id.equals(movement.order().actorId()) || !references.actors().containsKey(id) || references.people().meals().containsKey(id))
+        if (!id.equals(movement.order().actorId()) || !references.actors().containsKey(id))
             throw new IllegalArgumentException("actor movement must bind one exact actor without a competing meal owner");
         movement.context().validateReferences(references, movement);
     }

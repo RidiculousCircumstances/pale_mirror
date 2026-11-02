@@ -12,7 +12,7 @@ public final class ForestryDeathResources {
         var authority = state.actorExecutions().actors().get(actor);
         if (authority == null) return Optional.empty();
         return authority.current().filter(id -> id.activityKind() == ActorActivityKind.FORESTRY)
-                .or(() -> authority.suspended().filter(id -> id.activityKind() == ActorActivityKind.FORESTRY))
+                .or(() -> authority.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.FORESTRY).findFirst())
                 .map(id -> ForestryWorkAuthority.require(state, id));
     }
     public static boolean resourcesSettled(FrontierWorldState state, ForestryWork job) {

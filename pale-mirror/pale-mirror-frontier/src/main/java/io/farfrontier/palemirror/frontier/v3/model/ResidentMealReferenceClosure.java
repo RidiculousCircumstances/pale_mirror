@@ -77,8 +77,8 @@ public final class ResidentMealReferenceClosure {
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(obligation.residentId()));
             if (actor == null || actor.condition().status() != ActorLifeStatus.DEAD
                     || execution == null || execution.current().isPresent()
-                    || execution.generation() != obligation.executionId().generation()
-                    || execution.suspended().equals(java.util.Optional.of(obligation.executionId()))
+                    || execution.generation() < obligation.executionId().generation()
+                    || execution.continuations().contains(obligation.executionId())
                     || retired == null || retired.asset() != FencedRecoveryAsset.BODY
                     || !retired.ownerId().equals(obligation.residentId()) || retired.ownerRevision() != 0L
                     || retired.retiredEpoch() != obligation.body().physicalEpoch()

@@ -10,7 +10,7 @@ final class SecurityProcessModule implements FrontierWorldProcessModule {
     private static final Set<String> INGRESS=Set.of(SecurityEvent.Incident.TYPE,SecurityEvent.Seen.TYPE,SecurityEvent.ContactEnded.TYPE);
     static final Set<String> TYPES=java.util.stream.Stream.concat(INGRESS.stream(),java.util.stream.Stream.of(SecurityResponsesAllocated.TYPE)).collect(java.util.stream.Collectors.toUnmodifiableSet());
     static final DeterministicProcessDescriptor DESCRIPTOR=new DeterministicProcessDescriptor("security",INGRESS,Set.of(SecurityReview.KIND),TYPES,
-            java.util.stream.Stream.concat(TYPES.stream(),java.util.stream.Stream.of("kernel.reconsideration_requested",
+            java.util.stream.Stream.concat(TYPES.stream(),java.util.stream.Stream.of(io.farfrontier.palemirror.frontier.v3.model.combat.EvasionEvent.Threatened.TYPE,"kernel.reconsideration_requested",
                     "frontier.actor_movement_interrupted","kernel.schedule_cancelled","kernel.schedule_rescheduled")).collect(java.util.stream.Collectors.toUnmodifiableSet()),TYPES);
     private static SubjectId subject(SecurityEvent event){return switch(event){
         case SecurityEvent.Incident v->v.home();case SecurityEvent.Seen v->v.contact().home();case SecurityEvent.ContactEnded v->v.home();};}
@@ -20,7 +20,15 @@ final class SecurityProcessModule implements FrontierWorldProcessModule {
         try { SecurityTransitions.apply(state,owner,event,command.submittedAt().ticks()); }
         catch(IllegalArgumentException invalid){return FrontierWorldCommandPlanner.rejected(invalid.getMessage());}
         events.add(new ProposedEvent(owner,event));
-        if(event instanceof SecurityEvent.Incident incident)events.add(SecurityReview.wake(incident.home(),command.submittedAt().ticks()));
+        if(event instanceof SecurityEvent.Incident incident){
+            events.add(SecurityReview.wake(incident.home(),command.submittedAt().ticks()));
+            var actor=incident.victim().actorId();
+            boolean armedGuard=GuardEquipment.in(state,incident.home()).stream().anyMatch(g->g.execution().actorId().equals(actor) && g.phase()==GuardDuty.Phase.ON_DUTY && GuardEquipment.held(state,g));
+            if(!armedGuard && state.actorLocations().get(actor).condition().status()==ActorLifeStatus.ALIVE){
+                events.add(new ProposedEvent(actor,new EvasionEvent.Threatened(incident.home(),incident.victim(),incident.attacker(),new SurfaceAnchor(incident.victimPosition()),incident.visibleAttackerPosition().map(SurfaceAnchor::new))));
+                events.add(EvasionProcess.wake(actor,command.submittedAt().ticks()));
+            }
+        }
         if(event instanceof SecurityEvent.Seen seen)events.add(SecurityReview.wake(seen.contact().home(),command.submittedAt().ticks()));
         if(event instanceof SecurityEvent.ContactEnded ended)events.add(SecurityReview.wake(ended.home(),command.submittedAt().ticks()));
         if(event instanceof SecurityEvent.Seen || event instanceof SecurityEvent.ContactEnded) {

@@ -24,6 +24,8 @@ public final class ResidentMealProcess {
     public static java.util.Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
         ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
         if (meal == null) return java.util.Set.of(action.subject());
+        if(state.actorExecutions().retainsSuspended(meal.residentId(),io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,meal.claimId()))return java.util.Set.of(meal.residentId());
+        if(state.combat().evasions().containsKey(meal.residentId()))return java.util.Set.of(meal.residentId());
         if (meal.portable()) return java.util.Set.of();
         if (meal.pendingPhysicalStep().isPresent()
                 || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
@@ -63,6 +65,8 @@ public final class ResidentMealProcess {
         if (!PROGRESS.equals(action.kind())) return false;
         ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
         if (meal == null) return false;
+        if(state.actorExecutions().retainsSuspended(meal.residentId(),io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,meal.claimId()))return true;
+        if(state.combat().evasions().containsKey(meal.residentId()) && meal.pendingPhysicalStep().isEmpty())return true;
         if (meal.pendingPhysicalStep().isPresent()
                 || !ActorExecutionCoordinator.coldAvailable(state, meal.residentId()))
             return true;
@@ -606,7 +610,7 @@ public final class ResidentMealProcess {
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         AmbientActorLease previous = state.ambientLeases().get(meal.residentId());
         long epoch = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
-        return new TimedKnownRoute(order, route, now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge(), epoch);
+        return new TimedKnownRoute(order, route, now, ResidentWalkingPace.ticksPerEdge(state,meal.residentId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK), epoch);
     }
 
     /** Entrance ends at the semantic station; clearance still witnesses the first exit. */

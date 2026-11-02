@@ -11,7 +11,7 @@ public final class StationWorkDeathResources {
         var authority = state.actorExecutions().actors().get(actor);
         if (authority == null) return Optional.empty();
         return authority.current().filter(id -> id.activityKind() == ActorActivityKind.PRODUCTION)
-                .or(() -> authority.suspended().filter(id -> id.activityKind() == ActorActivityKind.PRODUCTION));
+                .or(() -> authority.continuations().stream().filter(id -> id.activityKind() == ActorActivityKind.PRODUCTION).findFirst());
     }
     public static Optional<ProductionJob> work(FrontierWorldState state, SubjectId actor) {
         return execution(state, actor).map(id -> {

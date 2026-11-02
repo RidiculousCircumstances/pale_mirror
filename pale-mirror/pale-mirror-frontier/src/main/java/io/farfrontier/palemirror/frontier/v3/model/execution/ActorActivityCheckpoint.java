@@ -26,7 +26,7 @@ public record ActorActivityCheckpoint(FrontierWorldState basis, ActorExecutionId
         validateBasis(state, expected);
         var retained = state.actorExecutions().actors().get(expected.actorId());
         if (retained == null || !retained.current().equals(Optional.of(expected))
-                && !retained.suspended().equals(Optional.of(expected)))
+                && !retained.continuations().contains(expected))
             throw new IllegalArgumentException("owner checkpoint lacks its exact retained execution");
     }
 

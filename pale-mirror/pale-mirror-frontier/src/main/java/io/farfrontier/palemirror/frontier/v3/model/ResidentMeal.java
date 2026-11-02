@@ -28,9 +28,13 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
     /** Stable continuation identity belongs to the retained activity, not its scheduler adapter. */
     public io.farfrontier.palemirror.frontier.v3.api.ScheduleId progressScheduleId() {
         return new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-meal-"
-                + residentId.value().substring("resident:".length()) + "-" + executionId.generation() + "-" + startedAtTick);
+                + claimId.value().replace(':','-') + "-" + startedAtTick);
     }
 
+    public ResidentMeal resumed(ActorExecutionId successor){
+        if(pendingPhysicalStep.isPresent() || !successor.actorId().equals(residentId) || !successor.activityOwnerId().equals(claimId))throw new IllegalArgumentException("meal cannot rebind an unsettled or foreign portion");
+        return new ResidentMeal(residentId,settlementId,source,clearingSurface,actorAccountId,portion,claimId,retainedWorkOwner,phase,startedAtTick,waitReason,Optional.empty(),Optional.empty(),successor);
+    }
     public boolean movesToClearance() { return phase == Phase.CLEAR_ACCESS; }
     public boolean portable() { return source instanceof ResidentFoodSource.Personal; }
     public SubjectId sourceAccountId() { return source.accountId(); }

@@ -549,6 +549,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"dropBlocks\":" + location.navigationProfile().dropBlocks() + ",\"capabilities\":["
                 + location.navigationProfile().capabilities().stream().sorted(java.util.Comparator.comparingInt(io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags::tag))
                     .map(value -> "\"" + value.name() + "\"").collect(java.util.stream.Collectors.joining(",")) + "]}"
+                + (resident==null?"":FrontierV3EvasionDiagnostic.fields(state,subject))
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
                 + "\",\"goalPosition\":" + goalPosition

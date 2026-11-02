@@ -798,7 +798,7 @@ public final class ResourceSiteHarvestProcess {
                         == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE)
             return state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval();
         return !ResourceSiteHarvestGoal.current(state, job).arrivedAt(actor.supportingSurface())
-                ? state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()
+                ? ResidentWalkingPace.ticksPerEdge(state,job.workerId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK)
                 : state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval();
     }
 

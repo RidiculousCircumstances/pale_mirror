@@ -56,7 +56,7 @@ public final class MeleePositions {
         if(physical.isEmpty())return missing?pendingGeometry(knowledge,order):new Choice(Optional.empty(),MeleePosition.Reason.NO_POSITION);
         var candidates=physical.stream().filter(station->available(state,order,station,tick)).toList();
         if(candidates.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.SPACE_OCCUPIED);
-        try{var selected=reachable(rank(order,weapon,candidates,activePeers),rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
+        try{var selected=reachable(rank(order,weapon,candidates,activePeers,MeleeTactics.sector(state.combat(),order,tick,rules),rules),rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
             if(selected.isEmpty() && missing)return pendingGeometry(knowledge,order);
             return new Choice(selected,selected.isPresent()?MeleePosition.Reason.RESERVED:MeleePosition.Reason.NO_PATH);
         }catch(KnownPedestrianNavigation.RouteUnavailable pending){
@@ -93,10 +93,11 @@ public final class MeleePositions {
         if(pending!=null)throw pending;return Optional.empty();
     }
     /** Pure ranking API: the caller supplies geometry candidates, never a fabricated route. */
-    public static List<SurfaceAnchor> rank(CombatOrder order,WeaponProfile weapon,List<SurfaceAnchor> candidates,List<CombatOrder> peers){
+    public static List<SurfaceAnchor> rank(CombatOrder order,WeaponProfile weapon,List<SurfaceAnchor> candidates,
+            List<CombatOrder> peers,MeleeSector sector,MeleeRules rules){
         var claimed=peers.stream().filter(peer->!peer.execution().equals(order.execution())).flatMap(peer->peer.station().stream()).collect(java.util.stream.Collectors.toSet());
         return candidates.stream().distinct().filter(station->legal(order,weapon,station) && !claimed.contains(station))
-                .sorted(Comparator.comparingDouble((SurfaceAnchor station)->score(order,weapon,station,peers))
+                .sorted(Comparator.comparingDouble((SurfaceAnchor station)->score(order,weapon,station,peers)+rules.sectorWeightPermille()/1000.0*(1.0-sector.alignment(station,order.targetPosition())))
                         .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
     }
     private static double score(CombatOrder order,WeaponProfile weapon,SurfaceAnchor station,List<CombatOrder> peers){

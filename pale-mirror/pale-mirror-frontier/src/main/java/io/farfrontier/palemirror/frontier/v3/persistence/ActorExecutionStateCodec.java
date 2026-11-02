@@ -19,7 +19,8 @@ final class ActorExecutionStateCodec {
             FrontierWorldStateCodec.writeString(out, actor.actorId().value());
             out.writeLong(actor.generation());
             writeOptional(out, actor.current());
-            writeOptional(out, actor.suspended());
+            out.writeByte(actor.continuations().size());
+            for(var continuation:actor.continuations())writeId(out,continuation);
         }
     }
     static ActorExecutionState read(DataInputStream in) throws IOException {
@@ -28,7 +29,10 @@ final class ActorExecutionStateCodec {
         var actors = new LinkedHashMap<SubjectId, ActorExecution>();
         for (int index = 0; index < count; index++) {
             SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(in));
-            ActorExecution execution = new ActorExecution(actor, in.readLong(), readOptional(in), readOptional(in));
+            long generation=in.readLong();var current=readOptional(in);int depth=in.readUnsignedByte();
+            if(depth>ActorExecution.MAX_CONTINUATIONS)throw new IOException("execution continuation bound");
+            var chain=new java.util.ArrayList<ActorExecutionId>();for(int j=0;j<depth;j++)chain.add(readId(in));
+            ActorExecution execution = new ActorExecution(actor,generation,current,chain);
             if (actors.putIfAbsent(actor, execution) != null) throw new IllegalArgumentException("duplicate execution actor");
         }
         return new ActorExecutionState(actors);

@@ -87,9 +87,9 @@ class ResidentMealProcessTest {
         state = ResidentMealProcess.reduceStarted(state, resident, started);
         assertTrue(ActorSpatialCourtesy.assess(state, started.meal().executionId()).ready(),
                 "approaching food may yield without abandoning the meal claim");
-        assertFalse(ActorExecutionComposition.CAPABILITIES.require(started.meal().executionId().activityKind())
+        assertTrue(ActorExecutionComposition.CAPABILITIES.require(started.meal().executionId().activityKind())
                 .checkpoint(state, started.meal().executionId()).ready(),
-                "spatial courtesy is not terminal meal interruption");
+                "an unfenced meal can retain its portion while a safety activity owns the resident");
         BodyPosition departure = state.actorLocations().get(resident).body();
         var events = ResidentMealProcess.planProgress(state, ResidentMealProcess.progress(started.meal(), 27_001L));
         assertEquals(2, events.size(), "travel starts and replaces one due action, not one action per support");

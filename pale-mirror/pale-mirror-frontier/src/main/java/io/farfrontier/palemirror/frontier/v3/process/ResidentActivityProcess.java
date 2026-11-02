@@ -42,6 +42,11 @@ public final class ResidentActivityProcess {
         var waiting = (ResidentActivityAdmission.Waiting) retained.value();
         var bootstrap = state.bootstrap();
         var actor = action.subject();
+        if(waiting.reason()==ResidentActivityAdmission.Reason.SAFETY){
+            var safety=state.combat().evasions().get(actor);
+            return java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<>(action,waiting.dependencies(),
+                    current->current.bootstrap()==bootstrap && java.util.Optional.ofNullable(current.combat().evasions().get(actor)).map(e->e.id().equals(safety.id())).orElse(false)));
+        }
         if (waiting.reason() == ResidentActivityAdmission.Reason.RETAINED_MEAL) {
             var meal = state.humanPopulation().meals().get(actor);
             var profile = state.humanPopulation().resident(actor);
@@ -118,7 +123,7 @@ public final class ResidentActivityProcess {
         try {
             var result = currentAdmission(state, action);
             if (result instanceof ResidentActivityAdmission.Waiting waiting
-                    && (waiting.reason() == ResidentActivityAdmission.Reason.FOOD_STOCK
+                    && (waiting.reason() == ResidentActivityAdmission.Reason.FOOD_STOCK || waiting.reason()==ResidentActivityAdmission.Reason.SAFETY
                         || waiting.reason() == ResidentActivityAdmission.Reason.RETAINED_MEAL)) {
                 if (image.values().size() >= MAX_ADMISSION_QUERIES) image.values().clear();
                 image.values().put(action.id(), new CachedAdmission(action, result,
@@ -147,7 +152,7 @@ public final class ResidentActivityProcess {
         return new Object[] { state.bootstrap(), people.resident(resident), people.nutrition().get(resident),
                 people.residents(), people.health(), people.households(), people.quarantines(), people.provisions(),
                 people.birthJobs(), people.mealResourceObligations(), people.meals(), people.migrations(), people.medicalOperations(), people.schedules(),
-                state.actorLocations(), state.actorMovements(), state.actorExecutions(), state.inventory(),
+                state.combat().evasions().get(resident), state.actorLocations(), state.actorMovements(), state.actorExecutions(), state.inventory(),
                 state.sceneLeases(), state.ambientLeases(), state.resourceSites(), state.productionJobs(),
                 state.serviceWorks(), state.routeConstructions(), state.routeMaintenances(),
                 plans, state.shipments(), state.unitGroups(),
@@ -165,7 +170,11 @@ public final class ResidentActivityProcess {
         if (resident == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             return new ResidentActivityAdmission.Ready();
         long now = Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
-        if (state.humanPopulation().meals().containsKey(residentId))
+        if(state.combat().evasions().containsKey(residentId))return waiting(state,residentId,ResidentActivityAdmission.Reason.SAFETY);
+        var retainedMeal=state.humanPopulation().meals().get(residentId);
+        if(retainedMeal!=null && state.actorExecutions().retainsSuspended(residentId,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,retainedMeal.claimId()))
+            return new ResidentActivityAdmission.Ready();
+        if (retainedMeal!=null)
             return waiting(state, residentId, ResidentActivityAdmission.Reason.RETAINED_MEAL);
         if (state.actorMovements().containsKey(residentId))
             return ResidentActivityExecutionComposition.INTERRUPTION.mayAttempt(state, residentId, now)
@@ -306,9 +315,9 @@ public final class ResidentActivityProcess {
         }
         ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, action.subject(), now);
         var execution = state.actorExecutions().actors().get(action.subject());
-        if (choice.kind() == ResidentActivityChoice.Kind.WORK && execution != null
-                && execution.suspended().isPresent()
-                && ActivityExecutionCapabilities.mayResumeWork(state, HumanAssignmentProjection.compile(state).assignment(action.subject()))
+        if (execution != null && execution.suspended().isPresent()
+                && (choice.kind()==ResidentActivityChoice.Kind.EAT && execution.suspended().orElseThrow().activityKind()==io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL
+                    || choice.kind()==ResidentActivityChoice.Kind.WORK && ActivityExecutionCapabilities.mayResumeWork(state, HumanAssignmentProjection.compile(state).assignment(action.subject())))
                 && (execution.current().isEmpty() || ActorExecutionComposition.CAPABILITIES
                     .require(execution.current().orElseThrow().activityKind()).interruption()
                         == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCapability.Interruption.RELEASE)) {

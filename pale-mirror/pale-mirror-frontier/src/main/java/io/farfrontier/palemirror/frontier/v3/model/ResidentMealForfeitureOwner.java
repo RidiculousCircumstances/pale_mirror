@@ -20,12 +20,11 @@ final class ResidentMealForfeitureOwner implements FungibleClaimForfeitureOwner 
             var meal = state.humanPopulation().meals().get(claim.claimantId());
             var movements = new LinkedHashMap<>(transaction.movements());
             var movement = movements.get(meal.residentId());
-            if (movement != null) {
-                if (!movement.executionId().equals(meal.executionId()))
-                    throw new IllegalArgumentException("meal source loss cannot retire foreign movement authority");
+            if (movement != null && movement.executionId().equals(meal.executionId()))
                 movements.remove(meal.residentId());
-            }
-            transaction = transaction.withShipments(transaction.shipments(), transaction.executions().finish(meal.executionId()),
+            transaction.executions().requireRetained(meal.executionId());
+            transaction = transaction.withShipments(transaction.shipments(), ActorExecutionComposition.LIFECYCLE.retire(transaction.executions(), meal.residentId(),
+                            meal.executionId().activityKind(), meal.claimId()),
                     movements).withPopulation(transaction.population().abandonMealSource(meal));
         }
         return transaction;

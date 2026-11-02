@@ -7,7 +7,7 @@ import java.util.Optional;
 final class MealActivityCapability implements ActorActivityCapability {
     public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, ActorExecutionId execution) {
-        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state,execution.actorId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK));
     }
 
     @Override public ActorActivityKind kind() { return ActorActivityKind.MEAL; }
@@ -39,7 +39,7 @@ final class MealActivityCapability implements ActorActivityCapability {
             return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
         };
     }
-    @Override public Interruption interruption() { return Interruption.TERMINAL_ONLY; }
+    @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
     @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
         return Optional.of((state, execution, tick) -> {
             validateReference(state, execution);
@@ -78,9 +78,8 @@ final class MealActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution) {
         validateReference(state, execution);
         var meal = state.humanPopulation().meals().get(execution.actorId());
-        return new ActorActivityCheckpoint(state, execution, Optional.of(new ActorActivityCheckpoint.Wait(
-                meal.pendingPhysicalStep().isPresent() ? ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION
-                        : ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, execution.activityOwnerId())));
+        return new ActorActivityCheckpoint(state,execution,meal.pendingPhysicalStep().isPresent()
+                ?Optional.of(new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION,execution.activityOwnerId())):Optional.empty());
     }
     @Override public ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {
         validateReference(state, execution);
@@ -94,10 +93,23 @@ final class MealActivityCapability implements ActorActivityCapability {
         return lease.goal() == AmbientGoalKind.MEAL && lease.goalBody().supportingSurface().equals(
                 io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.goalSurface(state, meal));
     }
+    public ActorActivityResumption resumptionReference(){return request->{
+        var state=request.expectedState();validateReference(state,request.suspended());var meal=state.humanPopulation().meals().get(request.suspended().actorId());
+        return new ActorActivityResumption.Acknowledgement(request,FrontierWorldStateUpdate.begin().humanPopulation(state.humanPopulation().advanceMeal(meal,meal.resumed(request.successor()))));
+    };}
+    public java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuationAfterResume(FrontierWorldState state,ActorExecutionId execution,long tick){
+        validateReference(state,execution);var meal=state.humanPopulation().meals().get(execution.actorId());
+return java.util.List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(execution.actorId(),
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested(io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.progress(meal,tick+1))));
+    }
     @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick) {
-        throw new IllegalArgumentException("meal must settle its portion before replacement");
+        validateReference(state,execution);var meal=state.humanPopulation().meals().get(execution.actorId());
+        if(!checkpoint(state,execution).ready())throw new IllegalArgumentException("meal retains a physical effect");
+        var body=io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.bodyAt(state,execution.actorId(),atTick);
+        return state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(state.humanPopulation().advanceMeal(meal,meal.withoutColdTravel()))
+                .actorLocations(ImmutableLookupMap.withEntry(state.actorLocations(),execution.actorId(),state.actorLocations().get(execution.actorId()).withBody(body))));
     }
     @Override public FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long atTick) {
-        throw new IllegalArgumentException("meal has no suspended continuation");
+        validateReference(state,execution);return state;
     }
 }

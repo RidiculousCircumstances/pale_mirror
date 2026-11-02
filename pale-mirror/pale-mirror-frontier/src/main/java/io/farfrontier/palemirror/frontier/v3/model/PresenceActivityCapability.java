@@ -7,7 +7,9 @@ import java.util.Optional;
 final class PresenceActivityCapability implements ActorActivityCapability {
     public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution) {
-        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+        validateReference(state, execution); return java.util.Optional.of((state.actorLocations().get(execution.actorId()).kind()==ActorKind.RESIDENT
+                ? ResidentWalkingPace.read(state,execution.actorId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK)
+                : ResidentWalkingPace.read(state)));
     }
 
     private static final ImmutableReferenceIndex.Source<java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation>,

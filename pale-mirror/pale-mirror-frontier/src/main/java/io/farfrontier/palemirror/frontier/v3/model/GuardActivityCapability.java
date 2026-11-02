@@ -7,7 +7,17 @@ import java.util.*;
 final class GuardActivityCapability implements ActorActivityCapability {
     public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, ActorExecutionId execution) {
-        validateReference(state, execution); return java.util.Optional.of(ResidentWalkingPace.read(state));
+        var duty=GuardAuthority.require(state,execution);
+        var mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK;
+        if(duty.mission().filter(m->m.stage()==io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Stage.INTERCEPT).isPresent()){
+            var point=state.combat().positions().get(duty.id());var arm=state.combat().armaments().get(duty.id());
+            mode=point!=null && point.sector().role()!=io.farfrontier.palemirror.frontier.v3.model.combat.MeleeSector.Role.PRESSURE
+                    ?io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.MANEUVER
+                    :point!=null && arm!=null && io.farfrontier.palemirror.frontier.v3.model.combat.EvasionDestinations.distance(
+                        state.actorLocations().get(execution.actorId()).supportingSurface(),point.targetPosition())<=arm.profile().reach()
+                        ?io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.CAREFUL:io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
+        }
+        return java.util.Optional.of(ResidentWalkingPace.read(state,execution.actorId(),mode));
     }
 
     public ActorActivityKind kind() { return ActorActivityKind.GUARD; }

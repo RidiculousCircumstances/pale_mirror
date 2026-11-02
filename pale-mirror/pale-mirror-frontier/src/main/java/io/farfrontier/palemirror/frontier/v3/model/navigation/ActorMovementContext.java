@@ -10,8 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
         ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg,
-            ActorMovementContext.GuardEquipment, ActorMovementContext.GuardMissionLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION }
+            ActorMovementContext.GuardEquipment, ActorMovementContext.GuardMissionLeg, ActorMovementContext.EvasionLeg {
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION }
     Provider provider();
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
@@ -43,6 +43,18 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
                     || movement.executionId().activityKind() != ActorActivityKind.PRODUCTION
                     || movement.order().goalOrdinal() != work.goalOrdinal() || movement.order().goalRevision() != 1L)
                 throw new IllegalArgumentException("station movement lost its exact job, material trip or phase");
+        }
+    }
+    record EvasionLeg(SubjectId episodeId,long revision) implements ActorMovementContext {
+        public EvasionLeg{Objects.requireNonNull(episodeId);if(revision<1)throw new IllegalArgumentException("invalid evasion revision");}
+        public Provider provider(){return Provider.EVASION;}
+        public java.util.Optional<SubjectId> delegatedGoalOwner(){return java.util.Optional.empty();}
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs,ActorMovement movement){return java.util.List.of(ActorMovementReferences.EVASIONS.at(movement.order().actorId()));}
+        public void validateReferences(ActorMovementReferences refs,ActorMovement movement){
+            var value=refs.combat().evasions().get(movement.order().actorId());
+            if(value==null || !value.id().equals(episodeId) || value.revision()!=revision
+                    || !value.execution().equals(java.util.Optional.of(movement.executionId())) || !value.order().equals(movement.order()))
+                throw new IllegalArgumentException("evasion movement lost exact episode/goal/execution");
         }
     }
     record GuardMissionLeg(SubjectId dutyId, long revision) implements ActorMovementContext {

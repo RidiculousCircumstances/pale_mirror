@@ -377,7 +377,7 @@ class SettlementSecurityTest {
         assertThrows(IllegalArgumentException.class,()->apply(before,r.duty().id(),new CombatEvent.StanceObserved(new MeleeStance(foreign,contact(r).target(),true,21002)),21002));
         state=apply(state,duty.id(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),contact(r).target(),true,21002)),21002);
         assertEquals(body,state.actorLocations().get(duty.execution().actorId()).body());
-        assertTrue(state.combat().positions().isEmpty(),"native holding releases unused approach reservations");
+        assertTrue(state.combat().positions().containsKey(duty.id()),"native holding retains its bounded tactical sector rather than reassigning it to a peer");
         var events=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21003),21003);
         assertTrue(events.stream().noneMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted));
         assertFalse(duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()));

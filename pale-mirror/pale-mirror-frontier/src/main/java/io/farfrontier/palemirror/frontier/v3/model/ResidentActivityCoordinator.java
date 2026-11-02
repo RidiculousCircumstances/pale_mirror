@@ -12,7 +12,7 @@ public final class ResidentActivityCoordinator {
                                                io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                                long dueAt) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
-        if (resident == null || state.humanPopulation().meals().containsKey(residentId)
+        if (resident == null || state.combat().evasions().containsKey(residentId) || state.humanPopulation().meals().containsKey(residentId)
                 || state.actorMovements().containsKey(residentId)) return false;
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         return ResidentActivityPreferences.work(state.humanPopulation().schedule(resident.settlementId()), assessedAt)
@@ -38,7 +38,7 @@ public final class ResidentActivityCoordinator {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null) return false;
         long assessedAt = Math.max(canonicalTick, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
-        return state.humanPopulation().meals().containsKey(residentId)
+        return state.combat().evasions().containsKey(residentId) || state.humanPopulation().meals().containsKey(residentId)
                 || state.actorMovements().containsKey(residentId)
                 || ServiceAccessCoordinator.turnoverPoint(state, residentId).isPresent()
                     && ActivityExecutionCapabilities.waitingForServiceResource(state,
@@ -121,6 +121,7 @@ public final class ResidentActivityCoordinator {
         if (resident == null) throw new IllegalArgumentException("activity has no exact resident");
         long assessedAt = Math.max(canonicalTick, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
+        if(state.combat().evasions().containsKey(residentId))return new ResidentActivityChoice(residentId,ResidentActivityChoice.Kind.SAFETY,assignment.ownerId(),Optional.empty());
         ResidentWorkYield checkpoint = ResidentWorkYield.assess(state, assignment);
         ResidentActivityChoice choice = choose(state.humanPopulation().schedule(resident.settlementId()), assessedAt,
                 state.humanPopulation().nutrition(residentId), assignment,
