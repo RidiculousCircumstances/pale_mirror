@@ -425,3 +425,94 @@ ordinary manufacture/collection/appointment must occur, no bootstrap weapons.
 Old world preserved. Exact delivery binding build/melee-tactics/verified.json.
 Implementation/release clean; pack unchanged except preserved .f0v-baseline/.
 No client publication, push, COLD combat or reinforcement-policy change.
+
+## Threat movement, locomotion and stable melee sectors — schema321
+
+Source3b4d87276 implements shared WALK/RUN/MANEUVER/CAREFUL gait through
+existing navigation: run1500, maneuver1300, careful850 permille, with bounded
+source-addressed resident factors. No new actuator, stamina, automatic wound
+modifier, parry or COLD damage. Guard pursuit and reserved tactical sectors
+request gait; shared combat balances pressure/flank-left/flank-right/cut-off
+without a leader and retains/renews HOLD sector leases. Native impact still
+requires actual weapon, incarnation, LOS, reach and tactical readiness.
+
+Confirmed physical harm requests one addressed evasion episode. Native bounded
+LOS observations refresh actual threat position; shared known geometry and
+navigation select a safer station. UAE alone interrupts safe registered owners.
+The bounded four-deep exact continuation chain preserves work -> meal -> safety;
+physical pending effects settle first. Quiet expiry releases safety and wakes
+normal arbitration from current position. Meal portion/claim/cargo remain with
+their owners. A disappearing reserved food source retires its own paused meal
+and cannot finish the current safety execution or deeper work continuation.
+
+Full integration check: domain324, NeoForge896, Visuals79 passed; Frontier2267
+had one missing evasion representative in an exhaustive descriptor fixture.
+The representative was added; focused registry/lifecycle/pilot checks passed.
+Final source-loss/lifecycle/meal/registry slice67 tests,0failures, guardrails and
+packaged JAR PASS22s. Original integration report and corrected focused receipt
+remain in IMPL/build/threat-movement/. Native/deployment evidence follows below;
+this paragraph alone makes no materialization or human acceptance claim.
+
+Native discrimination and connected correction: name-only selection hit a guard
+who shares Finn Moss with resident1-13. Exact body UUID from the existing actor
+diagnostic now constrains setup/attack/camera/motion. Sourcefa5d84a5e then exposed
+the real issue: at17837 evasion started movement before the old harvest scene
+released physical custody. e861ffd96 waits on that shared custody boundary and
+rejects a forged Started while held. The existing owner yield/release path owns
+the actual handoff, with pending effects fenced. Generic movement admission now
+requires exact current UAE rather than vetoing a retained paused meal; a real
+nested-meal movement test covers it. The failed world's invalid written batch
+is retained and rejected at replay, never edited into a successful recovery.
+Focused handoff/movement/UAE gate PASS17s. Fresh native evidence pending below.
+
+A connected admission correction3d585586d removes an over-eager generic
+requireCurrent added in e861: ServiceExitMovementProvider legitimately creates
+its declared execution atomically in start through LIFECYCLE, so requiring it
+before that registered transition broke first-tick bootstrap and cascaded into
+mining/trade/hive tests. Providers retain their exact admission/validation; the
+common resulting-state closure still rejects competing authority. Corrected
+52-case mining/trade/safety/rules slice, guardrails/package PASS45s. Intermediate
+full-suite failures are attributed to that cause, never labelled an unrelated
+economy defect. Fresh source3d native carrier/gates still running.
+
+Final source3d585586dbd598352af9ab290a29d2a739a20f21 is clean in IMPL and
+clean detached RELEASE. Full current Frontier2268 +NeoForge896 tests,0failures,
+errors or skips; build/package PASS8m34s. Unchanged domain324/Visuals79 and
+prior guardrails evidence reused. Full GameTest413/416 remains a non-green
+aggregate: two prior inactive assault/patrol failures, and one transient
+prepared-body DEFERRED; unchanged focused recovery3/3 pass. No416-pass claim.
+
+Native-final checked-in threat-response scenario, same frozen3d artifact, fresh
+seed41 worldv3-disposable_threat_response_restart-8b5a6d50. One20FPS private-Xvfb
+persistent client491dffed-035c-464a-9714-f66ce24b11ca:6before +4after actions PASS.
+Real received UUIDe6d45b80-92d6-3fef-ada0-b0063d3a3e1a sustains ordinary player
+harm, enters SAFETY with pace0.15 against ordinary0.10, continuation depth1,
+and supplies60consecutive local/server-pose samples (net local displacement
+3.13blocks over59client ticks). A real graceful stop/restart retains the same
+person and ends safety; terminal12011 is FIELD_HARVEST with depth0/no evasion.
+Frame reviewed: foreground armed guards obscure most of the escaping farmer.
+This is scoped physical movement/authority/recovery evidence, not clear full
+tactical formation, M3, full-pack graphical preflight or scale acceptance.
+An independent field lifecycle_reconciliation conflict20659 preceded harm;
+the retained job's diagnostic remains TRAVELLING:CONFLICTED. This run proves
+restored work authority, not a subsequently productive full harvest cycle.
+
+Existing melee restart after-segment reused that normally saved world without
+new aggression. Player healed, native health94 received; remembered hostility
+retained1, terminal contact/responders0, all4actions PASS. Final private normal
+stop saved all dimensions20:12:00 with pending native operations0. All private
+clients/Xvfb/JVMs and25583/4 closed. Receipts build/threat-movement/native-final.json,
+melee-after-receipt.json, release-final.json and verified.json. No COLD hits,
+automatic wound modifiers, stamina or shields were introduced.
+
+MAIN: exact binary matches native prepared SHA256
+f35713902418ca685bb99d96cf0a7701d4a53eaa1ec5b3201aaf6ae88b4ae019; installed
+SHA5128ff14c15c86fe21a4785819272adedcc4b0b7ec9cbbf54045f9a09bb483e6a1dea058e796ef090d97f0b68e877e536f0d9c5f3ff3f548de7428a8c926b96cda4.
+Fresh threat-movement-schema321-seed134-20261102, persisted seed134/r31,
+12settlements/342residents. Java22PID2867788/wrapper2867763,25565/RCON25575,
+far-frontier-v3-live.service. Old320 normal stop saved all20:09:50; world preserved.
+Root preflight/shared pinned installer/deploy-verify PASS, start epoch1793632227.
+Snapshot1753/tick1400 binds actual seed/ruleset; summaries687->3813 green,
+required conflicts0, ordinary pending0/fastforward0 in sampled performance.
+No client publication/update or push. PACK tracked unchanged; preserve existing
+.f0v-baseline/. This is a verified technical deployment, not HUMAN_CANDIDATE.

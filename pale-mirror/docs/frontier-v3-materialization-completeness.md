@@ -494,3 +494,24 @@ The reviewed frame is an extreme body close-up. This is scoped physical-effect/
 closure evidence, not full-cohort tactical M2, full-pack human M3 or a global
 performance claim. Initial invalid-oracle and setup failures remain classified
 in retained receipts. MAIN deployment binding is build/melee-tactics/verified.json.
+
+## Schema321 threat movement and resident safety — 2026-11-02
+
+Registered evasion owns a bounded threat episode and safer-point selection;
+UAE owns the bounded exact continuation chain, common navigation owns all
+motion, inventory/meal/work retain their resources and native operations own
+physical facts/effects. A physical scene must acknowledge release before safety
+can acquire movement. Confirmed harm and actual native LOS knowledge are the
+only threat inputs; no COLD opponent tracking or damage is invented.
+
+Source3d585586d focused negative/handoff/resource-loss/wire checks and current
+Frontier2268/NeoForge896 build/package pass. Fresh seed41 real-client harm ->
+SAFETY same UUID ->60consecutive poses -> normal restart -> quiet closure and
+restored FIELD_HARVEST authority passes; existing remembered-hostility native
+hit/terminal contact closure after-segment also passes. Full retained evidence
+and failure classifications are in HOT findings, schema321, and source-checkout
+build/threat-movement/. Frame has foreground guards obscuring the farmer.
+The field already had a separate lifecycle conflict before harm, so productive
+post-resume harvesting, full-cohort tactical M2 and M3 are not established.
+No full-pack graphical preflight, scale or global80ms claim. MAIN exact binary,
+new seed134/schema321 world and Java22 service bind in verified.json.
