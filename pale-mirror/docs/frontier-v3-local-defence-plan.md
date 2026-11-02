@@ -57,3 +57,11 @@ are covered. The retired test requiring unchanged crews after a50-block target m
 was replaced by small-change hysteresis and materially closer reassignment cases.
 These are canonical/adapter evidence, not multiplayer or full-pack visual acceptance.
 Native/release outcomes are recorded in the canonical security findings/ledger.
+
+The native carrier uses its immediately following confirmed offence/self-defence
+assertion as the harm receipt. A transient client-side victim health sample is not
+that receipt: on retained worldc337faca a real confirmed incident and SELF_DEFENCE
+were present while the client's target-health predicate timed out. Keep the real
+fist packet, one-attempt budget and the durable native harm assertion. An arbitrary
+packet without actual harm cannot create that offence. This does not assert that
+resident wound presentation is repaired.

@@ -92,7 +92,7 @@
       "maxDistance": 32,
       "maxAttacks": 1,
       "requireRemoval": false,
-      "requireDamage": true,
+      "requireDamage": false,
       "timeoutMs": 30000,
       "causalMilestone": "player_harmed_declared_guard"
     },
