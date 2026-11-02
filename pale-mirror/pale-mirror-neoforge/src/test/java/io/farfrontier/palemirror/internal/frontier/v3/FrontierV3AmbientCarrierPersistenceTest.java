@@ -65,4 +65,36 @@ class FrontierV3AmbientCarrierPersistenceTest {
         var pending = restored.pendingAdoption(old.actorId()).orElseThrow();
         assertEquals(old, pending.predecessor().identity()); assertEquals(live, pending.admitted());
     }
+    @Test void nativeReadFencingAndServerPublicationKeepEveryActorRow() throws Exception {
+        Path file = directory.resolve("concurrent.dat");
+        var ledger = FrontierV3AmbientCarrierLedger.readFile(file, null);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var workers = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var changes = workers.submit(() -> {
+                start.await();
+                for (int index = 1; index <= 256; index++) {
+                    var declaration = new FrontierV3ActorCarrierComposition.Declaration(new SubjectId("resident:concurrent-" + index),
+                            ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY,
+                            new java.util.UUID(0, index), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 0L, 1L);
+                    assertTrue(ledger.fence(declaration, 2L, 2L));
+                }
+                return null;
+            });
+            var publication = workers.submit(() -> {
+                start.await();
+                for (int index = 0; index < 32; index++)
+                    ledger.publishStoredReturnFence(new net.minecraft.world.level.ChunkPos(0, 0), null);
+                return null;
+            });
+            start.countDown();
+            changes.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            publication.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            ledger.save(file.toFile(), null);
+            var restored = FrontierV3AmbientCarrierLedger.readFile(file, null);
+            assertEquals(256, restored.inactiveCount(), "concurrent native callbacks must neither lose dirty rows nor corrupt iteration");
+            for (int index = 1; index <= 256; index++) assertTrue(restored.hasCarrier(new SubjectId("resident:concurrent-" + index)));
+        } finally { workers.shutdownNow(); }
+    }
+
 }

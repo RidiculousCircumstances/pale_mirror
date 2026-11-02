@@ -28,11 +28,14 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
     static final int FORMAT = 12;
     private static final int MAX_CARRIERS = 4_096;
     private final Map<SubjectId, Carrier> carriers;
+    // EntityStorage's deserializer must fence returned bodies even while the
+    // server waits in vanilla flush. All mutable ledger access shares this
+    // monitor; disk workers receive immutable rows and never acquire it.
     private final java.util.Set<SubjectId> dirtyActors = new java.util.TreeSet<>();
     private final FrontierV3RecordDurability<SubjectId> writeReceipts = new FrontierV3RecordDurability<>();
     private FrontierV3JournalStore journal;
     private java.nio.file.Path journalPath;
-    private void markDirty(SubjectId actor) { dirtyActors.add(actor); setDirty(); }
+    private synchronized void markDirty(SubjectId actor) { dirtyActors.add(actor); setDirty(); }
     private final Map<SubjectId, FrontierV3ActorAdoption> pendingAdoptions = new LinkedHashMap<>();
     /** Separately bounded lifetime markers; successful save never makes an actor fresh again. */
     private final Map<SubjectId, FrontierV3ActorFirstAdmission> firstAdmissions = new LinkedHashMap<>();
@@ -53,29 +56,29 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
     /** High-water marks survive receipt withdrawal; loading a body is not a new physical incarnation. */
     private final Map<SubjectId, Long> bodyResidences = new LinkedHashMap<>();
     private final Map<SubjectId, FrontierV3BodyAdmissionOperation> bodyOperations = new LinkedHashMap<>();
-    java.util.Optional<FrontierV3BodyAdmissionOperation> bodyOperation(SubjectId actor) { return java.util.Optional.ofNullable(bodyOperations.get(actor)); }
-    List<FrontierV3BodyAdmissionOperation> bodyOperations() { return List.copyOf(bodyOperations.values()); }
-    boolean canRetainBodyOperation(SubjectId actor) { return bodyOperations.size() < MAX_CARRIERS && !bodyOperations.containsKey(actor); }
-    void retainBodyOperation(FrontierV3BodyAdmissionOperation value) {
+    synchronized java.util.Optional<FrontierV3BodyAdmissionOperation> bodyOperation(SubjectId actor) { return java.util.Optional.ofNullable(bodyOperations.get(actor)); }
+    synchronized List<FrontierV3BodyAdmissionOperation> bodyOperations() { return List.copyOf(bodyOperations.values()); }
+    synchronized boolean canRetainBodyOperation(SubjectId actor) { return bodyOperations.size() < MAX_CARRIERS && !bodyOperations.containsKey(actor); }
+    synchronized void retainBodyOperation(FrontierV3BodyAdmissionOperation value) {
         if (!currentBodyResidence(value.actor(), value.residence()) || !value.undo().current(this)
                 || value.rejected() || !canRetainBodyOperation(value.actor()))
             throw new IllegalStateException("body operation lost exact admission authority");
         bodyOperations.put(value.actor(), value); markDirty(value.actor());
     }
-    void rejectBodyOperation(FrontierV3BodyAdmissionOperation value) {
+    synchronized void rejectBodyOperation(FrontierV3BodyAdmissionOperation value) {
         if (!value.equals(bodyOperations.get(value.actor()))) throw new IllegalStateException("stale body operation rollback");
         if (value.rejected()) return;
         if (!value.undo().reject(this)) throw new IllegalStateException("body operation lost exact rollback predecessor");
         bodyOperations.put(value.actor(), value.rejection()); markDirty(value.actor());
     }
-    void forgetBodyOperation(FrontierV3BodyAdmissionOperation value) {
+    synchronized void forgetBodyOperation(FrontierV3BodyAdmissionOperation value) {
         if (!bodyOperations.remove(value.actor(), value)) throw new IllegalStateException("stale body operation closure");
         markDirty(value.actor());
     }
     private FrontierV3AmbientCarrierLedger() { this(new LinkedHashMap<>()); }
     private FrontierV3AmbientCarrierLedger(Map<SubjectId, Carrier> carriers) { this.carriers = carriers; }
     static FrontierV3AmbientCarrierLedger emptyForTest() { return new FrontierV3AmbientCarrierLedger(); }
-    long beginBodyResidence(FrontierV3ActorCarrierComposition.Declaration live) {
+    synchronized long beginBodyResidence(FrontierV3ActorCarrierComposition.Declaration live) {
         var first = firstAdmissions.get(live.actorId());
         if (live.representation() != FrontierV3ActorCarrierComposition.Representation.LIVE_BODY
                 || first == null || !first.identity().matches(live) || hasBodyDeparture(live.actorId())
@@ -85,22 +88,22 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         long next = Math.addExact(bodyResidences.getOrDefault(live.actorId(), 0L), 1L);
         bodyResidences.put(live.actorId(), next); markDirty(live.actorId()); return next;
     }
-    boolean currentBodyResidence(SubjectId actor, long generation) {
+    synchronized boolean currentBodyResidence(SubjectId actor, long generation) {
         return generation > 0L && java.util.Objects.equals(bodyResidences.get(actor), generation);
     }
-    boolean knownBodyResidence(SubjectId actor, long generation) {
+    synchronized boolean knownBodyResidence(SubjectId actor, long generation) {
         return generation > 0L && bodyResidences.containsKey(actor) && generation <= bodyResidences.get(actor);
     }
-    java.util.Optional<FrontierV3ActorBodyDeparture> bodyDeparture(SubjectId actor) {
+    synchronized java.util.Optional<FrontierV3ActorBodyDeparture> bodyDeparture(SubjectId actor) {
         return java.util.Optional.ofNullable(bodyDepartures.get(actor));
     }
-    boolean hasBodyDeparture(SubjectId actor) {
+    synchronized boolean hasBodyDeparture(SubjectId actor) {
         return bodyDepartures.containsKey(actor) || departures.containsKey(actor) || ambientDepartures.containsKey(actor);
     }
-    List<FrontierV3ActorBodyDeparture> bodyDepartures() {
+    synchronized List<FrontierV3ActorBodyDeparture> bodyDepartures() {
         return bodyDepartures.values().stream().sorted(Comparator.comparing(value -> value.identity().actorId())).toList();
     }
-    boolean recordBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
+    synchronized boolean recordBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         if (!currentBodyResidence(actor, receipt.residenceGeneration())) return false;
         var previous = bodyDepartures.get(actor);
@@ -115,12 +118,12 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
                 value.identity().entityId().equals(receipt.identity().entityId()))) return false;
         bodyDepartures.put(actor, receipt); markDirty(actor); return true;
     }
-    boolean savedBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
+    synchronized boolean savedBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         return receipt.equals(bodyDepartures.get(actor)) && java.util.Objects.equals(savedBodyDepartures.get(actor), receipt.residenceGeneration())
                 && !returnReads.contains(actor) && !hasDepartureConflict(actor);
     }
-    boolean confirmSavedBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
+    synchronized boolean confirmSavedBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         if (!receipt.equals(bodyDepartures.get(actor)) || returnReads.contains(actor) || hasDepartureConflict(actor)) return false;
         if (savedBodyDepartures.putIfAbsent(actor, receipt.residenceGeneration()) == null) markDirty(actor);
@@ -128,7 +131,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
     }
 
     /** One durable publication for one positively saved batch, never one whole-ledger write per body. */
-    void publishSavedDepartures(List<FrontierV3ActorBodyDeparture> bodies,
+    synchronized void publishSavedDepartures(List<FrontierV3ActorBodyDeparture> bodies,
                                List<FrontierV3SceneDeparture> scenes,
                                List<FrontierV3AmbientDeparture> ambient, Runnable persist) {
         java.util.Objects.requireNonNull(persist, "departure publication");
@@ -157,27 +160,27 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
             throw failedPublication;
         }
     }
-    boolean resumeBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
+    synchronized boolean resumeBodyDeparture(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         if (!receipt.equals(bodyDepartures.get(actor)) || hasDepartureConflict(actor)) return false;
         var fenced = carriers.get(actor);
         if (fenced != null && !fenced.identity().equals(receipt.identity())) return false;
         carriers.remove(actor); forgetDeparture(actor); return true;
     }
-    boolean markBodyReturnRead(FrontierV3ActorBodyDeparture receipt) {
+    synchronized boolean markBodyReturnRead(FrontierV3ActorBodyDeparture receipt) {
         var actor = receipt.identity().actorId();
         if (!receipt.equals(bodyDepartures.get(actor))) return false;
         if (returnReads.add(actor)) { savedBodyDepartures.remove(actor); markDirty(actor); }
         return true;
     }
-    java.util.Optional<FrontierV3ActorFirstAdmission> firstAdmission(SubjectId actor) {
+    synchronized java.util.Optional<FrontierV3ActorFirstAdmission> firstAdmission(SubjectId actor) {
         return java.util.Optional.ofNullable(firstAdmissions.get(actor));
     }
-    List<FrontierV3ActorFirstAdmission> firstAdmissions() {
+    synchronized List<FrontierV3ActorFirstAdmission> firstAdmissions() {
         return firstAdmissions.values().stream().sorted(Comparator.comparing(value -> value.identity().actorId())).toList();
     }
     /** Physical history is independent of execution or scene ownership. */
-    boolean permitsRecordedOwner(FrontierV3ActorOwnerBinding observed) {
+    synchronized boolean permitsRecordedOwner(FrontierV3ActorOwnerBinding observed) {
         var adoption = pendingAdoptions.get(observed.declaration().actorId());
         if (adoption != null && !adoption.matches(observed)) return false;
         var first = firstAdmissions.get(observed.declaration().actorId());
@@ -189,11 +192,11 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         return observed.equals(first.attempt().orElseThrow());
     }
     /** Called only by explicit initialization/birth issuance, never an absence-based admission fallback. */
-    boolean registerFirstAdmission(FrontierV3ActorFirstAdmission permit) {
+    synchronized boolean registerFirstAdmission(FrontierV3ActorFirstAdmission permit) {
         return registerFirstAdmissions(List.of(permit));
     }
     /** Fresh bootstrap and a multi-birth WAL transaction publish no partial permission set. */
-    boolean registerFirstAdmissions(List<FrontierV3ActorFirstAdmission> permits) {
+    synchronized boolean registerFirstAdmissions(List<FrontierV3ActorFirstAdmission> permits) {
         java.util.Objects.requireNonNull(permits, "first-admission permissions");
         if (permits.size() > MAX_CARRIERS) return false;
         var additions = new LinkedHashMap<SubjectId, FrontierV3ActorFirstAdmission>();
@@ -225,7 +228,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         }
         return true;
     }
-    boolean beginFirstAdmission(FrontierV3ActorOwnerBinding target) {
+    synchronized boolean beginFirstAdmission(FrontierV3ActorOwnerBinding target) {
         var actor = target.declaration().actorId(); var permit = firstAdmissions.get(actor);
         if (permit == null || permit.phase() != FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
                     && permit.phase() != FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT
@@ -237,7 +240,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         firstAdmissions.put(actor, pending); markDirty(actor); return true;
     }
     /** Offline publisher only; absence proof and this transition must share one durable publication. */
-    boolean rearmFirstAdmissionAfterAbsence(FrontierV3ActorFirstAdmission expected, String receipt) {
+    synchronized boolean rearmFirstAdmissionAfterAbsence(FrontierV3ActorFirstAdmission expected, String receipt) {
         var actor = expected.identity().actorId();
         if (expected.phase() != FrontierV3ActorFirstAdmission.Phase.PENDING
                 || !expected.equals(firstAdmissions.get(actor)) || receipt == null
@@ -247,12 +250,12 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         markDirty(actor); return true;
     }
     /** Startup reconciliation only: canonical birth was not published and no creation ever began. */
-    boolean retireUnbornPermission(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
+    synchronized boolean retireUnbornPermission(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
                                   FrontierV3ActorFirstAdmission expected) {
         return retireUnbornPermissions(recovered, List.of(expected));
     }
     /** Validate every candidate before removing any permission from the shared SavedData image. */
-    boolean retireUnbornPermissions(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
+    synchronized boolean retireUnbornPermissions(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
                                     List<FrontierV3ActorFirstAdmission> expected) {
         java.util.Objects.requireNonNull(recovered, "recovered actor state");
         java.util.Objects.requireNonNull(expected, "unpublished birth permissions");
@@ -266,7 +269,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         actors.forEach(this::markDirty);
         return true;
     }
-    private boolean canRetireUnbornPermission(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
+    private synchronized boolean canRetireUnbornPermission(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState recovered,
                                               FrontierV3ActorFirstAdmission expected) {
         var actor = expected.identity().actorId();
         if (expected.phase() != FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
@@ -277,7 +280,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
                 || departures.containsKey(actor) || ambientDepartures.containsKey(actor) || hasDepartureConflict(actor)) return false;
         return true;
     }
-    boolean rejectUncreatedFirstAdmission(FrontierV3ActorFirstAdmission expected) {
+    synchronized boolean rejectUncreatedFirstAdmission(FrontierV3ActorFirstAdmission expected) {
         var actor = expected.identity().actorId();
         if (expected.phase() != FrontierV3ActorFirstAdmission.Phase.PENDING || !expected.equals(firstAdmissions.get(actor))
                 || carriers.containsKey(actor) || pendingAdoptions.containsKey(actor)
@@ -286,7 +289,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         if (!next.equals(expected)) { firstAdmissions.put(actor, next); markDirty(actor); }
         return true;
     }
-    boolean acknowledgeFirstAdmission(FrontierV3ActorFirstAdmission expected, FrontierV3ActorOwnerBinding saved) {
+    synchronized boolean acknowledgeFirstAdmission(FrontierV3ActorFirstAdmission expected, FrontierV3ActorOwnerBinding saved) {
         var actor = expected.identity().actorId();
         if (expected.phase() != FrontierV3ActorFirstAdmission.Phase.PENDING || !expected.equals(firstAdmissions.get(actor))
                 || !expected.attempt().orElseThrow().equals(saved)
@@ -294,7 +297,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         firstAdmissions.put(actor, expected.saved(saved)); markDirty(actor); return true;
     }
     /** Mandatory durable boundaries append only exact changed actors, never a whole-world image. */
-    @Override public void save(java.io.File file, HolderLookup.Provider registries) {
+    @Override public synchronized void save(java.io.File file, HolderLookup.Provider registries) {
         try {
             if (journal != null) journal.checkHealthy();
             if (!isDirty()) {
@@ -316,14 +319,14 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
             throw new java.io.UncheckedIOException("unable to persist carrier journal", failure);
         }
     }
-    java.util.concurrent.CompletableFuture<Long> persistAsync(ServerLevel level, WorldId worldId) {
+    synchronized java.util.concurrent.CompletableFuture<Long> persistAsync(ServerLevel level, WorldId worldId) {
         if (get(level, worldId) != this) throw new IllegalArgumentException("foreign actor carrier ledger");
         return submitRows(storageFile(level, worldId).toAbsolutePath().normalize());
     }
-    @Override public void submitAutosave(java.io.File file, HolderLookup.Provider registries) {
+    @Override public synchronized void submitAutosave(java.io.File file, HolderLookup.Provider registries) {
         submitRows(file.toPath().toAbsolutePath().normalize());
     }
-    private java.util.concurrent.CompletableFuture<Long> submitRows(java.nio.file.Path path) {
+    private synchronized java.util.concurrent.CompletableFuture<Long> submitRows(java.nio.file.Path path) {
         try {
             if (journal == null) { journal = FrontierV3JournalStore.open(path); journalPath = path; }
             else if (!journalPath.equals(path)) throw new IllegalArgumentException("carrier ledger changed storage target");
@@ -344,7 +347,17 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         }
     }
     /** Submit current changes, then poll only this actor's exact journal prefix. */
-    boolean prepareActorDurable(ServerLevel level, WorldId worldId, SubjectId actor) {
+    /** Called with the retained owner captured before the native asynchronous read.
+     * Fence selection, mutation and immutable journal submission are atomic against
+     * server saves; no SavedData lookup or server-queue round trip occurs here. */
+    synchronized java.util.concurrent.CompletableFuture<Long> publishStoredReturnFence(
+            net.minecraft.world.level.ChunkPos chunk, CompoundTag raw) {
+        if (journalPath == null) throw new IllegalStateException("entity return fence lacks its retained carrier journal");
+        FrontierV3DepartureReturnReadFence.fenceStoredInventory(chunk, raw, this);
+        return submitRows(journalPath);
+    }
+
+    synchronized boolean prepareActorDurable(ServerLevel level, WorldId worldId, SubjectId actor) {
         persistAsync(level, worldId);
         return !dirtyActors.contains(actor) && writeReceipts.ready(actor);
     }
@@ -359,12 +372,12 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
             throw new java.io.UncheckedIOException("unable to recover carrier journal", failure);
         }
     }
-    void finishCheckpoints() {
+    synchronized void finishCheckpoints() {
         if (journal == null) return;
         try { journal.append(Map.of()); journal.awaitCheckpoint(); }
         catch (java.io.IOException failure) { throw new java.io.UncheckedIOException("carrier checkpoint shutdown failed", failure); }
     }
-    String journalDiagnostic() {
+    synchronized String journalDiagnostic() {
         if (journal == null) return "{\"attached\":false}";
         var pressure = journal.pressure();
         return "{\"attached\":true,\"durableSequence\":" + pressure.durableSequence()
@@ -384,7 +397,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
                 () -> { ledger.persist(level, worldId); ledger.finishCheckpoints(); }, ledger::journalDiagnostic);
         return ledger;
     }
-    private CompoundTag actorImage(SubjectId actor) {
+    private synchronized CompoundTag actorImage(SubjectId actor) {
         var row = new CompoundTag(); row.putInt("format", FORMAT); row.putString("actor", actor.value());
         FrontierV3CarrierJournalImage.list(row, "bodyOperations", bodyOperations.containsKey(actor) ? bodyOperations.get(actor).save() : null);
         FrontierV3CarrierJournalImage.list(row, "bodyResidences", bodyResidences.containsKey(actor)
@@ -409,7 +422,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
     private static String fileName(WorldId worldId) {
         return NAME + "_" + Base64.getUrlEncoder().withoutPadding().encodeToString(worldId.value().getBytes(StandardCharsets.UTF_8));
     }
-    void persist(ServerLevel level, WorldId worldId) {
+    synchronized void persist(ServerLevel level, WorldId worldId) {
         if (get(level, worldId) != this) throw new IllegalArgumentException("foreign actor carrier ledger");
         save(storageFile(level, worldId).toFile(), level.registryAccess());
     }
@@ -418,7 +431,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
                 level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT));
         return dimension.resolve("data").resolve(fileName(worldId) + ".dat");
     }
-    Reconciliation reconciliation(FrontierV3ActorCarrierComposition.Declaration live) {
+    synchronized Reconciliation reconciliation(FrontierV3ActorCarrierComposition.Declaration live) {
         if (hasDepartureConflict(live.actorId())) return Reconciliation.DEPARTURE_CONFLICT;
         Carrier carrier = carriers.get(live.actorId());
         if (carrier == null) return Reconciliation.NO_FENCED_CARRIER;
@@ -428,12 +441,12 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         return live.epoch() <= carrier.identity().epoch() ? Reconciliation.STALE_REVISION : Reconciliation.READY;
     }
     /** Reject a live exact body plus a retained inactive carrier before either custody changes. */
-    Reconciliation reconciliation(FrontierV3ActorCarrierComposition.Declaration live, boolean liveBodyPresent) {
+    synchronized Reconciliation reconciliation(FrontierV3ActorCarrierComposition.Declaration live, boolean liveBodyPresent) {
         Reconciliation result = reconciliation(live);
         return liveBodyPresent && result != Reconciliation.NO_FENCED_CARRIER
                 ? Reconciliation.CONCURRENT_CUSTODY : result;
     }
-    boolean canFence(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
+    synchronized boolean canFence(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
         if (inactive.representation() != FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER || physicalRevision < 1L || ambientRevision < 0L
                 || hasDepartureConflict(inactive.actorId()) || carriers.containsKey(inactive.actorId())) return false;
         var adoption = pendingAdoptions.get(inactive.actorId());
@@ -456,7 +469,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
                 && pendingAdoptions.values().stream().noneMatch(value -> !value.admitted().actorId().equals(inactive.actorId())
                     && value.admitted().entityId().equals(inactive.entityId()));
     }
-    boolean fence(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
+    synchronized boolean fence(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
         if (hasDepartureConflict(inactive.actorId())) return false;
         Carrier next = new Carrier(inactive, physicalRevision, ambientRevision);
         Carrier previous = carriers.get(inactive.actorId());
@@ -469,20 +482,20 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         pendingAdoptions.remove(inactive.actorId());
         markDirty(inactive.actorId()); return true;
     }
-    boolean matchesCarrier(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
+    synchronized boolean matchesCarrier(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
         return new Carrier(inactive, physicalRevision, ambientRevision).equals(carriers.get(inactive.actorId()));
     }
-    boolean hasCarrier(SubjectId actorId) { return carriers.containsKey(actorId); }
-    java.util.Optional<Carrier> inactiveCarrier(SubjectId actorId) { return java.util.Optional.ofNullable(carriers.get(actorId)); }
+    synchronized boolean hasCarrier(SubjectId actorId) { return carriers.containsKey(actorId); }
+    synchronized java.util.Optional<Carrier> inactiveCarrier(SubjectId actorId) { return java.util.Optional.ofNullable(carriers.get(actorId)); }
     /** Historical body cleanup uses the fence's own epoch, not a newer ambient lease revision. */
-    boolean fencesBody(FrontierV3ActorCarrierComposition.Declaration live) {
+    synchronized boolean fencesBody(FrontierV3ActorCarrierComposition.Declaration live) {
         var carrier = carriers.get(live.actorId());
         return live.representation() == FrontierV3ActorCarrierComposition.Representation.LIVE_BODY
                 && !hasDepartureConflict(live.actorId()) && carrier != null
                 && carrier.identity().equals(live.inactiveCarrier());
     }
     /** Validate the complete survivor set before installing any release fence. */
-    boolean canFenceAll(List<Carrier> requested) {
+    synchronized boolean canFenceAll(List<Carrier> requested) {
         var actors = new java.util.HashSet<SubjectId>();
         var entities = new java.util.HashSet<java.util.UUID>();
         int projectedSize = inventorySize();
@@ -499,7 +512,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         return projectedSize <= MAX_CARRIERS;
     }
 
-    boolean fenceAll(List<Carrier> requested) {
+    synchronized boolean fenceAll(List<Carrier> requested) {
         if (!canFenceAll(requested)) return false;
         // Server-thread-owned map: the preflight and mutation cannot interleave.
         // Capacity-releasing transfers go first so a valid complete set cannot
@@ -517,7 +530,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         return true;
     }
     /** A receipt is evidence only; recording it does not install an inactive carrier. */
-    boolean recordDeparture(FrontierV3SceneDeparture departure) {
+    synchronized boolean recordDeparture(FrontierV3SceneDeparture departure) {
         SubjectId actor = departure.carrier().identity().actorId();
         if (ambientDepartures.containsKey(actor)) return false;
         var previous = departures.get(actor);
@@ -532,20 +545,20 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         markDirty(actor);
         return true;
     }
-    java.util.Optional<FrontierV3SceneDeparture> departure(SubjectId actor) {
+    synchronized java.util.Optional<FrontierV3SceneDeparture> departure(SubjectId actor) {
         return java.util.Optional.ofNullable(departures.get(actor));
     }
-    List<FrontierV3SceneDeparture> departures() {
+    synchronized List<FrontierV3SceneDeparture> departures() {
         return departures.values().stream().sorted(Comparator.comparing(value -> value.carrier().identity().actorId())).toList();
     }
-    boolean savedDeparture(FrontierV3SceneDeparture expected) {
+    synchronized boolean savedDeparture(FrontierV3SceneDeparture expected) {
         var actor = expected.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(expected) && savedBodyDeparture(physical);
         return expected.equals(departures.get(actor)) && savedDepartures.contains(actor)
                 && !returnReads.contains(actor) && !hasDepartureConflict(actor);
     }
-    boolean noLoadRecoverableDeparture(FrontierV3SceneDeparture expected) {
+    synchronized boolean noLoadRecoverableDeparture(FrontierV3SceneDeparture expected) {
         return savedDeparture(expected) && (bodyDeparture(expected.carrier().identity().actorId()).filter(value -> value.matches(expected)).isPresent()
                 || readFencedDepartures.contains(expected.carrier().identity().actorId()));
     }
@@ -555,14 +568,14 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
      * caller must prove the exact unique serialized body and fresh write/read fences before
      * publishing the marker and releasing any canonical custody.
      */
-    boolean noLoadProofCandidate(FrontierV3SceneDeparture expected) {
+    synchronized boolean noLoadProofCandidate(FrontierV3SceneDeparture expected) {
         var actor = expected.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(expected) && !returnReads.contains(actor) && !hasDepartureConflict(actor);
         return expected.equals(departures.get(actor)) && readFencedDepartures.contains(actor)
                 && !returnReads.contains(actor) && !hasDepartureConflict(actor);
     }
-    boolean confirmSavedDeparture(FrontierV3SceneDeparture expected) {
+    synchronized boolean confirmSavedDeparture(FrontierV3SceneDeparture expected) {
         var actor = expected.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(expected) && confirmSavedBodyDeparture(physical);
@@ -570,7 +583,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         if (savedDepartures.add(actor)) markDirty(actor);
         return true;
     }
-    boolean markReturnRead(FrontierV3SceneDeparture receipt) {
+    synchronized boolean markReturnRead(FrontierV3SceneDeparture receipt) {
         var actor = receipt.carrier().identity().actorId();
         if (!receipt.equals(departures.get(actor)) && bodyDeparture(actor).filter(value -> value.matches(receipt)).isEmpty()) return false;
         if (returnReads.add(actor)) {
@@ -578,8 +591,8 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         }
         return true;
     }
-    boolean returnRead(SubjectId actor) { return returnReads.contains(actor); }
-    boolean recordAmbientDeparture(FrontierV3AmbientDeparture receipt) {
+    synchronized boolean returnRead(SubjectId actor) { return returnReads.contains(actor); }
+    synchronized boolean recordAmbientDeparture(FrontierV3AmbientDeparture receipt) {
         SubjectId actor = receipt.carrier().identity().actorId();
         var previous = ambientDepartures.get(actor);
         if (previous != null) {
@@ -591,18 +604,18 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
                     .equals(receipt.carrier().identity().entityId()))) return false;
         ambientDepartures.put(actor, receipt); markDirty(actor); return true;
     }
-    java.util.Optional<FrontierV3AmbientDeparture> ambientDeparture(SubjectId actor) {
+    synchronized java.util.Optional<FrontierV3AmbientDeparture> ambientDeparture(SubjectId actor) {
         return java.util.Optional.ofNullable(ambientDepartures.get(actor));
     }
-    List<FrontierV3AmbientDeparture> ambientDepartures() { return List.copyOf(ambientDepartures.values()); }
-    boolean savedAmbientDeparture(FrontierV3AmbientDeparture expected) {
+    synchronized List<FrontierV3AmbientDeparture> ambientDepartures() { return List.copyOf(ambientDepartures.values()); }
+    synchronized boolean savedAmbientDeparture(FrontierV3AmbientDeparture expected) {
         var actor = expected.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(expected) && savedBodyDeparture(physical);
         return expected.equals(ambientDepartures.get(actor)) && savedAmbientDepartures.contains(actor)
                 && !returnReads.contains(actor) && !hasDepartureConflict(actor);
     }
-    boolean confirmSavedAmbientDeparture(FrontierV3AmbientDeparture expected) {
+    synchronized boolean confirmSavedAmbientDeparture(FrontierV3AmbientDeparture expected) {
         var actor = expected.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(expected) && confirmSavedBodyDeparture(physical);
@@ -610,7 +623,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         if (savedAmbientDepartures.add(actor)) markDirty(actor);
         return true;
     }
-    boolean resumeAmbientDeparture(FrontierV3AmbientDeparture receipt) {
+    synchronized boolean resumeAmbientDeparture(FrontierV3AmbientDeparture receipt) {
         SubjectId actor = receipt.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(receipt) && resumeBodyDeparture(physical);
@@ -619,7 +632,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         if (fenced != null && !fenced.equals(receipt.carrier())) return false;
         carriers.remove(actor); forgetDeparture(actor); return true;
     }
-    boolean markAmbientReturnRead(FrontierV3AmbientDeparture receipt) {
+    synchronized boolean markAmbientReturnRead(FrontierV3AmbientDeparture receipt) {
         var actor = receipt.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(receipt) && markBodyReturnRead(physical);
@@ -627,11 +640,11 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         if (returnReads.add(actor)) { savedAmbientDepartures.remove(actor); markDirty(actor); }
         return true;
     }
-    boolean hasDepartureConflict(SubjectId actor) {
+    synchronized boolean hasDepartureConflict(SubjectId actor) {
         return departureConflicts.containsKey(actor) || ambientDepartureConflicts.containsKey(actor)
                 || bodyDepartureConflicts.containsKey(actor);
     }
-    boolean retireDeadActor(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, SubjectId actor) {
+    synchronized boolean retireDeadActor(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, SubjectId actor) {
         var location = state.actorLocations().get(actor);
         if (location == null || location.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD
                 || state.fencedRecovery().current().containsKey(
@@ -644,7 +657,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         return true;
     }
     /** Explicit resolved cleanup; mere reappearance must not discard contradictory evidence. */
-    void forgetDeparture(SubjectId actor) {
+    synchronized void forgetDeparture(SubjectId actor) {
         boolean changed = departures.remove(actor) != null;
         changed |= bodyDepartures.remove(actor) != null;
         changed |= bodyDepartureConflicts.remove(actor) != null;
@@ -659,7 +672,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         if (changed) markDirty(actor);
     }
     /** Withdraw only this exact provisional fence when the same scene body returns before release. */
-    boolean resumeDeparture(FrontierV3SceneDeparture receipt) {
+    synchronized boolean resumeDeparture(FrontierV3SceneDeparture receipt) {
         SubjectId actor = receipt.carrier().identity().actorId();
         var physical = bodyDepartures.get(actor);
         if (physical != null) return physical.matches(receipt) && resumeBodyDeparture(physical);
@@ -670,8 +683,8 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         forgetDeparture(actor);
         return true;
     }
-    long reconstructionEpoch(SubjectId actorId) { Carrier carrier = carriers.get(actorId); if (carrier == null) throw new IllegalStateException("missing v3 ambient carrier"); return Math.addExact(carrier.identity.epoch(), 1L); }
-    boolean adopt(FrontierV3ActorOwnerBinding binding) {
+    synchronized long reconstructionEpoch(SubjectId actorId) { Carrier carrier = carriers.get(actorId); if (carrier == null) throw new IllegalStateException("missing v3 ambient carrier"); return Math.addExact(carrier.identity.epoch(), 1L); }
+    synchronized boolean adopt(FrontierV3ActorOwnerBinding binding) {
         var live = binding.declaration();
         var first = firstAdmissions.get(live.actorId());
         if (first != null && (first.phase() != FrontierV3ActorFirstAdmission.Phase.ESTABLISHED
@@ -687,33 +700,33 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
         pendingAdoptions.put(live.actorId(), pending);
         carriers.remove(live.actorId()); forgetDeparture(live.actorId()); markDirty(live.actorId()); return true;
     }
-    java.util.Optional<FrontierV3ActorAdoption> pendingAdoption(SubjectId actor) {
+    synchronized java.util.Optional<FrontierV3ActorAdoption> pendingAdoption(SubjectId actor) {
         return java.util.Optional.ofNullable(pendingAdoptions.get(actor));
     }
     /** Only a synchronous, explicit no-admission result may call this, never absence after restart. */
-    boolean rejectUncreatedAdoption(FrontierV3ActorAdoption expected) {
+    synchronized boolean rejectUncreatedAdoption(FrontierV3ActorAdoption expected) {
         var actor = expected.admitted().actorId();
         if (!expected.equals(pendingAdoptions.get(actor)) || carriers.containsKey(actor)
                 || hasDepartureConflict(actor) || departures.containsKey(actor) || ambientDepartures.containsKey(actor)) return false;
         carriers.put(actor, expected.predecessor()); pendingAdoptions.remove(actor); markDirty(actor); return true;
     }
-    List<FrontierV3ActorAdoption> pendingAdoptions() {
+    synchronized List<FrontierV3ActorAdoption> pendingAdoptions() {
         return pendingAdoptions.values().stream().sorted(Comparator.comparing(value -> value.admitted().actorId())).toList();
     }
     /** Caller must supply current successful entity-write + synchronization evidence. */
-    boolean acknowledgeAdoption(FrontierV3ActorAdoption expected,
+    synchronized boolean acknowledgeAdoption(FrontierV3ActorAdoption expected,
                                 FrontierV3ActorOwnerBinding binding) {
         var saved = binding.declaration();
         if (!expected.matches(binding) || hasDepartureConflict(saved.actorId())
                 || !expected.equals(pendingAdoptions.get(saved.actorId()))) return false;
         pendingAdoptions.remove(saved.actorId()); markDirty(saved.actorId()); return true;
     }
-    private int inventorySize() {
+    private synchronized int inventorySize() {
         return carriers.size() + pendingAdoptions.size()
                 + (int) firstAdmissions.values().stream().filter(value -> value.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING).count();
     }
-    int inactiveCount() { return carriers.size(); }
-    List<FrontierDomainRelationships.CarrierEvidence> relationshipEvidence() {
+    synchronized int inactiveCount() { return carriers.size(); }
+    synchronized List<FrontierDomainRelationships.CarrierEvidence> relationshipEvidence() {
         return carriers.values().stream().sorted(Comparator.comparing(value -> value.identity.actorId().value())).map(value ->
                 new FrontierDomainRelationships.CarrierEvidence(value.identity.actorId(), "carrier:" + value.identity.entityId(), "carrier-revision:" + value.physicalRevision)).toList();
     }
@@ -889,7 +902,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData implements Frontier
                 || rows.size() > MAX_CARRIERS) throw new IllegalStateException("invalid carrier inventory: " + key);
         return rows;
     }
-    @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    @Override public synchronized CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag values = new ListTag();
         var operations = new ListTag(); bodyOperations.values().stream().sorted(Comparator.comparing(FrontierV3BodyAdmissionOperation::actor))
                 .map(FrontierV3BodyAdmissionOperation::save).forEach(operations::add); tag.put("bodyOperations", operations);

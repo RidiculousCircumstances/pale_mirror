@@ -20,11 +20,13 @@ final class FrontierV3DepartureReturnReadFence {
     static CompletableFuture<Optional<CompoundTag>> observeRead(ServerLevel level, ChunkPos chunk,
             CompletableFuture<Optional<CompoundTag>> source, java.util.concurrent.Executor deserializer) {
         if (!FrontierV3PhysicalWorld.isPhysical(level)) return source;
+        if (!level.getServer().isSameThread()) throw new IllegalStateException("entity read admission outside server thread");
+        var actors = FrontierV3AmbientCarrierLedger.get(level, FrontierV3PhysicalWorld.WORLD_ID);
         PENDING_READS.reserve(level, chunk);
         return beforeDeserialize(source, deserializer, raw -> {
             try {
                 FrontierV3OperationEntityColumns.loaded(level, chunk, raw.orElse(null));
-                return fenceBeforeVanillaLoad(level, chunk, raw.orElse(null));
+                return actors.publishStoredReturnFence(chunk, raw.orElse(null));
             }
             catch (RuntimeException publicationFailure) {
                 PaleMirrorMod.LOGGER.error("Entity return-read fence could not be published chunk={}; vanilla load held", chunk, publicationFailure);
@@ -97,18 +99,6 @@ final class FrontierV3DepartureReturnReadFence {
             });
             if (chunks.isEmpty()) counts.remove(owner);
         }
-    }
-
-    static CompletableFuture<Long> fenceBeforeVanillaLoad(ServerLevel level, ChunkPos chunk, CompoundTag raw) {
-        var world = FrontierV3PhysicalWorld.WORLD_ID;
-        var actors = FrontierV3AmbientCarrierLedger.get(level, world);
-        fenceStoredInventory(chunk, raw, actors);
-        // A failed publication fails the dependent vanilla read: otherwise an
-        // unjournaled returned body could move while an old saved departure
-        // still looks eligible to a later no-load recovery after a crash.
-        // Even an unchanged marker may belong to an earlier outstanding read's
-        // write. Await the submitted prefix, not merely this call's dirty flag.
-        return actors.persistAsync(level, world);
     }
 
     static boolean fenceStoredInventory(ChunkPos chunk, CompoundTag raw,
