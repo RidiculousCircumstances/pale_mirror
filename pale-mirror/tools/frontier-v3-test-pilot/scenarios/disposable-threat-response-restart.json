@@ -62,7 +62,12 @@
           "field": "position"
         }
       },
-      "settleMs": 0
+      "settleMs": 0,
+      "offset": {
+        "x": 4,
+        "y": 0,
+        "z": 0
+      }
     },
     {
       "type": "visit_nearest_entity",
