@@ -1,102 +1,104 @@
 # Active continuity — 2026-11-02
 
-## Current assignment — reusable HOT melee delivered
-User approved implementing/integrating the common combat module through guards.
-Main alone; no subagents/Terra/API goal/push. Standing commit and verified MAIN
-deploy fulfilled. No COLD combat, civilian combat, ranged attacks or convoy policy.
-No active implementation remains for this cut. Next user may inspect guards or
-request another slice; do not infer an additional goal. Plan in source
-`docs/frontier-v3-combat-module-plan.md`; detailed evidence/classification in
-`docs/frontier-v3-security-hot-findings-20261102.md` schema319 section.
+## Current assignment — HOT melee tactics1–4 delivered
+User accepted stable combat distance/hysteresis, windup/strike/recovery, expiring
+dimensional group position reservations and typed unavailable-target handling.
+Main alone; no agents, Terra/API goal or push. Standing commit/deploy fulfilled.
+No new task inferred. Full details/history and known limits:
+docs/frontier-v3-security-hot-findings-20261102.md, schema320 section.
 
-IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror, branch
-feat/baker-carry-orders-20260926 CLEAN799435d7db9cb78cd5b73941e2b65b120f87d37d.
-Core705f58c71; persisted-policy/native-rendezvous03794462c; connected station
-restart fix799435d7d. RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror
-CLEAN detached799. PACK /home/rd/proj/minecraft trackedcleanf72713382957;
-preserve its existing untracked .f0v-baseline/. No client update/publication/push.
-Governance has extensive unrelated WIP; never bulk stage or discard it.
+IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror,
+branch feat/baker-carry-orders-20260926 CLEAN73ddfc4d0dec01255f34f637232078407c1962dd.
+Core69bc0b27c, connected producer/unknown-geometry fix346feae7e;
+read-only pilot health-baseline391a38b52 and current-patrol-region setup73.
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached73.
+PACK /home/rd/proj/minecraft trackedcleanf72713382957; preserve .f0v-baseline/.
+Governance has extensive unrelated WIP: stage only this assignment's ledger,
+HOT findings, new materialization appendix and settlement_security_boundary key.
+No client publication/update, no push. IMPL freeze lifted: native runs stopped.
 
 ## Architecture
-Common model.combat owns CombatState, exact pending MeleeStrike/readiness, weapon
-facts and bounded rejected melee stations. Read-only CombatOrder is permission
-from a closed execution-kind CombatCapability registry, not a second target/body
-controller. GuardCombatCapability owns politics, response references and
-patrol/search/return. Common core imports no security policy. Tactical station
-ranking/reselection uses common geometry/navigation, weapon reach, unit dimensions
-and peer stations; completed negative paths cannot hide later candidates behind
-the outstanding-query budget. Retention consumes persisted hashed MeleeRules.
+Common model.combat alone owns mechanical stance/readiness/pending strike and
+exact execution/target dimensional melee-position claims. Registered role
+capabilities supply permission and their policy; guard owns response references,
+patrol/search/return. Common combat imports no guard politics. Existing UAE/nav
+remains the sole mover; shared native operation journal remains the effect owner.
+No direct parallel actuator or inventory authority. Rules persist through hashed
+FrontierRuleset; schema320/fresh-world-only. No COLD damage.
 
-Separate registered combat process/codec and native executor preserve one UAE,
-body controller, inventory authority and exact native operation journal. Actual
-HOT weapon, LOS/reach, readiness, target incarnation and wear gate every hit.
-Registry weapon definitions permit COLD approaches, never COLD hits. Passive
-CombatStatus performs no route/forecast work. Schema319, fresh-world-only policy.
-
-Connected recovery fix: scene suspension could call general machine.replace while
-pending fuel/recipe pinned its revision, causing startup quarantine. The common
-station boundary now permits only validated settlement of the previous labour
-clock and withdrawal of attendance while preserving physical effect revision,
-pre/postimage and custody. Resume/new work remains forbidden under pending effect.
-Same failed world restarted successfully without reset. No format/default change.
-Prior local-reaction, authority, station geometry and contact-ending contracts
-remain; historical field CONFLICT and retired-body warnings were not silently
-claimed repaired. Sources/evidence retained in the HOT findings.
+HOLD enters inside reach minus0.35blocks and persists to actual reach; stale native
+facts expire. HOLD withdraws only melee approach through its UAE checkpoint,
+never awards arrival or stops another execution. Durable Prepared is cancellable
+8tick windup (capped below weapon interval) with vanilla swing/amber particles;
+canonical due and actual native warning elapsed time both gate the effect. LOS,
+reach, weapon, permission and incarnation recheck cancel without damage/wear.
+Existing pending native-effect recovery precedes new checks; cooldown uses the
+same attack period, not a second full interval. Claims carry width/height,
+80tick lease and exact execution/target; mission admission is atomic. Post return
+is not another melee reservation. ROUTE_PENDING/missing geometry, SPACE_OCCUPIED,
+confirmed NO_PATH/NO_POSITION remain distinct. Only confirmed unavailability can
+defer after100ticks for100ticks; queued routes never become unreachable. A deferred
+target cannot repeatedly cancel guard-owned return; target movement reopens it.
 
 ## Verification
-Clean705 full guardrails/check/NeoForge build/packaged gate PASS8m34s:
-Frontier2253/NeoForge895/domain324/Visuals79, no failures/errors/skips.
-Focused core72/adapter48, registry4, Node56 pass. GameTest414/416; same2 inactive
-legacy assault/patrol failures reproduce on clean baseline de34 and remain debt,
-not a green416 claim. Final037 delta focused/policy/package PASS25s; Neo895 reran
-PASS3m8s. Final799 station/recovery29+guardrails/package PASS47s, clean detached
-package/verify PASS12s. Reuse unchanged gates; no confidence rerun.
-Receipts IMPL/build/combat-module/{focused,executor-registry,integration,gametest,
-station-recovery-focused,retained-carrier,verified}.json; /tmp/pm-combat-*.log.
+Clean69 full guardrails/check/NeoForge build/package PASS8m51s: domain324,
+Frontier2260, NeoForge895, Visuals79,0failures/errors/skips. Final346 focused56
+Frontier+guardrails/package PASS25s. Pilot baseline/parser negative checks PASS11s,
+Node56 PASS. Detached391 NeoForge build/package PASS2m54s,896tests green; final73
+scenario-only delta package PASS2s. Reuse unchanged gates, no confidence rerun.
+GameTest414/416: same2 inactive baseline legacy assault/patrol failures remain,
+not a green416 claim. Receipts IMPL/build/melee-tactics/{integration,boundaries-
+focused,release-final,release-oracle,retained-carrier,verified}.json.
 
-Initial isolated319 receipt native.json FAILED player-entry setup: routeSurface
-expected feet65 but real player landed64; no offence/hit occurred. Do not relabel
-it passed or claim product geometry fixed. Checked-in scenario uses ordinary
-player-only high entry plus setup-only rendezvous with received named guard.
-Retained seed41 worldv3-disposable_security_response_restart-6369077c, finite forge
-inputs/no sword or appointment injection. Existing restartSegments/run-scenario,
-frozen799, one20FPS private-Xvfb client at a time. Before5e056e4c-f179-4837-bc38-
-10ad4c62d8f1 PASS8actions: real fist -> SELF_DEFENCE -> native player100->94 ->
-safe exit -> bounded search/contact0/responders0/RETURN/no pending strike.
-Normal stop saved all dimensions14:48:28 and closed JVM/ports. Same-world restart
-20c2a565-96a0-461a-b2e5-cfcb414146cf, after11722a98-b415-498f-a3f9-9827cbd7b837
-PASS4actions: remembered hostility, native100->94 without new attack, safe exit,
-contact0/responders0/no pending hit. Final private stop saved all dimensions14:51:55.
-Frame reviewed: actual armed body, dark partial terrain. No full-pack graphical,
-HUMAN/M3, multiplayer/whole-cohort tactics, industrial M2 or scale/global80ms claim.
-Private clients/Xvfb/25583/4 and all other private servers are STOPPED.
+Native checked-in disposable-melee-tactics-restart.json, existing restartSegments/
+run-scenario, frozen73, one20FPS private-Xvfb client. Retained seed41 world
+v3-disposable_melee_tactics_restart-bea52ec2, finite forge inputs/no swords or
+appointments injected. Before5bc8acd6-9f2a-4446-ae16-caf654c52d3b PASS10actions:
+real fist/self defence -> windup -> ordinary dimension escape, health100->100,
+contact0/responders0. Normal stop saved all16:08:50. Same-world restart
+cb5351ce-b474-4067-9259-e54a7ad3fbff PASS4: remembered hostility/no new offence ->
+native100->94 -> escape -> contact0/responders0. Final save all16:10:28.
+All private clients/Xvfb/JVMs and25583/4, fullpack25581/2,100town25579/80 STOPPED.
+Frame reviewed: extreme close-up of body, not an overview of weapon/tactics.
+No full-pack graphical human/M3, full-cohort tactical M2, industrial M2,
+multiplayer or scale/global80ms claim.
+
+Initial native-final.json remains FAILED: absolute100health predicate ignored
+an earlier applied strike prepared10795 before observed windup10835. Native
+operation journal proves one old attempt/no later hit, saved player99.333 after
+regen. Corrected observer captures packet health before dodge, rejects a decrease,
+fails closed on absent/duplicate baseline. A retry failed before combat in fixed
+entry rendezvous; setup now visits read-only current guard-position hint before
+requiring real received body. Neither test fix moves a guard/forces domain outcome.
+Original69 aborted pre-client because missing guard PositionPlanned producer
+emission; fixed346 with actual registry-path coverage. Receipts preserve failures.
 
 ## MAIN delivery
 RUNNING /home/rd/far-frontier-server, far-frontier-v3-live.service.
-Actual Java22PID1667411, wrapper1667387;25565/RCON25575. Source799 above; SHA512
-55ecdae4358051aacf327a4123aee93340de981b93db3dad188da5647ac0ee87b6581293958b2dc02b60cb2167f2d7a01ef9d9f679a498652d2158e4ebea0e37.
-Fresh combat-module-schema319-seed132-20261102, actual persisted seed132,
-frontier-v3-simulation-terrain-r31,12town/364residents. Old318 world preserved.
-Normal old stop saved all dimensions and closed JVM/ports; required datapack
-installed before genesis. Root preflight/shared pinned installer/deploy-verify PASS.
-Start epoch1793613160; ready14:52:52/runtime14:52:53. Snapshot1400 proves identity;
-summaries1319->1599 green retained-conflict scope/required0, ordinary pending0,
-fastforward0. Exact binding IMPL/build/combat-module/verified.json. First town at1329
-armed guards0: ordinary manufacture/collection/appointment, no injected roles/items.
+Actual Java22PID1971867/wrapper1971843;25565/RCON25575. Source73 above; SHA512
+511dacc1db772f97449ca8bda5e9aca3ba4170ed215a0e0b2fcbdb6efa75ba4b917de955b1733c96d111fd5805a722ac0d9217a01671ad27adad3bfba60f53db.
+Fresh melee-tactics-schema320-seed133-20261102, persisted seed133,
+frontier-v3-simulation-terrain-r31,12town/369residents. Old319 world preserved.
+Old normal stop saved all dimensions16:10:30; required datapack before genesis.
+Root preflight/shared pinned installer/deploy-verify PASS. Start epoch1793617867;
+snapshot400 proves seed/ruleset, summaries183->533 green retained-conflict scope,
+required0, ordinary pending0, fastforward0. First-town armed guards0 at950:
+ordinary manufacture/collection/appointment, no injected items/roles.
+Exact identity binding IMPL/build/melee-tactics/verified.json.
 Address100.100.78.29:25565 / LAN192.168.0.103. First-town support(-1486,64,-1360),
-entry above it then land naturally; diagnostic support has a known entry-height
-mismatch in the seed41 carrier, so do not infer exact physical feet from it.
+entry above it then land naturally. RouteSurface diagnostic names support, not
+physical feet; use actual received body for melee-entry tests.
 
 ## Operations
 RCON IMPL/build/forestry-native/query-runtime.mjs reads password silently; never
 print server.properties. Valid pale_mirror v3 inspect summary/performance or
 inspect settlement settlement:1. advance N queues; inspect terminal result.
-Normal RCON stop and native saved-dimensions/process/port closure precede changes.
+Normal RCON stop, saved dimensions plus actual JVM/ports exit precede changes.
 Transient unit disappears on stop; recreate with systemd-run --user
 --unit=far-frontier-v3-live --collect --working-directory=/home/rd/far-frontier-server
 /home/rd/far-frontier-server/scripts/run-server-java22.sh. Root preflight and
-frontier-v3-deploy-verify required. Detached build property
--PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt.
-JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; runtime Java22
-/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java. Local artifact host
-127.0.0.1:18092 serves RELEASE/build/libs. No source edits/build during native runs.
+deploy-verify required. JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2;
+runtime Java22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
+Detached build -PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt.
+Artifact host127.0.0.1:18092 serves RELEASE/build/libs. No source edits/build during
+native runs; prepared-rendezvous.json binds final73 native classes/artifact.

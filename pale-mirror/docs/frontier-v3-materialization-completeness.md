@@ -477,3 +477,20 @@ remain visible. Exact evidence and reviewed-frame limits are in the schema319
 section of docs/frontier-v3-security-hot-findings-20261102.md and
 IMPL/build/combat-module/retained-carrier.json. MAIN delivery is bound separately in
 the current ledger and build/combat-module/verified.json after deployment.
+
+
+## Schema320 shared HOT melee tactics — 2026-11-02
+
+The existing combat family retains exact stance, cancellable windup/recovery and
+expiring dimensional position claims; the registered guard adapter owns bounded
+search/post return. Common navigation/UAE and native operations remain the sole
+actuators. Unknown geometry/queued navigation is pending, never confirmed no-path.
+No new process family, alternate body controller or COLD damage is introduced.
+Focused exact/stale/competing-execution, wire-format, interruption/lease and
+registry-path checks pass. Real private-client dodge100->100 and same-world
+restart/no-new-offence hit100->94 plus terminal contact/responders0 halves pass
+on source73ddfc4d0; see HOT findings and build/melee-tactics/retained-carrier.json.
+The reviewed frame is an extreme body close-up. This is scoped physical-effect/
+closure evidence, not full-cohort tactical M2, full-pack human M3 or a global
+performance claim. Initial invalid-oracle and setup failures remain classified
+in retained receipts. MAIN deployment binding is build/melee-tactics/verified.json.

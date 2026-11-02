@@ -352,3 +352,76 @@ First town armed guards0 at1329: ordinary manufacture/collection, no injected it
 Old318 world retained. Exact delivery binding build/combat-module/verified.json;
 source and detached release clean, pack trackedclean with preserved .f0v-baseline/.
 No client artifact publication or push.
+
+
+## HOT melee tactics 1–4 — schema320 delivery, 2026-11-02
+
+Implementation source73ddfc4d0dec01255f34f637232078407c1962dd, core69bc0b27c,
+producer/unknown-geometry closure346feae7e. The shared combat owner now retains
+exact execution/target stance facts, windup/readiness and dimensional expiring
+position claims. Guard policy retains patrol/search/return decisions. Existing
+UAE/navigation and native operation journal remain the only movement/effect
+owners. Rules are included in the persisted hashed ruleset; schema320 requires
+fresh worlds, with no old-format conversion.
+
+- Range hysteresis: enter HOLD inside reach minus0.35blocks, retain until actual
+  reach is lost. Native stance freshness is bounded; it cannot award route arrival
+  or stop another execution's movement.
+- Windup:8ticks, capped below the weapon's attack interval, with a vanilla swing
+  and amber particles. Both canonical deadline and actual native warning elapsed
+  time gate a strike. Lost permission, LOS, reach, target incarnation or weapon
+  cancels without damage/wear. Recovery belongs to the same weapon attack period,
+  not an additional full cooldown. Existing prepared/applied effect recovery
+  remains ahead of new checks; no replayed native hit or COLD damage is introduced.
+- Group positions: exact execution/target, navigation width/height and80tick lease;
+  competing current claims cannot overlap. Guard mission admission claims the
+  position atomically; return travel does not acquire a fake melee reservation.
+- Typed waiting: queued route/missing geometry, occupied space and confirmed lack
+  of a route/position stay distinct. Only confirmed unavailability can defer after
+  100ticks for100ticks. The guard owns bounded search and return to its retained
+  post; a deferred target cannot repeatedly cancel that return.
+
+Verification: clean69 full guardrails/check/NeoForge build/packaged gate PASS8m51s;
+Frontier2260/domain324/NeoForge895/Visuals79. Final346 focused56 Frontier+guardrails/
+package PASS25s; focused pilot oracle/parser negative checks PASS11s and Node56
+PASS. Final391 detached NeoForge build/package PASS2m54s,896 tests with0failures,
+errors or skips. Final73 scenario-only delta package verification PASS2s; reuse
+unchanged gates. GameTest414/416: same2 inactive legacy assault/patrol failures,
+not a green416 claim. Receipts IMPL/build/melee-tactics/{integration,boundaries-
+focused,release-final,release-oracle,retained-carrier,verified}.json.
+
+Native isolated seed41 worldv3-disposable_melee_tactics_restart-bea52ec2 retained
+finite forge inputs, ordinary manufacture and no injected swords/appointments.
+Checked-in disposable-melee-tactics-restart.json through existing restartSegments
+and run-scenario, source73 frozen, one20FPS private-Xvfb client. Before5bc8acd6-
+9f2a-4446-ae16-caf654c52d3b PASS10actions: real fist -> self defence -> native
+windup -> ordinary dimension escape, packet health100->100 -> contact0/responders0.
+Normal stop saved all dimensions16:08:50. Same-world restart cb5351ce-b474-4067-
+9259-e54a7ad3fbff PASS4actions: no new offence -> remembered hostility -> native
+health100->94 -> escape -> contact0/responders0. Final normal stop saved all
+16:10:28; clients/Xvfb/private JVMs and25583/4 closed. Frame reviewed: extreme
+close-up of the named body, not an overview of weapon/tactics. No full-pack human
+M3 or whole-cohort tactical visual acceptance is claimed.
+
+Original native-final.json remains FAILED: an absolute100health assertion ignored
+an earlier actual strike prepared10795, before the later observed windup10835.
+Native operation journal contains that one applied attempt and no later hit;
+saved99.333 health includes regeneration. Corrected read-only observer captures
+health before dodge and rejects a decrease; missing baseline fails closed. One
+retained-world retry also failed in setup rendezvous, before combat: the fixed
+entry did not locate the patrolling named body. Scenario now visits the current
+read-only guard-position hint before requiring the actual received body. Neither
+correction changes combat, moves a guard or writes canonical test outcomes.
+
+MAIN: source73, fresh melee-tactics-schema320-seed133-20261102, seed133/r31,
+12settlements/369residents. Java22PID1971867/wrapper1971843,25565/RCON25575,
+far-frontier-v3-live.service. SHA512
+511dacc1db772f97449ca8bda5e9aca3ba4170ed215a0e0b2fcbdb6efa75ba4b917de955b1733c96d111fd5805a722ac0d9217a01671ad27adad3bfba60f53db.
+Old319 normal stop saved all dimensions16:10:30; required datapack installed before
+new genesis. Root preflight/shared pinned installer/deploy-verify pass; start epoch
+1793617867. Snapshot400 binds actual seed/ruleset, summaries183->533 green with
+required conflicts0, ordinary pending0 and fastforward0. First town guards0 at950:
+ordinary manufacture/collection/appointment must occur, no bootstrap weapons.
+Old world preserved. Exact delivery binding build/melee-tactics/verified.json.
+Implementation/release clean; pack unchanged except preserved .f0v-baseline/.
+No client publication, push, COLD combat or reinforcement-policy change.
