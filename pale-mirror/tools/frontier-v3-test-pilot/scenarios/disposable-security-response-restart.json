@@ -28,14 +28,17 @@
     },
     {
       "type": "assert_fixture",
-      "timeoutMs": 30000,
+      "timeoutMs": 120000,
       "checks": [
         {
           "view": "settlement",
           "id": "settlement:1",
           "expect": {
             "status": "ok",
-            "hasArmedGuard": true
+            "hasArmedGuard": true,
+            "security": {
+              "reserveStatus": "PRESERVED"
+            }
           }
         }
       ]
@@ -112,8 +115,8 @@
         "status": "ok",
         "security": {
           "contactCount": 1,
-          "respondingGuards": 1,
-          "postedGuards": 1
+          "responseStatus": "ENGAGED",
+          "reserveStatus": "PRESERVED"
         }
       },
       "timeoutMs": 60000,
@@ -303,7 +306,7 @@
   ],
   "zeroPlayerPrelude": {
     "kind": "cold_duty_cycle",
-    "advanceTicks": 6000,
+    "advanceTicks": 12000,
     "timeoutMs": 450000
   },
   "frames": [

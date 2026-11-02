@@ -14,6 +14,11 @@ final class FrontierV3SecurityDiagnostic {
         long posted=io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state,home).stream()
                 .filter(duty -> io.farfrontier.palemirror.frontier.v3.model.security.SecurityDispatch.eligible(state,duty)
                         && !state.security().responses().containsKey(duty.id())).count();
+        int budget=io.farfrontier.palemirror.frontier.v3.model.security.SecurityDispatch.budget(state,(int)available);
+        boolean withinBudget=responses.size()<=budget && contacts.stream().allMatch(c -> responses.stream()
+                .filter(r -> r.contact().target().equals(c.target())).count()<=state.bootstrap().ruleset().security().respondersPerThreat());
+        String responseStatus=!withinBudget?"OVER_BUDGET":responses.isEmpty()?"IDLE":"ENGAGED";
+        String reserveStatus=available<2?"INSUFFICIENT_STAFF":posted>=available-budget?"PRESERVED":"LOST";
         String threats=contacts.stream().map(c -> "{\"target\":\""+c.target().entity()+"\",\"kind\":\""+c.target().kind()
                 +"\",\"atTick\":"+c.atTick()+",\"position\":"+position(c.position())+",\"responders\":"
                 +strings(responses.stream().filter(r -> r.contact().target().equals(c.target())).map(r -> r.duty().value()).toList())+"}")
@@ -26,7 +31,8 @@ final class FrontierV3SecurityDiagnostic {
                         +",\"returnStation\":"+position(mission.post().station().support())+"}").orElse("null")
                 +",\"strikePending\":"+state.security().pending().containsKey(duty.id())+"}").collect(java.util.stream.Collectors.joining(",","[","]"));
         return "{\"respondingGuards\":"+responses.size()+",\"postedGuards\":"+posted
-                +",\"responseBudget\":"+io.farfrontier.palemirror.frontier.v3.model.security.SecurityDispatch.budget(state,(int)available)
+                +",\"responseBudget\":"+budget+",\"availableGuards\":"+available
+                +",\"responseStatus\":\""+responseStatus+"\",\"reserveStatus\":\""+reserveStatus+"\""
                 +",\"contactCount\":"+contacts.size()+",\"threats\":"+threats
                 +",\"missions\":"+missions+",\"hostilePlayers\":"+state.security().hostility().keySet().stream().filter(relation->relation.home().equals(home)).count()
                 +",\"contactAt\":"+(contact==null?"null":Long.toString(contact.atTick()))
