@@ -306,7 +306,7 @@
   ],
   "zeroPlayerPrelude": {
     "kind": "cold_duty_cycle",
-    "advanceTicks": 12000,
+    "advanceTicks": 6000,
     "timeoutMs": 450000
   },
   "frames": [
