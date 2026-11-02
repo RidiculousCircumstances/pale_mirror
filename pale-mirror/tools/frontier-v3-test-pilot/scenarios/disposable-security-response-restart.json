@@ -28,7 +28,7 @@
     },
     {
       "type": "assert_fixture",
-      "timeoutMs": 180000,
+      "timeoutMs": 120000,
       "checks": [
         {
           "view": "settlement",
@@ -306,8 +306,8 @@
   ],
   "zeroPlayerPrelude": {
     "kind": "cold_duty_cycle",
-    "advanceTicks": 6000,
-    "timeoutMs": 450000
+    "advanceTicks": 10000,
+    "timeoutMs": 900000
   },
   "frames": [
     {
