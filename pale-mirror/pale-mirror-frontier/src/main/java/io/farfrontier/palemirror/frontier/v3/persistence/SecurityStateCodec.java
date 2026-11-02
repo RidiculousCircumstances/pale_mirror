@@ -35,10 +35,16 @@ final class SecurityStateCodec {
         return new SecurityState.Strike(duty,revision,attacker,target,weapon,before,profile,in.readLong(),in.readLong(),in.readLong());
     }
     static void response(DataOutputStream out,SecurityState.Response response)throws IOException {
-        id(out,response.duty());id(out,response.contact().home());target(out,response.contact().target());out.writeLong(response.assignedAt());
+        id(out,response.duty());id(out,response.contact().home());target(out,response.contact().target());out.writeLong(response.assignedAt());engagement(out,response.engagement());
     }
     static SecurityState.Response response(DataInputStream in)throws IOException {
-        return new SecurityState.Response(id(in),new SecurityState.ContactKey(id(in),target(in)),in.readLong());
+        return new SecurityState.Response(id(in),new SecurityState.ContactKey(id(in),target(in)),in.readLong(),engagement(in));
+    }
+    static void engagement(DataOutputStream out,CombatEngagement value)throws IOException {
+        target(out,value.target());out.writeByte(value.kind().wireTag());FrontierWorldStateCodec.writePosition(out,value.anchor().support());out.writeInt(value.radius());
+    }
+    static CombatEngagement engagement(DataInputStream in)throws IOException {
+        return new CombatEngagement(target(in),CombatEngagement.Kind.require(in.readUnsignedByte()),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readInt());
     }
     static void responses(DataOutputStream out,Map<SubjectId,SecurityState.Response> responses)throws IOException {
         out.writeInt(responses.size());for(var value:responses.values().stream().sorted(Comparator.comparing(SecurityState.Response::duty)).toList())response(out,value);
@@ -48,7 +54,7 @@ final class SecurityStateCodec {
         for(int i=0;i<n;i++){var r=response(in);if(result.putIfAbsent(r.duty(),r)!=null)throw new IllegalArgumentException("duplicate response assignment");}return Map.copyOf(result);
     }
     static void write(DataOutputStream out,SecurityState state)throws IOException{
-        out.writeLong(state.observationRevision());responses(out,state.responses());
+        out.writeLong(state.observationRevision());responses(out,state.responses());CombatAwarenessCodec.write(out,state.awareness());
         out.writeInt(state.hostility().size());
         for(var row:state.hostility().entrySet().stream().sorted(Comparator.comparing((Map.Entry<SecurityState.Relation,SecurityState.Offence> e)->e.getKey().home())
                 .thenComparing(e->e.getKey().player())).toList()){
@@ -62,7 +68,7 @@ final class SecurityStateCodec {
         out.writeInt(state.nextAttack().size());for(var row:state.nextAttack().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){id(out,row.getKey());out.writeLong(row.getValue());}
     }
     static SecurityState read(DataInputStream in)throws IOException{
-        long observationRevision=in.readLong();var responses=responses(in);
+        long observationRevision=in.readLong();var responses=responses(in);var awareness=CombatAwarenessCodec.read(in);
         int n=UnitGroupStateCodec.count(in,SecurityState.MAX_RELATIONS);var hostility=new LinkedHashMap<SecurityState.Relation,SecurityState.Offence>();
         for(int i=0;i<n;i++)if(hostility.putIfAbsent(new SecurityState.Relation(id(in),uuid(in)),new SecurityState.Offence(in.readLong(),in.readLong(),in.readLong()))!=null)
             throw new IllegalArgumentException("duplicate hostility relation");
@@ -72,7 +78,7 @@ final class SecurityStateCodec {
         for(int i=0;i<n;i++){var value=strike(in);if(pending.putIfAbsent(value.duty(),value)!=null)throw new IllegalArgumentException("duplicate strike");}
         n=UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);var readiness=new LinkedHashMap<SubjectId,Long>();
         for(int i=0;i<n;i++)if(readiness.putIfAbsent(id(in),in.readLong())!=null)throw new IllegalArgumentException("duplicate readiness");
-        return new SecurityState(hostility,contacts,pending,readiness,responses,observationRevision);
+        return new SecurityState(hostility,contacts,pending,readiness,responses,observationRevision,awareness);
     }
     private SecurityStateCodec(){}
 }

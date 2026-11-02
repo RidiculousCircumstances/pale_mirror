@@ -14,6 +14,11 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(value.replace("\"maximum\":19","\"maximum\":0")));
         assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(value.replace("30000","120001")));
     }
+    @Test void actualLocalDefenceAndRestartCarrierIsAcceptedBeforeLaunchingAClient() throws java.io.IOException {
+        var declaration=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
+                "scenarios","disposable-security-response-restart.json"));
+        assertEquals(12,FrontierV3TestPilotScenario.parse(declaration).actionCount());
+    }
     @Test void ordinarySaplingGrowthDeclarationHasBoundedNativeItemUse() throws java.io.IOException {
         var source = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",
                 "scenarios", "disposable-forestry-growth-intervention.json"));

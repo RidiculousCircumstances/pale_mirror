@@ -11,7 +11,7 @@ public final class SecurityTransitions {
             var resident=state.humanPopulation().resident(incident.victim().actorId());
             if(!subject.equals(incident.home()) || resident==null || !resident.settlementId().equals(incident.home()))
                 throw new IllegalArgumentException("harm report lost its exact victim/home");
-            security=security.offence(incident.home(),incident.attacker(),tick);
+            security=security.harmed(incident,tick);
         }else if(event instanceof SecurityEvent.Seen seen){
             ActorBodyAuthority.requireActuation(state,seen.observer());
             var guard=GuardAuthority.require(state,seen.observer().execution());var contact=seen.contact();
@@ -23,7 +23,7 @@ public final class SecurityTransitions {
             // by the physical executor. Canonical movement may still retain an older pose;
             // it cannot independently re-measure that native observation. Domain pursuit
             // bounds remain with GuardResponse and do not grant an unseen melee effect.
-            security=security.observed(contact);
+            security=security.seen(contact,seen.observer().body().actorId(),seen.observerPosition());
         }else if(event instanceof SecurityEvent.ContactEnded ended){
             // This is an already observed fact, not a new actuation permission. Its
             // exact body may have left HOT before the durable observation is delivered.

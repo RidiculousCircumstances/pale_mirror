@@ -25,8 +25,10 @@ final class SecurityPayloadCodecs {
             if(!payload.type().equals(type))throw new IllegalArgumentException("foreign security payload");
             try{var bytes=new ByteArrayOutputStream();var out=new DataOutputStream(bytes);
                 switch((SecurityEvent)payload){
-                    case SecurityEvent.Incident v->{SecurityStateCodec.id(out,v.home());SecurityStateCodec.body(out,v.victim());SecurityStateCodec.uuid(out,v.attacker());out.writeDouble(v.observedDamage());}
-                    case SecurityEvent.Seen v->{SecurityStateCodec.actuation(out,v.observer());SecurityStateCodec.contact(out,v.contact());}
+                    case SecurityEvent.Incident v->{SecurityStateCodec.id(out,v.home());SecurityStateCodec.body(out,v.victim());SecurityStateCodec.target(out,v.attacker());
+                        FrontierWorldStateCodec.writePosition(out,v.victimPosition());out.writeBoolean(v.visibleAttackerPosition().isPresent());
+                        if(v.visibleAttackerPosition().isPresent())FrontierWorldStateCodec.writePosition(out,v.visibleAttackerPosition().orElseThrow());out.writeDouble(v.observedDamage());}
+                    case SecurityEvent.Seen v->{SecurityStateCodec.actuation(out,v.observer());SecurityStateCodec.contact(out,v.contact());FrontierWorldStateCodec.writePosition(out,v.observerPosition());}
                     case SecurityEvent.ContactEnded v->{SecurityStateCodec.actuation(out,v.observer());SecurityStateCodec.id(out,v.home());SecurityStateCodec.target(out,v.target());out.writeLong(v.expectedRevision());}
                     case SecurityEvent.Prepared v->SecurityStateCodec.strike(out,v.strike());
                     case SecurityEvent.Completed v->{SecurityStateCodec.id(out,v.duty());out.writeLong(v.attemptOrdinal());out.writeBoolean(v.applied());SecurityStateCodec.condition(out,v.after());}
@@ -35,8 +37,9 @@ final class SecurityPayloadCodecs {
         }
         public FrontierPayload decode(byte[] bytes){try{var in=new DataInputStream(new ByteArrayInputStream(bytes));
             FrontierPayload result=switch(type){
-                case SecurityEvent.Incident.TYPE->new SecurityEvent.Incident(SecurityStateCodec.id(in),SecurityStateCodec.body(in),SecurityStateCodec.uuid(in),in.readDouble());
-                case SecurityEvent.Seen.TYPE->new SecurityEvent.Seen(SecurityStateCodec.actuation(in),SecurityStateCodec.contact(in));
+                case SecurityEvent.Incident.TYPE->new SecurityEvent.Incident(SecurityStateCodec.id(in),SecurityStateCodec.body(in),SecurityStateCodec.target(in),
+                        FrontierWorldStateCodec.readPosition(in),in.readBoolean()?Optional.of(FrontierWorldStateCodec.readPosition(in)):Optional.empty(),in.readDouble());
+                case SecurityEvent.Seen.TYPE->new SecurityEvent.Seen(SecurityStateCodec.actuation(in),SecurityStateCodec.contact(in),FrontierWorldStateCodec.readPosition(in));
                 case SecurityEvent.ContactEnded.TYPE->new SecurityEvent.ContactEnded(SecurityStateCodec.actuation(in),SecurityStateCodec.id(in),SecurityStateCodec.target(in),in.readLong());
                 case SecurityEvent.Prepared.TYPE->new SecurityEvent.Prepared(SecurityStateCodec.strike(in));
                 case SecurityEvent.Completed.TYPE->new SecurityEvent.Completed(SecurityStateCodec.id(in),in.readLong(),in.readBoolean(),SecurityStateCodec.condition(in));

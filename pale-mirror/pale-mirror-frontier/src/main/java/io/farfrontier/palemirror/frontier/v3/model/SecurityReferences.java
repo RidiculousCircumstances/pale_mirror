@@ -11,6 +11,12 @@ final class SecurityReferences {
                 if(contact.target().kind()==CombatTarget.Kind.PLAYER && !security.hostile(contact.home(),contact.target().entity()))
                     throw new IllegalArgumentException("player threat contact has no declared hostile relation");
             }
+            for(var sight:security.awareness().sights().values()) {
+                FrontierWorldStateSupport.settlement(bootstrap,sight.key().scope());
+                if(sight.key().target().kind()==CombatTarget.Kind.PLAYER && !security.hostile(sight.key().scope(),sight.key().target().entity()))
+                    throw new IllegalArgumentException("personal player sight lost hostile relation");
+            }
+            for(var harm:security.awareness().harms().values())FrontierWorldStateSupport.settlement(bootstrap,harm.key().scope());
             for(var response:security.responses().values()) {
                 var duty=plans.guards().get(response.duty());
                 if(duty==null || !duty.home().equals(response.contact().home()))

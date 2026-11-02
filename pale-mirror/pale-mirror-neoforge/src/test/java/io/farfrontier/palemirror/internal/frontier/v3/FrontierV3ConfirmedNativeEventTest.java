@@ -2,7 +2,8 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
-import io.farfrontier.palemirror.frontier.v3.model.security.SecurityEvent;
+import io.farfrontier.palemirror.frontier.v3.model.security.*;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.*;
 import java.util.*;
@@ -13,7 +14,8 @@ class FrontierV3ConfirmedNativeEventTest {
     @BeforeAll static void version(){net.minecraft.SharedConstants.tryDetectVersion();}
     @Test void aConfirmedFactSurvivesPredecessorWaitAndRestartAndCommitsOnlyOnce() {
         var home=new SubjectId("settlement:test");
-        var fact=new SecurityEvent.Incident(home,new ActorBodyId(new SubjectId("resident:test"),7),new UUID(11,12),1);
+        var fact=new SecurityEvent.Incident(home,new ActorBodyId(new SubjectId("resident:test"),7),new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(11,12),"pale_mirror:frontier_graybox"),
+                new BlockPosition(0,63,0),Optional.empty(),1);
         var ledger=FrontierV3OperationLedger.inMemory();var operation=FrontierV3ConfirmedNativeEvent.record(ledger,home,fact);
         var before=ledger.save(new CompoundTag(),null);var ready=new AtomicBoolean();var submissions=new AtomicInteger();
         var receipts=new HashMap<CommandId,CommandReceipt>();var pins=new HashSet<CommandId>();

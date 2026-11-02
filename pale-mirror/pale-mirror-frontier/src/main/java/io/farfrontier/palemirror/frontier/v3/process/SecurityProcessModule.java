@@ -36,6 +36,7 @@ final class SecurityProcessModule implements FrontierWorldProcessModule {
         }
         catch(IllegalArgumentException invalid){return FrontierWorldCommandPlanner.rejected(invalid.getMessage());}
         events.add(new ProposedEvent(owner,event));
+        if(event instanceof SecurityEvent.Incident incident)events.add(SecurityReview.wake(incident.home(),command.submittedAt().ticks()));
         if(event instanceof SecurityEvent.Seen seen)events.add(SecurityReview.wake(seen.contact().home(),command.submittedAt().ticks()));
         if(event instanceof SecurityEvent.ContactEnded ended)events.add(SecurityReview.wake(ended.home(),command.submittedAt().ticks()));
         if(event instanceof SecurityEvent.Seen || event instanceof SecurityEvent.ContactEnded) {
@@ -55,11 +56,13 @@ final class SecurityProcessModule implements FrontierWorldProcessModule {
         var previous=state.security().responses().values().stream().filter(r -> r.contact().home().equals(home))
                 .collect(java.util.stream.Collectors.toMap(SecurityState.Response::duty,r -> r));
         var events=new ArrayList<ProposedEvent>();
-        boolean expired=state.security().contactsIn(home).stream().anyMatch(c -> !c.current(tick,state.bootstrap().ruleset().security().investigationTicks()));
+        var rules=state.bootstrap().ruleset().security();
+        boolean expired=state.security().awareness().needsPruning(home,tick,rules.investigationTicks(),rules.harmMemoryTicks())
+                || state.security().contactsIn(home).stream().anyMatch(c -> !c.current(tick,state.bootstrap().ruleset().security().investigationTicks()));
         if(!previous.equals(assigned) || expired)events.add(new ProposedEvent(home,new SecurityResponsesAllocated(home,assigned)));
         var wake=new java.util.TreeSet<SubjectId>();wake.addAll(previous.keySet());wake.addAll(assigned.keySet());
         for(var id:wake)if(!Objects.equals(previous.get(id),assigned.get(id)))events.add(GuardContinuation.wake(id,tick));
-        boolean active=state.security().contactsIn(home).stream().anyMatch(c -> c.current(tick,state.bootstrap().ruleset().security().investigationTicks()));
+        boolean active=!state.security().awareness().harmsIn(home).isEmpty() || state.security().contactsIn(home).stream().anyMatch(c -> c.current(tick,state.bootstrap().ruleset().security().investigationTicks()));
         events.add(new ProposedEvent(home,active?new ScheduleEffect.Rescheduled(action.id(),SecurityReview.at(home,
                 tick+state.bootstrap().ruleset().security().contactRefreshTicks())):new ScheduleEffect.Cancelled(action.id())));
         return List.copyOf(events);

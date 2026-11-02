@@ -77,7 +77,7 @@ final class GuardPatrolProcess {
             GuardEquipment.in(state,duty.home()).stream().filter(g -> !g.id().equals(duty.id()))
                     .flatMap(g -> g.mission().stream()).map(GuardMission::station).forEach(excluded::add);
             var candidates=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(contact.position()),rules.searchRadius(),excluded)
-                    .stream().filter(surface -> !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(surface.support())
+                    .stream().filter(surface -> GuardResponse.permitsStation(state,duty,surface) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(surface.support())
                             && ServiceBoundaryComposition.turnoverPoint(state,surface).isEmpty())
                     .sorted(Comparator.comparingLong((SurfaceAnchor surface) -> -SecurityCoverage.distance(surface,new SurfaceAnchor(contact.position())))
                             .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
@@ -95,7 +95,7 @@ final class GuardPatrolProcess {
                 .flatMap(other -> other.mission().stream()).map(GuardMission::station).collect(java.util.stream.Collectors.toSet());
         var origin=state.actorLocations().get(duty.execution().actorId()).supportingSurface();
         var stations=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(position),
-                GuardResponse.MAX_CONTACT_STATION_DISTANCE,reserved).stream()
+                GuardResponse.MAX_CONTACT_STATION_DISTANCE,reserved).stream().filter(station -> GuardResponse.permitsStation(state,duty,station))
                 .sorted(Comparator.comparingLong(station -> SecurityCoverage.distance(station,origin))).toList();
         return reachable(knowledge,origin,stations);
     }

@@ -21,7 +21,7 @@ public final class FrontierV3SecurityExecutor {
     private static final Map<ServerLevel,Integer> OBSERVATION_CURSOR=new WeakHashMap<>();
     private static final Map<ServerLevel,Long> NEXT_OBSERVATION_TICK=new WeakHashMap<>();
     public static void observedDamage(ServerLevel level,LivingEntity victim,Entity attacker,float damage) {
-        if(!(attacker instanceof ServerPlayer player)||damage<=0 || !FrontierV3PhysicalWorld.isPhysical(level))return;
+        if(!(attacker instanceof ServerPlayer) && !(attacker instanceof Enemy) || damage<=0 || !FrontierV3PhysicalWorld.isPhysical(level))return;
         var runtime=FrontierV3ServerLifecycle.runtimeFor(level.getServer());
         if(runtime==null||runtime.status().kind()!=FrontierV3RuntimeStatus.Kind.ACTIVE)return;
         var state=runtime.decodedState().orElseThrow();var declaration=FrontierV3ActorCarrierComposition.declaredBy(victim).orElse(null);
@@ -32,8 +32,13 @@ public final class FrontierV3SecurityExecutor {
         var binding=state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(body.actorId()));
         if(binding==null || binding.authorityEpoch()!=body.physicalEpoch())return; // A stale replica is not this resident's body.
         ActorBodyAuthority.require(state,body); // The victim need not have an active job or a running actuator.
+        var target=new CombatTarget(attacker instanceof ServerPlayer?CombatTarget.Kind.PLAYER:CombatTarget.Kind.HOSTILE_MOB,
+                attacker.getUUID(),level.dimension().location().toString());
+        int radius=state.bootstrap().ruleset().security().observationRadius();
+        var seen=victim.distanceToSqr(attacker)<=radius*(double)radius && victim.hasLineOfSight(attacker)
+                ?Optional.of(position(attacker)):Optional.<BlockPosition>empty();
         FrontierV3ConfirmedNativeEvent.capture(level,resident.settlementId(),
-                new SecurityEvent.Incident(resident.settlementId(),body,player.getUUID(),damage));
+                new SecurityEvent.Incident(resident.settlementId(),body,target,position(victim),seen,damage));
     }
     static void tick(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime) {
         var state=runtime.decodedState().orElseThrow();
@@ -93,8 +98,10 @@ public final class FrontierV3SecurityExecutor {
                 if(previous==null && state.security().contactsIn(duty.home()).size()>=SecurityState.MAX_CONTACTS_PER_HOME)continue;
                 var contact=new SecurityState.Contact(duty.home(),key,new BlockPosition(pos.getX(),pos.getY(),pos.getZ()),tick,
                         Math.incrementExact(state.security().observationRevision()));
-                if(previous==null || !previous.position().equals(contact.position()) || tick-previous.atTick()>=state.bootstrap().ruleset().security().contactRefreshTicks()) {
-                    FrontierV3CommandSubmission.submit(runtime,"security-contact",duty.id().value(),new SecurityEvent.Seen(actuation,contact));
+                var personal=state.security().awareness().sight(duty.home(),duty.execution().actorId(),key);
+                if(personal.isEmpty() || tick-personal.orElseThrow().atTick()>=state.bootstrap().ruleset().security().contactRefreshTicks()
+                        || previous==null || !previous.position().equals(contact.position()) || tick-previous.atTick()>=state.bootstrap().ruleset().security().contactRefreshTicks()) {
+                    FrontierV3CommandSubmission.submit(runtime,"security-contact",duty.id().value(),new SecurityEvent.Seen(actuation,contact,position(guard)));
                     state=runtime.decodedState().orElseThrow();
                 }
             }
@@ -219,6 +226,9 @@ public final class FrontierV3SecurityExecutor {
     private static boolean attempt(Mob body,SecurityState.Strike strike){
         var receipt=body.getPersistentData().getCompound(ATTEMPT);
         return receipt.getString("owner").equals(strike.duty().value())&&receipt.getLong("ordinal")==strike.attemptOrdinal();
+    }
+    private static BlockPosition position(Entity entity) {
+        var p=entity.blockPosition().below();return new BlockPosition(p.getX(),p.getY(),p.getZ());
     }
     private FrontierV3SecurityExecutor(){}
 }

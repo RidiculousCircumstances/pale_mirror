@@ -14,7 +14,12 @@ public final class GuardPresentation {
             case ON_DUTY -> duty.mission().map(mission -> switch(mission.stage()) {
                 case PATROL -> "Patrol protected sites";
                 case WATCH -> "Watch post";
-                case INTERCEPT -> "Intercept threat";
+                case INTERCEPT -> state.security().response(duty.id()).map(response -> switch(response.engagement().kind()) {
+                    case SELF_DEFENCE -> "Self defence";
+                    case ALLY_DEFENCE -> "Defend nearby ally";
+                    case AREA_DEFENCE -> "Defend protected area";
+                    case REINFORCEMENT -> "Reinforce defenders";
+                }).orElse("Intercept threat");
                 case SEARCH -> "Search last known area";
                 case RETURN -> "Return to post";
             }).orElse("Guard duty");

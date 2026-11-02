@@ -17,47 +17,69 @@ class SecurityDispatchTest {
     private static List<SecurityDispatch.Candidate> guards(int count) {
         var result=new ArrayList<SecurityDispatch.Candidate>();
         for(int i=0;i<count;i++)result.add(new SecurityDispatch.Candidate(new SubjectId("guard-duty:test-"+i),
-                SurfaceAnchor.at(i*10,63,0),Optional.empty()));
+                SurfaceAnchor.at(i*10,63,0),Optional.empty(),Optional.empty()));
         return List.copyOf(result);
     }
+    private static SecurityDispatch.Reinforcement reinforcement(List<SecurityState.Contact> contacts) {
+        return new SecurityDispatch.Reinforcement(SurfaceAnchor.at(0,63,0),contacts.stream().map(SecurityState.Contact::target).collect(java.util.stream.Collectors.toSet()));
+    }
+    private static Map<SubjectId,SecurityState.Response> select(long tick,List<SecurityState.Contact> contacts,
+            List<SecurityDispatch.Candidate> guards,Map<SubjectId,SecurityState.Response> previous) {
+        return SecurityDispatch.select(RULES,HOME,tick,contacts,guards,reinforcement(contacts),previous);
+    }
     @Test void oneThreatGetsNearestBoundedCrewAndLeavesOtherGuardsPosted() {
-        var guards=guards(6);var assigned=SecurityDispatch.select(RULES,HOME,100,List.of(contact(1,1,100,1)),guards,Map.of());
+        var guards=guards(6);var assigned=select(100,List.of(contact(1,1,100,1)),guards,Map.of());
         assertEquals(Set.of(guards.get(0).duty(),guards.get(1).duty()),assigned.keySet());
         assertEquals(4,guards.size()-assigned.size());
-        assertEquals(1,SecurityDispatch.select(RULES,HOME,100,List.of(contact(1,1,100,1)),guards(1),Map.of()).size());
+        assertEquals(1,select(100,List.of(contact(1,1,100,1)),guards(1),Map.of()).size());
     }
     @Test void independentThreatsReceiveFirstRespondersBeforeReinforcements() {
         var guards=guards(6);var first=contact(1,0,100,1);var second=contact(2,50,100,2);
-        var old=SecurityDispatch.select(RULES,HOME,100,List.of(first),guards,Map.of());
-        var assigned=SecurityDispatch.select(RULES,HOME,101,List.of(first,second),guards,old);
+        var old=select(100,List.of(first),guards,Map.of());
+        var assigned=select(101,List.of(first,second),guards,old);
         assertEquals(3,assigned.size());
         assertEquals(2,assigned.values().stream().filter(r -> r.contact().target().equals(first.target())).count());
         assertEquals(second.target(),assigned.get(guards.get(5).duty()).contact().target());
         assertEquals(3,guards.size()-assigned.size());
     }
-    @Test void aMovingTargetDoesNotContinuouslyReplaceItsRetainedResponders() {
-        var guards=guards(6);var initial=SecurityDispatch.select(RULES,HOME,100,List.of(contact(1,0,100,1)),guards,Map.of());
-        var moved=SecurityDispatch.select(RULES,HOME,101,List.of(contact(1,50,101,2)),guards,initial);
-        assertEquals(initial,moved);
+    @Test void hysteresisRetainsSmallChangesButReassignsToMeaningfullyCloserResponders() {
+        var guards=guards(6);var initial=select(100,List.of(contact(1,0,100,1)),guards,Map.of());
+        assertEquals(initial,select(101,List.of(contact(1,2,101,2)),guards,initial));
+        var moved=select(101,List.of(contact(1,50,101,2)),guards,initial);
+        assertEquals(Set.of(guards.get(4).duty(),guards.get(5).duty()),moved.keySet());
         var reversed=new ArrayList<>(guards);Collections.reverse(reversed);
-        assertEquals(initial,SecurityDispatch.select(RULES,HOME,101,List.of(contact(1,50,101,2)),reversed,initial));
+        assertEquals(moved,select(101,List.of(contact(1,50,101,2)),reversed,initial));
+    }
+    @Test void localDefendersAreNotCappedAndReleaseUnneededDistantReinforcements() {
+        var candidates=guards(6);var c=contact(1,0,100,1);
+        var old=select(100,List.of(c),candidates,Map.of());
+        var local=candidates.stream().map(g -> new SecurityDispatch.Candidate(g.duty(),g.position(),Optional.empty(),
+                Optional.of(new CombatEngagement(c.target(),CombatEngagement.Kind.AREA_DEFENCE,SurfaceAnchor.at(0,63,0),64)))).toList();
+        assertEquals(6,select(100,List.of(c),local,old).size(),"local defence is never a distant reinforcement quota");
+        var takeover=new ArrayList<>(candidates);
+        for(int i=4;i<6;i++){var g=candidates.get(i);takeover.set(i,local.get(i));}
+        assertEquals(Set.of(candidates.get(4).duty(),candidates.get(5).duty()),select(100,List.of(c),takeover,old).keySet());
+        var lostOne=takeover.stream().filter(g -> !g.duty().equals(candidates.get(5).duty())).toList();
+        var afterLoss=select(101,List.of(c),lostOne,old);
+        assertEquals(2,afterLoss.size());assertTrue(afterLoss.containsKey(candidates.get(4).duty()));
+        assertTrue(afterLoss.values().stream().anyMatch(r -> r.engagement().kind()==CombatEngagement.Kind.REINFORCEMENT));
     }
     @Test void staleSightingsRetainOnlyExistingInvestigatorsAndExpireWithoutReplacements() {
         var candidates=guards(4);var contact=contact(1,0,100,1);
-        var assigned=SecurityDispatch.select(RULES,HOME,100,List.of(contact),candidates,Map.of());
+        var assigned=select(100,List.of(contact),candidates,Map.of());
         var investigating=candidates.stream().map(c -> new SecurityDispatch.Candidate(c.duty(),c.position(),
-                assigned.containsKey(c.duty())?Optional.of(contact.target()):Optional.empty())).toList();
-        assertEquals(assigned,SecurityDispatch.select(RULES,HOME,170,List.of(contact),investigating,assigned));
-        assertTrue(SecurityDispatch.select(RULES,HOME,170,List.of(contact),candidates,assigned).isEmpty(),"completed return cannot restart an old search");
-        assertTrue(SecurityDispatch.select(RULES,HOME,501,List.of(contact),investigating,assigned).isEmpty());
+                assigned.containsKey(c.duty())?Optional.of(contact.target()):Optional.empty(),Optional.empty())).toList();
+        assertEquals(assigned,select(170,List.of(contact),investigating,assigned));
+        assertTrue(select(170,List.of(contact),candidates,assigned).isEmpty(),"completed return cannot restart an old search");
+        assertTrue(select(501,List.of(contact),investigating,assigned).isEmpty());
         var available=investigating.stream().filter(c -> !assigned.containsKey(c.duty())).toList();
-        assertTrue(SecurityDispatch.select(RULES,HOME,170,List.of(contact),available,assigned).isEmpty(),"unseen threat cannot recruit a replacement");
+        assertTrue(select(170,List.of(contact),available,assigned).isEmpty(),"unseen threat cannot recruit a replacement");
     }
     @Test void lossOfOneContactCannotEraseAnotherAndObservationRevisionsDoNotRestart() {
         var a=contact(1,0,100,1);var b=contact(2,10,100,2);
         var state=SecurityState.empty().offence(HOME,a.target().entity(),90).offence(HOME,b.target().entity(),90).observed(a).observed(b);
-        var candidates=guards(4);var allocated=SecurityDispatch.select(RULES,HOME,100,List.of(a,b),candidates,Map.of());
-        state=state.allocated(HOME,allocated,100,RULES.investigationTicks());
+        var candidates=guards(4);var allocated=select(100,List.of(a,b),candidates,Map.of());
+        state=state.allocated(HOME,allocated,100,RULES);
         state=state.contactEnded(new SecurityState.ContactKey(HOME,a.target()));
         assertNull(state.contact(HOME,a.target()));assertEquals(b,state.contact(HOME,b.target()));
         assertEquals(1,state.responses().size());
@@ -68,8 +90,8 @@ class SecurityDispatchTest {
     }
     @Test void policyRejectsDuplicateCandidatesAndForeignContactDeclarations() {
         var one=guards(1).getFirst();
-        assertThrows(IllegalArgumentException.class,()->SecurityDispatch.select(RULES,HOME,100,List.of(),List.of(one,one),Map.of()));
+        assertThrows(IllegalArgumentException.class,()->select(100,List.of(),List.of(one,one),Map.of()));
         assertThrows(IllegalArgumentException.class,()->SecurityDispatch.select(RULES,new SubjectId("settlement:foreign"),100,
-                List.of(contact(1,1,100,1)),guards(4),Map.of()));
+                List.of(contact(1,1,100,1)),guards(4),reinforcement(List.of(contact(1,1,100,1))),Map.of()));
     }
 }

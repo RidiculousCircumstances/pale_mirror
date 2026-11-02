@@ -13,6 +13,6 @@ public record SecurityResponsesAllocated(SubjectId home,Map<SubjectId,SecuritySt
         if(!home.equals(subject) || !responses.equals(SecurityDispatch.plan(state,home,tick)))
             throw new IllegalArgumentException("stale or forged response allocation");
         return state.withChanges(FrontierWorldStateUpdate.begin().security(state.security().allocated(home,responses,tick,
-                state.bootstrap().ruleset().security().investigationTicks())));
+                state.bootstrap().ruleset().security())));
     }
 }

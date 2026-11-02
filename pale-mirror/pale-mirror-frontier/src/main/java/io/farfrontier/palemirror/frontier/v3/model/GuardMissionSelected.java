@@ -23,7 +23,8 @@ public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardM
             boolean intercept=mission.stage()==GuardMission.Stage.INTERCEPT;
             int radius=intercept?io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.MAX_CONTACT_STATION_DISTANCE
                     :state.bootstrap().ruleset().security().searchRadius();
-            if(contact==null || !contact.target().equals(mission.response().orElseThrow())
+            if(!io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.permitsStation(state,owner,mission.station())
+                    || contact==null || !contact.target().equals(mission.response().orElseThrow())
                     || intercept && io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.contact(state,owner,tick).isEmpty()
                     || !intercept && !io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.investigating(state,owner,tick)
                     || mission.station().manhattanDistance(new SurfaceAnchor(contact.position()))>radius)

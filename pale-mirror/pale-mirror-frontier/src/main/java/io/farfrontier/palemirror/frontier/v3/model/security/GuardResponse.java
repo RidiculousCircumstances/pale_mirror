@@ -10,7 +10,7 @@ public final class GuardResponse {
         if(assigned.isEmpty() || !assigned.orElseThrow().contact().home().equals(duty.home()))return Optional.empty();
         var contact=state.security().contacts().get(assigned.orElseThrow().contact());
         if(contact==null || !contact.current(tick,state.bootstrap().ruleset().security().contactLifetime()))return Optional.empty();
-        return inScope(state,duty.home(),contact)?Optional.of(contact):Optional.empty();
+        return permitted(state,assigned.orElseThrow(),contact)?Optional.of(contact):Optional.empty();
     }
     /** The same assigned sighting permits finite search, never live tracking through walls. */
     public static boolean investigating(FrontierWorldState state,GuardDuty duty,long tick) {
@@ -20,7 +20,14 @@ public final class GuardResponse {
                 || !assigned.orElseThrow().contact().target().equals(retained.orElseThrow()))return false;
         var sighting=state.security().contacts().get(assigned.orElseThrow().contact());
         return sighting!=null && sighting.current(tick,state.bootstrap().ruleset().security().investigationTicks())
-                && inScope(state,duty.home(),sighting);
+                && permitted(state,assigned.orElseThrow(),sighting);
+    }
+    private static boolean permitted(FrontierWorldState state,SecurityState.Response response,SecurityState.Contact contact) {
+        return response.engagement().contains(new SurfaceAnchor(contact.position()))
+                && (response.engagement().kind().local() || inScope(state,response.contact().home(),contact));
+    }
+    public static boolean permitsStation(FrontierWorldState state,GuardDuty duty,SurfaceAnchor station) {
+        return state.security().response(duty.id()).filter(r -> r.contact().home().equals(duty.home()) && r.engagement().contains(station)).isPresent();
     }
     static boolean inScope(FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.api.SubjectId homeId,SecurityState.Contact contact) {
         var position=new SurfaceAnchor(contact.position());
@@ -40,6 +47,8 @@ public final class GuardResponse {
         if(duty.mission().isEmpty())return contact(state,duty,tick).isPresent();
         if(!targetRetained(state,duty))return true;
         var mission=duty.mission().orElseThrow();var contact=contact(state,duty,tick);
+        if(mission.response().isPresent() && state.security().response(duty.id())
+                .filter(r -> !r.engagement().contains(mission.station())).isPresent())return true;
         if(mission.response().isEmpty())return contact.isPresent();
         if(contact.isEmpty()) {
             if(!investigating(state,duty,tick))return true;

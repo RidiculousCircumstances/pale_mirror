@@ -116,12 +116,12 @@
         "security": {
           "contactCount": 1,
           "responseStatus": "ENGAGED",
-          "reserveStatus": "PRESERVED"
+          "selfDefenders": 1
         }
       },
       "timeoutMs": 60000,
       "pollIntervalMs": 100,
-      "causalMilestone": "bounded_response_preserves_patrol"
+      "causalMilestone": "confirmed_local_self_defence"
     },
     {
       "type": "wait_until_player_health",
