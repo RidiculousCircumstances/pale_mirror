@@ -591,3 +591,11 @@ test('persistent client deadline includes the declared disconnected COLD and res
   assert.ok(scenarioDeadlineMs(value) >= scenarioDeadlineMs(scenario) + 935_000,
     'the complete declared COLD wait and demand-release interval must fit');
 });
+
+
+test('physical entity rendezvous remains bounded setup and cannot become an evidence action', () => {
+  const action={type:'visit_nearest_entity',entityType:'minecraft:villager',nameContains:'Guard',maxDistance:64,timeoutMs:30000};
+  assert.doesNotThrow(()=>validateScenario({...scenario,setup:[action]}));
+  assert.throws(()=>validateScenario({...scenario,actions:[action]}));
+  assert.throws(()=>validateScenario({...scenario,setup:[{...action,maxDistance:129}]}));
+});

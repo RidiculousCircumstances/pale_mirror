@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import java.util.*;
 
-/** Peaceful duty owns interruption semantics, never a combat controller or a body position. */
+/** Duty owns interruption semantics; shared combat and movement retain their own mechanical state. */
 final class GuardActivityCapability implements ActorActivityCapability {
     public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, ActorExecutionId execution) {
@@ -19,7 +19,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
     public void validateReference(FrontierWorldState state, ActorExecutionId execution) { GuardAuthority.require(state, execution); }
     public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) {
         if (GuardAuthority.pending(state, GuardAuthority.require(state, execution)))
-            throw new IllegalArgumentException("guard retains an unsettled equipment effect");
+            throw new IllegalArgumentException("guard retains an unsettled physical operation");
     }
     public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution) {
         var duty = GuardAuthority.require(state, execution);
@@ -74,7 +74,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
         validateReference(state, execution); return List.of(GuardContinuation.wake(execution.activityOwnerId(), tick));
     }
     public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long tick) {
-        if (!checkpoint(state, execution).ready()) throw new IllegalArgumentException("guard cannot pause a prepared equipment effect");
+        if (!checkpoint(state, execution).ready()) throw new IllegalArgumentException("guard cannot pause a prepared physical operation");
         return state;
     }
     public FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long tick) { validateReference(state, execution); return state; }

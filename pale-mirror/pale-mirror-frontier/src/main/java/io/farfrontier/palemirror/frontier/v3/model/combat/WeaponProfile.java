@@ -1,4 +1,4 @@
-package io.farfrontier.palemirror.frontier.v3.model.security;
+package io.farfrontier.palemirror.frontier.v3.model.combat;
 import java.util.*;
 /** Native-resolved immutable combat input; item identity/condition remain inventory-owned. */
 public record WeaponProfile(String itemKind, double damage, long attackIntervalTicks, double reach, int wear) {

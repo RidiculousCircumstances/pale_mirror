@@ -35,6 +35,12 @@ final class FrontierV3TestPilotPresentation {
         }
     }
 
+    static Entity nearestVisibleNamedEntity(Minecraft minecraft,com.google.gson.JsonObject action){
+        String name=FrontierV3PilotPresentationName.resolve(minecraft,action);if(name==null)return null;
+        var type=ResourceLocation.parse(action.get("entityType").getAsString());
+        double maximum=action.has("maxDistance")?action.get("maxDistance").getAsDouble():64.0;
+        return nearestVisibleNamedEntity(minecraft,type,name,maximum);
+    }
     static Entity nearestVisibleNamedEntity(Minecraft minecraft, ResourceLocation expectedType, String expectedName, double maximum) {
         return minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
                         !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)

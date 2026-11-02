@@ -14,7 +14,7 @@ final class FrontierV3TestPilotScenario {
             "wait", "wait_until_block", "wait_until_player_health", "wait_until_diagnostic", "wait_until_harvest_result", "observe_harvest_semantics",
             "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
-            "walk", "break", "place", "use_item_on", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
+            "visit_nearest_entity", "walk", "break", "place", "use_item_on", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
             "observe_entity_motion", "observe_settlement_population", "open_container", "quick_move_from_inventory",
             "quick_move_from_container", "split_move_from_container", "move_within_container", "click_menu_button", "close_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "assert_visible_entity");
@@ -62,6 +62,7 @@ final class FrontierV3TestPilotScenario {
             if (!validCausalMilestone(action, causalMilestones) || (type.equals("release_fast_forward_hold") && action.size() != 1) ||
                     (type.equals("command") && !action.has("command")) ||
                     (type.equals("visit") && !validVisit(action)) ||
+                    (type.equals("visit_nearest_entity") && (!section.equals("setup") || !validLookNearestEntity(action))) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
                             || !action.get("expect").isJsonObject() || !boundedDiagnosticWait(action) || !validOptionalIncreasePath(action)

@@ -18,6 +18,9 @@ class FrontierV3TestPilotScenarioTest {
         var declaration=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
                 "scenarios","disposable-security-response-restart.json"));
         assertEquals(12,FrontierV3TestPilotScenario.parse(declaration).actionCount());
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(
+                "{\"schema\":1,\"actions\":[{\"type\":\"visit_nearest_entity\",\"entityType\":\"minecraft:villager\","
+                        +"\"nameContains\":\"Guard\",\"maxDistance\":64,\"timeoutMs\":30000}]}"));
     }
     @Test void ordinarySaplingGrowthDeclarationHasBoundedNativeItemUse() throws java.io.IOException {
         var source = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",

@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.model.security.*;
 /** Combat relation closure, not health, body or equipment ownership. */
 final class SecurityReferences {
@@ -22,14 +23,6 @@ final class SecurityReferences {
                 if(duty==null || !duty.home().equals(response.contact().home()))
                     throw new IllegalArgumentException("response lost its declared guard/home relationship");
             }
-            for(var strike:security.pending().values()) {
-                var duty=plans.guards().get(strike.duty());
-                if(duty==null || !duty.execution().equals(strike.attacker().execution()) || duty.revision()!=strike.dutyRevision()
-                        || !duty.weapon().equals(strike.weapon()) || !strike.attacker().body().actorId().equals(duty.execution().actorId()))
-                    throw new IllegalArgumentException("pending combat effect lost its exact guard execution/weapon");
-            }
-            for(var duty:security.nextAttack().keySet()) if(!plans.guards().containsKey(duty))
-                throw new IllegalArgumentException("attack readiness retained a retired owner");
         },bootstrap,security,plans.guards());
     }
     private SecurityReferences(){}

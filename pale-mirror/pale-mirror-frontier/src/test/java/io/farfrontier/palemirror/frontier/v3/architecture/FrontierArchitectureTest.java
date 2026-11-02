@@ -19,6 +19,12 @@ final class FrontierArchitectureTest {
     }
 
     @ArchTest
+    static final ArchRule combat_core_does_not_depend_on_roles_or_security_policy = noClasses()
+            .that().resideInAPackage("..model.combat..")
+            .should().dependOnClassesThat().resideInAPackage("..model.security..")
+            .because("combat consumes explicit permissions and facts; its role adapters own settlement security");
+
+    @ArchTest
     static final ArchRule economic_solver_has_only_explicit_planning_owners = noClasses()
             .that().resideOutsideOfPackage("..model.economy..")
             .and().doNotHaveSimpleName("SettlementEconomicEvaluation")

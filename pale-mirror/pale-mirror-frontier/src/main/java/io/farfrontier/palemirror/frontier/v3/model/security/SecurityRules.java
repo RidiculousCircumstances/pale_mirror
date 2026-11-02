@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model.security;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 
 /** Hashed world policy; safety bounds remain separate from tunable security behaviour. */
 public record SecurityRules(int observationRadius, int pursuitMargin, int homePursuitLimit,

@@ -263,6 +263,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         }
     }
 
+    public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
     private String canonicalText() {
         return id + '|' + schemaVersion + '|' + cadence.canonicalText() + '|' + spatial.canonicalText() + '|' + rates.canonicalText()
                 + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText()
@@ -280,7 +282,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (tools.definitions().isEmpty() ? "" : "|tools=" + tools.canonicalText())
                 + (worldLayout.equals(FrontierWorldLayout.compact()) ? "" : "|layout=" + worldLayout.canonicalText())
                 + (forestry.enabled() ? "|forestry=" + forestry.canonicalText() : "")
-                + "|security=" + security.canonicalText();
+                + "|security=" + security.canonicalText()+"|melee="+melee().canonicalText();
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */
@@ -352,7 +354,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             return new ResidentLife(24_000, 12_000, 72L, 668, 900, 1_000, 1_000);
         }
 
-        private String canonicalText() {
+        public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
+    private String canonicalText() {
             return dayTicks + "," + workTicks + "," + satietyUnitTicks + "," + eatBelowUnits
                     + "," + mealTargetUnits + ",foods[" + foods.canonicalText() + "]," + satietyCapacityUnits
                     + "," + metabolismDefaultPermille + "," + metabolismMinPermille + "," + metabolismMaxPermille
@@ -451,7 +455,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(hiveTerritoryKnowledgeMaxAge, "hive territory knowledge max age");
             requirePositive(hiveSettlementKnowledgeMaxAge, "hive settlement knowledge max age");
         }
-        private String canonicalText() {
+        public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
+    private String canonicalText() {
             return resourceInitialPreparationTick + "," + resourceGrowthStageInterval + "," + resourceHarvestTraversalInterval + "," + resourceHarvestRetryInterval + "," + companyFoundationReviewInterval
                     + "," + strategicReviewInterval + "," + populationBirthReviewInterval + "," + populationBirthCompletionDelay + "," + provisionInitialReviewTick
                     + "," + provisionReviewInterval + "," + migrationReviewInterval + "," + migrationStepInterval + "," + humanHealthProgressionDelay
@@ -488,7 +494,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(hiveSettlementAssaultTerritoryRadius, "hive settlement assault territory radius");
             requirePositive(hiveSettlementAssaultColdStepBlocks, "hive settlement assault COLD step");
         }
-        private String canonicalText() {
+        public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
+    private String canonicalText() {
             return decontaminationResponseRadius + "," + settlementInfectionRadius + "," + hiveTerritoryGanglionRadius
                     + "," + hiveTerritoryScoutRadius + "," + hiveSettlementSightRadius + "," + hiveScoutPatrolRadius + "," + hiveScoutPatrolStep
                     + "," + hiveSettlementAssaultTerritoryRadius + "," + hiveSettlementAssaultColdStepBlocks;
@@ -513,7 +521,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 throw new IllegalArgumentException("economic rates must be non-negative treasury and positive price");
             }
         }
-        private String canonicalText() {
+        public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
+    private String canonicalText() {
             return hiveInfectionPulseGain.raw() + "," + decontaminationReduction.raw() + "," + initialSettlementTreasury.raw() + "," + worksJobPrice.raw();
         }
     }
@@ -532,7 +542,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(intactInfirmaryWorkCapacity, "intact infirmary work capacity");
             requirePositive(damagedWorkCapacity, "damaged work capacity");
         }
-        private String canonicalText() {
+        public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
+    private String canonicalText() {
             return intactHousingBeds + "," + damagedHousingBeds + "," + intactHallWorkCapacity + "," + intactFarmWorkCapacity
                     + "," + intactWorkshopWorkCapacity + "," + intactDepotWorkCapacity + "," + intactInfirmaryWorkCapacity + "," + damagedWorkCapacity;
         }
@@ -548,7 +560,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             residentGuardDamage = positive(residentGuardDamage, "resident guard damage");
             residentWorkerDamage = positive(residentWorkerDamage, "resident worker damage");
         }
-        private String canonicalText() {
+        public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
+    private String canonicalText() {
             return hiveGuardDamage.raw() + "," + hiveWorkerScoutDamage.raw() + "," + hiveBomberDamage.raw() + ","
                     + residentGuardDamage.raw() + "," + residentWorkerDamage.raw();
         }
@@ -569,7 +583,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(instinctReclaimInterval, "hive instinct reclaim interval");
         }
 
-        private String canonicalText() {
+        public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
+
+    private String canonicalText() {
             return overseerSubordinateCapacity + "," + runtSubordinateWeight + "," + sentinelSubordinateWeight
                     + "," + visibleMutationSurcharge + "," + signalMemoryTicks + "," + instinctReclaimInterval;
         }

@@ -20,7 +20,7 @@ const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
 const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'use_item_on', 'open_container', 'click_menu_button', 'close_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'move_within_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_player_health', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
-const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
+const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit', 'visit_nearest_entity']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
 export function selectMutterXauthority(entries) {
@@ -290,7 +290,7 @@ export function validateScenario(scenario) {
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128)))) {
         throw new Error('observe_settlement_population needs one settlement and bounded first-ingress sampling');
       }
-      if (action.type === 'look_nearest_entity' && (!validItemKind(action.entityType) || !validEntityName(action.nameContains)
+      if ((action.type === 'look_nearest_entity' || action.type === 'visit_nearest_entity') && (!validItemKind(action.entityType) || !validEntityName(action.nameContains)
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128)))) {
         throw new Error('look_nearest_entity needs one bounded locally rendered named entity');

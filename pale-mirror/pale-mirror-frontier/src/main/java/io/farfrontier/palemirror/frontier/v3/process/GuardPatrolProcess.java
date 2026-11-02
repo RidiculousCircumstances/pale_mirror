@@ -3,6 +3,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.security.*;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.*;
 /** Guard coverage continuation. No body writer or path-search implementation. */
@@ -14,8 +15,8 @@ final class GuardPatrolProcess {
         if(threat.isPresent() && mission.isPresent()) {
             var contact=threat.orElseThrow();
             if(mission.orElseThrow().response().equals(Optional.of(contact.target()))
-                    && GuardResponse.recoveringAfterAttack(state,duty,tick))
-                return List.of(scheduled(action,duty,Math.addExact(state.security().nextAttack().get(duty.id()),
+                    && GuardResponse.recoveringAfterAttack(state,duty,tick) && !GuardResponse.redirect(state,duty,tick))
+                return List.of(scheduled(action,duty,Math.addExact(state.combat().nextAttack().get(duty.id()),
                         state.bootstrap().ruleset().security().observationInterval()+1L)));
             if(mission.isPresent() && mission.orElseThrow().response().equals(Optional.of(contact.target()))
                     && !GuardResponse.redirect(state,duty,tick)) {
@@ -23,7 +24,8 @@ final class GuardPatrolProcess {
                 return List.of(scheduled(action,duty,tick+10));
             }
             var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,duty.execution().actorId());
-            var selected=approach(state,duty,knowledge,contact.position());
+            var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick).orElseThrow();
+            var selected=MeleePositions.select(state,order,knowledge,CombatComposition.CAPABILITIES.orders(state,tick),tick,Set.of());
             if(selected.isPresent()) {
                 var response=mission.orElseThrow().responding(selected.orElseThrow(),contact.target());
                 return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),response)),GuardContinuation.wake(duty.id(),tick));
@@ -147,7 +149,15 @@ final class GuardPatrolProcess {
         var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,duty.execution(),tick);
         if(assessment instanceof ActivityInterruptionPlanner.Waiting)return List.of(scheduled(action,duty,tick+20));
         var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,duty.execution().actorId());
-        var replacement=selectPost(ready.following(),action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);
+        var after=ready.following();List<ProposedEvent> replacement;
+        var order=CombatComposition.CAPABILITIES.current(after,duty.execution(),tick);
+        if(order.isPresent()){
+            var space=new GuardMissionMovementProvider().placementKnowledge(after,movement);
+            var station=MeleePositions.select(after,order.orElseThrow(),space,CombatComposition.CAPABILITIES.orders(after,tick),tick,Set.of(goal));
+            replacement=station.map(point->List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),
+                    duty.mission().orElseThrow().responding(point,order.orElseThrow().target()))),GuardContinuation.wake(duty.id(),tick)))
+                    .orElseGet(()->List.of(scheduled(action,duty,tick+20)));
+        }else replacement=selectPost(after,action,duty,tick,duty.mission().orElseThrow().visitOrdinal()+1);
         var events=new ArrayList<>(ready.events());
         events.addAll(replacement);return List.copyOf(events);
     }

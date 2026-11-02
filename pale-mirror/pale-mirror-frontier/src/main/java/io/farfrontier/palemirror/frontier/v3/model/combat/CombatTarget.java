@@ -1,4 +1,4 @@
-package io.farfrontier.palemirror.frontier.v3.model.security;
+package io.farfrontier.palemirror.frontier.v3.model.combat;
 import java.util.*;
 /** Physical contact identity is explicit. An absent entity is never a COLD opponent. */
 public record CombatTarget(Kind kind, UUID entity, String dimension) {

@@ -36,7 +36,7 @@ final class GuardDutyCodec {
         }
         out.writeByte(mission.targetKind().wireTag()); out.writeUTF(mission.target().value());
         FrontierWorldStateCodec.writePosition(out, mission.station().support()); out.writeLong(mission.visitOrdinal()); out.writeLong(mission.watchUntil());
-        out.writeBoolean(mission.response().isPresent()); if(mission.response().isPresent()) SecurityStateCodec.target(out,mission.response().orElseThrow());
+        out.writeBoolean(mission.response().isPresent()); if(mission.response().isPresent()) CombatWire.target(out,mission.response().orElseThrow());
         out.writeBoolean(mission.resume().isPresent()); if(mission.resume().isPresent()) {
             var post=mission.resume().orElseThrow();out.writeByte(post.kind().wireTag());out.writeUTF(post.target().value());
             FrontierWorldStateCodec.writePosition(out,post.station().support());out.writeLong(post.visitOrdinal());
@@ -53,7 +53,7 @@ final class GuardDutyCodec {
         return new io.farfrontier.palemirror.frontier.v3.model.security.GuardMission(
                 io.farfrontier.palemirror.frontier.v3.model.security.ProtectedTarget.Kind.require(in.readUnsignedByte()), new SubjectId(in.readUTF()),
                 new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), in.readLong(), in.readLong(),
-                in.readBoolean()?Optional.of(SecurityStateCodec.target(in)):Optional.empty(),
+                in.readBoolean()?Optional.of(CombatWire.target(in)):Optional.empty(),
                 in.readBoolean()?Optional.of(new io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Post(
                     io.farfrontier.palemirror.frontier.v3.model.security.ProtectedTarget.Kind.require(in.readUnsignedByte()),new SubjectId(in.readUTF()),
                     new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readLong())):Optional.empty(),stage,search);

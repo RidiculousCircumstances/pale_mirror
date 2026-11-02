@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -18,10 +19,10 @@ class SecurityStateCodecTest {
         var payload=new SecurityResponsesAllocated(home,Map.of(duty,response));var codec=FrontierWorldRuntimeDefinition.payloadCodecs();
         var bytes=codec.encode(payload);assertEquals(payload,codec.decode(payload.type(),bytes));
         assertThrows(IllegalArgumentException.class,()->codec.decode(payload.type(),Arrays.copyOf(bytes,bytes.length-1)));
-        var header=new ByteArrayOutputStream();SecurityStateCodec.target(new DataOutputStream(header),target);
-        var encoded=new ByteArrayOutputStream();SecurityStateCodec.engagement(new DataOutputStream(encoded),engagement);
+        var header=new ByteArrayOutputStream();CombatWire.target(new DataOutputStream(header),target);
+        var encoded=new ByteArrayOutputStream();CombatWire.engagement(new DataOutputStream(encoded),engagement);
         var bad=encoded.toByteArray();bad[header.size()]=127;
-        assertThrows(IllegalArgumentException.class,()->SecurityStateCodec.engagement(new DataInputStream(new ByteArrayInputStream(bad))));
+        assertThrows(IllegalArgumentException.class,()->CombatWire.engagement(new DataInputStream(new ByteArrayInputStream(bad))));
         var other=new CombatTarget(target.kind(),new UUID(3,4),target.dimension());
         assertThrows(IllegalArgumentException.class,()->new SecurityState.Response(duty,new SecurityState.ContactKey(home,other),10,engagement));
     }

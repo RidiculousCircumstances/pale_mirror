@@ -1,8 +1,9 @@
 package io.farfrontier.palemirror.frontier.v3.model.security;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.*;
-/** Combat owns only relations/contacts/attack lifecycle. It consumes existing body, role and inventory authority. */
+/** Security owns hostility and witnessed threat knowledge; it does not prepare or complete attacks. */
 public final class SecurityTransitions {
     public static FrontierWorldState apply(FrontierWorldState state,SubjectId subject,SecurityEvent event,long tick){
         var security=state.security();var update=FrontierWorldStateUpdate.begin();
@@ -37,32 +38,6 @@ public final class SecurityTransitions {
             // erasing that successor, just as a repeated end cannot recreate a contact.
             if(contact!=null && contact.target().equals(ended.target()) && contact.revision()==ended.expectedRevision())
                 security=security.contactEnded(new SecurityState.ContactKey(ended.home(),ended.target()));
-        }else if(event instanceof SecurityEvent.Prepared prepared){
-            var strike=prepared.strike();ActorBodyAuthority.requireActuation(state,strike.attacker());
-            var guard=GuardAuthority.require(state,strike.attacker().execution());var contact=security.contact(guard.home(),strike.target());
-            var item=state.inventory().items().get(strike.weapon());
-            if(!subject.equals(strike.duty()) || !guard.id().equals(strike.duty()) || guard.revision()!=strike.dutyRevision()
-                    || guard.phase()!=GuardDuty.Phase.ON_DUTY || !GuardEquipment.held(state,guard) || !guard.weapon().equals(strike.weapon())
-                    || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
-                    || contact==null || GuardResponse.contact(state,guard,tick).filter(c -> c.target().equals(strike.target())).isEmpty() || !contact.target().equals(strike.target()) || strike.preparedAt()!=tick
-                    || tick<security.nextAttack().getOrDefault(guard.id(),0L) || state.actorMovements().containsKey(guard.execution().actorId()))
-                throw new IllegalArgumentException("combat strike lacks current role/contact/weapon/readiness");
-            security=security.prepared(strike);
-        }else{
-            var outcome=(SecurityEvent.Completed)event;var strike=Objects.requireNonNull(security.pending().get(outcome.duty()),"pending strike");
-            if(!subject.equals(outcome.duty()) || outcome.attemptOrdinal()!=strike.attemptOrdinal()
-                    || !outcome.after().equals(outcome.applied() && strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before()))
-                throw new IllegalArgumentException("strike outcome lost its exact wear/effect declaration");
-            if(outcome.applied()) {
-                var item=state.inventory().items().get(strike.weapon());
-                // A confirmed later transfer/death may move or retire this exact item. Wear neither recreates it nor changes its holder/title.
-                if(item!=null) {
-                    if(!item.itemKind().equals(strike.profile().itemKind()) || !item.condition().equals(strike.before()) && !item.condition().equals(outcome.after()))
-                        throw new IllegalArgumentException("strike receipt conflicts with the current exact weapon condition");
-                    if(!item.condition().equals(outcome.after())) update.inventory(state.inventory().changeCondition(item,outcome.after()));
-                }
-            }
-            security=security.completed(strike,tick);
         }
         return state.withChanges(update.security(security));
     }

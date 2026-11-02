@@ -1,11 +1,11 @@
 package io.farfrontier.palemirror.frontier.v3.model.security;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 import java.util.*;
-/** Relations survive contact expiry. Contacts, attack intents and readiness each have finite lifetimes. */
+/** Security owns relations, contacts and response assignments; mechanical attempts belong to CombatState. */
 public record SecurityState(Map<Relation, Offence> hostility, Map<ContactKey, Contact> contacts,
-                            Map<SubjectId, Strike> pending, Map<SubjectId, Long> nextAttack,
                             Map<SubjectId, Response> responses, long observationRevision, CombatAwareness awareness) {
     public static final int MAX_RELATIONS=16384, MAX_CONTACTS_PER_HOME=16;
     public record ContactKey(SubjectId home, CombatTarget target) {
@@ -33,7 +33,7 @@ public record SecurityState(Map<Relation, Offence> hostility, Map<ContactKey, Co
         next.putAll(assigned);
         var kept = new LinkedHashMap<>(contacts);
         kept.entrySet().removeIf(e -> e.getKey().home().equals(home) && !e.getValue().current(tick,rules.investigationTicks()));
-        return new SecurityState(hostility,kept,pending,nextAttack,next,observationRevision,awareness.pruned(home,tick,rules.investigationTicks(),rules.harmMemoryTicks()));
+        return new SecurityState(hostility,kept,next,observationRevision,awareness.pruned(home,tick,rules.investigationTicks(),rules.harmMemoryTicks()));
     }
     public record Relation(SubjectId home, UUID player) { public Relation { Objects.requireNonNull(home); Objects.requireNonNull(player); } }
     public record Offence(long firstTick, long lastTick, long incidents) {
@@ -44,19 +44,12 @@ public record SecurityState(Map<Relation, Offence> hostility, Map<ContactKey, Co
             if(atTick<0 || revision<1)throw new IllegalArgumentException("invalid dated security contact"); }
         public boolean current(long tick, long lifetime) { return tick>=atTick && tick-atTick <= lifetime; }
     }
-    public record Strike(SubjectId duty, long dutyRevision, ActorActuationId attacker, CombatTarget target,
-                         SubjectId weapon, ItemCondition before, WeaponProfile profile, long targetIncarnation, long attemptOrdinal, long preparedAt) {
-        public Strike { Objects.requireNonNull(duty);Objects.requireNonNull(attacker);Objects.requireNonNull(target);
-            Objects.requireNonNull(weapon);Objects.requireNonNull(before);Objects.requireNonNull(profile);
-            if(targetIncarnation<1 || dutyRevision<1 || attemptOrdinal<1 || preparedAt<0 || !before.usable() || before.remaining()<profile.wear())
-                throw new IllegalArgumentException("invalid combat strike declaration"); }
-    }
     public SecurityState {
         Objects.requireNonNull(awareness);
         hostility=ImmutableLookupMap.copyOf(hostility);contacts=ImmutableLookupMap.copyOf(contacts);
-        pending=ImmutableLookupMap.copyOf(pending);nextAttack=ImmutableLookupMap.copyOf(nextAttack);responses=ImmutableLookupMap.copyOf(responses);
-        if(hostility.size()>MAX_RELATIONS || contacts.size()>SimulationCapacity.MAX_SETTLEMENTS*MAX_CONTACTS_PER_HOME || pending.size()>SimulationCapacity.MAX_RESIDENTS
-                || responses.size()>SimulationCapacity.MAX_RESIDENTS || observationRevision<0 || nextAttack.size()>SimulationCapacity.MAX_RESIDENTS || nextAttack.values().stream().anyMatch(tick->tick<0))
+        responses=ImmutableLookupMap.copyOf(responses);
+        if(hostility.size()>MAX_RELATIONS || contacts.size()>SimulationCapacity.MAX_SETTLEMENTS*MAX_CONTACTS_PER_HOME
+                || responses.size()>SimulationCapacity.MAX_RESIDENTS || observationRevision<0)
             throw new IllegalArgumentException("unbounded security state");
         contacts.forEach((key,value)->{if(!key.equals(new ContactKey(value.home(),value.target())) || value.revision()>observationRevision)throw new IllegalArgumentException("foreign security contact key");});
         var sizes = new HashMap<SubjectId,Integer>();
@@ -64,14 +57,13 @@ public record SecurityState(Map<Relation, Offence> hostility, Map<ContactKey, Co
         if(sizes.values().stream().anyMatch(n -> n>MAX_CONTACTS_PER_HOME))throw new IllegalArgumentException("too many threat contacts");
         for(var entry:responses.entrySet()) if(!entry.getKey().equals(entry.getValue().duty()) || !contacts.containsKey(entry.getValue().contact()))
             throw new IllegalArgumentException("response lost exact duty/contact declaration");
-        pending.forEach((key,value)->{if(!key.equals(value.duty()))throw new IllegalArgumentException("foreign strike key");});
     }
-    public static SecurityState empty(){return new SecurityState(Map.of(),Map.of(),Map.of(),Map.of(),Map.of(),0,CombatAwareness.empty());}
+    public static SecurityState empty(){return new SecurityState(Map.of(),Map.of(),Map.of(),0,CombatAwareness.empty());}
     public boolean hostile(SubjectId home, UUID player){return hostility.containsKey(new Relation(home,player));}
     public SecurityState offence(SubjectId home,UUID player,long tick){
         var key=new Relation(home,player);var prior=hostility.get(key);var next=new LinkedHashMap<>(hostility);
         next.put(key,new Offence(prior==null?tick:prior.firstTick(),tick,prior==null?1:Math.incrementExact(prior.incidents())));
-        return new SecurityState(next,contacts,pending,nextAttack,responses,observationRevision,awareness);
+        return new SecurityState(next,contacts,responses,observationRevision,awareness);
     }
     public SecurityState observed(Contact contact){
         var key=new ContactKey(contact.home(),contact.target());
@@ -80,12 +72,12 @@ public record SecurityState(Map<Relation, Offence> hostility, Map<ContactKey, Co
             throw new IllegalArgumentException("stale security contact");
         if(prior==null && contactsIn(contact.home()).size()>=MAX_CONTACTS_PER_HOME)
             throw new IllegalArgumentException("contact admission exceeds bounded threat register");
-        return new SecurityState(hostility,ImmutableLookupMap.withEntry(contacts,key,contact),pending,nextAttack,responses,contact.revision(),awareness);
+        return new SecurityState(hostility,ImmutableLookupMap.withEntry(contacts,key,contact),responses,contact.revision(),awareness);
     }
 
     public SecurityState seen(Contact contact, SubjectId observer, BlockPosition observerPosition) {
         var next=observed(contact);
-        return new SecurityState(next.hostility,next.contacts,next.pending,next.nextAttack,next.responses,next.observationRevision,
+        return new SecurityState(next.hostility,next.contacts,next.responses,next.observationRevision,
                 next.awareness.seen(new CombatAwareness.Sight(new CombatAwareness.SightKey(contact.home(),observer,contact.target()),contact.position(),observerPosition,contact.atTick())));
     }
     public SecurityState harmed(SecurityEvent.Incident incident,long tick) {
@@ -94,25 +86,15 @@ public record SecurityState(Map<Relation, Offence> hostility, Map<ContactKey, Co
                 || next.contactsIn(incident.home()).size()<MAX_CONTACTS_PER_HOME))
             next=next.seen(new Contact(incident.home(),incident.attacker(),incident.visibleAttackerPosition().orElseThrow(),tick,
                     Math.incrementExact(next.observationRevision)),incident.victim().actorId(),incident.victimPosition());
-        return new SecurityState(next.hostility,next.contacts,next.pending,next.nextAttack,next.responses,next.observationRevision,
+        return new SecurityState(next.hostility,next.contacts,next.responses,next.observationRevision,
                 next.awareness.harmed(new CombatAwareness.Harm(new CombatAwareness.HarmKey(incident.home(),incident.victim().actorId(),incident.attacker()),incident.victimPosition(),tick)));
     }
 
-    public SecurityState prepared(Strike strike){
-        if(pending.containsKey(strike.duty()))throw new IllegalArgumentException("guard already retains a strike");
-        return new SecurityState(hostility,contacts,ImmutableLookupMap.withEntry(pending,strike.duty(),strike),nextAttack,responses,observationRevision,awareness);
-    }
     public SecurityState contactEnded(ContactKey key) {
         var kept=new LinkedHashMap<>(responses);kept.entrySet().removeIf(e -> e.getValue().contact().equals(key));
-        return new SecurityState(hostility,ImmutableLookupMap.withoutEntry(contacts,key),pending,nextAttack,kept,observationRevision,awareness.ended(key.home(),key.target()));
+        return new SecurityState(hostility,ImmutableLookupMap.withoutEntry(contacts,key),kept,observationRevision,awareness.ended(key.home(),key.target()));
     }
     public SecurityState retired(SubjectId duty) {
-        if(pending.containsKey(duty))throw new IllegalArgumentException("cannot retire an unsettled combat owner");
-        return new SecurityState(hostility,contacts,pending,ImmutableLookupMap.withoutEntry(nextAttack,duty),ImmutableLookupMap.withoutEntry(responses,duty),observationRevision,awareness);
-    }
-    public SecurityState completed(Strike strike,long tick){
-        if(!strike.equals(pending.get(strike.duty())) || tick<strike.preparedAt())throw new IllegalArgumentException("stale strike completion");
-        return new SecurityState(hostility,contacts,ImmutableLookupMap.withoutEntry(pending,strike.duty()),
-                ImmutableLookupMap.withEntry(nextAttack,strike.duty(),Math.addExact(tick,strike.profile().attackIntervalTicks())),responses,observationRevision,awareness);
+        return new SecurityState(hostility,contacts,ImmutableLookupMap.withoutEntry(responses,duty),observationRevision,awareness);
     }
 }

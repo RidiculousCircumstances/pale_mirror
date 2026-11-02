@@ -153,11 +153,12 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> ALL_WORLD = union(physicalCommands(), REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
-            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES, GuardProcessModule.TYPES, SecurityProcessModule.TYPES);
+            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES, GuardProcessModule.TYPES, SecurityProcessModule.TYPES, CombatProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("forestry", new ForestryProcessModule()),
             Map.entry("guard", new GuardProcessModule()),
             Map.entry("security", new SecurityProcessModule()),
+            Map.entry("combat", new CombatProcessModule()),
             Map.entry("cultivation", new CultivationProcessModule()),
             Map.entry("defender-equipment-return-visit", new DefenderEquipmentReturnVisitProcessModule()),
             Map.entry("extraction", new ExtractionWorkProcessModule()),
@@ -440,7 +441,9 @@ public final class FrontierWorldProcessCatalog {
                 ProductionStationProcessModule.DESCRIPTOR, GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
                 DefenderEquipmentReturnVisitProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
-                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR, CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR, GuardProcessModule.DESCRIPTOR, SecurityProcessModule.DESCRIPTOR);
+                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR,
+                    CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR, GuardProcessModule.DESCRIPTOR,
+                    SecurityProcessModule.DESCRIPTOR, CombatProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }

@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -16,7 +17,6 @@ import java.util.*;
 
 /** Native sensors and melee effects. Movement is exclusively guard missions through UAE/navigation. */
 public final class FrontierV3SecurityExecutor {
-    private static final String ATTEMPT="pm_v3_combat_attempt";
     private static final int MAX_GUARDS_PER_PASS=32;
     private static final Map<ServerLevel,Integer> OBSERVATION_CURSOR=new WeakHashMap<>();
     private static final Map<ServerLevel,Long> NEXT_OBSERVATION_TICK=new WeakHashMap<>();
@@ -42,8 +42,6 @@ public final class FrontierV3SecurityExecutor {
     }
     static void tick(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime) {
         var state=runtime.decodedState().orElseThrow();
-        // Prepared effects recover before another observation or attack is admitted.
-        for(var strike:state.security().pending().values().stream().limit(MAX_GUARDS_PER_PASS).toList()) execute(level,runtime,strike);
         // Cooperative passes can resume on any tick. A modulo-only gate can miss
         // every opportunity at a stable nonzero phase; sample once the interval is due.
         long nativeTick=level.getGameTime();
@@ -105,127 +103,7 @@ public final class FrontierV3SecurityExecutor {
                     state=runtime.decodedState().orElseThrow();
                 }
             }
-            var contact=GuardResponse.contact(state,duty,tick).orElse(null);
-            var approach=state.actorMovements().get(duty.execution().actorId());
-            if(contact==null || approach!=null && !(approach.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.GuardMissionLeg)
-                    || state.security().pending().containsKey(duty.id())
-                    || tick<state.security().nextAttack().getOrDefault(duty.id(),0L))continue;
-            var actual=level.getEntity(contact.target().entity());
-            if(!(actual instanceof LivingEntity living)||!living.isAlive()||!guard.hasLineOfSight(living) )continue;
-            var item=state.inventory().items().get(duty.weapon());var stack=guard.getMainHandItem();
-            var profile=FrontierV3WeaponProfiles.read(stack);
-            if(!FrontierV3MeleeReach.contains(guard,living,profile) || !FrontierV3ExactItemPresentation.exactMatch(stack,item)
-                    || item.condition().remaining()<profile.wear())continue;
-            // The canonical prepared tick is a unique guard attempt boundary, not a random retry identity.
-            var strike=new SecurityState.Strike(duty.id(),duty.revision(),actuation,contact.target(),duty.weapon(),item.condition(),profile,targetPort(living).identity().incarnation(),tick+1,tick);
-            // An unavailable shared checkpoint is an ordinary wait before any hit.
-            // Ask the same sole interruption owner used by canonical admission; do
-            // not submit a known-unready proposal or swallow an unexpected rejection.
-            if(approach!=null && ActorMovementProcess.ownerTransitionCheckpoint(state,duty.execution(),tick) instanceof ActivityInterruptionPlanner.Waiting)continue;
-            FrontierV3CommandSubmission.submit(runtime,"combat-prepare",duty.id().value(),new SecurityEvent.Prepared(strike));
-            state=runtime.decodedState().orElseThrow();
         }
-    }
-    private static void execute(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,SecurityState.Strike strike) {
-        var state=runtime.decodedState().orElseThrow();
-        var actor=level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(),strike.attacker().body().actorId()));
-        var opponent=level.getEntity(strike.target().entity());
-        var retained=FrontierV3OperationLedger.get(level).find(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.duty(),"strike-"+strike.attemptOrdinal());
-        var ledger=FrontierV3OperationLedger.get(level);
-        if(retained.isPresent()) {
-            var prior=retained.orElseThrow(); var command=ledger.ownerCommand(prior.ticket());
-            if(command.isPresent()) { FrontierV3OperationConfirmation.submitRequired(level,runtime,prior.ticket(),command.orElseThrow().consequence()); return; }
-            if(prior.cancelled()) { confirmMiss(level,runtime,strike,prior.ticket()); return; }
-            if(actor instanceof Mob guard && attempt(guard,strike)) {
-                boolean hit=guard.getPersistentData().getCompound(ATTEMPT).getBoolean("hit");
-                FrontierV3OperationConfirmation.submitRequired(level,runtime,prior.ticket(),new SecurityEvent.Completed(strike.duty(),strike.attemptOrdinal(),hit,
-                        hit&&strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before()));return;
-            }
-        }
-        if(!(actor instanceof Mob guard) || !(opponent instanceof LivingEntity target)) {
-            if(retained.isEmpty()) FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.duty().value(),
-                    new SecurityEvent.Completed(strike.duty(),strike.attemptOrdinal(),false,strike.before()));
-            else cancelUnusedOrWait(level,runtime,strike,retained.orElseThrow());
-            return;
-        }
-        if(retained.isEmpty() && (!canActuate(state,strike) || !guard.isAlive() || !target.isAlive()
-                || targetPort(target).identity().incarnation()!=strike.targetIncarnation())) {
-            FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.duty().value(),new SecurityEvent.Completed(strike.duty(),strike.attemptOrdinal(),false,strike.before()));return;
-        }
-        // Continuation retains the exact declaration and native incarnations admitted before the effect.
-        // A respawned player or replacement body cannot become the participant of an old strike.
-        List<FrontierV3MinecraftOperation.Participant> ports;
-        FrontierV3OperationReceipt.Declaration declaration;
-        if(retained.isPresent()) {
-            declaration=retained.orElseThrow().declaration();
-            ports=FrontierV3OperationParticipantLookup.current(level,declaration.participants());
-            if(ports.isEmpty()) { cancelUnusedOrWait(level,runtime,strike,retained.orElseThrow()); return; }
-        } else {
-            var actorPort=FrontierV3OperationEntityParticipant.current(guard,strike.attacker().body().physicalEpoch());
-            var targetPort=targetPort(target);
-            ports=List.of(actorPort,targetPort);
-            declaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.duty(),"strike-"+strike.attemptOrdinal(),
-                    strike.toString(),ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
-        }
-        var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->{
-                    var current=runtime.decodedState().orElseThrow();
-                    return canActuate(current,strike) && strike.equals(current.security().pending().get(strike.duty())) && target.isAlive() && guard.isAlive()
-                            && guard.hasLineOfSight(target)&&FrontierV3MeleeReach.contains(guard,target,strike.profile())
-                            && current.inventory().items().containsKey(strike.weapon())
-                            && FrontierV3ExactItemPresentation.exactMatch(guard.getMainHandItem(),current.inventory().items().get(strike.weapon()));
-                },new FrontierV3NativeEffect(()->FrontierV3NativeEffect.Admission.READY,()->{
-                    var source=guard.damageSources().mobAttack(guard);
-                    float damage=EnchantmentHelper.modifyDamage(level,guard.getMainHandItem(),target,source,(float)strike.profile().damage());
-                    guard.swing(InteractionHand.MAIN_HAND);
-                    boolean hit=target.hurt(source,damage);
-                    if(hit) {
-                        if(strike.profile().wear()>0)guard.getMainHandItem().setDamageValue(strike.before().damage()+strike.profile().wear());
-                        EnchantmentHelper.doPostAttackEffects(level,target,source);guard.setLastHurtMob(target);
-                    }
-                    var receipt=new CompoundTag();receipt.putString("owner",strike.duty().value());receipt.putLong("ordinal",strike.attemptOrdinal());receipt.putBoolean("hit",hit);
-                    guard.getPersistentData().put(ATTEMPT,receipt);
-                    if(hit && !target.isAlive()) {
-                        // The confirmed terminal hit must outlive Minecraft's short corpse
-                        // window and possible departure of the last presentation observer.
-                        var after=runtime.decodedState().orElseThrow();
-                        var duty=after.strategicPlans().guards().get(strike.duty());
-                        var contact=after.security().contact(duty.home(),strike.target());
-                        if(contact!=null && contact.target().equals(strike.target()))
-                            FrontierV3ConfirmedNativeEvent.capture(level,duty.home(),new SecurityEvent.ContactEnded(
-                                    strike.attacker(),duty.home(),strike.target(),contact.revision()));
-                    }
-                    return FrontierV3NativeEffect.Outcome.APPLIED;
-                }),()->attempt(guard,strike));
-        if(result.pending())return;
-        if(result.complete()) {
-            boolean hit=guard.getPersistentData().getCompound(ATTEMPT).getBoolean("hit");
-            var after=hit&&strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before();
-            FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new SecurityEvent.Completed(strike.duty(),strike.attemptOrdinal(),hit,after));
-        } else if(result.status()==FrontierV3MinecraftOperation.Status.NOT_APPLIED||result.status()==FrontierV3MinecraftOperation.Status.SOURCE_CHANGED) {
-            FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new SecurityEvent.Completed(strike.duty(),strike.attemptOrdinal(),false,strike.before()));
-        }
-    }
-    private static FrontierV3MinecraftOperation.Participant targetPort(LivingEntity target) {
-        return target instanceof ServerPlayer player?FrontierV3OperationPlayers.currentHealth(player):FrontierV3OperationEntityParticipant.nativeObject(target);
-    }
-    private static void confirmMiss(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
-            SecurityState.Strike strike, UUID ticket) {
-        FrontierV3OperationConfirmation.submitRequired(level,runtime,ticket,
-                new SecurityEvent.Completed(strike.duty(),strike.attemptOrdinal(),false,strike.before()));
-    }
-    private static void cancelUnusedOrWait(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
-            SecurityState.Strike strike, FrontierV3OperationReceipt retained) {
-        var cancelled=FrontierV3MinecraftOperation.cancelUnattempted(level,retained.declaration());
-        if(cancelled.isPresent()) confirmMiss(level,runtime,strike,cancelled.orElseThrow().ticket());
-        // An attempted effect without complete native receipts remains a visible local recovery case.
-    }
-    private static boolean canActuate(FrontierWorldState state,SecurityState.Strike strike) {
-        try { ActorBodyAuthority.requireActuation(state,strike.attacker()); return true; }
-        catch(IllegalArgumentException retired) { return false; }
-    }
-    private static boolean attempt(Mob body,SecurityState.Strike strike){
-        var receipt=body.getPersistentData().getCompound(ATTEMPT);
-        return receipt.getString("owner").equals(strike.duty().value())&&receipt.getLong("ordinal")==strike.attemptOrdinal();
     }
     private static BlockPosition position(Entity entity) {
         var p=entity.blockPosition().below();return new BlockPosition(p.getX(),p.getY(),p.getZ());

@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
-import io.farfrontier.palemirror.frontier.v3.model.security.WeaponProfile;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+import io.farfrontier.palemirror.frontier.v3.model.combat.WeaponProfile;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;

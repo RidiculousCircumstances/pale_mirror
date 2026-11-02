@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.security.GuardMission;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import java.util.*;
 public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardMission mission) implements FrontierPayload {
     public static final String TYPE = "frontier.guard.mission_selected";
@@ -21,13 +22,16 @@ public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardM
             var allocated=state.security().response(owner.id()).orElseThrow(()->new IllegalArgumentException("guard has no response allocation"));
             var contact=state.security().contacts().get(allocated.contact());
             boolean intercept=mission.stage()==GuardMission.Stage.INTERCEPT;
-            int radius=intercept?io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.MAX_CONTACT_STATION_DISTANCE
-                    :state.bootstrap().ruleset().security().searchRadius();
+            var order=intercept?CombatComposition.CAPABILITIES.current(state,owner.execution(),tick):Optional.<CombatOrder>empty();
+            boolean legalMelee=order.filter(value->MeleePositions.weapon(state.combat(),value)
+                    .filter(profile->MeleePositions.legal(value,profile,mission.station())).isPresent()).isPresent();
+            int radius=state.bootstrap().ruleset().security().searchRadius();
             if(!io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.permitsStation(state,owner,mission.station())
                     || contact==null || !contact.target().equals(mission.response().orElseThrow())
                     || intercept && io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.contact(state,owner,tick).isEmpty()
                     || !intercept && !io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.investigating(state,owner,tick)
-                    || mission.station().manhattanDistance(new SurfaceAnchor(contact.position()))>radius)
+                    || intercept && !legalMelee
+                    || !intercept && mission.station().manhattanDistance(new SurfaceAnchor(contact.position()))>radius)
                 throw new IllegalArgumentException("guard response lacks its exact allocated bounded contact");
             if(mission.search().isPresent()) {
                 var search=mission.search().orElseThrow();var previous=owner.mission().orElseThrow();

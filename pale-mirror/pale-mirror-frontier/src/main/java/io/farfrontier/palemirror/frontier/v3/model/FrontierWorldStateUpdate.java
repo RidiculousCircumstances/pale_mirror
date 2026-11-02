@@ -58,7 +58,7 @@ public final class FrontierWorldStateUpdate {
         EXTRACTION_SITES,
         PRODUCTION_STATIONS,
         NAVIGATION_GEOMETRY,
-        FOREST, SITE_USES, SECURITY
+        FOREST, SITE_USES, SECURITY, COMBAT
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -107,6 +107,11 @@ public final class FrontierWorldStateUpdate {
         mark(Component.SITE_USES); siteUses = require(next, "site uses"); return this;
     }
     io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState siteUses(FrontierWorldState state) { return changed(Component.SITE_USES, siteUses, state.siteUses()); }
+    private io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat;
+    public FrontierWorldStateUpdate combat(io.farfrontier.palemirror.frontier.v3.model.combat.CombatState next) {
+        mark(Component.COMBAT);combat=require(next,"combat");return this;
+    }
+    io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat(FrontierWorldState state){return changed(Component.COMBAT,combat,state.combat());}
     private io.farfrontier.palemirror.frontier.v3.model.security.SecurityState security;
     public FrontierWorldStateUpdate security(io.farfrontier.palemirror.frontier.v3.model.security.SecurityState next) {
         mark(Component.SECURITY); security=require(next,"security"); return this;
@@ -176,6 +181,7 @@ public final class FrontierWorldStateUpdate {
                 case FOREST -> forest(contribution.forest);
                 case SITE_USES -> siteUses(contribution.siteUses);
                 case SECURITY -> security(contribution.security);
+                case COMBAT -> combat(contribution.combat);
             }
         }
         return this;
@@ -356,6 +362,7 @@ public final class FrontierWorldStateUpdate {
                 case FOREST -> forest != state.forest();
                 case SITE_USES -> siteUses != state.siteUses();
                 case SECURITY -> security != state.security();
+                case COMBAT -> combat != state.combat();
             };
             if (replaced) return true;
         }

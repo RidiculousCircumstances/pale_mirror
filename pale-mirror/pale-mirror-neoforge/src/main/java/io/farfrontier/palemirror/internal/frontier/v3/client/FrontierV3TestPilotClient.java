@@ -103,7 +103,9 @@ public final class FrontierV3TestPilotClient {
             setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
             anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L;
-            breaking = false; placementAttempted = false; itemUse = null; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
+            breaking = false; placementAttempted = false; itemUse = null; visitSent = false; FrontierV3PilotEntityVisit.reset();
+                    visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false;
+                    visitHandshakeBaseline = null;
             containerOpenAttempted = false; quickMoveAttempted = false;
             inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
             diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L; currentCausalMilestone = null;
@@ -282,6 +284,10 @@ public final class FrontierV3TestPilotClient {
                 case "wait_until_container_item" -> waitUntilContainerItem(minecraft, action);
                 case "assert_fixture" -> assertFixture(minecraft, action);
                 case "visit" -> visit(minecraft, action);
+                case "visit_nearest_entity" -> {
+                    if(FrontierV3PilotEntityVisit.ready(minecraft,action))advance(type);
+                    else timeout(minecraft,action,"player did not reach the named received setup entity");
+                }
                 case "assert_visible_block" -> assertVisibleBlock(minecraft, action);
                 case "assert_visible_board" -> assertVisibleBoard(minecraft, action);
                 case "assert_visible_entity" -> assertVisibleEntity(minecraft, action);
@@ -571,22 +577,11 @@ public final class FrontierV3TestPilotClient {
                 + "; view=" + Math.round(view.x * 100.0D) + "," + Math.round(view.y * 100.0D) + "," + Math.round(view.z * 100.0D));
     }
     /** Rotates only the local test camera towards one locally rendered named body. */
-    private static void lookNearestEntity(Minecraft minecraft, JsonObject action) {
-        ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
-        String expectedName = FrontierV3PilotPresentationName.resolve(minecraft, action);
-        if (expectedName == null) { timeout(minecraft, action, "entity name diagnostic unavailable"); return; }
-        double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
-        Entity target = FrontierV3TestPilotPresentation.nearestVisibleNamedEntity(minecraft, expectedType, expectedName, maximum);
-        if (target == null) {
-            timeout(minecraft, action, "no line-of-sight local entity " + expectedType + " named " + expectedName
-                    + "; candidates=" + FrontierV3TestPilotPresentation.localEntityEvidence(minecraft, expectedType, expectedName, maximum));
-            return;
-        }
-        // Use the same direct local rotation primitive as the coordinate camera actions.  The
-        // inherited Entity#lookAt path is authoritative for server entities but does not
-        // consistently update the client render view between consecutive pilot actions.
-        captureFocus = target.getEyePosition(); look(minecraft, captureFocus);
-        advance("look_nearest_entity");
+    private static void lookNearestEntity(Minecraft minecraft,JsonObject action){
+        Entity target=FrontierV3TestPilotPresentation.nearestVisibleNamedEntity(minecraft,action);
+        if(target==null){timeout(minecraft,action,"no visible received entity for "+action.get("nameContains"));return;}
+        // Direct local rotation updates the render view; inherited Entity.lookAt does not reliably do so.
+        captureFocus=target.getEyePosition();look(minecraft,captureFocus);advance("look_nearest_entity");
     }
     /**
      * Uses Minecraft's normal entity interaction packet and waits for its local, optional
@@ -920,7 +915,9 @@ public final class FrontierV3TestPilotClient {
         // A prior PASS must never satisfy another field or a later harvest epoch.
         harvestSemanticOracle = null;
         currentCausalMilestone = null; breaking = false; placementAttempted = false; itemUse = null;
-        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted =
+        visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L;
+                    visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
+                    quickMoveAttempted =
                 false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
         diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
@@ -977,7 +974,9 @@ public final class FrontierV3TestPilotClient {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
-        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted =
+        visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L;
+                    visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
+                    quickMoveAttempted =
                 false; inspectSent = false; inspectBaseline = null;
         boardInteractionAttempted = false; entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE;
         diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); FrontierV3PilotSessionControl.reset();
@@ -987,7 +986,7 @@ public final class FrontierV3TestPilotClient {
         Minecraft.getInstance().options.keyUp.setDown(false);
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
-        placementAttempted = false; itemUse = null; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;
+        placementAttempted = false; itemUse = null; visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;
         visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
         quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;

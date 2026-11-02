@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.CombatComposition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3DiagnosticJson.*;
 /** Read-only family explanation. No role, route, contact or timing mutation. */
@@ -29,12 +31,13 @@ final class FrontierV3SecurityDiagnostic {
                         +"\",\"targetKind\":\""+mission.targetKind()+"\",\"target\":\""+quote(mission.target().value())
                         +"\",\"station\":"+position(mission.station().support())+",\"watchUntil\":"+mission.watchUntil()
                         +",\"returnStation\":"+position(mission.post().station().support())+"}").orElse("null")
-                +",\"strikePending\":"+state.security().pending().containsKey(duty.id())+"}").collect(java.util.stream.Collectors.joining(",","[","]"));
+                +",\"combat\":\""+CombatStatus.read(state,CombatComposition.CAPABILITIES,duty.execution(),tick)+"\""
+                +",\"strikePending\":"+state.combat().pending().containsKey(duty.id())+"}").collect(java.util.stream.Collectors.joining(",","[","]"));
         return "{\"respondingGuards\":"+responses.size()+",\"postedGuards\":"+posted
                 +",\"localDefenders\":"+locals+",\"reinforcements\":"+reinforcements
-                +",\"selfDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.security.CombatEngagement.Kind.SELF_DEFENCE).count()
-                +",\"allyDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.security.CombatEngagement.Kind.ALLY_DEFENCE).count()
-                +",\"areaDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.security.CombatEngagement.Kind.AREA_DEFENCE).count()
+                +",\"selfDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.SELF_DEFENCE).count()
+                +",\"allyDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.ALLY_DEFENCE).count()
+                +",\"areaDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.AREA_DEFENCE).count()
                 +",\"responseBudget\":"+budget+",\"availableGuards\":"+available
                 +",\"responseStatus\":\""+responseStatus+"\",\"reserveStatus\":\""+reserveStatus+"\""
                 +",\"contactCount\":"+contacts.size()+",\"threats\":"+threats

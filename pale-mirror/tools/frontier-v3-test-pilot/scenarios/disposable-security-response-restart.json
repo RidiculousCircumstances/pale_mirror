@@ -16,6 +16,10 @@
   "setup": [
     {
       "type": "command",
+      "command": "/execute in minecraft:overworld run fill 10 62 -140 14 65 -136 minecraft:stone"
+    },
+    {
+      "type": "command",
       "command": "/gamemode creative"
     },
     {
@@ -50,15 +54,23 @@
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
-          "field": "firstGuardPosition"
+          "field": "routeSurface"
         }
       },
-      "offset": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
       "settleMs": 1000
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
     },
     {
       "type": "command",
@@ -135,7 +147,7 @@
       "dimension": "minecraft:overworld",
       "position": {
         "x": 12,
-        "y": 63,
+        "y": 66,
         "z": -138
       },
       "settleMs": 15000
@@ -170,7 +182,7 @@
       "dimension": "minecraft:overworld",
       "position": {
         "x": 12,
-        "y": 63,
+        "y": 66,
         "z": -138
       },
       "settleMs": 15000
@@ -230,32 +242,23 @@
           "diagnostic": {
             "view": "settlement",
             "id": "settlement:1",
-            "field": "firstGuardPosition"
+            "field": "routeSurface"
           }
-        },
-        "offset": {
-          "x": 0,
-          "y": 0,
-          "z": 0
         },
         "settleMs": 1000
       },
       {
-        "type": "visit",
-        "dimension": "pale_mirror:frontier_graybox",
-        "position": {
+        "type": "visit_nearest_entity",
+        "entityType": "minecraft:villager",
+        "nameContains": {
           "diagnostic": {
             "view": "settlement",
             "id": "settlement:1",
-            "field": "firstGuardPosition"
+            "field": "firstGuardName"
           }
         },
-        "offset": {
-          "x": 0,
-          "y": 0,
-          "z": 0
-        },
-        "settleMs": 0
+        "maxDistance": 64,
+        "timeoutMs": 30000
       },
       {
         "type": "command",
@@ -300,6 +303,10 @@
     {
       "after": 1,
       "name": "armed-guard-patrol-before-player-offence"
+    },
+    {
+      "after": 4,
+      "name": "local-melee-approach"
     }
   ]
 }

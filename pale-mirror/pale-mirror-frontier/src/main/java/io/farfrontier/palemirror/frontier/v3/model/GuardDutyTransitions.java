@@ -43,7 +43,7 @@ public final class GuardDutyTransitions {
             if (executions.actors().get(duty.execution().actorId()).current().equals(Optional.of(duty.execution())))
                 executions = executions.finish(duty.execution());
             return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().withoutGuard(duty.id()))
-                    .actorExecutions(executions).security(state.security().retired(duty.id())));
+                    .actorExecutions(executions).security(state.security().retired(duty.id())).combat(state.combat().retired(duty.id())));
         }
         state.actorExecutions().requireCurrent(duty.execution());
         if (changed.change() == GuardDutyEvent.Change.RETURN_SELECTED) {

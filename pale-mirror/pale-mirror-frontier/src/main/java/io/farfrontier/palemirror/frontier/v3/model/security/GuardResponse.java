@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model.security;
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import java.util.*;
 /** Shared contact selection and protected-area pursuit envelope; never tracks an invisible target. */
 public final class GuardResponse {
@@ -50,18 +51,19 @@ public final class GuardResponse {
         if(mission.response().isPresent() && state.security().response(duty.id())
                 .filter(r -> !r.engagement().contains(mission.station())).isPresent())return true;
         if(mission.response().isEmpty())return contact.isPresent();
+        if(contact.isPresent() && io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES.current(state,duty.execution(),tick)
+                .filter(order->MeleePositions.needsReplacement(state.combat(),order,tick)).isPresent())return true;
         if(contact.isEmpty()) {
             if(!investigating(state,duty,tick))return true;
             var last=state.security().contact(duty.home(),mission.response().orElseThrow());
             return mission.search().map(search -> search.sightingRevision()!=last.revision())
                     .orElseGet(() -> SecurityCoverage.distance(mission.station(),new SurfaceAnchor(last.position()))>MAX_CONTACT_STATION_DISTANCE);
         }
-        return mission.stage()!=GuardMission.Stage.INTERCEPT || !mission.response().orElseThrow().equals(contact.orElseThrow().target())
-                || SecurityCoverage.distance(mission.station(),new SurfaceAnchor(contact.orElseThrow().position()))>MAX_CONTACT_STATION_DISTANCE;
+        return mission.stage()!=GuardMission.Stage.INTERCEPT || !mission.response().orElseThrow().equals(contact.orElseThrow().target());
     }
     /** Brief recovery gives native sensing one opportunity after cooldown before restarting an approach. */
     public static boolean recoveringAfterAttack(FrontierWorldState state,GuardDuty duty,long tick) {
-        var next=state.security().nextAttack().get(duty.id());
+        var next=state.combat().nextAttack().get(duty.id());
         return next!=null && tick<=Math.addExact(next,state.bootstrap().ruleset().security().observationInterval());
     }
     private GuardResponse(){}

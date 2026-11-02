@@ -1,4 +1,4 @@
-package io.farfrontier.palemirror.frontier.v3.model.security;
+package io.farfrontier.palemirror.frontier.v3.model.combat;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -6,7 +6,8 @@ import java.util.*;
 
 /** Bounded dated knowledge. Old observer/victim identities are history, never current actuation. */
 public record CombatAwareness(Map<SightKey, Sight> sights, Map<HarmKey, Harm> harms) {
-    public static final int MAX_RECORDS = SimulationCapacity.MAX_RESIDENTS * SecurityState.MAX_CONTACTS_PER_HOME;
+    public static final int MAX_TARGETS_PER_SCOPE=16;
+    public static final int MAX_RECORDS = SimulationCapacity.MAX_RESIDENTS * MAX_TARGETS_PER_SCOPE;
     public record SightKey(SubjectId scope, SubjectId observer, CombatTarget target) {
         public SightKey { Objects.requireNonNull(scope); Objects.requireNonNull(observer); Objects.requireNonNull(target); }
     }

@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierProcessSceneSdk;
@@ -288,7 +289,10 @@ class FrontierWorldProcessCatalogTest {
     @Test
     void everyProcessDescriptorRoundTripsOneOwnedRepresentativePayload() {
         Map<String, FrontierPayload> representatives = Map.ofEntries(
-                Map.entry("security",new io.farfrontier.palemirror.frontier.v3.model.security.SecurityEvent.Completed(
+                Map.entry("security",new io.farfrontier.palemirror.frontier.v3.model.security.SecurityEvent.Incident(new SubjectId("settlement:representative"),
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId("resident:representative"),1),
+                        new CombatTarget(CombatTarget.Kind.PLAYER,new java.util.UUID(1,2),"pale_mirror:frontier_graybox"),new BlockPosition(0,63,0),Optional.empty(),1)),
+                Map.entry("combat",new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEvent.Completed(
                         new SubjectId("guard:representative"),1,false,new ItemCondition(250,0))),
                 Map.entry("guard", new GuardDutyEvent.Changed(new SubjectId("guard:representative"), 1, GuardDutyEvent.Change.ENDED, Optional.empty())),
                 Map.entry("kernel-schedule", new ScheduleEffect.Cancelled(new ScheduleId("schedule:representative"))),

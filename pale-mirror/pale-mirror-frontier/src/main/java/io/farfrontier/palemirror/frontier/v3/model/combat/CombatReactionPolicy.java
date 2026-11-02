@@ -1,4 +1,4 @@
-package io.farfrontier.palemirror.frontier.v3.model.security;
+package io.farfrontier.palemirror.frontier.v3.model.combat;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;

@@ -491,8 +491,8 @@ public final class FrontierDomainRelationships {
     private record ValidationFamily(String traceName, java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
                                     ValidationCollector collect) { }
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
-            new ValidationFamily("relations-guards", s -> List.of(s.strategicPlans().guards(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory().items(), s.inventory().containers()),
-                    (s, edges, incidents) -> GuardAuthority.validateReferences(s.bootstrap(), s.strategicPlans(), s.humanPopulation(), s.actorLocations(), s.actorExecutions())),
+            new ValidationFamily("relations-guards", s -> List.of(s.strategicPlans().guards(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory().items(), s.inventory().containers(),s.combat().pending()),
+                    (s, edges, incidents) -> GuardAuthority.validateReferences(s.bootstrap(), s.strategicPlans(), s.humanPopulation(), s.actorLocations(), s.actorExecutions(),s.combat())),
             new ValidationFamily("relations-forestry", s -> List.of(s.forest(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory()),
                     (s, edges, incidents) -> ForestryRelationships.validate(s)),
             new ValidationFamily("relations-extraction", s -> List.of(s.extractionSites(), s.humanPopulation().residents(), s.actorExecutions(), s.inventory()),
