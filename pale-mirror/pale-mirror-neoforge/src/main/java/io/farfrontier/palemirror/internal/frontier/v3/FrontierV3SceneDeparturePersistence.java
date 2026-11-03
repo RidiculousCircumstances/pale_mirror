@@ -254,7 +254,7 @@ final class FrontierV3SceneDeparturePersistence {
                     tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY),
                     tag.getLong(FrontierV3ActorBodyController.RESIDENCE_KEY),
                     observedBody.orElseThrow(),
-                    new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand, mainhand,
+                    FrontierV3HealthObservation.survivor(health).orElseThrow(), offhand, mainhand,
                     FrontierV3StoredAttachedStorage.fromEntitySave(entity)));
         }
 

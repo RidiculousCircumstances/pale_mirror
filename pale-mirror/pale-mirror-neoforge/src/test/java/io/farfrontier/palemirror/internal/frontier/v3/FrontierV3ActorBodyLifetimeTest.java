@@ -11,6 +11,15 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarr
 
 /** Replaces owner-transfer chain tests: activities cannot transfer the body in the first place. */
 class FrontierV3ActorBodyLifetimeTest {
+    @Test void survivorObservationCannotTurnNonFiniteHealthIntoAZeroHealthSurvivor() {
+        assertTrue(FrontierV3HealthObservation.survivor(Float.NaN).isEmpty());
+        assertTrue(FrontierV3HealthObservation.survivor(Float.POSITIVE_INFINITY).isEmpty());
+        assertTrue(FrontierV3HealthObservation.survivor(0.0F).isEmpty());
+        assertTrue(FrontierV3HealthObservation.survivor(-1.0F).isEmpty());
+        assertEquals(new FixedScalar(1), FrontierV3HealthObservation.survivor(Float.MIN_VALUE).orElseThrow());
+        assertEquals(FixedScalar.whole(15), FrontierV3HealthObservation.survivor(15.0F).orElseThrow());
+    }
+
     @Test void savedDependentInventoryCheckpointSurvivesBodyRetirementButNotSuccessor() {
         var state = running(); var receipt = receipt(state); var actor = receipt.identity().actorId();
         var ledger = ledger(receipt);

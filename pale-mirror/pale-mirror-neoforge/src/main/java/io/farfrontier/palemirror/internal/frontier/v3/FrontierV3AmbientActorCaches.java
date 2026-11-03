@@ -23,10 +23,12 @@ final class FrontierV3AmbientActorCaches {
     private FrontierV3AmbientActorCaches() { }
 
     static void rememberObserved(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId, Mob body, int capacity) {
+        var health = FrontierV3HealthObservation.survivor(body.getHealth());
+        if (health.isEmpty()) { forgetObserved(runtime, actorId); return; }
         Map<SubjectId, Observed> observations = OBSERVATIONS.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         if (observations.size() < capacity || observations.containsKey(actorId)) {
             observations.put(actorId, new Observed(FrontierV3BodyObservation.position(body),
-                    new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))));
+                    health.orElseThrow()));
         }
     }
 

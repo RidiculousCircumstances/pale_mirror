@@ -209,8 +209,15 @@ final class FrontierV3ActorBodyController {
     /** The source callback records physical facts, never discovers a job/scene owner. */
     static boolean observeLeave(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 net.minecraft.world.entity.Entity entity) {
-        if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F
+        if (!(entity instanceof Mob body)
                 || entity.getRemovalReason() != net.minecraft.world.entity.Entity.RemovalReason.UNLOADED_TO_CHUNK) return false;
+        if (!Float.isFinite(body.getHealth())) {
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(
+                    "PMV3_BODY_DEPARTURE_REJECTED entity={} reason=NON_FINITE_HEALTH health={} position={}",
+                    body.getUUID(), body.getHealth(), body.position());
+            return false;
+        }
+        if (!(body.getHealth() > 0.0F)) return false;
         var state = runtime.decodedState().orElse(null);
         if (state == null) return false;
         var receipt = capture(level, state, body, true).orElse(null);
@@ -317,6 +324,8 @@ final class FrontierV3ActorBodyController {
         // Requiring support here cancels a saved airborne body before Minecraft
         // can index it and apply gravity. Grounded execution/arrival remains
         // independently fenced by inspectCurrent and semantic movement.
+        var health = FrontierV3HealthObservation.survivor(body.getHealth());
+        if (health.isEmpty()) return java.util.Optional.empty();
         var position = departing ? FrontierV3BodyObservation.captureForDeparture(body).position()
                 : FrontierV3BodyObservationSave.returnedPosition(body);
         var off = body.getOffhandItem(); var main = body.getMainHandItem();
@@ -324,8 +333,7 @@ final class FrontierV3ActorBodyController {
         var actor = state.actorLocations().get(declaration.actorId());
         return java.util.Optional.of(new FrontierV3ActorBodyDeparture(declaration.inactiveCarrier(), residence,
                 new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(declaration.actorId(), position,
-                    new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
-                        * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE))),
+                    health.orElseThrow()),
                 actor.body(), actor.condition().health(), FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()),
                 FrontierV3ActorHandEvidence.observed(off), FrontierV3ActorHandEvidence.observed(main),
                 FrontierV3StoredAttachedStorage.capture(state, declaration.actorId(), body)));
@@ -429,8 +437,8 @@ final class FrontierV3ActorBodyController {
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
         if (observed.isEmpty()) return;
         var location = state.actorLocations().get(declaration.actorId());
-        var health = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
-                * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE));
+        var health = FrontierV3HealthObservation.survivor(body.getHealth()).orElse(null);
+        if (health == null) return;
         var consequence = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(id,
                 location.body(), location.condition().health(), observed.orElseThrow(), health);
         if (!FrontierV3BodyOperationIntegration.confirm(level, runtime, state, body, declaration.actorId(), consequence)) {
@@ -478,8 +486,8 @@ final class FrontierV3ActorBodyController {
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
         if (observed.isEmpty()) return inspectionDeferred(body, "SUPPORTED_CONTACT:chunk=" + FrontierV3LoadedWorld.ready(level, body.getOnPos()));
         var actor = state.actorLocations().get(declaration.actorId());
-        var health = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
-                * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE));
+        var health = FrontierV3HealthObservation.survivor(body.getHealth()).orElse(null);
+        if (health == null) return inspectionDeferred(body, "INVALID_SURVIVOR_HEALTH:" + body.getHealth());
         if (phase == FencedRecoveryPhase.RUNNING && actor.body().equals(observed.orElseThrow())
                 && actor.condition().health().equals(health)) { INSPECTION_WAITS.remove(body); return true; }
         var receipt = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected(id,
