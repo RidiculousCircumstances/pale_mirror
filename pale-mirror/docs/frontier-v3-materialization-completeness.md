@@ -515,3 +515,21 @@ The field already had a separate lifecycle conflict before harm, so productive
 post-resume harvesting, full-cohort tactical M2 and M3 are not established.
 No full-pack graphical preflight, scale or global80ms claim. MAIN exact binary,
 new seed134/schema321 world and Java22 service bind in verified.json.
+
+## Schema324 cooperative melee encounter — 2026-11-03
+
+Source344d29b5f adds the canonical common CombatEngagement plan (M0), not another
+physical process or body owner. Existing registered guard capability declares
+party/target permission; the common plan owns exact participants, stable tactical
+roles and single-use body-fenced attack windows. Existing melee/native journal,
+UAE and shared navigation alone own physical execution. COLD damage stays off.
+
+The existing melee family has scoped continuous HOT evidence: checked-in
+`disposable-coordinated-melee.json`, seed41, actual player harm, two naturally
+armed guards, measured second-body movement with PRESSURE/FLANK_LEFT plan, native
+QUICK/LUNGE, normal open-fight save/restart/reconnect, renewed engagement and
+terminal group/contact release. Final15/15 native receipt and exact source/JAR
+reuse binding are retained under IMPL/build/combat-engagements; detailed findings,
+limits and deployment are in `frontier-v3-coordinated-combat-20261103.md`.
+Frames were reviewed but show one foreground fighter and a second sword at the
+edge; no full-cohort visual tactics, full-pack M3 or global performance claim.
