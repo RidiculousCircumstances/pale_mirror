@@ -25,6 +25,24 @@ final class FrontierV3RouteNavigation {
     static FrontierV3MinecraftGoalNavigation.Result pursue(ServerLevel level, Mob actor,
                                                            FrontierV3GoalNavigation.Goal goal,
                                                            FrontierV3GoalNavigation.ProviderPermission permission) {
+        var result = pursueSelected(level, actor, goal, permission);
+        if (result.transitHint().isEmpty() || !permission.current(actor)) return result;
+        var hint = new ArrayList<>(result.transitHint());
+        if (!goal.legalStations().contains(hint.getLast())) hint.add(goal.legalStations().getFirst());
+        var approach = new FrontierV3GoalNavigation.Goal(goal.legalStations(), goal.capability(), goal.scope(), goal.order(), hint);
+        var leg = new Leg(approach, 0, List.of(result.transitHint().getLast()), -1L);
+        LEGS.put(actor, leg);
+        // Traffic, profile and live collision are checked again by the same
+        // navigator for this short leg. Only the original goal can complete work.
+        var advanced = pursueLeg(level, actor, leg, permission);
+        return advanced.status() == FrontierV3MinecraftGoalNavigation.Status.ARRIVED
+                && !goal.legalStations().contains(advanced.arrivedStation().orElseThrow())
+                ? new FrontierV3MinecraftGoalNavigation.Result(FrontierV3MinecraftGoalNavigation.Status.IN_PROGRESS,
+                    "native-frontier-reached;semantic-goal-retained") : advanced;
+    }
+
+    private static FrontierV3MinecraftGoalNavigation.Result pursueSelected(ServerLevel level, Mob actor,
+            FrontierV3GoalNavigation.Goal goal, FrontierV3GoalNavigation.ProviderPermission permission) {
         java.util.Objects.requireNonNull(permission, "route provider permission");
         if (!permission.current(actor))
             return new FrontierV3MinecraftGoalNavigation.Result(FrontierV3MinecraftGoalNavigation.Status.AMBIGUOUS,

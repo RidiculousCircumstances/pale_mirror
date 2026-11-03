@@ -26,6 +26,45 @@ import java.util.stream.IntStream;
 public final class FrontierV3RouteNavigationGameTests {
     private FrontierV3RouteNavigationGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "pale_mirror_visuals",
+            template = "test/navigation_frontier", timeoutTicks = 110)
+    public static void incompleteNativePathApproachesWithoutCompletingAnUnreachableGoal(GameTestHelper helper) {
+        var level = helper.getLevel();
+        for (int x = 0; x < 80; x++) for (int z = 0; z < 8; z++) {
+            level.setBlock(helper.absolutePos(new BlockPos(x, 0, z)), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(helper.absolutePos(new BlockPos(x, 2, z)), Blocks.AIR.defaultBlockState(), 3);
+        }
+        for (int z = 0; z < 8; z++) for (int y = 1; y <= 2; y++)
+            level.setBlock(helper.absolutePos(new BlockPos(40, y, z)), Blocks.STONE.defaultBlockState(), 3);
+        var actor = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(1.5D, 1.0D, 3.5D));
+        var target = anchor(helper, 74, 3);
+        var goal = FrontierV3GoalNavigation.Goal.routed(order(target), List.of(), new WorldBounds(helper.absolutePos(BlockPos.ZERO).getX(), helper.absolutePos(BlockPos.ZERO).getZ(), 80, 8));
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 600; turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, actor, goal);
+                helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.ARRIVED,
+                        "a reachable prefix is not arrival beyond the closed wall");
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(actor); actor.aiStep();
+            }
+            helper.assertTrue(actor.getX() > helper.absolutePos(new BlockPos(2, 0, 3)).getX(),
+                    "a verified native prefix must permit approach instead of freezing at departure: " + actor.position());
+            helper.assertTrue(actor.getX() < helper.absolutePos(new BlockPos(40, 0, 3)).getX(),
+                    "the approach must not cross an unbroken wall");
+            level.setBlock(helper.absolutePos(new BlockPos(40, 1, 3)), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(helper.absolutePos(new BlockPos(40, 2, 3)), Blocks.AIR.defaultBlockState(), 3);
+            helper.runAfterDelay(FrontierV3MinecraftGoalNavigation.retryIntervalTicks() + 1, () -> {
+                for (int turn = 0; turn < 900 && !FrontierV3SemanticMovement.arrived(level, actor, target); turn++) {
+                    FrontierV3GoalNavigation.pursue(level, actor, goal);
+                    FrontierV3GoalNavigation.advanceAtEntityBoundary(actor); actor.aiStep();
+                }
+                helper.assertTrue(FrontierV3SemanticMovement.arrived(level, actor, target),
+                        "opening the wall must let the same original order finish: " + actor.position());
+                FrontierV3GoalNavigation.stop(actor); actor.discard(); helper.succeed();
+            });
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 110)
     public static void wideBodyCentersFromAdjacentNativeEndpointWithoutFictionalArrival(GameTestHelper helper) {

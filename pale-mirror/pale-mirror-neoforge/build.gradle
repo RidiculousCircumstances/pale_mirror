@@ -166,6 +166,7 @@ sourceSets {
     frontierV3SceneTemplate {
         resources.srcDir project(':pale-mirror-visuals').file('src/main/resources')
         resources.include 'data/pale_mirror_visuals/structure/temperate/residence_1.nbt'
+        resources.include 'data/pale_mirror_visuals/structure/test/navigation_frontier.nbt'
         resources.include 'META-INF/neoforge.mods.toml'
     }
 }

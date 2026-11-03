@@ -27,10 +27,13 @@ final class FrontierV3PedestrianTraffic {
     record Body(java.util.UUID id, AABB bounds) { }
     /** A clear native route rejected only by live occupants, not a guessed terrain failure. */
     record Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage,
-                 boolean budgetExhausted) {
+                 boolean budgetExhausted, Path advisoryPath) {
         Query { blockers = List.copyOf(blockers); passage = List.copyOf(passage); }
         Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage) {
-            this(path, blockers, passage, false);
+            this(path, blockers, passage, false, null);
+        }
+        Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage, boolean budgetExhausted) {
+            this(path, blockers, passage, budgetExhausted, null);
         }
         boolean trafficBlocked(ServerLevel level, FrontierV3NavigationScope scope) {
             return !blockers.isEmpty() && !budgetExhausted && FrontierV3PhysicalPathPolicy.reject(level, path, scope)
@@ -128,7 +131,8 @@ final class FrontierV3PedestrianTraffic {
                 ? search(level, actor, target, scope, List.of(), profile) : unconstrained;
         if (FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).isPresent()
                 || !FrontierV3PathClearance.path(level, actor, ordinary))
-            return new Query(ordinary, List.of(), List.of());
+            return new Query(ordinary, List.of(), List.of(), false,
+                    ordinary == null ? unconstrained : ordinary);
         java.util.Map<java.util.UUID, Body> blockers = new java.util.LinkedHashMap<>();
         java.util.List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage = new java.util.ArrayList<>();
         AABB routeArea = actor.getBoundingBox();

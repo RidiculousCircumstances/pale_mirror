@@ -28,16 +28,19 @@ import java.util.WeakHashMap;
 final class FrontierV3MinecraftGoalNavigation {
     enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
     record Result(Status status, String reason, Optional<FrontierV3GoalNavigation.BlockReason> blockReason,
-                  Optional<SurfaceAnchor> arrivedStation) {
+                  Optional<SurfaceAnchor> arrivedStation, List<SurfaceAnchor> transitHint) {
         Result {
             Objects.requireNonNull(status);
             Objects.requireNonNull(reason);
             Objects.requireNonNull(blockReason);
             Objects.requireNonNull(arrivedStation);
+            transitHint = List.copyOf(transitHint);
             if ((status == Status.BLOCKED) != blockReason.isPresent()
                     || (status == Status.ARRIVED) != arrivedStation.isPresent())
                 throw new IllegalArgumentException("physical goal result requires exact block or arrival evidence");
         }
+        Result(Status status, String reason, Optional<FrontierV3GoalNavigation.BlockReason> blockReason,
+                Optional<SurfaceAnchor> arrivedStation) { this(status, reason, blockReason, arrivedStation, List.of()); }
         Result(Status status, String reason) { this(status, reason, Optional.empty(), Optional.empty()); }
         Result(Status status, String reason, Optional<FrontierV3GoalNavigation.BlockReason> blockReason) {
             this(status, reason, blockReason, Optional.empty());
@@ -166,6 +169,7 @@ final class FrontierV3MinecraftGoalNavigation {
         Path path = null;
         boolean unloaded = false;
         String rejection = "";
+        List<SurfaceAnchor> transitHint = List.of();
         FrontierV3GoalNavigation.BlockReason rejectionReason = FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE;
         FrontierV3PedestrianTraffic.Query traffic = null;
         // A service region is one semantic goal. Minecraft may choose whichever declared
@@ -178,6 +182,8 @@ final class FrontierV3MinecraftGoalNavigation {
             Path candidate = query.path();
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
             if (refused.isPresent() || !FrontierV3PathClearance.path(level, actor, candidate)) {
+                if (transitHint.isEmpty()) transitHint = FrontierV3NativePathFrontier.hint(level, actor,
+                        query.advisoryPath(), feet, scope, permission.navigationProfile());
                 if (traffic == null && query.trafficBlocked(level, scope)) traffic = query;
                 if (rejection.isEmpty()) {
                     rejection = FrontierV3PathExplanation.rejected(level, station, candidate, scope);
@@ -204,9 +210,11 @@ final class FrontierV3MinecraftGoalNavigation {
                         FrontierV3GoalNavigation.BlockReason.TRAFFIC_BLOCKED);
             }
             FrontierV3PedestrianYieldRequests.clear(actor);
-            return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
+            var waiting = retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
                     unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable[" + rejection + "]",
                     unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED : rejectionReason);
+            return transitHint.isEmpty() ? waiting : new Result(waiting.status(), waiting.reason(), waiting.blockReason(),
+                    waiting.arrivedStation(), transitHint);
         }
         FrontierV3PedestrianYieldRequests.clear(actor);
         if (!actor.getNavigation().moveTo(path, speed(actor, permission)))
