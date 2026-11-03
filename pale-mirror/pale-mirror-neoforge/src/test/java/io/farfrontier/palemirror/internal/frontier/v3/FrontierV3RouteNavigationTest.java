@@ -7,6 +7,19 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3RouteNavigationTest {
+    @Test void unchangedSemanticGoalRetainsItsAcceptedRouteWhenAdvisoryCacheDisappears() {
+        var start=SurfaceAnchor.at(0,63,0);var target=SurfaceAnchor.at(60,63,0);
+        var scope=new FrontierV3NavigationScope.ObservedWorld(new WorldBounds(-128,-128,256,256));
+        var retained=new FrontierV3GoalNavigation.Goal(List.of(target),TraversalCapability.PEDESTRIAN,scope,Optional.empty(),
+                List.of(start,start.offset(12,0,0),target));
+        var refreshed=new FrontierV3GoalNavigation.Goal(List.of(target),TraversalCapability.PEDESTRIAN,scope,Optional.empty(),List.of());
+        assertSame(retained,FrontierV3RouteNavigation.continuedGoal(refreshed,retained));
+        var changed=new FrontierV3GoalNavigation.Goal(List.of(target.offset(0,0,1)),TraversalCapability.PEDESTRIAN,scope,Optional.empty(),List.of());
+        assertSame(changed,FrontierV3RouteNavigation.continuedGoal(changed,retained));
+        var restricted=new FrontierV3GoalNavigation.Goal(List.of(target),TraversalCapability.PEDESTRIAN,
+                new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(List.of(start,target),List.of(target))),Optional.empty(),List.of());
+        assertSame(restricted,FrontierV3RouteNavigation.continuedGoal(restricted,retained),"hard scope changes cannot reuse old permission");
+    }
     @Test void distantFallbackRetriesHintsWithoutCancellingAProgressingPath() {
         var start = SurfaceAnchor.at(288, 63, 10);
         var local = SurfaceAnchor.at(299, 63, 10);

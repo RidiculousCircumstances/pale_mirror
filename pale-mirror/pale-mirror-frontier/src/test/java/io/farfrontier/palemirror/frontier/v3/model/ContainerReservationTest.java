@@ -11,6 +11,37 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContainerReservationTest {
+    @Test void observedPlayerToolDisplacesProspectiveHarvestCapacityButNeverExistingStock() {
+        var state = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0).state();
+        var harvest = state.resourceSites().site(new SubjectId("site:1-wheat-field")).harvestJobs().values().iterator().next();
+        var slot = harvest.outputSlot();
+        state = state.withInventory(state.inventory().withSurfaceStatus(slot.containerId(), ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(slot.containerId(), ContainerSurfaceStatus.ACTIVE));
+        assertFalse(state.containerSlotAvailable(slot), "another producer cannot steal the reserved destination");
+        assertTrue(state.inventory().slotVacant(slot), "the observed player action used a physically empty address");
+        var item = new ExactItemStack(new SubjectId("item:player-sword"), state.inventory().containers().get(slot.containerId()).ownerId(),
+                "minecraft:iron_sword", 1, slot, new ItemCondition(250, 0));
+        var payload = new ResourceDeposited(item);
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("test:observed-sword");
+        var command = new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, state.bootstrap().worldId(),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(10), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(22_100),
+                FrontierExecutionSubjects.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), payload);
+        var plan = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner.plan(state, command,
+                    io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry(), FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
+        var fact = plan.events().getFirst();
+        var event = new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(1,
+                new io.farfrontier.palemirror.frontier.v3.api.EventId("test:observed-sword"),
+                new io.farfrontier.palemirror.frontier.v3.api.TransactionId("test:observed-sword"), state.bootstrap().worldId(),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(11), command.submittedAt(), fact.subject(), command.causes(), fact.payload());
+        var result = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.reduce(state, event);
+        assertEquals(item, result.inventory().itemAt(slot.containerId(), slot.slot()).orElseThrow());
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(result));
+        assertEquals(item, recovered.inventory().items().get(item.id()));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner.plan(recovered, command,
+                    io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry(), FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
+    }
     @Test void indexedInboundKeepsHolderSectionRepresentationAndCompletionProofIsolated() {
         var a = new SubjectId("container:index-a"); var b = new SubjectId("container:index-b");
         var first = new SubjectId("job:index-first"); var other = new SubjectId("job:index-other");

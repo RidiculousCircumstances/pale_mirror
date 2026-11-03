@@ -163,7 +163,11 @@ public final class FrontierWorldPhysicalObservationProcess {
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) {
             throw new IllegalArgumentException("resource deposit needs an active owned container surface");
         }
-        if (!state.containerSlotAvailable(slot)) {
+        // This is an observed external postimage, not admission of future production.
+        // Soft output/inbound reservations cannot veto an item the player already put
+        // into a vacant physical slot. Their owners re-assess the displaced capacity;
+        // the composed click boundary separately fences actual in-flight effects.
+        if (!state.inventory().slotVacant(slot)) {
             throw new IllegalArgumentException("resource deposit targets an occupied canonical slot");
         }
         return state.withInventory(state.inventory().store(deposited.item()));

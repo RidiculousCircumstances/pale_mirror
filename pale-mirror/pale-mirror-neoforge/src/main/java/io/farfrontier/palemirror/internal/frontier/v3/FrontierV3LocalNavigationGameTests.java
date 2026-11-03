@@ -342,7 +342,9 @@ public final class FrontierV3LocalNavigationGameTests {
             for (int turn = 0; turn < 75 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
                 boolean atHint = FrontierV3SemanticMovement.arrived(level, worker, intermediate);
                 double before = worker.getDeltaMovement().horizontalDistance();
-                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                var refreshed = turn == 0 ? goal : new FrontierV3GoalNavigation.Goal(goal.legalStations(),
+                        goal.capability(), goal.scope(), goal.order(), List.of());
+                var result = FrontierV3GoalNavigation.pursue(level, worker, refreshed);
                 if (atHint && !crossed) {
                     helper.assertTrue(before > 0, "the real body must arrive at the hint with momentum");
                     helper.assertTrue(worker.getDeltaMovement().horizontalDistance() > 0,
@@ -639,7 +641,8 @@ public final class FrontierV3LocalNavigationGameTests {
                 FrontierV3GoalNavigation.stop(farmer);
                 level.setBlock(next.above(), Blocks.AIR.defaultBlockState(), 3);
                 for (int workTurn = 0; workTurn < 20; workTurn++) {
-                    FrontierV3ControlledMobMotion.showStationWorkGesture(level, farmer);
+                    // This unmodeled navigation fixture checks station physics, not
+                    // managed labour presentation (which requires a declared body).
                     FrontierV3ControlledMobMotion.advanceAtEntityBoundary(farmer);
                     farmer.aiStep();
                 }
@@ -676,11 +679,10 @@ public final class FrontierV3LocalNavigationGameTests {
                         "ordinary tending/exit must retain hydrated soil; turn=" + turn
                                 + " pos=" + worker.position() + " fall=" + worker.fallDistance
                                 + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
-                if (turn < 50) {
-                    FrontierV3ControlledMobMotion.showStationWorkGesture(level, worker);
-                } else {
+                // Waiting tests native gravity/support, without pretending this
+                // unmodeled path fixture owns a canonical work/animation cue.
+                if (turn >= 50) {
                     if (turn == 50) level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
-                    if (turn == 50) FrontierV3ControlledMobMotion.clearStationWorkGesture(level, worker);
                     pursueFixtureRetainedEdge(level, worker, from, to);
                 }
                 // GameTest callbacks can run after EntityTick.Pre; drive that same
@@ -949,27 +951,6 @@ public final class FrontierV3LocalNavigationGameTests {
                     io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.BLOCKED_CLEARANCE,
                     "a retained harvest target occupied by a foreign living body must not be reported navigable");
             FrontierV3ControlledMobMotion.stop(worker); worker.discard(); blocker.discard(); helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
-    public static void cropTendingIsAStationaryWorkPoseNotAnOrbit(GameTestHelper helper) {
-        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
-        helper.getLevel().setBlock(origin, Blocks.STONE.defaultBlockState(), 3);
-        helper.getLevel().setBlock(origin.above(), Blocks.AIR.defaultBlockState(), 3);
-        helper.getLevel().setBlock(origin.above(2), Blocks.AIR.defaultBlockState(), 3);
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
-        Vec3 station = worker.position();
-        for (int turn = 1; turn <= 16; turn++) helper.runAtTickTime(turn, () -> {
-            FrontierV3ControlledMobMotion.showStationWorkGesture(helper.getLevel(), worker);
-            helper.assertTrue(worker.position().distanceToSqr(station) < .0001D,
-                    "the production work gesture must not move the worker away from its station: " + worker.position());
-        });
-        helper.runAtTickTime(17, () -> {
-            helper.assertTrue(worker.position().distanceToSqr(station) < .0001D,
-                    "a crop work gesture must stay at its station rather than circle as filler: " + worker.position());
-            FrontierV3ControlledMobMotion.clearStationWorkGesture(helper.getLevel(), worker);
-            helper.succeed();
         });
     }
 

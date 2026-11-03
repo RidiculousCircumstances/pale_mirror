@@ -4,7 +4,9 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
-/** Field owns the available cell pool; shared native probes bound its feasibility search. */
+/** Field selects eligible work; the common navigator alone searches/executes the route.
+ * Remember genuinely failed destinations for one finite pass instead of speculating
+ * through many full native paths and whole-world draft states on each callback. */
 final class FrontierV3HarvestTargetSearch {
     /** Negative hints live for one finite pass, then retry live terrain/traffic. Canonical changes
      * elsewhere cannot restart the prefix forever; accepted goals always read native geometry afresh. */
@@ -14,6 +16,8 @@ final class FrontierV3HarvestTargetSearch {
     static java.util.OptionalInt next(ServerLevel level, FrontierWorldState state, ResourceSiteHarvestJob job,
                                       Mob worker, FrontierV3ActorActuation actuation) {
         var cycle = state.resourceSites().cycle(job.siteId());
+        var currentGoal = ResourceSiteHarvestGoal.current(state, job);
+        if (currentGoal.kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL) return java.util.OptionalInt.empty();
         var origin = FrontierV3SupportedBodyCapture.observe(level, worker);
         if (!actuation.current(worker) || origin.isEmpty()) throw new FrontierV3ClearanceProbe.Pending("field-retarget awaits supported authority");
         var support = origin.orElseThrow().supportingSurface();
@@ -30,6 +34,7 @@ final class FrontierV3HarvestTargetSearch {
             RETARGET_SEARCHES.put(worker, search);
         }
         var probes = search.probe();
+        probes.reject(currentGoal.representative());
         probes.nextTurn(level.getGameTime());
         var alternate = cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
                 var cell = cycle.layout().cells().get(index);
@@ -37,18 +42,15 @@ final class FrontierV3HarvestTargetSearch {
                     var access = FrontierV3ResourceFieldWorkAccessExecutor.read(level, cell);
                     if (access.isEmpty() || access.orElseThrow().blocked()
                             || !state.resourceSites().site(job.siteId()).targetAvailable(index, job.id())) return false;
-                    ResourceSiteHarvestJob candidate = job.retargetTo(index).bindTarget(cycle);
-                    FrontierWorldState candidateState = state.withResourceSites(state.resourceSites().replace(
-                            state.resourceSites().site(job.siteId()).retargetHarvestCell(job, index, cycle)));
-                    ResourceSiteHarvestGoal candidateGoal = ResourceSiteHarvestGoal.current(candidateState, candidate);
-                    return FrontierV3GoalNavigation.canReach(level, worker,
-                            FrontierV3ResourceSiteHarvestSceneExecutor.hotGoal(candidateState, candidate, candidateGoal), actuation);
+                    return !state.resourceSites().hasPendingCellMutation(job.siteId(), cell.id());
                 });
         });
         if (alternate.isEmpty()) {
             RETARGET_SEARCHES.put(worker, new RetargetSearch(search.layout(), probes,
                     level.getGameTime() + FrontierV3MinecraftGoalNavigation.retryIntervalTicks()));
-        } else RETARGET_SEARCHES.remove(worker);
+        }
+        // Keep the pass after selection. If this destination really fails during
+        // execution, next() rejects it before choosing another available cell.
         return alternate;
     }
     private FrontierV3HarvestTargetSearch() { }

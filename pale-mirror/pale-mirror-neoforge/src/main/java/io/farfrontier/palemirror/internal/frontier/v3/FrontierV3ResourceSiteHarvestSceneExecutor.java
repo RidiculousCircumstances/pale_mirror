@@ -619,7 +619,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                                                   FrontierWorldState state, SceneLease lease,
                                                   ResourceSiteHarvestJob job, Mob worker) {
         if (job.progress().complete() || job.returningForBatch() || job.progress().hasPendingCrop()
-                || state.resourceSites().harvestMutationPending(job)) return false;
+                || state.resourceSites().harvestMutationPending(job)
+                || ResourceSiteHarvestGoal.current(state, job).kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL) return false;
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         var actuation = workActuation(state, runtime, lease, job, worker);
         java.util.OptionalInt alternate;

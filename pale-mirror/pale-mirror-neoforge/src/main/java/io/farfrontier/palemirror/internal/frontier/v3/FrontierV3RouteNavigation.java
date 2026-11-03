@@ -29,13 +29,13 @@ final class FrontierV3RouteNavigation {
         if (!permission.current(actor))
             return new FrontierV3MinecraftGoalNavigation.Result(FrontierV3MinecraftGoalNavigation.Status.AMBIGUOUS,
                     "stale-provider-authority");
+        Leg leg = LEGS.get(actor);
+        if (leg != null) goal = continuedGoal(goal, leg.goal());
         List<SurfaceAnchor> route = goal.routeHint();
-        if (route.isEmpty() || goal.legalStations().stream().anyMatch(station ->
-                FrontierV3SemanticMovement.arrived(level, actor, station))) {
+        if (route.isEmpty() || arrived(level, actor, goal.legalStations())) {
             LEGS.remove(actor);
             return FrontierV3MinecraftGoalNavigation.pursue(level, actor, goal.legalStations(), goal.scope(), goal.order(), permission, true);
         }
-        Leg leg = LEGS.get(actor);
         if (leg == null || !leg.goal().equals(goal)) {
             FrontierV3MinecraftGoalNavigation.stop(actor);
             leg = leg(goal, nearest(actor, route));
@@ -85,6 +85,18 @@ final class FrontierV3RouteNavigation {
         // Start the successor in this same physical refresh. Local arrival is
         // never semantic completion, and creates no stop/wait frame.
         return pursueLeg(level, actor, next, permission);
+    }
+
+    /** Advisory availability is not semantic goal identity. Losing a route-cache
+     * entry during body inspection cannot revoke the accepted local leg/path. */
+    static FrontierV3GoalNavigation.Goal continuedGoal(FrontierV3GoalNavigation.Goal incoming,
+                                                      FrontierV3GoalNavigation.Goal retained) {
+        return incoming.legalStations().equals(retained.legalStations()) && incoming.capability() == retained.capability()
+                && incoming.scope().equals(retained.scope()) && incoming.order().equals(retained.order()) ? retained : incoming;
+    }
+    private static boolean arrived(ServerLevel level, Mob actor, List<SurfaceAnchor> stations) {
+        for (var station : stations) if (FrontierV3SemanticMovement.arrived(level, actor, station)) return true;
+        return false;
     }
 
     private static FrontierV3MinecraftGoalNavigation.Result pursueLeg(ServerLevel level, Mob actor, Leg leg,
