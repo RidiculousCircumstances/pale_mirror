@@ -64,8 +64,9 @@ public final class FrontierV3CombatExecutor {
             boolean wasHolding=previous!=null && previous.observer().equals(actuation) && previous.current(order,tick,rules) && previous.holding();
             double holdReach=rules.holdReach(profile,wasHolding);
             boolean tacticalReady=MeleeTactics.readyAt(state.combat(),order,new SurfaceAnchor(new BlockPosition(fighter.getOnPos().getX(),fighter.getOnPos().getY(),fighter.getOnPos().getZ())),tick,rules);
-            boolean holding=tacticalReady && visible && distance<=holdReach;
-            boolean attackReady=tacticalReady && visible && MeleeTactics.opportunity(profile,attack,distance,rules);
+            // A preferred flank is a movement goal, never a veto on real close contact.
+            boolean holding=visible && distance<=holdReach;
+            boolean attackReady=visible && MeleeTactics.opportunity(profile,attack,distance,rules);
             if(previous==null || !previous.observer().equals(actuation) || !previous.target().equals(order.target())
                     || previous.holding()!=holding || previous.attackReady()!=attackReady || tick-previous.atTick()>=2L*rules.sensingInterval()){
                 FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,attackReady,tick)));
@@ -79,7 +80,10 @@ public final class FrontierV3CombatExecutor {
                 if(harmed.isPresent() && tick-harmed.getAsLong()<=rules.maneuvers().harmLifetime())
                     trace(order,"MANEUVER_WINDOW","tick="+tick+" harm="+harmed.getAsLong()+" facts="+maneuverFacts+" preferred="+MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())));
             }
-            if(visible && (state.actorMovements().get(order.execution().actorId())==null
+            // A defensive reaction may yield a hit; an optional gap-closing burst may not.
+            boolean retreat=MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution()))
+                    .filter(kind->kind==MeleeManeuver.Kind.BACKSTEP).isPresent();
+            if((!attackReady || retreat) && visible && (state.actorMovements().get(order.execution().actorId())==null
                     || capabilities.require(order.execution()).permitsManeuverInterruption(state,state.actorMovements().get(order.execution().actorId()),order))
                     && MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())).isPresent()){
                 var origin=FrontierV3SupportedBodyCapture.observe(level,fighter);if(origin.isEmpty())continue;
@@ -87,7 +91,7 @@ public final class FrontierV3CombatExecutor {
                 if(!(requested instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected))continue;
                 trace(order,"MANEUVER_REFUSED",requested);
             }
-            var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,MeleeTactics.opportunity(profile,attack,distance,rules) && tacticalReady,
+            var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,attackReady,
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),item.condition().remaining()>=profile.wear()));
             if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))trace(order,"OPPORTUNITY",
                     "distance="+distance+" visible="+visible+" tactical="+tacticalReady+" attack="+attack+" decision="+decision+" actor="+fighter.position()+" target="+target.position());
@@ -143,19 +147,7 @@ public final class FrontierV3CombatExecutor {
                 FrontierV3CommandSubmission.submit(runtime,"combat-windup-cancelled",strike.owner().value(),
                         new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));return;
             }
-            long now=runtime.executionView().orElseThrow().instant().ticks();
-            long started=FrontierV3CombatPresentation.start(level,fighter,strike,state.bootstrap().ruleset().melee(),target);
-            long elapsed=level.getGameTime()-started;
-            long preparation=state.bootstrap().ruleset().melee().windup(strike.attack());
-            fighter.getLookControl().setLookAt(target,30,30);
-            // The real presentation must have been visible for the full preparation.
-            if(now<strike.impactAt(state.bootstrap().ruleset().melee()) || elapsed<preparation)return;
-            if(elapsed>preparation+state.bootstrap().ruleset().melee().techniques().require(strike.attack()).activeTicks() || !FrontierV3MeleeReach.contains(fighter,target,strike.profile())
-                    || !FrontierV3CombatPresentation.strikeArc(fighter,target,strike,state.bootstrap().ruleset().melee())){
-                FrontierV3CombatPresentation.cancel(level,fighter,strike);
-                FrontierV3CommandSubmission.submit(runtime,"combat-missed-window",strike.owner().value(),
-                        new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));return;
-            }
+
         }
         // Continuation retains the exact declaration and native incarnations admitted before the effect.
         // A respawned player or replacement body cannot become the participant of an old strike.
@@ -175,19 +167,21 @@ public final class FrontierV3CombatExecutor {
         var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->{
                     var current=runtime.decodedState().orElseThrow();
                     return canActuate(current,strike) && strike.equals(current.combat().pending().get(strike.owner())) && target.isAlive() && fighter.isAlive()
-                            && fighter.hasLineOfSight(target)&&FrontierV3MeleeReach.contains(fighter,target,strike.profile())
-                            && FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,current.bootstrap().ruleset().melee())
-                            && FrontierV3CombatPresentation.strikeArc(fighter,target,strike,current.bootstrap().ruleset().melee())
+                            && fighter.hasLineOfSight(target)
+                            && MeleeTactics.opportunity(strike.profile(),strike.attack(),Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition())),current.bootstrap().ruleset().melee())
+                            && FrontierV3CombatPresentation.preparationOpen(level,fighter,strike,current.bootstrap().ruleset().melee())
                             && CombatComposition.CAPABILITIES.current(current,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks())
                                 .filter(order->order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent()
                             && current.inventory().items().containsKey(strike.weapon())
                             && FrontierV3ExactItemPresentation.exactMatch(fighter.getMainHandItem(),current.inventory().items().get(strike.weapon()));
-                },new FrontierV3NativeEffect(()->FrontierV3NativeEffect.Admission.READY,()->{
+                },new FrontierV3NativeEffect(()->prepareImpact(level,fighter,target,strike,runtime.decodedState().orElseThrow().bootstrap().ruleset().melee(),runtime.executionView().orElseThrow().instant().ticks()),()->{
                     var source=fighter.damageSources().mobAttack(fighter);
                     float damage=EnchantmentHelper.modifyDamage(level,fighter.getMainHandItem(),target,source,(float)strike.profile().damage());
                     FrontierV3CombatPresentation.impact(level,fighter,strike,target);
                     fighter.swing(InteractionHand.MAIN_HAND);
+                    float health=target.getHealth();
                     boolean hit=target.hurt(source,damage);
+                    if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))trace(strike,"NATIVE_HIT","hit="+hit+" health="+health+"->"+target.getHealth());
                     if(hit) {
                         if(strike.profile().wear()>0)fighter.getMainHandItem().setDamageValue(strike.before().damage()+strike.profile().wear());
                         EnchantmentHelper.doPostAttackEffects(level,target,source);fighter.setLastHurtMob(target);
@@ -204,6 +198,7 @@ public final class FrontierV3CombatExecutor {
                     return FrontierV3NativeEffect.Outcome.APPLIED;
                 }),()->attempt(fighter,strike));
         if(result.pending())return;
+        trace(strike,"RESULT",result.status());
         if(result.complete()) {
             boolean hit=fighter.getPersistentData().getCompound(ATTEMPT).getBoolean("hit");
             var after=hit&&strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before();
@@ -212,6 +207,25 @@ public final class FrontierV3CombatExecutor {
             FrontierV3CombatPresentation.cancel(level,fighter,strike);
             FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));
         }
+    }
+    /** Runs only after durable intent, before spending the operation's live attempt. */
+    static FrontierV3NativeEffect.Admission prepareImpact(ServerLevel level,Mob fighter,LivingEntity target,
+            MeleeStrike strike,MeleeRules rules,long canonicalTick){
+        if(canonicalTick<strike.impactAt(rules))return FrontierV3NativeEffect.Admission.waiting("MELEE_CANONICAL_ADMISSION");
+        long started=FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
+        fighter.getLookControl().setLookAt(target,30,30);
+        // Neither journal nor simulation admission can consume the visible contact window.
+        if(level.getGameTime()-started<rules.windup(strike.attack()))
+            return FrontierV3NativeEffect.Admission.waiting("MELEE_WINDUP");
+        if(!FrontierV3MeleeReach.contains(fighter,target,strike.profile())
+                || !FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules)
+                || !FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules))
+            return FrontierV3NativeEffect.Admission.waiting("MELEE_CONTACT_WINDOW");
+        return FrontierV3NativeEffect.Admission.READY;
+    }
+    private static void trace(MeleeStrike strike,String reason,Object detail){
+        if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                "PMV3_MELEE actor={} owner={} ordinal={} reason={} detail={}",strike.attacker().execution().actorId().value(),strike.owner().value(),strike.attemptOrdinal(),reason,detail);
     }
     /** Opt-in bounded native diagnosis; never changes admission or persists another combat state. */
     private static void trace(CombatOrder order,String reason,Object detail){

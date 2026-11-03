@@ -13,9 +13,7 @@ public final class CombatApproach {
             case PRESSURE,SUPPORT->0;case FLANK_LEFT->Math.PI/2;case FLANK_RIGHT->-Math.PI/2;case CUT_OFF->Math.PI;};
         double angle=Math.atan2((double)order.actorPosition().z()-order.targetPosition().z(),(double)order.actorPosition().x()-order.targetPosition().x());
         double delta=Math.atan2(Math.sin(desired-angle),Math.cos(desired-angle));
-        // The two flank directions are stable; a half-turn cut-off uses the currently shorter side.
-        if(sector.role()==MeleeSector.Role.FLANK_LEFT && delta<0)delta+=2*Math.PI;
-        if(sector.role()==MeleeSector.Role.FLANK_RIGHT && delta>0)delta-=2*Math.PI;
+        // The assigned side is stable; overshooting it must not require another full orbit.
         double next=angle+Math.copySign(Math.min(Math.abs(delta),Math.toRadians(rules.arcDegrees())),delta);
         double x=order.targetPosition().x()+Math.cos(next)*rules.outerRadius();
         double z=order.targetPosition().z()+Math.sin(next)*rules.outerRadius();

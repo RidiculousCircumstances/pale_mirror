@@ -67,6 +67,10 @@ class CombatModuleTest {
         var actor=order(2,Optional.empty());var sector=new MeleeSector(MeleeSector.Role.FLANK_LEFT,1000,0);var rules=EngagementRules.initial();
         assertTrue(CombatApproach.arc(actor,sector,rules));
         assertTrue(CombatApproach.score(actor,sector,TARGET.offset(4,0,3),rules)<CombatApproach.score(actor,sector,TARGET.offset(0,0,1),rules));
+        var overshot=actor.atActorObservation(TARGET.offset(-1,0,5));
+        assertTrue(CombatApproach.score(overshot,sector,TARGET.offset(0,0,5),rules)
+                <CombatApproach.score(overshot,sector,TARGET.offset(-4,0,3),rules),
+                "a flanker just beyond its assigned side returns directly instead of orbiting again");
         assertTrue(MeleeAim.contains(179,0,-1,55));assertTrue(MeleeAim.contains(-179,0,-1,55));
         assertFalse(MeleeAim.contains(0,0,-1,55));assertTrue(MeleeAim.contains(0,1,1,55));
     }
@@ -83,6 +87,19 @@ class CombatModuleTest {
         assertEquals(strike,restored.pending().get(order.owner()));assertEquals(106,strike.impactAt(MeleeRules.initial()));
         assertEquals(118L,restored.completed(strike,110,MeleeRules.initial()).nextAttack().get(order.owner()));
         assertThrows(IllegalArgumentException.class,()->MeleeAttack.require(0));
+    }
+    @Test void ordinaryCombatApproachDoesNotGrantPermanentSprintBetweenBoundedAttacks(){
+        var order=order(1,Optional.empty());var rules=MeleeRules.initial();var key=CombatEngagement.Key.of(order);
+        var state=CombatState.empty().enlisted(order,100,rules);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK,
+                CombatLocomotion.plan(state,order.execution(),key,TARGET.offset(8,0,0),rules).mode());
+        var strike=new MeleeStrike(order.owner(),1,new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution()),
+                order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100);
+        var pending=state.prepared(strike);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN,
+                CombatLocomotion.plan(pending,order.execution(),key,TARGET.offset(3,0,0),rules).mode());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK,
+                CombatLocomotion.plan(pending.completed(strike,110,rules),order.execution(),key,TARGET.offset(8,0,0),rules).mode());
     }
     @Test void immediateDecisionHonoursVisibilityReadinessPendingEffectsAndExpiry(){
         var order=order(1,Optional.empty());

@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "id": "retained_stationary_melee",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583,
+    "profile": "peaceful-guards"
+  },
+  "pilot": {
+    "username": "pmresponse"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/gamerule naturalRegeneration false"
+    },
+    {
+      "type": "command",
+      "command": "/time set day"
+    },
+    {
+      "type": "command",
+      "command": "/effect clear @s"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 1000"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.knockback_resistance base set 1"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 240 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 60000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "hasArmedGuard": true,
+            "guardsReady": 2,
+            "security": {
+              "hostilePlayers": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 128,
+      "timeoutMs": 30000,
+      "standOff": 2
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "coordinatedParticipants": 2
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "stationary-target-contact",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "workerId": "resident:1-16",
+      "maxDistance": 96,
+      "durationTicks": 240,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 60000,
+      "requiredCombatAttacks": [
+        "QUICK"
+      ],
+      "causalMilestone": "native_contact_sequence_observed"
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 980,
+      "captureAs": "contact-health",
+      "timeoutMs": 1000,
+      "causalMilestone": "stationary_player_took_repeated_real_hits"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 66,
+        "z": -138
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 980,
+      "captureAs": "escaped-health",
+      "timeoutMs": 1000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0,
+          "contactCount": 0,
+          "engagementCount": 0
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimumFrom": "escaped-health",
+      "timeoutMs": 1000,
+      "causalMilestone": "no_damage_after_physical_escape"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1",
+      "causalMilestone": "encounter_released_after_real_damage"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 8,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "respondingGuards": 0,
+          "contactCount": 0,
+          "engagementCount": 0
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "stationary-contact",
+      "presentation": "player"
+    }
+  ]
+}
