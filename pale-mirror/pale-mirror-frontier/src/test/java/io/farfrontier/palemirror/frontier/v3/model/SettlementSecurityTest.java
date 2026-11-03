@@ -110,6 +110,22 @@ class SettlementSecurityTest {
         state=apply(state,other.owner(),new CombatEvent.PositionPlanned(other.execution(),other.target(),other.targetPosition(),Optional.empty(),MeleePosition.Reason.NO_PATH),tick);
         assertEquals(MeleeSector.Role.SUPPORT,MeleeTactics.sector(state.combat(),other,tick,state.bootstrap().ruleset().melee()).role());
     }
+    @Test void closingBurstCannotSpendItsCooldownOnAnEndpointOutsideWeaponReach() {
+        var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
+        var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
+        var far=order.atActorObservation(order.targetPosition().offset(8,0,0));
+        assertTrue(MeleeManeuvers.preference(state,far,new MeleeManeuvers.Facts(8,.2),21001,
+                CombatComposition.CAPABILITIES.require(order.execution())).isEmpty());
+        var shortStep=far.actorPosition().offset(-3,0,0);
+        assertFalse(MeleeManeuvers.useful(state,far,MeleeManeuver.Kind.BURST,shortStep));
+        var bad=MeleeManeuvers.selected(state,far,r.body(),MeleeManeuver.Kind.BURST,shortStep,21001);
+        var before=state;
+        assertThrows(IllegalArgumentException.class,()->apply(before,bad.owner(),new CombatEvent.ManeuverSelected(bad),21001));
+        assertTrue(state.combat().maneuvers().isEmpty(),"a refused approach cannot spend maneuver cooldown");
+        var contact=order.targetPosition().offset(2,0,0);
+        assertTrue(MeleeManeuvers.useful(state,order,MeleeManeuver.Kind.BURST,contact));
+        assertTrue(MeleeManeuvers.useful(state,far,MeleeManeuver.Kind.BACKSTEP,shortStep),"defensive escape has a different purpose");
+    }
     @Test void maneuverKeepsItsExactGoalThroughSnapshotAndOnlyClosesAfterSharedMovementReleases(){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();

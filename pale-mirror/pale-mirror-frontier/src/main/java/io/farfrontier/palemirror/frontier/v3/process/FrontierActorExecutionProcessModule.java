@@ -9,6 +9,30 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarte
 
 /** Shared committed execution transitions; no family progress, body or food dispatch here. */
 final class FrontierActorExecutionProcessModule implements FrontierWorldProcessModule {
+    /** Native presentation may request passive authority, never synthesize an actuation lease. */
+    @Override public io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan planCommand(
+            FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
+        if (!(command.payload() instanceof ActorPresenceStarted presence))
+            return FrontierWorldCommandPlanner.rejected("execution command is not passive presence");
+        var actor=presence.execution().actorId();var lease=state.ambientLeases().get(actor);
+        var retained=state.actorExecutions().actors().get(actor);
+        if (presence.atTick()!=command.submittedAt().ticks() || retained!=null && retained.current().isPresent()
+                || !presence.execution().equals(state.actorExecutions().next(actor,
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE,actor))
+                || lease==null || lease.status()!=io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT
+                || !io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.retainsPhysicalCustody(state,actor)
+                || state.actorMovements().containsKey(actor)
+                || io.farfrontier.palemirror.frontier.v3.model.ActorInventoryInteractionFences.pendingOwner(state,actor).isPresent())
+            return FrontierWorldCommandPlanner.rejected("passive presence lacks exact vacant HOT authority");
+        var capability=ActorExecutionComposition.CAPABILITIES.require(presence.execution().activityKind());
+        try { capability.validateReference(state,presence.execution());
+            if (!capability.permitsAmbientMotion(state,presence.execution(),lease))
+                return FrontierWorldCommandPlanner.rejected("ambient purpose is not passive presence");
+            ActorExecutionComposition.LIFECYCLE.prepareBegin(state,presence.execution(),presence.atTick());
+        } catch (IllegalArgumentException denied) { return FrontierWorldCommandPlanner.rejected(denied.getMessage()); }
+        return new io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted(java.util.List.of(
+                new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(actor,presence)));
+    }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         if (event.payload() instanceof ActorPresenceStarted presence) {
             if (!event.subject().equals(presence.execution().actorId()))

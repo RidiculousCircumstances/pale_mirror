@@ -38,7 +38,8 @@ public final class CombatManeuverProcess {
         boolean permitted=state.actorLocations().get(execution.actorId()).condition().status()==ActorLifeStatus.ALIVE
             && state.actorExecutions().current(execution.activityKind()).get(execution.actorId())!=null
             && state.actorExecutions().current(execution.activityKind()).get(execution.actorId()).equals(execution)
-            && CombatComposition.CAPABILITIES.current(state,execution,tick).filter(m::matches).isPresent()
+            && CombatComposition.CAPABILITIES.current(state,execution,tick)
+                .filter(order->m.matches(order) && MeleeManeuvers.useful(state,order,m.kind(),m.station())).isPresent()
             && ActorBodyAuthority.retainsPhysicalCustody(state,execution.actorId()) && ActorBodyAuthority.current(state,execution.actorId()).equals(m.actor().body());
         var movement=state.actorMovements().get(execution.actorId());
         boolean expired=tick>=(m.launchedAt()==0?m.selectedAt()+80:m.launchedAt()+rules.travelTicks());

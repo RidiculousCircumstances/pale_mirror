@@ -24,6 +24,12 @@ final class FrontierV3CombatManeuvers {
             if(order.filter(m::matches).isEmpty())continue;
             if(m.launchedAt()>0){FrontierV3CombatPresentation.maneuverMoving(level,body,m);continue;}
             var opponent=level.getEntity(m.target().entity());if(!(opponent instanceof LivingEntity target) || !target.isAlive() || !body.hasLineOfSight(target))continue;
+            // Preparation may not spend a burst whose fixed endpoint has already fallen out of range.
+            if (!MeleeManeuvers.useful(state,order.orElseThrow(),m.kind(),m.station())) {
+                FrontierV3CommandSubmission.propose(runtime,"combat-maneuver-obsolete",m.owner().value(),
+                        new CombatEvent.ManeuverClosed(m.owner(),m.attemptOrdinal()));
+                continue;
+            }
             var rules=state.bootstrap().ruleset().melee().maneuvers();
             long start=FrontierV3CombatPresentation.begin(level,body,m.owner().value(),m.attemptOrdinal(),m.actor().body().physicalEpoch(),CombatGesture.maneuver(m.kind()),rules.preparation(),rules.travelTicks(),rules.recovery(),target);
             if(level.getGameTime()-start>=rules.preparation() && runtime.executionView().orElseThrow().instant().ticks()>=m.selectedAt()+rules.preparation())

@@ -13,6 +13,27 @@ import net.minecraft.world.entity.Mob;
 final class FrontierV3AmbientHotAdmission {
     private FrontierV3AmbientHotAdmission() { }
 
+    /** Existing HOT bodies need the same passive execution as a freshly selected idle actor. */
+    static boolean establishPresence(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                     FrontierWorldState state, Mob body, AmbientActorLease lease) {
+        if (lease.status()!=AmbientLeaseStatus.HOT
+                || !io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.retainsPhysicalCustody(state,lease.actorId())) return false;
+        var retained=state.actorExecutions().actors().get(lease.actorId());
+        if (retained!=null && retained.current().isPresent() || state.actorMovements().containsKey(lease.actorId())
+                || io.farfrontier.palemirror.frontier.v3.model.ActorInventoryInteractionFences.pendingOwner(state,lease.actorId()).isPresent()) return false;
+        try { io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.PRESENCE_POLICIES.requireEligible(state,lease.actorId()); }
+        catch (IllegalArgumentException denied) { return false; }
+        var execution=state.actorExecutions().next(lease.actorId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE,lease.actorId());
+        var capability=io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.CAPABILITIES.require(execution.activityKind());
+        if (!capability.permitsAmbientMotion(state,execution,lease)) return false;
+        if (!FrontierV3ActorBodyController.recognizes(state,body) || !FrontierV3ActorBodyController.readyForExecution(level,state,java.util.List.of(
+                io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state,lease.actorId())))) return false;
+        var result=FrontierV3CommandSubmission.submit(runtime,"ambient-passive-presence",lease.actorId().value(),
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorPresenceStarted(execution,
+                        runtime.executionView().orElseThrow().instant().ticks()));
+        return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+    }
     static void confirmAndArm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId actorId) {
         confirm(level, runtime, actorId, true);
     }

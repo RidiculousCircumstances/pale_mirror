@@ -47,7 +47,11 @@ final class FrontierV3PedestrianCourtesy {
             var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElse(null);
             var retained = declaration == null ? null : state.actorExecutions().actors().get(declaration.actorId());
             var execution = retained == null ? null : retained.current().orElse(null);
-            if (execution == null) { cancel(body); continue; }
+            if (execution == null) {
+                var passive=declaration==null?null:state.ambientLeases().get(declaration.actorId());
+                if (passive!=null) FrontierV3AmbientHotAdmission.establishPresence(level,runtime,state,body,passive);
+                cancel(body); continue;
+            }
             // Recovery/handoff cannot be displaced by a stale local courtesy target.
             var lease = state.ambientLeases().get(execution.actorId());
             if (lease != null && lease.status() != AmbientLeaseStatus.HOT

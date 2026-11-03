@@ -306,6 +306,7 @@ final class FrontierV3AmbientActorExecutor {
             Entity body = level.getEntity(entityId(state, actorId));
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, location.kind())) {
                 FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
+                if (FrontierV3AmbientHotAdmission.establishPresence(level,runtime,state,mob,lease)) return;
                 FrontierV3ScenePresentation.applyAmbientActorPresentation(mob, state, actorId, bioform(state, actorId));
                 if (pursueLocalGoal(level, runtime, state, actorId, mob, lease)) return;
                 if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;

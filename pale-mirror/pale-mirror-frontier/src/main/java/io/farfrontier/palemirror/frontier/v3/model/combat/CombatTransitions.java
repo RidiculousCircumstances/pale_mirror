@@ -15,6 +15,7 @@ public final class CombatTransitions {
             var m=selected.maneuver();var order=requireOrder(state,capabilities,m.actor(),tick).atActorObservation(m.origin());var prior=combat.maneuvers().get(subject);
             if(!subject.equals(m.owner()) || !m.matches(order) || !state.bootstrap().bounds().contains(m.origin().support()) || !order.engagement().contains(m.origin()) || !order.engagement().contains(m.station())
                     || !m.equals(MeleeManeuvers.selected(state,order,m.actor(),m.kind(),m.station(),tick))
+                    || !MeleeManeuvers.useful(state,order,m.kind(),m.station())
                     || !capabilities.require(order.execution()).maneuvers().contains(m.kind()) || combat.pending().containsKey(subject)
                     || prior!=null && !prior.ready(m.kind(),tick) || state.actorMovements().containsKey(order.execution().actorId()))
                 throw new IllegalArgumentException("maneuver lacks exact current permission, checkpoint or cooldown");
@@ -22,6 +23,7 @@ public final class CombatTransitions {
         }else if(event instanceof CombatEvent.ManeuverLaunched launch){
             var m=combat.maneuvers().get(subject);var order=requireOrder(state,capabilities,launch.observer(),tick);
             if(m==null || !m.open() || !m.actor().equals(launch.observer()) || m.attemptOrdinal()!=launch.attemptOrdinal() || !m.matches(order)
+                    || !MeleeManeuvers.useful(state,order,m.kind(),m.station())
                     || tick<m.selectedAt()+state.bootstrap().ruleset().melee().maneuvers().preparation())throw new IllegalArgumentException("stale or premature maneuver launch");
             combat=combat.maneuver(m.launched(tick));
         }else if(event instanceof CombatEvent.ManeuverClosed close){

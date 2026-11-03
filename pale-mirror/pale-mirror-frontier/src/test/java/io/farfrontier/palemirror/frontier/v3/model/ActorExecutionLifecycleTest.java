@@ -15,6 +15,35 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorExecutionLifecycleTest {
+    @Test void observedVacantHotBodyCanAcquirePassivePresenceWithoutChangingBodyOrResources() {
+        var state=ResourceSiteHarvestProcessTest.initial();
+        var actor=state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        state=ActorBodyAuthority.demand(state,actor);
+        state=ActorBodyAuthority.running(state,ActorBodyAuthority.current(state,actor));
+        var location=state.actorLocations().get(actor);
+        var lease=new AmbientActorLease(actor,location.body(),new SimInstant(10),1,AmbientLeaseStatus.HOT,AmbientGoalKind.PATROL,location.body());
+        state=state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor,lease)));
+        var presence=new ActorPresenceStarted(state.actorExecutions().next(actor,ActorActivityKind.PRESENCE,actor),10);
+        var id=new CommandId("test:passive-hot-body");
+        var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,id,state.bootstrap().worldId(),Revision.ZERO,
+                new SimInstant(10),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(id),presence);
+        var registry=FrontierWorldRuntimeDefinition.processRegistry();
+        var plan=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner.plan(state,command,registry,FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR));
+        assertEquals(List.of(new ProposedEvent(actor,presence)),plan.events());
+        var cold=ActorBodyAuthority.released(state,ActorBodyAuthority.current(state,actor));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner.plan(cold,command,registry,FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR));
+        var fact=new FrontierEvent(FrontierEvent.SCHEMA_VERSION,new EventId("test:passive-hot-body"),new TransactionId("test:passive-hot-body"),
+                state.bootstrap().worldId(),Revision.ZERO,new SimInstant(10),actor,CauseChain.root(id),presence);
+        var next=FrontierWorldProcessCatalog.reduce("actor-execution",state,fact);
+        assertSame(state.inventory(),next.inventory());assertEquals(state.actorLocations(),next.actorLocations());
+        assertTrue(ActorSpatialCourtesy.assess(next,presence.execution()).ready());
+        next=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next));
+        assertTrue(ActorSpatialCourtesy.assess(next,presence.execution()).ready());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner.plan(next,command,registry,FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR));
+    }
     @Test void coordinatedDeathRetirementRequiresItsExplicitSameOwnerKindAndCasualtyGroup() {
         var state = ResourceSiteHarvestProcessTest.initial();
         var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();

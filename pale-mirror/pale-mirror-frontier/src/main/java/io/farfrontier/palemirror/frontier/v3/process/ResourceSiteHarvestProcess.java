@@ -694,6 +694,7 @@ public final class ResourceSiteHarvestProcess {
         if (next.harvestJobs().values().stream().noneMatch(sibling -> sibling.taskId().equals(task.id())))
             events.add(transition(task, StrategicTaskStatus.COMPLETED));
         events.add(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Cancelled(coldProgress(job, now).id())));
+        events.add(ResidentActivityProcess.wakeAfterActivity(job.workerId(), now));
         events.addAll(ResourceFieldGrowthProcess.afterWork(state, next,
                 state.resourceSites().cycle(lifecycle.siteId()), job.id(), now));
         return List.copyOf(events);

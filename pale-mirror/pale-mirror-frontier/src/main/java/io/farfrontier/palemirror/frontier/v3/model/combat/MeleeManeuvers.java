@@ -14,6 +14,8 @@ public final class MeleeManeuvers {
         var kind=(hurt && facts.distance()<=rules.hurtGapMicros()/1_000_000.0 || facts.distance()<rules.crowdedGapMicros()/1_000_000.0)?MeleeManeuver.Kind.BACKSTEP:
             facts.distance()>=rules.minimumBurstGapMicros()/1_000_000.0 && facts.distance()<=rules.maximumBurstGapMicros()/1_000_000.0
                 && (facts.distance()>=rules.distantGapMicros()/1_000_000.0 || facts.separatingSpeed()>=rules.retreatSpeedMicros()/1_000_000.0)?MeleeManeuver.Kind.BURST:null;
+        if(kind==MeleeManeuver.Kind.BURST && MeleePositions.weapon(state.combat(),order)
+                .filter(profile->facts.distance()<=rules.burstDistance()+profile.reach()).isEmpty())return Optional.empty();
         if(kind==MeleeManeuver.Kind.BURST && !MeleeTactics.readyAt(state.combat(),order,order.actorPosition(),tick,state.bootstrap().ruleset().melee()))return Optional.empty();
         return kind!=null && capability.maneuvers().contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
     }
@@ -23,7 +25,8 @@ public final class MeleeManeuvers {
         var physical=PedestrianInteractionStations.within(knowledge.geometry(),origin,radius*2,Set.of()).stream()
             .filter(p->knowledge.clearStation(p) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(p.support())
                 && ServiceBoundaryComposition.turnoverPoint(state,p).isEmpty() && MeleePositions.available(state,order,p,tick)).toList();
-        var candidates=rank(order,kind,physical,rules).stream().filter(point->kind!=MeleeManeuver.Kind.BURST
+        var candidates=rank(order,kind,physical,rules).stream().filter(point->useful(state,order,kind,point))
+                .filter(point->kind!=MeleeManeuver.Kind.BURST
                 || MeleeTactics.readyAt(state.combat(),order,point,tick,state.bootstrap().ruleset().melee())).toList();
         return MeleePositions.reachable(candidates,3,p->{var route=knowledge.plannedPath(origin,new MovementOrder(order.owner(),order.execution().actorId(),1,1,List.of(p),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION));
             if(route.size()>radius+2)throw new KnownPedestrianNavigation.RouteUnavailable(PedestrianRouteResult.Status.NO_PATH,"maneuver detour exceeds bounded distance");});
@@ -36,6 +39,11 @@ public final class MeleeManeuvers {
                 && (kind==MeleeManeuver.Kind.BURST?distance(p,target)>=1.25 && distance(p,target)<old-0.75:distance(p,target)>old+0.5))
             .distinct().sorted(Comparator.comparingDouble((SurfaceAnchor p)->kind==MeleeManeuver.Kind.BURST?Math.abs(distance(p,target)-1.6):-distance(p,target))
                 .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
+    }
+    /** A closing burst must finish within real weapon reach, not merely somewhere closer. */
+    public static boolean useful(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,SurfaceAnchor station){
+        return kind!=MeleeManeuver.Kind.BURST || MeleePositions.weapon(state.combat(),order)
+                .filter(profile->MeleePositions.legal(order,profile,station)).isPresent();
     }
     public static boolean available(FrontierWorldState state,CombatOrder order,SurfaceAnchor station){
         return state.combat().maneuvers().values().stream().filter(m->m.open() && !m.owner().equals(order.owner())).noneMatch(m->{
