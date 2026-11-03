@@ -294,7 +294,7 @@ class FrontierWorldProcessCatalogTest {
                         new CombatTarget(CombatTarget.Kind.PLAYER,new java.util.UUID(1,2),"pale_mirror:frontier_graybox"),new BlockPosition(0,63,0),Optional.empty(),1)),
                 Map.entry("evasion",new EvasionEvent.Ended(new SubjectId("resident:representative"),new SubjectId("safety:representative"),1)),
                 Map.entry("combat",new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEvent.Completed(
-                        new SubjectId("guard:representative"),1,false,new ItemCondition(250,0))),
+                        new SubjectId("guard:representative"),1,io.farfrontier.palemirror.frontier.v3.model.combat.MeleeOutcome.CANCELLED,new ItemCondition(250,0))),
                 Map.entry("guard", new GuardDutyEvent.Changed(new SubjectId("guard:representative"), 1, GuardDutyEvent.Change.ENDED, Optional.empty())),
                 Map.entry("kernel-schedule", new ScheduleEffect.Cancelled(new ScheduleId("schedule:representative"))),
                 Map.entry("physical-observation", new PhysicalIntentTransition(new PhysicalIntentId("intent:representative"),

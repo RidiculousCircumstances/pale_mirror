@@ -59,7 +59,8 @@ public final class FrontierV3CombatExecutor {
             boolean visible=fighter.hasLineOfSight(target);
             double distance=Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition()));
             double separating=separatingSpeed(fighter,target,actuation,visible,state.bootstrap().ruleset().melee().sensingInterval());
-            var attack=MeleeTactics.attack(profile,distance,separating,state.bootstrap().ruleset().melee());
+            var attack=MeleeTactics.attack(state.combat(),order,actuation,targetPort(target).identity().incarnation(),tick,
+                    profile,distance,separating,state.bootstrap().ruleset().melee());
             var rules=state.bootstrap().ruleset().melee();var previous=state.combat().stances().get(order.owner());
             boolean wasHolding=previous!=null && previous.observer().equals(actuation) && previous.current(order,tick,rules) && previous.holding();
             double holdReach=rules.holdReach(profile,wasHolding);
@@ -124,19 +125,19 @@ public final class FrontierV3CombatExecutor {
             if(prior.cancelled()) { confirmMiss(level,runtime,strike,prior.ticket()); return; }
             if(actor instanceof Mob fighter && attempt(fighter,strike)) {
                 boolean hit=fighter.getPersistentData().getCompound(ATTEMPT).getBoolean("hit");
-                FrontierV3OperationConfirmation.submitRequired(level,runtime,prior.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),hit,
+                FrontierV3OperationConfirmation.submitRequired(level,runtime,prior.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),hit?MeleeOutcome.HIT:MeleeOutcome.MISS,
                         hit&&strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before()));return;
             }
         }
         if(!(actor instanceof Mob fighter) || !(opponent instanceof LivingEntity target)) {
             if(retained.isEmpty()) FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.owner().value(),
-                    new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));
+                    new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,strike.before()));
             else cancelUnusedOrWait(level,runtime,strike,retained.orElseThrow());
             return;
         }
         if(retained.isEmpty() && (!canActuate(state,strike) || !fighter.isAlive() || !target.isAlive()
                 || targetPort(target).identity().incarnation()!=strike.targetIncarnation())) {
-            FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.owner().value(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));return;
+            FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.owner().value(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,strike.before()));return;
         }
         if(retained.isEmpty()){
             var permission=CombatComposition.CAPABILITIES.current(state,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks());
@@ -145,7 +146,7 @@ public final class FrontierV3CombatExecutor {
                     || !MeleeTactics.opportunity(strike.profile(),strike.attack(),Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition())),state.bootstrap().ruleset().melee())){
                 FrontierV3CombatPresentation.cancel(level,fighter,strike);
                 FrontierV3CommandSubmission.submit(runtime,"combat-windup-cancelled",strike.owner().value(),
-                        new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));return;
+                        new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,strike.before()));return;
             }
 
         }
@@ -168,24 +169,13 @@ public final class FrontierV3CombatExecutor {
                     var current=runtime.decodedState().orElseThrow();
                     return canActuate(current,strike) && strike.equals(current.combat().pending().get(strike.owner())) && target.isAlive() && fighter.isAlive()
                             && fighter.hasLineOfSight(target)
-                            && MeleeTactics.opportunity(strike.profile(),strike.attack(),Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition())),current.bootstrap().ruleset().melee())
                             && FrontierV3CombatPresentation.preparationOpen(level,fighter,strike,current.bootstrap().ruleset().melee())
                             && CombatComposition.CAPABILITIES.current(current,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks())
                                 .filter(order->order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent()
                             && current.inventory().items().containsKey(strike.weapon())
                             && FrontierV3ExactItemPresentation.exactMatch(fighter.getMainHandItem(),current.inventory().items().get(strike.weapon()));
                 },new FrontierV3NativeEffect(()->prepareStrike(level,runtime,fighter,target,strike),()->{
-                    var source=fighter.damageSources().mobAttack(fighter);
-                    float damage=EnchantmentHelper.modifyDamage(level,fighter.getMainHandItem(),target,source,(float)strike.profile().damage());
-                    FrontierV3CombatPresentation.impact(level,fighter,strike,target);
-                    fighter.swing(InteractionHand.MAIN_HAND);
-                    float health=target.getHealth();
-                    boolean hit=target.hurt(source,damage);
-                    if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))trace(strike,"NATIVE_HIT","hit="+hit+" health="+health+"->"+target.getHealth());
-                    if(hit) {
-                        if(strike.profile().wear()>0)fighter.getMainHandItem().setDamageValue(strike.before().damage()+strike.profile().wear());
-                        EnchantmentHelper.doPostAttackEffects(level,target,source);fighter.setLastHurtMob(target);
-                    }
+                    boolean hit=applyImpact(level,fighter,target,strike,runtime.decodedState().orElseThrow().bootstrap().ruleset().melee());
                     var receipt=new CompoundTag();receipt.putString("owner",strike.owner().value());receipt.putLong("ordinal",strike.attemptOrdinal());receipt.putBoolean("hit",hit);
                     fighter.getPersistentData().put(ATTEMPT,receipt);
                     if(hit && !target.isAlive()) {
@@ -202,11 +192,28 @@ public final class FrontierV3CombatExecutor {
         if(result.complete()) {
             boolean hit=fighter.getPersistentData().getCompound(ATTEMPT).getBoolean("hit");
             var after=hit&&strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before();
-            FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),hit,after));
+            FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),hit?MeleeOutcome.HIT:MeleeOutcome.MISS,after));
         } else if(result.status()==FrontierV3MinecraftOperation.Status.NOT_APPLIED||result.status()==FrontierV3MinecraftOperation.Status.SOURCE_CHANGED) {
             FrontierV3CombatPresentation.cancel(level,fighter,strike);
-            FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));
+            FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,strike.before()));
         }
+    }
+    /** The transaction's actual native effect: approach latitude can never extend damage reach. */
+    static boolean applyImpact(ServerLevel level,Mob fighter,LivingEntity target,MeleeStrike strike,MeleeRules rules){
+        boolean contact=FrontierV3MeleeReach.contains(fighter,target,strike.profile())
+                && FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules)
+                && FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules);
+        FrontierV3CombatPresentation.impact(level,fighter,strike,target);
+        fighter.swing(InteractionHand.MAIN_HAND);
+        var source=fighter.damageSources().mobAttack(fighter);
+        float damage=contact?EnchantmentHelper.modifyDamage(level,fighter.getMainHandItem(),target,source,(float)strike.profile().damage()):0;
+        float health=target.getHealth();boolean hit=contact && target.hurt(source,damage);
+        if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))trace(strike,"NATIVE_HIT","hit="+hit+" health="+health+"->"+target.getHealth());
+        if(hit){
+            if(strike.profile().wear()>0)fighter.getMainHandItem().setDamageValue(strike.before().damage()+strike.profile().wear());
+            EnchantmentHelper.doPostAttackEffects(level,target,source);fighter.setLastHurtMob(target);
+        }
+        return hit;
     }
     private static FrontierV3NativeEffect.Admission prepareStrike(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
             Mob fighter,LivingEntity target,MeleeStrike strike){
@@ -227,6 +234,8 @@ public final class FrontierV3CombatExecutor {
         // Journal admission cannot consume the visible contact window.
         if(level.getGameTime()-started<rules.windup(strike.attack()))
             return FrontierV3NativeEffect.Admission.waiting("MELEE_WINDUP");
+        if(level.getGameTime()-started>=rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks())
+            return FrontierV3NativeEffect.Admission.READY; // finite observed whiff, still no damage without contact
         if(!FrontierV3MeleeReach.contains(fighter,target,strike.profile())
                 || !FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules)
                 || !FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules))
@@ -256,7 +265,7 @@ public final class FrontierV3CombatExecutor {
     private static void confirmMiss(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
             MeleeStrike strike, UUID ticket) {
         FrontierV3OperationConfirmation.submitRequired(level,runtime,ticket,
-                new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));
+                new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,strike.before()));
     }
     private static void cancelUnusedOrWait(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
             MeleeStrike strike, FrontierV3OperationReceipt retained) {

@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 final class FrontierV3MeleeGuidance {
     static void observe(ServerLevel level,FrontierWorldState state,Supplier<Optional<FrontierWorldState>> currentState,
             Mob fighter,LivingEntity target,MeleeStrike strike,boolean tracking,long tick){
-        if(strike.attack()!=MeleeAttack.LUNGE)return;
+        if(!strike.attack().closesDistance())return;
         var move=state.actorMovements().get(strike.attacker().execution().actorId());
         var execution=strike.attacker().execution();
         if(move!=null && (move.coldTravel().isPresent() || !move.executionId().equals(execution)
@@ -31,7 +31,11 @@ final class FrontierV3MeleeGuidance {
         var observed=FrontierV3BodyObservation.capture(target).support();
         if(origin.isEmpty() || observed.isEmpty())return;
         var contact=observed.orElseThrow();var direction=fighter.position().subtract(target.position()).normalize();
-        var station=SurfaceAnchor.at((int)Math.floor(target.getX()+direction.x),contact.y(),(int)Math.floor(target.getZ()+direction.z));
+        if(strike.attack()==MeleeAttack.FOLLOWUP && Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition()))
+                >strike.profile().reach()+state.bootstrap().ruleset().melee().followup().technique().approachAllowance())return;
+        // A recovery step aims at weapon contact, not all the way into the target's cell.
+        double separation=strike.attack()==MeleeAttack.FOLLOWUP?Math.max(1.0,strike.profile().reach()-state.bootstrap().ruleset().melee().rangeHysteresisMicros()/1_000_000.0):1.0;
+        var station=SurfaceAnchor.at((int)Math.floor(target.getX()+direction.x*separation),contact.y(),(int)Math.floor(target.getZ()+direction.z*separation));
         int radius=state.bootstrap().ruleset().melee().engagements().lungeCorrectionBlocks();
         if(origin.orElseThrow().supportingSurface().manhattanDistance(station)>radius
                 && order.legalStations().stream().noneMatch(p->p.manhattanDistance(station)<=radius))return;

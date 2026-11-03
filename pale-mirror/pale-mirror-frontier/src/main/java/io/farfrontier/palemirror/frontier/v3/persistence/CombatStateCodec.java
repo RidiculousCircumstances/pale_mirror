@@ -28,6 +28,11 @@ out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeBy
         out.writeInt(state.maneuvers().size());for(var value:state.maneuvers().values().stream().sorted(Comparator.comparing(MeleeManeuver::owner)).toList())maneuver(out,value);
         out.writeInt(state.engagements().size());
         for(var value:state.engagements().values().stream().sorted(CombatEngagementCodec.order()).toList())CombatEngagementCodec.write(out,value);
+        out.writeInt(state.followups().size());
+        for(var f:state.followups().values().stream().sorted(Comparator.comparing(MeleeFollowup::owner)).toList()){
+            actuation(out,f.actor());target(out,f.target());id(out,f.weapon());out.writeLong(f.targetIncarnation());
+            out.writeLong(f.missedOrdinal());out.writeLong(f.openedAt());out.writeLong(f.expiresAt());
+        }
         out.writeInt(state.evasions().size());for(var value:state.evasions().values().stream().sorted(Comparator.comparing(Evasion::actor)).toList())EvasionWire.write(out,value);
     }
     static CombatState read(DataInputStream in)throws IOException{
@@ -53,9 +58,14 @@ unique(positions,key,new MeleePosition(execution,target,point,station,in.readInt
         n=count(in);var maneuvers=new LinkedHashMap<SubjectId,MeleeManeuver>();for(int i=0;i<n;i++){var m=maneuver(in);unique(maneuvers,m.owner(),m);}
         n=count(in);var engagements=new LinkedHashMap<CombatEngagement.Key,CombatEngagement>();
         for(int i=0;i<n;i++){var value=CombatEngagementCodec.read(in);if(engagements.putIfAbsent(value.key(),value)!=null)throw new IllegalArgumentException("duplicate encounter");}
+        n=count(in);var followups=new LinkedHashMap<SubjectId,MeleeFollowup>();
+        for(int i=0;i<n;i++){
+            var f=new MeleeFollowup(actuation(in),target(in),id(in),in.readLong(),in.readLong(),in.readLong(),in.readLong());
+            unique(followups,f.owner(),f);
+        }
         n=count(in);var evasions=new LinkedHashMap<SubjectId,Evasion>();
         for(int i=0;i<n;i++){var value=EvasionWire.read(in);unique(evasions,value.actor(),value);}
-        return new CombatState(pending,ready,arms,blocked,stances,positions,evasions,maneuvers,engagements);
+        return new CombatState(pending,ready,arms,blocked,stances,positions,evasions,maneuvers,engagements,followups);
     }
     private static int count(DataInputStream in)throws IOException{return UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);}
     private static <T> void unique(Map<SubjectId,T> values,SubjectId key,T value){if(values.putIfAbsent(key,value)!=null)throw new IllegalArgumentException("duplicate combat entry");}

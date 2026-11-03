@@ -96,6 +96,33 @@ class CombatModuleTest {
         assertEquals(118L,restored.completed(strike,110,MeleeRules.initial()).nextAttack().get(order.owner()));
         assertThrows(IllegalArgumentException.class,()->MeleeAttack.require(0));
     }
+    @Test void missedLungeOffersOneNearbyRecoveryAttackWithExactIdentityAndNormalWeaponCadence() throws IOException {
+        var order=order(1,Optional.empty());var rules=MeleeRules.initial();
+        var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var lunge=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,17,101,100);
+        var pending=CombatState.empty().prepared(lunge);
+        assertTrue(pending.completed(lunge,104,rules,true).followups().isEmpty(),"cancelled preparation is not a missed swing");
+        assertTrue(pending.completed(lunge,110,rules,false).followups().isEmpty(),"a hit does not grant another attack");
+        var missed=pending.completed(lunge,110,rules,true);
+        assertEquals(113L,missed.nextAttack().get(order.owner()),"short recovery still respects the actual sword interval");
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),missed);
+        var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        assertEquals(missed,recovered);
+        assertEquals(MeleeAttack.FOLLOWUP,MeleeTactics.attack(recovered,order,actor,17,113,SWORD,3.6,0.2,rules));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,113,SWORD,6,0.2,rules),"far targets get ordinary pursuit");
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,18,113,SWORD,3.6,0.2,rules),"respawn is a different target incarnation");
+        var successor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),2),order.execution());
+        assertFalse(recovered.followups().get(order.owner()).matches(order,successor,17,113));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,134,SWORD,3.6,0.2,rules),"expired response is not permanent sprint");
+        var followup=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),lunge.before(),SWORD,MeleeAttack.FOLLOWUP,17,114,113);
+        var response=recovered.prepared(followup);
+        assertTrue(response.followups().isEmpty(),"preparation spends the one continuation");
+        assertTrue(response.completed(followup,120,rules,true).followups().isEmpty(),"missing again cannot chain recovery attacks");
+        assertTrue(recovered.withdrawn(order.execution()).followups().isEmpty());
+        assertTrue(recovered.retired(order.owner()).followups().isEmpty());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN,
+                CombatLocomotion.plan(response,order.execution(),CombatEngagement.Key.of(order),TARGET.offset(3,0,0),rules).mode());
+    }
     @Test void ordinaryCombatApproachDoesNotGrantPermanentSprintBetweenBoundedAttacks(){
         var order=order(1,Optional.empty());var rules=MeleeRules.initial();var key=CombatEngagement.Key.of(order);
         var state=CombatState.empty().enlisted(order,100,rules);

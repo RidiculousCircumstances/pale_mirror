@@ -14,6 +14,14 @@ public final class MeleeTactics {
         return distance<=Math.min(rules.techniques().quickDistanceMicros()/1_000_000.0,weapon.reach()*rules.techniques().quickReachPermille()/1000.0)
                 && separatingSpeed<rules.techniques().retreatSpeedMicros()/1_000_000.0?MeleeAttack.QUICK:MeleeAttack.LUNGE;
     }
+    public static MeleeAttack attack(CombatState state,CombatOrder order,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long incarnation,long tick,
+            WeaponProfile weapon,double distance,double separatingSpeed,MeleeRules rules){
+        var followup=state.followups().get(order.owner());
+        return followup!=null && followup.matches(order,observer,incarnation,tick)
+                && opportunity(weapon,MeleeAttack.FOLLOWUP,distance,rules)?MeleeAttack.FOLLOWUP
+                :attack(weapon,distance,separatingSpeed,rules);
+    }
     public static boolean opportunity(WeaponProfile weapon,MeleeAttack attack,double distance,MeleeRules rules){
         return Double.isFinite(distance) && distance>=0 && distance<=weapon.reach()+rules.techniques().require(attack).approachAllowance();
     }

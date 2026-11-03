@@ -38,9 +38,19 @@ public final class FrontierV3MeleeBoundaryGameTests {
     }
     @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
     public static void durableAdmissionStartsTheFullWindupAndTheActualHitCannotReplay(GameTestHelper helper){
+        durableAdmission(helper,MeleeAttack.LUNGE);
+    }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void recoveryStrikeUsesTheQuickCueAndCannotReplayItsHit(GameTestHelper helper){
+        durableAdmission(helper,MeleeAttack.FOLLOWUP);
+    }
+    private static void durableAdmission(GameTestHelper helper,MeleeAttack attack){
         var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
-        var rules=MeleeRules.initial();var strike=strike(level.getGameTime());
+        var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),attack);
+        helper.assertTrue(io.farfrontier.palemirror.internal.network.CombatGesture.strike(attack)
+                ==(attack==MeleeAttack.FOLLOWUP?io.farfrontier.palemirror.internal.network.CombatGesture.QUICK
+                    :io.farfrontier.palemirror.internal.network.CombatGesture.LUNGE),"the recovery response has the short attack cue");
 
         var actorPort=FrontierV3OperationEntityParticipant.nativeObject(fighter);
         var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);var ports=List.of(actorPort,targetPort);
@@ -60,7 +70,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
         },()->{
             helper.assertTrue(level.getGameTime()-visibleSince.get()>=rules.windup(strike.attack()),"native cue must last its complete preparation after admission");
             helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules),"effect needs a live finite impact window");
-            helper.assertTrue(target.hurt(fighter.damageSources().mobAttack(fighter),6),"actual native damage accepted");hits.incrementAndGet();
+            helper.assertTrue(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"actual production contact effect accepted");hits.incrementAndGet();
             return FrontierV3NativeEffect.Outcome.APPLIED;
         });
         helper.onEachTick(()->{
@@ -112,15 +122,30 @@ public final class FrontierV3MeleeBoundaryGameTests {
             fighter.discard();target.discard();helper.succeed();
         });
     }
-    private static MeleeStrike strike(long tick){
-        var owner=new SubjectId("guard:windup-test");
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void completedMissIsVisibleButApproachAllowanceNeverDealsRemoteDamage(GameTestHelper helper){
+        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(8,8,4));target.setNoAi(true);target.setNoGravity(true);
+        var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),MeleeAttack.FOLLOWUP);float health=target.getHealth();
+        FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
+        helper.runAfterDelay(rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks(),()->{
+            helper.assertTrue(FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,strike.impactAt(rules)).ready(),
+                    "a finite completed swing can be recorded as a miss");
+            helper.assertFalse(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"short step allowance is not damage reach");
+            helper.assertValueEqual(target.getHealth(),health,"a visible miss deals no remote damage");
+            fighter.discard();target.discard();helper.succeed();
+        });
+    }
+    private static MeleeStrike strike(long tick){return strike(tick,MeleeAttack.LUNGE);}
+    private static MeleeStrike strike(long tick,MeleeAttack attack){
+        var owner=new SubjectId(attack==MeleeAttack.FOLLOWUP?"guard:recovery-test":"guard:windup-test");
         var actor=new ActorExecutionId(new SubjectId("resident:windup-test"),
                 ActorActivityKind.GUARD,owner,1);
         return new MeleeStrike(owner,1,
                 new ActorActuationId(new ActorBodyId(actor.actorId(),1),actor),
                 new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"minecraft:overworld"),
                 new SubjectId("item:windup-sword"),new ItemCondition(250,0),
-                FrontierV3WeaponProfiles.read(new ItemStack(Items.IRON_SWORD)),MeleeAttack.LUNGE,1,tick+1,tick);
+                FrontierV3WeaponProfiles.read(new ItemStack(Items.IRON_SWORD)),attack,1,tick+1,tick);
     }
     private FrontierV3MeleeBoundaryGameTests() { }
 }

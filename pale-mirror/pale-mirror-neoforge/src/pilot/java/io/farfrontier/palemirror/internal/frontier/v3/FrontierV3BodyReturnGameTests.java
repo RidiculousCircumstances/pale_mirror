@@ -25,22 +25,28 @@ public final class FrontierV3BodyReturnGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void savedDepartureReturnsThroughOrdinaryJoinFirewall(GameTestHelper helper) {
-        savedDepartureReturns(helper, false);
+        savedDepartureReturns(helper, false, false);
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void savedPreparedBodyReturnsAfterInsertionAcknowledgement(GameTestHelper helper) {
-        savedDepartureReturns(helper, true);
+        savedDepartureReturns(helper, true, false);
     }
 
-    private static void savedDepartureReturns(GameTestHelper helper, boolean preparedSave) {
+    @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void tinyPositiveHealthRetainsLivingIdentityThroughRealSaveAndReturn(GameTestHelper helper) {
+        savedDepartureReturns(helper, false, true);
+    }
+
+    private static void savedDepartureReturns(GameTestHelper helper, boolean preparedSave, boolean tinyHealth) {
         var level = helper.getLevel();
         var actor = new SubjectId("resident:1-1");
         var feet = helper.absolutePos(new BlockPos(0, 1, 0));
         FrontierV3AmbientActorGameTests.prepareFloor(level, feet);
         var config = FrontierV3AmbientActorGameTests.configurationAt(helper,
-                new WorldId(preparedSave ? "frontier:saved-prepared-body-return" : "frontier:saved-body-return"), 91L, actor);
+                new WorldId(tinyHealth ? "frontier:tiny-health-body-return" : preparedSave ? "frontier:saved-prepared-body-return" : "frontier:saved-body-return"), 91L, actor);
         var store = new FrontierV3AmbientActorGameTests.EphemeralStore();
         var runtime = FrontierV3ServerRuntime.start(config, store, 10_000);
         FrontierV3AmbientActorGameTests.initializeAdmission(level, config, store);
@@ -54,6 +60,7 @@ public final class FrontierV3BodyReturnGameTests {
             var body = (Mob) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, actor));
             helper.assertTrue(body != null, "original body must be indexed");
             if (!preparedSave) FrontierV3ActorBodyController.confirmPresent(level, runtime, body);
+            if (tinyHealth) body.setHealth(Float.MIN_VALUE);
             var saved = new CompoundTag();
             helper.assertTrue(body.save(saved), "real body must serialize before final unload");
             var ledger = FrontierV3AmbientCarrierLedger.get(level, config.worldId());
@@ -72,6 +79,8 @@ public final class FrontierV3BodyReturnGameTests {
             body.remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
             helper.assertTrue(FrontierV3ActorBodyController.observeLeave(level, runtime, body), "final unload must retain exact receipt");
             var receipt = ledger.bodyDeparture(actor).orElseThrow();
+            if (tinyHealth) helper.assertValueEqual(receipt.observed().health().raw(), 1L,
+                    "positive native health must stay alive at domain precision");
             helper.assertTrue(ledger.markBodyReturnRead(receipt), "positive return read fences old absence");
             var returned = EntityType.loadEntityRecursive(saved, level, entity -> entity);
             var proof = FrontierV3ServerLifecycle.observeSourceJoin(level, runtime, returned);

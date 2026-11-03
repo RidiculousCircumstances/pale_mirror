@@ -21,7 +21,8 @@ final class FrontierStateSchema {
     // Atomic COLD cell receipts change the closed process event inventory.
     // Peaceful guard appointments retain exact equipment and execution declarations.
     // Lunge guidance and finite aim tracking change the hashed combat policy.
-    static final int VERSION = 326;
+    // One-shot missed-lunge continuations survive recovery with exact body/target identities.
+    static final int VERSION = 327;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

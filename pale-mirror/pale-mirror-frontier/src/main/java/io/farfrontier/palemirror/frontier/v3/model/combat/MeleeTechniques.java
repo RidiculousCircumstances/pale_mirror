@@ -18,7 +18,7 @@ public record MeleeTechniques(Technique quick,Technique lunge,int quickDistanceM
                 || retreatSpeedMicros<0 || retreatSpeedMicros>1_000_000 || pressureDistanceMicros<1 || pressureDistanceMicros>4_000_000)
             throw new IllegalArgumentException("invalid attack selection policy");
     }
-    public Technique require(MeleeAttack attack){return switch(attack){case QUICK->quick;case LUNGE->lunge;};}
+    public Technique require(MeleeAttack attack){return switch(attack){case QUICK->quick;case LUNGE->lunge;case FOLLOWUP->MeleeFollowupRules.initial().technique();};}
     public static MeleeTechniques initial(){
         return new MeleeTechniques(new Technique(4,3,6,350_000),new Technique(6,4,8,650_000),2_200_000,750,80_000,2_200_000);
     }

@@ -225,6 +225,23 @@ class SettlementSecurityTest {
         var events=registry.validateEmissions("security",accepted.events());
         assertEquals(2,events.size(),"a new contact wakes its settlement allocator, not every guard");
     }
+    @Test void recoveryStrikeRequiresAnUnspentMissForThisExactActorAndTargetIncarnation(){
+        var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
+        var item=state.inventory().items().get(r.duty().weapon());var profile=new WeaponProfile(item.itemKind(),6,13,3,1);
+        var lunge=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),profile,MeleeAttack.LUNGE,17,21002,21001);
+        state=apply(strikeSlot(state,lunge),lunge.owner(),new CombatEvent.Prepared(lunge),21001);
+        state=apply(state,lunge.owner(),new CombatEvent.Completed(lunge.owner(),lunge.attemptOrdinal(),MeleeOutcome.MISS,item.condition()),21009);
+        state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        var response=new MeleeStrike(lunge.owner(),lunge.ownerRevision(),lunge.attacker(),lunge.target(),lunge.weapon(),lunge.before(),profile,MeleeAttack.FOLLOWUP,17,21015,21014);
+        var admitted=strikeSlot(state,response);var exact=admitted;
+        var forged=new MeleeStrike(response.owner(),response.ownerRevision(),response.attacker(),response.target(),response.weapon(),response.before(),profile,MeleeAttack.FOLLOWUP,18,21015,21014);
+        assertThrows(IllegalArgumentException.class,()->apply(exact,response.owner(),new CombatEvent.Prepared(forged),21014));
+        assertThrows(IllegalArgumentException.class,()->apply(exact.withChanges(FrontierWorldStateUpdate.begin().combat(exact.combat().withoutFollowup(response.owner()))),response.owner(),new CombatEvent.Prepared(response),21014));
+        admitted=apply(admitted,response.owner(),new CombatEvent.Prepared(response),21014);
+        assertTrue(admitted.combat().followups().isEmpty());
+        admitted=apply(admitted,response.owner(),new CombatEvent.Completed(response.owner(),response.attemptOrdinal(),MeleeOutcome.MISS,item.condition()),21020);
+        assertTrue(admitted.combat().followups().isEmpty(),"a missed recovery strike cannot regenerate its own permission");
+    }
     @Test void strikeRetainsExactBodyWeaponAndOutcomeAcrossRecoveryAndRejectsForgedWear(){
         var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);
         state=allocated(state,21001);
@@ -240,8 +257,8 @@ class SettlementSecurityTest {
         var forged=new MeleeStrike(strike.owner(),strike.ownerRevision()+1,strike.attacker(),strike.target(),strike.weapon(),strike.before(),strike.profile(),MeleeAttack.QUICK,
                 strike.targetIncarnation(),strike.attemptOrdinal(),strike.preparedAt());
         assertThrows(IllegalArgumentException.class,()->pending.withChanges(FrontierWorldStateUpdate.begin().combat(CombatState.empty().prepared(forged))));
-        assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition()),21002));
-        state=apply(state,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21009);
+        assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition()),21002));
+        state=apply(state,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition().wear(1)),21009);
         assertTrue(state.combat().pending().isEmpty());assertEquals(item.condition().wear(1),state.inventory().items().get(item.id()).condition());
         assertEquals(21015L,state.combat().nextAttack().get(r.duty().id()));
     }
@@ -405,7 +422,7 @@ class SettlementSecurityTest {
         var strike=new MeleeStrike(duty.id(),duty.revision(),r.body(),contact(r).target(),duty.weapon(),item.condition(),
                 new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21002,21001);
         state=apply(strikeSlot(state,strike),duty.id(),new CombatEvent.Prepared(strike),21001);
-        state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21009);
+        state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition().wear(1)),21009);
         var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),21009).orElseThrow();
         var maneuver=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.BURST,order.actorPosition().offset(1,0,0),21001).launched(21005).closed(21009);
         state=state.withChanges(FrontierWorldStateUpdate.begin().combat(state.combat().maneuver(maneuver)));
@@ -514,8 +531,8 @@ class SettlementSecurityTest {
         var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21002,21001);
         var pending=apply(strikeSlot(state,strike),r.duty().id(),new CombatEvent.Prepared(strike),21001);
         assertEquals(CombatStatus.WINDING_UP,CombatStatus.read(pending,CombatComposition.CAPABILITIES,r.duty().execution(),21002));
-        assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21002));
-        var cancelled=apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),false,item.condition()),21002);
+        assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition().wear(1)),21002));
+        var cancelled=apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,item.condition()),21002);
         assertEquals(item,cancelled.inventory().items().get(item.id()));assertTrue(cancelled.combat().pending().isEmpty());
         assertEquals(21014L,cancelled.combat().nextAttack().get(r.duty().id()));
     }
@@ -633,7 +650,7 @@ class SettlementSecurityTest {
         assertFalse(capability.permitsNavigationOrder(state,duty.execution(),stale));
         state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(Optional.of(duty.missionOrder()),capability.navigationOrder(state,duty.execution()));
-        state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),false,item.condition()),21003);
+        state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,item.condition()),21003);
         assertTrue(capability.navigationOrder(state,duty.execution()).isEmpty());
     }
     @Test void queuedApproachPublishesItsTypedWaitThroughTheDeclaredGuardProducer() throws Exception {

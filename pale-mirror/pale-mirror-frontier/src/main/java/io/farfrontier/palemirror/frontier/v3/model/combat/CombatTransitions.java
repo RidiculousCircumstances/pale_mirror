@@ -34,6 +34,11 @@ public final class CombatTransitions {
         }else if(event instanceof CombatEvent.ManeuverRequested){throw new IllegalArgumentException("maneuver request is ingress, not a retained outcome");
         }else if(event instanceof CombatEvent.Prepared prepared){
             var strike=prepared.strike();var order=requireOrder(state,capabilities,strike.attacker(),tick);var item=state.inventory().items().get(strike.weapon());
+            var followup=combat.followups().get(strike.owner());
+            if(strike.attack()==MeleeAttack.FOLLOWUP && (followup==null
+                    || !followup.matches(order,strike.attacker(),strike.targetIncarnation(),tick)
+                    || strike.attemptOrdinal()<=followup.missedOrdinal()))
+                throw new IllegalArgumentException("followup lacks exact unspent missed-lunge continuation");
             if(!subject.equals(strike.owner()) || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
                     || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon()) || strike.preparedAt()!=tick
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
@@ -48,7 +53,7 @@ public final class CombatTransitions {
         }else if(event instanceof CombatEvent.Completed outcome){
             var strike=Objects.requireNonNull(combat.pending().get(outcome.owner()),"pending melee attempt");
             capabilities.require(strike.attacker().execution()).requirePending(state,strike);
-            if(!subject.equals(outcome.owner()) || outcome.applied() && tick<strike.impactAt(state.bootstrap().ruleset().melee()) || outcome.attemptOrdinal()!=strike.attemptOrdinal()
+            if(!subject.equals(outcome.owner()) || outcome.outcome()!=MeleeOutcome.CANCELLED && tick<strike.impactAt(state.bootstrap().ruleset().melee()) || outcome.attemptOrdinal()!=strike.attemptOrdinal()
                     || !outcome.after().equals(outcome.applied() && strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before()))
                 throw new IllegalArgumentException("melee outcome lost its exact effect/wear declaration");
             var item=state.inventory().items().get(strike.weapon());
@@ -57,7 +62,7 @@ public final class CombatTransitions {
                     throw new IllegalArgumentException("melee receipt conflicts with current exact weapon condition");
                 if(!item.condition().equals(outcome.after())){inventory=inventory.changeCondition(item,outcome.after());update.inventory(inventory);}
             }
-            combat=combat.completed(strike,tick,state.bootstrap().ruleset().melee());
+            combat=combat.completed(strike,tick,state.bootstrap().ruleset().melee(),outcome.outcome()==MeleeOutcome.MISS);
         }else if(event instanceof CombatEvent.PositionPlanned position){
             state.actorExecutions().requireCurrent(position.execution());
             var order=capabilities.current(state,position.execution(),tick).filter(value->value.current(tick)).orElseThrow(()->new IllegalArgumentException("expired melee position consumer"));

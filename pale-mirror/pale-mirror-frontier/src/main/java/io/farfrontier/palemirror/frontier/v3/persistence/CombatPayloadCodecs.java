@@ -30,7 +30,7 @@ final class CombatPayloadCodecs {
                     case CombatEvent.PositionPlanned value->{ActorExecutionStateCodec.writeId(out,value.execution());target(out,value.target());FrontierWorldStateCodec.writePosition(out,value.targetPosition().support());
                         out.writeBoolean(value.station().isPresent());if(value.station().isPresent())FrontierWorldStateCodec.writePosition(out,value.station().orElseThrow().support());out.writeByte(value.reason().wireTag());}
                     case CombatEvent.Prepared value->strike(out,value.strike());
-                    case CombatEvent.Completed value->{id(out,value.owner());out.writeLong(value.attemptOrdinal());out.writeBoolean(value.applied());condition(out,value.after());}
+                    case CombatEvent.Completed value->{id(out,value.owner());out.writeLong(value.attemptOrdinal());out.writeByte(value.outcome().wireTag());condition(out,value.after());}
                     case CombatEvent.WeaponObserved value->{actuation(out,value.observer());id(out,value.weapon());profile(out,value.profile());}
                     case CombatEvent.WeaponDefined value->{ActorExecutionStateCodec.writeId(out,value.execution());id(out,value.weapon());profile(out,value.profile());}
                     case CombatEvent.PositionBlocked value->{actuation(out,value.observer());target(out,value.target());FrontierWorldStateCodec.writePosition(out,value.station().support());}
@@ -49,7 +49,7 @@ final class CombatPayloadCodecs {
                 case CombatEvent.PositionPlanned.TYPE->new CombatEvent.PositionPlanned(ActorExecutionStateCodec.readId(in),target(in),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
                         in.readBoolean()?Optional.of(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in))):Optional.empty(),MeleePosition.Reason.require(in.readUnsignedByte()));
                 case CombatEvent.Prepared.TYPE->new CombatEvent.Prepared(strike(in));
-                case CombatEvent.Completed.TYPE->new CombatEvent.Completed(id(in),in.readLong(),in.readBoolean(),condition(in));
+                case CombatEvent.Completed.TYPE->new CombatEvent.Completed(id(in),in.readLong(),MeleeOutcome.require(in.readUnsignedByte()),condition(in));
                 case CombatEvent.WeaponObserved.TYPE->new CombatEvent.WeaponObserved(actuation(in),id(in),profile(in));
                 case CombatEvent.WeaponDefined.TYPE->new CombatEvent.WeaponDefined(ActorExecutionStateCodec.readId(in),id(in),profile(in));
                 case CombatEvent.PositionBlocked.TYPE->new CombatEvent.PositionBlocked(actuation(in),target(in),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));

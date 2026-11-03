@@ -38,9 +38,10 @@ public sealed interface CombatEvent extends FrontierPayload permits CombatEvent.
         public Prepared {Objects.requireNonNull(strike);} public String type(){return TYPE;}
         public boolean requiresDurableBeforeEffect(){return true;}
     }
-    record Completed(SubjectId owner,long attemptOrdinal,boolean applied,ItemCondition after) implements CombatEvent {
+    record Completed(SubjectId owner,long attemptOrdinal,MeleeOutcome outcome,ItemCondition after) implements CombatEvent {
         public static final String TYPE="frontier.combat.completed";
-        public Completed {Objects.requireNonNull(owner);Objects.requireNonNull(after);if(attemptOrdinal<1)throw new IllegalArgumentException("invalid melee outcome");}
+        public Completed {Objects.requireNonNull(owner);Objects.requireNonNull(outcome);Objects.requireNonNull(after);if(attemptOrdinal<1)throw new IllegalArgumentException("invalid melee outcome");}
+        public boolean applied(){return outcome==MeleeOutcome.HIT;}
         public String type(){return TYPE;} public boolean requiresDurableBeforeEffect(){return true;}
     }
     record WeaponObserved(ActorActuationId observer,SubjectId weapon,WeaponProfile profile) implements CombatEvent {
