@@ -1,6 +1,24 @@
 # Active continuity — 2026-11-03
 
-## Current assignment — COMPLETE, COMMITTED, DEPLOYED: work animations
+## Latest assignment — DIAGNOSED: combat, global jerks and model deformation
+
+User asks to check problems while manually testing. No source edits or restart.
+Read-only findings and proposed boundaries are in
+`docs/frontier-v3-combat-motion-pose-findings-20261103.md`.
+MAIN still648dc5a3f/Java110336/world139. Player rd returned near-1469,64,-1344.
+Critical global jerks: repeated field scene350–375ms;45s MAIN JFR attributes
+3307/3505 (94.35%) server CPU samples to synchronous farm retarget reachability
+pool. Exact JFR+summary under IMPL/build/melee-response-audit/. Recording ended;
+3.4GiB expanded JSON removed,26MiB original retained. Fast forward0. No private
+client/server. Combat source also double-counts canonical then native preparation
+(QUICK4+4/LUNGE6+6), lunge only corrects an existing approach/early aim, group
+slots12ticks apart. Per-attempt current hit/miss trace unavailable. Model adapter
+directly rotates a separately pivoted HumanEra torso after Fresh Animations;
+no joint compensation/scoped restore. Visible exact deformation remains unverified
+in a client; do not infer persistent pose solely from a missing reset.
+Fixes NOT implemented. Source and PACK unchanged; do not present diagnosis as repair.
+
+## Previous assignment — COMPLETE, COMMITTED, DEPLOYED: work animations
 
 User asked to audit/add resident work animations. During implementation a guard
 hit report was withdrawn: the player had creative mode; no combat/damage fix.
