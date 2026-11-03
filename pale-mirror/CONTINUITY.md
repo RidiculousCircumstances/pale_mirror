@@ -1,8 +1,29 @@
 # Active continuity — 2026-11-03
 
+## Current incident — COMPLETE, DEPLOYED, SAME-WORLD RECOVERY VERIFIED
+
+User-reported11:09:18 MAIN stop: tick25170 activity review for1-5 resumed a
+paused meal but emitted a coalescible review request for its exact continuation.
+Validator correctly rejected it; not OOM/watchdog. Source3e0eb77fb097e5c848ad96925a178f946af053a2 fixes the producer via ResidentMealProcess.wake:
+Rescheduled exact retained meal progress, validator unchanged. Existing nested
+work/meal/safety test now crosses real planner/reducer/schedule validation,
+rather than stopping at manual prepareResume.45focusedFrontier tests/guardrails
+PASS15s; clean RELEASE build/verifyPackage902tests0fail PASS2m36s.
+Docs: docs/frontier-v3-meal-resumption-20261103.md. No new follow-up scheduled.
+
+Source IMPL and RELEASE clean3e0eb77fb, detached release published/pinned.
+SAME crashed world recovered, no reset. Actual resident1-5 ate at25452;
+NOURISHED/satiety993/mealNONE at25941. Latest actualsummary29292/revision50590,
+statusok, inventoryConflicts0, no new quarantine. requiredConflicts1 is unchanged
+historical kernel-failure incident at25170/revision41320/occurrences1, not a new
+failure; do not claim summary wholly green or suppress its history.
+IMPL/build/meal-resume-incident/{crash-cause-and-save.log,recovered-summary-final.txt,
+recovered-resident.txt,retained-incident.txt,release.json}. No private clients,
+no agents/push/goal/ongoing monitoring. Prior combat result below remains valid.
+
 ## Assignment and result
 
-CURRENT task COMPLETE and DEPLOYED: shared combat BURST/BACKSTEP, native
+PREVIOUS task COMPLETE and DEPLOYED: shared combat BURST/BACKSTEP, native
 animation cues and user-reported multi-guard circling hesitation. Sole main
 executor; no agents, no push, no goal. No further work implicitly scheduled.
 User standing commit/deploy and disposable-world authority remain. Next user
@@ -92,7 +113,7 @@ No canonical/WAL/body edits manufactured any native outcome.
 ## Repositories and release
 
 IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror, branch
-feat/baker-carry-orders-20260926, HEAD9ae557ddf CLEAN.
+feat/baker-carry-orders-20260926, HEAD3e0eb77fb CLEAN (includes combat9ae557ddf).
 RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same ref.
 Release guardrails/build/verifyPackagedJar PASS2m38s, all902NeoForge tests0fail,
 /tmp/pm-maneuvers-release.log. All6460class files/resources equal final native
@@ -108,18 +129,18 @@ Governance has extensive unrelated WIP: commit only own CONTINUITY.md,
 docs/frontier-v3-combat-maneuvers-20261103.md and combat_maneuvers_boundary key.
 Architecture index staged as HEAD+only that key; working unrelated keys preserved.
 
-## MAIN runtime — actual verified delivery
+## MAIN runtime — latest recovered delivery
 
-Old MAIN normally saved/stopped10:47:43, all dimensions. Installed exact
-checksum-pinned JAR through shared root installer; no history/world deletion.
-Fresh world combat-maneuvers-schema323-seed136-20261103, seed136, rootr31
-agricultural_flat datapack installed before start. Started epoch1793684886,
-far-frontier-v3-live.service wrapper1972464/Java22PID1972488,25565/RCON25575.
-Root old/new preflight and deploy-verify PASS:
-/tmp/pm-maneuvers-{preflight-old,preflight-new,deploy-verify}.log.
-Actual inspect summary revision743/tick269 statusok, required/inventory conflicts0,
-12settlements/328residents; IMPL/build/melee-maneuvers/deployed-summary.txt.
-Client update required; no full-pack graphical promotion claimed.
+Latest source3e0eb77fb, installed by checksum-pinned shared installer after
+11:09:21 saved crash shutdown. SAME world combat-maneuvers-schema323-seed136-20261103,
+seed136/rootr31 agricultural_flat. Started epoch1793686595,
+far-frontier-v3-live.service wrapper2077548/Java22PID2077576,25565/RCON25575.
+Release SHA2561dc2104b64193bcf2b841763f53a9123cce5d1500e999ea544ae0a9bc01b868f;
+SHA51217939f98a0cf23cf02c06cecdfd8d3b92dffd4af396feee581abe77c817f38c6d57a19d3fa29c59f6106577a087970d64ee1756dd923977befca4cf73350fa71.
+Root preflight/deployverify PASS /tmp/pm-meal-resume-{preflight,deploy-verify}.log.
+Actual native recovery/remaining historical incident described above. This
+server-only correction does not add another client protocol change; prior
+network2 combat client requirement still applies.
 
 Build JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2;
 runtime22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
