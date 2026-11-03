@@ -75,6 +75,19 @@ final class FrontierV3PilotInventoryActions {
         return Result.afterClick();
     }
 
+    static int playerQuantity(Minecraft minecraft, ResourceLocation item) {
+        return quantity(minecraft, item, true);
+    }
+    static int containerQuantity(Minecraft minecraft, ResourceLocation item) {
+        return quantity(minecraft, item, false);
+    }
+    private static int quantity(Minecraft minecraft, ResourceLocation item, boolean inPlayer) {
+        return minecraft.player.containerMenu.slots.stream()
+                .filter(slot -> (slot.container == minecraft.player.getInventory()) == inPlayer)
+                .filter(slot -> !slot.getItem().isEmpty() && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item))
+                .mapToInt(slot -> slot.getItem().getCount()).sum();
+    }
+
     static boolean sameStack(Slot slot, ResourceLocation item, int count) {
         return !slot.getItem().isEmpty() && slot.getItem().getCount() == count && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item);
     }

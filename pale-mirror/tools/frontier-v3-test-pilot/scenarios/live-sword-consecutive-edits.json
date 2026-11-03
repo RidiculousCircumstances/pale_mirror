@@ -121,7 +121,7 @@
     },
     {
       "type": "wait",
-      "ms": 15000
+      "ms": 45000
     },
     {
       "type": "inspect",
