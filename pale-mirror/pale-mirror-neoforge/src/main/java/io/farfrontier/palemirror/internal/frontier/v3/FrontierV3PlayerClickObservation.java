@@ -41,8 +41,10 @@ final class FrontierV3PlayerClickObservation {
                         throw new IllegalStateException("native click produced unsupported item components");
                     if (stack.isDamageableItem()) {
                         if (ingress != null) throw new IllegalStateException("one click produced multiple individual arrivals");
-                        var itemId = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:player-contribution:"
-                                + UUID.nameUUIDFromBytes((transaction.id() + "/" + member.containerId().value() + "/" + slot)
+                        // The durable click cause distinguishes a new item from an earlier
+                        // contribution to the same slot; returning tagged items keeps its existing ID.
+                        var itemId = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:player-contribution-"
+                                + UUID.nameUUIDFromBytes((member.interactionId() + "/" + member.containerId().value() + "/" + slot)
                                     .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                         var item = new ExactItemStack(itemId, member.ownerId(), BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),
                                 1, destination, new ItemCondition(stack.getMaxDamage(), stack.getDamageValue()));

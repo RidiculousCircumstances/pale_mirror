@@ -1,0 +1,399 @@
+{
+  "schema": 1,
+  "id": "disposable_plain_sword_container_restart",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583,
+    "profile": "peaceful-guards",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/time set day"
+    },
+    {
+      "type": "command",
+      "command": "/clear @s"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:diamond_sword 2"
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1469 64 -1345"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 60000,
+      "checks": [
+        {
+          "view": "container",
+          "id": "container:1-depot",
+          "expect": {
+            "status": "ok",
+            "surface": "ACTIVE"
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/setblock -1469 64 -1347 minecraft:chest"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 60000,
+      "checks": [
+        {
+          "view": "container",
+          "id": "container:observed--1469_64_-1347",
+          "expect": {
+            "status": "ok",
+            "occupiedCount": 0,
+            "surface": "ACTIVE"
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 0,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "owned_container_ready"
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:observed--1469_64_-1347",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 1,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "first_plain_sword_is_accounted"
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 2,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "second_plain_sword_is_accounted_without_blocking"
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:observed--1469_64_-1347",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 1,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "first_sword_withdrawn_after_restart"
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 0,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "both_swords_returned_to_player"
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 1,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "first_tagged_sword_returned"
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 2,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "both_tagged_swords_returned"
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 1,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "first_sword_can_be_taken_again"
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:diamond_sword",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "occupiedCount": 0,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "all_exact_items_withdrawn_and_container_stays_current"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 19,
+      "view": "container",
+      "id": "container:observed--1469_64_-1347",
+      "expect": {
+        "status": "ok",
+        "occupiedCount": 0,
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      }
+    },
+    {
+      "after": 20,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 6,
+      "name": "two-plain-swords-in-chest",
+      "presentation": "player"
+    },
+    {
+      "after": 19,
+      "name": "both-swords-withdrawn-after-return",
+      "presentation": "player"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 6,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/gamemode creative"
+      },
+      {
+        "type": "command",
+        "command": "/execute in pale_mirror:frontier_graybox run tp @s -1469 64 -1345"
+      },
+      {
+        "type": "assert_fixture",
+        "timeoutMs": 30000,
+        "checks": [
+          {
+            "view": "container",
+            "id": "container:observed--1469_64_-1347",
+            "expect": {
+              "status": "ok",
+              "occupiedCount": 2,
+              "surface": "ACTIVE"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

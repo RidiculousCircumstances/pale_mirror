@@ -178,7 +178,40 @@ public final class FrontierV3ExactContainerIngressGameTests {
                 .filter(a -> a.custody().equals(new ResourceCustody.Container(container)))
                 .flatMap(a -> a.lotQuantities().values().stream()).mapToInt(Integer::intValue).sum() == 195,
                 "canonical stock includes three coal stacks and three bread");
+        // Plain vanilla durable items enter through the same UI, without a pre-existing PM ID.
+        // Two consecutive arrivals must close their fences; reusing a freed slot is a new cause.
+        player.getInventory().setItem(9, new ItemStack(Items.IRON_SWORD));
+        click(player, menu, runtime, 27);
+        var firstSword = FrontierV3ExactItemPresentation.itemId(chest.getItem(5)).orElseThrow();
+        player.getInventory().setItem(9, new ItemStack(Items.IRON_SWORD));
+        click(player, menu, runtime, 27);
+        var secondSword = FrontierV3ExactItemPresentation.itemId(chest.getItem(6)).orElseThrow();
+        helper.assertTrue(!firstSword.equals(secondSword), "consecutive plain swords receive distinct valid identities");
+        click(player, menu, runtime, 5);
+        helper.assertValueEqual(state(runtime).inventory().items().get(firstSword).custody(),
+                new InventoryCustody.Player(player.getUUID()), "plain contribution can immediately be withdrawn");
+        player.getInventory().setItem(9, new ItemStack(Items.IRON_SWORD));
+        click(player, menu, runtime, 27);
+        var replacement = FrontierV3ExactItemPresentation.itemId(chest.getItem(5)).orElseThrow();
+        helper.assertTrue(!replacement.equals(firstSword) && !replacement.equals(secondSword),
+                "a later sword in the same slot cannot alias an earlier player's item");
+        int source = java.util.stream.IntStream.range(27, menu.slots.size())
+                .filter(index -> FrontierV3ExactItemPresentation.itemId(menu.getSlot(index).getItem()).filter(firstSword::equals).isPresent())
+                .findFirst().orElseThrow();
+        click(player, menu, runtime, source);
+        helper.assertValueEqual(FrontierV3ExactItemPresentation.itemId(chest.getItem(7)).orElseThrow(), firstSword,
+                "returning the actual tagged sword preserves its identity");
+        helper.assertTrue(FrontierV3DepotClickLedger.get(level).pending(container) == null,
+                "plain/returned durable items never leave the next click waiting");
         player.closeContainer(); runtime.shutdown(); helper.succeed();
+    }
+    private static void click(net.minecraft.server.level.ServerPlayer player, net.minecraft.world.inventory.ChestMenu menu,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, int slot) {
+        if (FrontierV3ContainerClickExecutor.before(player, menu, slot, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, runtime)
+                != FrontierV3ContainerClickExecutor.Admission.ACCEPTED) throw new AssertionError("consecutive tool click refused");
+        FrontierV3PlayerClickOperation.perform(player, menu, runtime,
+                () -> menu.clicked(slot, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player));
+        FrontierV3ContainerClickExecutor.after(player, menu, runtime);
     }
     private static BlockPos interior(GameTestHelper helper) { return helper.absolutePos(new BlockPos(1, 8, 0)); }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) { return runtime.decodedState().orElseThrow(); }
