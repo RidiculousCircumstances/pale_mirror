@@ -2,117 +2,112 @@
 
 ## Current assignment — COMPLETE, COMMITTED, DEPLOYED
 
-Shared cooperative melee encounter, pressure/flank/cutoff/support, faster combat
-runs, staggered single-use attack windows and shorter credible lunge. User accepted
-implementation. Sole main; no agents/push/goal. No private client/Xvfb or monitoring
-process remains. Detailed design, findings, evidence and limits:
-`docs/frontier-v3-coordinated-combat-20261103.md`.
+User reported plain sword deposit locking every later container edit. Fixed
+actual producer's malformed ID and reused-slot identity collision, verified
+ordinary/negative/restore boundaries, committed and deployed fresh disposable
+MAIN. Sole main, no agents/push/goal. No private client/Xvfb or monitoring remains.
+Detailed findings and delivery: `docs/frontier-v3-plain-item-click-20261103.md`.
 
-CombatEnvelope is the renamed role permission; new CombatEngagement in CombatState
-owns the plan keyed by explicit CombatPartyId+CombatTarget. Guard adapter declares
-home party; common mechanics never inspects guard/settlement internals. Exact
-execution members retain stable roles; MeleePosition alone owns spatial claims.
-Wave slots retain ActorActuationId including body epoch, are single-use and persist
-under schema324 (323 unsupported). Local pure planner reacts to existing combat
-facts; no global scan/process, NPC commander or second actuator. UAE/navigation
-alone route/actuate; real outer arc before flank closure. Shared candidate/knowledge
-admissibility prevents unknown outer clearance becoming NO_POSITION. Confirmed
-flank failure can yield SUPPORT, async waiting cannot. Mission exit/pause/death/
-retirement withdraws exact member without erasing unsettled hits; last member
-retires plan. HOLD and attackReady are separate physical facts.
+Exact MAIN failure at14:31:17 on344d29b5f/seed137: native click moved item,
+FrontierV3PlayerClickObservation then threw for item:player-contribution:UUID
+(two colons). PLAYER_CONTAINER_CLICK ticketd11a8466-0759-4804-b9bd-7748023de54a,
+interactionc7e753dd-cf62-48df-8268-75e4205832a1, container1-depot/player rd,
+AMBIGUOUS/EFFECT_EXCEPTION/no outcome. Later CONTAINER_CLICK_PENDING was the
+correct physical fence, not routing latency. Canonical summary green covers only
+its stated scope, not absence of an unresolved physical operation. Raw cause
+retained IMPL/build/plain-exact-clicks/main-original-failure.txt and old world.
 
-World-hashed policy: walk unchanged, RUN3x/MANEUVER2.8x actor base; lunge movement
-1.5x run, preparation6/active4/recovery8, approach allowance.65block, actual reach
-unchanged. Commitment cones55deg lunge/90quick. Outer5blocks/45deg arc, assembly8,
-lead2, slot spacing12/window8/max3. Vanilla exact source confirmed native player
-hitbox reach and ordinary hurt protection; no bypasses, COLD hits or new attackers.
-Another combat role can register a capability and declare cooperation identity.
+Producer now emits legal item:player-contribution-UUID from the explicit durable
+interaction plus member container/slot. Old code used container as cause and would
+alias a later new item in a reused slot. Tagged moves/returns keep their old ID;
+no sword-specific branch, validation relaxation, new protocol/schema or guessed
+recovery. Source scan found this sole malformed SubjectId literal prefix. Missing
+captured outcome cannot be invented from a later matching layout or replayed;
+old operation was not silently unlocked. Fresh-world delivery is authorized.
 
 ## Verification
 
-Critical integration /tmp/pm-encounters-integration.log executed324domain,
-2281Frontier,904NeoForge and417GameTests. Two obsolete policy expectations failed
-(RUN1.5 and old7.5tick lunge sample); both fixed, focused EvasionLifecycle/
-MeleeAnimation plus9scene-strikes (actual player reach comparison) PASS1m11s
-/tmp/pm-encounters-boundary.log. Combat/security/reaction/codec/layered checks with
-partial-geometry negative and guardrails PASS24s /tmp/pm-encounters-geometry.log.
-Packaged JAR verified. Node56PASS /tmp/pm-encounters-node-final.log.
+IMPL guardrails/NeoForge904/19player-storage GameTests/build/verifyPackagedJar
+PASS2m49s /tmp/pm-plain-exact-check.log. Existing ExactContainerIngress GameTest
+now also does two plain iron swords, immediate withdrawal, later new sword in
+freed slot (different ID), return of original (same ID), alongside bread/coal.
 
-Final checked-in disposable-coordinated-melee native PASS15/15,
-IMPL/build/combat-engagements/native-3.json, run60e51733-5072-48c5-82ae-698a1dc99ebc,
-worldv3-disposable_coordinated_melee-7e0bd81f, seed41/peaceful-guards/schema324.
-Finite ordinary inputs produced swords/appointments naturally (10000tick prelude).
-Actual workers resident1-16/Finn Brooks and resident1-28/Finn Moss. Real sword harm
-produced PRESSURE+FLANK_LEFT; second exact body261poses:19.61block maximum
-displacement/98.53deg relative angular span (player also moves from knockback),
-QUICK and LUNGE rendered, HumanEra260/261. Normal open-fight save14:10:41, new
-server ready14:11:01, same client reconnect, hostility retained and fresh2-member
-plan. First exact body120poses/HumanEra120 included QUICK. Escape produced no late
-health loss and terminal contact/respondingGuards/engagementCount0 at11429/11431.
-Frames personally viewed; one foreground fighter and another sword at edge. This
-is scoped M2 physical evidence, not full-cohort tactics/full-pack M3/global TPS.
+Checked-in disposable-plain-sword-container-restart native20/20 PASS,
+IMPL/build/plain-exact-clicks/native-4.json,
+run61b2fc20-5bd8-466b-96f0-7767a9553394,
+worldv3-disposable_plain_sword_container_res-1a1c365d, seed41/schema324,
+peaceful-guards. Setup's ordinary empty chest was adopted by shared territorial
+storage. Diamond swords avoid unrelated normal guard acquisition; iron uses the
+same real callback in GameTest. Physical player packets put two swords, normal
+save/restart/reconnect, repeated withdrawals/returns and terminal current empty
+chest. Exact counts0→1→2→1→0→1→2→1→0; two IDs retained through restore/return,
+identity-evidence.json. Frames personally reviewed: two swords in chest then two
+in hotbar, no loss/duplication. One20FPS client reused its JVM, all private
+processes/Xvfb/25583/4 stopped. Earlier setup failures were method-only (command
+vocabulary, existing three hoes in depot, feet66 vs observed65) before tested
+click; corrected using observed plaza/independently adopted empty chest. No fake
+NPC outcomes or WAL edits. This is scoped inventory/UI evidence, not M3/world TPS.
 
-Native1 rejected stale sibling flat datapack; explicit PACK agricultural r31
-fixed environment. Native2 was deliberately stopped/all-saved13:58:09 because
-fixture named second actor1-17 rather than observed1-28, before source correction;
-not acceptance. Unknown-outer-clearance source finding fixed after saved stop.
-Native3 is final candidate; no suppressed gates or fabricated NPC outcomes.
-
-Committed source bytes equal native source content
-4dea400f9ee2452fa540ccb16e1d265c3c807873598ce2919d2a0467f83d8220,
-receipt build/combat-engagements/committed-source-reuse.json. Release6486classes/
-resources equal native except META-INF/pale-mirror-runtime-identity.properties,
-release-class-reuse.json. Detached release guardrails/build/verifyPackagedJar
-PASS2m47s /tmp/pm-encounters-release.log,904NeoForge0fail.
+Committed source bytes equal frozen prepared-5.json source content
+09328e4a1440e18159f15b94101c5a70b5b5c0395cf28dbc0760b7b25d0ffca6,
+committed-source-reuse.json. NativeJAR SHA256
+7fe8ffbbd4e64c7481f92ff08993f3660e9afef97d14eb6efc96bb5695b7094f.
+Detached release guardrails/jar/verifyPackagedJar PASS15s
+/tmp/pm-plain-exact-release.log. All6486 classes/resources equal native except
+META-INF/pale-mirror-runtime-identity.properties, release-class-reuse.json.
+Reuse IMPL904/19results through that exact byte match; no duplicate test claim.
 
 ## Repositories
 
 IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror,
 branch feat/baker-carry-orders-20260926,
-HEAD344d29b5f40fb0499e6bf17686dc9fd0715af4e0 CLEAN.
+HEADf2de641e5851b0d6464875466c9016cd8b8134c3 CLEAN.
 RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same.
 PACK /home/rd/proj/minecraft HEAD888ed90d5e3b80b18c278107aa83bb003b541f69,
-trackedCLEAN; pre-existing .f0v-baseline/ preserved.164Packwiz inputs verified;
-exact PM and unchanged Visuals published. No dependency/network changes.
+trackedCLEAN; pre-existing .f0v-baseline/ preserved.164Packwiz inputs validated,
+exact PM +unchanged Visuals published. Server-only change; no client dependency
+or network update needed. No automatic push.
 GOV /home/rd/proj/pm-governance retains extensive unrelated WIP. This task changes
-only the ledger, new coordinated-combat note, combat_engagement_boundary key and
-new Schema324 materialization section. Architecture/inventory commits include
-only those additions; other working changes preserved. No agents/automatic push.
+only the ledger/new plain-item-click note; do not include other working changes.
+The previous combat task's own architecture/inventory entries are already committed.
 
 ## MAIN runtime — latest delivery
 
-New selected world combat-engagements-schema324-seed137-20261103,
-seed137/rootr31 agricultural-flat. Previous323world saved all dimensions14:16:22,
-old JVM/ports closed before install. Service far-frontier-v3-live started
-1793697498 (14:18:18 +05), wrapper2780522/Java22PID2780546,25565/RCON25575.
-Source344d29b5f, release/installed SHA256
-5ac25cc3e2607d68d9e6ae0e4ed2d104e55a02bf5f6215fb0984c07fd6a2ee99;
-SHA512997ede1189a1e57540451514e6c074a013160f71d578fce3d648ca38368942ca079e8ff538a3d3e124325b664c679509b2e734e9a52d936898c5f31bc28d3c59.
-Preflight/install/fresh deployverify PASS /tmp/pm-encounters-*.log.
-Latest summary6630/rev9329 statusok, diagnosticVerdictgreen, required/scene/inventory
-conflicts0 and incidentIndexSize0; build/combat-engagements/main-summary-final.txt. Settlement1 route surface
--1486,64,-1360, farm-1460,64,-1372. Fresh normal world has no armed guard yet;
-at6837 (0hungry); weapons/appointments arise from ordinary production, no injected NPC swords.
-Previous historical requiredConflict1 belongs to the old323world, not a new
-incident; its diagnostic history is not acknowledged/erased by this feature.
+Selected world item-ingress-schema324-seed138-20261103,
+seed138/rootr31 agricultural-flat. Previous seed137 saved all dimensions14:59:52,
+actual old JVM/ports closed before shared installer. No previous operation edit.
+far-frontier-v3-live started1793700150 (15:02:30 +05), wrapper3094218/
+Java22PID3094242,25565/RCON25575. Sourcef2de641e5, installed release SHA256
+5a175ea9ba89a9ebf65ce10f46b2fd5f13ab890a8525aef49afd28b0b367f861;
+SHA512b31b759fff5d908622f7bff2159920c4978b4275a63ac1e84fb7c0af5b71e7f1ba33f4243584f9e0e3263e411d07256aaaeea2a08089d479d62096cc74030dbd.
+Preflight/install/fresh deployverify PASS /tmp/pm-plain-exact-*.log.
+Summary1265/rev1842 statusok/green, required/scene/inventory conflicts0,
+incidentIndexSize0, IMPL/build/plain-exact-clicks/main-summary.txt.
+New normal world starts with ordinary production/staffing, no injected weapons.
 
 Build JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2;
 runtime22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
-Artifact host127.0.0.1:18092 serves RELEASE/pale-mirror-neoforge/build/libs.
-Pack host8092 serves PACK root; Visuals hosted/pale_mirror_visuals-current.jar.
+Artifact host127.0.0.1:18092 serves RELEASE/pale-mirror-neoforge/build/libs;
+pack host8092 serves PACK root. Visuals: hosted/pale_mirror_visuals-current.jar.
 Detached build requires -PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt.
 RCON helper IMPL/build/forestry-native/query-runtime.mjs reads properties silently.
-MAIN transient unit disappears on stop; recreate with systemd-run --user
+MAIN transient unit disappears on normal stop; recreate via systemd-run --user
 --unit=far-frontier-v3-live --collect --working-directory=/home/rd/far-frontier-server
-/home/rd/far-frontier-server/scripts/run-server-java22.sh. Require normal native
-save/all dimensions and actual JVM/ports closed before replacement/reset.
+/home/rd/far-frontier-server/scripts/run-server-java22.sh. Require native all-saved
+and actual JVM/ports exit before replacement/reset. Worlds disposable by standing
+authorization; never generalize deletion to unrelated paths/evidence.
 
-## Previous retained deliveries
+## Previous deliveries (do not restart completed work)
 
-316eb206b HumanEra/EMF/ETF +FreshAnimations +author activator integration and
-melee/carry poses. `docs/frontier-v3-human-residents-20261103.md` holds exact
-receipts, original assets, prior failed-case classifications and rig limits.
-9ae557ddf common BURST/BACKSTEP, stable pursuit/body observation;
-`docs/frontier-v3-combat-maneuvers-20261103.md`.3e0eb77fb exact meal continuation
-wake after safety; `docs/frontier-v3-meal-resumption-20261103.md`.adb13df4b exact
-pending field layout identity across appended land. Do not restart completed work.
+344d29b5f shared CombatEngagement/CombatEnvelope, exact party+target participants,
+stable pressure/flank/cutoff/support and body-fenced single-use waves. Faster
+combat gaits, shortened lunge/native reach, common navigation only, no COLD hits.
+Guard adapter is enabled; other roles register capabilities and explicit party.
+`docs/frontier-v3-coordinated-combat-20261103.md` holds source boundaries,
+15/15 real two-guard/restart/closure and exact release receipts/visual limits.
+316eb206b HumanEra +FreshAnimations/author activator +EMF/ETF and shared rig poses,
+`docs/frontier-v3-human-residents-20261103.md`.9ae557ddf BURST/BACKSTEP, stable
+pursuit/body observation, `docs/frontier-v3-combat-maneuvers-20261103.md`.
+3e0eb77fb meal continuation after safety; `docs/frontier-v3-meal-resumption-20261103.md`.
+adb13df4b exact pending field layout identity across appended land. Historical
+kernel requiredConflict1 belongs to old323world, not current new delivery.
