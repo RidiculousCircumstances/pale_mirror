@@ -14,6 +14,7 @@ public final class MeleeManeuvers {
         var kind=(hurt && facts.distance()<=rules.hurtGapMicros()/1_000_000.0 || facts.distance()<rules.crowdedGapMicros()/1_000_000.0)?MeleeManeuver.Kind.BACKSTEP:
             facts.distance()>=rules.minimumBurstGapMicros()/1_000_000.0 && facts.distance()<=rules.maximumBurstGapMicros()/1_000_000.0
                 && (facts.distance()>=rules.distantGapMicros()/1_000_000.0 || facts.separatingSpeed()>=rules.retreatSpeedMicros()/1_000_000.0)?MeleeManeuver.Kind.BURST:null;
+        if(kind==MeleeManeuver.Kind.BURST && !MeleeTactics.readyAt(state.combat(),order,order.actorPosition(),tick,state.bootstrap().ruleset().melee()))return Optional.empty();
         return kind!=null && capability.maneuvers().contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
     }
     public static Optional<SurfaceAnchor> destination(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,KnownPedestrianRouteKnowledge knowledge,long tick){
@@ -22,7 +23,8 @@ public final class MeleeManeuvers {
         var physical=PedestrianInteractionStations.within(knowledge.geometry(),origin,radius*2,Set.of()).stream()
             .filter(p->knowledge.clearStation(p) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(p.support())
                 && ServiceBoundaryComposition.turnoverPoint(state,p).isEmpty() && MeleePositions.available(state,order,p,tick)).toList();
-        var candidates=rank(order,kind,physical,rules);
+        var candidates=rank(order,kind,physical,rules).stream().filter(point->kind!=MeleeManeuver.Kind.BURST
+                || MeleeTactics.readyAt(state.combat(),order,point,tick,state.bootstrap().ruleset().melee())).toList();
         return MeleePositions.reachable(candidates,3,p->{var route=knowledge.plannedPath(origin,new MovementOrder(order.owner(),order.execution().actorId(),1,1,List.of(p),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION));
             if(route.size()>radius+2)throw new KnownPedestrianNavigation.RouteUnavailable(PedestrianRouteResult.Status.NO_PATH,"maneuver detour exceeds bounded distance");});
     }

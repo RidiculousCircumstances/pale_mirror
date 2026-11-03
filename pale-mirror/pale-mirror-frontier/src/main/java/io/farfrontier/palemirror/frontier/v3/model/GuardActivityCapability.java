@@ -9,20 +9,16 @@ final class GuardActivityCapability implements ActorActivityCapability {
             FrontierWorldState state, ActorExecutionId execution) {
         var duty=GuardAuthority.require(state,execution);
         var mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK;
-        if(duty.mission().filter(m->m.stage()==io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Stage.INTERCEPT).isPresent()){
-            var point=state.combat().positions().get(duty.id());var arm=state.combat().armaments().get(duty.id());
-            mode=point!=null && point.sector().role()!=io.farfrontier.palemirror.frontier.v3.model.combat.MeleeSector.Role.PRESSURE
-                    ?io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.MANEUVER
-                    :point!=null && arm!=null && io.farfrontier.palemirror.frontier.v3.model.combat.EvasionDestinations.distance(
-                        state.actorLocations().get(execution.actorId()).supportingSurface(),point.targetPosition())<=arm.profile().reach()
-                        ?io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.CAREFUL:io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
+        var mission=duty.mission().filter(m->m.stage()==io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Stage.INTERCEPT);
+        var pace=ResidentWalkingPace.read(state,execution.actorId(),mode);
+        if(mission.isPresent()){var intent=io.farfrontier.palemirror.frontier.v3.model.combat.CombatLocomotion.plan(state.combat(),execution,
+                new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Key(
+                    new io.farfrontier.palemirror.frontier.v3.model.combat.CombatPartyId(duty.home()),mission.orElseThrow().response().orElseThrow()),
+                state.actorLocations().get(execution.actorId()).supportingSurface(),state.bootstrap().ruleset().melee());
+            pace=new io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace(
+                    ResidentWalkingPace.read(state,execution.actorId(),intent.mode()).blocksPerTick()*intent.multiplierPermille()/1000.0);
         }
-        var strike=state.combat().pending().get(duty.id());
-        if(strike!=null && strike.attack()==io.farfrontier.palemirror.frontier.v3.model.combat.MeleeAttack.LUNGE)
-            mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
-        var maneuver=state.combat().maneuvers().get(duty.id());
-        if(maneuver!=null && maneuver.open())mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
-        return java.util.Optional.of(ResidentWalkingPace.read(state,execution.actorId(),mode));
+        return java.util.Optional.of(pace);
     }
 
     public ActorActivityKind kind() { return ActorActivityKind.GUARD; }
@@ -81,6 +77,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
                 movements.remove(execution.actorId());
                 changes.actorMovements(movements);
             }
+            changes.combat(state.combat().withdrawn(execution));
             return new ActorActivityDeath.Acknowledgement(state, execution, changes,
                     ActorActivityDeath.Disposition.RETIRE_EXACT_EXECUTION);
         });
@@ -90,7 +87,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
     }
     public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long tick) {
         if (!checkpoint(state, execution).ready()) throw new IllegalArgumentException("guard cannot pause a prepared physical operation");
-        return state;
+        return state.withChanges(FrontierWorldStateUpdate.begin().combat(state.combat().withdrawn(execution)));
     }
     public FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long tick) { validateReference(state, execution); return state; }
     public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {

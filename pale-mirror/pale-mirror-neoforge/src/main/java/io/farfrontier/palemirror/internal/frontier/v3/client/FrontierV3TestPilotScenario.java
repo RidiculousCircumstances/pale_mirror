@@ -199,6 +199,7 @@ final class FrontierV3TestPilotScenario {
     }
 
     private static boolean validCombatObservation(JsonObject action){
+        if(!boundedOptionalNumber(action,"minimumAngularTravelDeg",0,360) || !boundedOptionalNumber(action,"minimumTravelBlocks",0,128))return false;
         if(action.has("requiredModelRig") && (!action.get("requiredModelRig").isJsonPrimitive()
                 || !Set.of("human_era", "vanilla_articulated").contains(action.get("requiredModelRig").getAsString())))return false;
         if(action.has("observerCircuit")){
@@ -424,7 +425,7 @@ final class FrontierV3TestPilotScenario {
                 || !reference.get("field").isJsonPrimitive() || !reference.get("field").getAsJsonPrimitive().isString()) return false;
         String view = reference.get("view").getAsString(), field = reference.get("field").getAsString();
         return (view.equals("actor") && field.equals("name") && requiredId(reference, "id", "resident:"))
-                || (view.equals("settlement") && field.equals("firstGuardName") && requiredId(reference, "id", "settlement:"))
+                || (view.equals("settlement") && Set.of("firstGuardName","secondGuardName").contains(field) && requiredId(reference, "id", "settlement:"))
                 || (view.equals("scene") && field.equals("primaryActorName"))
                 || (view.equals("site") && field.equals("workerPresentation"));
     }

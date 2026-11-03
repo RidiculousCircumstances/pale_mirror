@@ -25,10 +25,10 @@ public final class CombatReactionPolicy {
                 throw new IllegalArgumentException("local threat evidence names another target");
         }
     }
-    public static Optional<CombatEngagement> choose(Rules rules, SubjectId actor, SurfaceAnchor position, List<Area> areas,
-            List<Threat> threats, Optional<CombatEngagement> current, long tick) {
+    public static Optional<CombatEnvelope> choose(Rules rules, SubjectId actor, SurfaceAnchor position, List<Area> areas,
+            List<Threat> threats, Optional<CombatEnvelope> current, long tick) {
         Objects.requireNonNull(actor); Objects.requireNonNull(position); Objects.requireNonNull(current);
-        var choices = new ArrayList<CombatEngagement>();
+        var choices = new ArrayList<CombatEnvelope>();
         for (var threat : threats) {
             var harms = threat.harms().stream().filter(h -> h.current(tick, rules.harmLifetime())).toList();
             var self = harms.stream().filter(h -> h.key().victim().equals(actor))
@@ -38,7 +38,7 @@ public final class CombatReactionPolicy {
                     .orElseGet(() -> self.map(h -> new SurfaceAnchor(h.victimPosition())).orElse(position));
             if (self.isPresent() && observer.manhattanDistance(threat.position()) <= rules.localRadius()
                     && new SurfaceAnchor(self.orElseThrow().victimPosition()).manhattanDistance(threat.position()) <= rules.localRadius()) {
-                choices.add(new CombatEngagement(threat.target(), CombatEngagement.Kind.SELF_DEFENCE,
+                choices.add(new CombatEnvelope(threat.target(), CombatEnvelope.Kind.SELF_DEFENCE,
                         new SurfaceAnchor(self.orElseThrow().victimPosition()), rules.localRadius())); continue;
             }
             var ally = harms.stream().filter(h -> !h.key().victim().equals(actor)
@@ -47,7 +47,7 @@ public final class CombatReactionPolicy {
                     .sorted(Comparator.comparingLong((CombatAwareness.Harm h) -> position.manhattanDistance(new SurfaceAnchor(h.victimPosition())))
                             .thenComparing(h -> h.key().victim())).findFirst();
             if (ally.isPresent()) {
-                choices.add(new CombatEngagement(threat.target(), CombatEngagement.Kind.ALLY_DEFENCE,
+                choices.add(new CombatEnvelope(threat.target(), CombatEnvelope.Kind.ALLY_DEFENCE,
                         new SurfaceAnchor(ally.orElseThrow().victimPosition()), rules.localRadius())); continue;
             }
             boolean seen = ownSight.isPresent();
@@ -58,11 +58,11 @@ public final class CombatReactionPolicy {
             areas.stream().filter(area -> area.contains(threat.position()))
                     .sorted(Comparator.comparingLong((Area area) -> area.anchor().manhattanDistance(threat.position()))
                             .thenComparingInt(area -> area.anchor().x()).thenComparingInt(area -> area.anchor().z()).thenComparingInt(area -> area.anchor().y()))
-                    .findFirst().ifPresent(area -> choices.add(new CombatEngagement(threat.target(), CombatEngagement.Kind.AREA_DEFENCE, area.anchor(), area.radius())));
+                    .findFirst().ifPresent(area -> choices.add(new CombatEnvelope(threat.target(), CombatEnvelope.Kind.AREA_DEFENCE, area.anchor(), area.radius())));
         }
         if (choices.isEmpty()) return Optional.empty();
         var locations = new HashMap<CombatTarget, SurfaceAnchor>(); threats.forEach(t -> locations.put(t.target(), t.position()));
-        choices.sort(Comparator.comparingInt((CombatEngagement e) -> e.kind().wireTag())
+        choices.sort(Comparator.comparingInt((CombatEnvelope e) -> e.kind().wireTag())
                 .thenComparingLong(e -> position.manhattanDistance(locations.get(e.target())))
                 .thenComparing(e -> e.target().kind().wireTag()).thenComparing(e -> e.target().entity()).thenComparing(e -> e.target().dimension()));
         var best = choices.getFirst();

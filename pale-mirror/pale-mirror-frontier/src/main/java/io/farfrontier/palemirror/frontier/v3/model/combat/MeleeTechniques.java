@@ -20,7 +20,7 @@ public record MeleeTechniques(Technique quick,Technique lunge,int quickDistanceM
     }
     public Technique require(MeleeAttack attack){return switch(attack){case QUICK->quick;case LUNGE->lunge;};}
     public static MeleeTechniques initial(){
-        return new MeleeTechniques(new Technique(4,3,6,350_000),new Technique(10,4,10,1_100_000),2_200_000,750,80_000,1_650_000);
+        return new MeleeTechniques(new Technique(4,3,6,350_000),new Technique(6,4,8,650_000),2_200_000,750,80_000,2_200_000);
     }
     public String canonicalText(){return "quick="+quick.canonicalText()+"|lunge="+lunge.canonicalText()+"|choice="+quickDistanceMicros+":"
             +quickReachPermille+":"+retreatSpeedMicros+":"+pressureDistanceMicros;}

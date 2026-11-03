@@ -288,6 +288,8 @@ export function validateScenario(scenario) {
           || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:') && !requiredId(action.workerId, 'actor:'))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.anchor !== undefined && !validPosition(action.anchor))
+          || (action.minimumAngularTravelDeg !== undefined && (!Number.isFinite(action.minimumAngularTravelDeg) || action.minimumAngularTravelDeg<0 || action.minimumAngularTravelDeg>360))
+          || (action.minimumTravelBlocks !== undefined && (!Number.isFinite(action.minimumTravelBlocks) || action.minimumTravelBlocks<0 || action.minimumTravelBlocks>128))
           || (action.requiredModelRig !== undefined && !['human_era', 'vanilla_articulated'].includes(action.requiredModelRig))
           || (action.requiredCombatAttacks !== undefined && (!Array.isArray(action.requiredCombatAttacks)
             || action.requiredCombatAttacks.length < 1 || action.requiredCombatAttacks.length > 4
@@ -570,7 +572,7 @@ function validEntityName(value) {
   return value && Object.keys(value).length === 1 && reference && Object.keys(reference).length === 3
     && validDiagnosticIdentity(reference)
     && ((reference.view === 'actor' && reference.field === 'name' && requiredId(reference.id, 'resident:'))
-      || (reference.view === 'settlement' && reference.field === 'firstGuardName' && requiredId(reference.id, 'settlement:'))
+      || (reference.view === 'settlement' && ['firstGuardName', 'secondGuardName'].includes(reference.field) && requiredId(reference.id, 'settlement:'))
       || (reference.view === 'scene' && reference.field === 'primaryActorName')
       || (reference.view === 'site' && reference.field === 'workerPresentation'));
 }

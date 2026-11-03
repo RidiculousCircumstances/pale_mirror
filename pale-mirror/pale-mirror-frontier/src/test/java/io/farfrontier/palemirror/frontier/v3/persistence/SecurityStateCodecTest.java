@@ -14,7 +14,7 @@ class SecurityStateCodecTest {
     @Test void allocationWireRejectsUnknownPurposeTruncationAndContradictoryTarget() throws IOException {
         var home=new SubjectId("settlement:wire");var duty=new SubjectId("guard-duty:wire");
         var target=new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(1,2),"pale_mirror:frontier_graybox");
-        var engagement=new CombatEngagement(target,CombatEngagement.Kind.SELF_DEFENCE,SurfaceAnchor.at(0,63,0),24);
+        var engagement=new CombatEnvelope(target,CombatEnvelope.Kind.SELF_DEFENCE,SurfaceAnchor.at(0,63,0),24);
         var response=new SecurityState.Response(duty,new SecurityState.ContactKey(home,target),10,engagement);
         var payload=new SecurityResponsesAllocated(home,Map.of(duty,response));var codec=FrontierWorldRuntimeDefinition.payloadCodecs();
         var bytes=codec.encode(payload);assertEquals(payload,codec.decode(payload.type(),bytes));

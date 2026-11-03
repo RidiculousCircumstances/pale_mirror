@@ -4,21 +4,16 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
 import java.util.*;
 /** Temporary spatial claim or explicit wait. Not another movement goal/controller. */
 public record MeleePosition(ActorExecutionId execution,CombatTarget target,SurfaceAnchor targetPosition,
-        Optional<SurfaceAnchor> station,int widthMicros,int heightMicros,Reason reason,long sinceTick,long atTick,long retryAt,MeleeSector sector) {
+        Optional<SurfaceAnchor> station,int widthMicros,int heightMicros,Reason reason,long sinceTick,long atTick,long retryAt) {
     public enum Reason {
         RESERVED(1),ROUTE_PENDING(2),SPACE_OCCUPIED(3),NO_PATH(4),NO_POSITION(5),UNREACHABLE(6);
         private final int tag;Reason(int tag){this.tag=tag;}public int wireTag(){return tag;}
         public static Reason require(int tag){for(var value:values())if(value.tag==tag)return value;throw new IllegalArgumentException("unknown melee position reason");}
         public boolean unavailable(){return this==NO_PATH || this==NO_POSITION;}
     }
-    public MeleePosition(ActorExecutionId execution,CombatTarget target,SurfaceAnchor targetPosition,Optional<SurfaceAnchor> station,
-            int widthMicros,int heightMicros,Reason reason,long sinceTick,long atTick,long retryAt){
-        this(execution,target,targetPosition,station,widthMicros,heightMicros,reason,sinceTick,atTick,retryAt,
-                MeleeSector.pressure(station.orElse(targetPosition),targetPosition));
-    }
-    public MeleePosition renewed(long tick){return new MeleePosition(execution,target,targetPosition,station,widthMicros,heightMicros,reason,sinceTick,tick,retryAt,sector);}
+    public MeleePosition renewed(long tick){return new MeleePosition(execution,target,targetPosition,station,widthMicros,heightMicros,reason,sinceTick,tick,retryAt);}
     public MeleePosition {
-        Objects.requireNonNull(execution);Objects.requireNonNull(target);Objects.requireNonNull(targetPosition);station=Objects.requireNonNull(station);Objects.requireNonNull(reason);Objects.requireNonNull(sector);
+        Objects.requireNonNull(execution);Objects.requireNonNull(target);Objects.requireNonNull(targetPosition);station=Objects.requireNonNull(station);Objects.requireNonNull(reason);
         if(widthMicros<100_000 || widthMicros>4_000_000 || heightMicros<100_000 || heightMicros>8_000_000 || sinceTick<0 || atTick<sinceTick
                 || (reason==Reason.RESERVED)!=station.isPresent() || (reason==Reason.UNREACHABLE?retryAt<=atTick:retryAt!=0))
             throw new IllegalArgumentException("invalid melee spatial claim/wait");

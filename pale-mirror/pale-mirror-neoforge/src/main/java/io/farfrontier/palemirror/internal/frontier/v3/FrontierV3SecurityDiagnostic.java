@@ -36,16 +36,27 @@ final class FrontierV3SecurityDiagnostic {
         long winding=io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state,home).stream()
                 .filter(duty->CombatStatus.read(state,CombatComposition.CAPABILITIES,duty.execution(),tick)==CombatStatus.WINDING_UP).count();
         var maneuvers=io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state,home).stream().map(d->state.combat().maneuvers().get(d.id())).filter(java.util.Objects::nonNull).filter(MeleeManeuver::open).toList();
+        var encounters=state.combat().engagements().values().stream().filter(plan->plan.key().party().equals(new CombatPartyId(home))).toList();
+        String plans=encounters.stream().map(plan->"{\"revision\":"+plan.revision()+",\"target\":\""+plan.key().target().entity()
+                +"\",\"assemblySince\":"+plan.assemblySince()+",\"participants\":"
+                +plan.participants().values().stream().sorted(java.util.Comparator.comparing(member->member.execution().actorId()))
+                    .map(member->"{\"actor\":\""+quote(member.execution().actorId().value())+"\",\"role\":\""+member.role()+"\"}")
+                    .collect(java.util.stream.Collectors.joining(",","[","]"))
+                +",\"wave\":"+plan.wave().map(wave->wave.slots().stream().map(slot->"{\"actor\":\""+quote(slot.execution().actorId().value())
+                    +"\",\"opensAt\":"+slot.opensAt()+",\"closesAt\":"+slot.closesAt()+",\"committed\":"+slot.committed()+"}")
+                    .collect(java.util.stream.Collectors.joining(",","[","]"))).orElse("null")+"}")
+                .collect(java.util.stream.Collectors.joining(",","[","]"));
         return "{\"maneuverInProgress\":"+!maneuvers.isEmpty()+",\"maneuverKind\":\""+(maneuvers.isEmpty()?"NONE":maneuvers.getFirst().kind())
                 +"\",\"windupInProgress\":"+(winding>0)+",\"windingUpGuards\":"+winding+",\"respondingGuards\":"+responses.size()+",\"postedGuards\":"+posted
                 +",\"localDefenders\":"+locals+",\"reinforcements\":"+reinforcements
-                +",\"selfDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.SELF_DEFENCE).count()
-                +",\"allyDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.ALLY_DEFENCE).count()
-                +",\"areaDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Kind.AREA_DEFENCE).count()
+                +",\"selfDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope.Kind.SELF_DEFENCE).count()
+                +",\"allyDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope.Kind.ALLY_DEFENCE).count()
+                +",\"areaDefenders\":"+responses.stream().filter(r -> r.engagement().kind()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope.Kind.AREA_DEFENCE).count()
                 +",\"responseBudget\":"+budget+",\"availableGuards\":"+available
                 +",\"responseStatus\":\""+responseStatus+"\",\"reserveStatus\":\""+reserveStatus+"\""
                 +",\"contactCount\":"+contacts.size()+",\"threats\":"+threats
-                +",\"missions\":"+missions+",\"hostilePlayers\":"+state.security().hostility().keySet().stream().filter(relation->relation.home().equals(home)).count()
+                +",\"engagementCount\":"+encounters.size()+",\"coordinatedParticipants\":"+encounters.stream().mapToInt(plan->plan.participants().size()).max().orElse(0)
+                +",\"plans\":"+plans+",\"missions\":"+missions+",\"hostilePlayers\":"+state.security().hostility().keySet().stream().filter(relation->relation.home().equals(home)).count()
                 +",\"contactAt\":"+(contact==null?"null":Long.toString(contact.atTick()))
                 +",\"contactKind\":"+(contact==null?"null":"\""+contact.target().kind()+"\"")
                 +",\"contactTarget\":"+(contact==null?"null":"\""+quote(contact.target().entity().toString())+"\"")

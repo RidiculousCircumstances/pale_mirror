@@ -17,7 +17,8 @@ class MeleeAnimationTest {
     }
     @Test void techniquesHaveDistinctPreparationAndBothReturnToTheirReadyPose(){
         var quick=MeleeAnimation.sample(frame(CombatGesture.QUICK,CombatGesturePayload.Phase.PREPARING,3,0));
-        var lunge=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,7.5f,0));
+        var preparation=MeleeRules.initial().techniques().require(MeleeAttack.LUNGE).preparationTicks();
+        var lunge=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,preparation*0.75f,0));
         assertTrue(quick.shoulder()<-1.5f);assertTrue(lunge.elbow()<-1.8f);assertTrue(lunge.lean()<-0.1f);
         for(var attack:java.util.List.of(CombatGesture.QUICK,CombatGesture.LUNGE)){
             var technique=MeleeRules.initial().techniques().require(attack==CombatGesture.QUICK?MeleeAttack.QUICK:MeleeAttack.LUNGE);

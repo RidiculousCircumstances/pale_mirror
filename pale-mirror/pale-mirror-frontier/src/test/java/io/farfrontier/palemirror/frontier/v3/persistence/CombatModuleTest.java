@@ -16,13 +16,13 @@ class CombatModuleTest {
     private static CombatOrder order(int id,Optional<SurfaceAnchor> station){
         var execution=new ActorExecutionId(new SubjectId("resident:combat-"+id),ActorActivityKind.COURIER,new SubjectId("shipment:combat-"+id),1);
         var enemy=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"pale_mirror:frontier_graybox");
-        return new CombatOrder(execution,1,new SubjectId("item:sword-"+id),new CombatEngagement(enemy,CombatEngagement.Kind.SELF_DEFENCE,TARGET,24),
+        return new CombatOrder(execution,1,new SubjectId("item:sword-"+id),new CombatPartyId(new SubjectId("party:test")),new CombatEnvelope(enemy,CombatEnvelope.Kind.SELF_DEFENCE,TARGET,24),
                 TARGET,100,60,TARGET.offset(3,0,0),UnitNavigationProfile.VILLAGER,station);
     }
     @Test void tacticalSectorsSpreadAndStayStableAcrossTargetCellChangesAndHydration() throws Exception {
         var rules=MeleeRules.initial();var state=CombatState.empty();var first=order(1,Optional.empty());
         state=state.positioned(first,Optional.of(TARGET.offset(2,0,0)),MeleePosition.Reason.RESERVED,100,rules);
-        assertEquals(MeleeSector.Role.PRESSURE,state.positions().get(first.owner()).sector().role());
+        assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,first,100,rules).role());
         var second=order(2,Optional.empty());var sector=MeleeTactics.sector(state,second,101,rules);
         assertEquals(MeleeSector.Role.FLANK_LEFT,sector.role());
         state=state.positioned(second,Optional.of(TARGET.offset(0,0,2)),MeleePosition.Reason.RESERVED,101,rules);
@@ -31,7 +31,44 @@ class CombatModuleTest {
         var third=order(3,Optional.empty());assertEquals(MeleeSector.Role.FLANK_RIGHT,MeleeTactics.sector(state,third,102,rules).role());
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
-        assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,second,182,rules).role());
+        assertEquals(MeleeSector.Role.FLANK_LEFT,MeleeTactics.sector(state,second,182,rules).role(),"a temporary station lease is not encounter membership");
+    }
+    @Test void encounterMembershipIsExplicitSeparatesPartiesAndReleasesOnlyTheExactExecution() throws IOException {
+        var a=order(1,Optional.empty());var b=order(2,Optional.empty());var raw=order(3,Optional.empty());
+        var c=new CombatOrder(raw.execution(),raw.revision(),raw.weapon(),new CombatPartyId(new SubjectId("party:other")),raw.engagement(),
+                raw.targetPosition(),raw.observedAt(),raw.lifetime(),raw.actorPosition(),raw.navigation(),raw.station());
+        var rules=MeleeRules.initial();var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules);
+        assertEquals(2,state.engagements().size());assertEquals(MeleeSector.Role.FLANK_LEFT,MeleeTactics.sector(state,b,100,rules).role());
+        assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,c,100,rules).role());
+        var obsolete=new ActorExecutionId(a.execution().actorId(),a.execution().activityKind(),a.owner(),2);
+        assertEquals(state,state.withdrawn(obsolete),"another execution cannot retire a participant");
+        state=state.withdrawn(a.execution());assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,b,100,rules).role());
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
+        assertTrue(state.withdrawn(b.execution()).withdrawn(c.execution()).engagements().isEmpty());
+    }
+    @Test void waveSlotsAreSingleUseFencedAndRetainTheirUseAcrossRecovery() throws IOException {
+        var a=order(1,Optional.empty());var observer=new ActorActuationId(new ActorBodyId(a.execution().actorId(),1),a.execution());
+        var plan=CombatEngagement.first(a,100);var key=plan.key();
+        plan=new CombatEngagement(key,2,plan.anchor(),plan.axisX(),plan.axisZ(),plan.participants(),100,
+                Optional.of(new CombatEngagement.Wave(a.targetPosition(),List.of(new CombatEngagement.Slot(observer,104,110,false)))));
+        assertFalse(plan.permits(a,observer,103,EngagementRules.initial()));assertTrue(plan.permits(a,observer,104,EngagementRules.initial()));
+        assertFalse(plan.permits(a,new ActorActuationId(new ActorBodyId(a.execution().actorId(),2),a.execution()),104,EngagementRules.initial()));
+        assertFalse(plan.permits(a,observer,111,EngagementRules.initial()));
+        plan=plan.committed(observer);assertFalse(plan.permits(a,observer,105,EngagementRules.initial()));
+        var state=CombatState.empty().withEngagement(plan);var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        assertFalse(recovered.engagements().get(key).permits(a,observer,105,EngagementRules.initial()));
+        var foreign=order(2,Optional.empty());var retained=plan;
+        assertThrows(IllegalArgumentException.class,()->new CombatEngagement(key,3,retained.anchor(),retained.axisX(),retained.axisZ(),retained.participants(),100,
+                Optional.of(new CombatEngagement.Wave(a.targetPosition(),List.of(new CombatEngagement.Slot(new ActorActuationId(new ActorBodyId(foreign.execution().actorId(),1),foreign.execution()),104,110,false))))));
+    }
+    @Test void flankApproachUsesAnOuterArcAndCommittedAimDoesNotTrackThroughTheBack() {
+        var actor=order(2,Optional.empty());var sector=new MeleeSector(MeleeSector.Role.FLANK_LEFT,1000,0);var rules=EngagementRules.initial();
+        assertTrue(CombatApproach.arc(actor,sector,rules));
+        assertTrue(CombatApproach.score(actor,sector,TARGET.offset(4,0,3),rules)<CombatApproach.score(actor,sector,TARGET.offset(0,0,1),rules));
+        assertTrue(MeleeAim.contains(179,0,-1,55));assertTrue(MeleeAim.contains(-179,0,-1,55));
+        assertFalse(MeleeAim.contains(0,0,-1,55));assertTrue(MeleeAim.contains(0,1,1,55));
     }
     @Test void attackChoiceUsesObservedDistanceAndRetreatButNeverGrantsExtraDamageReach() throws IOException {
         assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,1.2,0,MeleeRules.initial()));
@@ -43,8 +80,8 @@ class CombatModuleTest {
         var strike=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100);
         var state=CombatState.empty().prepared(strike);var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         var restored=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
-        assertEquals(strike,restored.pending().get(order.owner()));assertEquals(110,strike.impactAt(MeleeRules.initial()));
-        assertEquals(120L,restored.completed(strike,110,MeleeRules.initial()).nextAttack().get(order.owner()));
+        assertEquals(strike,restored.pending().get(order.owner()));assertEquals(106,strike.impactAt(MeleeRules.initial()));
+        assertEquals(118L,restored.completed(strike,110,MeleeRules.initial()).nextAttack().get(order.owner()));
         assertThrows(IllegalArgumentException.class,()->MeleeAttack.require(0));
     }
     @Test void immediateDecisionHonoursVisibilityReadinessPendingEffectsAndExpiry(){
@@ -101,15 +138,15 @@ class CombatModuleTest {
         state=state.positioned(order,Optional.empty(),MeleePosition.Reason.NO_PATH,1001,rules)
                 .positioned(order,Optional.empty(),MeleePosition.Reason.NO_POSITION,1101,rules);
         assertTrue(state.deferred(order,1102));assertFalse(state.deferred(order,1201));
-        var moved=new CombatOrder(order.execution(),order.revision(),order.weapon(),order.engagement(),TARGET.offset(1,0,0),100,2000,order.actorPosition(),order.navigation(),order.station());
+        var moved=new CombatOrder(order.execution(),order.revision(),order.weapon(),order.party(),order.engagement(),TARGET.offset(1,0,0),100,2000,order.actorPosition(),order.navigation(),order.station());
         assertFalse(state.deferred(moved,1102),"target movement reopens tactical admission");
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
         assertThrows(IllegalArgumentException.class,()->MeleePosition.Reason.require(99));
     }
     @Test void holdingUsesTwoStrictWeaponBoundariesAndCannotExpandAttackReach(){
-        var rules=MeleeRules.initial();assertEquals(1.65,rules.holdReach(SWORD,false),0.0001);assertEquals(2.0,rules.holdReach(SWORD,true));
-        assertEquals(4,rules.windup(MeleeAttack.QUICK));assertEquals(10,rules.windup(MeleeAttack.LUNGE));
+        var rules=MeleeRules.initial();assertEquals(2.2,rules.holdReach(SWORD,false),0.0001);assertEquals(2.55,rules.holdReach(SWORD,true),0.0001);
+        assertEquals(4,rules.windup(MeleeAttack.QUICK));assertEquals(6,rules.windup(MeleeAttack.LUNGE));
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.APPROACH,MeleeTactics.decide(order,new MeleeTactics.Facts(101,true,true,false,false,100,true)));
     }
@@ -119,14 +156,23 @@ class CombatModuleTest {
             public SurfaceAnchor supportAt(int x,int z){return null;}
             public boolean blocked(SurfaceAnchor surface){return false;}
         };
-        assertTrue(MeleePositions.knowledgeMissing(unknown,order(1,Optional.empty()),SWORD,3));
+        assertTrue(MeleePositions.knowledgeMissing(unknown,order(1,Optional.empty()),SWORD,3,false,MeleeRules.initial().engagements()));
         var multiLevel=new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry(){
             public WorldBounds bounds(){return new WorldBounds(-16,-16,32,32);}
             public SurfaceAnchor supportAt(int x,int z){return SurfaceAnchor.at(x,63,z);}
             public List<SurfaceAnchor> surfacesAt(int x,int z){return List.of(SurfaceAnchor.at(x,63,z),SurfaceAnchor.at(x,66,z));}
             public boolean blocked(SurfaceAnchor surface){return true;}
         };
-        assertFalse(MeleePositions.knowledgeMissing(multiLevel,order(1,Optional.empty()),SWORD,3));
+        assertFalse(MeleePositions.knowledgeMissing(multiLevel,order(1,Optional.empty()),SWORD,3,false,MeleeRules.initial().engagements()));
+        var outerUnknown=new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry(){
+            public WorldBounds bounds(){return new WorldBounds(-16,-16,32,32);}
+            public SurfaceAnchor supportAt(int x,int z){return SurfaceAnchor.at(x,63,z);}
+            public boolean blocked(SurfaceAnchor surface){return false;}
+            public boolean clearanceKnown(SurfaceAnchor surface){return CombatEngagement.distance(surface,TARGET)<=3;}
+        };
+        assertFalse(MeleePositions.knowledgeMissing(outerUnknown,order(1,Optional.empty()),SWORD,6,false,MeleeRules.initial().engagements()));
+        assertTrue(MeleePositions.knowledgeMissing(outerUnknown,order(1,Optional.empty()),SWORD,6,true,MeleeRules.initial().engagements()),
+                "known close reach cannot classify an unknown outer arc as an impossible flank");
     }
     @Test void allMechanicalIngressHasAnExactCodecAndRejectsTruncation(){
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
@@ -135,7 +181,7 @@ class CombatModuleTest {
                 new CombatEvent.ManeuverRequested(actor,order.target(),order.actorPosition(),new MeleeManeuvers.Facts(5,0.2)),
                 new CombatEvent.ManeuverSelected(new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),order.actorPosition().offset(1,0,0),100,0,0,200,0,140)),
                 new CombatEvent.ManeuverLaunched(actor,101),new CombatEvent.ManeuverClosed(order.owner(),101),
-                new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,100)),
+                new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,true,100)),
                 new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),order.station(),MeleePosition.Reason.RESERVED));
         var codecs=CombatPayloadCodecs.create();
         for(var event:events){var bytes=codecs.encode(event);assertEquals(event,codecs.decode(event.type(),bytes));

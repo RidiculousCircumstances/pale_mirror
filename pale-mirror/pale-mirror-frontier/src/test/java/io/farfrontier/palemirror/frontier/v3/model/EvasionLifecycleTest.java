@@ -105,7 +105,7 @@ class EvasionLifecycleTest {
     @Test void perResidentFactorsAndGaitsUseTheSamePaceForNativeRequestsAndColdClocks(){
         var state=ResourceSiteHarvestProcessTest.initial();var actor=state.humanPopulation().residents().keySet().iterator().next();
         var walk=ResidentWalkingPace.read(state,actor,LocomotionMode.WALK);var run=ResidentWalkingPace.read(state,actor,LocomotionMode.RUN);
-        assertEquals(walk.blocksPerTick()*1.5,run.blocksPerTick(),0.000001);
+        assertEquals(walk.blocksPerTick()*3,run.blocksPerTick(),0.000001);
         var modifiers=ResidentMovementModifiers.initial().with(new SubjectId("effect:wound"),500);
         assertEquals(0.5,modifiers.multiplier());assertEquals(1.0,modifiers.without(new SubjectId("effect:wound")).multiplier());
     }

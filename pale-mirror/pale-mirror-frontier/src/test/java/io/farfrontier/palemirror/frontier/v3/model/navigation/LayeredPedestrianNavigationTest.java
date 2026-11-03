@@ -78,7 +78,8 @@ class LayeredPedestrianNavigationTest {
         var origin=SurfaceAnchor.at(0,58,0);var enemy=SurfaceAnchor.at(5,63,0);
         var execution=new ActorExecutionId(new SubjectId("resident:test"),ActorActivityKind.GUARD,new SubjectId("guard:test"),1);
         var target=new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(1,2),"minecraft:overworld");
-        var order=new CombatOrder(execution,1,new SubjectId("item:sword"),new CombatEngagement(target,CombatEngagement.Kind.AREA_DEFENCE,origin,32),enemy,1,100,origin,UnitNavigationProfile.VILLAGER,Optional.empty());
+        var order=new CombatOrder(execution,1,new SubjectId("item:sword"),
+                new CombatPartyId(new SubjectId("party:test")),new CombatEnvelope(target,CombatEnvelope.Kind.AREA_DEFENCE,origin,32),enemy,1,100,origin,UnitNavigationProfile.VILLAGER,Optional.empty());
         var landing=SurfaceAnchor.at(2,60,0);
         var ranked=MeleeManeuvers.rank(order,MeleeManeuver.Kind.BURST,List.of(landing),ManeuverRules.initial());assertEquals(List.of(landing),ranked);
         BiFunction<Integer,Integer,List<SurfaceAnchor>> levels=(x,z)->List.of(SurfaceAnchor.at(x,58+x,z));

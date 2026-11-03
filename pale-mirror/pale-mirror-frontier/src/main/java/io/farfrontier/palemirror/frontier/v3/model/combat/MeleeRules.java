@@ -22,7 +22,8 @@ public record MeleeRules(int sensingInterval,int routeRequestLimit,int maximumRa
             || obstructionTicks<1 || obstructionTicks>200 || windupTicks<1 || windupTicks>40 || rangeHysteresisMicros<1
             || rangeHysteresisMicros>1_000_000 || positionLeaseTicks<3*sensingInterval || positionLeaseTicks>1200
             || unreachableTicks<1 || retryTicks<1 || sectorWeightPermille<0 || sectorWeightPermille>20000 || alignmentPermille<0 || alignmentPermille>1000)throw new IllegalArgumentException("invalid melee policy");}
-    public static MeleeRules initial(){return new MeleeRules(10,8,8,40);}
+    public static MeleeRules initial(){return new MeleeRules(4,8,8,40);}
+    public EngagementRules engagements(){return EngagementRules.initial();}
     public long windup(MeleeAttack attack){
         return Math.max(1,Math.min(40,Math.round((double)windupTicks*techniques.require(attack).preparationTicks()/8)));
     }
@@ -31,5 +32,6 @@ public record MeleeRules(int sensingInterval,int routeRequestLimit,int maximumRa
         return alreadyHolding?Math.min(profile.reach(),close+rangeHysteresisMicros/1_000_000.0):close;
     }
     public String canonicalText(){return sensingInterval+":"+routeRequestLimit+":"+maximumRadius+":"+obstructionTicks+":"
-            +windupTicks+":"+rangeHysteresisMicros+":"+positionLeaseTicks+":"+unreachableTicks+":"+retryTicks+":"+sectorWeightPermille+":"+alignmentPermille+"|techniques="+techniques.canonicalText()+"|maneuvers="+maneuvers.canonicalText();}
+            +windupTicks+":"+rangeHysteresisMicros+":"+positionLeaseTicks+":"+unreachableTicks+":"+retryTicks+":"+sectorWeightPermille+":"+alignmentPermille+"|techniques="+techniques.canonicalText()+"|maneuvers="+maneuvers.canonicalText()
+            +"|engagements="+engagements().canonicalText();}
 }

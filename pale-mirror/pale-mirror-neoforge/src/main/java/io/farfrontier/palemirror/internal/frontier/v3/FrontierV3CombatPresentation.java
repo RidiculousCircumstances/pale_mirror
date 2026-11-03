@@ -54,6 +54,13 @@ public final class FrontierV3CombatPresentation {
                 && marker.getInt("phase")!=CombatGesturePayload.Phase.CANCELLED.wireTag()
                 && elapsed>=rules.windup(strike.attack()) && elapsed<=rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks();
     }
+    static boolean strikeArc(Mob body,LivingEntity target,MeleeStrike strike,MeleeRules rules){
+        var marker=body.getPersistentData().getCompound(KEY);
+        return marker.getString("owner").equals(strike.owner().value()) && marker.getLong("ordinal")==strike.attemptOrdinal()
+                && marker.getLong("epoch")==strike.attacker().body().physicalEpoch()
+                && MeleeAim.contains(marker.getFloat("facingYaw"),target.getX()-body.getX(),target.getZ()-body.getZ(),
+                    strike.attack()==MeleeAttack.LUNGE?rules.engagements().lungeTurnDegrees():rules.engagements().quickTurnDegrees());
+    }
     static void cancel(ServerLevel level,Mob body,MeleeStrike strike){finish(level,body,strike,CombatGesturePayload.Phase.CANCELLED);}
     private static void finish(ServerLevel level,Mob body,MeleeStrike strike,CombatGesturePayload.Phase phase){
         finish(level,body,strike.owner().value(),strike.attemptOrdinal(),phase);

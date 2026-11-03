@@ -1,0 +1,449 @@
+{
+  "schema": 1,
+  "id": "disposable_coordinated_melee",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583,
+    "profile": "peaceful-guards"
+  },
+  "pilot": {
+    "username": "pmresponse"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/execute in minecraft:overworld run fill 10 62 -140 14 65 -136 minecraft:stone"
+    },
+    {
+      "type": "command",
+      "command": "/weather clear"
+    },
+    {
+      "type": "command",
+      "command": "/time set day"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:iron_sword"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 240 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:speed 180 1 true"
+    },
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 1000"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 120000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "hasArmedGuard": true,
+            "guardsReady": 2
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 128,
+      "timeoutMs": 30000,
+      "standOff": 2
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok"
+          }
+        }
+      ]
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "actor",
+          "id": "resident:1-16",
+          "expect": {
+            "status": "ok",
+            "ambientLease": "HOT",
+            "physicalAdmission": {
+              "bodyCustody": {
+                "phase": "RUNNING"
+              }
+            },
+            "activityKind": "GUARD"
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 128,
+      "timeoutMs": 30000,
+      "standOff": 0
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 10000,
+    "timeoutMs": 900000
+  },
+  "actions": [
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "attack_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 32,
+      "maxAttacks": 1,
+      "requireRemoval": false,
+      "requireDamage": true,
+      "timeoutMs": 30000,
+      "causalMilestone": "player_harmed_declared_guard"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "contactCount": 1,
+          "responseStatus": "ENGAGED",
+          "selfDefenders": 1
+        }
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100,
+      "causalMilestone": "confirmed_local_self_defence"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 8,
+        "y": 0,
+        "z": 8
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "coordinatedParticipants": 2
+        }
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 200
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "flank-approach",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "secondGuardName"
+        }
+      },
+      "workerId": "resident:1-28",
+      "maxDistance": 96,
+      "durationTicks": 400,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 60000,
+      "minimumTravelBlocks": 3,
+      "minimumAngularTravelDeg": 30,
+      "requiredModelRig": "human_era",
+      "causalMilestone": "second_fighter_physically_changed_side"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1",
+      "causalMilestone": "shared_encounter_plan_and_attack_slots_observed"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1,
+          "coordinatedParticipants": 2
+        }
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 200
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "resumed-group-combat",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "durationTicks": 120,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 30000,
+      "requiredCombatAttacks": [
+        "QUICK"
+      ],
+      "requiredModelRig": "human_era",
+      "causalMilestone": "remembered_hostile_reengaged_after_restart"
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 1000,
+      "captureAs": "before-group-exit",
+      "timeoutMs": 1000
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 66,
+        "z": -138
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimumFrom": "before-group-exit",
+      "timeoutMs": 1000,
+      "causalMilestone": "leaving_the_fight_prevented_late_damage"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0,
+          "contactCount": 0,
+          "engagementCount": 0
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1",
+      "causalMilestone": "encounter_released_and_normal_duty_resumed"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 15,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "hostilePlayers": 1,
+          "respondingGuards": 0,
+          "contactCount": 0,
+          "engagementCount": 0
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 7,
+      "name": "two-fighters-outer-approach",
+      "presentation": "clean"
+    },
+    {
+      "after": 10,
+      "name": "resumed-coordinated-combat",
+      "presentation": "clean"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 8,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/gamemode creative"
+      },
+      {
+        "type": "command",
+        "command": "/attribute @s minecraft:generic.max_health base set 1000"
+      },
+      {
+        "type": "command",
+        "command": "/effect give @s minecraft:instant_health 1 10 true"
+      },
+      {
+        "type": "command",
+        "command": "/effect give @s minecraft:night_vision 240 0 true"
+      },
+      {
+        "type": "command",
+        "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+      },
+      {
+        "type": "assert_fixture",
+        "timeoutMs": 30000,
+        "checks": [
+          {
+            "view": "settlement",
+            "id": "settlement:1",
+            "expect": {
+              "status": "ok",
+              "security": {
+                "hostilePlayers": 1
+              },
+              "hasArmedGuard": true
+            }
+          }
+        ]
+      },
+      {
+        "type": "visit_nearest_entity",
+        "entityType": "minecraft:villager",
+        "nameContains": {
+          "diagnostic": {
+            "view": "settlement",
+            "id": "settlement:1",
+            "field": "firstGuardName"
+          }
+        },
+        "standOff": 2,
+        "maxDistance": 128,
+        "timeoutMs": 30000
+      },
+      {
+        "type": "assert_fixture",
+        "timeoutMs": 30000,
+        "checks": [
+          {
+            "view": "actor",
+            "id": "resident:1-16",
+            "expect": {
+              "status": "ok",
+              "ambientLease": "HOT",
+              "physicalAdmission": {
+                "bodyCustody": {
+                  "phase": "RUNNING"
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "type": "command",
+        "command": "/gamemode survival"
+      }
+    ]
+  }
+}

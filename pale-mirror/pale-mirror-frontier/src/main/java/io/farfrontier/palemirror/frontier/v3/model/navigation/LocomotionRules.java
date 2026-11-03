@@ -7,7 +7,7 @@ public record LocomotionRules(int runPermille, int maneuverPermille, int careful
                 || maneuverPermille > runPermille || carefulPermille < 250 || carefulPermille > 1000)
             throw new IllegalArgumentException("invalid locomotion policy");
     }
-    public static LocomotionRules initial() { return new LocomotionRules(1500, 1300, 850); }
+    public static LocomotionRules initial() { return new LocomotionRules(3000, 2800, 850); }
     public int multiplier(LocomotionMode mode) {
         return switch (mode) { case WALK -> 1000; case RUN -> runPermille;
             case MANEUVER -> maneuverPermille; case CAREFUL -> carefulPermille; };

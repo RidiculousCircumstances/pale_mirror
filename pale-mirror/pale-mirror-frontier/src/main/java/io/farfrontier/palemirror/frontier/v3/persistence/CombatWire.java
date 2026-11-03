@@ -31,11 +31,11 @@ final class CombatWire {
         var profile=profile(in);var attack=MeleeAttack.require(in.readUnsignedByte());
         return new MeleeStrike(duty,revision,attacker,target,weapon,before,profile,attack,in.readLong(),in.readLong(),in.readLong());
     }
-    static void engagement(DataOutputStream out,CombatEngagement value)throws IOException {
+    static void engagement(DataOutputStream out,CombatEnvelope value)throws IOException {
         target(out,value.target());out.writeByte(value.kind().wireTag());FrontierWorldStateCodec.writePosition(out,value.anchor().support());out.writeInt(value.radius());
     }
-    static CombatEngagement engagement(DataInputStream in)throws IOException {
-        return new CombatEngagement(target(in),CombatEngagement.Kind.require(in.readUnsignedByte()),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readInt());
+    static CombatEnvelope engagement(DataInputStream in)throws IOException {
+        return new CombatEnvelope(target(in),CombatEnvelope.Kind.require(in.readUnsignedByte()),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readInt());
     }
     static void profile(DataOutputStream out,WeaponProfile p)throws IOException{out.writeUTF(p.itemKind());out.writeDouble(p.damage());out.writeLong(p.attackIntervalTicks());out.writeDouble(p.reach());out.writeInt(p.wear());}
     static WeaponProfile profile(DataInputStream in)throws IOException{return new WeaponProfile(in.readUTF(),in.readDouble(),in.readLong(),in.readDouble(),in.readInt());}

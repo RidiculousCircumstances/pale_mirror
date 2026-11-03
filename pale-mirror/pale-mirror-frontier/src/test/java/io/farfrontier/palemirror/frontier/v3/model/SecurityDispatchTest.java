@@ -55,7 +55,7 @@ class SecurityDispatchTest {
         var candidates=guards(6);var c=contact(1,0,100,1);
         var old=select(100,List.of(c),candidates,Map.of());
         var local=candidates.stream().map(g -> new SecurityDispatch.Candidate(g.duty(),g.position(),Optional.empty(),
-                Optional.of(new CombatEngagement(c.target(),CombatEngagement.Kind.AREA_DEFENCE,SurfaceAnchor.at(0,63,0),64)))).toList();
+                Optional.of(new CombatEnvelope(c.target(),CombatEnvelope.Kind.AREA_DEFENCE,SurfaceAnchor.at(0,63,0),64)))).toList();
         assertEquals(6,select(100,List.of(c),local,old).size(),"local defence is never a distant reinforcement quota");
         var takeover=new ArrayList<>(candidates);
         for(int i=4;i<6;i++){var g=candidates.get(i);takeover.set(i,local.get(i));}
@@ -63,7 +63,7 @@ class SecurityDispatchTest {
         var lostOne=takeover.stream().filter(g -> !g.duty().equals(candidates.get(5).duty())).toList();
         var afterLoss=select(101,List.of(c),lostOne,old);
         assertEquals(2,afterLoss.size());assertTrue(afterLoss.containsKey(candidates.get(4).duty()));
-        assertTrue(afterLoss.values().stream().anyMatch(r -> r.engagement().kind()==CombatEngagement.Kind.REINFORCEMENT));
+        assertTrue(afterLoss.values().stream().anyMatch(r -> r.engagement().kind()==CombatEnvelope.Kind.REINFORCEMENT));
     }
     @Test void staleSightingsRetainOnlyExistingInvestigatorsAndExpireWithoutReplacements() {
         var candidates=guards(4);var contact=contact(1,0,100,1);

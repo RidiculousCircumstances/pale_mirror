@@ -114,7 +114,7 @@ final class FrontierV3PilotMotionObserver {
                 if(pursuitStall>40)throw new IllegalStateException("guard stalled outside melee reach while the player moved around it; actor="+receivedDiagnostic("actor",worker));
             }
             Vec3 authoritative = authoritativePosition(action);
-            samples.add(new Pose(clientTick, gameTime, body.getX(), body.getY(), body.getZ(), velocity.x, velocity.z,
+            samples.add(new Pose(clientTick, gameTime, body.getX(), body.getY(), body.getZ(), minecraft.player.getX(), minecraft.player.getZ(), velocity.x, velocity.z,
                     authoritative == null ? null : authoritative.x, authoritative == null ? null : authoritative.z,
                     workAnimation, semanticPhase(action, body.getId()),
                     body instanceof net.minecraft.world.entity.npc.Villager resident
@@ -124,8 +124,23 @@ final class FrontierV3PilotMotionObserver {
         if (clientTick < action.get("durationTicks").getAsLong()) return false;
         try{
             if(action.has("observerCircuit") && circuitDistance<16)throw new IllegalStateException("player did not actually traverse the declared pursuit circuit: "+circuitDistance);
-            requireModelRig(action);requireCombat(action);emit(action, expectedType, interval, actionStep, milestone);return true;
+            requireRepositioning(action);requireModelRig(action);requireCombat(action);emit(action, expectedType, interval, actionStep, milestone);return true;
         }finally{releaseCircuit();}
+    }
+
+    /** Actual relative trajectories distinguish an outer approach from a declared flank label. */
+    private static void requireRepositioning(JsonObject action){
+        if(!action.has("minimumAngularTravelDeg") && !action.has("minimumTravelBlocks"))return;
+        double angle=0,minimum=0,maximum=0,travel=0;var first=samples.getFirst();double previous=Math.atan2(first.z()-first.observerZ(),first.x()-first.observerX());
+        for(var sample:samples){
+            double next=Math.atan2(sample.z()-sample.observerZ(),sample.x()-sample.observerX());
+            angle+=Math.atan2(Math.sin(next-previous),Math.cos(next-previous));previous=next;minimum=Math.min(minimum,angle);maximum=Math.max(maximum,angle);
+            travel=Math.max(travel,Math.hypot(sample.x()-first.x(),sample.z()-first.z()));
+        }
+        if(action.has("minimumAngularTravelDeg") && Math.toDegrees(maximum-minimum)<action.get("minimumAngularTravelDeg").getAsDouble())
+            throw new IllegalStateException("fighter did not actually change side around the observed player: "+Math.toDegrees(maximum-minimum));
+        if(action.has("minimumTravelBlocks") && travel<action.get("minimumTravelBlocks").getAsDouble())
+            throw new IllegalStateException("fighter did not actually traverse the required approach: "+travel);
     }
 
     private static void requireModelRig(JsonObject action) {
@@ -274,6 +289,7 @@ final class FrontierV3PilotMotionObserver {
         if (retained != null) value.addProperty("entityUuid", retained.getUUID().toString());
         JsonArray values = new JsonArray(); for (Pose pose : samples) { JsonObject sample = new JsonObject(); sample.addProperty("tick", pose.tick()); sample.addProperty("serverTick", pose.serverTick());
             sample.addProperty("x", pose.x()); sample.addProperty("y", pose.y()); sample.addProperty("z", pose.z());
+            sample.addProperty("observerX",pose.observerX());sample.addProperty("observerZ",pose.observerZ());
             sample.addProperty("velocityX", pose.velocityX()); sample.addProperty("velocityZ", pose.velocityZ()); sample.addProperty("workAnimation", pose.workAnimation());
             if (pose.authoritativeX() != null) { sample.addProperty("authoritativeX", pose.authoritativeX()); sample.addProperty("authoritativeZ", pose.authoritativeZ()); }
             if(pose.combat()!=null){var combat=pose.combat();var rendered=new JsonObject();rendered.addProperty("attack",combat.attack());
@@ -287,6 +303,6 @@ final class FrontierV3PilotMotionObserver {
         Minecraft minecraft = Minecraft.getInstance();
         return minecraft.level == null || entityRuntimeId < 0 ? null : minecraft.level.getEntity(entityRuntimeId);
     }
-    private record Pose(long tick, long serverTick, double x, double y, double z, double velocityX, double velocityZ,
+    private record Pose(long tick, long serverTick, double x, double y, double z, double observerX, double observerZ, double velocityX, double velocityZ,
                         Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase, String rig,io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.Rendered combat) { }
 }

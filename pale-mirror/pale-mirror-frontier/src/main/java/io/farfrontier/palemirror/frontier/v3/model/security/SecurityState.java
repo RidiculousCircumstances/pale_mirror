@@ -11,7 +11,7 @@ public record SecurityState(Map<Relation, Offence> hostility, Map<ContactKey, Co
     public record ContactKey(SubjectId home, CombatTarget target) {
         public ContactKey { Objects.requireNonNull(home); Objects.requireNonNull(target); }
     }
-    public record Response(SubjectId duty, ContactKey contact, long assignedAt, CombatEngagement engagement) {
+    public record Response(SubjectId duty, ContactKey contact, long assignedAt, CombatEnvelope engagement) {
         public Response { Objects.requireNonNull(duty); Objects.requireNonNull(contact); Objects.requireNonNull(engagement);
             if (!contact.target().equals(engagement.target())) throw new IllegalArgumentException("response engagement names another target");
             if (assignedAt < 0) throw new IllegalArgumentException("invalid response assignment date"); }

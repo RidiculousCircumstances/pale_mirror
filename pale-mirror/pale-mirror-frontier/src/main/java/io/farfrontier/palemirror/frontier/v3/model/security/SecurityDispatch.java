@@ -16,7 +16,7 @@ public final class SecurityDispatch {
                 && !GuardStaffingRelease.requested(state,duty);
     }
     public record Candidate(SubjectId duty,SurfaceAnchor position,Optional<CombatTarget> missionTarget,
-                            Optional<CombatEngagement> localReaction) {
+                            Optional<CombatEnvelope> localReaction) {
         public Candidate {
             Objects.requireNonNull(duty);Objects.requireNonNull(position);Objects.requireNonNull(missionTarget);Objects.requireNonNull(localReaction);
             if(localReaction.filter(e -> !e.kind().local()).isPresent())throw new IllegalArgumentException("local nomination is a reinforcement");
@@ -86,7 +86,7 @@ public final class SecurityDispatch {
             boolean fresh=contact.current(tick,rules.contactLifetime());
             var candidates=guards.stream().filter(g -> !result.containsKey(g.duty()))
                     .filter(g -> fresh || Optional.ofNullable(previous.get(g.duty())).filter(r -> r.contact().equals(key)
-                            && r.engagement().kind()==CombatEngagement.Kind.REINFORCEMENT).isPresent()
+                            && r.engagement().kind()==CombatEnvelope.Kind.REINFORCEMENT).isPresent()
                             && g.missionTarget().equals(Optional.of(contact.target())))
                     .sorted(Comparator.comparingLong((Candidate g)->SecurityCoverage.distance(g.position(),point))
                             .thenComparing(Candidate::duty)).toList();
@@ -95,12 +95,12 @@ public final class SecurityDispatch {
             var guard=candidates.stream().filter(g -> Optional.ofNullable(previous.get(g.duty())).filter(r -> r.contact().equals(key)).isPresent()
                             && SecurityCoverage.distance(g.position(),point)<=SecurityCoverage.distance(nearest.position(),point)+rules.reassignmentAdvantage())
                     .min(Comparator.comparing(Candidate::duty)).orElse(nearest);
-            var engagement=new CombatEngagement(contact.target(),CombatEngagement.Kind.REINFORCEMENT,reinforcement.anchor(),rules.homePursuitLimit());
+            var engagement=new CombatEnvelope(contact.target(),CombatEnvelope.Kind.REINFORCEMENT,reinforcement.anchor(),rules.homePursuitLimit());
             result.put(guard.duty(),response(guard.duty(),home,engagement,tick,previous));sent++;
         }
         return Map.copyOf(result);
     }
-    private static SecurityState.Response response(SubjectId duty,SubjectId home,CombatEngagement engagement,long tick,
+    private static SecurityState.Response response(SubjectId duty,SubjectId home,CombatEnvelope engagement,long tick,
             Map<SubjectId,SecurityState.Response> previous) {
         var key=new SecurityState.ContactKey(home,engagement.target());
         return Optional.ofNullable(previous.get(duty)).filter(r -> r.contact().equals(key) && r.engagement().equals(engagement))

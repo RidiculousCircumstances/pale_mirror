@@ -418,6 +418,9 @@ final class FrontierV3DiagnosticJson {
                 + ",\"guardNames\":" + strings(guards.stream().map(duty -> state.humanPopulation().resident(duty.execution().actorId()).name()).toList())
                 + ",\"firstGuardPosition\":" + readyGuard.map(duty->position(io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state,duty.execution().actorId(),checkpoint.instant().ticks()))).orElse("null")
                 + ",\"firstGuardName\":\"" + quote(readyGuard.map(duty->state.humanPopulation().resident(duty.execution().actorId()).name()).orElse("")) + "\""
+                + ",\"secondGuardName\":\"" + quote(guards.stream().filter(duty->readyGuard.filter(first->first.id().equals(duty.id())).isEmpty())
+                    .filter(duty->io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state,duty))
+                    .findFirst().map(duty->state.humanPopulation().resident(duty.execution().actorId()).name()).orElse("")) + "\""
                 + ",\"strategic\":" + lane(value.strategic())
                 + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())

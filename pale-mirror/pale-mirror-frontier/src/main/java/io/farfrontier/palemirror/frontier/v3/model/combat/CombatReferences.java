@@ -10,6 +10,11 @@ public final class CombatReferences {
         for(var arm:combat.armaments().values())if(!actors.containsKey(arm.execution().actorId()))throw new IllegalArgumentException("combat history lost its actor");
         for(var point:combat.positions().values())if(!actors.containsKey(point.execution().actorId()))throw new IllegalArgumentException("melee position lost actor");
         for(var stance:combat.stances().values())if(!actors.containsKey(stance.observer().execution().actorId()))throw new IllegalArgumentException("melee stance lost actor");
+        for(var encounter:combat.engagements().values())for(var member:encounter.participants().values()){
+            capabilities.require(member.execution());
+            if(!actors.containsKey(member.execution().actorId()))throw new IllegalArgumentException("encounter lost actor");
+            executions.requireRetained(member.execution());
+        }
         for(var strike:combat.pending().values()){
             capabilities.require(strike.attacker().execution());
             var actor=actors.get(strike.attacker().body().actorId());
