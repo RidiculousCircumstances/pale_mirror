@@ -235,7 +235,7 @@ final class FrontierV3ResourceSiteExecutor {
                     || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return;
             var cycle = state.resourceSites().cycle(site.id());
             var predecessor = owner.witness();
-            if (!predecessor.matchesLayout(site.id(), cycle.layout())
+            if (!predecessor.matchesLayout(site.id(), cycle.layout()) && predecessor.extensionReady(cycle)
                     && !ledger.hasPendingFieldMutation(site.id()) && !state.resourceSites().hasPendingWorldChange(site.id())
                     && cycle.pendingPlayerBreaks().isEmpty()) {
                 ledger.replaceFieldClaim(owner, owner.withWitness(predecessor.extendDeclaration(cycle)));

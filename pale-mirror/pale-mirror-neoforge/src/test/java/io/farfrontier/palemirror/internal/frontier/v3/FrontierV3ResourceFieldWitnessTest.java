@@ -89,6 +89,9 @@ class FrontierV3ResourceFieldWitnessTest {
         assertEquals(extended, FrontierV3ResourceFieldWitness.read(extended.write()));
         assertThrows(IllegalArgumentException.class, () -> witness.extend(next, Map.of(id, DIRT)));
         assertThrows(IllegalArgumentException.class, () -> witness.extend(next, Map.of()));
+        var work=witness.begin(ResourceFieldCellTransition.between(SITE,1,1,FIRST,witness.cell(FIRST).committed(),RIPE),"fixture:pending-work");
+        assertFalse(work.extensionReady(next),"physical-first work must settle under its original layout");
+        assertThrows(IllegalArgumentException.class,()->work.extendDeclaration(next));
     }
     @Test void growthBeyondCanonicalTargetRecoversEvenWhenItsPhysicalProjectionWasLagging() {
         var projected = ResourceFieldCycle.seeded(SITE, layout(), 1).advanceGrowth(FIRST);
@@ -317,6 +320,8 @@ class FrontierV3ResourceFieldWitnessTest {
                 transition, "farmer:old-epoch:repair"), "a previous cycle cannot begin work in the current epoch");
         var pending = FrontierV3ResourceFieldWitness.claimed(SITE, 1, surface).begin(transition, "farmer:repair:1");
         assertEquals(SITE, pending.cell(FIRST).pending().orElseThrow().transition().siteId());
+        var missingLayout=pending.write();missingLayout.getList("cells",Tag.TAG_COMPOUND).getCompound(0).getCompound("pending").remove("layoutRevision");
+        assertThrows(IllegalStateException.class,()->FrontierV3ResourceFieldWitness.read(missingLayout),"a pending effect must declare its own layout before recovery");
         var recovered = FrontierV3ResourceFieldWitness.read(pending.write());
         assertEquals(1, recovered.epoch());
         assertEquals(SITE, recovered.cell(FIRST).pending().orElseThrow().transition().siteId());

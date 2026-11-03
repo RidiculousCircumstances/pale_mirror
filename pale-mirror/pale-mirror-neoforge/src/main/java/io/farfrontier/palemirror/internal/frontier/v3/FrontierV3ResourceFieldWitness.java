@@ -26,7 +26,7 @@ import java.util.UUID;
 
 /** Versioned value for the replacement SavedData field claim; not a second runtime owner. */
 final class FrontierV3ResourceFieldWitness {
-    private static final int FORMAT = 11;
+    private static final int FORMAT = 12;
 
     /** Raw block-state NBT is retained verbatim, never guessed from an OBSTRUCTED enum. */
     static final class ForeignIncident {
@@ -192,6 +192,7 @@ final class FrontierV3ResourceFieldWitness {
                     cell.pending().ifPresent(effect -> {
                         if (!effect.transition().siteId().equals(siteId) || effect.transition().epoch() != epoch
                                 || effect.transition().layoutRevision() != layoutRevision
+                                    && !(precedingLayouts.containsKey(effect.transition().layoutRevision()) && effect.canonicalSource().isPresent() && effect.handEffect().isEmpty())
                                 || !effect.transition().cellId().equals(id))
                             throw new IllegalArgumentException("physical field effect has foreign layout or cell identity");
                         effect.handEffect().ifPresent(hand -> {
@@ -299,6 +300,12 @@ final class FrontierV3ResourceFieldWitness {
                 byIdBucket, cellCount, cellIdsFingerprint, precedingLayouts, false);
     }
 
+    /** Disjoint appended cells may retain old canonical-first causes verbatim. Labour/epoch handoffs must settle first. */
+    boolean extensionReady(ResourceFieldCycle current){
+        return current.pendingPlayerBreaks().isEmpty() && byIdBucket.values().stream().flatMap(bucket->bucket.values().stream())
+            .flatMap(cell->cell.pending().stream()).allMatch(effect->current.epoch()==epoch && effect.canonicalSource().isPresent() && effect.handEffect().isEmpty());
+    }
+
     /** Preserve old observed cells and seals; new cells require the exact admitted bare-ground observation. */
     FrontierV3ResourceFieldWitness extend(ResourceFieldCycle current,
             Map<ResourceFieldLayout.CellId, ResourceFieldPhysicalSurface.Condition> observedGround) {
@@ -307,7 +314,7 @@ final class FrontierV3ResourceFieldWitness {
                 && entry.predecessorCellCount() == cellCount && entry.predecessorFingerprint().equals(layoutFingerprint))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("field has no exact geometry successor"));
         if (!siteId.equals(current.siteId()) || current.epoch() < epoch || !current.pendingPlayerBreaks().isEmpty()
-                || byIdBucket.values().stream().flatMap(bucket -> bucket.values().stream()).anyMatch(cell -> cell.pending().isPresent()))
+                || !extensionReady(current))
             throw new IllegalArgumentException("field extension overlaps an unresolved physical effect");
         var added = new LinkedHashMap<ResourceFieldLayout.CellId, ResourceFieldCycle.Soil>();
         layout.extensions().stream().filter(entry -> entry.predecessorRevision() >= predecessor.predecessorRevision())
@@ -705,6 +712,7 @@ final class FrontierV3ResourceFieldWitness {
                             ResourceSiteHarvestAcceptanceCodec.encodeAcceptance(seal)));
                     entry.getValue().pending().ifPresent(pending -> {
                         var effect = new CompoundTag();
+                        effect.putLong("layoutRevision",pending.transition().layoutRevision());
                         writeCondition(effect, "before", pending.transition().before());
                         writeCondition(effect, "after", pending.transition().after());
                         effect.putString("mode", pending.transition().isHarvest() ? "HARVEST" : "DIRECT");
@@ -777,7 +785,7 @@ final class FrontierV3ResourceFieldWitness {
                 throw new IllegalStateException("pending field projection has an invalid tag type");
             if (value.contains("pending", Tag.TAG_COMPOUND)) {
                 var effect = value.getCompound("pending");
-                if (!effect.contains("completed", Tag.TAG_INT) || !effect.contains("mode", Tag.TAG_STRING)
+                if (!effect.contains("layoutRevision", Tag.TAG_LONG) || !effect.contains("completed", Tag.TAG_INT) || !effect.contains("mode", Tag.TAG_STRING)
                         || !effect.contains("steps", Tag.TAG_INT) || !effect.contains("cause", Tag.TAG_STRING)
                         || !effect.contains("handConfirmed", Tag.TAG_BYTE)
                         || !effect.contains("origin", Tag.TAG_STRING))
@@ -801,10 +809,10 @@ final class FrontierV3ResourceFieldWitness {
                 var after = readCondition(effect, "after");
                 ResourceFieldCellTransition transition = switch (effect.getString("mode")) {
                     case "DIRECT" -> ResourceFieldCellTransition.between(new SubjectId(tag.getString("site")),
-                            tag.getLong("epoch"), revision, id, before, after);
+                            tag.getLong("epoch"), effect.getLong("layoutRevision"), id, before, after);
                     case "HARVEST" -> {
                         var work = ResourceFieldCellTransition.harvest(new SubjectId(tag.getString("site")),
-                                tag.getLong("epoch"), revision, id, before);
+                                tag.getLong("epoch"), effect.getLong("layoutRevision"), id, before);
                         if (!work.after().equals(after))
                             throw new IllegalStateException("harvest field projection has a foreign terminal condition");
                         yield work;

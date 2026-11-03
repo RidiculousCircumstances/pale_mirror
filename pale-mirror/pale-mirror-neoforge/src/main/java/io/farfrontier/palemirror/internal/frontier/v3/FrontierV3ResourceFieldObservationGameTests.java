@@ -683,26 +683,34 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             helper.assertTrue(rejects(() -> predecessor.beginCanonicalProjection(accepted, transition,
                             "projection:growth-5", fabricatedBefore)),
                     "a caller-supplied lookalike condition is not a real loaded-world predecessor");
-            var pending = FrontierV3ResourceFieldWitness.read(predecessor.beginCanonicalProjection(accepted, transition,
+            var originalPending = FrontierV3ResourceFieldWitness.read(predecessor.beginCanonicalProjection(accepted, transition,
                     "projection:growth-5", physicalBefore).write());
-            var unchanged = FrontierV3ResourceFieldObservation.observe(level, target, pending, cell.id(), "native:growth-before");
+            var added=cell(2,soil.east(2));var ground=Map.of(added.id(),ResourceFieldCycle.Soil.GRASS);
+            var expanded=target.extended(layout.extend(List.of(added),3,ground),ground);
+            var successorAccepted=new FrontierCanonicalState<>(accepted.worldId(),new Revision(6),new SimInstant(6),expanded);
+            helper.assertTrue(originalPending.extensionReady(expanded),"disjoint new land must not block an already canonical projection");
+            var pending=FrontierV3ResourceFieldWitness.read(originalPending.extendDeclaration(expanded).write());
+            helper.assertTrue(pending.cell(cell.id()).pending().equals(originalPending.cell(cell.id()).pending())
+                    && pending.layoutRevision()==2 && pending.cell(cell.id()).pending().orElseThrow().transition().layoutRevision()==1,
+                    "extension retains the exact old cause and cursor; it never relabels a physical attempt");
+            var unchanged = FrontierV3ResourceFieldObservation.observe(level, expanded, pending, cell.id(), "native:growth-before");
             helper.assertTrue(unchanged.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
-                            && rejects(() -> pending.acknowledgeCanonicalProjection(accepted, cell.id(),
+                            && rejects(() -> pending.acknowledgeCanonicalProjection(successorAccepted, cell.id(),
                                     "projection:growth-5", unchanged)),
                     "canonical authority alone cannot confirm an unwritten physical growth step");
             level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 1), 3);
-            var afterWrite = FrontierV3ResourceFieldObservation.observe(level, target, pending, cell.id(), "native:growth-after");
+            var afterWrite = FrontierV3ResourceFieldObservation.observe(level, expanded, pending, cell.id(), "native:growth-after");
             var complete = FrontierV3ResourceFieldWitness.read(pending.confirm(cell.id(), afterWrite).write());
-            var current = FrontierV3ResourceFieldObservation.observe(level, target, complete, cell.id(), "native:growth-current");
+            var current = FrontierV3ResourceFieldObservation.observe(level, expanded, complete, cell.id(), "native:growth-current");
             var foreignWorld = new FrontierCanonicalState<>(new WorldId("frontier:other"),
                     accepted.revision(), accepted.instant(), target);
             helper.assertTrue(rejects(() -> complete.acknowledgeCanonicalProjection(foreignWorld, cell.id(),
                             "projection:growth-5", current))
-                            && rejects(() -> complete.acknowledgeCanonicalProjection(accepted, cell.id(),
+                            && rejects(() -> complete.acknowledgeCanonicalProjection(successorAccepted, cell.id(),
                                     "projection:other", current)),
                     "a foreign canonical world or cause cannot retire the retained physical projection");
             var acknowledged = FrontierV3ResourceFieldWitness.read(complete.acknowledgeCanonicalProjection(
-                    accepted, cell.id(), "projection:growth-5", current).write());
+                    successorAccepted, cell.id(), "projection:growth-5", current).write());
             helper.assertTrue(acknowledged.cell(cell.id()).pending().isEmpty()
                             && acknowledged.cell(cell.id()).committed().equals(transition.after()),
                     "same accepted canonical target and actual loaded block retire only this projection cause");
