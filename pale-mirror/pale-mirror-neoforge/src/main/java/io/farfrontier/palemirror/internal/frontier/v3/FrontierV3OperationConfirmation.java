@@ -191,6 +191,9 @@ final class FrontierV3OperationConfirmation {
     }
     private static void close(FrontierV3OperationLedger ledger, Durability durability, Canonical canonical,
             UUID ticket, FrontierV3OperationLedger.OwnerCommand command) {
+        if (ledger.require(ticket).declaration().protocol() == FrontierV3OperationReceipt.Protocol.NATIVE_OBSERVATION)
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_NATIVE_FACT_COMMITTED ticket={} owner={} type={}",
+                    ticket,ledger.require(ticket).declaration().owner().value(),command.consequence().type());
         ledger.closeOwner(ticket);
         if (ledger.require(ticket).retirable()) ledger.retire(ticket);
         durability.closed(() -> canonical.release(command.id())); // Failure keeps the receipt pinned.

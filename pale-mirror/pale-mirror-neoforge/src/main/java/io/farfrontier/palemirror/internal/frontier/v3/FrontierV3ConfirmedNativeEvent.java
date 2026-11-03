@@ -22,7 +22,9 @@ final class FrontierV3ConfirmedNativeEvent {
     }
     static void capture(ServerLevel level, SubjectId owner, FrontierPayload fact) {
         if(!level.getServer().isSameThread())throw new IllegalStateException("native fact outside its server thread");
-        var ledger=FrontierV3OperationLedger.get(level);record(ledger,owner,fact);ledger.persistAsync(level);
+        var ledger=FrontierV3OperationLedger.get(level);var operation=record(ledger,owner,fact);ledger.persistAsync(level);
+        io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_NATIVE_FACT_CAPTURED ticket={} owner={} type={} nativeTick={}",
+                operation.ticket(),owner.value(),fact.type(),level.getGameTime());
     }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<?,?> runtime) {
         var ledger=FrontierV3OperationLedger.get(level);
