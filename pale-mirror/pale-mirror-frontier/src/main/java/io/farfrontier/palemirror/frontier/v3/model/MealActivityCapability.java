@@ -99,8 +99,7 @@ final class MealActivityCapability implements ActorActivityCapability {
     };}
     public java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuationAfterResume(FrontierWorldState state,ActorExecutionId execution,long tick){
         validateReference(state,execution);var meal=state.humanPopulation().meals().get(execution.actorId());
-return java.util.List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(execution.actorId(),
-                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested(io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.progress(meal,tick+1))));
+        return java.util.List.of(io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.wake(meal, tick));
     }
     @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick) {
         validateReference(state,execution);var meal=state.humanPopulation().meals().get(execution.actorId());

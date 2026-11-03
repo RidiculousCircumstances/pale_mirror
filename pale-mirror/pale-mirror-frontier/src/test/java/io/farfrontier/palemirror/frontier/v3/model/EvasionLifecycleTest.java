@@ -53,7 +53,27 @@ class EvasionLifecycleTest {
         state=EvasionTransitions.apply(state,actor,new EvasionEvent.Ended(actor,episode.id(),episode.revision()),27102);
         assertEquals(ResidentActivityChoice.Kind.EAT,ResidentActivityCoordinator.assess(state,actor,27102).kind());
         var successor=state.actorExecutions().next(actor,ActorActivityKind.MEAL,meal.claimId());
-        state=ActorExecutionComposition.LIFECYCLE.prepareResume(state,meal.executionId(),successor,Optional.empty(),27102).commit(state,FrontierWorldStateUpdate.begin());
+        var planned=io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.plan(state,
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(actor,27102),27102);
+        var continuations=new ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect>();
+        int eventNumber=0;
+        for(var proposed:planned){
+            if(proposed.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect effect){
+                FrontierWorldStateTransitionValidator.INSTANCE.validateScheduleEffect(state,proposed.subject(),effect);
+                continuations.add(effect);
+            }else{
+                var id=new CommandId("command:resume-meal-"+(++eventNumber));
+                state=io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.reduce(state,
+                    new FrontierEvent(1,new EventId("event:resume-meal-"+eventNumber),new TransactionId("transaction:resume-meal"),
+                        state.bootstrap().worldId(),new Revision(eventNumber),new SimInstant(27102),proposed.subject(),CauseChain.root(id),proposed.payload()));
+            }
+        }
+        var continuation=continuations.stream().filter(effect->effect instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled rescheduled
+                && rescheduled.scheduleId().equals(meal.progressScheduleId())).findFirst().orElseThrow();
+        var resumed=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,continuation);
+        assertEquals(ResidentMealProcess.progress(state.humanPopulation().meals().get(actor),27103),resumed.replacement());
+        assertThrows(IllegalArgumentException.class,()->io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.requireReconsideration(resumed.replacement()),
+                "an exact meal continuation must remain forbidden as a coalescible policy hint");
         assertEquals(successor,state.humanPopulation().meals().get(actor).executionId());
         assertEquals(meal.progressScheduleId(),state.humanPopulation().meals().get(actor).progressScheduleId());
         assertEquals(meal.portion(),state.humanPopulation().meals().get(actor).portion());assertEquals(inventory,state.inventory());

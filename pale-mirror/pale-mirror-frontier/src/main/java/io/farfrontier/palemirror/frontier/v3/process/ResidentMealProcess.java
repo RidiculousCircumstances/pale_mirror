@@ -60,6 +60,12 @@ public final class ResidentMealProcess {
                 new SimInstant(dueAt), 12, meal.residentId(), PROGRESS, 1);
     }
 
+    /** Resume the retained exact continuation, not a coalescible policy review. */
+    public static ProposedEvent wake(ResidentMeal meal, long atTick) {
+        var action = progress(meal, Math.addExact(atTick, 1L));
+        return new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), action));
+    }
+
     /** HOT or an unresolved physical hand owns the meal; no COLD retry is useful. */
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         if (!PROGRESS.equals(action.kind())) return false;
