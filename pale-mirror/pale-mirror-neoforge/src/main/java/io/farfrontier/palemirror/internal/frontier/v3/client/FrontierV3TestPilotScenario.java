@@ -199,6 +199,8 @@ final class FrontierV3TestPilotScenario {
     }
 
     private static boolean validCombatObservation(JsonObject action){
+        if(action.has("requiredModelRig") && (!action.get("requiredModelRig").isJsonPrimitive()
+                || !Set.of("human_era", "vanilla_articulated").contains(action.get("requiredModelRig").getAsString())))return false;
         if(action.has("observerCircuit")){
             if(!action.get("observerCircuit").isJsonArray() || action.getAsJsonArray("observerCircuit").size()!=4)return false;
             for(var value:action.getAsJsonArray("observerCircuit")){

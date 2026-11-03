@@ -188,6 +188,9 @@ dependencies {
     compileOnly 'info.journeymap:journeymap-api-neoforge:2.0.0-1.21.1'
     // Exact optional server API. DH itself is supplied by the private pack and is never shaded into PM.
     compileOnly 'maven.modrinth:uCdwusMi:3.2.0-b-1.21.1'
+    // Optional client model adapter only; resource packs and EMF/ETF are supplied by the client pack.
+    compileOnly 'maven.modrinth:entity-model-features:197m3VoU'
+    compileOnly 'maven.modrinth:entitytexturefeatures:lwNx1nD1'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     // Minecraft supplies Gson at runtime; unit tests execute outside its launch classpath.

@@ -7,8 +7,8 @@ import net.minecraft.client.model.geom.builders.*;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.npc.Villager;
 
-/** Vanilla body/profession layers with articulated arms only for an explicit server combat cue. */
-final class CombatVillagerModel extends VillagerModel<Villager> implements ArmedModel {
+/** Vanilla fallback with articulated arms for held items and explicit server combat cues. */
+final class CombatVillagerModel extends VillagerModel<Villager> implements ArmedModel,ResidentPoseRig {
     private final ModelPart right,left,rightForearm,leftForearm,folded,body;
     private boolean combat;
     CombatVillagerModel(ModelPart root){
@@ -30,21 +30,16 @@ final class CombatVillagerModel extends VillagerModel<Villager> implements Armed
     @Override public void setupAnim(Villager actor,float swing,float amount,float age,float yaw,float pitch){
         root().getAllParts().forEach(ModelPart::resetPose);
         super.setupAnim(actor,swing,amount,age,yaw,pitch);
-        var frame=PaleMirrorCombatClient.frame(actor,age-actor.tickCount);combat=frame!=null;
+        combat=ResidentVisuals.apply(actor,age-actor.tickCount,this);
         right.visible=combat;left.visible=combat;folded.visible=!combat;
-        if(!combat)return;
-        float nativeYaw=net.minecraft.util.Mth.rotLerp(age-actor.tickCount,actor.yBodyRotO,actor.yBodyRot);
-        getHead().yRot=net.minecraft.util.Mth.clamp(net.minecraft.util.Mth.wrapDegrees(frame.payload().facingYaw()-MeleeAnimation.facingYaw(frame,nativeYaw)),-60,60)*(float)Math.PI/180;
-        getHead().xRot=frame.payload().facingPitch()*(float)Math.PI/180;
-        var pose=MeleeAnimation.sample(frame);boolean rightHand=actor.getMainArm()==HumanoidArm.RIGHT;
-        var weapon=rightHand?right:left;var forearm=rightHand?rightForearm:leftForearm;var off=rightHand?left:right;
-        float mirror=rightHand?1:-1;
-        weapon.xRot=pose.shoulder();weapon.yRot=mirror*pose.yaw();weapon.zRot=mirror*pose.roll();forearm.xRot=pose.elbow();
-        off.xRot=-0.7f;off.zRot=-mirror*0.25f;(rightHand?leftForearm:rightForearm).xRot=-0.6f;
-        body.yRot=mirror*pose.torso();body.xRot=pose.lean();
-        weapon.z-=2*pose.lean();off.z-=2*pose.lean();
-        PaleMirrorCombatClient.rendered(actor,frame,pose.shoulder(),pose.elbow());
+        ResidentVisuals.rendered(actor,"vanilla_articulated");
     }
+    public void arm(HumanoidArm side,float shoulder,float elbow,float yaw,float roll){
+        var arm=side==HumanoidArm.RIGHT?right:left;var forearm=side==HumanoidArm.RIGHT?rightForearm:leftForearm;
+        arm.xRot=shoulder;arm.yRot=yaw;arm.zRot=roll;forearm.xRot=elbow;
+    }
+    public void torso(float yaw,float lean){body.yRot=yaw;body.xRot=lean;right.z-=2*lean;left.z-=2*lean;}
+    public void look(float yaw,float pitch){getHead().yRot=yaw;getHead().xRot=pitch;}
     @Override public void translateToHand(HumanoidArm arm,PoseStack poses){
         (arm==HumanoidArm.RIGHT?right:left).translateAndRotate(poses);
         (arm==HumanoidArm.RIGHT?rightForearm:leftForearm).translateAndRotate(poses);

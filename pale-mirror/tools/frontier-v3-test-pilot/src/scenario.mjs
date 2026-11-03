@@ -288,6 +288,7 @@ export function validateScenario(scenario) {
           || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:') && !requiredId(action.workerId, 'actor:'))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.anchor !== undefined && !validPosition(action.anchor))
+          || (action.requiredModelRig !== undefined && !['human_era', 'vanilla_articulated'].includes(action.requiredModelRig))
           || (action.requiredCombatAttacks !== undefined && (!Array.isArray(action.requiredCombatAttacks)
             || action.requiredCombatAttacks.length < 1 || action.requiredCombatAttacks.length > 4
             || new Set(action.requiredCombatAttacks).size !== action.requiredCombatAttacks.length

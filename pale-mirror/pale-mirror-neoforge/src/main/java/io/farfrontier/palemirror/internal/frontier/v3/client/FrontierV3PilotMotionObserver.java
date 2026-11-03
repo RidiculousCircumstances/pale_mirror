@@ -78,7 +78,7 @@ final class FrontierV3PilotMotionObserver {
             }
             return false;
         }
-        if(action.has("requiredCombatAttacks") || action.has("observerCircuit"))FrontierV3TestPilotClient.look(minecraft,body.getEyePosition());
+        if(action.has("requiredCombatAttacks") || action.has("observerCircuit") || action.has("requiredModelRig"))FrontierV3TestPilotClient.look(minecraft,body.getEyePosition());
         if(action.has("observerCircuit"))circuit(minecraft,action);
         if (entityRuntimeId < 0) { entityRuntimeId = body.getId(); samples = new ArrayList<>(); sampledTicks = new HashSet<>(); }
         int interval = action.get("sampleEveryTicks").getAsInt();
@@ -116,13 +116,23 @@ final class FrontierV3PilotMotionObserver {
             Vec3 authoritative = authoritativePosition(action);
             samples.add(new Pose(clientTick, gameTime, body.getX(), body.getY(), body.getZ(), velocity.x, velocity.z,
                     authoritative == null ? null : authoritative.x, authoritative == null ? null : authoritative.z,
-                    workAnimation, semanticPhase(action, body.getId()),io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body)));
+                    workAnimation, semanticPhase(action, body.getId()),
+                    body instanceof net.minecraft.world.entity.npc.Villager resident
+                        ? io.farfrontier.palemirror.internal.client.ResidentVisuals.renderedRig(resident) : "unobserved",
+                    io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body)));
         }
         if (clientTick < action.get("durationTicks").getAsLong()) return false;
         try{
             if(action.has("observerCircuit") && circuitDistance<16)throw new IllegalStateException("player did not actually traverse the declared pursuit circuit: "+circuitDistance);
-            requireCombat(action);emit(action, expectedType, interval, actionStep, milestone);return true;
+            requireModelRig(action);requireCombat(action);emit(action, expectedType, interval, actionStep, milestone);return true;
         }finally{releaseCircuit();}
+    }
+
+    private static void requireModelRig(JsonObject action) {
+        if (!action.has("requiredModelRig")) return;
+        String expected = action.get("requiredModelRig").getAsString();
+        long observed = samples.stream().filter(sample -> expected.equals(sample.rig())).count();
+        if (observed < 3) throw new IllegalStateException("Required resident rig was not actually rendered: " + expected);
     }
 
     /** Optional combat assertion consumes the same actually rendered bounded pose series. */
@@ -269,7 +279,7 @@ final class FrontierV3PilotMotionObserver {
             if(pose.combat()!=null){var combat=pose.combat();var rendered=new JsonObject();rendered.addProperty("attack",combat.attack());
                 rendered.addProperty("attempt",combat.attempt());rendered.addProperty("age",combat.age());rendered.addProperty("preparation",combat.preparation());
                 rendered.addProperty("shoulder",combat.shoulder());rendered.addProperty("elbow",combat.elbow());sample.add("combat",rendered);}
-            sample.addProperty("semanticPhase", pose.semanticPhase()); values.add(sample); }
+            sample.addProperty("modelRig", pose.rig()); sample.addProperty("semanticPhase", pose.semanticPhase()); values.add(sample); }
         value.add("samples", values); FrontierV3PilotSessionControl.stampDiagnostic(value, actionStep, milestone);
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
     }
@@ -278,5 +288,5 @@ final class FrontierV3PilotMotionObserver {
         return minecraft.level == null || entityRuntimeId < 0 ? null : minecraft.level.getEntity(entityRuntimeId);
     }
     private record Pose(long tick, long serverTick, double x, double y, double z, double velocityX, double velocityZ,
-                        Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase,io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.Rendered combat) { }
+                        Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase, String rig,io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.Rendered combat) { }
 }
