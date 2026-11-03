@@ -1,100 +1,133 @@
 # Active continuity — 2026-11-03
 
-## Assignment / authority
-User accepted melee improvements1/2/4 and distinct short-strike/lunge animations;
-implement, verify, commit and deploy. Main alone, no subagents/API goal/push.
-Standing authority permits fresh disposable worlds, verified publication/deploy.
-Canonical protocol docs/engineering-agent-protocol.md. No full-pack human/M3 claim.
+## Assignment and result
 
-## Current result
-Source COMMITTED8aad1392042d17f88a156e041b3ee6df2a74c828 in IMPL
-/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror, branch
-feat/baker-carry-orders-20260926, CLEAN. Accepted mechanics implemented:
-QUICK preparation4ticks vs LUNGE10; opportunity allowance does not extend actual
-weapon reach. Exact same INTERCEPT movement may continue during preparation;
-no teleport/second actuator. Recovery delays the next strike without stopping
-pursuit. Only current role permission, exact body/weapon/target incarnation,
-LOS/reach and finite native hit window permit journaled damage. Dead pending
-actor cannot resume movement; pending effect cannot reselect a mission.
-Client payload/cache and original articulated vanilla Villager model animate
-arm/elbow/sword/torso, retract cancellation and show remaining cue on tracking.
-Visual focus yaw is independent of physical navigation heading. Server entities
-and UUIDs stay Villagers. No new animation dependency; client update required.
-Schema322 intentionally needs a fresh MAIN world. Durable design and verification:
-docs/frontier-v3-melee-techniques-20261102.md. Earlier unrelated fixes/cause record:
-docs/frontier-v3-security-hot-findings-20261102.md.
+CURRENT task COMPLETE and DEPLOYED: shared combat BURST/BACKSTEP, native
+animation cues and user-reported multi-guard circling hesitation. Sole main
+executor; no agents, no push, no goal. No further work implicitly scheduled.
+User standing commit/deploy and disposable-world authority remain. Next user
+message may steer manual testing; do not restart this completed campaign.
+Durable design, findings, actual accepted evidence and invalid intermediate
+carriers: docs/frontier-v3-combat-maneuvers-20261103.md.
 
-## Verification / reuse
-Full integration PASS8m47s: Frontier2270, NeoForge900, native GameTests416,
-guardrails/check/build/package; receipt IMPL/build/melee-techniques/integration.json,
-/tmp/pm-melee-integration.log. Subsequent scoped combat/death/pending movement,
-client/animation/parser checks PASS; logs /tmp/pm-melee-{preparation-finish,
-final-pose}.log. Domain324/Visuals79 unchanged evidence reused, not rerun.
-Node scenario56 PASS /tmp/pm-melee-scenario-node.log.
-Final exact native JAR SHA25608e7adc39971b2cd382a4195fe58109ba9de3aca598555998b516fceaa0a8f3e,
-identity build/melee-techniques/prepared-final-native.json. Checked-in
-live-melee-techniques.json PASS16/16 (live-before5.json): ordinary real player
-harm/shared response, actual rendered QUICK/LUNGE and actual prep movement,
-escape during preparation causes no additional damage, terminal cleared response.
-Normal saved stop00:40:28 then SAME-world restart:
-live-melee-hostility-recovery.json PASS4/4 (live-recovery.json), remembered player
-was actually hit without a new offence, then escaped and response cleared.
-Actual frames-final5/0011 raised short strike and0124 lunge plus neighbouring
-frames reviewed; recovery manifest links its real frame. Task20FPS graphical
-client on private Xvfb, not full-pack HUMAN_CANDIDATE. All task-native clients,
-private display/server and25583/4 STOPPED normally, no save CME.
-Seed41/schema322 native world retained at IMPL/pale-mirror-neoforge/build/runs/
-frontier-v3-pilot-server/v3-disposable_melee_tactics_restart-e6d9768f.
-Original aggregate/followups remain FAILED: inside-head/lost camera, early
-sampling or over-specified PRESERVED reserve while guards ate. Current observer
-follows actual rendered actor and waits preparation; no canonical fixture edits.
-Logs showed restored moving bodies, not proof of a separate body/meal defect.
+Source commits: adb13df4b preserves pending field projection causes across
+same-epoch append-only extensions; 9ae557ddff61171f64589f6b9ae167844ede2f2a adds
+shared maneuvers/stable pursuit and includes that field fix. Both source trees
+below are CLEAN; no uncommitted implementation. Previous8aad/schema322 delivery
+is superseded, retained worlds/history untouched.
 
-## Completed release / delivery
-RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror is CLEAN detached8aad.
-Release guardrails/build/verifyPackagedJar PASS2m37s, all900 NeoForge tests0
-failures, log /tmp/pm-melee-release.log. Unchanged SourceGraybox first-year seed
-check accounts for most of that release test time; no repeat needed.
-Native and release6445class files byte-identical; only artifact difference is
-META-INF/pale-mirror-runtime-identity.properties. Exact reuse/verification receipts
-IMPL/build/melee-techniques/{release-class-reuse,verified-release}.json.
-Release JAR SHA2568dd120f46365265f8c33806a85f93a9c71b5242c00bcf8b5e71b01979572175f.
-Root publisher validated all158 Packwiz inputs, published required PM and
-unchanged Visuals; public hosted checksum matches. Hosted outputs are ignored,
-so PACK has no tracked change to commit. No automatic push.
-MAIN normally stopped00:46:00 with all dimensions saved/operations0; installed
-exact pinned artifact through shared root installer. Fresh selected world
-melee-techniques-schema322-seed135-20261103 with rootr31/agricultural_flat pack.
-Root preflight and deploy-verify PASS; no world/history deletion required.
-/tmp/pm-melee-{preflight-final,deploy-verify}.log; actual runtime health green.
-No remaining work for the accepted scope. User must update client for animation.
+## Decisions and fixes
 
-## Repositories / preserve WIP
-PACK /home/rd/proj/minecraft HEADf72713382957 trackedCLEAN, preserve existing
-untracked .f0v-baseline/. Hosted publication complete; tracked pack unchanged. RELEASE clean as above.
-Governance HEADf2d41157b has extensive unrelated WIP. Only own CONTINUITY.md,
-docs/frontier-v3-melee-techniques-20261102.md and architecture key
-melee_techniques_boundary may be committed. Partial-stage architecture as HEAD
-plus only this key; never bulk-stage/discard others. Earlier native return-fence
-threading fix is already source history, not new scope.
+CombatState alone retains exact execution/body/weapon/target, fixed safe
+maneuver destination, bounded preparation/travel/recovery and cooldowns.
+Roles supply permission, geometry knowledge and confirmed harm through
+CombatCapability. Registered COMBAT_MANEUVER uses existing ActorMovement/UAE,
+shared navigator/courtesy; no teleport, invulnerability, extra reach or COLD
+combat travel. BURST requests2.2x role combat pace over<=3blocks; BACKSTEP1.5x
+over1block. Policy4prep/20maxtravel/6recovery, cooldown100/60/shared40 ticks.
+Distinct BURST/BACKSTEP client gestures reuse existing bounded articulated
+Villager renderer; network2 requires client update. Schema323/fresh world.
 
-## MAIN runtime (verified)
-RUNNING /home/rd/far-frontier-server, far-frontier-v3-live.service. Wrapper3929406,
-Java22PID3929432,25565/RCON25575, source8aad13920. Start1793648795.
-Fresh schema322 world melee-techniques-schema322-seed135-20261103, seed135/r31.
-SHA2568dd120f46365265f8c33806a85f93a9c71b5242c00bcf8b5e71b01979572175f;
-SHA51213a91831d6486a4d19da5788fe5bbc176bf3359fa2601981ec6989094c387a2f01b0e3530e97eff7193e142e2436fe183956bf5c6273aad15768eff9618176e1.
-Actual inspect summaryrevision965/tick384 green, required/inventory conflicts0,
-12settlements/356residents. IMPL/build/melee-techniques/deployed-summary.txt.
-Earlier old321 world remains untouched, no backwards compatibility claim.
-RCON helper IMPL/build/forestry-native/query-runtime.mjs silently reads properties;
-never print credentials. Normal stop must confirm all saved dimensions and actual
-PID/ports exit. Transient service disappears on stop; recreate via systemd-run
---user --unit=far-frontier-v3-live --collect
---working-directory=/home/rd/far-frontier-server
-/home/rd/far-frontier-server/scripts/run-server-java22.sh.
-JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2;
+GuardResponse previously invalidated a valid melee station whenever the same
+player changed target cell. Same-opponent/execution continuity now preserves
+otherwise legal/free/current station/sector; real reach/space/permission loss
+still reselects. Only an OPEN maneuver owns movement; closed recovery gates the
+next attack/maneuver, never ordinary pursuit. Closed exact attempt remains
+historical cooldown across same-owner role resumption, without granting old
+body actuation. Role-approved reversible patrol/search interruption is distinct
+from INTERCEPT-only strike permission. Optional unattempted proposals expose
+policy refusal; witnessed physical effects keep mandatory receipt assertions.
+
+Shared native actor observer consumes immutable HOT goal/order deltas to wake
+its existing fair lane; equal order/position/COLD changes do not churn. A native
+supported-origin observation is maneuver planning input only; common inspection
+remains sole canonical ActorLocation writer. Outside-world/engagement origin
+refuses optional admission before transition. No await-every-pose starvation.
+
+Unrelated native field crash fixed: appended land preserves exact old
+canonical-first pending causes/history. Physical-first labour/epoch changes
+still settle before append. Field witness12 explicitly persists each pending
+layoutRevision, rejecting missing identity; no relabelling or legacy fallback.
+No economic rate, crop yield or staffing balance change.
+
+## Verification and actual native evidence
+
+Initial full integration PASS9m03, guardrails/check/build/package/all416required
+GameTests: /tmp/pm-maneuvers-integration.log. Subsequent affected corrections:
+23field GameTests PASS /tmp/pm-maneuvers-field-extension-final.log; missing
+pending layout identity negative PASS /tmp/pm-maneuvers-field-identity.log;
+combat/authority/navigation/probe/animation/parser scoped PASS26s
+/tmp/pm-maneuvers-observed-origin-final.log; outside-origin admission negative
+and architecture PASS16s /tmp/pm-maneuvers-origin-permission.log. Node56PASS
+/tmp/pm-maneuvers-node-final.log. Unchanged broader Frontier/domain/visuals
+coverage reused, no blanket fresh rerun claim.
+
+IMPL build/melee-maneuvers/final-field12-native.json PASS13/13: real ordinary
+player harm, admitted BACKSTEP>=.5block and BURST>=1.5block same-cue actual
+motion,240tick circuits, escaped target causes no extra damage, terminalclear.
+Both guard traces move; coarse wall-second distant stationary interval<=1sec.
+334actual JPGs/correctly centred contact sheet reviewed. Later only production
+change is outside-origin refusal; this inside-envelope BACKSTEP path unchanged.
+
+Final exact candidate prepared-final-pursuit-valid.json nativeJAR SHA256
+1c9b4b5749f1c64c30e10eab0aec1c5fc83afe27c8d0b5c156e9399245d02087:
+final-live-pursuit.json PASS13/13 actualBURST/circling/two-guard responseclear.
+Saved SAME-world stop10:42:47/all dimensions on
+v3-disposable_combat_maneuvers-905b9072, fresh JVM then
+final-live-recovery.json PASS4/4 remembered-hostile real hit without new offence,
+escape/terminalclear. Frame reviewed. Final normal save10:44:07, all dimensions,
+private clients/server/Xvfb and25583/4 STOPPED. No monitoring remains running.
+Lite20FPS Xvfb evidence is not full-pack HUMAN_CANDIDATE/M3.
+
+Failed intermediate17carrier remains FAILED: route PLANNING legitimately
+prevented optional retreat before an ordinary strike; invalid oracle demanded
+a maneuver after every hit. Checked-in carriers now inspect optional reaction,
+still require actualBURST/circling/clear; disposable17 declares normal restart
+with existing4recovery actions. Accepted final evidence is the actual two live
+saved-world runs above, not a relabelled failed aggregate. Earlier standalone
+restart used a successful runner's already-deleted world and created an empty
+overworld; harness setup failure, superseded by actual retained-world recovery.
+No canonical/WAL/body edits manufactured any native outcome.
+
+## Repositories and release
+
+IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror, branch
+feat/baker-carry-orders-20260926, HEAD9ae557ddf CLEAN.
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same ref.
+Release guardrails/build/verifyPackagedJar PASS2m38s, all902NeoForge tests0fail,
+/tmp/pm-maneuvers-release.log. All6460class files/resources equal final native
+JAR; only META-INF/pale-mirror-runtime-identity.properties differs. Receipts
+IMPL/build/melee-maneuvers/{release-class-reuse,verified-source}.json.
+
+Release SHA25611bd5849de8edd0fbe1e81d99987765eab82871b08763b6b46a1d50de22fc508.
+SHA512412b3d39ba1af6d84ad4262dcf5965b53a51c8f1eb03f2beb81af67eecedb4cf303bde7353ad7df4e7c5be63a0c0fa254e43c1bced53000692fc31410fecfe4f.
+PACK /home/rd/proj/minecraft HEADf72713382957 trackedCLEAN; pre-existing untracked
+.f0v-baseline/ preserved. Publisher verified158Packwiz inputs and published exact
+PM plus unchangedVisuals. Hosted outputs ignored, no root change/empty commit.
+Governance has extensive unrelated WIP: commit only own CONTINUITY.md,
+docs/frontier-v3-combat-maneuvers-20261103.md and combat_maneuvers_boundary key.
+Architecture index staged as HEAD+only that key; working unrelated keys preserved.
+
+## MAIN runtime — actual verified delivery
+
+Old MAIN normally saved/stopped10:47:43, all dimensions. Installed exact
+checksum-pinned JAR through shared root installer; no history/world deletion.
+Fresh world combat-maneuvers-schema323-seed136-20261103, seed136, rootr31
+agricultural_flat datapack installed before start. Started epoch1793684886,
+far-frontier-v3-live.service wrapper1972464/Java22PID1972488,25565/RCON25575.
+Root old/new preflight and deploy-verify PASS:
+/tmp/pm-maneuvers-{preflight-old,preflight-new,deploy-verify}.log.
+Actual inspect summary revision743/tick269 statusok, required/inventory conflicts0,
+12settlements/328residents; IMPL/build/melee-maneuvers/deployed-summary.txt.
+Client update required; no full-pack graphical promotion claimed.
+
+Build JDK21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2;
 runtime22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
 Artifact host127.0.0.1:18092 serves RELEASE/pale-mirror-neoforge/build/libs.
-Detached Gradle catalogue property points to
-/home/rd/proj/minecraft/config/graybox-disabled-mods.txt.
+Detached build property frontierV3GrayboxDisabledModsCatalog points to root
+config/graybox-disabled-mods.txt. RCON helper IMPL/build/forestry-native/
+query-runtime.mjs silently reads properties; never print credentials. MAIN
+transient service disappears on stop; recreate via systemd-run --user
+--unit=far-frontier-v3-live --collect --working-directory=/home/rd/far-frontier-server
+/home/rd/far-frontier-server/scripts/run-server-java22.sh. Always require normal
+saved dimensions and actual PID/port exit before reset/replacement.
