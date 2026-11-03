@@ -199,14 +199,24 @@ final class FrontierV3TestPilotScenario {
     }
 
     private static boolean validCombatObservation(JsonObject action){
+        if(action.has("observerCircuit")){
+            if(!action.get("observerCircuit").isJsonArray() || action.getAsJsonArray("observerCircuit").size()!=4)return false;
+            for(var value:action.getAsJsonArray("observerCircuit")){
+                if(!value.isJsonObject())return false;var point=value.getAsJsonObject();
+                if(!point.has("x") || !point.has("z") || !point.get("x").isJsonPrimitive() || !point.get("z").isJsonPrimitive())return false;
+                double x=point.get("x").getAsDouble(),z=point.get("z").getAsDouble();if(!Double.isFinite(x) || !Double.isFinite(z) || Math.abs(x)>8 || Math.abs(z)>8)return false;
+            }
+        }
+        if(action.has("requireManeuverMotion") && (!action.has("requiredCombatAttacks") || !action.get("requireManeuverMotion").isJsonPrimitive()
+                || !action.get("requireManeuverMotion").getAsJsonPrimitive().isBoolean()))return false;
         if(action.has("requireWindupMotion") && (!action.has("requiredCombatAttacks") || !action.get("requireWindupMotion").isJsonPrimitive()
                 || !action.get("requireWindupMotion").getAsJsonPrimitive().isBoolean()))return false;
         if(!action.has("requiredCombatAttacks"))return true;
         if(!action.get("requiredCombatAttacks").isJsonArray() || action.getAsJsonArray("requiredCombatAttacks").size()<1
-                || action.getAsJsonArray("requiredCombatAttacks").size()>2)return false;
+                || action.getAsJsonArray("requiredCombatAttacks").size()>4)return false;
         var values=new java.util.HashSet<String>();
         for(var value:action.getAsJsonArray("requiredCombatAttacks"))if(!value.isJsonPrimitive()
-                || !Set.of("QUICK","LUNGE").contains(value.getAsString()) || !values.add(value.getAsString()))return false;
+                || !Set.of("QUICK","LUNGE","BURST","BACKSTEP").contains(value.getAsString()) || !values.add(value.getAsString()))return false;
         return true;
     }
 
@@ -366,7 +376,8 @@ final class FrontierV3TestPilotScenario {
         return action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
                 && validEntityName(action.get("nameContains")) && validWorkerSelector(action)
-                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D);
+                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
+                && boundedOptionalNumber(action,"standOff",0,2);
     }
 
     /** A bounded ordinary right-click on one already-rendered semantic board. */

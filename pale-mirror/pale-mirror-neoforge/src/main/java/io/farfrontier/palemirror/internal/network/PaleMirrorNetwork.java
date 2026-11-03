@@ -17,7 +17,7 @@ public final class PaleMirrorNetwork {
     private PaleMirrorNetwork() { }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("1");
+        var registrar = event.registrar("2");
         registrar.playToClient(CombatGesturePayload.TYPE,CombatGesturePayload.STREAM_CODEC,PaleMirrorNetwork::receiveCombatGesture);
         registrar.playToClient(AtlasSnapshotPayload.TYPE, AtlasSnapshotPayload.STREAM_CODEC,
                 PaleMirrorNetwork::receiveSnapshot);

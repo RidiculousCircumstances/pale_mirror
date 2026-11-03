@@ -18,6 +18,11 @@ final class FrontierV3CommandSubmission {
         return requireNotRejected(submitResult(runtime, phase, id, payload));
     }
 
+    /** Optional, unattempted intent. Policy refusal is an admission result, never a physical receipt failure. */
+    static CommandResult propose(FrontierV3ServerRuntime<?, ?> runtime,String phase,String id,FrontierPayload payload){
+        return submitRaw(runtime,phase,id,payload,Optional.empty());
+    }
+
     /** A witnessed non-replayable effect must retain a rejected receipt as a local ambiguity. */
     static CommandResult submitResult(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload) {
         return submitRaw(runtime, phase, id, payload, Optional.empty());

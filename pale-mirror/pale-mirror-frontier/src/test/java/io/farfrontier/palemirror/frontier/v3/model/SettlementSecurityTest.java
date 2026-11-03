@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.security.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
@@ -41,6 +42,69 @@ class SettlementSecurityTest {
         for(var duty:GuardEquipment.in(state,home))if(GuardEquipment.held(state,duty))combat=combat.observed(new CombatState.Armament(
                 duty.execution(),duty.weapon(),new WeaponProfile(state.inventory().items().get(duty.weapon()).itemKind(),6,13,3,1)));
         return state.withChanges(FrontierWorldStateUpdate.begin().combat(combat));
+    }
+    @Test void maneuverKeepsItsExactGoalThroughSnapshotAndOnlyClosesAfterSharedMovementReleases(){
+        var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
+        var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
+        var m=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.BACKSTEP,order.actorPosition().offset(-1,0,0),21001);
+        state=apply(state,m.owner(),new CombatEvent.ManeuverSelected(m),21001);
+        var snapshot=new FrontierWorldStateCodec();state=snapshot.decode(snapshot.encode(state));assertEquals(m,state.combat().maneuvers().get(m.owner()));
+        var preparing=state;assertThrows(IllegalArgumentException.class,()->apply(preparing,m.owner(),new CombatEvent.ManeuverLaunched(r.body(),m.attemptOrdinal()),21002));
+        state=apply(state,m.owner(),new CombatEvent.ManeuverLaunched(r.body(),m.attemptOrdinal()),21005);
+        var events=GuardWorkProcess.progress(state,GuardContinuation.progress(m.owner(),21005),21005);
+        var start=events.stream().map(ProposedEvent::payload).filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::isInstance)
+            .map(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::cast).findFirst().orElseThrow();
+        state=ActorMovementProcess.reduceStarted(state,r.body().execution().actorId(),start);var move=start.movement();
+        assertEquals(m.order(),move.order());assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.Provider.COMBAT_MANEUVER,move.context().provider());
+        var permission=ActorMovementProviders.require(move).movementPermission(state,move,order.actorPosition(),21005,ActorPositionView.canonical(state,21005));
+        assertTrue(permission.allowed());assertTrue(permission.pace().orElseThrow().blocksPerTick()>ActorExecutionComposition.CAPABILITIES.require(r.body().execution().activityKind()).navigationPace(state,
+            r.body().execution()).orElseThrow().blocksPerTick());
+        var unloaded=ActorBodyAuthority.released(state,r.body().body());
+        var provider=ActorMovementProviders.require(move);
+        assertFalse(provider.movementPermission(unloaded,move,order.actorPosition(),21006,ActorPositionView.canonical(unloaded,21006)).allowed());
+        assertEquals(List.of(order.actorPosition()),provider.nextSegment(unloaded,move,order.actorPosition()),"no COLD search or travel is admitted for a physical maneuver");
+        assertTrue(GuardWorkProcess.progress(unloaded,GuardContinuation.progress(m.owner(),21006),21006).stream().anyMatch(e->e.payload() instanceof CombatEvent.ManeuverClosed));
+        var replacement=ActorBodyAuthority.demand(unloaded,r.body().execution().actorId());
+        replacement=ActorBodyAuthority.running(replacement,ActorBodyAuthority.current(replacement,r.body().execution().actorId()));
+        assertFalse(provider.movementPermission(replacement,move,order.actorPosition(),21006,ActorPositionView.canonical(replacement,21006)).allowed(),"a successor physical epoch cannot execute the old burst");
+        var moving=state;assertThrows(IllegalArgumentException.class,()->apply(moving,m.owner(),new CombatEvent.ManeuverClosed(m.owner(),m.attemptOrdinal()),21006));
+        var interruption=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted(r.body().execution().actorId(),1,21006,order.actorPosition().standingBody(),r.body().execution());
+        var fact=new FrontierEvent(FrontierEvent.SCHEMA_VERSION,new EventId("test:maneuver-interruption"),new TransactionId("test:maneuver-interruption"),state.bootstrap().worldId(),Revision.ZERO,
+            new SimInstant(21006),r.body().execution().actorId(),CauseChain.root(new CommandId("test:maneuver")),interruption);
+        state=FrontierWorldProcessCatalog.reduce("actor-movement",state,fact);
+        state=apply(state,m.owner(),new CombatEvent.ManeuverClosed(m.owner(),m.attemptOrdinal()),21006);
+        assertFalse(state.combat().maneuvers().get(m.owner()).open());assertFalse(state.combat().maneuvers().get(m.owner()).ready(MeleeManeuver.Kind.BACKSTEP,21020));
+        assertTrue(state.combat().maneuvers().get(m.owner()).ready(MeleeManeuver.Kind.BACKSTEP,21101));
+        assertTrue(state.combat().retired(m.owner()).maneuvers().isEmpty());
+    }
+    @Test void maneuverUsesTheExactNativePlanningOriginWithoutPublishingACompetingBodyPosition(){
+        var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
+        var actor=r.duty().execution().actorId();var observed=state.actorLocations().get(actor).supportingSurface();
+        state=state.withActorBody(actor,observed.offset(30,0,0).standingBody());var prior=state.actorLocations().get(actor);
+        var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow().atActorObservation(observed);
+        var m=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.BACKSTEP,observed.offset(-1,0,0),21001);
+        var selected=apply(state,m.owner(),new CombatEvent.ManeuverSelected(m),21001);
+        assertEquals(observed,selected.combat().maneuvers().get(m.owner()).origin());
+        assertEquals(prior,selected.actorLocations().get(actor),"combat selects a goal without publishing a body position");
+        var outside=new SurfaceAnchor(new BlockPosition(state.bootstrap().bounds().minX()+state.bootstrap().bounds().width()+100,observed.y(),observed.z()));
+        var commandId=new CommandId("test:outside-maneuver");
+        var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,commandId,state.bootstrap().worldId(),Revision.ZERO,
+            new SimInstant(21001),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(commandId),
+            new CombatEvent.ManeuverRequested(r.body(),order.target(),outside,new MeleeManeuvers.Facts(1,0)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("combat",state,command),"knockback outside the engagement refuses the optional intent before transition/replay");
+    }
+    @Test void movementOfTheSameTargetWithinReachDoesNotCancelAnOtherwiseValidApproach(){
+        var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
+        var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor().offset(3,0,0),0,0,GuardMission.Stage.PATROL);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),21001);
+        var duty=state.strategicPlans().guards().get(r.duty().id());
+        state=new GuardMissionSelected(duty.id(),duty.revision(),patrol.responding(new SurfaceAnchor(contact(r).position()).offset(1,0,0),contact(r).target())).apply(state,duty.id(),21001);
+        duty=state.strategicPlans().guards().get(duty.id());assertFalse(GuardResponse.redirect(state,duty,21001));
+        var shifted=new SecurityState.Contact(duty.home(),contact(r).target(),contact(r).position().offset(0,0,1),21002,2);
+        state=apply(state,duty.home(),seen(r,shifted),21002);
+        assertFalse(GuardResponse.redirect(state,duty,21002),"small target motion preserves the valid path and leased sector");
+        assertEquals(patrol.post(),duty.mission().orElseThrow().post());
     }
     @Test void confirmedIncidentPersistsByPlayerUuidButDoesNotCreateAnEternalPhysicalContact(){
         var r=ready();var state=offence(r);assertTrue(state.security().hostile(r.duty().home(),r.offender()));
@@ -229,6 +293,15 @@ class SettlementSecurityTest {
         assertTrue(waiting.stream().anyMatch(event->event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled));
         state=state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor,
                 lease.withGoal(AmbientGoalKind.ACTOR_MOVEMENT,move.order().legalStations().getFirst().standingBody()))));
+        var permission=CombatComposition.CAPABILITIES.require(duty.execution());
+        var order=permission.current(state,duty.execution(),21002).orElseThrow();
+        assertFalse(permission.permitsApproach(state,move),"a strike may only reuse an actual INTERCEPT approach");
+        assertTrue(permission.permitsManeuverInterruption(state,move,order),"role explicitly permits defensive movement to checkpoint its own reversible patrol");
+        var maneuverCommand=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,new CommandId("test:patrol-maneuver"),state.bootstrap().worldId(),Revision.ZERO,
+            new SimInstant(21002),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(new CommandId("test:patrol-maneuver")),
+            new CombatEvent.ManeuverRequested(r.body(),contact(r).target(),order.actorPosition(),new MeleeManeuvers.Facts(2,0)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("combat",state,maneuverCommand),
+            "an unattempted proposal with no maneuver opportunity is an ordinary policy refusal");
         var readyEvents=GuardWorkProcess.progress(state,action,21002);
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted.class,readyEvents.getFirst().payload());
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
@@ -250,6 +323,10 @@ class SettlementSecurityTest {
                 new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21002,21001);
         state=apply(state,duty.id(),new CombatEvent.Prepared(strike),21001);
         state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),true,item.condition().wear(1)),21009);
+        var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),21009).orElseThrow();
+        var maneuver=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.BURST,order.actorPosition().offset(1,0,0),21001).launched(21005).closed(21009);
+        state=state.withChanges(FrontierWorldStateUpdate.begin().combat(state.combat().maneuver(maneuver)));
+        assertTrue(state.combat().maneuverBusy(duty.id(),21010,state.bootstrap().ruleset().melee().maneuvers()));
         assertFalse(duty.missionOrder().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()));
         var result=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21010),21010);
         assertTrue(result.stream().anyMatch(e->e.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled));

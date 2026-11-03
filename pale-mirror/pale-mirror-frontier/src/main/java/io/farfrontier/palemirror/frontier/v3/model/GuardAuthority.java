@@ -17,7 +17,7 @@ public final class GuardAuthority {
             HumanPopulation people, Map<SubjectId, ActorLocation> actors, ActorExecutionState executions,
             io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat) {
         REFERENCES.validate(() -> {validate(bootstrap, plans, people, actors, executions);validateCombat(plans,combat);}, bootstrap, plans.guards(), people.residents(),
-                executions, ActorIdentityDeclarations.lifeStatuses(bootstrap, actors),combat.pending());
+                executions, ActorIdentityDeclarations.lifeStatuses(bootstrap, actors),combat.pending(),combat.maneuvers());
     }
     private static void validate(FrontierBootstrap bootstrap, StrategicPlanState plans, HumanPopulation people,
             Map<SubjectId, ActorLocation> actors, ActorExecutionState executions) {
@@ -43,6 +43,10 @@ public final class GuardAuthority {
     }
 
     private static void validateCombat(StrategicPlanState plans,io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat){
+        for(var m:combat.maneuvers().values())if(m.actor().execution().activityKind()==ActorActivityKind.GUARD){
+            var duty=plans.guards().get(m.owner());
+            if(duty==null || !m.retainedBy(duty.execution(),duty.weapon()))throw new IllegalArgumentException("maneuver lost exact guard permission owner");
+        }
         for(var strike:combat.pending().values())if(strike.attacker().execution().activityKind()==ActorActivityKind.GUARD)requirePendingCombat(plans,strike);
     }
     public static void requirePendingCombat(StrategicPlanState plans,io.farfrontier.palemirror.frontier.v3.model.combat.MeleeStrike strike){
@@ -54,8 +58,9 @@ public final class GuardAuthority {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.GUARD_EQUIPMENT, duty.id(), duty.execution().actorId(), duty.source().containerId());
     }
     public static boolean pending(FrontierWorldState state, GuardDuty duty) {
-        return state.combat().pending().containsKey(duty.id()) || equipmentPending(state,duty);
+        return pendingEffect(state,duty) || state.combat().maneuverOpen(duty.id());
     }
+    public static boolean pendingEffect(FrontierWorldState state,GuardDuty duty){return state.combat().pending().containsKey(duty.id()) || equipmentPending(state,duty);}
     public static boolean equipmentPending(FrontierWorldState state,GuardDuty duty) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.GUARD_DUTY
                 && intent.roles().require(PhysicalIntentSubjectRole.GUARD_DUTY).equals(duty.id())

@@ -7,15 +7,20 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
 import java.util.*;
 final class CombatProcessModule implements FrontierWorldProcessModule {
     static final Set<String> TYPES=Set.of(CombatEvent.Prepared.TYPE,CombatEvent.Completed.TYPE,CombatEvent.WeaponObserved.TYPE,CombatEvent.PositionBlocked.TYPE,CombatEvent.WeaponDefined.TYPE,CombatEvent.StanceObserved.TYPE,
-        CombatEvent.PositionPlanned.TYPE);
+        CombatEvent.PositionPlanned.TYPE,CombatEvent.ManeuverRequested.TYPE,CombatEvent.ManeuverSelected.TYPE,CombatEvent.ManeuverLaunched.TYPE,CombatEvent.ManeuverClosed.TYPE);
     static final DeterministicProcessDescriptor DESCRIPTOR=new DeterministicProcessDescriptor("combat",TYPES,Set.of(),TYPES,
             java.util.stream.Stream.concat(TYPES.stream(),java.util.stream.Stream.of("kernel.reconsideration_requested","frontier.actor_movement_interrupted",
-                    "kernel.schedule_cancelled","kernel.schedule_rescheduled")).collect(java.util.stream.Collectors.toUnmodifiableSet()),TYPES);
+                    "kernel.schedule_cancelled","kernel.schedule_rescheduled","frontier.actor_movement_started")).collect(java.util.stream.Collectors.toUnmodifiableSet()),TYPES);
     public CommandPlan planCommand(FrontierWorldState state,FrontierCommand command){
         if(!(command.payload() instanceof CombatEvent event))throw new IllegalArgumentException("foreign combat ingress");
-        long tick=command.submittedAt().ticks();var events=new ArrayList<ProposedEvent>();var capabilities=CombatComposition.CAPABILITIES;
+        long tick=command.submittedAt().ticks();
+        if(event instanceof CombatEvent.ManeuverRequested request){try{return CombatManeuverProcess.request(state,request,tick);}catch(IllegalArgumentException invalid){return FrontierWorldCommandPlanner.rejected(invalid.getMessage());}}
+        var events=new ArrayList<ProposedEvent>();var capabilities=CombatComposition.CAPABILITIES;
         SubjectId owner;ActorExecutionId execution;
-        if(event instanceof CombatEvent.Prepared prepared){owner=prepared.strike().owner();execution=prepared.strike().attacker().execution();}
+        if(event instanceof CombatEvent.ManeuverSelected){return FrontierWorldCommandPlanner.rejected("maneuver selection belongs to common admission");}
+        if(event instanceof CombatEvent.ManeuverLaunched launched){execution=launched.observer().execution();owner=execution.activityOwnerId();}
+        else if(event instanceof CombatEvent.ManeuverClosed closed){owner=closed.owner();var m=state.combat().maneuvers().get(owner);if(m==null)return FrontierWorldCommandPlanner.rejected("no retained maneuver");execution=m.actor().execution();}
+        else if(event instanceof CombatEvent.Prepared prepared){owner=prepared.strike().owner();execution=prepared.strike().attacker().execution();}
         else if(event instanceof CombatEvent.Completed outcome){
             owner=outcome.owner();var pending=state.combat().pending().get(owner);
             if(pending==null)return FrontierWorldCommandPlanner.rejected("no exact pending melee outcome");execution=pending.attacker().execution();

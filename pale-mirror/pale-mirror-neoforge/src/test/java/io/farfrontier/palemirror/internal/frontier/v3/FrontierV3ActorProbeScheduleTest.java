@@ -10,6 +10,29 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3ActorProbeScheduleTest {
+    @Test void newHotGoalWakesBeforeCensusWhilePositionAndColdUpdatesDoNot(){
+        var actor=new SubjectId("actor:90");var owner=new SubjectId("guard:90");
+        var cursor=new FrontierV3ActorProbeSchedule.Cursor(java.util.stream.IntStream.range(0,100).mapToObj(i->new SubjectId("actor:"+i)).toList());
+        var body=new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0,64,0);
+        var lease=new io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease(actor,body,new io.farfrontier.palemirror.frontier.v3.api.SimInstant(1),1,
+            io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT,io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind.GUARD,body);
+        var leases=java.util.Map.of(actor,lease);cursor.synchronizeGoals(leases,java.util.Map.of(),1);cursor.probed(actor);
+        var execution=new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GUARD,owner,1);
+        var goal=new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(owner,actor,1,1,java.util.List.of(body.supportingSurface()),
+            io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN,io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var context=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.GuardMissionLeg(owner,1);
+        var move=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(goal,1,context,execution);
+        cursor.synchronizeGoals(leases,java.util.Map.of(actor,move),2);
+        assertEquals(actor,cursor.prioritizeDeferred(List.of(new SubjectId("actor:0")),1).getFirst());cursor.probed(actor);
+        cursor.synchronizeGoals(leases,java.util.Map.of(actor,new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(goal,2,context,execution)),3);
+        assertEquals("{\"depth\":0,\"oldestHostTicks\":0}",cursor.diagnostic(3),"same exact order is not a new wake");
+        var cold=java.util.Map.of(actor,lease.withStatus(io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED));
+        cursor.synchronizeGoals(cold,java.util.Map.of(),4);
+        assertEquals("{\"depth\":0,\"oldestHostTicks\":0}",cursor.diagnostic(4),"COLD goal churn cannot compete with loaded body observation");
+        cursor.synchronizeGoals(leases,java.util.Map.of(),5);
+        assertEquals(actor,cursor.prioritizeDeferred(List.of(),1).getFirst());
+    }
+
     @Test void durableWakeDoesNotWaitBehindTheWholeCensusOrStarveIt() {
         var actors = java.util.stream.IntStream.range(0, 100)
                 .mapToObj(index -> new SubjectId("actor:" + index)).toList();

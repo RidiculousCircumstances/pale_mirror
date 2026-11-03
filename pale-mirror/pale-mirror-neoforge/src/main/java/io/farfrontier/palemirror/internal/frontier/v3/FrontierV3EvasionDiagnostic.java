@@ -11,7 +11,17 @@ final class FrontierV3EvasionDiagnostic {
                 +",\"continuationDepth\":"+(retained==null?0:retained.continuations().size())
                 +",\"safety\":{\"requested\":"+(value!=null)+",\"active\":"+(value!=null && value.execution().isPresent())
                 +",\"moving\":"+(value!=null && move!=null && value.execution().filter(move.executionId()::equals).isPresent())
-                +",\"quietUntil\":"+(value==null?0:value.quietUntil())+"}";
+                +",\"quietUntil\":"+(value==null?0:value.quietUntil())+"}"+maneuver(state,actor);
+    }
+    private static String maneuver(FrontierWorldState state,SubjectId actor){
+        var retained=state.actorExecutions().actors().get(actor);var execution=retained==null?null:retained.current().orElse(null);
+        var m=execution==null?null:state.combat().maneuvers().get(execution.activityOwnerId());
+        if(m==null)return ",\"combatManeuver\":null";
+        var move=state.actorMovements().get(actor);
+        return ",\"combatManeuver\":{\"kind\":\""+m.kind()+"\",\"attempt\":"+m.attemptOrdinal()
+            +",\"selectedAt\":"+m.selectedAt()+",\"launchedAt\":"+m.launchedAt()+",\"closedAt\":"+m.closedAt()
+            +",\"moving\":"+(move!=null && move.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.CombatManeuverLeg)
+            +",\"goal\":{\"x\":"+m.station().x()+",\"y\":"+(m.station().y()+1)+",\"z\":"+m.station().z()+"}}";
     }
     private FrontierV3EvasionDiagnostic(){}
 }

@@ -26,6 +26,7 @@ final class CombatStateCodec {
 out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeByte(point.reason().wireTag());out.writeLong(point.sinceTick());out.writeLong(point.atTick());out.writeLong(point.retryAt());
                 out.writeByte(point.sector().role().wireTag());out.writeInt(point.sector().axisX());out.writeInt(point.sector().axisZ());
         }
+        out.writeInt(state.maneuvers().size());for(var value:state.maneuvers().values().stream().sorted(Comparator.comparing(MeleeManeuver::owner)).toList())maneuver(out,value);
         out.writeInt(state.evasions().size());for(var value:state.evasions().values().stream().sorted(Comparator.comparing(Evasion::actor)).toList())EvasionWire.write(out,value);
     }
     static CombatState read(DataInputStream in)throws IOException{
@@ -49,9 +50,10 @@ out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeBy
 unique(positions,key,new MeleePosition(execution,target,point,station,in.readInt(),in.readInt(),MeleePosition.Reason.require(in.readUnsignedByte()),in.readLong(),in.readLong(),in.readLong(),
                 new MeleeSector(MeleeSector.Role.require(in.readUnsignedByte()),in.readInt(),in.readInt())));
         }
+        n=count(in);var maneuvers=new LinkedHashMap<SubjectId,MeleeManeuver>();for(int i=0;i<n;i++){var m=maneuver(in);unique(maneuvers,m.owner(),m);}
         n=count(in);var evasions=new LinkedHashMap<SubjectId,Evasion>();
         for(int i=0;i<n;i++){var value=EvasionWire.read(in);unique(evasions,value.actor(),value);}
-        return new CombatState(pending,ready,arms,blocked,stances,positions,evasions);
+        return new CombatState(pending,ready,arms,blocked,stances,positions,evasions,maneuvers);
     }
     private static int count(DataInputStream in)throws IOException{return UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);}
     private static <T> void unique(Map<SubjectId,T> values,SubjectId key,T value){if(values.putIfAbsent(key,value)!=null)throw new IllegalArgumentException("duplicate combat entry");}

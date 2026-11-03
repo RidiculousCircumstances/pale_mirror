@@ -18,6 +18,7 @@ public final class FrontierV3CombatExecutor {
     private record Sighting(ActorActuationId observer,UUID target,int runtimeId,long at,net.minecraft.world.phys.Vec3 position){}
     private static final Map<Mob,Sighting> SIGHTINGS=new WeakHashMap<>();
     static void tick(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime){
+        FrontierV3CombatManeuvers.tick(level,runtime);
         var state=runtime.decodedState().orElseThrow();
         for(var strike:state.combat().pending().values().stream().limit(MAX_PER_PASS).toList())execute(level,runtime,strike);
         if(level.getGameTime()<NEXT.getOrDefault(level,0L))return;
@@ -69,6 +70,21 @@ public final class FrontierV3CombatExecutor {
             }
             double distance=Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition()));
             double separating=separatingSpeed(fighter,target,actuation,visible,rules.sensingInterval());
+            if(state.combat().maneuverBusy(order.owner(),tick,rules.maneuvers()))continue;
+            var maneuverFacts=new MeleeManeuvers.Facts(distance,separating);
+            if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace")){
+                var harmed=capabilities.require(order.execution()).harmedAt(state,order);
+                if(harmed.isPresent() && tick-harmed.getAsLong()<=rules.maneuvers().harmLifetime())
+                    trace(order,"MANEUVER_WINDOW","tick="+tick+" harm="+harmed.getAsLong()+" facts="+maneuverFacts+" preferred="+MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())));
+            }
+            if(visible && (state.actorMovements().get(order.execution().actorId())==null
+                    || capabilities.require(order.execution()).permitsManeuverInterruption(state,state.actorMovements().get(order.execution().actorId()),order))
+                    && MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())).isPresent()){
+                var origin=FrontierV3SupportedBodyCapture.observe(level,fighter);if(origin.isEmpty())continue;
+                var requested=FrontierV3CommandSubmission.propose(runtime,"combat-maneuver",order.owner().value(),new CombatEvent.ManeuverRequested(actuation,order.target(),origin.orElseThrow().supportingSurface(),maneuverFacts));
+                if(!(requested instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected))continue;
+                trace(order,"MANEUVER_REFUSED",requested);
+            }
             var attack=MeleeTactics.attack(profile,distance,separating,rules);
             var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,MeleeTactics.opportunity(profile,attack,distance,rules) && tacticalReady,
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),item.condition().remaining()>=profile.wear()));

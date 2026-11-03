@@ -60,8 +60,10 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
             MEALS = new Source<>(r -> r.people().meals());
     public static final Source<ActorMovementReferences,SubjectId,io.farfrontier.palemirror.frontier.v3.model.combat.Evasion>
             EVASIONS=new Source<>(r->r.combat().evasions());
+    public static final Source<ActorMovementReferences,SubjectId,io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver>
+            MANEUVERS=new Source<>(r->r.combat().maneuvers());
     public static final List<Source<ActorMovementReferences, ?, ?>> SOURCES = List.of(
-            EVASIONS, PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
+            MANEUVERS, EVASIONS, PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
     public List<Read<ActorMovementReferences>> reads(ActorMovement movement) {
         var actor = movement.order().actorId();
         var result = new java.util.ArrayList<Read<ActorMovementReferences>>();

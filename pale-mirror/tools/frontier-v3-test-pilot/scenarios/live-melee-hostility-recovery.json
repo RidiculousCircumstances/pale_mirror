@@ -16,28 +16,19 @@
     },
     {
       "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 100"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
+    },
+    {
+      "type": "command",
       "command": "/effect give @s minecraft:night_vision 240 0 true"
     },
     {
       "type": "command",
-      "command": "/effect give @s minecraft:instant_health 1 5 true"
-    },
-    {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "firstGuardPosition"
-        }
-      },
-      "offset": {
-        "x": 4,
-        "y": 0,
-        "z": 0
-      },
-      "settleMs": 0
+      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
     },
     {
       "type": "assert_fixture",
@@ -57,22 +48,6 @@
       ]
     },
     {
-      "type": "command",
-      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
-    },
-    {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "firstGuardPosition"
-        }
-      },
-      "settleMs": 0
-    },
-    {
       "type": "visit_nearest_entity",
       "entityType": "minecraft:villager",
       "nameContains": {
@@ -82,7 +57,8 @@
           "field": "firstGuardName"
         }
       },
-      "maxDistance": 64,
+      "standOff": 2,
+      "maxDistance": 128,
       "timeoutMs": 30000
     },
     {
@@ -90,30 +66,19 @@
       "timeoutMs": 30000,
       "checks": [
         {
-          "view": "settlement",
-          "id": "settlement:1",
+          "view": "actor",
+          "id": "resident:1-16",
           "expect": {
-            "status": "ok"
+            "status": "ok",
+            "ambientLease": "HOT",
+            "physicalAdmission": {
+              "bodyCustody": {
+                "phase": "RUNNING"
+              }
+            }
           }
         }
       ]
-    },
-    {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "firstGuardPosition"
-        }
-      },
-      "offset": {
-        "x": 2,
-        "y": 0,
-        "z": 0
-      },
-      "settleMs": 0
     },
     {
       "type": "command",

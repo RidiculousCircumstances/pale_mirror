@@ -2,6 +2,9 @@ package io.farfrontier.palemirror.frontier.v3.model.navigation;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import org.junit.jupiter.api.Test;
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.*;
 import java.util.function.BiFunction;
 import static org.junit.jupiter.api.Assertions.*;
@@ -70,6 +73,20 @@ class LayeredPedestrianNavigationTest {
                 finish(map, SurfaceAnchor.at(1, 58, 0), SurfaceAnchor.at(1, 63, 0)).status());
         assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
                 finish(map, SurfaceAnchor.at(1, 60, 0), SurfaceAnchor.at(46, 63, 0)).status());
+    }
+    @Test void shortCombatManeuversUseRealStairRoutesAndRejectTheDamagedConnection(){
+        var origin=SurfaceAnchor.at(0,58,0);var enemy=SurfaceAnchor.at(5,63,0);
+        var execution=new ActorExecutionId(new SubjectId("resident:test"),ActorActivityKind.GUARD,new SubjectId("guard:test"),1);
+        var target=new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(1,2),"minecraft:overworld");
+        var order=new CombatOrder(execution,1,new SubjectId("item:sword"),new CombatEngagement(target,CombatEngagement.Kind.AREA_DEFENCE,origin,32),enemy,1,100,origin,UnitNavigationProfile.VILLAGER,Optional.empty());
+        var landing=SurfaceAnchor.at(2,60,0);
+        var ranked=MeleeManeuvers.rank(order,MeleeManeuver.Kind.BURST,List.of(landing),ManeuverRules.initial());assertEquals(List.of(landing),ranked);
+        BiFunction<Integer,Integer,List<SurfaceAnchor>> levels=(x,z)->List.of(SurfaceAnchor.at(x,58+x,z));
+        var map=geometry(new WorldBounds(0,0,6,1),levels,Set.of(),UnitNavigationProfile.VILLAGER);
+        assertEquals(PedestrianRouteResult.Status.FOUND,finish(map,origin,ranked.getFirst()).status());
+        var damaged=geometry(new WorldBounds(0,0,6,1),levels,Set.of(new BlockPosition(1,59,0)),UnitNavigationProfile.VILLAGER);
+        assertEquals(PedestrianRouteResult.Status.NO_PATH,finish(damaged,origin,landing).status());
+        assertTrue(MeleeManeuvers.rank(order,MeleeManeuver.Kind.BURST,List.of(SurfaceAnchor.at(2,66,0)),ManeuverRules.initial()).isEmpty());
     }
     @Test void onlyRealAscendingSurfacesConnectLevelsAndADamagedStepClosesTheConnection() {
         BiFunction<Integer, Integer, List<SurfaceAnchor>> stairs = (x, z) -> List.of(SurfaceAnchor.at(x, 58 + x, z));

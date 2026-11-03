@@ -1,7 +1,8 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -25,6 +26,7 @@ final class FrontierV3ActorProbeSchedule {
         long instant = runtime.canonicalState().orElseThrow().instant().ticks();
         Cursor cursor = CURSORS.computeIfAbsent(runtime, ignored -> new Cursor(state));
         cursor.synchronizeRoster(state);
+        cursor.synchronizeGoals(state.ambientLeases(),state.actorMovements(),level.getGameTime());
         return cursor.nextDemanded(state, level, instant, maximum, advance);
     }
 
@@ -74,6 +76,8 @@ final class FrontierV3ActorProbeSchedule {
         private List<SubjectId> actors;
         private Set<SubjectId> actorIds;
         private Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.ActorLocation> observedLocations;
+        private Map<SubjectId,AmbientActorLease> observedLeases=Map.of();
+        private Map<SubjectId,ActorMovement> observedMovements=Map.of();
         private final Map<SubjectId, Long> retainedDemand = new LinkedHashMap<>();
         private final Map<SubjectId, Long> deferred = new LinkedHashMap<>();
         private final FrontierV3ActorSpatialCandidates spatial = new FrontierV3ActorSpatialCandidates();
@@ -115,6 +119,22 @@ final class FrontierV3ActorProbeSchedule {
             retainedDemand.keySet().retainAll(actorIds);
             deferred.keySet().retainAll(actorIds);
             awakened.keySet().retainAll(actorIds);
+        }
+
+        /** Goal publication wakes the existing observer; it grants no motion or body permission.
+         * Pure position/clock changes do not repeatedly wake the same movement. */
+        void synchronizeGoals(Map<SubjectId,AmbientActorLease> leases,Map<SubjectId,ActorMovement> movements,long gameTime){
+            ImmutableMapChanges.forEachIdentityChangedKey(observedLeases,leases,actor->{
+                var before=observedLeases.get(actor);var after=leases.get(actor);
+                if(after!=null && after.status()==AmbientLeaseStatus.HOT && actorIds.contains(actor)
+                        && (before==null || before.status()!=AmbientLeaseStatus.HOT || before.goal()!=after.goal() || !before.goalBody().equals(after.goalBody())))wake(actor,gameTime);
+            });
+            ImmutableMapChanges.forEachIdentityChangedKey(observedMovements,movements,actor->{
+                var lease=leases.get(actor);var before=observedMovements.get(actor);var after=movements.get(actor);
+                if(lease!=null && lease.status()==AmbientLeaseStatus.HOT && actorIds.contains(actor)
+                        && (before==null || after==null || !before.executionId().equals(after.executionId()) || !before.order().equals(after.order())))wake(actor,gameTime);
+            });
+            observedLeases=leases;observedMovements=movements;
         }
 
         void defer(SubjectId actor) { defer(actor, 0L); }

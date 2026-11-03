@@ -11,6 +11,8 @@ public record CombatOrder(ActorExecutionId execution,long revision,SubjectId wea
         Objects.requireNonNull(targetPosition);Objects.requireNonNull(actorPosition);Objects.requireNonNull(navigation);Objects.requireNonNull(station);
         if(revision<1 || observedAt<0 || lifetime<1 || !engagement.contains(targetPosition))throw new IllegalArgumentException("invalid combat permission");
     }
+    /** Native planning input only; common body inspection alone publishes a position. */
+    public CombatOrder atActorObservation(SurfaceAnchor observed){return new CombatOrder(execution,revision,weapon,engagement,targetPosition,observedAt,lifetime,observed,navigation,station);}
     public SubjectId owner(){return execution.activityOwnerId();}
     public CombatTarget target(){return engagement.target();}
     public boolean current(long tick){return tick>=observedAt && tick-observedAt<=lifetime;}

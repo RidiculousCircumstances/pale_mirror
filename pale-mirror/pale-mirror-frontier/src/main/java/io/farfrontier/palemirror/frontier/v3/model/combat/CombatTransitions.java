@@ -11,11 +11,31 @@ public final class CombatTransitions {
     }
     public static FrontierWorldState apply(FrontierWorldState state,SubjectId subject,CombatEvent event,long tick,CombatCapabilities capabilities){
         var combat=state.combat();var update=FrontierWorldStateUpdate.begin();
-        if(event instanceof CombatEvent.Prepared prepared){
+        if(event instanceof CombatEvent.ManeuverSelected selected){
+            var m=selected.maneuver();var order=requireOrder(state,capabilities,m.actor(),tick).atActorObservation(m.origin());var prior=combat.maneuvers().get(subject);
+            if(!subject.equals(m.owner()) || !m.matches(order) || !state.bootstrap().bounds().contains(m.origin().support()) || !order.engagement().contains(m.origin()) || !order.engagement().contains(m.station())
+                    || !m.equals(MeleeManeuvers.selected(state,order,m.actor(),m.kind(),m.station(),tick))
+                    || !capabilities.require(order.execution()).maneuvers().contains(m.kind()) || combat.pending().containsKey(subject)
+                    || prior!=null && !prior.ready(m.kind(),tick) || state.actorMovements().containsKey(order.execution().actorId()))
+                throw new IllegalArgumentException("maneuver lacks exact current permission, checkpoint or cooldown");
+            combat=combat.releasePosition(subject).maneuver(m);
+        }else if(event instanceof CombatEvent.ManeuverLaunched launch){
+            var m=combat.maneuvers().get(subject);var order=requireOrder(state,capabilities,launch.observer(),tick);
+            if(m==null || !m.open() || !m.actor().equals(launch.observer()) || m.attemptOrdinal()!=launch.attemptOrdinal() || !m.matches(order)
+                    || tick<m.selectedAt()+state.bootstrap().ruleset().melee().maneuvers().preparation())throw new IllegalArgumentException("stale or premature maneuver launch");
+            combat=combat.maneuver(m.launched(tick));
+        }else if(event instanceof CombatEvent.ManeuverClosed close){
+            var m=combat.maneuvers().get(subject);
+            if(m==null || !m.open() || !subject.equals(close.owner()) || m.attemptOrdinal()!=close.attemptOrdinal() || state.actorMovements().containsKey(m.actor().execution().actorId()))
+                throw new IllegalArgumentException("maneuver closure still owns movement or lost its exact attempt");
+            combat=combat.maneuver(m.closed(tick));
+        }else if(event instanceof CombatEvent.ManeuverRequested){throw new IllegalArgumentException("maneuver request is ingress, not a retained outcome");
+        }else if(event instanceof CombatEvent.Prepared prepared){
             var strike=prepared.strike();var order=requireOrder(state,capabilities,strike.attacker(),tick);var item=state.inventory().items().get(strike.weapon());
             if(!subject.equals(strike.owner()) || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
                     || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon()) || strike.preparedAt()!=tick
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
+                    || combat.maneuverBusy(strike.owner(),tick,state.bootstrap().ruleset().melee().maneuvers())
                     || tick<combat.nextAttack().getOrDefault(strike.owner(),0L)
                     || state.actorMovements().containsKey(order.execution().actorId())
                         && !capabilities.require(order.execution()).permitsApproach(state,state.actorMovements().get(order.execution().actorId())))

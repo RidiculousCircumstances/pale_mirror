@@ -24,6 +24,11 @@ final class FrontierV3PilotMotionObserver {
     private static Set<Long> sampledTicks = Set.of();
     /** Monotonic client turns expose a player-visible server freeze even while game time stops. */
     private static long elapsedClientTicks;
+    private static Vec3 circuitOrigin;
+    private static int circuitLeg;
+    private static int pursuitStall;
+    private static double circuitYaw,circuitDistance;
+    private static Vec3 previousPlayerPosition;
 
     private FrontierV3PilotMotionObserver() { }
 
@@ -73,7 +78,8 @@ final class FrontierV3PilotMotionObserver {
             }
             return false;
         }
-        if(action.has("requiredCombatAttacks"))FrontierV3TestPilotClient.look(minecraft,body.getEyePosition());
+        if(action.has("requiredCombatAttacks") || action.has("observerCircuit"))FrontierV3TestPilotClient.look(minecraft,body.getEyePosition());
+        if(action.has("observerCircuit"))circuit(minecraft,action);
         if (entityRuntimeId < 0) { entityRuntimeId = body.getId(); samples = new ArrayList<>(); sampledTicks = new HashSet<>(); }
         int interval = action.get("sampleEveryTicks").getAsInt();
         long gameTime = minecraft.level.getGameTime();
@@ -84,7 +90,7 @@ final class FrontierV3PilotMotionObserver {
             // Read the already-delivered process result and periodically renew it through the
             // same ordinary player diagnostic path.  A rendered pose alone must never be
             // mistaken for a semantic work duty.
-            if (!action.has("requiredCombatAttacks") && clientTick % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect process " + action.get("id").getAsString());
+            if (!action.has("requiredCombatAttacks") && !action.has("observerCircuit") && clientTick % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect process " + action.get("id").getAsString());
             // This is a bounded diagnostic correlation, not a second pose source: it answers
             // whether a visually held remote body was also held by the authoritative server.
             // The actor receipt pairs a read-only authoritative position with the rendered one.
@@ -101,22 +107,40 @@ final class FrontierV3PilotMotionObserver {
             // from a body which has a delivered interpolation/velocity but is not rendering it;
             // it is never an alternative motion oracle.
             Vec3 velocity = body.getDeltaMovement();
+            if(action.has("observerCircuit") && !samples.isEmpty()){
+                var previous=samples.getLast();
+                boolean stationary=Math.hypot(body.getX()-previous.x(),body.getZ()-previous.z())<0.01;
+                pursuitStall=stationary && body.distanceTo(minecraft.player)>4.5?pursuitStall+interval:0;
+                if(pursuitStall>40)throw new IllegalStateException("guard stalled outside melee reach while the player moved around it; actor="+receivedDiagnostic("actor",worker));
+            }
             Vec3 authoritative = authoritativePosition(action);
             samples.add(new Pose(clientTick, gameTime, body.getX(), body.getY(), body.getZ(), velocity.x, velocity.z,
                     authoritative == null ? null : authoritative.x, authoritative == null ? null : authoritative.z,
                     workAnimation, semanticPhase(action, body.getId()),io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body)));
         }
         if (clientTick < action.get("durationTicks").getAsLong()) return false;
-        requireCombat(action);emit(action, expectedType, interval, actionStep, milestone); return true;
+        try{
+            if(action.has("observerCircuit") && circuitDistance<16)throw new IllegalStateException("player did not actually traverse the declared pursuit circuit: "+circuitDistance);
+            requireCombat(action);emit(action, expectedType, interval, actionStep, milestone);return true;
+        }finally{releaseCircuit();}
     }
 
     /** Optional combat assertion consumes the same actually rendered bounded pose series. */
     private static void requireCombat(JsonObject action){
         if(!action.has("requiredCombatAttacks"))return;
-        var observed=new HashSet<String>();boolean moving=false;
+        var observed=new HashSet<String>();boolean moving=false,maneuverMoving=false;
         for(int i=0;i<samples.size();i++){
             var sample=samples.get(i);var combat=sample.combat();if(combat==null)continue;
-            if(combat.age()<=combat.preparation()+1)observed.add(combat.attack());
+            if(combat.age()<=combat.preparation()+(java.util.Set.of("BURST","BACKSTEP").contains(combat.attack())?20:1))observed.add(combat.attack());
+            if(i>0 && combat.age()>=combat.preparation() && java.util.Set.of("BURST","BACKSTEP").contains(combat.attack())){
+                var before=samples.get(i-1);var prior=before.combat();
+                if(prior!=null && prior.attempt()==combat.attempt() && Math.hypot(sample.x()-before.x(),sample.z()-before.z())>0.005){
+                    for(int j=i-1;j>=0;j--){var start=samples.get(j);var cue=start.combat();
+                        if(cue==null || cue.attempt()!=combat.attempt() || !cue.attack().equals(combat.attack()) || cue.age()<cue.preparation())break;
+                        if(Math.hypot(sample.x()-start.x(),sample.z()-start.z())>=(combat.attack().equals("BACKSTEP")?0.5:1.5)){maneuverMoving=true;break;}
+                    }
+                }
+            }
             if(i==0 || combat.age()>=combat.preparation())continue;
             var before=samples.get(i-1);var prior=before.combat();
             if(prior!=null && prior.attempt()==combat.attempt() && prior.age()<prior.preparation()
@@ -124,11 +148,29 @@ final class FrontierV3PilotMotionObserver {
         }
         for(var required:action.getAsJsonArray("requiredCombatAttacks"))if(!observed.contains(required.getAsString()))
             throw new IllegalStateException("client did not render required attack "+required+"; observed="+observed);
+        if(action.has("requireManeuverMotion") && action.get("requireManeuverMotion").getAsBoolean() && !maneuverMoving)
+            throw new IllegalStateException("no actual body motion during the rendered maneuver");
         if(action.has("requireWindupMotion") && action.get("requireWindupMotion").getAsBoolean() && !moving)
             throw new IllegalStateException("no actual body motion during the rendered preparation");
     }
 
-    static void reset() { actionStartedTick = Long.MIN_VALUE; entityRuntimeId = -1; samples = List.of(); sampledTicks = Set.of(); elapsedClientTicks = 0L; }
+    private static void circuit(Minecraft minecraft,JsonObject action){
+        if(circuitOrigin==null){circuitOrigin=minecraft.player.position();previousPlayerPosition=circuitOrigin;circuitYaw=Math.toRadians(minecraft.player.getYRot());}
+        circuitDistance+=minecraft.player.position().subtract(previousPlayerPosition).horizontalDistance();previousPlayerPosition=minecraft.player.position();
+        var points=action.getAsJsonArray("observerCircuit");var point=points.get(circuitLeg%points.size()).getAsJsonObject();
+        double x=point.get("x").getAsDouble(),z=point.get("z").getAsDouble();
+        var target=circuitOrigin.add(Math.cos(circuitYaw)*x-Math.sin(circuitYaw)*z,0,Math.sin(circuitYaw)*x+Math.cos(circuitYaw)*z);var delta=target.subtract(minecraft.player.position());
+        if(delta.horizontalDistanceSqr()<0.3){circuitLeg++;return;}
+        double yaw=Math.toRadians(minecraft.player.getYRot());double forward=-Math.sin(yaw)*delta.x+Math.cos(yaw)*delta.z;
+        double left=Math.cos(yaw)*delta.x+Math.sin(yaw)*delta.z;
+        minecraft.options.keyUp.setDown(forward>0.25);minecraft.options.keyDown.setDown(forward< -0.25);
+        minecraft.options.keyLeft.setDown(left>0.25);minecraft.options.keyRight.setDown(left< -0.25);minecraft.options.keySprint.setDown(true);
+    }
+    private static void releaseCircuit(){
+        if(circuitOrigin==null)return;var minecraft=Minecraft.getInstance();minecraft.options.keyUp.setDown(false);minecraft.options.keyDown.setDown(false);
+        minecraft.options.keyLeft.setDown(false);minecraft.options.keyRight.setDown(false);minecraft.options.keySprint.setDown(false);circuitOrigin=null;circuitLeg=0;pursuitStall=0;circuitDistance=0;previousPlayerPosition=null;
+    }
+    static void reset() {releaseCircuit(); actionStartedTick = Long.MIN_VALUE; entityRuntimeId = -1; samples = List.of(); sampledTicks = Set.of(); elapsedClientTicks = 0L; }
 
     /** Reads only a diagnostic the normal client packet handler already retained. */
     private static JsonObject receivedDiagnostic(String kind, String id) {

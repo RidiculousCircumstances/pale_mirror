@@ -8,7 +8,10 @@ import java.util.*;
 import static io.farfrontier.palemirror.frontier.v3.persistence.CombatWire.*;
 final class CombatPayloadCodecs {
     static PayloadCodecs create(){return new PayloadCodecs(List.of(codec(CombatEvent.Prepared.TYPE),codec(CombatEvent.Completed.TYPE),
-                    codec(CombatEvent.WeaponObserved.TYPE),codec(CombatEvent.PositionBlocked.TYPE),codec(CombatEvent.WeaponDefined.TYPE),codec(CombatEvent.StanceObserved.TYPE),codec(CombatEvent.PositionPlanned.TYPE)));
+                    codec(CombatEvent.WeaponObserved.TYPE),codec(CombatEvent.PositionBlocked.TYPE),codec(CombatEvent.WeaponDefined.TYPE),
+                        codec(CombatEvent.StanceObserved.TYPE),codec(CombatEvent.PositionPlanned.TYPE),
+                        codec(CombatEvent.ManeuverRequested.TYPE),codec(CombatEvent.ManeuverSelected.TYPE),
+                        codec(CombatEvent.ManeuverLaunched.TYPE),codec(CombatEvent.ManeuverClosed.TYPE)));
                     }
     private static PayloadCodec codec(String type){return new PayloadCodec(){
         public String type(){return type;}
@@ -16,6 +19,12 @@ final class CombatPayloadCodecs {
             if(!payload.type().equals(type))throw new IllegalArgumentException("foreign combat payload");
             try{var bytes=new ByteArrayOutputStream();var out=new DataOutputStream(bytes);
                 switch((CombatEvent)payload){
+                    case CombatEvent.ManeuverRequested v->{actuation(out,v.observer());target(out,v.target());
+                        FrontierWorldStateCodec.writePosition(out,v.origin().support());out.writeDouble(v.facts().distance());
+                        out.writeDouble(v.facts().separatingSpeed());}
+                    case CombatEvent.ManeuverSelected v->maneuver(out,v.maneuver());
+                    case CombatEvent.ManeuverLaunched v->{actuation(out,v.observer());out.writeLong(v.attemptOrdinal());}
+                    case CombatEvent.ManeuverClosed v->{id(out,v.owner());out.writeLong(v.attemptOrdinal());}
                     case CombatEvent.StanceObserved value->{actuation(out,value.stance().observer());target(out,value.stance().target());out.writeBoolean(value.stance().holding());out.writeLong(value.stance().atTick());}
                     case CombatEvent.PositionPlanned value->{ActorExecutionStateCodec.writeId(out,value.execution());target(out,value.target());FrontierWorldStateCodec.writePosition(out,value.targetPosition().support());
                         out.writeBoolean(value.station().isPresent());if(value.station().isPresent())FrontierWorldStateCodec.writePosition(out,value.station().orElseThrow().support());out.writeByte(value.reason().wireTag());}
@@ -29,6 +38,12 @@ final class CombatPayloadCodecs {
         }
         public FrontierPayload decode(byte[] bytes){try{var in=new DataInputStream(new ByteArrayInputStream(bytes));
             FrontierPayload value=switch(type){
+                case CombatEvent.ManeuverRequested.TYPE->new CombatEvent.ManeuverRequested(actuation(in),
+                    target(in),new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
+                    new MeleeManeuvers.Facts(in.readDouble(),in.readDouble()));
+                case CombatEvent.ManeuverSelected.TYPE->new CombatEvent.ManeuverSelected(maneuver(in));
+                case CombatEvent.ManeuverLaunched.TYPE->new CombatEvent.ManeuverLaunched(actuation(in),in.readLong());
+                case CombatEvent.ManeuverClosed.TYPE->new CombatEvent.ManeuverClosed(id(in),in.readLong());
                 case CombatEvent.StanceObserved.TYPE->new CombatEvent.StanceObserved(new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readLong()));
                 case CombatEvent.PositionPlanned.TYPE->new CombatEvent.PositionPlanned(ActorExecutionStateCodec.readId(in),target(in),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
                         in.readBoolean()?Optional.of(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in))):Optional.empty(),MeleePosition.Reason.require(in.readUnsignedByte()));

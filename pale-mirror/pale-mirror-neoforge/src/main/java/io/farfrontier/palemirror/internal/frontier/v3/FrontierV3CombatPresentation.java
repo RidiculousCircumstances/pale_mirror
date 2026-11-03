@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.internal.network.CombatGesturePayload;
+import io.farfrontier.palemirror.internal.network.CombatGesture;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.*;
 import net.minecraft.world.entity.Mob;
@@ -18,18 +19,24 @@ import net.neoforged.neoforge.network.registration.NetworkRegistry;
 public final class FrontierV3CombatPresentation {
     private static final String KEY="pm_v3_combat_windup";
     static long start(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules,LivingEntity target){
+        return begin(level,body,strike.owner().value(),strike.attemptOrdinal(),strike.attacker().body().physicalEpoch(),CombatGesture.strike(strike.attack()),
+            (int)rules.windup(strike.attack()),rules.techniques().require(strike.attack()).activeTicks(),rules.techniques().require(strike.attack()).recoveryTicks(),target);
+    }
+    static long begin(ServerLevel level,Mob body,String owner,long ordinal,long epoch,CombatGesture gesture,int preparation,int active,int recovery,LivingEntity target){
         var marker=body.getPersistentData().getCompound(KEY);
-        if(!marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal()
-                || level.getGameTime()<marker.getLong("startedAtTick")){
-            marker=new CompoundTag();marker.putString("owner",strike.owner().value());marker.putLong("ordinal",strike.attemptOrdinal());
-            marker.putLong("epoch",strike.attacker().body().physicalEpoch());marker.putInt("attack",strike.attack().wireTag());
-            marker.putInt("preparation",(int)rules.windup(strike.attack()));
-            marker.putInt("active",rules.techniques().require(strike.attack()).activeTicks());marker.putInt("recovery",rules.techniques().require(strike.attack()).recoveryTicks());
-            marker.putLong("startedAtTick",level.getGameTime());marker.putInt("phase",CombatGesturePayload.Phase.PREPARING.wireTag());
-            facing(marker,body,target);body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
+        if(!marker.getString("owner").equals(owner) || marker.getLong("ordinal")!=ordinal || level.getGameTime()<marker.getLong("startedAtTick")){
+            marker=new CompoundTag();marker.putString("owner",owner);marker.putLong("ordinal",ordinal);marker.putLong("epoch",epoch);marker.putInt("attack",gesture.wireTag());
+            marker.putInt("preparation",preparation);marker.putInt("active",active);marker.putInt("recovery",recovery);marker.putLong("startedAtTick",level.getGameTime());
+            marker.putInt("phase",CombatGesturePayload.Phase.PREPARING.wireTag());facing(marker,body,target);body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
         }
         return marker.getLong("startedAtTick");
     }
+    static void maneuverMoving(ServerLevel level,Mob body,MeleeManeuver m){
+        var marker=body.getPersistentData().getCompound(KEY);
+        if(!marker.getString("owner").equals(m.owner().value()) || marker.getLong("ordinal")!=m.attemptOrdinal() || marker.getInt("phase")!=CombatGesturePayload.Phase.PREPARING.wireTag())return;
+        marker.putLong("startedAtTick",level.getGameTime()-marker.getInt("preparation"));marker.putInt("phase",CombatGesturePayload.Phase.IMPACT.wireTag());body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
+    }
+    static void maneuverEnded(ServerLevel level,Mob body,MeleeManeuver m){finish(level,body,m.owner().value(),m.attemptOrdinal(),CombatGesturePayload.Phase.CANCELLED);}
     static void impact(ServerLevel level,Mob body,MeleeStrike strike,LivingEntity target){
         var marker=body.getPersistentData().getCompound(KEY);facing(marker,body,target);body.getPersistentData().put(KEY,marker);
         finish(level,body,strike,CombatGesturePayload.Phase.IMPACT);
@@ -49,14 +56,16 @@ public final class FrontierV3CombatPresentation {
     }
     static void cancel(ServerLevel level,Mob body,MeleeStrike strike){finish(level,body,strike,CombatGesturePayload.Phase.CANCELLED);}
     private static void finish(ServerLevel level,Mob body,MeleeStrike strike,CombatGesturePayload.Phase phase){
+        finish(level,body,strike.owner().value(),strike.attemptOrdinal(),phase);
+    }
+    private static void finish(ServerLevel level,Mob body,String owner,long ordinal,CombatGesturePayload.Phase phase){
         var marker=body.getPersistentData().getCompound(KEY);
-        if(!marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal()
-                || marker.getInt("phase")!=CombatGesturePayload.Phase.PREPARING.wireTag())return;
+        if(!marker.getString("owner").equals(owner) || marker.getLong("ordinal")!=ordinal || marker.getInt("phase")==CombatGesturePayload.Phase.CANCELLED.wireTag())return;
         marker.putInt("phase",phase.wireTag());body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
     }
     private static CombatGesturePayload cue(ServerLevel level,Mob body,CompoundTag marker){
         return new CombatGesturePayload(body.getId(),body.getUUID(),marker.getLong("epoch"),marker.getLong("ordinal"),
-            MeleeAttack.require(marker.getInt("attack")),CombatGesturePayload.Phase.require(marker.getInt("phase")),
+            CombatGesture.require(marker.getInt("attack")),CombatGesturePayload.Phase.require(marker.getInt("phase")),
             marker.getLong("startedAtTick"),level.getGameTime(),marker.getInt("preparation"),marker.getInt("active"),marker.getInt("recovery"),marker.getFloat("facingYaw"),marker.getFloat("facingPitch"));
     }
     private static void broadcast(ServerLevel level,Mob body,CompoundTag marker){

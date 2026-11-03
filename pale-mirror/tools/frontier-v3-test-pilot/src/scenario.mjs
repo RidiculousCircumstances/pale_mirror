@@ -275,6 +275,11 @@ export function validateScenario(scenario) {
           || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {
         throw new Error('assert_visible_entity needs a bounded locally rendered entity presentation');
       }
+      if (action.observerCircuit !== undefined && (action.type !== 'observe_entity_motion'
+        || !Array.isArray(action.observerCircuit) || action.observerCircuit.length !== 4
+        || action.observerCircuit.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.z) || Math.abs(p.x) > 8 || Math.abs(p.z) > 8))) {
+        throw new Error('observerCircuit requires four bounded ordinary movement waypoints during combat observation');
+      }
       if (action.type === 'observe_entity_motion' && (typeof action.id !== 'string' || !action.id || !validItemKind(action.entityType)
           || !Number.isInteger(action.durationTicks) || action.durationTicks < 1 || action.durationTicks > 12_000
           || !Number.isInteger(action.sampleEveryTicks) || action.sampleEveryTicks < 1 || action.sampleEveryTicks > 20
@@ -284,10 +289,11 @@ export function validateScenario(scenario) {
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.anchor !== undefined && !validPosition(action.anchor))
           || (action.requiredCombatAttacks !== undefined && (!Array.isArray(action.requiredCombatAttacks)
-            || action.requiredCombatAttacks.length < 1 || action.requiredCombatAttacks.length > 2
+            || action.requiredCombatAttacks.length < 1 || action.requiredCombatAttacks.length > 4
             || new Set(action.requiredCombatAttacks).size !== action.requiredCombatAttacks.length
-            || action.requiredCombatAttacks.some(value => !['QUICK', 'LUNGE'].includes(value))))
-          || (action.requireWindupMotion !== undefined && (typeof action.requireWindupMotion !== 'boolean' || action.requiredCombatAttacks === undefined)))) {
+            || action.requiredCombatAttacks.some(value => !['QUICK', 'LUNGE', 'BURST', 'BACKSTEP'].includes(value))))
+          || (action.requireManeuverMotion !== undefined && (typeof action.requireManeuverMotion !== 'boolean' || action.requiredCombatAttacks === undefined))
+        || (action.requireWindupMotion !== undefined && (typeof action.requireWindupMotion !== 'boolean' || action.requiredCombatAttacks === undefined)))) {
         throw new Error('observe_entity_motion needs one bounded locally rendered entity and exact sampling window');
       }
       if (action.type === 'observe_settlement_population' && (!requiredId(action.settlementId, 'settlement:')
@@ -296,6 +302,7 @@ export function validateScenario(scenario) {
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128)))) {
         throw new Error('observe_settlement_population needs one settlement and bounded first-ingress sampling');
       }
+      if (action.standOff !== undefined && (action.type !== 'visit_nearest_entity' || !Number.isFinite(action.standOff) || action.standOff < 0 || action.standOff > 2)) throw new Error('standOff requires a bounded setup player contact');
       if ((action.type === 'look_nearest_entity' || action.type === 'visit_nearest_entity') && (!validItemKind(action.entityType) || !validEntityName(action.nameContains)
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128)))) {

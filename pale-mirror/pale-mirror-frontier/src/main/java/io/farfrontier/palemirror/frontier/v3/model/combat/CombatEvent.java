@@ -5,7 +5,23 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 import java.util.*;
 /** Native facts and exact hit lifecycle. No role receives its own parallel melee protocol. */
 public sealed interface CombatEvent extends FrontierPayload permits CombatEvent.Prepared,CombatEvent.Completed,CombatEvent.WeaponObserved,CombatEvent.PositionBlocked,CombatEvent.WeaponDefined,CombatEvent.StanceObserved,
-        CombatEvent.PositionPlanned {
+        CombatEvent.PositionPlanned,CombatEvent.ManeuverRequested,CombatEvent.ManeuverSelected,CombatEvent.ManeuverLaunched,CombatEvent.ManeuverClosed {
+    record ManeuverRequested(ActorActuationId observer,CombatTarget target,SurfaceAnchor origin,MeleeManeuvers.Facts facts) implements CombatEvent {
+        public static final String TYPE="frontier.combat.maneuver_requested";
+        public ManeuverRequested{Objects.requireNonNull(observer);Objects.requireNonNull(target);Objects.requireNonNull(origin);Objects.requireNonNull(facts);}public String type(){return TYPE;}
+    }
+    record ManeuverSelected(MeleeManeuver maneuver) implements CombatEvent {
+        public static final String TYPE="frontier.combat.maneuver_selected";
+        public ManeuverSelected{Objects.requireNonNull(maneuver);}public String type(){return TYPE;}
+    }
+    record ManeuverLaunched(ActorActuationId observer,long attemptOrdinal) implements CombatEvent {
+        public static final String TYPE="frontier.combat.maneuver_launched";
+        public ManeuverLaunched{Objects.requireNonNull(observer);if(attemptOrdinal<1)throw new IllegalArgumentException("invalid maneuver launch");}public String type(){return TYPE;}
+    }
+    record ManeuverClosed(SubjectId owner,long attemptOrdinal) implements CombatEvent {
+        public static final String TYPE="frontier.combat.maneuver_closed";
+        public ManeuverClosed{Objects.requireNonNull(owner);if(attemptOrdinal<1)throw new IllegalArgumentException("invalid maneuver closure");}public String type(){return TYPE;}
+    }
     record StanceObserved(MeleeStance stance) implements CombatEvent {
         public static final String TYPE="frontier.combat.stance_observed";
         public StanceObserved{Objects.requireNonNull(stance);}public String type(){return TYPE;}

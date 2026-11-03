@@ -20,6 +20,8 @@ final class GuardActivityCapability implements ActorActivityCapability {
         var strike=state.combat().pending().get(duty.id());
         if(strike!=null && strike.attack()==io.farfrontier.palemirror.frontier.v3.model.combat.MeleeAttack.LUNGE)
             mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
+        var maneuver=state.combat().maneuvers().get(duty.id());
+        if(maneuver!=null && maneuver.open())mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN;
         return java.util.Optional.of(ResidentWalkingPace.read(state,execution.actorId(),mode));
     }
 
@@ -31,7 +33,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
     }
     public void validateReference(FrontierWorldState state, ActorExecutionId execution) { GuardAuthority.require(state, execution); }
     public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) {
-        if (GuardAuthority.pending(state, GuardAuthority.require(state, execution)))
+        if (GuardAuthority.pendingEffect(state, GuardAuthority.require(state, execution)))
             throw new IllegalArgumentException("guard retains an unsettled physical operation");
     }
     public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution) {

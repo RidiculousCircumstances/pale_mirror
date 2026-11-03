@@ -132,6 +132,9 @@ class CombatModuleTest {
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var events=List.<CombatEvent>of(new CombatEvent.WeaponDefined(order.execution(),order.weapon(),SWORD),new CombatEvent.WeaponObserved(actor,order.weapon(),SWORD),
                 new CombatEvent.PositionBlocked(actor,order.target(),order.station().orElseThrow()),
+                new CombatEvent.ManeuverRequested(actor,order.target(),order.actorPosition(),new MeleeManeuvers.Facts(5,0.2)),
+                new CombatEvent.ManeuverSelected(new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),order.actorPosition().offset(1,0,0),100,0,0,200,0,140)),
+                new CombatEvent.ManeuverLaunched(actor,101),new CombatEvent.ManeuverClosed(order.owner(),101),
                 new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,100)),
                 new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),order.station(),MeleePosition.Reason.RESERVED));
         var codecs=CombatPayloadCodecs.create();

@@ -18,7 +18,7 @@ public final class ImmutableMapChanges {
         return before.keySet().equals(after.keySet());
     }
     /** Complete identity changes for immutable dependency evidence, not value equality. */
-    static <K> void forEachIdentityChangedKey(Map<K, ?> before, Map<K, ?> after, Consumer<K> consume) {
+    public static <K> void forEachIdentityChangedKey(Map<K, ?> before, Map<K, ?> after, Consumer<K> consume) {
         if (before == after) return;
         var keys = ImmutableMapDifferences.keys(before, after);
         if (keys.isPresent()) {

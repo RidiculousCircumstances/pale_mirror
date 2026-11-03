@@ -23,6 +23,7 @@ public record MeleePosition(ActorExecutionId execution,CombatTarget target,Surfa
                 || (reason==Reason.RESERVED)!=station.isPresent() || (reason==Reason.UNREACHABLE?retryAt<=atTick:retryAt!=0))
             throw new IllegalArgumentException("invalid melee spatial claim/wait");
     }
+    public boolean sameOpponent(CombatOrder order){return execution.equals(order.execution()) && target.equals(order.target());}
     public boolean matches(CombatOrder order){return execution.equals(order.execution()) && target.equals(order.target()) && targetPosition.equals(order.targetPosition());}
     public boolean active(long tick,MeleeRules rules){return reason==Reason.RESERVED && tick>=atTick && tick-atTick<=rules.positionLeaseTicks();}
     public boolean deferred(CombatOrder order,long tick){return matches(order) && reason==Reason.UNREACHABLE && tick<retryAt;}

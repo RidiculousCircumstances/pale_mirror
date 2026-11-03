@@ -31,6 +31,21 @@ final class GuardCombatCapability implements CombatCapability {
                 && duty.mission().filter(m->m.stage()==GuardMission.Stage.INTERCEPT).flatMap(GuardMission::response)
                     .filter(target->state.security().response(duty.id()).filter(response->response.contact().target().equals(target)).isPresent()).isPresent();
     }
+    public boolean permitsManeuverInterruption(FrontierWorldState state,ActorMovement movement,CombatOrder order){
+        var duty=GuardAuthority.require(state,movement.executionId());
+        return order.execution().equals(duty.execution()) && duty.phase()==GuardDuty.Phase.ON_DUTY
+            && movement.context() instanceof ActorMovementContext.GuardMissionLeg leg && leg.dutyId().equals(duty.id())
+            && leg.revision()==duty.revision() && movement.order().equals(duty.missionOrder())
+            && state.security().response(duty.id()).filter(response->response.contact().target().equals(order.target())).isPresent();
+    }
+    public KnownPedestrianRouteKnowledge maneuverKnowledge(FrontierWorldState state,ActorExecutionId execution){
+        var duty=GuardAuthority.require(state,execution);return KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,execution.actorId());
+    }
+    public OptionalLong harmedAt(FrontierWorldState state,CombatOrder order){
+        var duty=GuardAuthority.require(state,order.execution());return state.security().awareness().harmsIn(duty.home()).stream()
+            .filter(h->h.key().victim().equals(order.execution().actorId()) && h.key().attacker().equals(order.target())).mapToLong(h->h.atTick()).max();
+    }
+    public Set<MeleeManeuver.Kind> maneuvers(){return java.util.EnumSet.allOf(MeleeManeuver.Kind.class);}
     public List<ProposedEvent> wake(FrontierWorldState state,ActorExecutionId execution,long tick){
         var duty=GuardAuthority.require(state,execution);
         return List.of(GuardContinuation.wake(duty.id(),tick),SecurityReview.wake(duty.home(),tick));

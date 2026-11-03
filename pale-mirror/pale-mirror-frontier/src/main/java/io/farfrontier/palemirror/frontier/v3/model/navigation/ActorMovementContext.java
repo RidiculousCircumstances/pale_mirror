@@ -10,8 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
         ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg,
-            ActorMovementContext.GuardEquipment, ActorMovementContext.GuardMissionLeg, ActorMovementContext.EvasionLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION }
+            ActorMovementContext.GuardEquipment, ActorMovementContext.GuardMissionLeg, ActorMovementContext.EvasionLeg, ActorMovementContext.CombatManeuverLeg {
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION, COMBAT_MANEUVER }
     Provider provider();
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
@@ -43,6 +43,17 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
                     || movement.executionId().activityKind() != ActorActivityKind.PRODUCTION
                     || movement.order().goalOrdinal() != work.goalOrdinal() || movement.order().goalRevision() != 1L)
                 throw new IllegalArgumentException("station movement lost its exact job, material trip or phase");
+        }
+    }
+    record CombatManeuverLeg(SubjectId owner,long attemptOrdinal) implements ActorMovementContext {
+        public CombatManeuverLeg{Objects.requireNonNull(owner);if(attemptOrdinal<1)throw new IllegalArgumentException("invalid maneuver identity");}
+        public Provider provider(){return Provider.COMBAT_MANEUVER;}
+        public java.util.Optional<SubjectId> delegatedGoalOwner(){return java.util.Optional.empty();}
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs,ActorMovement movement){return java.util.List.of(ActorMovementReferences.MANEUVERS.at(owner));}
+        public void validateReferences(ActorMovementReferences refs,ActorMovement movement){
+            var m=refs.combat().maneuvers().get(owner);
+            if(m==null || !m.open() || m.launchedAt()==0 || m.attemptOrdinal()!=attemptOrdinal || !m.actor().execution().equals(movement.executionId()) || !m.order().equals(movement.order()))
+                throw new IllegalArgumentException("maneuver movement lost exact owner/attempt/goal");
         }
     }
     record EvasionLeg(SubjectId episodeId,long revision) implements ActorMovementContext {

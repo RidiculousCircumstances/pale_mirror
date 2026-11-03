@@ -30,7 +30,7 @@ public final class MeleePositions {
     }
     public static boolean available(FrontierWorldState state,CombatOrder order,SurfaceAnchor station,long tick){
         var rules=state.bootstrap().ruleset().melee();
-        return state.combat().positions().values().stream().filter(point->!point.execution().equals(order.execution()) && point.active(tick,rules)
+        return MeleeManeuvers.available(state,order,station) && state.combat().positions().values().stream().filter(point->!point.execution().equals(order.execution()) && point.active(tick,rules)
                 && point.execution().equals(state.actorExecutions().current(point.execution().activityKind()).get(point.execution().actorId())))
                 .noneMatch(point->point.overlaps(station,order.navigation().widthMicros(),order.navigation().heightMicros()));
     }
