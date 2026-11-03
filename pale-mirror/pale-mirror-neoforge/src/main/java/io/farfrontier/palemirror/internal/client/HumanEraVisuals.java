@@ -13,14 +13,22 @@ final class HumanEraVisuals {
     private record Binding(EMFModelPartRoot root, int variant) {}
     // A resource reload creates fresh roots; logout clears the cache and the hard cap bounds old roots.
     private static final Map<Binding,Rig> RIGS=new LinkedHashMap<>();
-    static void clear(){RIGS.clear();}
+    private static final Map<EMFModelPartRoot,ResidentPoseOverlay> OVERLAYS=new WeakHashMap<>();
+    static void clear(){OVERLAYS.values().forEach(ResidentPoseOverlay::restore);OVERLAYS.clear();RIGS.clear();}
     static void install(){
         try{
             if(!EMFAnimationApi.registerAnimationHook(new EMFAnimationApi.EMFAnimationHook(){
+                @Override public boolean onAnimationStart(AnimationContext context,boolean animationCancelled){
+                    var previous=OVERLAYS.remove(context.animatingModelRoot());
+                    if(previous!=null)previous.restore();
+                    return super.onAnimationStart(context,animationCancelled);
+                }
                 @Override public void onAnimationEnd(AnimationContext context,boolean animationCancelled){
                     if(animationCancelled || context.error()!=null || !(context.activeState().emfEntity() instanceof Villager actor))return;
                     var rig=rig(context);if(rig==null)return;
-                    ResidentVisuals.apply(actor,context.activeState().age()-actor.tickCount,rig);
+                    var base=ResidentPoseOverlay.capture(rig.parts());
+                    if(ResidentVisuals.apply(actor,context.activeState().age()-actor.tickCount,rig))
+                        OVERLAYS.put(context.animatingModelRoot(),base);
                     ResidentVisuals.rendered(actor,"human_era");
                 }
             }))throw new IllegalStateException("EMF rejected the resident animation compositor");
@@ -41,7 +49,8 @@ final class HumanEraVisuals {
         var key=new Binding(root,root.currentModelVariant);
         var cached=RIGS.get(key);if(cached!=null)return Optional.of(cached);
         var rig=Rig.bind(root);
-        rig.ifPresent(value->{if(RIGS.size()>=128)RIGS.remove(RIGS.keySet().iterator().next());RIGS.put(key,value);});
+        rig.ifPresent(value->{if(RIGS.size()>=128){var evicted=RIGS.keySet().iterator().next();RIGS.remove(evicted);
+                var base=OVERLAYS.remove(evicted.root());if(base!=null)base.restore();}RIGS.put(key,value);});
         return rig;
     }
     /** Full-length Human Era arms have no elbow joint: distribute elbow flex into the arm rotation. */
@@ -57,7 +66,8 @@ final class HumanEraVisuals {
         public void arm(HumanoidArm side,float shoulder,float elbow,float yaw,float roll){
             var arm=side==HumanoidArm.RIGHT?right:left;arm.xRot=shoulder+elbow*0.35f;arm.yRot=yaw;arm.zRot=roll;
         }
-        public void torso(float yaw,float lean){body.yRot=yaw;body.xRot=lean;}
+        List<ModelPart> parts(){var result=new ArrayList<ModelPart>(heads);result.add(body);result.add(right);result.add(left);return List.copyOf(result);}
+        public void torso(float yaw,float lean){ResidentPoseOverlay.torso(body,yaw,lean,0,-12,0);}
         public void look(float yaw,float pitch){for(var head:heads){head.yRot=yaw;head.xRot=pitch;}}
         void hand(HumanoidArm side,PoseStack pose){
             carrier.translateAndRotate(pose);body.translateAndRotate(pose);

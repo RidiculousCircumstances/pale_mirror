@@ -36,7 +36,7 @@ final class FrontierV3ServicePointClearance {
                 search = new FrontierV3ClearanceProbe(actuation.id(), observed.supportingSurface(), clearance.knowledge().geometry());
                 SEARCHES.put(body, search);
             }
-            search.nextTurn();
+            search.nextTurn(level.getGameTime());
             var probes = search;
             List<SurfaceAnchor> surfaces;
             try { surfaces = ServiceAreaDestinations.select(clearance, lease.actorId(),

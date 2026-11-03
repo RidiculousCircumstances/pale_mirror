@@ -20,7 +20,7 @@ final class FrontierV3LocalGoalCorrection {
     private static final Map<Mob,Correction> CORRECTIONS=new WeakHashMap<>();
     static void offer(Mob body,FrontierV3ActorActuation actuation,MovementOrder parent,long token,SurfaceAnchor station,
             LocalNavigationEnvelope envelope,long expiresAt){
-        if(!actuation.current(body) || !actuation.currentMovement(parent))throw new IllegalArgumentException("local correction lost its retained movement authority");
+        if(!actuation.current(body) || !retained(actuation,parent))throw new IllegalArgumentException("local correction lost its retained movement authority");
         long now=body.level().getGameTime();
         if(expiresAt<now || expiresAt-now>40)throw new IllegalArgumentException("unbounded local correction lifetime");
         CORRECTIONS.put(body,new Correction(actuation.id(),parent,token,station,envelope,expiresAt));
@@ -28,10 +28,23 @@ final class FrontierV3LocalGoalCorrection {
     static Optional<Correction> current(Mob body,FrontierV3ActorActuation actuation,MovementOrder parent){
         var value=CORRECTIONS.get(body);if(value==null)return Optional.empty();
         if(!value.actor().equals(actuation.id()) || !value.parent().equals(parent))return Optional.empty();
-        if(!actuation.current(body) || !actuation.currentMovement(parent) || !value.current(actuation.id(),parent,body.level().getGameTime())){
+        if(!actuation.current(body) || !retained(actuation,parent) || !value.current(actuation.id(),parent,body.level().getGameTime())){
             CORRECTIONS.remove(body);return Optional.empty();
         }
         return Optional.of(value);
+    }
+    static boolean retained(FrontierV3ActorActuation actuation,MovementOrder parent){
+        return actuation.currentMovement(parent) || actuation.currentActivityGoal(parent);
+    }
+    /** Activity-local motion is consumed by the same ambient navigator even after a journey arrived. */
+    static boolean pursueActivity(net.minecraft.server.level.ServerLevel level,Mob body,FrontierV3ActorActuation actuation){
+        var value=CORRECTIONS.get(body);
+        if(value==null || actuation.currentMovement(value.parent()))return false;
+        var current=current(body,actuation,value.parent());
+        if(current.isEmpty())return false;
+        FrontierV3GoalNavigation.pursueCorrection(level,body,current.orElseThrow(),actuation,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission.allow());
+        return true;
     }
     static void withdraw(Mob body,ActorActuationId actor,long token){
         var value=CORRECTIONS.get(body);

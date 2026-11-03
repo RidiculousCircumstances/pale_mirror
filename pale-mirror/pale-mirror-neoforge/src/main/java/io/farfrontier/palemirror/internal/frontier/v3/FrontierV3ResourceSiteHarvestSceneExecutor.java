@@ -621,17 +621,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (job.progress().complete() || job.returningForBatch() || job.progress().hasPendingCrop()
                 || state.resourceSites().harvestMutationPending(job)) return false;
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        var alternate = cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
-                var cell = cycle.layout().cells().get(index);
-                var access = FrontierV3ResourceFieldWorkAccessExecutor.read(level, cell);
-                if (access.isEmpty() || access.orElseThrow().blocked()
-                        || !state.resourceSites().site(job.siteId()).targetAvailable(index, job.id())) return false;
-                ResourceSiteHarvestJob candidate = job.retargetTo(index).bindTarget(cycle);
-                FrontierWorldState candidateState = state.withResourceSites(state.resourceSites().replace(
-                        state.resourceSites().site(job.siteId()).retargetHarvestCell(job, index, cycle)));
-                ResourceSiteHarvestGoal candidateGoal = ResourceSiteHarvestGoal.current(candidateState, candidate);
-                return FrontierV3GoalNavigation.canReach(level, worker, hotGoal(candidateState, candidate, candidateGoal));
-        });
+        var actuation = workActuation(state, runtime, lease, job, worker);
+        java.util.OptionalInt alternate;
+        try { alternate = FrontierV3HarvestTargetSearch.next(level, state, job, worker, actuation); }
+        catch (FrontierV3ClearanceProbe.Pending pending) {
+            FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(), "field-retarget:SEARCH_PENDING:" + pending.getMessage());
+            return true;
+        }
         if (alternate.isEmpty()) return false;
         var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) return false;

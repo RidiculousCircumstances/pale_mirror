@@ -178,12 +178,15 @@ final class FrontierV3GoalNavigation {
     static Result pursueCorrection(ServerLevel level,Mob actor,FrontierV3LocalGoalCorrection.Correction correction,
             FrontierV3ActorActuation actuation,io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission movement){
         if(!movement.allowed())throw new IllegalArgumentException("held correction cannot actuate navigation");
-        if(!actuation.current(actor) || !actuation.currentMovement(correction.parent())
+        if(!actuation.current(actor) || !FrontierV3LocalGoalCorrection.retained(actuation,correction.parent())
                 || !correction.current(actuation.id(),correction.parent(),level.getGameTime()))
             return new Result(Status.AMBIGUOUS,"stale-local-correction",Optional.empty(),Optional.empty());
         if(FrontierV3PedestrianCourtesy.active(actor))return new Result(Status.IN_PROGRESS,"owner-authorized-spatial-yield",Optional.empty(),Optional.empty());
         return pursueCaptured(level,actor,new Goal(correction.station(),correction.parent().capability(),correction.envelope()),actuation,
-                movement.pace(),movement.spacing().map(value->(double)value.normalSpacing()).orElse(0.0),Optional.of(correction.parent()));
+                movement.pace(),movement.spacing().map(value->(double)value.normalSpacing()).orElse(0.0),
+                actuation.currentMovement(correction.parent())?Optional.of(correction.parent()):Optional.empty(),
+                actuation.currentActivityGoal(correction.parent()) && !actuation.currentMovement(correction.parent())
+                        ?Optional.of(correction.parent()):Optional.empty());
     }
 
     static Result pursueCourtesy(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
@@ -194,6 +197,11 @@ final class FrontierV3GoalNavigation {
 
     private static Result pursueCaptured(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation,
                                           Optional<TravelPace> pace, double followingSpacing, Optional<MovementOrder> retainedOrder) {
+        return pursueCaptured(level,actor,goal,actuation,pace,followingSpacing,retainedOrder,Optional.empty());
+    }
+    private static Result pursueCaptured(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation,
+                                          Optional<TravelPace> pace, double followingSpacing, Optional<MovementOrder> retainedOrder,
+                                          Optional<MovementOrder> localActivityOrder) {
         Objects.requireNonNull(actuation, "navigation actuation");
         if (!actuation.current(actor))
             return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
@@ -210,8 +218,8 @@ final class FrontierV3GoalNavigation {
         if(FrontierV3WorkPresentation.active(actor) && goal.legalStations().stream().noneMatch(station->FrontierV3SemanticMovement.arrived(level,actor,station)))
             FrontierV3WorkPresentation.clear(actor);
         ACTUATIONS.put(actor, actuation);
-        var activityOrder = retainedOrder.isEmpty() ? goal.order().filter(actuation::currentActivityGoal)
-                : Optional.<MovementOrder>empty();
+        var activityOrder = localActivityOrder.isPresent() ? localActivityOrder
+                : retainedOrder.isEmpty() ? goal.order().filter(actuation::currentActivityGoal) : Optional.<MovementOrder>empty();
         return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation, pace, followingSpacing,
                 retainedOrder, activityOrder));
     }

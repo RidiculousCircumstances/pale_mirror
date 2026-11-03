@@ -15,7 +15,7 @@ class FrontierV3ClearanceProbeTest {
                 SurfaceAnchor.at(0, 63, 0), new Object());
         var blocked = SurfaceAnchor.at(1, 63, 0); var next = SurfaceAnchor.at(2, 63, 0);
         assertTrue(search.test(blocked, () -> true));
-        search.reject(blocked); search.nextTurn();
+        search.reject(blocked); search.nextTurn(1);
         assertFalse(search.test(blocked, () -> { fail("stalled destination cannot win again before the next pass"); return true; }));
         assertTrue(search.test(next, () -> true));
     }
@@ -30,7 +30,13 @@ class FrontierV3ClearanceProbeTest {
         var ninth = SurfaceAnchor.at(9, 63, 0);
         assertThrows(FrontierV3ClearanceProbe.Pending.class, () -> search.test(ninth, () -> { calls.incrementAndGet(); return true; }));
         assertEquals(8, calls.get()); assertEquals(8, search.rejectedCount());
-        search.nextTurn();
+        search.nextTurn(40);
+        // Same native tick cannot replenish quota through a second caller callback.
+        for (int i = 10; i < 17; i++) assertFalse(search.test(SurfaceAnchor.at(i, 63, 0), () -> false));
+        assertTrue(search.test(ninth, () -> true));
+        search.nextTurn(40);
+        assertThrows(FrontierV3ClearanceProbe.Pending.class, () -> search.test(SurfaceAnchor.at(18, 63, 0), () -> true));
+        search.nextTurn(41);
         for (int i = 1; i <= 8; i++) assertFalse(search.test(SurfaceAnchor.at(i, 63, 0), () -> { fail("must resume beyond tested candidates"); return true; }));
         assertTrue(search.test(ninth, () -> { calls.incrementAndGet(); return true; }));
         assertEquals(9, calls.get()); assertEquals(1, search.probes());

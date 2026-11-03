@@ -51,7 +51,14 @@ final class GuardActivityCapability implements ActorActivityCapability {
     }
     public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder> navigationOrder(FrontierWorldState state, ActorExecutionId execution) {
         validateReference(state, execution); var move = state.actorMovements().get(execution.actorId());
-        return move != null && move.executionId().equals(execution) ? Optional.of(move.order()) : Optional.empty();
+        if (move != null) return move.executionId().equals(execution) ? Optional.of(move.order()) : Optional.empty();
+        var duty = GuardAuthority.require(state, execution);
+        var strike = state.combat().pending().get(duty.id());
+        // A brief native attack correction may retain the exact mission after its approach arrived.
+        // It neither opens a new semantic journey nor grants a different role's order.
+        return strike != null && strike.attacker().execution().equals(execution)
+                && duty.mission().flatMap(io.farfrontier.palemirror.frontier.v3.model.security.GuardMission::response)
+                        .equals(Optional.of(strike.target())) ? Optional.of(duty.missionOrder()) : Optional.empty();
     }
     public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
         validateReference(state, execution);

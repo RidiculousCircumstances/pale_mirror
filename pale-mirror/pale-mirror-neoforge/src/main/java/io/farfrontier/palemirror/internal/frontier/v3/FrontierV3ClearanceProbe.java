@@ -17,6 +17,7 @@ final class FrontierV3ClearanceProbe {
     private final Object geometry;
     private final Set<SurfaceAnchor> rejected = new HashSet<>();
     private int probes;
+    private long nativeTurn = Long.MIN_VALUE;
 
     FrontierV3ClearanceProbe(ActorActuationId authority, SurfaceAnchor origin, Object geometry) {
         this.authority = authority; this.origin = origin; this.geometry = geometry;
@@ -24,7 +25,10 @@ final class FrontierV3ClearanceProbe {
     boolean matches(ActorActuationId authority, SurfaceAnchor origin, Object geometry) {
         return this.authority.equals(authority) && this.origin.equals(origin) && this.geometry == geometry;
     }
-    void nextTurn() { probes = 0; }
+    /** Reentrant callbacks in one native tick share the same quota. */
+    void nextTurn(long tick) {
+        if (nativeTurn != tick) { nativeTurn = tick; probes = 0; }
+    }
     boolean rejected(SurfaceAnchor station) { return rejected.contains(station); }
     int probes() { return probes; }
     int rejectedCount() { return rejected.size(); }

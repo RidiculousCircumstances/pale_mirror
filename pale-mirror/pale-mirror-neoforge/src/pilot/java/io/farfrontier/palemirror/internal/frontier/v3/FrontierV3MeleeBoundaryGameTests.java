@@ -41,8 +41,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
         var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
         var rules=MeleeRules.initial();var strike=strike(level.getGameTime());
-        helper.assertFalse(FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,strike.preparedAt()).ready(),"canonical admission is still pending");
-        helper.assertFalse(fighter.getPersistentData().contains("pm_v3_combat_windup"),"simulation admission cannot start a visible cue early");
+
         var actorPort=FrontierV3OperationEntityParticipant.nativeObject(fighter);
         var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);var ports=List.of(actorPort,targetPort);
         var declaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.owner(),
@@ -52,7 +51,12 @@ public final class FrontierV3MeleeBoundaryGameTests {
         var effect=new FrontierV3NativeEffect(()->{
             if(level.getGameTime()<admittedAfter)return FrontierV3NativeEffect.Admission.waiting("TEST_ADMISSION");
             visibleSince.compareAndSet(-1,level.getGameTime());
-            return FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,level.getGameTime());
+            // Keep canonical time initially at Prepared: both preparations must run concurrently.
+            long canonical=strike.preparedAt()+level.getGameTime()-visibleSince.get();
+            var admission=FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,canonical);
+            if(level.getGameTime()-visibleSince.get()==rules.windup(strike.attack()))
+                helper.assertTrue(admission.ready(),"aligned clocks need one windup, not canonical then native");
+            return admission;
         },()->{
             helper.assertTrue(level.getGameTime()-visibleSince.get()>=rules.windup(strike.attack()),"native cue must last its complete preparation after admission");
             helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules),"effect needs a live finite impact window");

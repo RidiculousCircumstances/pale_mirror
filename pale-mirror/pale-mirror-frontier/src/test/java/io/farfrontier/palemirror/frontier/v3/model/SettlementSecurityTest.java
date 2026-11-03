@@ -594,6 +594,32 @@ class SettlementSecurityTest {
         MeleePositions.requireClaim(occupied,contender,station,21082);
         assertTrue(occupied.combat().retired(first.owner()).positions().isEmpty());
     }
+    @Test void arrivedApproachRetainsOnlyItsPendingAttackGoalAndRevokesItOnCompletion() {
+        var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
+        var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();
+        var patrol=new GuardMission(post.kind(),post.id(),post.observationAnchor(),0,0,GuardMission.Stage.PATROL);
+        state=new GuardMissionSelected(r.duty().id(),r.duty().revision(),patrol).apply(state,r.duty().id(),21001);
+        var duty=state.strategicPlans().guards().get(r.duty().id());
+        state=new GuardMissionSelected(duty.id(),duty.revision(),patrol.responding(
+                state.actorLocations().get(duty.execution().actorId()).supportingSurface(),contact(r).target())).apply(state,duty.id(),21001);
+        duty=state.strategicPlans().guards().get(duty.id());
+        var capability=ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD);
+        assertTrue(capability.navigationOrder(state,duty.execution()).isEmpty());
+        var item=state.inventory().items().get(duty.weapon());
+        var strike=new MeleeStrike(duty.id(),duty.revision(),r.body(),contact(r).target(),item.id(),item.condition(),
+                new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.LUNGE,17,21003,21002);
+        state=apply(strikeSlot(state,strike),duty.id(),new CombatEvent.Prepared(strike),21002);
+        assertFalse(state.actorMovements().containsKey(duty.execution().actorId()));
+        assertEquals(Optional.of(duty.missionOrder()),capability.navigationOrder(state,duty.execution()));
+        var stale=new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(duty.id(),duty.execution().actorId(),
+                duty.missionOrder().goalOrdinal(),duty.missionOrder().goalRevision()+1,duty.missionOrder().legalStations(),
+                duty.missionOrder().capability(),duty.missionOrder().arrivalPolicy());
+        assertFalse(capability.permitsNavigationOrder(state,duty.execution(),stale));
+        state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(Optional.of(duty.missionOrder()),capability.navigationOrder(state,duty.execution()));
+        state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),false,item.condition()),21003);
+        assertTrue(capability.navigationOrder(state,duty.execution()).isEmpty());
+    }
     @Test void queuedApproachPublishesItsTypedWaitThroughTheDeclaredGuardProducer() throws Exception {
         var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
         var post=SecurityCoverage.posts(state,r.duty().home()).getFirst();

@@ -219,11 +219,12 @@ public final class FrontierV3CombatExecutor {
     /** Runs only after durable intent, before spending the operation's live attempt. */
     static FrontierV3NativeEffect.Admission prepareImpact(ServerLevel level,Mob fighter,LivingEntity target,
             MeleeStrike strike,MeleeRules rules,long canonicalTick){
-        if(canonicalTick<strike.impactAt(rules))return FrontierV3NativeEffect.Admission.waiting("MELEE_CANONICAL_ADMISSION");
         long started=FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
         fighter.getLookControl().setLookAt(target,30,30);
         FrontierV3CombatPresentation.track(level,fighter,strike,rules,target);
-        // Neither journal nor simulation admission can consume the visible contact window.
+        // Both clocks advance concurrently after durable intent; never two serial windups.
+        if(canonicalTick<strike.impactAt(rules))return FrontierV3NativeEffect.Admission.waiting("MELEE_CANONICAL_ADMISSION");
+        // Journal admission cannot consume the visible contact window.
         if(level.getGameTime()-started<rules.windup(strike.attack()))
             return FrontierV3NativeEffect.Admission.waiting("MELEE_WINDUP");
         if(!FrontierV3MeleeReach.contains(fighter,target,strike.profile())

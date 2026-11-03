@@ -153,7 +153,7 @@ final class FrontierV3PedestrianCourtesy {
                 SEARCHES.put(body, retainedSearch);
             }
             var search = retainedSearch;
-            search.nextTurn();
+            search.nextTurn(level.getGameTime());
             var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actor));
             TARGETS.keySet().stream().filter(other -> !TARGETS.get(other).authority().current(other)).toList()
                     .forEach(FrontierV3PedestrianCourtesy::cancel);

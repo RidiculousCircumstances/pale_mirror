@@ -16,7 +16,7 @@ public record EngagementRules(int outerRadius, int arcDegrees, int flankAlignmen
                 || attackDistanceMicros<1 || spacingMicros<1 || arcWeightPermille<1 || confirmedFlankFailureTicks<1 || confirmedFlankFailureTicks>participantLifetime)
             throw new IllegalArgumentException("invalid encounter tactics");
     }
-    public static EngagementRules initial() { return new EngagementRules(5,45,700,12,8,2,12,8,3,80,2_000_000,90,85,1500,2_200_000,800_000,4000,12,650,12,2); }
+    public static EngagementRules initial() { return new EngagementRules(5,45,700,12,4,1,12,8,3,80,2_000_000,90,85,1500,2_200_000,800_000,4000,12,650,12,2); }
     public String canonicalText() { return outerRadius+":"+arcDegrees+":"+flankAlignmentPermille+":"+rebaseDistance+":"+assemblyTicks
             +":"+releaseLeadTicks+":"+slotSpacingTicks+":"+slotWindowTicks+":"+maximumWaveSize+":"+participantLifetime
             +":"+targetDriftMicros+":"+quickTurnDegrees+":"+lungeTurnDegrees+":"+lungeRunPermille+":"+attackDistanceMicros+":"+spacingMicros+":"+arcWeightPermille+":"+confirmedFlankFailureTicks

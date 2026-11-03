@@ -101,6 +101,7 @@ final class FrontierV3AmbientMovementExecutor {
                 ? FrontierV3ScoutPatrolMotion.capture(state, runtime, body, lease)
                 : FrontierV3AmbientActuation.capture(state, runtime, body, lease)).orElse(null);
         if (actuation == null) return false;
+        if (FrontierV3LocalGoalCorrection.pursueActivity(level, body, actuation)) return false;
         if (lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT) {
             FrontierV3ActorMovementNavigation.pursue(level, runtime, state, body, lease,
                     state.actorMovements().get(actorId));
