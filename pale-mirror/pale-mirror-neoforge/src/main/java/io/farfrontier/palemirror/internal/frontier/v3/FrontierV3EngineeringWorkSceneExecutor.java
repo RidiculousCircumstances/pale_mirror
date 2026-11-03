@@ -113,7 +113,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
                     new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())),
                     FrontierV3ActorActuation.capture(state, mob, executions.requireMember(member.actorId()), runtime::decodedState));
             if (FrontierV3SupportedBodyCapture.observe(level, mob).filter(slot.standingBody()::equals).isPresent()
-                    && level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                    && level.getGameTime() % 12L == 0L) FrontierV3WorkPresentation.pulse(mob,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.STRIKE);
         }
 
         // Inspection changes the common position owner. Never prepare against the old snapshot.

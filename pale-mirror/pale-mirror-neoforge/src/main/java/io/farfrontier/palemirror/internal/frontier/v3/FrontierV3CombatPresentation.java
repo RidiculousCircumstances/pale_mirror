@@ -25,6 +25,7 @@ public final class FrontierV3CombatPresentation {
     static long begin(ServerLevel level,Mob body,String owner,long ordinal,long epoch,CombatGesture gesture,int preparation,int active,int recovery,LivingEntity target){
         var marker=body.getPersistentData().getCompound(KEY);
         if(!marker.getString("owner").equals(owner) || marker.getLong("ordinal")!=ordinal || level.getGameTime()<marker.getLong("startedAtTick")){
+            FrontierV3WorkPresentation.clear(body);
             marker=new CompoundTag();marker.putString("owner",owner);marker.putLong("ordinal",ordinal);marker.putLong("epoch",epoch);marker.putInt("attack",gesture.wireTag());
             marker.putInt("preparation",preparation);marker.putInt("active",active);marker.putInt("recovery",recovery);marker.putLong("startedAtTick",level.getGameTime());
             marker.putInt("phase",CombatGesturePayload.Phase.PREPARING.wireTag());marker.putLong("aimAt",level.getGameTime());facing(marker,body,target);body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);

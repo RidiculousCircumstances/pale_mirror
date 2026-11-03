@@ -219,7 +219,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
             return;
         }
         if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == inputCursor) {
-            worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.HANDLE);
             submit(runtime, "production-work-input-ready", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), ProductionWorkProgress.inputReady(), observation));
             return;
         }
@@ -242,7 +242,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
                     ? ProductionWorkProgress.outputReady() : ProductionWorkProgress.processing(job.workProgress().completedTicks() + 1);
             case OUTPUT_READY -> throw new IllegalStateException("terminal work may not continue");
         };
-        worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.HANDLE);
         FrontierV3CommandSubmission.submitBound(runtime, "production-work-progress", lease.id().value(),
                 new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next, observation), binding);
     }

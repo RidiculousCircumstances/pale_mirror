@@ -146,6 +146,7 @@ final class FrontierV3ControlledMobMotion {
     static void clearStationWorkGesture(ServerLevel level, Mob actor) {
         DUTY_CUES.remove(actor);
         STATION_SETTLING.remove(actor);
+        FrontierV3WorkPresentation.clear(actor);
         actor.swinging = false;
         actor.swingTime = 0;
         PaleMirrorNetwork.sendStationWorkGesture(level, actor, false);
@@ -155,6 +156,7 @@ final class FrontierV3ControlledMobMotion {
     static void showStationWorkGesture(ServerLevel level, Mob actor) {
         STATION_SETTLING.remove(actor);
         DUTY_CUES.put(actor, "HARVESTING:PREPARED");
+        FrontierV3WorkPresentation.pulse(actor,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.CULTIVATE);
         PaleMirrorNetwork.sendStationWorkGesture(level, actor, true);
     }
 

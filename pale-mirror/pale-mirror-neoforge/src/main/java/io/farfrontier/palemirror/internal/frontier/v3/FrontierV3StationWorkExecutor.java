@@ -155,8 +155,8 @@ final class FrontierV3StationWorkExecutor {
                 long tick = runtime.canonicalState().orElseThrow().instant().ticks();
                 var prior = StationWorkLabour.progress(state, job);
                 if (prior.filter(progress -> progress.running() && tick < progress.activeUntilTick()).isPresent()) {
-                    // Vanilla bounds the swing animation; no per-frame custom broadcast or work credit.
-                    worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                    // The bounded pose pulse carries no work credit and is throttled per native body.
+                    FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.HANDLE);
                     return;
                 }
                 boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();

@@ -1,0 +1,232 @@
+{
+  "schema": 1,
+  "id": "retained_resident_work_animation",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25583,
+    "profile": "peaceful-guards"
+  },
+  "pilot": {
+    "username": "pmresponse"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/time set day"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": -4,
+        "y": 0,
+        "z": -4
+      },
+      "settleMs": 500
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run fill -1455 64 -1375 -1429 64 -1334 minecraft:wheat[age=7] replace minecraft:wheat"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "expect": {
+            "status": "ok"
+          }
+        }
+      ]
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 60000,
+      "checks": [
+        {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "expect": {
+            "status": "ok",
+            "phase": "HARVESTING"
+          }
+        }
+      ]
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "process",
+          "id": "job:site-harvest-1-wheat-field-6",
+          "expect": {
+            "status": "ok",
+            "identity": {
+              "worker": "resident:1-31"
+            },
+            "result": {
+              "complete": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "workerPresentation"
+        }
+      },
+      "maxDistance": 96,
+      "timeoutMs": 30000,
+      "standOff": 2
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "site",
+      "id": "site:1-wheat-field",
+      "expect": {
+        "status": "ok",
+        "phase": "HARVESTING"
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "workerPresentation"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "job:site-harvest-1-wheat-field-6",
+      "entityType": "minecraft:villager",
+      "durationTicks": 240,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 90000,
+      "maxDistance": 96,
+      "requiredModelRig": "human_era",
+      "requiredWorkGestures": [
+        "CULTIVATE"
+      ],
+      "workerId": "resident:1-31"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 66,
+        "z": -138
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-31",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -4,
+        "y": 0,
+        "z": -4
+      },
+      "settleMs": 500
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "workerPresentation"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "job:site-harvest-1-wheat-field-6",
+      "entityType": "minecraft:villager",
+      "durationTicks": 240,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 90000,
+      "maxDistance": 96,
+      "requiredModelRig": "human_era",
+      "requiredWorkGestures": [
+        "CULTIVATE"
+      ],
+      "workerId": "resident:1-31"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 9,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "resident-work-contact"
+    },
+    {
+      "after": 3,
+      "name": "human-resident-field-work"
+    },
+    {
+      "after": 8,
+      "name": "field-work-after-cold-return"
+    }
+  ]
+}

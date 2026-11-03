@@ -18,6 +18,9 @@ public final class PaleMirrorNetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar("2");
+        registrar.playToClient(ResidentWorkGesturePayload.TYPE,ResidentWorkGesturePayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->{if(FMLEnvironment.dist==Dist.CLIENT)
+                    io.farfrontier.palemirror.internal.client.PaleMirrorResidentWorkClient.receive(payload);}));
         registrar.playToClient(CombatGesturePayload.TYPE,CombatGesturePayload.STREAM_CODEC,PaleMirrorNetwork::receiveCombatGesture);
         registrar.playToClient(AtlasSnapshotPayload.TYPE, AtlasSnapshotPayload.STREAM_CODEC,
                 PaleMirrorNetwork::receiveSnapshot);

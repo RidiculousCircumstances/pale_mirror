@@ -214,6 +214,13 @@ final class FrontierV3TestPilotScenario {
                 || !action.get("requireManeuverMotion").getAsJsonPrimitive().isBoolean()))return false;
         if(action.has("requireWindupMotion") && (!action.has("requiredCombatAttacks") || !action.get("requireWindupMotion").isJsonPrimitive()
                 || !action.get("requireWindupMotion").getAsJsonPrimitive().isBoolean()))return false;
+        if(action.has("requiredWorkGestures")){
+            if(!action.get("requiredWorkGestures").isJsonArray() || action.getAsJsonArray("requiredWorkGestures").size()<1
+                    || action.getAsJsonArray("requiredWorkGestures").size()>3)return false;
+            var gestures=new java.util.HashSet<String>();
+            for(var value:action.getAsJsonArray("requiredWorkGestures"))if(!value.isJsonPrimitive()
+                    || !Set.of("STRIKE","CULTIVATE","HANDLE").contains(value.getAsString()) || !gestures.add(value.getAsString()))return false;
+        }
         if(!action.has("requiredCombatAttacks"))return true;
         if(!action.get("requiredCombatAttacks").isJsonArray() || action.getAsJsonArray("requiredCombatAttacks").size()<1
                 || action.getAsJsonArray("requiredCombatAttacks").size()>4)return false;

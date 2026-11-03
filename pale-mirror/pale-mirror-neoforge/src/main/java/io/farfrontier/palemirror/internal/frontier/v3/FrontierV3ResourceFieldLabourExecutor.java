@@ -14,12 +14,16 @@ final class FrontierV3ResourceFieldLabourExecutor {
         return submit(level, runtime, state, lease, job, false);
     }
     static boolean advance(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job) {
+            FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job, net.minecraft.world.entity.Mob worker) {
         var work = job.progress().work();
         if (work.filter(WorkProgress::complete).isPresent()) return false;
         long now = runtime.canonicalState().orElseThrow().instant().ticks();
         if (work.filter(WorkProgress::running).isPresent()) {
-            if (now < work.orElseThrow().activeUntilTick()) return true;
+            if (now < work.orElseThrow().activeUntilTick()) {
+                if (work.orElseThrow().completedAt(now)<work.orElseThrow().requiredMilliWork())
+                    FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.CULTIVATE);
+                return true;
+            }
             return submit(level, runtime, state, lease, job, false);
         }
         return submit(level, runtime, state, lease, job, true);

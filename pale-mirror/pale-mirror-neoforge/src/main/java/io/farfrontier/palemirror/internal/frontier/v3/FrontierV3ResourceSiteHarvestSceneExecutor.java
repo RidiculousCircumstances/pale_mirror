@@ -468,7 +468,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // Arrival already holds a supported position. Work may animate here, never
         // install a second unfenced local target follower while its continuation waits.
         if (!job.progress().hasPendingCrop()
-                && FrontierV3ResourceFieldLabourExecutor.advance(level, runtime, state, lease, job)) return;
+                && FrontierV3ResourceFieldLabourExecutor.advance(level, runtime, state, lease, job, worker)) return;
         var dueBinding = FrontierV3TraversalScheduleGate.dueBinding(runtime.executionView().orElseThrow(), job);
         if (dueBinding.isEmpty()) {
             if (job.progress().hasPendingCrop()) {
@@ -534,7 +534,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (intent.status() != PhysicalIntentStatus.RUNNING) {
             conflict(level, runtime, lease, "field-work-intent-state-" + intent.status().name().toLowerCase(java.util.Locale.ROOT)); return;
         }
-        worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.CULTIVATE);
         submitBound(runtime, "resource-site-harvest-crop-prepared", lease.id().value(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()), dueBinding.orElseThrow());
     }

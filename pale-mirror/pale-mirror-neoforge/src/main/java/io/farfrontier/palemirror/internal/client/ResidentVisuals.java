@@ -25,6 +25,14 @@ public final class ResidentVisuals {
         for(var hand:HumanoidArm.values())if(!actor.getItemInHand(hand==actor.getMainArm()?net.minecraft.world.InteractionHand.MAIN_HAND:net.minecraft.world.InteractionHand.OFF_HAND).isEmpty()){
             rig.arm(hand,-0.8f,-0.35f,0,hand==HumanoidArm.RIGHT?0.08f:-0.08f);held=true;
         }
+        var work=PaleMirrorResidentWorkClient.frame(actor,partial);
+        if(work!=null){
+            var pose=ResidentWorkAnimation.sample(work.kind(),work.age()/work.duration());
+            var hand=actor.getMainArm();float mirror=hand==HumanoidArm.RIGHT?1:-1;
+            rig.arm(hand,pose.shoulder(),pose.elbow(),mirror*pose.yaw(),mirror*pose.roll());
+            if(pose.twoHands())rig.arm(hand.getOpposite(),pose.shoulder(),pose.elbow(),-mirror*pose.yaw(),-mirror*pose.roll());
+            rig.torso(mirror*pose.torso(),pose.lean());PaleMirrorResidentWorkClient.rendered(actor,work,pose);return true;
+        }
         return held;
     }
     static void rendered(Villager actor,String rig){if(SEEN.size()<256 || SEEN.containsKey(actor.getUUID()))SEEN.put(actor.getUUID(),new Seen(rig,clock));}

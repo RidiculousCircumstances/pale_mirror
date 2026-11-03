@@ -207,6 +207,8 @@ final class FrontierV3GoalNavigation {
             clearProvider(actor);
             FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         }
+        if(FrontierV3WorkPresentation.active(actor) && goal.legalStations().stream().noneMatch(station->FrontierV3SemanticMovement.arrived(level,actor,station)))
+            FrontierV3WorkPresentation.clear(actor);
         ACTUATIONS.put(actor, actuation);
         var activityOrder = retainedOrder.isEmpty() ? goal.order().filter(actuation::currentActivityGoal)
                 : Optional.<MovementOrder>empty();

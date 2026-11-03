@@ -108,7 +108,20 @@ final class FrontierV3ExtractionExecutor {
         var observation = new ActorHotObservation(actuation.id(), job.revision());
         var site = ExtractionWorkAuthority.site(state, job);
         if (job.phase() == ExtractionWork.Phase.EXTRACT) {
-            if (job.labour().isEmpty() || job.labour().orElseThrow().completedAt(tick) < job.labour().orElseThrow().requiredMilliWork()) return null;
+            if (job.labour().isEmpty()) return null;
+            var labour=job.labour().orElseThrow();
+            if (labour.completedAt(tick)<labour.requiredMilliWork()) {
+                var cell=site.layout().require(job.target().orElseThrow().key().cell());
+                var tool=state.inventory().items().get(job.toolId());
+                var source=new BlockPos(cell.source().x(),cell.source().y(),cell.source().z());
+                if(labour.running() && tick<labour.activeUntilTick() && tool!=null
+                        && FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(),tool)
+                        && ExtractionWorkSafety.available(state,state.extractionSites().deposits().get(site.id()),cell)
+                        && FrontierV3LoadedWorld.ready(level,source)
+                        && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(cell.definition().before()))
+                    FrontierV3BlockWorkGesture.present(worker,cell.source());
+                return null;
+            }
             if (!ExtractionSourceCustody.mutationAvailable(state.extractionSites(), job)) return null;
             var target = job.target().orElseThrow(); var cell = site.layout().require(target.key().cell());
             if (!ExtractionWorkSafety.available(state, state.extractionSites().deposits().get(site.id()), cell)) return null;
@@ -211,7 +224,7 @@ final class FrontierV3ExtractionExecutor {
                             && FrontierV3ToolUse.after(worker.getMainHandItem(), block.toolUse())
                             && plain(worker.getOffhandItem(), job.outputKind(), resultCount));
                 if (!operation.complete()) return null;
-                worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.STRIKE);
                 return new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(), List.of(ExtractionPhysicalStateSupport.hand(state, job, resultCount)), external));
             }
             case ExtractionPhysicalStep.Equipment equipment -> {

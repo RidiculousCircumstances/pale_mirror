@@ -184,7 +184,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         SettlementServiceWorkPhase next = work.completedWorkTicks() + 1 == SettlementServiceWork.REQUIRED_WORK_TICKS
                 ? SettlementServiceWorkPhase.EFFECT_READY : SettlementServiceWorkPhase.WORKING;
         int ticks = next == SettlementServiceWorkPhase.EFFECT_READY ? 0 : work.completedWorkTicks() + 1;
-        worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.HANDLE);
         submit(runtime, "settlement-service-work-progress", lease.id().value(),
                 new SettlementServiceWorkProgressed(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next, ticks, observation));
     }

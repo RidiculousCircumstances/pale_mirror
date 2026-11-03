@@ -73,12 +73,17 @@ final class FrontierV3PilotMotionObserver {
                 : FrontierV3TestPilotPresentation.nearestVisibleNamedEntity(minecraft, expectedType, expectedName, maximum))
                 : minecraft.level.getEntity(entityRuntimeId);
         if (!matches(body, expectedType, expectedName, expectedUuid)) {
+            if(entityRuntimeId>=0){
+                emit(action,expectedType,action.get("sampleEveryTicks").getAsInt(),actionStep,milestone,"failed");
+                throw new IllegalStateException("retained motion body disappeared or changed identity: runtime="+entityRuntimeId
+                        +" expectedUuid="+expectedUuid+" actor="+receivedDiagnostic("actor",worker));
+            }
             if (clientTick * 50L >= action.get("timeoutMs").getAsLong()) {
                 throw new IllegalStateException("local named motion body was unavailable: " + expectedType + " " + expectedName);
             }
             return false;
         }
-        if(action.has("requiredCombatAttacks") || action.has("observerCircuit") || action.has("requiredModelRig"))FrontierV3TestPilotClient.look(minecraft,body.getEyePosition());
+        if(action.has("requiredCombatAttacks") || action.has("requiredWorkGestures") || action.has("observerCircuit") || action.has("requiredModelRig"))FrontierV3TestPilotClient.look(minecraft,body.getEyePosition());
         if(action.has("observerCircuit"))circuit(minecraft,action);
         if (entityRuntimeId < 0) { entityRuntimeId = body.getId(); samples = new ArrayList<>(); sampledTicks = new HashSet<>(); }
         int interval = action.get("sampleEveryTicks").getAsInt();
@@ -97,11 +102,10 @@ final class FrontierV3PilotMotionObserver {
             // It shares the process receipt's bounded cadence: a motion carrier must not turn
             // diagnostic polling itself into a high-frequency scene-admission workload.
             if (worker != null && clientTick % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect actor " + worker);
-            // The received swing event starts before the interpolated attack amount becomes
-            // positive on some client turns.  Both fields are ordinary client-rendered state;
-            // observing either preserves the distinction between a declared work dwell and a
-            // frozen body without inventing a presentation signal.
-            boolean workAnimation = body instanceof LivingEntity living && (living.swinging || living.getAttackAnim(1.0F) > 0.0F);
+            // Observe the actual final rig layer. A delivered packet or a native Villager
+            // swing flag alone does not prove that the resident model rendered work.
+            var renderedWork=io.farfrontier.palemirror.internal.client.PaleMirrorResidentWorkClient.rendered(body);
+            boolean workAnimation = renderedWork!=null;
             // This is deliberately an observed client value, paired with the rendered body
             // position.  It lets the native carrier distinguish a frozen authoritative body
             // from a body which has a delivered interpolation/velocity but is not rendering it;
@@ -119,12 +123,14 @@ final class FrontierV3PilotMotionObserver {
                     workAnimation, semanticPhase(action, body.getId()),
                     body instanceof net.minecraft.world.entity.npc.Villager resident
                         ? io.farfrontier.palemirror.internal.client.ResidentVisuals.renderedRig(resident) : "unobserved",
-                    io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body)));
+                    io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body),renderedWork));
         }
         if (clientTick < action.get("durationTicks").getAsLong()) return false;
         try{
             if(action.has("observerCircuit") && circuitDistance<16)throw new IllegalStateException("player did not actually traverse the declared pursuit circuit: "+circuitDistance);
-            requireRepositioning(action);requireModelRig(action);requireCombat(action);emit(action, expectedType, interval, actionStep, milestone);return true;
+            try { requireRepositioning(action);requireModelRig(action);requireCombat(action);requireWork(action); }
+            catch(RuntimeException failure){emit(action,expectedType,interval,actionStep,milestone,"failed");throw failure;}
+            emit(action,expectedType,interval,actionStep,milestone,"ok");return true;
         }finally{releaseCircuit();}
     }
 
@@ -177,6 +183,17 @@ final class FrontierV3PilotMotionObserver {
             throw new IllegalStateException("no actual body motion during the rendered maneuver");
         if(action.has("requireWindupMotion") && action.get("requireWindupMotion").getAsBoolean() && !moving)
             throw new IllegalStateException("no actual body motion during the rendered preparation");
+    }
+
+    /** Work proof reads only poses actually applied by the shared renderer, not an arm event flag. */
+    private static void requireWork(JsonObject action){
+        if(!action.has("requiredWorkGestures"))return;
+        for(var required:action.getAsJsonArray("requiredWorkGestures")){
+            var poses=samples.stream().filter(p->p.work()!=null && p.work().gesture().equals(required.getAsString())).toList();
+            double min=poses.stream().mapToDouble(p->p.work().shoulder()).min().orElse(0);
+            double max=poses.stream().mapToDouble(p->p.work().shoulder()).max().orElse(0);
+            if(poses.size()<3 || max-min<0.05)throw new IllegalStateException("no changing rendered work gesture "+required+"; samples="+poses.size());
+        }
     }
 
     private static void circuit(Minecraft minecraft,JsonObject action){
@@ -281,9 +298,9 @@ final class FrontierV3PilotMotionObserver {
                 .findFirst().orElse(null);
     }
     private static Vec3 position(JsonObject value) { return new Vec3(value.get("x").getAsDouble(), value.get("y").getAsDouble(), value.get("z").getAsDouble()); }
-    private static void emit(JsonObject action, ResourceLocation type, int interval, int actionStep, String milestone) {
+    private static void emit(JsonObject action, ResourceLocation type, int interval, int actionStep, String milestone,String status) {
         JsonObject value = new JsonObject(); value.addProperty("kind", "pilot_motion"); value.addProperty("id", action.get("id").getAsString());
-        value.addProperty("status", "ok"); value.addProperty("entityType", type.toString()); value.addProperty("sampleEveryTicks", interval);
+        value.addProperty("status", status); value.addProperty("entityType", type.toString()); value.addProperty("sampleEveryTicks", interval);
         value.addProperty("durationTicks", action.get("durationTicks").getAsLong()); value.addProperty("entityRuntimeId", entityRuntimeId);
         Entity retained = minecraftEntity();
         if (retained != null) value.addProperty("entityUuid", retained.getUUID().toString());
@@ -295,6 +312,8 @@ final class FrontierV3PilotMotionObserver {
             if(pose.combat()!=null){var combat=pose.combat();var rendered=new JsonObject();rendered.addProperty("attack",combat.attack());
                 rendered.addProperty("attempt",combat.attempt());rendered.addProperty("age",combat.age());rendered.addProperty("preparation",combat.preparation());
                 rendered.addProperty("shoulder",combat.shoulder());rendered.addProperty("elbow",combat.elbow());sample.add("combat",rendered);}
+            if(pose.work()!=null){var work=pose.work();var rendered=new JsonObject();rendered.addProperty("gesture",work.gesture());
+                rendered.addProperty("age",work.age());rendered.addProperty("shoulder",work.shoulder());rendered.addProperty("elbow",work.elbow());sample.add("work",rendered);}
             sample.addProperty("modelRig", pose.rig()); sample.addProperty("semanticPhase", pose.semanticPhase()); values.add(sample); }
         value.add("samples", values); FrontierV3PilotSessionControl.stampDiagnostic(value, actionStep, milestone);
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
@@ -304,5 +323,7 @@ final class FrontierV3PilotMotionObserver {
         return minecraft.level == null || entityRuntimeId < 0 ? null : minecraft.level.getEntity(entityRuntimeId);
     }
     private record Pose(long tick, long serverTick, double x, double y, double z, double observerX, double observerZ, double velocityX, double velocityZ,
-                        Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase, String rig,io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.Rendered combat) { }
+                        Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase, String rig,
+                        io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.Rendered combat,
+                        io.farfrontier.palemirror.internal.client.PaleMirrorResidentWorkClient.Rendered work) { }
 }

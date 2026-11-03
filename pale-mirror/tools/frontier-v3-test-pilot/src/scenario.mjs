@@ -291,6 +291,10 @@ export function validateScenario(scenario) {
           || (action.minimumAngularTravelDeg !== undefined && (!Number.isFinite(action.minimumAngularTravelDeg) || action.minimumAngularTravelDeg<0 || action.minimumAngularTravelDeg>360))
           || (action.minimumTravelBlocks !== undefined && (!Number.isFinite(action.minimumTravelBlocks) || action.minimumTravelBlocks<0 || action.minimumTravelBlocks>128))
           || (action.requiredModelRig !== undefined && !['human_era', 'vanilla_articulated'].includes(action.requiredModelRig))
+          || (action.requiredWorkGestures !== undefined && (!Array.isArray(action.requiredWorkGestures)
+            || action.requiredWorkGestures.length < 1 || action.requiredWorkGestures.length > 3
+            || new Set(action.requiredWorkGestures).size !== action.requiredWorkGestures.length
+            || action.requiredWorkGestures.some(value => !['STRIKE', 'CULTIVATE', 'HANDLE'].includes(value))))
           || (action.requiredCombatAttacks !== undefined && (!Array.isArray(action.requiredCombatAttacks)
             || action.requiredCombatAttacks.length < 1 || action.requiredCombatAttacks.length > 4
             || new Set(action.requiredCombatAttacks).size !== action.requiredCombatAttacks.length

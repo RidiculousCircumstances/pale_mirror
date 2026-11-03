@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.internal.network.StationWorkGesturePayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -57,7 +56,7 @@ public final class PaleMirrorStationWorkGestureClient {
                 int settledTicks = unchanged ? cue.settledTicks() + 1 : 0;
                 if (settledTicks >= 2) {
                     cue = new Cue(cue.expiresAt(), cue.dutyPhase(), cue.gesture(), false, position, settledTicks);
-                    if (cue.gesture() && cue.expiresAt() > clientTick) living.swing(InteractionHand.MAIN_HAND, false);
+                    // The shared resident work layer owns the actual articulated pose.
                 } else cue = new Cue(cue.expiresAt(), cue.dutyPhase(), cue.gesture(), true, position, settledTicks);
                 entry.setValue(cue);
             }

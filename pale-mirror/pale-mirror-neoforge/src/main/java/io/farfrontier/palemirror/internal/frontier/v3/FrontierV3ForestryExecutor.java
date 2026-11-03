@@ -222,7 +222,7 @@ final class FrontierV3ForestryExecutor {
                             && FrontierV3ToolUse.after(worker.getMainHandItem(), block.toolUse())
                             && plain(worker.getOffhandItem(), job.outputKind(), resultCount));
                 if (!operation.complete()) return null;
-                worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.STRIKE);
                 return new Applied(operation.ticket(), new ForestryPhysicalEvent.Observed(job.id(), step, List.of(), List.of(ForestryPhysicalStateSupport.hand(state, job, resultCount)), external));
             }
             case ForestryPhysicalStep.Equipment equipment -> {

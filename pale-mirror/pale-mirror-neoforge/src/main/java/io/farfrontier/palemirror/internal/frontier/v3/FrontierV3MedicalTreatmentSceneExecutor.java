@@ -106,7 +106,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
                 conflict(level, runtime, lease, "hot-body-unavailable"); return;
             }
             if (!member.actorId().equals(operation.patientId()) && level.getGameTime() % 20L == 0L) {
-                body.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                FrontierV3WorkPresentation.pulse(body,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.HANDLE);
             }
         }
 
