@@ -518,6 +518,16 @@ class SettlementSecurityTest {
         var state=apply(r.state(),r.duty().home(),incident,21001);
         state=allocated(state,21001);
         assertEquals(CombatEnvelope.Kind.SELF_DEFENCE,state.security().response(r.duty().id()).orElseThrow().engagement().kind());
+        var commandId=new CommandId("test:repeated-visible-harm");
+        var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,commandId,state.bootstrap().worldId(),Revision.ZERO,
+                new SimInstant(21002),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(commandId),incident);
+        var accepted=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                FrontierWorldProcessCatalog.planCommand("security",state,command));
+        var events=FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("security",accepted.events());
+        assertTrue(events.contains(GuardContinuation.wake(r.duty().id(),21002)),
+                "another hit must wake the existing responder even when allocation stays unchanged");
+        assertFalse(events.stream().anyMatch(event -> event.payload() instanceof GuardDutyEvent),
+                "the harm ingress wakes the owner without replacing its appointment");
         var codec=new FrontierWorldStateCodec();assertEquals(state.security(),codec.decode(codec.encode(state)).security());
         var code=FrontierWorldRuntimeDefinition.payloadCodecs();assertEquals(incident,code.decode(incident.type(),code.encode(incident)));
         var expired=allocated(state,21402);

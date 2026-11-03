@@ -31,9 +31,14 @@ final class SecurityProcessModule implements FrontierWorldProcessModule {
         }
         if(event instanceof SecurityEvent.Seen seen)events.add(SecurityReview.wake(seen.contact().home(),command.submittedAt().ticks()));
         if(event instanceof SecurityEvent.ContactEnded ended)events.add(SecurityReview.wake(ended.home(),command.submittedAt().ticks()));
-        if(event instanceof SecurityEvent.Seen || event instanceof SecurityEvent.ContactEnded) {
-            var key=event instanceof SecurityEvent.Seen seen?new SecurityState.ContactKey(seen.contact().home(),seen.contact().target())
-                    :new SecurityState.ContactKey(((SecurityEvent.ContactEnded)event).home(),((SecurityEvent.ContactEnded)event).target());
+        // A new hit also changes current threat knowledge. An unchanged response
+        // allocation must not leave its existing guard asleep until another sensor pass.
+        {
+            var key=switch(event) {
+                case SecurityEvent.Incident incident -> new SecurityState.ContactKey(incident.home(),incident.attacker());
+                case SecurityEvent.Seen seen -> new SecurityState.ContactKey(seen.contact().home(),seen.contact().target());
+                case SecurityEvent.ContactEnded ended -> new SecurityState.ContactKey(ended.home(),ended.target());
+            };
             for(var response:state.security().responses().values())if(response.contact().equals(key))
                 events.add(GuardContinuation.wake(response.duty(),command.submittedAt().ticks()));
         }
