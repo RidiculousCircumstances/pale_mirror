@@ -21,11 +21,12 @@ final class FrontierV3AmbientActuation {
     static Optional<FrontierV3ActorActuation> capture(FrontierWorldState basis,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, AmbientActorLease lease,
             ActorExecutionId execution) {
-        if (!permitted(basis, execution, lease)) return Optional.empty();
         try {
+            ActorExecutionComposition.CAPABILITIES.requireAmbientMotion(basis, execution, lease);
             return Optional.of(FrontierV3ActorActuation.capture(basis, body, execution,
                     () -> runtime.decodedState().filter(current -> permitted(current, execution, lease))));
         } catch (IllegalArgumentException denied) {
+            FrontierV3PhysicalWaitTrace.actor(body, basis, execution.actorId(), "ambient-actuation:" + denied.getMessage());
             return Optional.empty();
         }
     }

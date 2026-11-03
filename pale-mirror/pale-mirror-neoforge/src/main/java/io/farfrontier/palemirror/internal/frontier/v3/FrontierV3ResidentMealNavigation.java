@@ -106,6 +106,8 @@ final class FrontierV3ResidentMealNavigation {
                 FrontierV3GoalNavigation.Goal.routed(order, route.physicalOnly() ? List.of() : route.waypoints(), state.bootstrap().bounds()), actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
             blocked(body, meal, "minecraft_path:" + result.reason());
+        else if (result.status() == FrontierV3GoalNavigation.Status.AMBIGUOUS)
+            FrontierV3PhysicalWaitTrace.actor(body, state, meal.residentId(), "meal-navigation:" + result.reason());
         else BLOCKED.remove(body);
     }
 
