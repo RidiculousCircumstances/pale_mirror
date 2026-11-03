@@ -174,7 +174,7 @@ public final class FrontierV3CombatExecutor {
                                 .filter(order->order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent()
                             && current.inventory().items().containsKey(strike.weapon())
                             && FrontierV3ExactItemPresentation.exactMatch(fighter.getMainHandItem(),current.inventory().items().get(strike.weapon()));
-                },new FrontierV3NativeEffect(()->prepareImpact(level,fighter,target,strike,runtime.decodedState().orElseThrow().bootstrap().ruleset().melee(),runtime.executionView().orElseThrow().instant().ticks()),()->{
+                },new FrontierV3NativeEffect(()->prepareStrike(level,runtime,fighter,target,strike),()->{
                     var source=fighter.damageSources().mobAttack(fighter);
                     float damage=EnchantmentHelper.modifyDamage(level,fighter.getMainHandItem(),target,source,(float)strike.profile().damage());
                     FrontierV3CombatPresentation.impact(level,fighter,strike,target);
@@ -208,12 +208,21 @@ public final class FrontierV3CombatExecutor {
             FrontierV3OperationConfirmation.submitRequired(level,runtime,result.ticket(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),false,strike.before()));
         }
     }
+    private static FrontierV3NativeEffect.Admission prepareStrike(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
+            Mob fighter,LivingEntity target,MeleeStrike strike){
+        var state=runtime.decodedState().orElseThrow();var rules=state.bootstrap().ruleset().melee();
+        var admission=prepareImpact(level,fighter,target,strike,rules,runtime.executionView().orElseThrow().instant().ticks());
+        FrontierV3MeleeGuidance.observe(level,state,runtime::decodedState,fighter,target,strike,
+                FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),runtime.executionView().orElseThrow().instant().ticks());
+        return admission;
+    }
     /** Runs only after durable intent, before spending the operation's live attempt. */
     static FrontierV3NativeEffect.Admission prepareImpact(ServerLevel level,Mob fighter,LivingEntity target,
             MeleeStrike strike,MeleeRules rules,long canonicalTick){
         if(canonicalTick<strike.impactAt(rules))return FrontierV3NativeEffect.Admission.waiting("MELEE_CANONICAL_ADMISSION");
         long started=FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
         fighter.getLookControl().setLookAt(target,30,30);
+        FrontierV3CombatPresentation.track(level,fighter,strike,rules,target);
         // Neither journal nor simulation admission can consume the visible contact window.
         if(level.getGameTime()-started<rules.windup(strike.attack()))
             return FrontierV3NativeEffect.Admission.waiting("MELEE_WINDUP");

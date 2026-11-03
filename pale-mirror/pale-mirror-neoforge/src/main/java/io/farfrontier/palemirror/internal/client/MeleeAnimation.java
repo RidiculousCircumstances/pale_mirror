@@ -19,18 +19,19 @@ final class MeleeAnimation {
         var cue=frame.payload();
         if(cue.attack()==CombatGesture.BURST || cue.attack()==CombatGesture.BACKSTEP)return maneuver(frame);
         boolean lunge=cue.attack()==CombatGesture.LUNGE;
-        var drawn=lunge?new Pose(0.2f,-1.9f,-0.25f,0.15f,-0.3f,-0.13f)
+        var drawn=lunge?new Pose(0.2f,-1.9f,-1.05f,0.65f,-0.5f,-0.13f)
                 :new Pose(-1.65f,-0.85f,-0.65f,0.45f,-0.2f,-0.03f);
-        var extended=lunge?new Pose(-1.5f,-0.12f,0.05f,0.05f,0.22f,0.18f)
+        var extended=lunge?new Pose(-1.1f,-0.25f,1.1f,-0.6f,0.55f,0.18f)
                 :new Pose(-0.65f,-0.3f,0.85f,-0.3f,0.25f,0.06f);
+        var contact=lunge?new Pose(-1.35f,-0.15f,0,0.05f,0.05f,0.18f):extended;
         float age=frame.age();
         if(cue.phase()==CombatGesturePayload.Phase.CANCELLED){
             float cancelledAt=cue.sampledAt()-cue.startedAt();
-            Pose stopped=preparing(cue.preparation(),cancelledAt,drawn,extended);
+            Pose stopped=preparing(cue.preparation(),cancelledAt,drawn,contact);
             return stopped.mix(READY,(age-cancelledAt)/cue.recovery());
         }
-        if(age<cue.preparation())return preparing(cue.preparation(),age,drawn,extended);
-        if(age<cue.preparation()+cue.active())return extended;
+        if(age<cue.preparation())return preparing(cue.preparation(),age,drawn,contact);
+        if(age<cue.preparation()+cue.active())return contact.mix(extended,(age-cue.preparation())/cue.active());
         return extended.mix(READY,(age-cue.preparation()-cue.active())/cue.recovery());
     }
     private static Pose maneuver(PaleMirrorCombatClient.Frame frame){

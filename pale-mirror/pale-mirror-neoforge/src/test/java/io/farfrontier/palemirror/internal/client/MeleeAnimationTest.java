@@ -34,6 +34,14 @@ class MeleeAnimationTest {
         var forward=MeleeAnimation.sample(new PaleMirrorCombatClient.Frame(burst,7));var retreat=MeleeAnimation.sample(new PaleMirrorCombatClient.Frame(back,7));
         assertTrue(forward.lean()>0.2);assertTrue(retreat.lean()<0);assertNotEquals(forward,retreat);
     }
+    @Test void longAttackSweepsAcrossTheBodyDuringContactInsteadOfHoldingAStraightThrust(){
+        var technique=MeleeRules.initial().techniques().require(MeleeAttack.LUNGE);
+        var drawn=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,technique.preparationTicks()*0.75f,0));
+        var contact=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.IMPACT,technique.preparationTicks(),technique.preparationTicks()));
+        var follow=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.IMPACT,technique.preparationTicks()+technique.activeTicks(),technique.preparationTicks()));
+        assertTrue(drawn.yaw()<-1);assertEquals(0,contact.yaw(),0.01);assertTrue(follow.yaw()>1);
+        assertTrue(drawn.torso()<0 && follow.torso()>0,"torso follows the visible cross-body sword arc");
+    }
     @Test void cancelledPreparationRetractsInsteadOfPlayingTheForwardStrike(){
         var atCancel=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.CANCELLED,5,5));
         var before=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,5,0));

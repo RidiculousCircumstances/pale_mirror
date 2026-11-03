@@ -174,6 +174,18 @@ final class FrontierV3GoalNavigation {
                 Optional.of(goal.order().orElseThrow(() -> new IllegalArgumentException("movement permission requires its retained order"))));
     }
 
+    /** A finite physical correction retains the original order's permission and arrival owner. */
+    static Result pursueCorrection(ServerLevel level,Mob actor,FrontierV3LocalGoalCorrection.Correction correction,
+            FrontierV3ActorActuation actuation,io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission movement){
+        if(!movement.allowed())throw new IllegalArgumentException("held correction cannot actuate navigation");
+        if(!actuation.current(actor) || !actuation.currentMovement(correction.parent())
+                || !correction.current(actuation.id(),correction.parent(),level.getGameTime()))
+            return new Result(Status.AMBIGUOUS,"stale-local-correction",Optional.empty(),Optional.empty());
+        if(FrontierV3PedestrianCourtesy.active(actor))return new Result(Status.IN_PROGRESS,"owner-authorized-spatial-yield",Optional.empty(),Optional.empty());
+        return pursueCaptured(level,actor,new Goal(correction.station(),correction.parent().capability(),correction.envelope()),actuation,
+                movement.pace(),movement.spacing().map(value->(double)value.normalSpacing()).orElse(0.0),Optional.of(correction.parent()));
+    }
+
     static Result pursueCourtesy(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
         if (!FrontierV3PedestrianCourtesy.active(actor))
             throw new IllegalArgumentException("courtesy motion requires its admitted owner checkpoint");

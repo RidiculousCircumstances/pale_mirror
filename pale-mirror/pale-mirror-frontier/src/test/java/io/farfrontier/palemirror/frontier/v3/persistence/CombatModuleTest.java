@@ -74,6 +74,14 @@ class CombatModuleTest {
         assertTrue(MeleeAim.contains(179,0,-1,55));assertTrue(MeleeAim.contains(-179,0,-1,55));
         assertFalse(MeleeAim.contains(0,0,-1,55));assertTrue(MeleeAim.contains(0,1,1,55));
     }
+    @Test void lungeAimTurnsGraduallyAndHasABroadButNotRearFacingContactSector(){
+        var maximum=EngagementRules.initial().aimTurnDegreesPerTick();
+        assertEquals(maximum,MeleeAim.turnToward(0,90,maximum));
+        assertEquals(181,MeleeAim.turnToward(179,-179,12),0.001,"wrap-around uses the short turn");
+        int sector=EngagementRules.initial().lungeTurnDegrees();
+        assertTrue(MeleeAim.contains(0,Math.sin(Math.toRadians(75)),Math.cos(Math.toRadians(75)),sector));
+        assertFalse(MeleeAim.contains(0,0,-1,sector),"wide sword arc never hits straight behind the committed facing");
+    }
     @Test void attackChoiceUsesObservedDistanceAndRetreatButNeverGrantsExtraDamageReach() throws IOException {
         assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,1.2,0,MeleeRules.initial()));
         assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,1.2,0.2,MeleeRules.initial()));

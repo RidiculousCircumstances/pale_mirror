@@ -74,6 +74,15 @@ final class FrontierV3ActorMovementNavigation {
             FrontierV3GoalNavigation.stop(body, actuation);
             return;
         }
+        // Owners may request bounded local latitude; only this common path actuates it.
+        // Reaching the correction never completes the retained semantic order.
+        var correction=FrontierV3LocalGoalCorrection.current(body,actuation,movement.order());
+        if(correction.isPresent()){
+            var result=FrontierV3GoalNavigation.pursueCorrection(level,body,correction.orElseThrow(),actuation,permission);
+            if(result.status()==FrontierV3GoalNavigation.Status.BLOCKED)blocked(body,movement,"local-correction:"+result.reason());
+            else BLOCKED.remove(body);
+            return;
+        }
         var hint = routeHint(state, body, actuation);
         if (movement.order().legalStations().stream().anyMatch(station -> FrontierV3SemanticMovement.arrived(level, body, station))) {
             BLOCKED.remove(body);

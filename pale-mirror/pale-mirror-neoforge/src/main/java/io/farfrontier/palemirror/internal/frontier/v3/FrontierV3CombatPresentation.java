@@ -14,7 +14,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
-/** Native presentation clock only. The retained strike and journal own all gameplay decisions. */
+/** Observed native strike clock/facing and its read-only client cue; the strike and journal own effects. */
 @EventBusSubscriber(modid=PaleMirrorMod.MOD_ID)
 public final class FrontierV3CombatPresentation {
     private static final String KEY="pm_v3_combat_windup";
@@ -27,7 +27,7 @@ public final class FrontierV3CombatPresentation {
         if(!marker.getString("owner").equals(owner) || marker.getLong("ordinal")!=ordinal || level.getGameTime()<marker.getLong("startedAtTick")){
             marker=new CompoundTag();marker.putString("owner",owner);marker.putLong("ordinal",ordinal);marker.putLong("epoch",epoch);marker.putInt("attack",gesture.wireTag());
             marker.putInt("preparation",preparation);marker.putInt("active",active);marker.putInt("recovery",recovery);marker.putLong("startedAtTick",level.getGameTime());
-            marker.putInt("phase",CombatGesturePayload.Phase.PREPARING.wireTag());facing(marker,body,target);body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
+            marker.putInt("phase",CombatGesturePayload.Phase.PREPARING.wireTag());marker.putLong("aimAt",level.getGameTime());facing(marker,body,target);body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
         }
         return marker.getLong("startedAtTick");
     }
@@ -38,8 +38,25 @@ public final class FrontierV3CombatPresentation {
     }
     static void maneuverEnded(ServerLevel level,Mob body,MeleeManeuver m){finish(level,body,m.owner().value(),m.attemptOrdinal(),CombatGesturePayload.Phase.CANCELLED);}
     static void impact(ServerLevel level,Mob body,MeleeStrike strike,LivingEntity target){
-        var marker=body.getPersistentData().getCompound(KEY);facing(marker,body,target);body.getPersistentData().put(KEY,marker);
+        FrontierV3LocalGoalCorrection.withdraw(body,strike.attacker(),strike.attemptOrdinal());
         finish(level,body,strike,CombatGesturePayload.Phase.IMPACT);
+    }
+    /** Track only during early preparation. The final commitment and contact use a frozen facing. */
+    static boolean track(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules,LivingEntity target){
+        if(strike.attack()!=MeleeAttack.LUNGE)return false;
+        var marker=body.getPersistentData().getCompound(KEY);long now=level.getGameTime();
+        long elapsed=now-marker.getLong("startedAtTick");
+        long tracking=Math.min(rules.windup(strike.attack())-1,Math.max(1,(rules.windup(strike.attack())*rules.engagements().aimTrackPermille()+999)/1000));
+        if(!marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal()
+                || marker.getLong("epoch")!=strike.attacker().body().physicalEpoch()
+                || marker.getInt("phase")!=CombatGesturePayload.Phase.PREPARING.wireTag() || elapsed<0 || elapsed>=tracking)return false;
+        if(now<=marker.getLong("aimAt"))return true;
+        var direction=target.getEyePosition().subtract(body.getEyePosition());
+        float desired=(float)Math.toDegrees(Math.atan2(-direction.x,direction.z));
+        float corrected=(float)MeleeAim.turnToward(marker.getFloat("facingYaw"),desired,rules.engagements().aimTurnDegreesPerTick());
+        marker.putLong("aimAt",now);marker.putFloat("facingYaw",corrected);
+        marker.putFloat("facingPitch",(float)Math.toDegrees(-Math.atan2(direction.y,Math.hypot(direction.x,direction.z))));
+        body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);return true;
     }
     private static void facing(CompoundTag marker,Mob body,LivingEntity target){
         var direction=target.getEyePosition().subtract(body.getEyePosition());
@@ -70,7 +87,7 @@ public final class FrontierV3CombatPresentation {
                 && MeleeAim.contains(marker.getFloat("facingYaw"),target.getX()-body.getX(),target.getZ()-body.getZ(),
                     strike.attack()==MeleeAttack.LUNGE?rules.engagements().lungeTurnDegrees():rules.engagements().quickTurnDegrees());
     }
-    static void cancel(ServerLevel level,Mob body,MeleeStrike strike){finish(level,body,strike,CombatGesturePayload.Phase.CANCELLED);}
+    static void cancel(ServerLevel level,Mob body,MeleeStrike strike){FrontierV3LocalGoalCorrection.withdraw(body,strike.attacker(),strike.attemptOrdinal());finish(level,body,strike,CombatGesturePayload.Phase.CANCELLED);}
     private static void finish(ServerLevel level,Mob body,MeleeStrike strike,CombatGesturePayload.Phase phase){
         finish(level,body,strike.owner().value(),strike.attemptOrdinal(),phase);
     }

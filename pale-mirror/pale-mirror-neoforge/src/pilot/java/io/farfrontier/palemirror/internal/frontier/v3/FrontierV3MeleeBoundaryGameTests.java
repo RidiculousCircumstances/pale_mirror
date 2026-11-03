@@ -84,6 +84,30 @@ public final class FrontierV3MeleeBoundaryGameTests {
             fighter.discard();target.discard();helper.succeed();
         });
     }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void lungeTracksEarlyButCannotTurnAfterCommittingItsWideArc(GameTestHelper helper){
+        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,6));target.setNoAi(true);target.setNoGravity(true);
+        var rules=MeleeRules.initial();var strike=strike(level.getGameTime());var yaw=new AtomicReference<Float>();
+        FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
+        helper.runAfterDelay(1,()->{
+            target.setPos(fighter.getX()+2,fighter.getY(),fighter.getZ());
+            helper.assertTrue(FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),"early preparation can correct the observed aim");
+            float corrected=fighter.getPersistentData().getCompound("pm_v3_combat_windup").getFloat("facingYaw");
+            helper.assertTrue(corrected<0 && corrected>=-rules.engagements().aimTurnDegreesPerTick(),"no instantaneous right-angle homing");yaw.set(corrected);
+        });
+        helper.runAfterDelay(rules.windup(strike.attack()),()->{
+            target.setPos(fighter.getX()+2,fighter.getY(),fighter.getZ()+0.5);
+            helper.assertFalse(FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),"impact cannot keep tracking a circling player");
+            helper.assertTrue(fighter.getPersistentData().getCompound("pm_v3_combat_windup").getFloat("facingYaw")==yaw.get(),"committed facing remains frozen");
+            helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules)
+                    && FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules) && FrontierV3MeleeReach.contains(fighter,target,strike.profile()),
+                    "sideways target inside the broad front arc and ordinary reach is hittable");
+            target.setPos(fighter.getX(),fighter.getY(),fighter.getZ()-2);
+            helper.assertFalse(FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules),"dodging behind the commitment is still effective");
+            fighter.discard();target.discard();helper.succeed();
+        });
+    }
     private static MeleeStrike strike(long tick){
         var owner=new SubjectId("guard:windup-test");
         var actor=new ActorExecutionId(new SubjectId("resident:windup-test"),
