@@ -54,11 +54,11 @@
     {
       "type": "visit_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Owen Ash",
       "maxDistance": 128,
       "timeoutMs": 30000,
       "standOff": 2,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-3"
     },
     {
       "type": "assert_fixture",
@@ -79,7 +79,7 @@
       "checks": [
         {
           "view": "actor",
-          "id": "resident:1-16",
+          "id": "resident:1-3",
           "expect": {
             "status": "ok",
             "ambientLease": "HOT",
@@ -96,11 +96,11 @@
     {
       "type": "visit_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Owen Ash",
       "maxDistance": 128,
       "timeoutMs": 30000,
       "standOff": 0,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-3"
     },
     {
       "type": "command",
@@ -115,22 +115,22 @@
     {
       "type": "look_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Owen Ash",
       "maxDistance": 64,
       "timeoutMs": 30000,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-3"
     },
     {
       "type": "attack_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Owen Ash",
       "maxDistance": 32,
       "maxAttacks": 1,
       "requireRemoval": false,
       "requireDamage": true,
       "timeoutMs": 30000,
       "causalMilestone": "player_harmed_declared_guard",
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-3"
     },
     {
       "type": "wait_until_diagnostic",
@@ -138,7 +138,8 @@
       "id": "settlement:1",
       "expect": {
         "security": {
-          "hostilePlayers": 1
+          "contactTarget": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf",
+          "contactKind": "PLAYER"
         }
       },
       "timeoutMs": 30000
@@ -168,12 +169,12 @@
       "type": "observe_entity_motion",
       "id": "close-combat-response",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Owen Ash",
       "durationTicks": 100,
       "sampleEveryTicks": 1,
       "timeoutMs": 45000,
       "maxDistance": 48,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-3"
     },
     {
       "type": "wait_until_player_health",
@@ -196,7 +197,7 @@
       "type": "observe_entity_motion",
       "id": "circling-player-pursuit",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Owen Ash",
       "durationTicks": 400,
       "sampleEveryTicks": 1,
       "timeoutMs": 45000,
@@ -219,7 +220,7 @@
           "z": 3
         }
       ],
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-3"
     },
     {
       "type": "wait_until_player_health",
@@ -250,7 +251,6 @@
       "id": "settlement:1",
       "expect": {
         "security": {
-          "hostilePlayers": 1,
           "respondingGuards": 0,
           "contactCount": 0
         }
@@ -272,7 +272,6 @@
       "expect": {
         "status": "ok",
         "security": {
-          "hostilePlayers": 1,
           "respondingGuards": 0,
           "contactCount": 0,
           "maneuverInProgress": false
