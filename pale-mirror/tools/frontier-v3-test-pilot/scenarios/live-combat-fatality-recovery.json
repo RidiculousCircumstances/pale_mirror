@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "id": "live_combat_fatality_recovery",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "actor",
+          "id": "resident:1-10",
+          "expect": {
+            "status": "ok",
+            "life": "DEAD"
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 combat_trace start @s 2 60"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-10",
+          "field": "position"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:1-10",
+      "causalMilestone": "saved_death_is_not_resurrected_after_natural_chunk_visit"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 64,
+        "z": -138
+      },
+      "settleMs": 0
+    }
+  ],
+  "assertions": [
+    {
+      "after": 3,
+      "view": "actor",
+      "id": "resident:1-10",
+      "expect": {
+        "status": "ok",
+        "life": "DEAD"
+      }
+    },
+    {
+      "after": 5,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0
+      }
+    }
+  ],
+  "frames": []
+}
