@@ -1,5 +1,33 @@
 # Active continuity — 2026-11-04
 
+## Latest human fight — slow pursuit confirmed
+
+Read-only capture6e4b5245-b3db-44ea-903d-96bbd4cd1139 on deployedebb2d443a/
+JavaPID1329805/world329.5903/5903complete/no loss,36.3seconds/726native,world
+and simulationticks(~20TPS). rd survival/emptyhand throughout; observed median
+moving4.30blocks/s vs Eli Stone1-22GUARD~2.00. Finn Wood1-15iron_sword but
+PRODUCTION(job:production-settlement-1-settlement_maintain_equipment-131)→SAFETY;
+not a second guard in this capture. Finn6punches20→14HP,Eli5punches20→15HP.
+Eli2QUICKhits/8damage; player8.333→0.333. No death recorded; reported kills may
+be outside this fragment, don't assert they did/didn't occur elsewhere.
+All9BURST decisions rejected no-safe-destination; no forward burst launched.
+One SIDESTEP_LEFT selected58134/launched58140/closed58156, actual peak sample
+~4.62blocks/s, so accelerated actuator works. Trace sprinting=false is not proof
+of absent custom pace. Ordinary CombatLocomotion.plan explicitly returns WALK/
+CAREFUL except pending closing strike or open maneuver. Thus short maneuvers
+exist but cooldown-owned tactical pursuit running does not; not a server TPS loss.
+Seven prepare submissions:4visible QUICK(2hits/2rangemisses),2early tactical
+cancels,1LUNGE outside-approach cancellation. Source withdrawForEvasion checks
+lateral pressure before positively establishing a usable destination; at32801
+cancels QUICK at2.28gap then subsequent sidestep destination is refused. This
+can discard a contact opportunity with no executed evasive action. Exact reason
+for each no-safe-destination is not traced (geometry/policy/rank/reach/claims);
+do not invent a physical obstruction. Read-only analysis; no code/deploy/client/
+player mutation. Artifacts IMPL/build/combat-duel-20261104/user-swordfighters-
+summary.json. Next recommended scope: finite cooldown-owned pursuit/reposition
+running independent of a3block closing burst, review destination admission, and
+couple reversible strike withdrawal to a proven legal evasion. Not implemented.
+
 ## Latest human recording request — capture did not start
 
 User asked to inspect the new fight. Read-only current MAIN logs and recorder

@@ -135,3 +135,30 @@ captures with matching JFR sidecars, retaining exact bytes and a SHA256 manifest
 under runtime debug/pale-mirror/combat/archive/20261104-before-human-duel-retest/.
 Four latest files remain top-level, leaving12slots. No code/deploy/player/world
 change. The human fight needs a new recording; wait for RECORDING before combat.
+
+## Human fight6e4b5245 — ordinary pursuit remains too slow
+
+Read-only new capture is5903/5903complete,36.3seconds/726native ticks (~20TPS),
+rd survival/empty hand. Eli Stone GUARD median moving2.00blocks/sec vs rd4.30.
+All9BURST decisions are refused without an admissible destination. The exact
+filter reason is not exposed; do not assert that physical terrain is blocked.
+One actual SIDESTEP_LEFT launches/closes58140/58156 and reaches~4.62blocks/sec,
+so accelerated shared actuation exists. Ordinary CombatLocomotion.plan returns
+WALK/CAREFUL outside open maneuver or pending closing strike: there is no
+separate finite tactical pursuit run. Burst only allows a short3block closing
+goal. This is a policy/availability limitation, not low server TPS.
+
+Finn Wood carries iron_sword but executes PRODUCTION→SAFETY, not GUARD. Player
+lands6punches on Finn(20→14HP),5on Eli(20→15). Eli has4visible QUICKs,2hits/
+2rangemisses;2more early tactical cancellations and1LUNGE approach cancellation.
+Player8.333→0.333through8guard damage. No deaths recorded in this fragment;
+reported kills outside it are neither confirmed nor disproved.
+
+Additional source defect: withdrawForEvasion uses pressure eligibility before
+positive destination admission. At native32801 an in-reach2.28gap QUICK is
+cancelled for evasion, yet later lateral requests are refused. Safe cancellation
+alone does not prove the replacement can execute. Recommended repair couples
+reversible withdrawal to a proven candidate, and adds finite cooldown-owned
+pursuit/reposition running independent of a short closing burst. Not implemented
+by this analysis. No gameplay/player/client/server mutation. Offline summary:
+IMPL/build/combat-duel-20261104/user-swordfighters-summary.json.
