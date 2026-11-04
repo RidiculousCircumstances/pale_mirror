@@ -168,7 +168,7 @@
       "requireRemoval": false,
       "requireDamage": true,
       "timeoutMs": 30000,
-      "causalMilestone": "player_harmed_declared_guard",
+      "causalMilestone": "second_ordinary_hit_in_same_exchange",
       "workerId": "resident:1-16"
     },
     {
