@@ -1,5 +1,70 @@
 # Active continuity — 2026-11-04
 
+## Delivered — finite pursuit and maneuver admission
+
+User accepted all5points; implemented/verified/committed/deployed. User will test
+combat balance. Sole main/no agents/newgoal/push. IMPL /home/rd/proj/pm-f06r3-
+facility-lane-recovery/pale-mirror CLEANa161996ef (test-only scenario successor);
+production4f6137ef4ed1fed826c637de5760878a13b763f3. RELEASE /home/rd/proj/pm-r242-
+economic-release/pale-mirror CLEANdetached4f6137ef4. PACK trackedclean888ed90,
+old untracked.f0v-baseline/ preserved. GOV unrelated WIP preserved; stage only
+owned ledger/new pursuit report/exact tactical_pursuit_boundary line.
+
+Shared PURSUIT_RUN uses existing maneuver/UAE/nav:6horizontalblocks,30tick travel,
+1prep/2recovery,70tick retained independent cooldown,12shared,3000permille base
+walking gait,35effort. Other maneuvers/contact/hydration cannot refill it. Bounded
+observed-motion6tick/2block lead ranks actual supported pressure/flank stations;
+fixed goal during each short run, no per-frame replan/future input. Exact native
+contact can checkpoint/close same run before weapon Prepared without awarding
+arrival; recovery/cooldown still allow ordinary attacks/walking. Role combat port
+supplies unaccelerated gait, preventing multiplier duplication. Common native
+owner-issued pace safety cap1.0 replaces ambient0.7cap which clipped intended6
+blocks/sec; unpaced fallback0.7/actual attributes/collisions remain. Schema330
+freshworld, stable new kind tag5/cooldown/facts codec. Existing BURST cue reused,
+no client update. Same legal destination/checkpoint assessment precedes unused
+journal withdrawal; pending/refused alternative keeps current attack. Preview
+is not a reservation: actual admission revalidates dynamic facts. Common service
+access permits finite unclaimed apron movement, retaining service boundary,
+active egress/body/destination claims. Rejection stage counts/runReadyAt traced.
+
+/tmp/pm-pursuit-focused-final.log PASS38s:92focused cases (25combat,35security,
+11guard,4codec,10confirmation,2pace,5animation)+guardrails. Native18strikes PASS
+39.75s (/tmp/pm-pursuit-native-strikes.log);46localnavigation PASS3.684s/process31s
+(/tmp/pm-pursuit-native-navigation-final.log). First invalid scene-local-navigation
+slice ran0 despiteGradleexit0; corrected actual local-navigation verified counts.
+Source JAR/package PASS3s; clean detached guardrails/JAR/package PASS10s. No broad
+human-balance/product-visual validation claim. Detailed scope/negative/recovery/
+limits and all receipts: docs/frontier-v3-tactical-pursuit-20261104.md.
+
+MAIN /home/rd/far-frontier-server, far-frontier-v3-live.service, Java22PID1811874/
+wrapper1811850, start1793801273. New tactical-pursuit-schema330-seed139-20261104,
+seed139/rootr31. Old329world retained as identified diagnostic evidence.
+SHA5127296d5295b1e6bcce43a2a73e233dd2122eeeb05763d2a2369156bc7d615bb646a32c867e4bbeaa4b4b410fa450d506c5726ab450475489f8f25386ac1e9deef.
+Root preflight/publish/native saved+old JVM/ports exit/install/fresh-worldpreflight/
+post-start+final verify PASS; /tmp/pm-pursuit-*.log. Early verify before port ready
+correctly refused, not a server failure. No human rd state edited.
+
+Final one20FPS/fullpack/privateXvfb equipment diagnostic09665c13-00f8-488b-a9fc-
+b365a47fe940 completes9actions, two ordinary sword donations to admitted storage,
+first canonical occupiedCount1 observed before second click. Supplemental console
+setup only for task PMTestPilot2 after offline case-sensitive op identity mismatch;
+not an unassisted product preflight. Actual PMTestPilot2 operator removed. All
+clients/private displays stopped; no monitoring/recording task left. Settlement1
+Northwatch at27945:statusok/NORMAL/activeCases0,2appointed (Nora1-16EQUIPPING,
+Eli1-22ON_DUTY/armed), no contact/maneuvers. Human may test actual Guard role near
+(-1486,64,-1360); sword-carrying production workers are not guards.
+
+Separate discovered storage defect remains open, not repaired by combat work:
+original1-depot click refused FUNGIBLE_LAYOUT_MISMATCH:stock. Filling a new chest
+before adoption made2swords fungible; later managed click scans both untagged
+swords as new arrivals and throws multiple-individual-arrivals at PlayerClick-
+Observation43. Native operation2fcd143b-414f-45fe-8604-6fa25fcc8c9f PLAYER_CONTAINER_
+CLICK AMBIGUOUS/EFFECT_EXCEPTION; PMTestPilot further clicks fenced PLAYER_CLICK_
+PENDING. Don't erase/replay receipt or claim world fully clean from NORMAL alone.
+Final test uses clean admitted chest(-1468,64,-1343)/another task player, not a
+product fix for that condition. Failed/valid manifests under IMPL/build/combat-
+pursuit-20261104/. No remaining scoped combat implementation; manual balance next.
+
 ## Latest human fight — slow pursuit confirmed
 
 Read-only capture6e4b5245-b3db-44ea-903d-96bbd4cd1139 on deployedebb2d443a/
