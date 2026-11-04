@@ -27,6 +27,8 @@ public final class MeleeDuelPolicy {
     private static Optional<MeleeManeuver.Kind> lateral(CombatState combat,CombatOrder order,MeleeManeuvers.Facts facts,long tick,
             MeleeRules rules,OptionalLong harm,Set<MeleeManeuver.Kind> allowed) {
         var duel=rules.maneuvers().duel();var prior=combat.maneuvers().get(order.owner());var memory=memory(combat,order,tick,rules,harm);
+        var stance=combat.stances().get(order.owner());
+        if(CombatFormation.pressureNeeded(combat,order,tick,rules) && stance!=null && stance.current(order,tick,rules) && stance.attackReady())return Optional.empty();
         if(!memory.pressured(tick,duel) || facts.distance()>duel.maximumGapMicros()/1_000_000.0
                 || prior!=null && prior.busy(tick,rules.maneuvers()))return Optional.empty();
         int side=memory.side();
@@ -60,6 +62,7 @@ public final class MeleeDuelPolicy {
         if(prior!=null && prior.busy(tick,rules.maneuvers()))
             return Choice.of(prior.kind().closing() && (!prior.open() || prior.launchedAt()>0 || prior.kind()==MeleeManeuver.Kind.PURSUIT_RUN) && contact && attackReady
                     ?Action.ATTACK:Action.WAIT);
+        if(contact && attackReady && !combat.recovering(order.owner(),tick) && CombatFormation.pressureNeeded(combat,order,tick,rules))return Choice.of(Action.ATTACK);
         var lateral=lateral(combat,order,facts,tick,rules,harm,allowed);
         if(lateral.isPresent())return Choice.maneuver(lateral.orElseThrow());
         // Footwork can use weapon recovery; another weapon attack cannot.

@@ -75,7 +75,7 @@ class SettlementSecurityTest {
             state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(body,order.target(),true,true,21001)),21001);
         }
         var order=orders.getFirst();var key=CombatEngagement.Key.of(order);var wave=state.combat().engagements().get(key).wave().orElseThrow();
-        assertEquals(2,wave.slots().size());assertTrue(wave.slots().get(1).opensAt()-wave.slots().getFirst().opensAt()>=10);
+        assertEquals(2,wave.slots().size());assertEquals(wave.slots().getFirst().opensAt(),wave.slots().get(1).opensAt(),"different sides share a short attack window");
         var slot=wave.slots().getFirst();order=CombatComposition.CAPABILITIES.current(state,slot.execution(),slot.opensAt()).orElseThrow();
         assertFalse(CombatEngagementPlanner.permitsStrike(state.combat(),order,slot.participant(),slot.opensAt()-1,state.bootstrap().ruleset().melee()));
         var item=state.inventory().items().get(order.weapon());
@@ -106,7 +106,7 @@ class SettlementSecurityTest {
         r=pair();state=r.state();
         var other=CombatComposition.CAPABILITIES.orders(state,21001).stream().filter(value->!value.owner().equals(order.owner())).findFirst().orElseThrow();
         state=apply(state,other.owner(),new CombatEvent.PositionPlanned(other.execution(),other.target(),other.targetPosition(),Optional.empty(),MeleePosition.Reason.NO_PATH),21001);
-        long tick=21001+state.bootstrap().ruleset().melee().engagements().confirmedFlankFailureTicks();
+        long tick=21001+state.bootstrap().ruleset().melee().engagements().roleCommitmentTicks();
         state=apply(state,other.owner(),new CombatEvent.PositionPlanned(other.execution(),other.target(),other.targetPosition(),Optional.empty(),MeleePosition.Reason.NO_PATH),tick);
         assertEquals(MeleeSector.Role.SUPPORT,MeleeTactics.sector(state.combat(),other,tick,state.bootstrap().ruleset().melee()).role());
     }

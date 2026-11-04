@@ -30,7 +30,7 @@ public final class GuardResponse {
     public static boolean permitsStation(FrontierWorldState state,GuardDuty duty,SurfaceAnchor station) {
         return state.security().response(duty.id()).filter(r -> r.contact().home().equals(duty.home()) && r.engagement().contains(station)).isPresent();
     }
-    static boolean inScope(FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.api.SubjectId homeId,SecurityState.Contact contact) {
+    public static boolean inScope(FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.api.SubjectId homeId,SecurityState.Contact contact) {
         var position=new SurfaceAnchor(contact.position());
         var home=new SurfaceAnchor(FrontierWorldStateSupport.settlement(state.bootstrap(),homeId).anchor());
         return SecurityCoverage.distance(home,position)<=state.bootstrap().ruleset().security().homePursuitLimit()

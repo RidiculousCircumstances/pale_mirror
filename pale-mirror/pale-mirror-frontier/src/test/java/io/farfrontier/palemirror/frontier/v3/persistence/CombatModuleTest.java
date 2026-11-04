@@ -63,6 +63,61 @@ class CombatModuleTest {
         assertThrows(IllegalArgumentException.class,()->new CombatEngagement(key,3,retained.anchor(),retained.axisX(),retained.axisZ(),retained.participants(),100,
                 Optional.of(new CombatEngagement.Wave(a.targetPosition(),List.of(new CombatEngagement.Slot(new ActorActuationId(new ActorBodyId(foreign.execution().actorId(),1),foreign.execution()),104,110,false))))));
     }
+    @Test void encounterChoosesTheNearerFreeFlankAndDoesNotPullItBackAcrossTheTarget(){
+        var first=order(1,Optional.empty());var next=order(2,Optional.empty()).atActorObservation(TARGET.offset(0,0,-4));
+        var plan=CombatEngagement.first(first,100).admitted(next,100);
+        assertEquals(MeleeSector.Role.FLANK_RIGHT,plan.participants().get(next.owner()).role());
+        assertEquals(plan.participants().get(next.owner()).role(),plan.admitted(next.atActorObservation(TARGET.offset(1,0,4)),101).participants().get(next.owner()).role(),
+                "a moving target does not swap the assigned side on every observation");
+        var left=order(2,Optional.empty()).atActorObservation(TARGET.offset(0,0,4));
+        assertEquals(List.of(TARGET.offset(0,0,2)),MeleePositions.rank(left,SWORD,
+                List.of(TARGET.offset(2,0,0),TARGET.offset(0,0,2),TARGET.offset(0,0,-2)),List.of(),new MeleeSector(MeleeSector.Role.FLANK_LEFT,1000,0),MeleeRules.initial()));
+    }
+    @Test void failedFlankRetainsIntentAcrossHydrationAndRetriesADifferentSideWithoutAnOldFailureClock() throws IOException {
+        var rules=MeleeRules.initial();var first=order(1,Optional.empty());var other=order(2,Optional.empty());
+        var combat=CombatState.empty().enlisted(first,100,rules).positioned(other,Optional.empty(),MeleePosition.Reason.NO_PATH,100,rules);
+        var plan=combat.engagements().get(CombatEngagement.Key.of(first));var members=new LinkedHashMap<>(plan.participants());
+        var orders=Map.of(first.owner(),first,other.owner(),other);
+        assertFalse(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),139,rules),"assignment gets time to execute");
+        assertTrue(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),140,rules));
+        assertEquals(MeleeSector.Role.SUPPORT,members.get(other.owner()).role());assertEquals(MeleeSector.Role.FLANK_LEFT,members.get(other.owner()).preferredRole());
+        plan=new CombatEngagement(plan.key(),plan.revision()+1,plan.anchor(),plan.axisX(),plan.axisZ(),members,0,Optional.empty());
+        combat=combat.withEngagement(plan).reassigned(other.execution());
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),combat);
+        var restored=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));assertEquals(combat,restored);
+        assertFalse(restored.positions().containsKey(other.owner()),"old failure cannot become immediate UNREACHABLE on a new assignment");
+        members=new LinkedHashMap<>(restored.engagements().get(plan.key()).participants());
+        assertFalse(CombatFormation.reconcile(members,orders,restored,plan.axisX(),plan.axisZ(),199,rules));
+        var waiting=restored.positioned(other,Optional.empty(),MeleePosition.Reason.ROUTE_PENDING,200,rules);
+        assertFalse(CombatFormation.reconcile(members,orders,waiting,plan.axisX(),plan.axisZ(),200,rules),"retry cannot discard an outstanding shared route calculation");
+        assertTrue(CombatFormation.reconcile(members,orders,restored,plan.axisX(),plan.axisZ(),200,rules));
+        assertNotEquals(MeleeSector.Role.FLANK_LEFT,members.get(other.owner()).role());assertNotEquals(MeleeSector.Role.SUPPORT,members.get(other.owner()).role());
+        assertEquals(200,members.get(other.owner()).roleSince());
+    }
+    @Test void routeWaitingAndAnUnsettledAttackCannotBeReassignedAsFailedFlanking(){
+        var rules=MeleeRules.initial();var first=order(1,Optional.empty());var other=order(2,Optional.empty());
+        var combat=CombatState.empty().enlisted(first,100,rules).positioned(other,Optional.empty(),MeleePosition.Reason.ROUTE_PENDING,100,rules);
+        var plan=combat.engagements().get(CombatEngagement.Key.of(first));var members=new LinkedHashMap<>(plan.participants());var orders=Map.of(first.owner(),first,other.owner(),other);
+        assertFalse(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),150,rules));
+        var actor=new ActorActuationId(new ActorBodyId(other.execution().actorId(),1),other.execution());
+        combat=combat.positioned(other,Optional.empty(),MeleePosition.Reason.NO_PATH,100,rules)
+                .prepared(new MeleeStrike(other.owner(),1,actor,other.target(),other.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
+        assertFalse(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),150,rules));
+        assertEquals(MeleeSector.Role.FLANK_LEFT,members.get(other.owner()).role());
+    }
+    @Test void pressureFighterKeepsARealContactStrikeWhileItsPartnerIsFlanking(){
+        var rules=MeleeRules.initial();var first=order(1,Optional.empty());var other=order(2,Optional.empty());
+        var actor=new ActorActuationId(new ActorBodyId(first.execution().actorId(),1),first.execution());
+        var memory=MeleeExchange.first(first).observed(OptionalLong.of(100),100,rules.maneuvers().duel())
+                .observed(OptionalLong.of(120),120,rules.maneuvers().duel());
+        var combat=CombatState.empty().enlisted(first,100,rules).enlisted(other,100,rules)
+                .observed(new CombatState.Armament(first.execution(),first.weapon(),SWORD)).withExchange(first.owner(),memory)
+                .stance(new MeleeStance(actor,first.target(),true,true,121));
+        assertTrue(memory.pressured(121,rules.maneuvers().duel()));
+        assertTrue(CombatFormation.pressureNeeded(combat,first,121,rules));
+        assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(combat,first,new MeleeManeuvers.Facts(2.8,0,true),121,rules,
+                OptionalLong.of(120),EnumSet.allOf(MeleeManeuver.Kind.class),true).action());
+    }
     @Test void flankApproachUsesAnOuterArcAndCommittedAimDoesNotTrackThroughTheBack() {
         var actor=order(2,Optional.empty());var sector=new MeleeSector(MeleeSector.Role.FLANK_LEFT,1000,0);var rules=EngagementRules.initial();
         assertTrue(CombatApproach.arc(actor,sector,rules));

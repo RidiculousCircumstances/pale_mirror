@@ -21,15 +21,7 @@ public final class CombatEngagementPlanner {
         }
         if(members.isEmpty())return combat.withoutEngagement(key);
         boolean promoted=promote(members);
-        for(var entry:new ArrayList<>(members.entrySet())){
-            var member=entry.getValue();var point=combat.positions().get(entry.getKey());
-            if(member.role()!=MeleeSector.Role.PRESSURE && member.role()!=MeleeSector.Role.SUPPORT && point!=null
-                    && point.execution().equals(member.execution()) && point.target().equals(key.target())
-                    && (point.reason().unavailable() || point.reason()==MeleePosition.Reason.UNREACHABLE)
-                    && tick-point.sinceTick()>=policy.confirmedFlankFailureTicks()){
-                members.put(entry.getKey(),new CombatEngagement.Participant(key,member.execution(),MeleeSector.Role.SUPPORT,member.renewedAt()));promoted=true;
-            }
-        }
+        promoted|=CombatFormation.reconcile(members,orders,combat,before.axisX(),before.axisZ(),tick,rules);
         final boolean formationChanged=promoted;
         var newest=orders.values().stream().max(Comparator.comparingLong(CombatOrder::observedAt).thenComparing(CombatOrder::owner)).orElseThrow();
         boolean rebased=CombatEngagement.distance(before.anchor(),newest.targetPosition())>=policy.rebaseDistance();
@@ -44,14 +36,23 @@ public final class CombatEngagementPlanner {
         long since=ready.isEmpty()?0:before.assemblySince()==0?tick:before.assemblySince();
         if(wave.isEmpty() && !ready.isEmpty() && (ready.size()>1 || members.size()==1 || tick-since>=policy.assemblyTicks())){
             var slots=new ArrayList<CombatEngagement.Slot>();
-            for(var order:ready.stream().limit(policy.maximumWaveSize()).toList()){
-                long opens=tick+(members.size()==1?0:policy.releaseLeadTicks())+(long)slots.size()*policy.slotSpacingTicks();
+            var selected=new ArrayList<CombatOrder>();selected.add(ready.getFirst());
+            ready.stream().skip(1).sorted(Comparator.comparing(order->!CombatFormation.differentSides(ready.getFirst(),order,policy)))
+                    .limit(policy.maximumWaveSize()-1L).forEach(selected::add);
+            boolean paired=selected.size()>1 && CombatFormation.differentSides(selected.getFirst(),selected.get(1),policy);
+            for(var order:selected){
+                long opens=tick+(members.size()==1?0:policy.releaseLeadTicks())+(paired?0:(long)slots.size()*policy.slotSpacingTicks());
                 slots.add(new CombatEngagement.Slot(combat.stances().get(order.owner()).observer(),opens,opens+policy.slotWindowTicks(),false));
             }
             wave=Optional.of(new CombatEngagement.Wave(newest.targetPosition(),slots));since=0;
         }
         var next=new CombatEngagement(key,before.revision()+1,rebased?newest.targetPosition():before.anchor(),bearing.axisX(),bearing.axisZ(),members,since,wave);
-        return combat.withEngagement(next);
+        var result=combat.withEngagement(next);
+        if(promoted)for(var entry:members.entrySet()){
+            var previous=before.participants().get(entry.getKey());
+            if(previous!=null && previous.role()!=entry.getValue().role())result=result.reassigned(entry.getValue().execution());
+        }
+        return result;
     }
     private static boolean ready(FrontierWorldState state,CombatState combat,CombatOrder order,long tick,MeleeRules rules){
         var stance=combat.stances().get(order.owner());
@@ -65,7 +66,7 @@ public final class CombatEngagementPlanner {
     static boolean promote(Map<SubjectId,CombatEngagement.Participant> members){
         if(members.values().stream().anyMatch(member->member.role()==MeleeSector.Role.PRESSURE))return false;
         var id=members.keySet().stream().min(Comparator.naturalOrder()).orElseThrow();var member=members.get(id);
-        members.put(id,new CombatEngagement.Participant(member.engagement(),member.execution(),MeleeSector.Role.PRESSURE,member.renewedAt()));return true;
+        members.put(id,new CombatEngagement.Participant(member.engagement(),member.execution(),MeleeSector.Role.PRESSURE,member.renewedAt(),MeleeSector.Role.PRESSURE,member.roleSince()));return true;
     }
     public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long tick,MeleeRules rules){
         return permitsStrike(state,order,observer,MeleeAttack.LUNGE,tick,rules);

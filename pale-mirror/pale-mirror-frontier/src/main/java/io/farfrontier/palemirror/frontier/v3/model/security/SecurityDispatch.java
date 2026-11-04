@@ -29,6 +29,21 @@ public final class SecurityDispatch {
     public static int budget(SecurityRules rules,int available) {
         return available==0?0:Math.max(1,available*rules.responsePercent()/100);
     }
+    /** Pure quota calculation shared by dispatch and its explanation; contacts are already authorized by the caller. */
+    public static int budget(SecurityRules rules,List<SurfaceAnchor> positions,List<SecurityState.Contact> contacts,
+            Collection<SecurityState.Response> locals,SurfaceAnchor home,long tick){
+        int limit=budget(rules,Math.max(0,positions.size()-locals.size()));
+        for(var contact:contacts){
+            if(!contact.current(tick,rules.contactLifetime()))continue;
+            var point=new SurfaceAnchor(contact.position());
+            boolean atHome=SecurityCoverage.distance(home,point)<=rules.observationRadius();
+            long nearby=positions.stream().filter(p->SecurityCoverage.distance(p,point)<=rules.observationRadius()
+                    || atHome && SecurityCoverage.distance(p,home)<=rules.pursuitMargin()).count();
+            long assigned=locals.stream().filter(r->r.contact().target().equals(contact.target())).count();
+            limit=Math.max(limit,(int)Math.max(0,Math.min(nearby,rules.respondersPerThreat())-assigned));
+        }
+        return limit;
+    }
     public static Map<SubjectId,SecurityState.Response> plan(FrontierWorldState state,SubjectId home,long tick) {
         var rules=state.bootstrap().ruleset().security();var awareness=state.security().awareness();
         var contacts=state.security().contactsIn(home);
@@ -76,7 +91,8 @@ public final class SecurityDispatch {
                         && old.engagement().contains(new SurfaceAnchor(c.position()))))result.put(guard.duty(),old);
             }
         }
-        int budget=budget(rules,guards.size()-result.size()),sent=0;
+        int budget=budget(rules,guards.stream().map(Candidate::position).toList(),
+                contacts.stream().filter(c->reinforcement.targets().contains(c.target())).toList(),result.values(),reinforcement.anchor(),tick),sent=0;
         for(int slot=0;slot<rules.respondersPerThreat() && sent<budget;slot++)for(var contact:contacts) {
             if(sent>=budget)break;
             if(!reinforcement.targets().contains(contact.target()) || result.values().stream()

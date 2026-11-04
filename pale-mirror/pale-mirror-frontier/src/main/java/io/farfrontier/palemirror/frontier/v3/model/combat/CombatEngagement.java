@@ -14,9 +14,14 @@ public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int
         public Key { Objects.requireNonNull(party); Objects.requireNonNull(target); }
         public static Key of(CombatOrder order) { return new Key(order.party(),order.target()); }
     }
-    public record Participant(Key engagement, ActorExecutionId execution, MeleeSector.Role role, long renewedAt) {
-        public Participant { Objects.requireNonNull(engagement); Objects.requireNonNull(execution); Objects.requireNonNull(role);
-            if(renewedAt<0)throw new IllegalArgumentException("invalid combat participation time"); }
+    public record Participant(Key engagement, ActorExecutionId execution, MeleeSector.Role role, long renewedAt,
+            MeleeSector.Role preferredRole,long roleSince) {
+        public Participant { Objects.requireNonNull(engagement); Objects.requireNonNull(execution); Objects.requireNonNull(role);Objects.requireNonNull(preferredRole);
+            if(roleSince<0 || renewedAt<0 || role!=MeleeSector.Role.SUPPORT && role!=preferredRole)
+                throw new IllegalArgumentException("invalid combat participation time/assignment"); }
+        public Participant renewed(long tick){return new Participant(engagement,execution,role,tick,preferredRole,roleSince);}
+        public Participant assigned(MeleeSector.Role next,long tick){return new Participant(engagement,execution,next,renewedAt,
+                next==MeleeSector.Role.SUPPORT?preferredRole:next,tick);}
     }
     public record Slot(ActorActuationId participant, long opensAt, long closesAt, boolean committed) {
         public Slot { Objects.requireNonNull(participant); if(opensAt<0 || closesAt<opensAt)throw new IllegalArgumentException("invalid attack slot"); }
@@ -41,21 +46,25 @@ public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int
     }
     public static CombatEngagement first(CombatOrder order,long tick) {
         var key=Key.of(order);var bearing=MeleeSector.pressure(order.actorPosition(),order.targetPosition());
-        var member=new Participant(key,order.execution(),MeleeSector.Role.PRESSURE,tick);
+        var member=new Participant(key,order.execution(),MeleeSector.Role.PRESSURE,tick,MeleeSector.Role.PRESSURE,tick);
         return new CombatEngagement(key,1,order.targetPosition(),bearing.axisX(),bearing.axisZ(),Map.of(order.owner(),member),0,Optional.empty());
     }
     public CombatEngagement admitted(CombatOrder order,long tick) {
         if(!key.equals(Key.of(order)))throw new IllegalArgumentException("foreign encounter admission");
-        var existing=participants.get(order.owner());var role=existing!=null && existing.execution().equals(order.execution())?existing.role():nextRole();
-        var members=ImmutableLookupMap.withEntry(participants,order.owner(),new Participant(key,order.execution(),role,tick));
+        var existing=participants.get(order.owner());var role=existing!=null && existing.execution().equals(order.execution())?existing.preferredRole():nextRole(order);
+        var member=existing!=null && existing.execution().equals(order.execution())?existing.renewed(tick)
+                :new Participant(key,order.execution(),role,tick,role,tick);
+        var members=ImmutableLookupMap.withEntry(participants,order.owner(),member);
         // Replacing an execution cannot inherit its predecessor's coordinated attack slot.
         var retained=existing!=null && !existing.execution().equals(order.execution())?Optional.<Wave>empty():wave;
         return new CombatEngagement(key,revision+1,anchor,axisX,axisZ,members,assemblySince,retained);
     }
-    private MeleeSector.Role nextRole() {
+    private MeleeSector.Role nextRole(CombatOrder order) {
         var counts=new EnumMap<MeleeSector.Role,Integer>(MeleeSector.Role.class);
         participants.values().forEach(value->counts.merge(value.role(),1,Integer::sum));
-        return Arrays.stream(MeleeSector.Role.values()).min(Comparator.comparingInt((MeleeSector.Role role)->counts.getOrDefault(role,0))
+        return Arrays.stream(MeleeSector.Role.values()).filter(role->role!=MeleeSector.Role.SUPPORT || participants.size()>=4)
+                .min(Comparator.comparingInt((MeleeSector.Role role)->counts.getOrDefault(role,0))
+                .thenComparingDouble(role->-new MeleeSector(role,axisX,axisZ).alignment(order.actorPosition(),order.targetPosition()))
                 .thenComparingInt(MeleeSector.Role::wireTag)).orElseThrow();
     }
     public MeleeSector sector(ActorExecutionId execution) {

@@ -170,6 +170,13 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
         var point=positions.get(owner);if(point==null || point.station().isEmpty())return this;
         return new CombatState(pending,nextAttack,armaments,obstructions,stances,ImmutableLookupMap.withoutEntry(positions,owner),evasions,maneuvers,engagements,followups,readiness,exchanges);
     }
+    /** A new owned tactical assignment cannot inherit the previous approach's failure clock or station claim. */
+    public CombatState reassigned(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution){
+        var owner=execution.activityOwnerId();var point=positions.get(owner);var obstruction=obstructions.get(owner);
+        var nextPoints=point!=null && point.execution().equals(execution)?ImmutableLookupMap.withoutEntry(positions,owner):positions;
+        var nextBlocks=obstruction!=null && obstruction.execution().equals(execution)?ImmutableLookupMap.withoutEntry(obstructions,owner):obstructions;
+        return new CombatState(pending,nextAttack,armaments,nextBlocks,stances,nextPoints,evasions,maneuvers,engagements,followups,readiness,exchanges);
+    }
     public CombatState withEvasion(Evasion value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,ImmutableLookupMap.withEntry(evasions,value.actor(),value),maneuvers,engagements,followups,readiness,exchanges);}
     public CombatState withoutEvasion(SubjectId actor){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,ImmutableLookupMap.withoutEntry(evasions,actor),maneuvers,engagements,followups,readiness,exchanges);}
     public CombatState maneuver(MeleeManeuver value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,ImmutableLookupMap.withEntry(maneuvers,value.owner(),value),engagements,followups,readiness,exchanges);}

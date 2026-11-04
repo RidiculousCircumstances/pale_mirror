@@ -18,7 +18,13 @@ final class FrontierV3SecurityDiagnostic {
                         && !state.security().responses().containsKey(duty.id())).count();
         long locals=responses.stream().filter(r -> r.engagement().kind().local()).count();
         long reinforcements=responses.size()-locals;
-        int budget=io.farfrontier.palemirror.frontier.v3.model.security.SecurityDispatch.budget(state.bootstrap().ruleset().security(),Math.max(0,(int)(available-locals)));
+        var candidatePositions=io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state,home).stream()
+                .filter(duty->io.farfrontier.palemirror.frontier.v3.model.security.SecurityDispatch.eligible(state,duty))
+                .map(duty->io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementProjection.bodyAt(state,duty.execution().actorId(),tick).supportingSurface()).toList();
+        int budget=io.farfrontier.palemirror.frontier.v3.model.security.SecurityDispatch.budget(state.bootstrap().ruleset().security(),candidatePositions,
+                contacts.stream().filter(c->io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.inScope(state,home,c)).toList(),
+                responses.stream().filter(r->r.engagement().kind().local()).toList(),
+                new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport.settlement(state.bootstrap(),home).anchor()),tick);
         String responseStatus=reinforcements>budget?"OVER_BUDGET":responses.isEmpty()?"IDLE":"ENGAGED";
         String reserveStatus=locals>0?"LOCAL_DEFENCE":available<2?"INSUFFICIENT_STAFF":posted>=available-budget?"PRESERVED":"LOST";
         String threats=contacts.stream().map(c -> "{\"target\":\""+c.target().entity()+"\",\"kind\":\""+c.target().kind()
@@ -42,7 +48,7 @@ final class FrontierV3SecurityDiagnostic {
         String plans=encounters.stream().map(plan->"{\"revision\":"+plan.revision()+",\"target\":\""+plan.key().target().entity()
                 +"\",\"assemblySince\":"+plan.assemblySince()+",\"participants\":"
                 +plan.participants().values().stream().sorted(java.util.Comparator.comparing(member->member.execution().actorId()))
-                    .map(member->"{\"actor\":\""+quote(member.execution().actorId().value())+"\",\"role\":\""+member.role()+"\"}")
+                    .map(member->"{\"actor\":\""+quote(member.execution().actorId().value())+"\",\"role\":\""+member.role()+"\",\"preferredRole\":\""+member.preferredRole()+"\",\"roleSince\":"+member.roleSince()+"}")
                     .collect(java.util.stream.Collectors.joining(",","[","]"))
                 +",\"wave\":"+plan.wave().map(wave->wave.slots().stream().map(slot->"{\"actor\":\""+quote(slot.execution().actorId().value())
                     +"\",\"opensAt\":"+slot.opensAt()+",\"closesAt\":"+slot.closesAt()+",\"committed\":"+slot.committed()+"}")

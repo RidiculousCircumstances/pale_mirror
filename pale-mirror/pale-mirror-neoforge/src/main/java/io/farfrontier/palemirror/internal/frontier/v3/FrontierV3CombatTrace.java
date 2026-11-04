@@ -224,6 +224,19 @@ public final class FrontierV3CombatTrace {
                 if(execution!=null)execution.current().ifPresent(current->{
                     row.addProperty("activity",current.activityKind().name());row.addProperty("owner",current.activityOwnerId().value());
                     var owner=current.activityOwnerId();var combat=state.combat();
+                    io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES.current(state,current,runtime.calendarInstant().orElseThrow()).ifPresent(order->{
+                        var plan=combat.engagements().get(CombatEngagement.Key.of(order));
+                        var member=plan==null?null:plan.participants().get(owner);
+                        if(member!=null && member.execution().equals(current)){
+                            row.addProperty("encounterRole",member.role().name());row.addProperty("preferredRole",member.preferredRole().name());
+                            row.addProperty("roleSince",member.roleSince());
+                        }
+                    });
+                    var point=combat.positions().get(owner);
+                    if(point!=null && point.execution().equals(current)){
+                        row.addProperty("approachStatus",point.reason().name());
+                        point.station().ifPresent(station->{row.addProperty("approachX",station.x());row.addProperty("approachZ",station.z());});
+                    }
                     if(combat.armaments().containsKey(owner)) {
                         row.addProperty("readiness",CombatReadiness.available(combat.readiness().get(owner),runtime.calendarInstant().orElseThrow(),state.bootstrap().ruleset().melee().readiness()));
                         row.addProperty("nextAttackAt",combat.nextAttack().getOrDefault(owner,0L));

@@ -15,6 +15,7 @@ final class CombatEngagementCodec {
         out.writeInt(value.participants().size());
         for(var entry:value.participants().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){
             id(out,entry.getKey());var member=entry.getValue();ActorExecutionStateCodec.writeId(out,member.execution());out.writeByte(member.role().wireTag());out.writeLong(member.renewedAt());
+            out.writeByte(member.preferredRole().wireTag());out.writeLong(member.roleSince());
         }
         out.writeBoolean(value.wave().isPresent());
         if(value.wave().isPresent()){
@@ -27,7 +28,8 @@ final class CombatEngagementCodec {
         var anchor=new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));int x=in.readInt(),z=in.readInt();long since=in.readLong();
         int count=UnitGroupStateCodec.count(in,CombatEngagement.MAX_PARTICIPANTS);var members=new LinkedHashMap<SubjectId,CombatEngagement.Participant>();
         for(int i=0;i<count;i++){
-            var owner=id(in);var member=new CombatEngagement.Participant(key,ActorExecutionStateCodec.readId(in),MeleeSector.Role.require(in.readUnsignedByte()),in.readLong());
+            var owner=id(in);var member=new CombatEngagement.Participant(key,ActorExecutionStateCodec.readId(in),MeleeSector.Role.require(in.readUnsignedByte()),in.readLong(),
+                    MeleeSector.Role.require(in.readUnsignedByte()),in.readLong());
             if(members.putIfAbsent(owner,member)!=null)throw new IllegalArgumentException("duplicate encounter participant");
         }
         Optional<CombatEngagement.Wave> wave=Optional.empty();

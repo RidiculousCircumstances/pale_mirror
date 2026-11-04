@@ -23,7 +23,8 @@ final class FrontierStateSchema {
     // Lunge guidance and finite aim tracking change the hashed combat policy.
     // One-shot missed-lunge continuations survive recovery with exact body/target identities.
     // Shared combat effort and explicit visible-swing facts survive exact recovery.
-    static final int VERSION = 330;
+    // Cooperative flank intent and its retry/commitment clocks retain explicit ownership.
+    static final int VERSION = 331;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

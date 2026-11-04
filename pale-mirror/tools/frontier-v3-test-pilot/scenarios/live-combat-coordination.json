@@ -1,0 +1,280 @@
+{
+  "schema": 1,
+  "id": "live_combat_coordination",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "pmcombatgroup"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 240 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/effect clear @s minecraft:speed"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 1000"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
+    },
+    {
+      "type": "command",
+      "command": "/clear @s minecraft:iron_sword"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1486,
+        "y": 64,
+        "z": -1360
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 120000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "guardsReady": 2,
+            "guardActors": [
+              "resident:1-16",
+              "resident:1-22"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000,
+      "standOff": 2
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 combat_trace start @s 2 180"
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "attack_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000,
+      "maxAttacks": 1,
+      "requireRemoval": false,
+      "requireDamage": true,
+      "causalMilestone": "ordinary_player_harmed_guard"
+    },
+    {
+      "type": "walk",
+      "position": {
+        "x": -1486,
+        "y": 64,
+        "z": -1360
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "ordinary_retreat_into_shared_home_response_area"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "respondingGuards": 2,
+          "coordinatedParticipants": 2
+        }
+      },
+      "timeoutMs": 90000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "observe_entity_motion",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 45000,
+      "id": "pair-pressure-and-flank",
+      "durationTicks": 200,
+      "sampleEveryTicks": 1,
+      "observerCircuit": [
+        {
+          "x": 0,
+          "z": -7
+        },
+        {
+          "x": 5,
+          "z": -4
+        },
+        {
+          "x": 5,
+          "z": 4
+        },
+        {
+          "x": 0,
+          "z": 7
+        }
+      ]
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "respondingGuards": 2,
+          "coordinatedParticipants": 2
+        }
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 999,
+      "timeoutMs": 30000,
+      "causalMilestone": "group_delivered_real_native_damage"
+    },
+    {
+      "type": "observe_entity_motion",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 45000,
+      "id": "pair-replanning-under-circling",
+      "durationTicks": 200,
+      "sampleEveryTicks": 1,
+      "observerCircuit": [
+        {
+          "x": 4,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "z": 4
+        },
+        {
+          "x": -4,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "z": -4
+        }
+      ]
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 12,
+        "y": 64,
+        "z": -138
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "respondingGuards": 0,
+          "contactCount": 0,
+          "maneuverInProgress": false
+        }
+      },
+      "timeoutMs": 90000,
+      "pollIntervalMs": 100
+    }
+  ],
+  "assertions": [
+    {
+      "after": 10,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "security": {
+          "respondingGuards": 0,
+          "contactCount": 0,
+          "maneuverInProgress": false
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "pair-pressure-and-flank",
+      "presentation": "clean"
+    },
+    {
+      "after": 7,
+      "name": "pair-circling-response",
+      "presentation": "clean"
+    }
+  ]
+}

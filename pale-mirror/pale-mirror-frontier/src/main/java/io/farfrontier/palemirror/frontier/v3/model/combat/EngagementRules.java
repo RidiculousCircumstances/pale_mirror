@@ -4,9 +4,11 @@ package io.farfrontier.palemirror.frontier.v3.model.combat;
 public record EngagementRules(int outerRadius, int arcDegrees, int flankAlignmentPermille, int rebaseDistance,
         int assemblyTicks, int releaseLeadTicks, int slotSpacingTicks, int slotWindowTicks, int maximumWaveSize,
         int participantLifetime, int targetDriftMicros, int quickTurnDegrees, int lungeTurnDegrees, int lungeRunPermille,
-        int attackDistanceMicros, int spacingMicros, int arcWeightPermille, int confirmedFlankFailureTicks, int aimTrackPermille, int aimTurnDegreesPerTick, int lungeCorrectionBlocks) {
+        int attackDistanceMicros, int spacingMicros, int arcWeightPermille, int confirmedFlankFailureTicks, int aimTrackPermille, int aimTurnDegreesPerTick, int lungeCorrectionBlocks,
+        int roleCommitmentTicks,int flankRetryTicks,int pairedAngleDegrees) {
     public EngagementRules {
-        if (aimTrackPermille<1 || aimTrackPermille>900 || aimTurnDegreesPerTick<1 || aimTurnDegreesPerTick>30
+        if (roleCommitmentTicks<confirmedFlankFailureTicks || roleCommitmentTicks>participantLifetime || flankRetryTicks<roleCommitmentTicks || flankRetryTicks>400
+                || pairedAngleDegrees<30 || pairedAngleDegrees>150 || aimTrackPermille<1 || aimTrackPermille>900 || aimTurnDegreesPerTick<1 || aimTurnDegreesPerTick>30
                 || lungeCorrectionBlocks<1 || lungeCorrectionBlocks>3 || outerRadius < 4 || outerRadius > 8 || arcDegrees < 15 || arcDegrees > 60
                 || flankAlignmentPermille < 500 || flankAlignmentPermille > 950 || rebaseDistance < outerRadius
                 || assemblyTicks < 1 || releaseLeadTicks < 1 || slotSpacingTicks < 1 || slotWindowTicks < 1
@@ -16,9 +18,9 @@ public record EngagementRules(int outerRadius, int arcDegrees, int flankAlignmen
                 || attackDistanceMicros<1 || spacingMicros<1 || arcWeightPermille<1 || confirmedFlankFailureTicks<1 || confirmedFlankFailureTicks>participantLifetime)
             throw new IllegalArgumentException("invalid encounter tactics");
     }
-    public static EngagementRules initial() { return new EngagementRules(5,45,700,12,4,1,10,8,2,80,2_000_000,60,40,1500,2_200_000,800_000,4000,12,650,12,2); }
+    public static EngagementRules initial() { return new EngagementRules(5,45,700,12,4,1,2,8,2,80,2_000_000,60,40,1500,2_200_000,800_000,4000,20,650,12,2,40,60,60); }
     public String canonicalText() { return outerRadius+":"+arcDegrees+":"+flankAlignmentPermille+":"+rebaseDistance+":"+assemblyTicks
             +":"+releaseLeadTicks+":"+slotSpacingTicks+":"+slotWindowTicks+":"+maximumWaveSize+":"+participantLifetime
             +":"+targetDriftMicros+":"+quickTurnDegrees+":"+lungeTurnDegrees+":"+lungeRunPermille+":"+attackDistanceMicros+":"+spacingMicros+":"+arcWeightPermille+":"+confirmedFlankFailureTicks
-            +":"+aimTrackPermille+":"+aimTurnDegreesPerTick+":"+lungeCorrectionBlocks; }
+            +":"+aimTrackPermille+":"+aimTurnDegreesPerTick+":"+lungeCorrectionBlocks+":"+roleCommitmentTicks+":"+flankRetryTicks+":"+pairedAngleDegrees; }
 }

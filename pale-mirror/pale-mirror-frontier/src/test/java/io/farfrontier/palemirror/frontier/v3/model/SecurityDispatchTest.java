@@ -34,6 +34,13 @@ class SecurityDispatchTest {
         assertEquals(4,guards.size()-assigned.size());
         assertEquals(1,select(100,List.of(contact(1,1,100,1)),guards(1),Map.of()).size());
     }
+    @Test void nearbyPairCanRespondTogetherWhileDistantPostsAndExpiredSightingsKeepTheirReserve(){
+        assertEquals(2,select(100,List.of(contact(1,1,100,1)),guards(2),Map.of()).size());
+        var patrol=List.of(guards(6).getFirst(),guards(6).getLast());
+        assertEquals(2,select(100,List.of(contact(1,1,100,1)),patrol,Map.of()).size(),"home patrol can reinforce without already standing beside the target");
+        assertEquals(1,select(100,List.of(contact(1,100,100,1)),guards(2),Map.of()).size(),"a distant threat cannot empty both posts");
+        assertTrue(select(170,List.of(contact(1,1,100,1)),guards(2),Map.of()).isEmpty(),"old information cannot summon a new local pair");
+    }
     @Test void independentThreatsReceiveFirstRespondersBeforeReinforcements() {
         var guards=guards(6);var first=contact(1,0,100,1);var second=contact(2,50,100,2);
         var old=select(100,List.of(first),guards,Map.of());

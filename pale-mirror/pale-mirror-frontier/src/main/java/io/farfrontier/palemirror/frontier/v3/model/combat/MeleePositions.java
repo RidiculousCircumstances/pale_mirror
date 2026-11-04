@@ -13,7 +13,14 @@ public final class MeleePositions {
     }
     public static boolean permitted(FrontierWorldState state,CombatOrder order,WeaponProfile weapon,SurfaceAnchor station,long tick){
         var rules=state.bootstrap().ruleset().melee();var sector=MeleeTactics.sector(state.combat(),order,tick,rules);
-        return permitted(order,weapon,station,CombatApproach.arc(order,sector,rules.engagements()),rules.engagements());
+        return tactical(order,weapon,station,sector,rules.engagements());
+    }
+    private static boolean tactical(CombatOrder order,WeaponProfile weapon,SurfaceAnchor station,MeleeSector sector,EngagementRules rules){
+        boolean outer=CombatApproach.arc(order,sector,rules);
+        if(!permitted(order,weapon,station,outer,rules))return false;
+        if(outer)return true;
+        return sector.role()==MeleeSector.Role.PRESSURE || sector.role()==MeleeSector.Role.SUPPORT
+                || sector.alignment(station,order.targetPosition())>=rules.flankAlignmentPermille()/1000.0;
     }
     private static boolean permitted(CombatOrder order,WeaponProfile weapon,SurfaceAnchor station,boolean outer,EngagementRules rules){
         if(!outer)return legal(order,weapon,station);
@@ -29,7 +36,7 @@ public final class MeleePositions {
                         return order.engagement().contains(station) && distance>=profile.reach()+0.5 && distance<=rules.engagements().outerRadius()+1
                                 && station.manhattanDistance(order.actorPosition())>1;
                     }
-                    return legal(order,profile,station);
+                    return tactical(order,profile,station,sector,rules.engagements());
                 }).isPresent()).isEmpty();
     }
     public static boolean holding(FrontierWorldState state,CombatOrder order,long tick){
@@ -70,7 +77,8 @@ public final class MeleePositions {
         boolean arc=CombatApproach.arc(order,sector,rules.engagements());
         int radius=arc?rules.engagements().outerRadius()+1:Math.min(rules.maximumRadius(),Math.max(1,(int)Math.ceil(weapon.reach())));
         var physical=PedestrianInteractionStations.within(knowledge.geometry(),order.targetPosition(),radius,Set.of()).stream()
-                .filter(station->!failed.contains(station) && !state.combat().rejected(order,station,tick,rules) && permitted(state,order,weapon,station,tick)
+                .filter(station->!failed.contains(station) && !state.combat().rejected(order,station,tick,rules) && tactical(order,weapon,station,sector,rules.engagements())
+                        && (!arc || CombatApproach.score(order,sector,station,rules.engagements())<CombatApproach.score(order,sector,order.actorPosition(),rules.engagements()))
                         && knowledge.clearStation(station) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(station.support())
                         && ServiceBoundaryComposition.turnoverPoint(state,station).isEmpty()).toList();
         boolean missing=knowledgeMissing(knowledge.geometry(),order,weapon,radius,arc,rules.engagements());
@@ -121,7 +129,9 @@ public final class MeleePositions {
     public static List<SurfaceAnchor> rank(CombatOrder order,WeaponProfile weapon,List<SurfaceAnchor> candidates,
             List<CombatOrder> peers,MeleeSector sector,MeleeRules rules){
         var claimed=peers.stream().filter(peer->!peer.execution().equals(order.execution())).flatMap(peer->peer.station().stream()).collect(java.util.stream.Collectors.toSet());
-        return candidates.stream().distinct().filter(station->legal(order,weapon,station) && !claimed.contains(station))
+        return candidates.stream().distinct().filter(station->legal(order,weapon,station) && !claimed.contains(station)
+                && (sector.role()==MeleeSector.Role.PRESSURE || sector.role()==MeleeSector.Role.SUPPORT
+                    || sector.alignment(station,order.targetPosition())>=rules.engagements().flankAlignmentPermille()/1000.0))
                 .sorted(Comparator.comparingDouble((SurfaceAnchor station)->score(order,weapon,station,peers,rules)+rules.sectorWeightPermille()/1000.0*(1.0-sector.alignment(station,order.targetPosition())))
                         .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
     }
