@@ -37,9 +37,9 @@
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
-        "x": -1512,
+        "x": -1472,
         "y": 64,
-        "z": -1372
+        "z": -1336
       },
       "settleMs": 0
     },
@@ -146,9 +146,9 @@
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
-        "x": -1512,
+        "x": -1472,
         "y": 64,
-        "z": -1372
+        "z": -1336
       },
       "settleMs": 0
     },
@@ -217,16 +217,16 @@
       "workerId": "resident:1-22",
       "maxDistance": 16,
       "timeoutMs": 30000,
-      "maxAttacks": 1,
+      "maxAttacks": 3,
       "requireRemoval": false,
       "requireDamage": true
     },
     {
       "type": "walk",
       "position": {
-        "x": -1516,
+        "x": -1476,
         "y": 64,
-        "z": -1372
+        "z": -1336
       },
       "timeoutMs": 15000
     },
@@ -267,9 +267,9 @@
     {
       "type": "walk",
       "position": {
-        "x": -1512,
+        "x": -1472,
         "y": 64,
-        "z": -1376
+        "z": -1340
       },
       "timeoutMs": 15000
     },
@@ -310,9 +310,9 @@
     {
       "type": "walk",
       "position": {
-        "x": -1510,
+        "x": -1470,
         "y": 64,
-        "z": -1372
+        "z": -1336
       },
       "timeoutMs": 15000
     },
@@ -353,9 +353,9 @@
     {
       "type": "walk",
       "position": {
-        "x": -1512,
+        "x": -1472,
         "y": 64,
-        "z": -1368
+        "z": -1332
       },
       "timeoutMs": 15000
     },

@@ -709,6 +709,7 @@ public final class FrontierV3TestPilotClient {
                 attackedEntityInitialHealth=living.getHealth();
             }
             minecraft.gameMode.attack(minecraft.player, target);
+            minecraft.player.swing(InteractionHand.MAIN_HAND); // Normal clicks send visible intent as well as damage.
             entityAttackAttempts++;
             lastEntityAttackTick = tick;
         }
