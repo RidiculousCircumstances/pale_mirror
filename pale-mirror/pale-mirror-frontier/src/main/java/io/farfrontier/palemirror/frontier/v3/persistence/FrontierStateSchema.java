@@ -22,7 +22,8 @@ final class FrontierStateSchema {
     // Peaceful guard appointments retain exact equipment and execution declarations.
     // Lunge guidance and finite aim tracking change the hashed combat policy.
     // One-shot missed-lunge continuations survive recovery with exact body/target identities.
-    static final int VERSION = 327;
+    // Shared combat effort and explicit visible-swing facts survive exact recovery.
+    static final int VERSION = 328;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

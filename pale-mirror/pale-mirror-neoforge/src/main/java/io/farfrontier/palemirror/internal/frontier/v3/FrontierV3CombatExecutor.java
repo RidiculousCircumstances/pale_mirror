@@ -58,16 +58,20 @@ public final class FrontierV3CombatExecutor {
             if(!(actual instanceof LivingEntity target) || !target.isAlive())continue;
             boolean visible=fighter.hasLineOfSight(target);
             double distance=Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition()));
-            double separating=separatingSpeed(fighter,target,actuation,visible,state.bootstrap().ruleset().melee().sensingInterval());
+            var motion=observedMotion(fighter,target,actuation,visible,state.bootstrap().ruleset().melee().sensingInterval());
+            double separating=motion.separating();
             var attack=MeleeTactics.attack(state.combat(),order,actuation,targetPort(target).identity().incarnation(),tick,
-                    profile,distance,separating,state.bootstrap().ruleset().melee());
-            var rules=state.bootstrap().ruleset().melee();var previous=state.combat().stances().get(order.owner());
+                    profile,distance,separating,motion.lateral(),state.bootstrap().ruleset().melee());
+            var rules=state.bootstrap().ruleset().melee();
+            if(!state.combat().affords(order.owner(),tick,rules.readiness().cost(attack),rules))attack=MeleeAttack.QUICK;
+            boolean canSpend=state.combat().affords(order.owner(),tick,rules.readiness().cost(attack),rules);
+            var previous=state.combat().stances().get(order.owner());
             boolean wasHolding=previous!=null && previous.observer().equals(actuation) && previous.current(order,tick,rules) && previous.holding();
             double holdReach=rules.holdReach(profile,wasHolding);
             boolean tacticalReady=MeleeTactics.readyAt(state.combat(),order,new SurfaceAnchor(new BlockPosition(fighter.getOnPos().getX(),fighter.getOnPos().getY(),fighter.getOnPos().getZ())),tick,rules);
             // A preferred flank is a movement goal, never a veto on real close contact.
             boolean holding=visible && distance<=holdReach;
-            boolean attackReady=visible && MeleeTactics.opportunity(profile,attack,distance,rules);
+            boolean attackReady=visible && canSpend && MeleeTactics.opportunity(profile,attack,distance,rules);
             if(previous==null || !previous.observer().equals(actuation) || !previous.target().equals(order.target())
                     || previous.holding()!=holding || previous.attackReady()!=attackReady || tick-previous.atTick()>=2L*rules.sensingInterval()){
                 FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,attackReady,tick)));
@@ -75,7 +79,7 @@ public final class FrontierV3CombatExecutor {
                 order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
             }
             if(state.combat().maneuverBusy(order.owner(),tick,rules.maneuvers()))continue;
-            var maneuverFacts=new MeleeManeuvers.Facts(distance,separating);
+            var maneuverFacts=new MeleeManeuvers.Facts(distance,separating,visible && threateningSwing(fighter,target,rules));
             if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace")){
                 var harmed=capabilities.require(order.execution()).harmedAt(state,order);
                 if(harmed.isPresent() && tick-harmed.getAsLong()<=rules.maneuvers().harmLifetime())
@@ -103,7 +107,7 @@ public final class FrontierV3CombatExecutor {
                     FrontierV3CommandSubmission.submit(runtime,"combat-blocked-position",order.owner().value(),new CombatEvent.PositionBlocked(actuation,order.target(),station));
                 continue;
             }
-            if(decision!=MeleeTactics.Decision.ATTACK || !CombatEngagementPlanner.permitsStrike(state.combat(),order,actuation,tick,rules))continue;
+            if(!canSpend || decision!=MeleeTactics.Decision.ATTACK || !CombatEngagementPlanner.permitsStrike(state.combat(),order,actuation,tick,rules))continue;
             var approach=state.actorMovements().get(order.execution().actorId());
             if(approach!=null && !capabilities.require(order.execution()).permitsApproach(state,approach))continue;
             var strike=new MeleeStrike(order.owner(),order.revision(),actuation,order.target(),order.weapon(),item.condition(),profile,attack,
@@ -201,6 +205,7 @@ public final class FrontierV3CombatExecutor {
     /** The transaction's actual native effect: approach latitude can never extend damage reach. */
     static boolean applyImpact(ServerLevel level,Mob fighter,LivingEntity target,MeleeStrike strike,MeleeRules rules){
         boolean contact=FrontierV3MeleeReach.contains(fighter,target,strike.profile())
+                && FrontierV3MeleeReach.clearContact(fighter,target)
                 && FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules)
                 && FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules);
         FrontierV3CombatPresentation.impact(level,fighter,strike,target);
@@ -251,13 +256,23 @@ public final class FrontierV3CombatExecutor {
         if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
                 "PMV3_MELEE actor={} owner={} reason={} detail={}",order.execution().actorId().value(),order.owner().value(),reason,detail);
     }
-    private static double separatingSpeed(Mob fighter,LivingEntity target,ActorActuationId observer,boolean visible,int interval){
-        if(!visible){SIGHTINGS.remove(fighter);return 0;}
+    private record ObservedMotion(double separating,double lateral) { }
+    private static ObservedMotion observedMotion(Mob fighter,LivingEntity target,ActorActuationId observer,boolean visible,int interval){
+        if(!visible){SIGHTINGS.remove(fighter);return new ObservedMotion(0,0);}
         long now=fighter.level().getGameTime();
         var prior=SIGHTINGS.put(fighter,new Sighting(observer,target.getUUID(),target.getId(),now,target.position()));
         if(prior==null || !prior.observer().equals(observer) || !prior.target().equals(target.getUUID()) || prior.runtimeId()!=target.getId()
-                || now<=prior.at() || now-prior.at()>2L*interval)return 0;
-        return target.position().subtract(prior.position()).dot(target.position().subtract(fighter.position()).normalize())/(now-prior.at());
+                || now<=prior.at() || now-prior.at()>2L*interval)return new ObservedMotion(0,0);
+        var velocity=target.position().subtract(prior.position()).scale(1.0/(now-prior.at()));
+        var radial=target.position().subtract(fighter.position()).multiply(1,0,1).normalize();
+        return new ObservedMotion(velocity.dot(radial),Math.abs(velocity.x*radial.z-velocity.z*radial.x));
+    }
+    /** Only an already visible native swing aimed toward this body can invite a dodge. */
+    static boolean threateningSwing(Mob fighter,LivingEntity target,MeleeRules rules){
+        return target.swinging && target.swingTime>=0
+                && Math.sqrt(fighter.getBoundingBox().distanceToSqr(target.getEyePosition()))<=rules.maneuvers().hurtGapMicros()/1_000_000.0
+                && target.getLookAngle().normalize().dot(fighter.getBoundingBox().getCenter().subtract(target.getEyePosition()).normalize())
+                    >=Math.cos(Math.toRadians(rules.engagements().quickTurnDegrees()));
     }
     private static FrontierV3MinecraftOperation.Participant targetPort(LivingEntity target) {
         return target instanceof ServerPlayer player?FrontierV3OperationPlayers.currentHealth(player):FrontierV3OperationEntityParticipant.nativeObject(target);

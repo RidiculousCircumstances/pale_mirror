@@ -34,7 +34,7 @@ public final class MeleePositions {
     }
     public static boolean holding(FrontierWorldState state,CombatOrder order,long tick){
         var stance=state.combat().stances().get(order.owner());
-        return stance!=null && state.combat().holding(order,tick,state.bootstrap().ruleset().melee())
+        return stance!=null && (state.combat().recovering(order.owner(),tick) || state.combat().holding(order,tick,state.bootstrap().ruleset().melee()))
                 && ActorBodyAuthority.retainsPhysicalCustody(state,order.execution().actorId())
                 && ActorBodyAuthority.current(state,order.execution().actorId()).equals(stance.observer().body());
     }

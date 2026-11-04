@@ -8,7 +8,7 @@ public record MeleeFollowupRules(int windowTicks, int recoveryTicks, MeleeTechni
             throw new IllegalArgumentException("invalid melee followup policy");
     }
     public static MeleeFollowupRules initial() {
-        return new MeleeFollowupRules(24, 2, new MeleeTechniques.Technique(3, 3, 8, 1_000_000));
+        return new MeleeFollowupRules(40, 14, new MeleeTechniques.Technique(6, 3, 10, 350_000));
     }
     public String canonicalText() { return windowTicks + ":" + recoveryTicks + ":" + technique.canonicalText(); }
 }

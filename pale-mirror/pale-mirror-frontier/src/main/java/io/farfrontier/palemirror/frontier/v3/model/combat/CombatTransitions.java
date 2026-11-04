@@ -19,7 +19,7 @@ public final class CombatTransitions {
                     || !capabilities.require(order.execution()).maneuvers().contains(m.kind()) || combat.pending().containsKey(subject)
                     || prior!=null && !prior.ready(m.kind(),tick) || state.actorMovements().containsKey(order.execution().actorId()))
                 throw new IllegalArgumentException("maneuver lacks exact current permission, checkpoint or cooldown");
-            combat=combat.releasePosition(subject).maneuver(m);
+            combat=combat.releasePosition(subject).maneuver(m).spent(subject,tick,state.bootstrap().ruleset().melee().readiness().cost(m.kind()),state.bootstrap().ruleset().melee());
         }else if(event instanceof CombatEvent.ManeuverLaunched launch){
             var m=combat.maneuvers().get(subject);var order=requireOrder(state,capabilities,launch.observer(),tick);
             if(m==null || !m.open() || !m.actor().equals(launch.observer()) || m.attemptOrdinal()!=launch.attemptOrdinal() || !m.matches(order)
@@ -49,7 +49,8 @@ public final class CombatTransitions {
                 throw new IllegalArgumentException("melee lacks current owner/target/weapon/readiness");
             if(!CombatEngagementPlanner.permitsStrike(combat,order,strike.attacker(),tick,state.bootstrap().ruleset().melee()))
                 throw new IllegalArgumentException("strike has no current unspent coordinated slot");
-            combat=combat.withEngagement(combat.engagements().get(CombatEngagement.Key.of(order)).committed(strike.attacker())).prepared(strike);
+            combat=combat.withEngagement(combat.engagements().get(CombatEngagement.Key.of(order)).committed(strike.attacker()))
+                    .prepared(strike).spent(subject,tick,state.bootstrap().ruleset().melee().readiness().cost(strike.attack()),state.bootstrap().ruleset().melee());
         }else if(event instanceof CombatEvent.Completed outcome){
             var strike=Objects.requireNonNull(combat.pending().get(outcome.owner()),"pending melee attempt");
             capabilities.require(strike.attacker().execution()).requirePending(state,strike);

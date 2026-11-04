@@ -79,7 +79,7 @@ class CombatModuleTest {
         assertEquals(maximum,MeleeAim.turnToward(0,90,maximum));
         assertEquals(181,MeleeAim.turnToward(179,-179,12),0.001,"wrap-around uses the short turn");
         int sector=EngagementRules.initial().lungeTurnDegrees();
-        assertTrue(MeleeAim.contains(0,Math.sin(Math.toRadians(75)),Math.cos(Math.toRadians(75)),sector));
+        assertTrue(MeleeAim.contains(0,Math.sin(Math.toRadians(30)),Math.cos(Math.toRadians(30)),sector));
         assertFalse(MeleeAim.contains(0,0,-1,sector),"wide sword arc never hits straight behind the committed facing");
     }
     @Test void attackChoiceUsesObservedDistanceAndRetreatButNeverGrantsExtraDamageReach() throws IOException {
@@ -92,8 +92,8 @@ class CombatModuleTest {
         var strike=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100);
         var state=CombatState.empty().prepared(strike);var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         var restored=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
-        assertEquals(strike,restored.pending().get(order.owner()));assertEquals(106,strike.impactAt(MeleeRules.initial()));
-        assertEquals(118L,restored.completed(strike,110,MeleeRules.initial()).nextAttack().get(order.owner()));
+        assertEquals(strike,restored.pending().get(order.owner()));assertEquals(108,strike.impactAt(MeleeRules.initial()));
+        assertEquals(124L,restored.completed(strike,110,MeleeRules.initial()).nextAttack().get(order.owner()));
         assertThrows(IllegalArgumentException.class,()->MeleeAttack.require(0));
     }
     @Test void missedLungeOffersOneNearbyRecoveryAttackWithExactIdentityAndNormalWeaponCadence() throws IOException {
@@ -104,20 +104,20 @@ class CombatModuleTest {
         assertTrue(pending.completed(lunge,104,rules,true).followups().isEmpty(),"cancelled preparation is not a missed swing");
         assertTrue(pending.completed(lunge,110,rules,false).followups().isEmpty(),"a hit does not grant another attack");
         var missed=pending.completed(lunge,110,rules,true);
-        assertEquals(113L,missed.nextAttack().get(order.owner()),"short recovery still respects the actual sword interval");
+        assertEquals(124L,missed.nextAttack().get(order.owner()),"a successful dodge leaves a real recovery window");
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),missed);
         var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
         assertEquals(missed,recovered);
-        assertEquals(MeleeAttack.FOLLOWUP,MeleeTactics.attack(recovered,order,actor,17,113,SWORD,3.6,0.2,rules));
-        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,113,SWORD,6,0.2,rules),"far targets get ordinary pursuit");
-        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,18,113,SWORD,3.6,0.2,rules),"respawn is a different target incarnation");
+        assertEquals(MeleeAttack.FOLLOWUP,MeleeTactics.attack(recovered,order,actor,17,124,SWORD,3.2,0.2,rules));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,124,SWORD,6,0.2,rules),"far targets get ordinary pursuit");
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,18,124,SWORD,3.2,0.2,rules),"respawn is a different target incarnation");
         var successor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),2),order.execution());
-        assertFalse(recovered.followups().get(order.owner()).matches(order,successor,17,113));
-        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,134,SWORD,3.6,0.2,rules),"expired response is not permanent sprint");
-        var followup=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),lunge.before(),SWORD,MeleeAttack.FOLLOWUP,17,114,113);
+        assertFalse(recovered.followups().get(order.owner()).matches(order,successor,17,124));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,151,SWORD,3.2,0.2,rules),"expired response is not permanent sprint");
+        var followup=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),lunge.before(),SWORD,MeleeAttack.FOLLOWUP,17,125,124);
         var response=recovered.prepared(followup);
         assertTrue(response.followups().isEmpty(),"preparation spends the one continuation");
-        assertTrue(response.completed(followup,120,rules,true).followups().isEmpty(),"missing again cannot chain recovery attacks");
+        assertTrue(response.completed(followup,134,rules,true).followups().isEmpty(),"missing again cannot chain recovery attacks");
         assertTrue(recovered.withdrawn(order.execution()).followups().isEmpty());
         assertTrue(recovered.retired(order.owner()).followups().isEmpty());
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN,
@@ -198,7 +198,7 @@ class CombatModuleTest {
     }
     @Test void holdingUsesTwoStrictWeaponBoundariesAndCannotExpandAttackReach(){
         var rules=MeleeRules.initial();assertEquals(2.2,rules.holdReach(SWORD,false),0.0001);assertEquals(2.55,rules.holdReach(SWORD,true),0.0001);
-        assertEquals(4,rules.windup(MeleeAttack.QUICK));assertEquals(6,rules.windup(MeleeAttack.LUNGE));
+        assertEquals(4,rules.windup(MeleeAttack.QUICK));assertEquals(8,rules.windup(MeleeAttack.LUNGE));
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.APPROACH,MeleeTactics.decide(order,new MeleeTactics.Facts(101,true,true,false,false,100,true)));
     }
@@ -226,11 +226,55 @@ class CombatModuleTest {
         assertTrue(MeleePositions.knowledgeMissing(outerUnknown,order(1,Optional.empty()),SWORD,6,true,MeleeRules.initial().engagements()),
                 "known close reach cannot classify an unknown outer arc as an impossible flank");
     }
+    @Test void sweepAnswersObservedCirclingButIsDistinctFromRetreatPunishment(){
+        var order=order(1,Optional.empty());var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var rules=MeleeRules.initial();
+        assertEquals(MeleeAttack.SWEEP,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,1.8,0,0.2,rules));
+        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,1.8,0,0,rules));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,3,0.2,0.2,rules));
+        assertFalse(MeleeAttack.SWEEP.closesDistance());
+        assertTrue(rules.windup(MeleeAttack.SWEEP)>rules.windup(MeleeAttack.QUICK));
+        assertFalse(MeleeAim.contains(0,0,-1,rules.techniques().sweepHalfAngleDegrees()));
+        assertFalse(MeleeAim.contains(0,1,0,rules.engagements().lungeTurnDegrees()),"a committed lunge can be sidestepped");
+    }
+    @Test void attacksAndBothManeuversSpendOneRecoverableAccountAndHydrationCannotRefillIt() throws IOException {
+        var rules=MeleeRules.initial();var costs=rules.readiness();var order=order(1,Optional.empty());
+        var state=CombatState.empty().observed(new CombatState.Armament(order.execution(),order.weapon(),SWORD))
+                .spent(order.owner(),100,costs.burstCost(),rules).spent(order.owner(),101,costs.lungeCost(),rules)
+                .spent(order.owner(),102,costs.backstepCost(),rules);
+        assertFalse(state.affords(order.owner(),103,costs.quickCost(),rules));
+        var finalState=state;
+        assertThrows(IllegalArgumentException.class,()->finalState.spent(order.owner(),103,costs.quickCost(),rules));
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        assertEquals(state,recovered);
+        assertFalse(recovered.affords(order.owner(),118,costs.quickCost(),rules),"recovery delay survives restart");
+        assertTrue(recovered.affords(order.owner(),150,costs.burstCost(),rules));
+        assertEquals(costs.capacity(),recovered.readiness().get(order.owner()).available(Long.MAX_VALUE,costs));
+        assertThrows(IllegalArgumentException.class,()->finalState.affords(order.owner(),99,1,rules));
+        assertTrue(recovered.retired(order.owner()).readiness().isEmpty());
+    }
+    @Test void consecutiveWavesCannotExceedTheLiveAttackLimit(){
+        var a=order(1,Optional.empty());var b=order(2,Optional.empty());var c=order(3,Optional.empty());var rules=MeleeRules.initial();
+        var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules);
+        var first=new ActorActuationId(new ActorBodyId(a.execution().actorId(),1),a.execution());
+        var second=new ActorActuationId(new ActorBodyId(b.execution().actorId(),1),b.execution());
+        var third=new ActorActuationId(new ActorBodyId(c.execution().actorId(),1),c.execution());
+        state=state.prepared(new MeleeStrike(a.owner(),1,first,a.target(),a.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100));
+        state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
+        var plan=state.engagements().get(CombatEngagement.Key.of(c));
+        plan=new CombatEngagement(plan.key(),plan.revision()+1,plan.anchor(),plan.axisX(),plan.axisZ(),plan.participants(),0,
+                Optional.of(new CombatEngagement.Wave(c.targetPosition(),List.of(new CombatEngagement.Slot(third,100,110,false)))));
+        state=state.withEngagement(plan);
+        assertFalse(CombatEngagementPlanner.permitsStrike(state,c,third,100,rules));
+        state=state.completed(state.pending().get(a.owner()),110,rules);
+        assertTrue(CombatEngagementPlanner.permitsStrike(state,c,third,110,rules));
+    }
     @Test void allMechanicalIngressHasAnExactCodecAndRejectsTruncation(){
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var events=List.<CombatEvent>of(new CombatEvent.WeaponDefined(order.execution(),order.weapon(),SWORD),new CombatEvent.WeaponObserved(actor,order.weapon(),SWORD),
                 new CombatEvent.PositionBlocked(actor,order.target(),order.station().orElseThrow()),
-                new CombatEvent.ManeuverRequested(actor,order.target(),order.actorPosition(),new MeleeManeuvers.Facts(5,0.2)),
+                new CombatEvent.ManeuverRequested(actor,order.target(),order.actorPosition(),new MeleeManeuvers.Facts(5,0.2,true)),
                 new CombatEvent.ManeuverSelected(new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),order.actorPosition().offset(1,0,0),100,0,0,200,0,140)),
                 new CombatEvent.ManeuverLaunched(actor,101),new CombatEvent.ManeuverClosed(order.owner(),101),
                 new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,true,100)),

@@ -5,19 +5,24 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 import java.util.*;
 /** Shared tactical selection. Roles provide permission/knowledge; navigation proves traversability. */
 public final class MeleeManeuvers {
-    public record Facts(double distance,double separatingSpeed){public Facts{if(!Double.isFinite(distance)||distance<0||!Double.isFinite(separatingSpeed))throw new IllegalArgumentException("invalid maneuver observations");}}
+    public record Facts(double distance,double separatingSpeed,boolean threateningSwing){
+        public Facts(double distance,double separatingSpeed){this(distance,separatingSpeed,false);}
+        public Facts{if(!Double.isFinite(distance)||distance<0||!Double.isFinite(separatingSpeed))throw new IllegalArgumentException("invalid maneuver observations");}
+    }
     public static Optional<MeleeManeuver.Kind> preference(FrontierWorldState state,CombatOrder order,Facts facts,long tick,CombatCapability capability){
         var rules=state.bootstrap().ruleset().melee().maneuvers();var prior=state.combat().maneuvers().get(order.owner());
-        if(state.combat().pending().containsKey(order.owner()) || prior!=null && prior.busy(tick,rules))return Optional.empty();
+        if(state.combat().recovering(order.owner(),tick)
+                || state.combat().pending().containsKey(order.owner()) || prior!=null && prior.busy(tick,rules))return Optional.empty();
         var harm=capability.harmedAt(state,order);
         boolean hurt=harm.isPresent() && tick>=harm.getAsLong() && tick-harm.getAsLong()<=rules.harmLifetime();
-        var kind=(hurt && facts.distance()<=rules.hurtGapMicros()/1_000_000.0 || facts.distance()<rules.crowdedGapMicros()/1_000_000.0)?MeleeManeuver.Kind.BACKSTEP:
+        var kind=((hurt || facts.threateningSwing()) && facts.distance()<=rules.hurtGapMicros()/1_000_000.0 || facts.distance()<rules.crowdedGapMicros()/1_000_000.0)?MeleeManeuver.Kind.BACKSTEP:
             facts.distance()>=rules.minimumBurstGapMicros()/1_000_000.0 && facts.distance()<=rules.maximumBurstGapMicros()/1_000_000.0
                 && (facts.distance()>=rules.distantGapMicros()/1_000_000.0 || facts.separatingSpeed()>=rules.retreatSpeedMicros()/1_000_000.0)?MeleeManeuver.Kind.BURST:null;
         if(kind==MeleeManeuver.Kind.BURST && MeleePositions.weapon(state.combat(),order)
                 .filter(profile->facts.distance()<=rules.burstDistance()+profile.reach()).isEmpty())return Optional.empty();
         if(kind==MeleeManeuver.Kind.BURST && !MeleeTactics.readyAt(state.combat(),order,order.actorPosition(),tick,state.bootstrap().ruleset().melee()))return Optional.empty();
-        return kind!=null && capability.maneuvers().contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
+        return kind!=null && state.combat().affords(order.owner(),tick,state.bootstrap().ruleset().melee().readiness().cost(kind),state.bootstrap().ruleset().melee())
+                && capability.maneuvers().contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
     }
     public static Optional<SurfaceAnchor> destination(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,KnownPedestrianRouteKnowledge knowledge,long tick){
         var rules=state.bootstrap().ruleset().melee().maneuvers();var origin=order.actorPosition();var target=order.targetPosition();

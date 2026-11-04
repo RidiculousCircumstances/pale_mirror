@@ -19,11 +19,17 @@ final class MeleeAnimation {
         var cue=frame.payload();
         if(cue.attack()==CombatGesture.BURST || cue.attack()==CombatGesture.BACKSTEP)return maneuver(frame);
         boolean lunge=cue.attack()==CombatGesture.LUNGE;
-        var drawn=lunge?new Pose(0.2f,-1.9f,-1.05f,0.65f,-0.5f,-0.13f)
+        boolean sweep=cue.attack()==CombatGesture.SWEEP;
+        boolean followup=cue.attack()==CombatGesture.FOLLOWUP;
+        var drawn=sweep?new Pose(-0.8f,-1.3f,-1.5f,0.8f,-0.3f,0)
+                :followup?new Pose(-1.2f,-1.4f,-0.4f,0.3f,-0.1f,0)
+                :lunge?new Pose(0.2f,-1.9f,-1.05f,0.65f,-0.5f,-0.13f)
                 :new Pose(-1.65f,-0.85f,-0.65f,0.45f,-0.2f,-0.03f);
-        var extended=lunge?new Pose(-1.1f,-0.25f,1.1f,-0.6f,0.55f,0.18f)
+        var extended=sweep?new Pose(-0.9f,-0.2f,1.5f,-0.7f,0.35f,0.04f)
+                :followup?new Pose(-0.8f,-0.25f,0.5f,-0.2f,0.15f,0.05f)
+                :lunge?new Pose(-1.1f,-0.25f,1.1f,-0.6f,0.55f,0.18f)
                 :new Pose(-0.65f,-0.3f,0.85f,-0.3f,0.25f,0.06f);
-        var contact=lunge?new Pose(-1.35f,-0.15f,0,0.05f,0.05f,0.18f):extended;
+        var contact=sweep?new Pose(-0.9f,-0.3f,0,0.1f,0,0.04f):lunge?new Pose(-1.35f,-0.15f,0,0.05f,0.05f,0.18f):extended;
         float age=frame.age();
         if(cue.phase()==CombatGesturePayload.Phase.CANCELLED){
             float cancelledAt=cue.sampledAt()-cue.startedAt();

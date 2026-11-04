@@ -32,6 +32,8 @@ final class FrontierV3SecurityDiagnostic {
                         +"\",\"station\":"+position(mission.station().support())+",\"watchUntil\":"+mission.watchUntil()
                         +",\"returnStation\":"+position(mission.post().station().support())+"}").orElse("null")
                 +",\"combat\":\""+CombatStatus.read(state,CombatComposition.CAPABILITIES,duty.execution(),tick)+"\""
+                +",\"readiness\":"+CombatReadiness.available(state.combat().readiness().get(duty.id()),tick,state.bootstrap().ruleset().melee().readiness())
+                +",\"strikeKind\":\""+(state.combat().pending().containsKey(duty.id())?state.combat().pending().get(duty.id()).attack():"NONE")+"\""
                 +",\"strikePending\":"+state.combat().pending().containsKey(duty.id())+"}").collect(java.util.stream.Collectors.joining(",","[","]"));
         long winding=io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.in(state,home).stream()
                 .filter(duty->CombatStatus.read(state,CombatComposition.CAPABILITIES,duty.execution(),tick)==CombatStatus.WINDING_UP).count();

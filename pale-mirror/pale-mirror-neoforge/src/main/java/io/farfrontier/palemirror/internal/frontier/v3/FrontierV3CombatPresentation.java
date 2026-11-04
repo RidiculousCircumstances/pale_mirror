@@ -29,6 +29,13 @@ public final class FrontierV3CombatPresentation {
             marker=new CompoundTag();marker.putString("owner",owner);marker.putLong("ordinal",ordinal);marker.putLong("epoch",epoch);marker.putInt("attack",gesture.wireTag());
             marker.putInt("preparation",preparation);marker.putInt("active",active);marker.putInt("recovery",recovery);marker.putLong("startedAtTick",level.getGameTime());
             marker.putInt("phase",CombatGesturePayload.Phase.PREPARING.wireTag());marker.putLong("aimAt",level.getGameTime());facing(marker,body,target);body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
+            var sound=switch(gesture){
+                case LUNGE -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_STRONG;
+                case SWEEP -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP;
+                case QUICK,FOLLOWUP -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_WEAK;
+                case BURST,BACKSTEP -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_NODAMAGE;
+            };
+            level.playSound(null,body.blockPosition(),sound,net.minecraft.sounds.SoundSource.NEUTRAL,0.5f,1.0f);
         }
         return marker.getLong("startedAtTick");
     }
@@ -86,7 +93,11 @@ public final class FrontierV3CombatPresentation {
         return marker.getString("owner").equals(strike.owner().value()) && marker.getLong("ordinal")==strike.attemptOrdinal()
                 && marker.getLong("epoch")==strike.attacker().body().physicalEpoch()
                 && MeleeAim.contains(marker.getFloat("facingYaw"),target.getX()-body.getX(),target.getZ()-body.getZ(),
-                    strike.attack()==MeleeAttack.LUNGE?rules.engagements().lungeTurnDegrees():rules.engagements().quickTurnDegrees());
+                    switch(strike.attack()){
+                        case LUNGE -> rules.engagements().lungeTurnDegrees();
+                        case SWEEP -> rules.techniques().sweepHalfAngleDegrees();
+                        case QUICK,FOLLOWUP -> rules.engagements().quickTurnDegrees();
+                    });
     }
     static void cancel(ServerLevel level,Mob body,MeleeStrike strike){FrontierV3LocalGoalCorrection.withdraw(body,strike.attacker(),strike.attemptOrdinal());finish(level,body,strike,CombatGesturePayload.Phase.CANCELLED);}
     private static void finish(ServerLevel level,Mob body,MeleeStrike strike,CombatGesturePayload.Phase phase){

@@ -23,6 +23,7 @@ public record MeleeRules(int sensingInterval,int routeRequestLimit,int maximumRa
             || rangeHysteresisMicros>1_000_000 || positionLeaseTicks<3*sensingInterval || positionLeaseTicks>1200
             || unreachableTicks<1 || retryTicks<1 || sectorWeightPermille<0 || sectorWeightPermille>20000 || alignmentPermille<0 || alignmentPermille>1000)throw new IllegalArgumentException("invalid melee policy");}
     public static MeleeRules initial(){return new MeleeRules(4,8,8,40);}
+    public CombatReadinessRules readiness(){return CombatReadinessRules.initial();}
     public MeleeFollowupRules followup(){return MeleeFollowupRules.initial();}
     public EngagementRules engagements(){return EngagementRules.initial();}
     public long windup(MeleeAttack attack){
@@ -34,5 +35,5 @@ public record MeleeRules(int sensingInterval,int routeRequestLimit,int maximumRa
     }
     public String canonicalText(){return sensingInterval+":"+routeRequestLimit+":"+maximumRadius+":"+obstructionTicks+":"
             +windupTicks+":"+rangeHysteresisMicros+":"+positionLeaseTicks+":"+unreachableTicks+":"+retryTicks+":"+sectorWeightPermille+":"+alignmentPermille+"|techniques="+techniques.canonicalText()+"|maneuvers="+maneuvers.canonicalText()
-            +"|engagements="+engagements().canonicalText()+"|followup="+followup().canonicalText();}
+            +"|readiness="+readiness().canonicalText()+"|engagements="+engagements().canonicalText()+"|followup="+followup().canonicalText();}
 }

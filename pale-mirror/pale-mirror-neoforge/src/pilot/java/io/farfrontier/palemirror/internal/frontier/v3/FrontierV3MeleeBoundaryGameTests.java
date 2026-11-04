@@ -41,7 +41,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
         durableAdmission(helper,MeleeAttack.LUNGE);
     }
     @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
-    public static void recoveryStrikeUsesTheQuickCueAndCannotReplayItsHit(GameTestHelper helper){
+    public static void recoveryStrikeUsesItsOwnCueAndCannotReplayItsHit(GameTestHelper helper){
         durableAdmission(helper,MeleeAttack.FOLLOWUP);
     }
     private static void durableAdmission(GameTestHelper helper,MeleeAttack attack){
@@ -49,8 +49,8 @@ public final class FrontierV3MeleeBoundaryGameTests {
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
         var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),attack);
         helper.assertTrue(io.farfrontier.palemirror.internal.network.CombatGesture.strike(attack)
-                ==(attack==MeleeAttack.FOLLOWUP?io.farfrontier.palemirror.internal.network.CombatGesture.QUICK
-                    :io.farfrontier.palemirror.internal.network.CombatGesture.LUNGE),"the recovery response has the short attack cue");
+                ==(attack==MeleeAttack.FOLLOWUP?io.farfrontier.palemirror.internal.network.CombatGesture.FOLLOWUP
+                    :io.farfrontier.palemirror.internal.network.CombatGesture.LUNGE),"the recovery response has its own warning");
 
         var actorPort=FrontierV3OperationEntityParticipant.nativeObject(fighter);
         var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);var ports=List.of(actorPort,targetPort);
@@ -111,7 +111,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
             helper.assertTrue(corrected<0 && corrected>=-rules.engagements().aimTurnDegreesPerTick(),"no instantaneous right-angle homing");yaw.set(corrected);
         });
         helper.runAfterDelay(rules.windup(strike.attack()),()->{
-            target.setPos(fighter.getX()+2,fighter.getY(),fighter.getZ()+0.5);
+            target.setPos(fighter.getX()+0.5,fighter.getY(),fighter.getZ()+2);
             helper.assertFalse(FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),"impact cannot keep tracking a circling player");
             helper.assertTrue(fighter.getPersistentData().getCompound("pm_v3_combat_windup").getFloat("facingYaw")==yaw.get(),"committed facing remains frozen");
             helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules)
@@ -133,6 +133,37 @@ public final class FrontierV3MeleeBoundaryGameTests {
                     "a finite completed swing can be recorded as a miss");
             helper.assertFalse(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"short step allowance is not damage reach");
             helper.assertValueEqual(target.getHealth(),health,"a visible miss deals no remote damage");
+            fighter.discard();target.discard();helper.succeed();
+        });
+    }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void interposedBodiesBlockContactAndVisibleSwingsRequireFacingTheDefender(GameTestHelper helper){
+        var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,7));target.setNoAi(true);target.setNoGravity(true);
+        var peer=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,5));peer.setNoAi(true);peer.setNoGravity(true);
+        helper.assertFalse(FrontierV3MeleeReach.clearContact(fighter,target),"a friendly body in a choke cannot be struck through");
+        peer.setPos(fighter.getX()+2,fighter.getY(),fighter.getZ());
+        helper.assertTrue(FrontierV3MeleeReach.clearContact(fighter,target),"another nearby body outside the contact segment is harmless");
+        target.swinging=true;target.swingTime=1;target.setYRot(180);target.setXRot(0);
+        helper.assertTrue(FrontierV3CombatExecutor.threateningSwing(fighter,target,MeleeRules.initial()),"an already visible directed swing can invite physical defence");
+        target.setYRot(0);
+        helper.assertFalse(FrontierV3CombatExecutor.threateningSwing(fighter,target,MeleeRules.initial()),"swinging away from the guard does not reveal a future attack");
+        fighter.discard();target.discard();peer.discard();helper.succeed();
+    }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void sweepHasItsOwnCueAndCannotHitBehindTheCommittedFacing(GameTestHelper helper){
+        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,6));target.setNoAi(true);target.setNoGravity(true);
+        var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),MeleeAttack.SWEEP);
+        FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
+        helper.assertTrue(fighter.getPersistentData().getCompound("pm_v3_combat_windup").getInt("attack")
+                ==io.farfrontier.palemirror.internal.network.CombatGesture.SWEEP.wireTag(),"sweep uses an explicit distinct client cue");
+        helper.runAfterDelay(rules.windup(MeleeAttack.SWEEP),()->{
+            target.setPos(fighter.getX()+2,fighter.getY(),fighter.getZ());
+            helper.assertTrue(FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules),"wide frontal sweep covers close circling");
+            target.setPos(fighter.getX(),fighter.getY(),fighter.getZ()-2);
+            helper.assertFalse(FrontierV3CombatPresentation.strikeArc(fighter,target,strike,rules),"successful dodge behind the commitment stays safe");
+            helper.assertFalse(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"no damage through the guard's back");
             fighter.discard();target.discard();helper.succeed();
         });
     }

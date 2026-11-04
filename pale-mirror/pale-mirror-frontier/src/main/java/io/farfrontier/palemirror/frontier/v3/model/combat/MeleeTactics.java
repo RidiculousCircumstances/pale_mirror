@@ -17,6 +17,14 @@ public final class MeleeTactics {
     public static MeleeAttack attack(CombatState state,CombatOrder order,
             io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long incarnation,long tick,
             WeaponProfile weapon,double distance,double separatingSpeed,MeleeRules rules){
+        return attack(state,order,observer,incarnation,tick,weapon,distance,separatingSpeed,0,rules);
+    }
+    public static MeleeAttack attack(CombatState state,CombatOrder order,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long incarnation,long tick,
+            WeaponProfile weapon,double distance,double separatingSpeed,double lateralSpeed,MeleeRules rules){
+        if(!Double.isFinite(lateralSpeed) || lateralSpeed<0)throw new IllegalArgumentException("invalid observed lateral speed");
+        if(distance<=Math.min(weapon.reach(),rules.techniques().sweepDistanceMicros()/1_000_000.0)
+                && lateralSpeed>=rules.techniques().sweepSpeedMicros()/1_000_000.0)return MeleeAttack.SWEEP;
         var followup=state.followups().get(order.owner());
         return followup!=null && followup.matches(order,observer,incarnation,tick)
                 && opportunity(weapon,MeleeAttack.FOLLOWUP,distance,rules)?MeleeAttack.FOLLOWUP

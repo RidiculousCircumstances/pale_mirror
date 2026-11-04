@@ -1,10 +1,10 @@
 package io.farfrontier.palemirror.frontier.v3.model.combat;
 /** Explicit stable technique identity. World combat rules own all tunable mechanics. */
 public enum MeleeAttack {
-    QUICK(1), LUNGE(2), FOLLOWUP(3);
+    QUICK(1), LUNGE(2), FOLLOWUP(3), SWEEP(4);
     private final int tag;
     MeleeAttack(int tag){this.tag=tag;}
-    public boolean closesDistance(){return switch(this){case QUICK->false;case LUNGE,FOLLOWUP->true;};}
+    public boolean closesDistance(){return switch(this){case QUICK,SWEEP->false;case LUNGE,FOLLOWUP->true;};}
     public int wireTag(){return tag;}
     public static MeleeAttack require(int tag){
         for(var value:values())if(value.tag==tag)return value;

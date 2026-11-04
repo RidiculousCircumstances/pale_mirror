@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MeleeAnimationTest {
     private static PaleMirrorCombatClient.Frame frame(CombatGesture attack,CombatGesturePayload.Phase phase,float age,int sampled){
-        var technique=MeleeRules.initial().techniques().require(attack==CombatGesture.QUICK?MeleeAttack.QUICK:MeleeAttack.LUNGE);
+        var technique=MeleeRules.initial().techniques().require(MeleeAttack.valueOf(attack.name()));
         var cue=new CombatGesturePayload(1,new UUID(1,2),1,1,attack,phase,100,100+sampled,
                 technique.preparationTicks(),technique.activeTicks(),technique.recoveryTicks(),0,0);
         return new PaleMirrorCombatClient.Frame(cue,age);
@@ -20,13 +20,19 @@ class MeleeAnimationTest {
         var preparation=MeleeRules.initial().techniques().require(MeleeAttack.LUNGE).preparationTicks();
         var lunge=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,preparation*0.75f,0));
         assertTrue(quick.shoulder()<-1.5f);assertTrue(lunge.elbow()<-1.8f);assertTrue(lunge.lean()<-0.1f);
-        for(var attack:java.util.List.of(CombatGesture.QUICK,CombatGesture.LUNGE)){
-            var technique=MeleeRules.initial().techniques().require(attack==CombatGesture.QUICK?MeleeAttack.QUICK:MeleeAttack.LUNGE);
+        for(var attack:java.util.List.of(CombatGesture.QUICK,CombatGesture.LUNGE,CombatGesture.SWEEP,CombatGesture.FOLLOWUP)){
+            var technique=MeleeRules.initial().techniques().require(MeleeAttack.valueOf(attack.name()));
             var ready=MeleeAnimation.sample(frame(attack,CombatGesturePayload.Phase.PREPARING,0,0));
             var ended=MeleeAnimation.sample(frame(attack,CombatGesturePayload.Phase.IMPACT,
                     technique.preparationTicks()+technique.activeTicks()+technique.recoveryTicks(),0));
             assertEquals(ready,ended);
         }
+    }
+    @Test void sweepAndFollowupHaveSeparateReadableWarnings(){
+        var sweep=MeleeAnimation.sample(frame(CombatGesture.SWEEP,CombatGesturePayload.Phase.PREPARING,7.5f,0));
+        var follow=MeleeAnimation.sample(frame(CombatGesture.FOLLOWUP,CombatGesturePayload.Phase.PREPARING,4.5f,0));
+        var quick=MeleeAnimation.sample(frame(CombatGesture.QUICK,CombatGesturePayload.Phase.PREPARING,3,0));
+        assertTrue(sweep.yaw()<-1.4);assertNotEquals(follow,quick);assertNotEquals(sweep,follow);
     }
     @Test void movementGesturesHaveDifferentBodyIntentAndCannotPlayAWeaponStrike(){
         var burst=new CombatGesturePayload(1,new UUID(1,2),1,1,CombatGesture.BURST,CombatGesturePayload.Phase.IMPACT,100,104,4,20,6,0,0);
@@ -46,7 +52,7 @@ class MeleeAnimationTest {
         var atCancel=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.CANCELLED,5,5));
         var before=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,5,0));
         assertEquals(before,atCancel);
-        var recovered=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.CANCELLED,15,5));
+        var recovered=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.CANCELLED,19,5));
         assertEquals(MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,0,0)),recovered);
     }
 }

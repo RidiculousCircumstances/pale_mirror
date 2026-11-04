@@ -59,7 +59,8 @@ public final class CombatEngagementPlanner {
                 && ActorBodyAuthority.retainsPhysicalCustody(state,order.execution().actorId())
                 && ActorBodyAuthority.current(state,order.execution().actorId()).equals(stance.observer().body())
                 && !combat.pending().containsKey(order.owner()) && !combat.maneuverBusy(order.owner(),tick,rules.maneuvers())
-                && tick>=combat.nextAttack().getOrDefault(order.owner(),0L);
+                && tick>=combat.nextAttack().getOrDefault(order.owner(),0L)
+                && combat.affords(order.owner(),tick,rules.readiness().quickCost(),rules);
     }
     static boolean promote(Map<SubjectId,CombatEngagement.Participant> members){
         if(members.values().stream().anyMatch(member->member.role()==MeleeSector.Role.PRESSURE))return false;
@@ -67,7 +68,8 @@ public final class CombatEngagementPlanner {
         members.put(id,new CombatEngagement.Participant(member.engagement(),member.execution(),MeleeSector.Role.PRESSURE,member.renewedAt()));return true;
     }
     public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long tick,MeleeRules rules){
-        var plan=state.engagements().get(CombatEngagement.Key.of(order));return plan!=null && plan.permits(order,observer,tick,rules.engagements());
+        var plan=state.engagements().get(CombatEngagement.Key.of(order));return plan!=null && plan.permits(order,observer,tick,rules.engagements())
+                && state.pending().keySet().stream().filter(plan.participants()::containsKey).count()<rules.engagements().maximumWaveSize();
     }
     private CombatEngagementPlanner() { }
 }

@@ -21,7 +21,7 @@ final class CombatPayloadCodecs {
                 switch((CombatEvent)payload){
                     case CombatEvent.ManeuverRequested v->{actuation(out,v.observer());target(out,v.target());
                         FrontierWorldStateCodec.writePosition(out,v.origin().support());out.writeDouble(v.facts().distance());
-                        out.writeDouble(v.facts().separatingSpeed());}
+                        out.writeDouble(v.facts().separatingSpeed());out.writeBoolean(v.facts().threateningSwing());}
                     case CombatEvent.ManeuverSelected v->maneuver(out,v.maneuver());
                     case CombatEvent.ManeuverLaunched v->{actuation(out,v.observer());out.writeLong(v.attemptOrdinal());}
                     case CombatEvent.ManeuverClosed v->{id(out,v.owner());out.writeLong(v.attemptOrdinal());}
@@ -41,7 +41,7 @@ final class CombatPayloadCodecs {
             FrontierPayload value=switch(type){
                 case CombatEvent.ManeuverRequested.TYPE->new CombatEvent.ManeuverRequested(actuation(in),
                     target(in),new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
-                    new MeleeManeuvers.Facts(in.readDouble(),in.readDouble()));
+                    new MeleeManeuvers.Facts(in.readDouble(),in.readDouble(),in.readBoolean()));
                 case CombatEvent.ManeuverSelected.TYPE->new CombatEvent.ManeuverSelected(maneuver(in));
                 case CombatEvent.ManeuverLaunched.TYPE->new CombatEvent.ManeuverLaunched(actuation(in),in.readLong());
                 case CombatEvent.ManeuverClosed.TYPE->new CombatEvent.ManeuverClosed(id(in),in.readLong());
