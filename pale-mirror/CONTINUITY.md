@@ -1,5 +1,68 @@
 # Active continuity — 2026-11-04
 
+## Active delivery — local duel tactics / pressure response
+
+User authorized full repair; delivered. Sole main/no agents/push/new goal.
+IMPL CLEANd83054940; production ebb2d443a115a13377b9d0d678e514d49d0cb865,
+RELEASE CLEANdetached ebb2d443a. Common MeleeExchange owns bounded dated harm/miss
+memory and pressure/withdrawal watermarks/stable side. MeleeDuelPolicy arbitrates
+attack/maneuver/approach/wait. Existing maneuver/UAE/nav owns finite lateral goals,
+geometry/group-sector/body/height/cooldown/effort and re-entry. Positive unused
+journal cancellation alone may withdraw reversible preparation; committed contact
+cannot retract. New native cancellation is deferred, existing confirmation still
+waits durability. No new server-tick disk wait/resistance/reach/damage buff.
+Schema329 fresh-world; obsolete quick selection hints removed. Final successor
+makes launch use kind-specific preparation, same as native cue. Existing BACKSTEP
+cue reused; optional trace names exact SIDESTEP/pressure/refusal. No client update.
+
+Focused guardrails/24combat+11guard+4codec+10architecture and19adapter/animation/
+operation/architecture checks PASS32s. Native strikes18PASS43.64s; local navigation
+46PASS3.488s/42sprocess incl actual raised lateral candidate/low-roof refusal.
+Withdrawal proves unused cancellation/no damage/wear/replay,journal hydration and
+active-window refusal. Non-flat fixture found/fixed horizontal radius including
+height; independent step/drop retained. Final35combat/guard+guardrails PASS29s;
+detached final JAR/package PASS2s (unit tests cached, unchanged boundaries reused).
+/tmp/pm-combat-duel-{final-check,native-final,navigation-final,launch-check,
+release,release-final}.log. Details/evidence/fixture limits:
+docs/frontier-v3-duel-pressure-tactics-20261104.md.
+
+MAIN /home/rd/far-frontier-server, far-frontier-v3-live.service wrapper1329771,
+start1793797609; duel-tactics-schema329-seed139-20261104 seed139/rootr31.
+Old skill-combat-schema328-seed139-20261104 preserved for old death/history question.
+SHA5127d9e4392f24d7214c0a4057c3daf8b2e1816f643bde8be63b0adfeefcccd7338c987c4e057bb281158fafb6244438eb4544e1265a09f1369e11177b7e1a701f2.
+Root preflight/publish/install/verify PASS; native all-dimensions saved/oldJVM+
+ports exited before install. Final correction keeps329world. Receipts
+/tmp/pm-combat-duel-correction-*.log. No human rd state edited.
+
+Fullpack20FPS/privateXvfb equipment9bdfb2c9... PASS7ordinary actions: two diagnostic
+swords donated through real UI, not natural sword-production evidence. Nora Bell
+1-16armed; Leon Lake1-4equipping. First battle66c72ce8... PASS17actions, capture
+a91c5f8c...7249/7249complete,18native hits, unused preparation cancellation and
+terminal escape/release. Lateral requests refused at bakery service apron; that
+probe alone does not prove physical evasion. Both frames reviewed.
+
+Final open-ground probe1175a34c-d6ae-4580-b0b3-4e5c9e0bd127 PASS21actions onexact
+ebb2d443a: real punches/pursuit, finite SIDESTEP_RIGHT twice, actual sampled
+XZdisplacements1.836/2.394blocks, each followed by renewed native LUNGE hit.
+Stable side retained; fresh pressure watermarks27167→27389.15hits/20visible
+attacks (60damage),4rangemisses/1windowmiss,1unused-cue tactical cancellation.
+Capture2c242f04-f66f-4499-81f4-6bf96d15612a4898/4898complete/no loss/cap.
+400tick ordinary circuit; escape no extra damage; terminal contact/responders/
+maneuvers0. Both real open-ground frames reviewed; two lateral BACKSTEP cues
+sampled. No human balance/kiting-impossible claim; pilot1000maxhealth is diagnostic.
+One failed open fixture used fixed centre while guard moved to remote patrol,
+losing64block observation; corrected actual actor-relative8block player visit.
+No body teleport/canonical mutation. All task clients/private displays stopped.
+
+Diagnostic-only d83054940 fixes analyzer absent source for sunlight damage/death;
+actual complete capture now parses retaining null-source environmental outcomes.
+Final runtime summary/settlement ok/NORMAL/activeCases0, recorderSAVED/inactive.
+Nora near(-1456,64,-1347)at29290. Netty connection reset at taskclientexit is not
+tick failure. Final artifacts IMPL/build/combat-duel-20261104/. No open scoped
+implementation or running test/monitor; user may test bare-hand/hoe pressure.
+PACK trackedclean888ed90, preexisting.f0v-baseline/; GOV unrelated WIP preserved.
+Stage only owned ledger/new report/exact duel/contact architecture lines.
+
 ## Latest analysis — repeated punch pressure / missing lateral response
 
 User reports the new fight still permits knockback control and asks analysis,
