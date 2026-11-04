@@ -44,7 +44,7 @@ final class CombatTraceCapture {
                 }
                 var recording=new Recording();
                 try {
-                    recording.setName("PM combat "+id);recording.setToDisk(true);recording.setMaxSize(32L*1024*1024);
+                    recording.setName("PM combat "+id);recording.setToDisk(true);recording.setMaxSize(64L*1024*1024);
                     recording.setDumpOnExit(true);
                     recording.setDuration(Duration.ofSeconds(seconds));recording.enable(Sample.class).withoutStackTrace();
                     recording.enable("jdk.DataLoss");recording.start();return recording;
