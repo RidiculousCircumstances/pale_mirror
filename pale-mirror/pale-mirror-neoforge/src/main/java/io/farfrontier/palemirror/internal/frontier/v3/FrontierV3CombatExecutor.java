@@ -71,7 +71,7 @@ public final class FrontierV3CombatExecutor {
             boolean tacticalReady=MeleeTactics.readyAt(state.combat(),order,new SurfaceAnchor(new BlockPosition(fighter.getOnPos().getX(),fighter.getOnPos().getY(),fighter.getOnPos().getZ())),tick,rules);
             // A preferred flank is a movement goal, never a veto on real close contact.
             boolean holding=visible && distance<=holdReach;
-            boolean attackReady=visible && canSpend && MeleeTactics.opportunity(profile,attack,distance,rules);
+            boolean attackReady=visible && MeleeTactics.opportunity(profile,attack,distance,rules);
             if(previous==null || !previous.observer().equals(actuation) || !previous.target().equals(order.target())
                     || previous.holding()!=holding || previous.attackReady()!=attackReady || tick-previous.atTick()>=2L*rules.sensingInterval()){
                 FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,attackReady,tick)));
@@ -97,7 +97,7 @@ public final class FrontierV3CombatExecutor {
                 trace(order,"MANEUVER_REFUSED",requested);
             }
             var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,attackReady,
-                    state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),item.condition().remaining()>=profile.wear()));
+                    state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),canSpend && item.condition().remaining()>=profile.wear()));
             if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))trace(order,"OPPORTUNITY",
                     "distance="+distance+" visible="+visible+" tactical="+tacticalReady+" attack="+attack+" decision="+decision+" actor="+fighter.position()+" target="+target.position());
             if(decision==MeleeTactics.Decision.APPROACH){
