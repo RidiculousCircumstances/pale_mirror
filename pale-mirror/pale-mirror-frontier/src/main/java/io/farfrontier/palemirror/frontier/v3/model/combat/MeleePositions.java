@@ -137,7 +137,7 @@ public final class MeleePositions {
     }
     private static double score(CombatOrder order,WeaponProfile weapon,SurfaceAnchor station,List<CombatOrder> peers,MeleeRules rules){
         double range=Math.hypot(station.x()-order.targetPosition().x(),station.z()-order.targetPosition().z());
-        double preferred=Math.min(rules.engagements().attackDistanceMicros()/1_000_000.0,weapon.reach()*0.75);
+        double preferred=Math.max(0.1,Math.min(order.style().preferredGapMicros()/1_000_000.0,weapon.reach()-rules.rangeHysteresisMicros()/1_000_000.0));
         return crowding(order,station,peers,rules)+2.0*Math.abs(range-preferred)+0.05*station.manhattanDistance(order.actorPosition());
     }
     private static double crowding(CombatOrder order,SurfaceAnchor station,List<CombatOrder> peers,MeleeRules rules){

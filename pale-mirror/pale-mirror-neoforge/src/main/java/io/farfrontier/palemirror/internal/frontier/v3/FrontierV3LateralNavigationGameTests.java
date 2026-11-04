@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleCatalog;
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import net.minecraft.core.BlockPos;
@@ -40,7 +42,8 @@ public final class FrontierV3LateralNavigationGameTests {
                 new io.farfrontier.palemirror.frontier.v3.model.combat.CombatPartyId(owner),
                 new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope(target,
                         io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope.Kind.SELF_DEFENCE,source,8),
-                source.offset(2,0,0),100,100,source,io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER,Optional.empty());
+                source.offset(2,0,0),100,100,source,io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER,Optional.empty(),CombatStyleCatalog.standard().require(
+                        new CombatStyleId("frontier:mobile")));
         var scope=new FrontierV3NavigationScope.ObservedWorld(new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(origin.getX()-2,origin.getZ()-2,6,6));
         var ranked=io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuvers.rank(order,
                 io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver.Kind.SIDESTEP_RIGHT,

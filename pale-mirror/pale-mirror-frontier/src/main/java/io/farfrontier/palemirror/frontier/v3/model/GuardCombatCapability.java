@@ -21,7 +21,7 @@ final class GuardCombatCapability implements CombatCapability {
             var observer=ActorMovementProjection.bodyAt(state,execution.actorId(),tick).supportingSurface();
             return new CombatOrder(execution,duty.revision(),duty.weapon(),new CombatPartyId(duty.home()),response.engagement(),new SurfaceAnchor(contact.position()),
                     contact.atTick(),state.bootstrap().ruleset().security().contactLifetime(),observer,state.actorLocations().get(execution.actorId()).navigationProfile(),
-                    duty.mission().filter(m->m.response().equals(Optional.of(contact.target()))).map(GuardMission::station));
+                    duty.mission().filter(m->m.response().equals(Optional.of(contact.target()))).map(GuardMission::station),state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()));
         });
     }
     public boolean permitsApproach(FrontierWorldState state,ActorMovement movement){

@@ -114,8 +114,8 @@ class SettlementSecurityTest {
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
         var far=order.atActorObservation(order.targetPosition().offset(8,0,0));
-        assertEquals(Optional.of(MeleeManeuver.Kind.PURSUIT_RUN),MeleeManeuvers.preference(state,far,new MeleeManeuvers.Facts(8,.2),21001,
-                CombatComposition.CAPABILITIES.require(order.execution())),"a tactical run need not end in weapon reach");
+        assertNotEquals(Optional.of(MeleeManeuver.Kind.BURST),MeleeManeuvers.preference(state,far,new MeleeManeuvers.Facts(8,.2),21001,
+                CombatComposition.CAPABILITIES.require(order.execution())),"style may choose running or walking, never an out-of-reach attacking burst");
         var shortStep=far.actorPosition().offset(-3,0,0);
         assertFalse(MeleeManeuvers.useful(state,far,MeleeManeuver.Kind.BURST,shortStep));
         var bad=MeleeManeuvers.selected(state,far,r.body(),MeleeManeuver.Kind.BURST,shortStep,21001);
@@ -694,7 +694,8 @@ class SettlementSecurityTest {
         var other=GuardEquipment.in(state,r.duty().home()).stream().filter(duty->!duty.id().equals(r.duty().id()) && GuardEquipment.held(r.state(),duty)).findFirst().orElseThrow();
         var station=new SurfaceAnchor(contact(r).position()).offset(1,0,0);
         var contender=new CombatOrder(other.execution(),other.revision(),other.weapon(),new CombatPartyId(new SubjectId("party:independent")),first.engagement(),first.targetPosition(),21001,1000,
-                state.actorLocations().get(other.execution().actorId()).supportingSurface(),state.actorLocations().get(other.execution().actorId()).navigationProfile(),Optional.of(station));
+                state.actorLocations().get(other.execution().actorId()).supportingSurface(),state.actorLocations().get(other.execution().actorId()).navigationProfile(),Optional.of(station),
+                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0));
         var occupied=apply(state,first.owner(),new CombatEvent.PositionPlanned(first.execution(),first.target(),first.targetPosition(),Optional.of(station),MeleePosition.Reason.RESERVED),21001);
         assertThrows(IllegalArgumentException.class,()->MeleePositions.requireClaim(occupied,contender,station,21002));
         MeleePositions.requireClaim(occupied,contender,station,21082);

@@ -25,15 +25,16 @@ public record MeleeRules(int sensingInterval,int routeRequestLimit,int maximumRa
     public static MeleeRules initial(){return new MeleeRules(4,8,8,40);}
     public CombatReadinessRules readiness(){return CombatReadinessRules.initial();}
     public MeleeFollowupRules followup(){return MeleeFollowupRules.initial();}
+    public CombatStyleCatalog styles(){return CombatStyleCatalog.standard();}
     public EngagementRules engagements(){return EngagementRules.initial();}
     public long windup(MeleeAttack attack){
         return Math.max(1,Math.min(40,Math.round((double)windupTicks*techniques.require(attack).preparationTicks()/8)));
     }
-    public double holdReach(WeaponProfile profile,boolean alreadyHolding){
-        double close=Math.max(0.1,Math.min(techniques.pressureDistanceMicros()/1_000_000.0,profile.reach()-rangeHysteresisMicros/1_000_000.0));
+    public double holdReach(WeaponProfile profile,boolean alreadyHolding,CombatStyle style){
+        double close=Math.max(0.1,Math.min(style.preferredGapMicros()/1_000_000.0,profile.reach()-rangeHysteresisMicros/1_000_000.0));
         return alreadyHolding?Math.min(profile.reach(),close+rangeHysteresisMicros/1_000_000.0):close;
     }
     public String canonicalText(){return sensingInterval+":"+routeRequestLimit+":"+maximumRadius+":"+obstructionTicks+":"
             +windupTicks+":"+rangeHysteresisMicros+":"+positionLeaseTicks+":"+unreachableTicks+":"+retryTicks+":"+sectorWeightPermille+":"+alignmentPermille+"|techniques="+techniques.canonicalText()+"|maneuvers="+maneuvers.canonicalText()
-            +"|readiness="+readiness().canonicalText()+"|engagements="+engagements().canonicalText()+"|followup="+followup().canonicalText();}
+            +"|readiness="+readiness().canonicalText()+"|engagements="+engagements().canonicalText()+"|followup="+followup().canonicalText()+"|styles="+styles().canonicalText();}
 }

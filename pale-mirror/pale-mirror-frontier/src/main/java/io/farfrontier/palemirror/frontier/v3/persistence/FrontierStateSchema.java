@@ -24,7 +24,8 @@ final class FrontierStateSchema {
     // One-shot missed-lunge continuations survive recovery with exact body/target identities.
     // Shared combat effort and explicit visible-swing facts survive exact recovery.
     // Cooperative flank intent and its retry/commitment clocks retain explicit ownership.
-    static final int VERSION = 331;
+    // Every resident retains its declared combat-style definition reference, including newborn payloads.
+    static final int VERSION = 332;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

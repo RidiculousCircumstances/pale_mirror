@@ -131,6 +131,7 @@ public final class FrontierV3CombatTrace {
         try {
             var row=base(level);row.add("fighter",body(fighter));row.add("target",body(target));row.addProperty("owner",order.owner().value());
             row.addProperty("attack",attack.name());row.addProperty("gate",gate);row.addProperty("distance",distance);
+            row.addProperty("combatStyle",order.style().id().value());
             row.addProperty("separatingSpeed",separating);row.addProperty("lateralSpeed",lateral);row.addProperty("canSpend",canSpend);row.addProperty("orderRevision",order.revision());
             var runtime=FrontierV3ServerLifecycle.runtimeFor(level.getServer());var state=runtime==null?null:runtime.decodedState().orElse(null);
             if(state!=null) {
@@ -226,6 +227,7 @@ public final class FrontierV3CombatTrace {
                     var owner=current.activityOwnerId();var combat=state.combat();
                     var capabilities=io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES;
                     if(capabilities.supports(current.activityKind()))capabilities.current(state,current,runtime.calendarInstant().orElseThrow()).ifPresent(order->{
+                        row.addProperty("combatStyle",order.style().id().value());
                         var plan=combat.engagements().get(CombatEngagement.Key.of(order));
                         var member=plan==null?null:plan.participants().get(owner);
                         if(member!=null && member.execution().equals(current)){

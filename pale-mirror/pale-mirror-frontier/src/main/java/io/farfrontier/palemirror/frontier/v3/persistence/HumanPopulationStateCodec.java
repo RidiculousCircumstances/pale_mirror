@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute;
@@ -422,6 +423,7 @@ final class HumanPopulationStateCodec {
             output.writeInt(entry.getValue().deltaPermille());
         }
         WorkStateCodec.writeModifiers(output, characteristics.workModifiers());
+        FrontierWorldStateCodec.writeString(output,resident.combatStyle().value());
         output.writeInt(characteristics.movementModifiers().basePermille());
         output.writeInt(characteristics.movementModifiers().factors().size());
         for(var factor:characteristics.movementModifiers().factors().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -446,13 +448,15 @@ final class HumanPopulationStateCodec {
             var modifier = new ResidentCharacteristics.MetabolismModifier(source, input.readInt());
             if (modifiers.put(source, modifier) != null) throw new IllegalArgumentException("duplicate resident characteristic modifier");
         }
-        var work=WorkStateCodec.readModifiers(input); int movementBase=input.readInt();
+        var work=WorkStateCodec.readModifiers(input);
+        var style=new CombatStyleId(FrontierWorldStateCodec.readString(input));
+        int movementBase=input.readInt();
         int movementCount=UnitGroupStateCodec.count(input,ResidentCharacteristics.MAX_MODIFIERS);
         var movement=new LinkedHashMap<SubjectId,Integer>();
         for(int i=0;i<movementCount;i++) if(movement.putIfAbsent(new SubjectId(FrontierWorldStateCodec.readString(input)),input.readInt())!=null)
             throw new IllegalArgumentException("duplicate movement modifier");
         return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), name,
                 birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers, work,
-                    new ResidentMovementModifiers(movementBase,movement)));
+                    new ResidentMovementModifiers(movementBase,movement)),style);
     }
 }

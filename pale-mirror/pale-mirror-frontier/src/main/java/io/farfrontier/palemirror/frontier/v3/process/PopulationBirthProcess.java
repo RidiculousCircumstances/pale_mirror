@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
@@ -118,7 +119,7 @@ public final class PopulationBirthProcess {
         SubjectId residentId = new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal);
         ResidentProfile resident = new ResidentProfile(residentId, household.id(), settlement.id(), ResidentRole.FARMER,
                 ResidentNames.create(seed, residentId),
-                birthTick, HumanPopulation.birthSkills(ordinal))
+                birthTick, HumanPopulation.birthSkills(ordinal),CombatStyleCatalog.standard().forBirth(seed,residentId))
                 .withCharacteristics(ResidentCharacteristics.initial(residentLife,
                         new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal)));
         return new ResidentBirthJob(new SubjectId("job:resident-birth-" + suffix), settlement.id(), household.id(), food,

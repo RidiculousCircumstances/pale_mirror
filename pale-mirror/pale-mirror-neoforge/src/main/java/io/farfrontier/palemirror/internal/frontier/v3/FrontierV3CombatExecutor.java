@@ -71,7 +71,7 @@ public final class FrontierV3CombatExecutor {
             boolean canSpend=state.combat().affords(order.owner(),tick,rules.readiness().cost(attack),rules);
             var previous=state.combat().stances().get(order.owner());
             boolean wasHolding=previous!=null && previous.observer().equals(actuation) && previous.current(order,tick,rules) && previous.holding();
-            double holdReach=rules.holdReach(profile,wasHolding);
+            double holdReach=rules.holdReach(profile,wasHolding,order.style());
             boolean tacticalReady=MeleeTactics.readyAt(state.combat(),order,new SurfaceAnchor(new BlockPosition(fighter.getOnPos().getX(),fighter.getOnPos().getY(),fighter.getOnPos().getZ())),tick,rules);
             // A preferred flank is a movement goal, never a veto on real close contact.
             boolean holding=visible && distance<=holdReach;
@@ -113,7 +113,7 @@ public final class FrontierV3CombatExecutor {
                 }
                 // A physically unavailable evasion must not prevent an otherwise safe contact attack.
             }
-            var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,attackReady,
+            var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,attackReady && tactic.action()!=MeleeDuelPolicy.Action.APPROACH,
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),canSpend && item.condition().remaining()>=profile.wear()));
             boolean slotReady=decision==MeleeTactics.Decision.ATTACK && canSpend && CombatEngagementPlanner.permitsStrike(state.combat(),order,actuation,attack,tick,rules);
             String traceGate=decision==MeleeTactics.Decision.WAIT

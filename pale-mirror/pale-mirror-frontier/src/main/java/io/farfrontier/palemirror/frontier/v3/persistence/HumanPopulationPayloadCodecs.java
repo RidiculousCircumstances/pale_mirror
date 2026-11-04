@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
@@ -11,7 +12,7 @@ import java.io.IOException;
 
 /** Wire codecs owned by the human-population boundary. */
 final class HumanPopulationPayloadCodecs {
-    private static final int BORN_FORMAT = 0x52424f33; // RBO3: explicit named profile, no profession byte.
+    private static final int BORN_FORMAT = 0x52424f34; // RBO4: explicit combat style reference on birth.
     private HumanPopulationPayloadCodecs() { }
 
     static PayloadCodec starvationIntegrated() {
@@ -570,6 +571,7 @@ final class HumanPopulationPayloadCodecs {
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
         for (HumanCapability capability : HumanCapability.values()) output.writeByte(resident.capability(capability));
         writeCharacteristics(output, resident.characteristics());
+        FrontierWorldPayloadCodecs.writeString(output,resident.combatStyle().value());
     }
     private static ResidentProfile readProfile(DataInputStream input) throws IOException {
         var id = FrontierWorldPayloadCodecs.readSubject(input); var household = FrontierWorldPayloadCodecs.readSubject(input); var settlement = FrontierWorldPayloadCodecs.readSubject(input);
@@ -580,7 +582,8 @@ final class HumanPopulationPayloadCodecs {
         var capabilities = new java.util.EnumMap<HumanCapability, Integer>(HumanCapability.class);
         for (HumanCapability capability : HumanCapability.values()) capabilities.put(capability, input.readUnsignedByte());
         return new ResidentProfile(id.value(), household.value(), settlement.value(), FrontierWireTags.require(ResidentRole.class, role),
-                name, birthTick, skills, capabilities, readCharacteristics(input));
+                name, birthTick, skills, capabilities, readCharacteristics(input),
+                new CombatStyleId(FrontierWorldPayloadCodecs.readString(input)));
     }
 
     private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {

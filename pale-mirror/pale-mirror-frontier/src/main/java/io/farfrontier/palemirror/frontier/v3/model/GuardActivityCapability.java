@@ -14,7 +14,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
         if(mission.isPresent()){var intent=io.farfrontier.palemirror.frontier.v3.model.combat.CombatLocomotion.plan(state.combat(),execution,
                 new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Key(
                     new io.farfrontier.palemirror.frontier.v3.model.combat.CombatPartyId(duty.home()),mission.orElseThrow().response().orElseThrow()),
-                state.actorLocations().get(execution.actorId()).supportingSurface(),state.bootstrap().ruleset().melee());
+                state.actorLocations().get(execution.actorId()).supportingSurface(),state.bootstrap().ruleset().melee(),state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()));
             pace=new io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace(
                     ResidentWalkingPace.read(state,execution.actorId(),intent.mode()).blocksPerTick()*intent.multiplierPermille()/1000.0);
         }

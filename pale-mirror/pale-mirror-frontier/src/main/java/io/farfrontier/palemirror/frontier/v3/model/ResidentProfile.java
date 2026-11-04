@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleCatalog;
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.EnumMap;
@@ -13,7 +15,7 @@ import java.util.Objects;
 public record ResidentProfile(
         SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
         String name, long birthTick, Map<ResidentSkill, Integer> skills,
-        Map<HumanCapability, Integer> capabilities, ResidentCharacteristics characteristics
+        Map<HumanCapability, Integer> capabilities, ResidentCharacteristics characteristics, CombatStyleId combatStyle
 ) {
     public static final int MAX_SKILL = 100;
 
@@ -46,39 +48,44 @@ public record ResidentProfile(
         if (capabilityCopy.size() != HumanCapability.values().length) throw new IllegalArgumentException("resident profile must own every capability");
         capabilities = Map.copyOf(capabilityCopy);
         characteristics = Objects.requireNonNull(characteristics, "resident characteristics");
+        CombatStyleCatalog.standard().require(Objects.requireNonNull(combatStyle,"resident combat style"));
     }
 
     public ResidentProfile(SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
                            String name, long birthTick, Map<ResidentSkill, Integer> skills,
-                           Map<HumanCapability, Integer> capabilities) {
+                           Map<HumanCapability, Integer> capabilities, CombatStyleId combatStyle) {
         this(id, householdId, settlementId, role, name, birthTick, skills, capabilities,
-                ResidentCharacteristics.initial());
+                ResidentCharacteristics.initial(),combatStyle);
     }
 
     /** Genesis constructor: capability baselines are explicit products of the supplied skills. */
     public ResidentProfile(SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
-                           String name, long birthTick, Map<ResidentSkill, Integer> skills) {
-        this(id, householdId, settlementId, role, name, birthTick, skills, initialCapabilities(skills));
+                           String name, long birthTick, Map<ResidentSkill, Integer> skills, CombatStyleId combatStyle) {
+        this(id, householdId, settlementId, role, name, birthTick, skills, initialCapabilities(skills),combatStyle);
     }
 
     public int skill(ResidentSkill skill) { return skills.get(Objects.requireNonNull(skill, "skill")); }
     public int capability(HumanCapability capability) { return capabilities.get(Objects.requireNonNull(capability, "capability")); }
 
     public ResidentProfile relocated(SubjectId nextSettlementId, SubjectId nextHouseholdId) {
-        return new ResidentProfile(id, nextHouseholdId, nextSettlementId, role, name, birthTick, skills, capabilities, characteristics);
+        return new ResidentProfile(id, nextHouseholdId, nextSettlementId, role, name, birthTick, skills, capabilities, characteristics,combatStyle);
     }
 
     public ResidentProfile withRole(ResidentRole nextRole) {
-        return new ResidentProfile(id, householdId, settlementId, nextRole, name, birthTick, skills, capabilities, characteristics);
+        return new ResidentProfile(id, householdId, settlementId, nextRole, name, birthTick, skills, capabilities, characteristics,combatStyle);
     }
 
     public ResidentProfile withCapabilities(Map<HumanCapability, Integer> nextCapabilities) {
-        return new ResidentProfile(id, householdId, settlementId, role, name, birthTick, skills, nextCapabilities, characteristics);
+        return new ResidentProfile(id, householdId, settlementId, role, name, birthTick, skills, nextCapabilities, characteristics,combatStyle);
     }
 
     public ResidentProfile withCharacteristics(ResidentCharacteristics nextCharacteristics) {
         return new ResidentProfile(id, householdId, settlementId, role, name, birthTick, skills,
-                capabilities, nextCharacteristics);
+                capabilities, nextCharacteristics,combatStyle);
+    }
+
+    public ResidentProfile withCombatStyle(CombatStyleId next){
+        return new ResidentProfile(id,householdId,settlementId,role,name,birthTick,skills,capabilities,characteristics,next);
     }
 
     private static Map<HumanCapability, Integer> initialCapabilities(Map<ResidentSkill, Integer> skills) {

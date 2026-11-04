@@ -16,6 +16,7 @@ final class FrontierV3ResidentCard {
         lines.add("Settlement: " + view.settlement());
         lines.add("Task: " + view.task());
         lines.add("Role: " + view.role() + " · " + view.activity());
+        lines.add("Combat style: " + state.bootstrap().ruleset().melee().styles().require(person.combatStyle()).name());
         lines.add("Skills: Agr " + person.skill(ResidentSkill.AGRICULTURE) + " · Build "
                 + person.skill(ResidentSkill.BUILDING) + " · Craft " + person.skill(ResidentSkill.CRAFTING));
         lines.add("Sec " + person.skill(ResidentSkill.SECURITY) + " · Med " + person.skill(ResidentSkill.MEDICINE)

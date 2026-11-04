@@ -11,13 +11,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Mechanics use a non-guard execution; this fixture grants no new production combat role. */
 class CombatModuleTest {
+    private static final CombatStyle MECHANICS=new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0);
     private static final SurfaceAnchor TARGET=SurfaceAnchor.at(0,63,0);
     private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1);
     private static CombatOrder order(int id,Optional<SurfaceAnchor> station){
         var execution=new ActorExecutionId(new SubjectId("resident:combat-"+id),ActorActivityKind.COURIER,new SubjectId("shipment:combat-"+id),1);
         var enemy=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"pale_mirror:frontier_graybox");
         return new CombatOrder(execution,1,new SubjectId("item:sword-"+id),new CombatPartyId(new SubjectId("party:test")),new CombatEnvelope(enemy,CombatEnvelope.Kind.SELF_DEFENCE,TARGET,24),
-                TARGET,100,60,TARGET.offset(3,0,0),UnitNavigationProfile.VILLAGER,station);
+                TARGET,100,60,TARGET.offset(3,0,0),UnitNavigationProfile.VILLAGER,station,MECHANICS);
     }
     @Test void tacticalSectorsSpreadAndStayStableAcrossTargetCellChangesAndHydration() throws Exception {
         var rules=MeleeRules.initial();var state=CombatState.empty();var first=order(1,Optional.empty());
@@ -36,7 +37,7 @@ class CombatModuleTest {
     @Test void encounterMembershipIsExplicitSeparatesPartiesAndReleasesOnlyTheExactExecution() throws IOException {
         var a=order(1,Optional.empty());var b=order(2,Optional.empty());var raw=order(3,Optional.empty());
         var c=new CombatOrder(raw.execution(),raw.revision(),raw.weapon(),new CombatPartyId(new SubjectId("party:other")),raw.engagement(),
-                raw.targetPosition(),raw.observedAt(),raw.lifetime(),raw.actorPosition(),raw.navigation(),raw.station());
+                raw.targetPosition(),raw.observedAt(),raw.lifetime(),raw.actorPosition(),raw.navigation(),raw.station(),MECHANICS);
         var rules=MeleeRules.initial();var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules);
         assertEquals(2,state.engagements().size());assertEquals(MeleeSector.Role.FLANK_LEFT,MeleeTactics.sector(state,b,100,rules).role());
         assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,c,100,rules).role());
@@ -181,20 +182,20 @@ class CombatModuleTest {
         assertTrue(recovered.withdrawn(order.execution()).followups().isEmpty());
         assertTrue(recovered.retired(order.owner()).followups().isEmpty());
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN,
-                CombatLocomotion.plan(response,order.execution(),CombatEngagement.Key.of(order),TARGET.offset(3,0,0),rules).mode());
+                CombatLocomotion.plan(response,order.execution(),CombatEngagement.Key.of(order),TARGET.offset(3,0,0),rules,order.style()).mode());
     }
     @Test void ordinaryCombatApproachDoesNotGrantPermanentSprintBetweenBoundedAttacks(){
         var order=order(1,Optional.empty());var rules=MeleeRules.initial();var key=CombatEngagement.Key.of(order);
         var state=CombatState.empty().enlisted(order,100,rules);
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK,
-                CombatLocomotion.plan(state,order.execution(),key,TARGET.offset(8,0,0),rules).mode());
+                CombatLocomotion.plan(state,order.execution(),key,TARGET.offset(8,0,0),rules,order.style()).mode());
         var strike=new MeleeStrike(order.owner(),1,new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution()),
                 order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100);
         var pending=state.prepared(strike);
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN,
-                CombatLocomotion.plan(pending,order.execution(),key,TARGET.offset(3,0,0),rules).mode());
+                CombatLocomotion.plan(pending,order.execution(),key,TARGET.offset(3,0,0),rules,order.style()).mode());
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK,
-                CombatLocomotion.plan(pending.completed(strike,110,rules),order.execution(),key,TARGET.offset(8,0,0),rules).mode());
+                CombatLocomotion.plan(pending.completed(strike,110,rules),order.execution(),key,TARGET.offset(8,0,0),rules,order.style()).mode());
     }
     @Test void immediateDecisionHonoursVisibilityReadinessPendingEffectsAndExpiry(){
         var order=order(1,Optional.empty());
@@ -252,14 +253,14 @@ class CombatModuleTest {
         state=state.positioned(order,Optional.empty(),MeleePosition.Reason.NO_PATH,1001,rules)
                 .positioned(order,Optional.empty(),MeleePosition.Reason.NO_POSITION,1101,rules);
         assertTrue(state.deferred(order,1102));assertFalse(state.deferred(order,1201));
-        var moved=new CombatOrder(order.execution(),order.revision(),order.weapon(),order.party(),order.engagement(),TARGET.offset(1,0,0),100,2000,order.actorPosition(),order.navigation(),order.station());
+        var moved=new CombatOrder(order.execution(),order.revision(),order.weapon(),order.party(),order.engagement(),TARGET.offset(1,0,0),100,2000,order.actorPosition(),order.navigation(),order.station(),MECHANICS);
         assertFalse(state.deferred(moved,1102),"target movement reopens tactical admission");
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
         assertThrows(IllegalArgumentException.class,()->MeleePosition.Reason.require(99));
     }
     @Test void holdingUsesTwoStrictWeaponBoundariesAndCannotExpandAttackReach(){
-        var rules=MeleeRules.initial();assertEquals(2.2,rules.holdReach(SWORD,false),0.0001);assertEquals(2.55,rules.holdReach(SWORD,true),0.0001);
+        var rules=MeleeRules.initial();assertEquals(2.2,rules.holdReach(SWORD,false,MECHANICS),0.0001);assertEquals(2.55,rules.holdReach(SWORD,true,MECHANICS),0.0001);
         assertEquals(4,rules.windup(MeleeAttack.QUICK));assertEquals(8,rules.windup(MeleeAttack.LUNGE));
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.APPROACH,MeleeTactics.decide(order,new MeleeTactics.Facts(101,true,true,false,false,100,true)));

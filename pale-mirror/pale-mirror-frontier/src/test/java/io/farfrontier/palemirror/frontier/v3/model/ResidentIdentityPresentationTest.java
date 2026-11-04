@@ -22,7 +22,7 @@ class ResidentIdentityPresentationTest {
         assertEquals("Unassigned", view.role());
         assertEquals("Idle", view.activity());
         var forgedName = new ResidentProfile(person.id(), person.householdId(), person.settlementId(), person.role(),
-                "Another Name", person.birthTick(), person.skills(), person.capabilities());
+                "Another Name", person.birthTick(), person.skills(), person.capabilities(),person.combatStyle());
         assertThrows(IllegalArgumentException.class, () -> recovered.humanPopulation().withProfile(forgedName));
     }
 
@@ -32,7 +32,7 @@ class ResidentIdentityPresentationTest {
         var person = state.humanPopulation().residents().values().iterator().next();
         for (String invalid : new String[]{"", " leading", "line\nname", "a".repeat(49)}) {
             assertThrows(IllegalArgumentException.class, () -> new ResidentProfile(person.id(), person.householdId(),
-                    person.settlementId(), person.role(), invalid, person.birthTick(), person.skills(), person.capabilities()));
+                    person.settlementId(), person.role(), invalid, person.birthTick(), person.skills(), person.capabilities(),person.combatStyle()));
         }
     }
 }

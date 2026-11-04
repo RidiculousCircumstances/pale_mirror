@@ -3,6 +3,7 @@ import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
@@ -77,7 +78,7 @@ class HumanPopulationProcessTest {
         ResidentProfile existing = initial.humanPopulation().resident(new SubjectId("resident:1-1"));
         ResidentBorn forged = new ResidentBorn(new SubjectId("job:resident-birth-forged"),
                 new ResidentProfile(new SubjectId("resident:forged"), existing.householdId(), existing.settlementId(), ResidentRole.FARMER,
-                "Test Resident", 0L, existing.skills()), initial.bootstrap().settlements().getFirst().anchor(),
+                "Test Resident", 0L, existing.skills(),new CombatStyleId("frontier:pressing")), initial.bootstrap().settlements().getFirst().anchor(),
                 new io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity(new SubjectId("resident:forged"),
                         io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity.Kind.RESIDENT));
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:forged-birth", forged)));
@@ -260,7 +261,7 @@ class HumanPopulationProcessTest {
         assertEquals(0, SettlementFacilityCapability.housingCapacity(destroyed, settlement.id()));
         ResidentProfile parent = destroyed.humanPopulation().resident(settlement.residents().getFirst().id());
         ResidentProfile newborn = new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
-                ResidentRole.FARMER, "Test Resident", 0L, parent.skills());
+                ResidentRole.FARMER, "Test Resident", 0L, parent.skills(),new CombatStyleId("frontier:pressing"));
         ResidentBirthJob permit = new ResidentBirthJob(new SubjectId("job:resident-birth-housing-blocked"), settlement.id(), parent.householdId(),
                 new ColdResourceConsumption.Exact(settlement.id(), FrontierWorldState.depotId(settlement.id()), "minecraft:bread",
                         new SubjectId("item:housing-blocked-bread"), 1),

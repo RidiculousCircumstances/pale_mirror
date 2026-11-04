@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode;
 public final class CombatLocomotion {
     public record Intent(LocomotionMode mode,int multiplierPermille) {}
     public static Intent plan(CombatState state,
-            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution,CombatEngagement.Key key,SurfaceAnchor actual,MeleeRules rules){
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution,CombatEngagement.Key key,SurfaceAnchor actual,MeleeRules rules,CombatStyle style){
         var pending=state.pending().get(execution.activityOwnerId());
         var plan=state.engagements().get(key);
         if(pending!=null && pending.attack().closesDistance() || state.maneuverOpen(execution.activityOwnerId()))
@@ -15,7 +15,7 @@ public final class CombatLocomotion {
         var point=state.positions().get(execution.activityOwnerId());
         var target=point!=null && point.target().equals(key.target())?point.targetPosition():plan.anchor();
         var arm=state.armaments().get(execution.activityOwnerId());
-        return new Intent(arm!=null && CombatEngagement.distance(actual,target)<=rules.holdReach(arm.profile(),true)
+        return new Intent(arm!=null && CombatEngagement.distance(actual,target)<=rules.holdReach(arm.profile(),true,style)
                 ?LocomotionMode.CAREFUL
                 :LocomotionMode.WALK,1000);
     }
