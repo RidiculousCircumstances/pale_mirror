@@ -255,3 +255,73 @@ unobserved post. Test-only successor `86438341e` updates existing setup to visit
 the exact actor's read-only current position before rendezvousing with its
 received physical body. No resident is teleported or pinned. All task clients
 and private displays are closed. The capture finished on pilot disconnect.
+
+
+## Crash during human capture780adf4c: retained death resources
+
+The failure on source3f at15:00:04–05 was in death/resource acknowledgement,
+not in the recorder call stack. The native death of Vera Rowan/resident1-10
+first threw because `UNIT_INVENTORY` aftermath had not closed immediately.
+Ordinary recovery then physically moved pocket stock to a native item entity
+and threw because canonical confirmation was still queued. Quarantine stopped
+Minecraft normally. Human capture780adf4c-2d2b-429f-a188-4b6486c588b0 was saved
+1198/1198complete without loss. The original remains under runtime debug;
+`IMPL/build/combat-fatality-20261104/` retains its copy and exact failing log.
+
+Repair2134fd17c makes the common entity-to-ground operation return pending
+confirmation while its exact durable outbox owns continuation. Native effect
+failure and genuine rejected required consequences remain invariant errors.
+All seven shared drop callers were traced. Exact held items return actual
+confirmation state; service death no longer treats that ordinary wait as fatal.
+The body fatality owner retains corpse custody until resource owners complete.
+
+The initial same-world restart/revisit then exposed another connected contract
+violation: `retireDeadActor` removed native residency before aftermath finished,
+while join admission had no exact corpse capability. It rejected the stored
+corpse needed to recover the outstanding operation. Final45fc4ebc3 retains
+provenance through owner closure, including ordinary retired-actor cleanup.
+A stored corpse may rejoin solely under exact retained fatality command,
+UUID/incarnation, domain body tombstone and actual operation marker; duplicate
+UUID and wrong native lifetime are refused. Admission cannot revive the actor
+or grant living execution. A derived protocol+owner index provides bounded
+retirement checks instead of scanning the operation registry. No schema change,
+second custody authority, missing-source reconstruction or loot replay is added.
+
+Final native regression uses a real managed villager with7pocket cobblestone,
+actual vanilla death and deliberately delayed real FrontierFileStore writes.
+It proves one physical drop with pending canonical ownership, immutable outbox
+hydration, residency retention through ordinary cleanup, serialization/rejoin
+of the real corpse, duplicate/wrong-lifetime rejection, eventual exact stock
+confirmation and owner closure, and no replay. This is native component evidence,
+not a process-crash/player-packet simulation. All27body-lifetime cases pass28s;
+19player-storage native cases pass25s. Guardrails,22operation unit cases and
+pilot compilation pass9s. Detached release JAR/package/guardrails pass9s.
+Initial invalid test-slice name and command-in-actions fixture are excluded
+from acceptance; corrected runs use the existing allowed mechanisms. The owner
+index test was also corrected to respect that recovered PREPARED is not an
+unused-attempt permission; production safety was not weakened.
+
+Final MAIN source45fc4ebc3489b19edbedb37570b0cb17faa9f1cf,
+Java22PID335339/wrapper335313, start1793787989,
+far-frontier-v3-live.service, same skill-combat-schema328-seed139-20261104 world.
+Pinned SHA512:
+`e24a90d1d2fd2d3780c7388ba674fa7748d00eac64a3062e8eedb4faa791d41a0785fce5b67a2311078ca1b267f639432d3a12966eeeb7d09ebed9d44f7d6180`.
+Receipts `/tmp/pm-combat-fatality-final-{preflight,publish,stop,install,verify}.log`.
+A premature intermediate start during installer completion was stopped; the
+final verified start follows completed pinned installation and actual previous
+JVM/ports exit. No human state, inventory, difficulty or world reset was used.
+
+Checked-in `live-combat-fatality-recovery.json` visits the exact dead actor's
+read-only current position with only the task player. Final fullpack20FPS probe
+7454117d-2382-4302-97ea-7f9d9008d7a5 passes6actions: natural fight-area loading,
+no revival, summary0required/inventory/scene conflicts, ordinary dimension exit.
+Its capture8f6c4f2a-8c87-4480-9b34-9c61b04a929b is326/326complete. Manifest:
+`IMPL/build/combat-fatality-20261104/live-final-recovery-manifest.json`.
+This proves loaded-world health/no revival, not direct closure of every old
+operation or general economic/balance acceptance. Exact serialized aftermath
+closure is covered by the native regression. Initial revisit also logged an
+unrelated SHIPMENT_TRANSFER declaration ambiguity; it was not a quarantine and
+is not silently classified as resolved. Final statusok/NORMAL/0cases,
+revision932024/simulation266227. All task clients/private displays are stopped;
+MAIN runs for human testing. Code/release clean; pack tracked clean with its
+preexisting .f0v-baseline/ retained; unrelated governance WIP preserved.

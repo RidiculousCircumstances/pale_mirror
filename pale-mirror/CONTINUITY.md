@@ -1,5 +1,56 @@
 # Active continuity — 2026-11-04
 
+## Delivered — combat-time death/resource crash
+
+User reports MAIN stopped during capture780adf4c. Exact cause in3f:15:00:04
+native Vera Rowan1-10fatality asserted immediate UNIT_INVENTORY aftermath;
+ordinary recovery then applied one pocket drop and asserted immediate canonical
+confirmation. Both waits are normal under async journaling. Quarantine stopped
+the server. Human recording complete1198/1198/no loss, retained unchanged; failure
+log/copy in IMPL/build/combat-fatality-20261104/. Recorder is not the failing stack.
+
+2134fd17c retains applied transfers in exact durable outbox while acknowledgement
+waits; required genuine rejection still fails. Death accepts pending aftermath;
+exact-hand/service caller semantics agree. Same-world restart inspection exposed
+connected premature native residency retirement and no corpse join capability.
+Final45fc4ebc3489b19edbedb37570b0cb17faa9f1cf keeps provenance through owner closure,
+including ordinary cleanup, and permits exact saved corpse only via retained
+fatality command, UUID/incarnation/tombstone/positive marker. No revival, movement,
+loot replay or source reconstruction. Generic protocol+owner index avoids global
+scans. Native test serializes/rejoins the corpse during pending stock transfer,
+rejects duplicate/wrong lifetime, and proves one drop/eventual closure/no replay.
+
+IMPL/RELEASE CLEAN45fc4ebc3; test scenario594bca15e is included in45.
+PACK tracked clean888ed90 with preexisting .f0v-baseline/. GOV unrelated WIP kept;
+owned report/ledger/one normative boundary line only. No agents/push/goal/reset.
+Guardrails/22operation unit tests/compilePilot PASS9s; final body-lifetime27native
+PASS28s, resource player-storage19native PASS25s; detached JAR/package/guardrails
+PASS9s. Logs /tmp/pm-combat-fatality-{retirement-check,retirement-native,resources,
+final-release}.log. Invalid initial slice/command-in-actions fixture and mistaken
+recovered-unused permission test were corrected; not product acceptance evidence.
+
+MAIN far-frontier-v3-live.service Java22PID335339/wrapper335313,
+world skill-combat-schema328-seed139-20261104 retained seed139/rootr31/schema328,
+start1793787989. SHA512:
+e24a90d1d2fd2d3780c7388ba674fa7748d00eac64a3062e8eedb4faa791d41a0785fce5b67a2311078ca1b267f639432d3a12966eeeb7d09ebed9d44f7d6180.
+Final receipts /tmp/pm-combat-fatality-final-{preflight,publish,stop,install,verify}.log.
+An early intermediate start during installer completion was stopped; final pin,
+completed installation, exited prior JVM/ports and fresh verification are proven.
+Current statusok/NORMAL/activeCases0; revision932024/sim266227 confirms progress.
+No human state/equipment altered; client update unnecessary.
+
+Fullpack20FPS/privateXvfb read-only revisit7454117d-2382-4302-97ea-7f9d9008d7a5
+PASS6actions on final build, exact dead actor retained, naturally loaded original
+fight area, summary0required/inventory/scene conflicts, ordinary exit. Scoped
+capture8f6c4f2a326/326complete. IMPL/build/combat-fatality-20261104/
+live-final-recovery-manifest.json. This is loaded-world health/no-revival evidence,
+not a direct query proving closure of every historical operation; component test
+proves exact transfer/serialized corpse closure. No universal economy/balance claim.
+One unrelated SHIPMENT_TRANSFER declaration ambiguity appeared in initial revisit;
+not a quarantine and not treated as absence of all operational debt. All task
+clients/private displays stopped; MAIN remains running. Details appended to combat
+responsiveness report. Prior delivered melee mechanics below are unchanged.
+
 ## Delivered — finite guidance and burst contact handoff
 
 User authorized repair after captureb685. Sole main; no agents/push/new goal.
