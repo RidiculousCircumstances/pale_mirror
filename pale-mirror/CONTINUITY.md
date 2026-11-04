@@ -1,5 +1,55 @@
 # Active continuity — 2026-11-04
 
+## Delivered — coordinated group combat (technical, manual balance pending)
+
+User five points implemented690476586: adaptive home/nearby crew, closer stable
+flank, retained preferredRole/roleSince,40tick commitment/20confirmed failure/
+60retry and alternate side, exact approach reset, pressure contact priority,
+60degree separated paired opening/2tick other spacing. Existing encounter/claims/
+UAE/nav/native damage remain owners; common CombatFormation is role-independent.
+Trace includes role/intent/time/approach. Schema331freshworld; network4unchanged.
+29CombatModule/35Security/8Dispatch/11Guard/4Codec focused checks+guardrails PASS;
+native19required PASS43.73s (unchanged strike/presentation/effect boundaries).
+Final retry-negative29PASS6s; source/final detached gates/package PASS9s.
+
+Old330server was already stopped20:58:37 by COLD meal private-only route query
+throwing invariant. Fixed2dea7fb73: shared publicContinuation Optional and candidate
+filter incl start==destination; receipt validation still rejects illegal route.
+13MealKnownNavigation+25RouteKnowledge PASS12s. Oldworld/log retained. First live
+trace exposed new instrumentation asking combat authority for PRESENCE. Fixed
+ d96b66330: explicit registry supports discovery only for bystander recording,
+strict require/current stays unchanged. First capture0167b44d CAPTURE_ERROR is
+incomplete, not evidence. IMPL cleanHEADd96b66330, RELEASE clean detachedsame;
+PACK trackedclean888ed90 +preexisting.f0v-baseline/. No agents/newgoal/push.
+
+MAIN /home/rd/far-frontier-server coordinated-combat-schema331-seed139-20261104,
+seed139/rootr31, wrapperPID2684821,start1793810804. Final preflight/publish/install/
+verify and health check OK (/tmp/pm-group-combat-*.log). SHA512c512a5c76fefd8671fd6707ac6503ddccdd8a145ee6c51e72865cbb56fc2170844654030d0aeca87a63add7d85440063e39fb6777ebaeb31db153611917198bb.
+No rd edits. All task clients/private displays stopped; task pmcombatgroup op
+removed,list0players. Final settlement1@16948statusok/NORMAL/0activeCases,2ready
+NoraBell1-16/EliStone1-22,0contacts/responders/maneuvers.
+
+Fullpack20FPS/privateXvfb equipment diagnostic2482376a-cace-41e9-a3c2-92248c5ae62c
+PASS9actions,2ordinary sword donations after adoption (not natural production).
+Both battle scenario invocations are FAILED METHOD, not full gameplay acceptance:
+test-player walk/circuit collided with a town building (second at-1494,64,-1361),
+so no circling or graphical-frame acceptance. Checked-in live-combat-coordination
+retains its strict obligations/failed receipts; do not relabel it green or launch
+another unchanged confidence campaign. Exact final deployed capture1e35ef3c-90f5-
+4582-bea1-93e78ae4f1ff is complete34198events/3minutes/no loss. Native physical
+observations support narrower group claims:1368frames with both within12blocks,
+524frames >=60degrees apart, max125.63degrees; Nora94/Eli34actual damage-applied
+hits (376/136damage) on1000HP task player. Roles PRESSURE/FLANK_RIGHT persist.
+This demonstrates actual distinct sides/hits, not success against a moving human.
+Summary IMPL/build/combat-coordination-20261104/observed-group-summary.json,
+failed manifests and all logs retained. User manual difficulty/active kiting next.
+
+Canonical docs/frontier-v3-coordinated-combat-20261104.md records scope/results/
+limits; new single coordinated_group_combat_boundary line staged independently
+of unrelated GOV WIP. Commit owned ledger/doc/that exact line only. No scoped
+production implementation remains. Separate previously found storage-adoption
+bug is still open; current fresh equipment donation did not reproduce it.
+
 ## Delivered — pursuit presentation crash fix
 
 Human report server fell: MAIN19:54:42 local IllegalArgumentException invalid
