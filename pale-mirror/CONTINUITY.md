@@ -1,5 +1,43 @@
 # Active continuity — 2026-11-04
 
+## Delivered — visible resident combat styles
+
+Implemented f70feb0ec, focused final99frontier+8NeoForge checks/guardrails/jar/
+package PASS32s; reused unchanged19native strike/presentation boundary checks.
+Personal explicit CombatStyleId assigned at birth/genesis, retained in profile
+mutators/state/birth codecs, schema332/RBO4; unknown rejects. Bounded cached data
+catalog pinned in rules hash. Role adapter resolves into common CombatOrder;
+common policy changes weighted legal attack/run/burst/lateral/backstep choices,
+effort reserve and real station/hold gap. No role/name dispatch or stat/cooldown
+buff; retained action clocks prevent per-inspection rerolls. Card/inspect/trace
+show it. Removed obsolete uniform gap/API. Same-fact tests distinguish3styles.
+
+Current IMPL clean60ebe26a0 (scenario-only longer second observation), RELEASE
+clean detachedf70feb0ec; release gates PASS11s. PACK trackedclean888ed90 with
+preexisting.f0v-baseline/. Same sole main/no agents/goal/push. Published/installed/
+verified new MAIN combat-styles-schema332-seed139-20261104,seed139/rootr31,
+far-frontier-v3-live wrapper3141107/native3141150,start1793814020.
+SHA512213de1905741b48b3f3a466dd9b8a40819ad555ecf1acdcbb1cf809f69a7c6e9fe50c3447c6123e626aa356e8896d3f73cdce5723bc7ecaa222be3f32122a77c.
+Old331diagnosis world/traces preserved. A premature old-class empty-world startup
+was saved/stopped/discarded before final correct332start; receipt in report.
+
+Fullpack20FPS/privateXvfb ordinary sword donation runec885da6 PASS9actions
+(not natural production); initial14action battlea2469308 PASS but too short for
+second guard arrival. Checked-in observation extended180to600ticks/finite60s
+bound; final fe26ab2c-70a1-41e6-9db7-59f6f24b7704 PASS14actions, reviewed readable
+style card and two equipped guards/terrain frames. Capture35308e9f-fd5b-4bcf-
+974d-4d298117a819 complete7746events/no loss. NoraBell1-16Cautious actual1backstep,
+3quick/2burst cues/2confirmed damage hits; EliStone1-22Pressing7burst/6quick cues/
+5hits. Different starting positions/team roles: these are actual differences,
+not a controlled statistical claim. Mobile same-fact tests; no physical mobile
+sample. Both contact; after ordinary leave0contacts/responders/maneuvers, styles
+retained, ordinary duty/return resumes. Finalsettlement1instant7250ok/NORMAL/
+0activeCases/2ready. Taskpmstyletest deopped/all client/display exited/list0.
+No human rd mutation. Performance/economy not audited. Manual active-kiting
+balance remains human judgement; old separate storage-adoption defect remains.
+Report docs/frontier-v3-combat-styles-20261104.md; receipts /tmp/pm-combat-styles-*,
+IMPL/build/combat-styles-20261104/{equipment,battle,pair}-manifest.json and summary.
+
 ## Delivered — coordinated group combat (technical, manual balance pending)
 
 User five points implemented690476586: adaptive home/nearby crew, closer stable
