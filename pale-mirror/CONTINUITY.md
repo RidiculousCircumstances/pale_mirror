@@ -1,5 +1,35 @@
 # Active continuity — 2026-11-04
 
+## Latest human trace — hoe pressure / passive physics defect
+
+User reports controlling guard by repeated hoe hit/knockback. Read-only capture
+45d4ee60-c0a7-402a-9612-7fd52171b132 on final45/PID335339:3604/3604complete,
+52.80s/1056native+canonical+level ticks (~20TPS). rd Adventure/stone_hoe,
+7fully charged1damage hits; Nora Bell1-20iron_sword HP17→10; rd5.333HP unchanged.
+No kill captured. Two LUNGE preparations: one early range cancellation, one
+native out-of-reach miss after receiving a hit. No guard damage.
+
+Major concrete common-physics defect: sampled X/Z exactly fixed ticks4687–4753
+(~3.3s) despite nonzero horizontal impulse and no horizontal collision; Y responds
+to hits/gravity and X/Z velocity decays0.98/tick. Current path-only isEffectiveAi
+bridge disables native travel when NoAI path ends/refuses; fallback
+ControlledMobMotion.advanceOrdinaryGravity integrates onlyY, preserving unconsumed
+horizontal velocity. ModLens actual1.21.1LivingEntity.aiStep/travel and Entity/
+Mob local-control gates confirm this source counterexample. Physics must be
+independent of retained locomotion, vanilla task selection suppressed separately;
+avoid dual integration. Not a proven lag/stun-only/balance explanation.
+
+Second mechanical limitation: QUICK limited2.2blocks against real sword reach3;
+contact at2.37..2.97 (within weapon reach) selects slower LUNGE; seven
+WAVE_SLOT transitions span distances2.37..3.59.
+Lunge268635cue4675at2.4, player hit4679, miss4687at4.83. Prior correction is
+actually offered/consumed; physical hit during preparation opens gap. Proposal:
+fix common passive physics, separate ordinary full-reach contact from lunging/
+wave approach, then reassess counterattack/retreat. No blanket knockback immunity
+or tuning deployed. Findings/summary in IMPL/build/combat-knockback-20261104/;
+report appended. Source/release stillCLEAN45; MAIN unchanged/running; no client,
+world/player mutation, goal, agents or deploy in this read-only analysis.
+
 ## Delivered — combat-time death/resource crash
 
 User reports MAIN stopped during capture780adf4c. Exact cause in3f:15:00:04

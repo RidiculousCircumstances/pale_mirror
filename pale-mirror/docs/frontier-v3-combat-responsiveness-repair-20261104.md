@@ -325,3 +325,51 @@ is not silently classified as resolved. Final statusok/NORMAL/0cases,
 revision932024/simulation266227. All task clients/private displays are stopped;
 MAIN runs for human testing. Code/release clean; pack tracked clean with its
 preexisting .f0v-baseline/ retained; unrelated governance WIP preserved.
+
+
+## Hoe hit-and-retreat capture45d4ee60: passive physics and contact selection
+
+Read-only analysis of complete3604/3604capture45d4ee60-c0a7-402a-9612-7fd52171b132,
+source45/PID335339,52.80s and1056matching native/canonical/level ticks. rd uses
+stone_hoe in Adventure, all7hits are full charge and1damage. Nora Bell1-20holds
+iron_sword, starts17HP and ends10; rd5.333HP is unchanged. No kill is captured.
+There are only2LUNGE preparations: one cancelled outside approach allowance,
+one actual swing missing out of reach. This is not evidence of slow TPS or a
+player invulnerability mode.
+
+A concrete shared-physics defect is visible and supported by source. All sampled
+X/Z coordinates remain exactly -1397.5114599238286/-1355.1632580042606 across
+native ticks4687–4753 (~3.3seconds), with nonzero horizontal velocity and no
+horizontal collision. Vertical motion still responds to hits. X/Z velocity
+simply decays by0.98per tick and can accumulate across subsequent hits.
+The NoAI native-travel bridge is conditional on retained path control in
+FrontierV3MobMotionLifecycle/FrontierV3GoalNavigationMobMixin. Once that path
+ends or cannot start, ControlledMobMotion.advanceOrdinaryGravity moves onlyY
+and leaves horizontal velocity untouched. ModLens snapshotac5901e actual
+Minecraft1.21.1/NeoForge source confirms LivingEntity.aiStep0.98 damping,
+LivingEntity.travel2161 local-control gate, Entity.isControlledByLocalInstance
+3050 and Mob.isEffectiveAi1396 NoAI condition. The observed factor matches the
+fallback path. This is a common body-physics defect, not just guard tactics.
+The two-tick recording cannot establish each unsampled tick's exact trajectory.
+
+There is also an evidenced contact-selection weakness. QUICK is limited to
+min(2.2,actual reach3*0.75)=2.2blocks. Contact at2.37..2.97, inside weapon
+reach, is therefore classified LUNGE, which still uses group-wave admission.
+Seven WAVE_SLOT transitions span distances2.37..3.59; some of those positions
+are outside ordinary reach and are not evidence of a withheld contact strike. The guard does not reject every action during
+hurtTime: the first preparation is submitted at distance3.07/hurtTime8 and
+cancels three ticks later at4.07. The second lunge268635starts its cue at native
+4675/distance2.4, receives the player's hit at4679, then misses at4687/distance
+4.83. Its correction is actually offered and consumed by the shared navigator;
+this is different from the former two-tick-lifetime defect.
+
+Recommended next repair: provide passive full native physics for exact managed
+bodies independently of navigation demand, suppress vanilla task selection
+separately, and ensure one physics integration per tick. Separately distinguish
+an ordinary full-weapon-reach contact strike from a closing lunge, preserving
+item reach, LOS/hitbox, cue, cadence, effort and finite dodge windows. Reassess
+retreat/counterattack under repeated hit-and-retreat only after fixing these
+causal defects; no blanket knockback immunity or unmeasured difficulty buff is
+justified by this trace alone. No gameplay/source/runtime/player/world mutation
+or deployment was performed in this analysis. Machine-readable evidence:
+IMPL/build/combat-knockback-20261104/{summary,findings}.json.
