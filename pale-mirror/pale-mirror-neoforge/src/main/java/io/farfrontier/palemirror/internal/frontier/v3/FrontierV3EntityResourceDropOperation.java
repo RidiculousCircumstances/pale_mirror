@@ -16,16 +16,18 @@ final class FrontierV3EntityResourceDropOperation {
         var position = drop.blockPosition();
         return new ResourceCustody.Ground(drop.getUUID(), new BlockPosition(position.getX(), position.getY(), position.getZ()));
     }
-    static void perform(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    /** False retains an already applied transfer in the durable outbox; only its
+     * canonical confirmation is pending. Never repeat the native drop from that result. */
+    static boolean perform(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorItemSlot slot, ItemEntity drop, FrontierPayload outcome) {
         var before = FrontierV3ActorResourceSlots.get(body, slot).copy();
         if (before.isEmpty() || !ItemStack.matches(before, drop.getItem()))
             throw new IllegalArgumentException("resource drop differs from the admitted source slot");
-        perform(level, runtime, body, slot, before, drop, outcome);
+        return perform(level, runtime, body, slot, before, drop, outcome);
     }
     /** The resource owner may change custody metadata on its detached destination.
      * Both images are retained for validation; item kind and quantity cannot change. */
-    static void perform(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean perform(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorItemSlot slot, ItemStack sourceWitness, ItemEntity drop, FrontierPayload outcome) {
         var before = sourceWitness.copy(); var after = drop.getItem().copy();
         if (before.isEmpty() || !ItemStack.isSameItem(before, after) || before.getCount() != after.getCount()
@@ -61,8 +63,9 @@ final class FrontierV3EntityResourceDropOperation {
         if (!result.complete()) throw new IllegalStateException("resource drop did not complete: " + result.status() + " ticket=" + transaction.id());
         var applied = transaction.bind(operations.require(result.ticket()));
         journal.updateEntityDrop(transaction, applied); journal.persist(level);
-        if (!reconcile(level, runtime, applied))
-            throw new IllegalStateException("resource drop awaits canonical confirmation: " + transaction.id());
+        // The outbox already retains the exact native outcome and immutable consequence.
+        // Queued canonical durability is a continuation, never a failed physical effect.
+        return reconcile(level, runtime, applied);
     }
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         for (var transaction : FrontierV3ResourceHandoffLedger.get(level).entityDrops())
@@ -88,7 +91,7 @@ final class FrontierV3EntityResourceDropOperation {
             if (!FrontierV3MinecraftOperation.recoverOutcome(level, current.ticket())) return false;
             current = operations.require(current.ticket());
             var applied = transaction.bind(current); journal.updateEntityDrop(transaction, applied); journal.persist(level); transaction = applied;
-            if (!FrontierV3OperationConfirmation.submit(level, runtime, current.ticket(), transaction.outcome())) return false;
+            if (!FrontierV3OperationConfirmation.submitRequired(level, runtime, current.ticket(), transaction.outcome())) return false;
         }
         journal.retireEntityDrop(transaction); journal.persist(level); return true;
     }

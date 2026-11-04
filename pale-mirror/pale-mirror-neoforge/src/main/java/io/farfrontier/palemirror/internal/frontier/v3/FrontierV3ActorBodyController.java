@@ -107,8 +107,10 @@ final class FrontierV3ActorBodyController {
         ledger.persist(level, state.bootstrap().worldId());
         FrontierV3GoalNavigation.retireIncarnation(body, id);
         resources.settle();
-        if (!FrontierV3BodyFatalityOperation.finish(level, runtime, fatality, id))
-            throw new IllegalStateException("native death retains unresolved resource aftermath: " + fatality + " body=" + id);
+        // A witnessed death is handled even while an exact resource owner awaits
+        // confirmation. The explicit fatality outbox retains corpse/aftermath custody;
+        // its registered recovery path calls finish again after those receipts commit.
+        FrontierV3BodyFatalityOperation.finish(level, runtime, fatality, id);
         return true;
     }
 

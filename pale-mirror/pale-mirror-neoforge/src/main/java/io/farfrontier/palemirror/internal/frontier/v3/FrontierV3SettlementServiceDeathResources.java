@@ -48,8 +48,9 @@ final class FrontierV3SettlementServiceDeathResources {
                         item.id().value(), work.endpointIntentId().value());
                 return;
             }
-            if (!FrontierV3ExactHeldItemDeath.resolve(level, runtime, body, item, "service-death:" + work.id().value(), "service_resource"))
-                throw new IllegalStateException("service death could not durably account its exact held resource");
+            // The common handoff retains an applied transfer while canonical
+            // confirmation waits. The fatality owner closes only after all owners settle.
+            FrontierV3ExactHeldItemDeath.resolve(level, runtime, body, item, "service-death:" + work.id().value(), "service_resource");
         };
     }
 }

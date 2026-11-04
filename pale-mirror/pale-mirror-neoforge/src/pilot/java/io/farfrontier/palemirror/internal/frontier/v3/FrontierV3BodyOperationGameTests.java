@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.kernel.*;
+import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.*;
@@ -58,6 +60,81 @@ public final class FrontierV3BodyOperationGameTests {
             body.discard();
         } finally { FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); }
         helper.succeed();
+    }
+    @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 120)
+    public static void bodyDeathRetainsOnePocketDropWhileItsRealCanonicalJournalIsDelayed(GameTestHelper helper) throws Exception {
+        var level=helper.getLevel();var actor=new SubjectId("resident:1-1");
+        var base=FrontierV3AmbientActorGameTests.configurationAt(helper,new WorldId("frontier:body-pocket-delayed"),91,actor);
+        var initial=base.initialState();var account=new SubjectId("custody:delayed-death-pocket");
+        var lot=new ResourceLot(new SubjectId("lot:delayed-death-pocket"),initial.humanPopulation().resident(actor).settlementId(),
+                "minecraft:cobblestone",7,"fixture:death-pocket",java.util.List.of());
+        var resources=initial.inventory().fungibleResources().issue(lot,new CustodyAccount(account,new ResourceCustody.Actor(actor),
+                java.util.Map.of(lot.id(),7),java.util.Map.of(),java.util.Optional.of(new ActorItemSlot.Pocket(3))));
+        initial=initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var config=new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(),initial,base.initialInstant(),
+                base.commandPlanner(),base.scheduledPlanner(),base.reducer(),base.stateCodec(),base.projectionMapper(),base.limits(),java.util.List.of(),
+                base.transactionCommitter(),base.stateValidator(),base.executionMetrics());
+        var tasks=new java.util.ArrayDeque<Runnable>();var delayed=new java.util.concurrent.atomic.AtomicBoolean();
+        var disk=new FrontierFileStore(java.nio.file.Files.createTempDirectory("pm-death-pocket-"),
+                io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs(),
+                action->{if(delayed.get())tasks.add(action);else action.run();});
+        var delegate=new FrontierStoreTransactionCommitter(disk);
+        TransactionCommitter committer=new TransactionCommitter(){
+            public void commit(TransactionRecord record,Durability ignored){delegate.commit(record,Durability.DURABLE_BEFORE_EFFECT);}
+            public Confirmation prepare(TransactionRecord record,Durability ignored){return delegate.prepare(record,Durability.DURABLE_BEFORE_EFFECT);}
+        };
+        var runtime=FrontierV3ServerRuntime.startRecovered(config,disk,disk.recover(config.worldId()),10_000,DiagnosticRuntimeIdentity.unavailable(),committer);
+        FrontierV3AmbientActorGameTests.initializeAdmission(level,config,disk);
+        var feet=helper.absolutePos(new BlockPos(0,1,0));FrontierV3AmbientActorGameTests.prepareFloor(level,feet);
+        var lease=AmbientActorProcess.nextLease(runtime.decodedState().orElseThrow(),actor,runtime.checkpointImage().orElseThrow().instant());
+        FrontierV3CommandSubmission.submit(runtime,"death-pocket-prepare",actor.value(),new AmbientLeasePrepared(lease));
+        FrontierV3AmbientActorGameTests.publishProjectionBeforeManagedJoin(helper,level,runtime);
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level,runtime,runtime.decodedState().orElseThrow(),actor,
+                new BodyPosition(feet.getX(),feet.getY(),feet.getZ())),FrontierV3AmbientActorExecutor.Result.APPLIED,"actual managed body admitted");
+        var body=(net.minecraft.world.entity.npc.Villager)level.getEntity(FrontierV3AmbientActorExecutor.entityId(initial,actor));
+        FrontierV3ActorBodyController.confirmPresent(level,runtime,body);var id=ActorBodyAuthority.current(runtime.decodedState().orElseThrow(),actor);
+        helper.assertValueEqual(body.getInventory().getItem(3).getCount(),7,"actual birth projects the retained pocket stock");
+        body.setHealth(0);delayed.set(true);
+        runtime.runPersistenceTurn(()->helper.assertTrue(FrontierV3ActorBodyController.commitDeath(level,runtime,body,null,
+                ()->body.die(level.damageSources().generic()),()->body.getPose()==net.minecraft.world.entity.Pose.DYING),
+                "native death is handled even though its resource owner still has aftermath"));
+        helper.assertTrue(FrontierV3BodyFatalityOperation.holdsBody(level,runtime.decodedState().orElseThrow(),body),"unsettled inventory retains exact fatality custody");
+        var outbox=FrontierV3ResourceHandoffLedger.get(level);
+        var transfer=new java.util.concurrent.atomic.AtomicReference<FrontierV3EntityResourceDropTransaction>();
+        var finished=new java.util.concurrent.atomic.AtomicBoolean();
+        helper.onEachTick(()->{
+            if(finished.get())return;
+            try{
+                if(helper.getTick()<5)return;
+                delayed.set(false);while(!tasks.isEmpty())tasks.remove().run();
+                runtime.runPersistenceTurn(()->{
+                    delayed.set(true);
+                    FrontierV3EntityResourceDropOperation.reconcileOne(level,runtime);
+                    FrontierV3BodyFatalityOperation.reconcile(level,runtime);
+                    if(transfer.get()==null)outbox.entityDrops().stream().filter(t->t.source().identity().equals(body.getUUID().toString())).findFirst().ifPresent(pending->{
+                        helper.assertTrue(level.getEntity(pending.entity()) instanceof net.minecraft.world.entity.item.ItemEntity
+                                && body.getInventory().getItem(3).isEmpty(),"one actual native transfer precedes canonical acknowledgement");
+                        helper.assertTrue(!FrontierV3UnitInventoryDeathResources.settled(runtime.decodedState().orElseThrow(),id),"pending acknowledgement cannot release source accounting early");
+                        helper.assertValueEqual(FrontierV3EntityResourceDropTransaction.read(pending.save()),pending,"pending consequence survives outbox hydration");
+                        transfer.set(pending);
+                    });
+                });
+                helper.assertValueEqual(runtime.status().kind(),FrontierV3RuntimeStatus.Kind.ACTIVE,"delayed aftermath is ordinary progress, not quarantine");
+                var current=runtime.decodedState().orElseThrow();
+                if(!FrontierV3UnitInventoryDeathResources.settled(current,id) || FrontierV3BodyFatalityOperation.holdsBody(level,current,body))return;
+                var destination=current.inventory().fungibleResources().accounts().values().stream().filter(a->a.lotQuantities().containsKey(lot.id())).findFirst().orElseThrow();
+                helper.assertTrue(destination.custody() instanceof ResourceCustody.Ground ground && transfer.get()!=null && ground.entityId().equals(transfer.get().entity())
+                        && destination.lotQuantities().equals(java.util.Map.of(lot.id(),7)),"confirmation preserves the exact single drop, title and quantity");
+                helper.assertTrue(outbox.entityDrops().stream().noneMatch(t->t.id().equals(transfer.get().id())),"confirmed outbox entry is retired");
+                FrontierV3BodyFatalityOperation.reconcile(level,runtime);
+                helper.assertValueEqual(runtime.decodedState().orElseThrow(),current,"repeated recovery cannot replay death or duplicate stock");
+                finished.set(true);delayed.set(false);while(!tasks.isEmpty())tasks.remove().run();
+                body.discard();FrontierV3AmbientActorExecutor.forget(runtime);runtime.shutdown();disk.close();helper.succeed();
+            }catch(RuntimeException failure){
+                finished.set(true);delayed.set(false);while(!tasks.isEmpty())tasks.remove().run();
+                body.discard();FrontierV3AmbientActorExecutor.forget(runtime);runtime.shutdown();disk.close();throw failure;
+            }
+        });
     }
     @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void nativeJoinRefusalClosesOnlyItsOwnAdmissionAndNextAttemptConfirms(GameTestHelper helper) {

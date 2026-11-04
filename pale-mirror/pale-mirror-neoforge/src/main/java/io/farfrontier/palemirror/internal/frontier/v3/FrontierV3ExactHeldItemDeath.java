@@ -33,9 +33,8 @@ final class FrontierV3ExactHeldItemDeath {
         FrontierV3ExactItemPresentation.bindWorldCarrier(drop.getItem(), carrier);
         drop.setItem(drop.getItem());
         var consequence = new ExactItemCustodyChanged(item.id(), source, new InventoryCustody.WorldCarrier(carrier));
-        FrontierV3EntityResourceDropOperation.perform(level, runtime, body,
+        return FrontierV3EntityResourceDropOperation.perform(level, runtime, body,
                 new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN), hand.copy(), drop, consequence);
-        return true;
     }
 
     private static boolean destroy(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
