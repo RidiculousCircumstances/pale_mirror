@@ -160,6 +160,50 @@ class SettlementSecurityTest {
         assertTrue(state.combat().maneuvers().get(m.owner()).ready(MeleeManeuver.Kind.BACKSTEP,21101));
         assertTrue(state.combat().retired(m.owner()).maneuvers().isEmpty());
     }
+    @Test void closeContactCheckpointsTheExactBurstAndPreparesOneStrikeWithoutClaimingItsDestination(){
+        var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
+        var actor=r.duty().execution().actorId();var enemy=new SurfaceAnchor(contact(r).position());
+        state=state.withActorBody(actor,enemy.offset(-4,0,0).standingBody());
+        var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
+        var m=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.BURST,enemy.offset(-1,0,0),21001);
+        state=apply(state,m.owner(),new CombatEvent.ManeuverSelected(m),21001);
+        state=apply(state,m.owner(),new CombatEvent.ManeuverLaunched(r.body(),m.attemptOrdinal()),21005);
+        var move=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(m.order(),21005,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.CombatManeuverLeg(m.owner(),m.attemptOrdinal()),r.body().execution());
+        state=ActorMovementProcess.reduceStarted(state,actor,new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(move));
+        var observed=enemy.offset(-2,0,0).standingBody();state=state.withActorBody(actor,observed);
+        state=apply(state,m.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21006)),21006);
+        var item=state.inventory().items().get(order.weapon());
+        order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21006).orElseThrow();
+        var strike=new MeleeStrike(order.owner(),order.revision(),r.body(),order.target(),order.weapon(),item.condition(),
+                state.combat().armaments().get(order.owner()).profile(),MeleeAttack.QUICK,1,21007,21006);
+        var exact=state;
+        assertThrows(IllegalArgumentException.class,()->apply(exact,m.owner(),new CombatEvent.Prepared(strike),21006),"replay cannot bypass the movement owner");
+        var commandId=new CommandId("test:burst-contact");
+        var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,commandId,state.bootstrap().worldId(),Revision.ZERO,
+                new SimInstant(21006),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(commandId),new CombatEvent.Prepared(strike));
+        var lease=new AmbientActorLease(actor,observed,new SimInstant(21005),1,AmbientLeaseStatus.HOT,AmbientGoalKind.GUARD,observed);
+        state=state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor,lease)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
+                FrontierWorldProcessCatalog.planCommand("combat",state,command),"uncertain shared checkpoint is an optional refusal");
+        state=state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor,
+                lease.withGoal(AmbientGoalKind.ACTOR_MOVEMENT,m.station().standingBody()))));
+        var plan=assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,FrontierWorldProcessCatalog.planCommand("combat",state,command));
+        var registry=FrontierWorldRuntimeDefinition.processRegistry();var events=registry.validateEmissions("combat",plan.events());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted.class,events.getFirst().payload());
+        for(var event:events)if(!(event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect)){
+            var fact=new FrontierEvent(1,new EventId("test:burst-contact"),new TransactionId("test:burst-contact"),state.bootstrap().worldId(),Revision.ZERO,
+                    new SimInstant(21006),event.subject(),CauseChain.root(commandId),event.payload());
+            state=FrontierWorldProcessCatalog.reduce(registry.requireReducedEventOwner(event.payload().type()),state,fact);
+        }
+        assertFalse(state.actorMovements().containsKey(actor));assertEquals(observed,state.actorLocations().get(actor).body());
+        assertFalse(m.order().arrivedAt(observed.supportingSurface()),"contact does not fabricate maneuver arrival");
+        var closed=state.combat().maneuvers().get(m.owner());assertFalse(closed.open());
+        assertFalse(closed.ready(MeleeManeuver.Kind.BURST,21006),"contact cannot refill burst cooldown");
+        assertEquals(strike,state.combat().pending().get(m.owner()));assertEquals(item,state.inventory().items().get(item.id()));
+        assertEquals(state,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("combat",state,command),"same attack cannot be prepared twice");
+    }
     @Test void maneuverUsesTheExactNativePlanningOriginWithoutPublishingACompetingBodyPosition(){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var actor=r.duty().execution().actorId();var observed=state.actorLocations().get(actor).supportingSurface();
@@ -232,14 +276,15 @@ class SettlementSecurityTest {
         state=apply(strikeSlot(state,lunge),lunge.owner(),new CombatEvent.Prepared(lunge),21001);
         state=apply(state,lunge.owner(),new CombatEvent.Completed(lunge.owner(),lunge.attemptOrdinal(),MeleeOutcome.MISS,item.condition()),21009);
         state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        var response=new MeleeStrike(lunge.owner(),lunge.ownerRevision(),lunge.attacker(),lunge.target(),lunge.weapon(),lunge.before(),profile,MeleeAttack.FOLLOWUP,17,21015,21014);
+        long responseAt=state.combat().nextAttack().get(lunge.owner());
+        var response=new MeleeStrike(lunge.owner(),lunge.ownerRevision(),lunge.attacker(),lunge.target(),lunge.weapon(),lunge.before(),profile,MeleeAttack.FOLLOWUP,17,responseAt+1,responseAt);
         var admitted=strikeSlot(state,response);var exact=admitted;
-        var forged=new MeleeStrike(response.owner(),response.ownerRevision(),response.attacker(),response.target(),response.weapon(),response.before(),profile,MeleeAttack.FOLLOWUP,18,21015,21014);
-        assertThrows(IllegalArgumentException.class,()->apply(exact,response.owner(),new CombatEvent.Prepared(forged),21014));
-        assertThrows(IllegalArgumentException.class,()->apply(exact.withChanges(FrontierWorldStateUpdate.begin().combat(exact.combat().withoutFollowup(response.owner()))),response.owner(),new CombatEvent.Prepared(response),21014));
-        admitted=apply(admitted,response.owner(),new CombatEvent.Prepared(response),21014);
+        var forged=new MeleeStrike(response.owner(),response.ownerRevision(),response.attacker(),response.target(),response.weapon(),response.before(),profile,MeleeAttack.FOLLOWUP,18,responseAt+1,responseAt);
+        assertThrows(IllegalArgumentException.class,()->apply(exact,response.owner(),new CombatEvent.Prepared(forged),responseAt));
+        assertThrows(IllegalArgumentException.class,()->apply(exact.withChanges(FrontierWorldStateUpdate.begin().combat(exact.combat().withoutFollowup(response.owner()))),response.owner(),new CombatEvent.Prepared(response),responseAt));
+        admitted=apply(admitted,response.owner(),new CombatEvent.Prepared(response),responseAt);
         assertTrue(admitted.combat().followups().isEmpty());
-        admitted=apply(admitted,response.owner(),new CombatEvent.Completed(response.owner(),response.attemptOrdinal(),MeleeOutcome.MISS,item.condition()),21020);
+        admitted=apply(admitted,response.owner(),new CombatEvent.Completed(response.owner(),response.attemptOrdinal(),MeleeOutcome.MISS,item.condition()),response.impactAt(admitted.bootstrap().ruleset().melee()));
         assertTrue(admitted.combat().followups().isEmpty(),"a missed recovery strike cannot regenerate its own permission");
     }
     @Test void strikeRetainsExactBodyWeaponAndOutcomeAcrossRecoveryAndRejectsForgedWear(){

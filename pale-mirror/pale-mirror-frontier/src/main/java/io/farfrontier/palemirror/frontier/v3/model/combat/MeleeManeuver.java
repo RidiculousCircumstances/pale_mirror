@@ -30,6 +30,8 @@ public record MeleeManeuver(ActorActuationId actor,SubjectId weapon,CombatTarget
     }
     public boolean matches(CombatOrder order){return actor.execution().equals(order.execution()) && weapon.equals(order.weapon()) && target.equals(order.target());}
     public boolean busy(long tick,ManeuverRules rules){return open() || tick<closedAt+rules.recovery();}
+    /** A completed closing burst hands contact to the weapon; evasive recovery remains committed. */
+    public boolean blocksStrike(long tick,ManeuverRules rules){return open() || kind==Kind.BACKSTEP && tick<closedAt+rules.recovery();}
     public boolean ready(Kind next,long tick){return !open() && tick>=anyReadyAt && tick>=(next==Kind.BURST?burstReadyAt:retreatReadyAt);}
     public MeleeManeuver launched(long tick){if(!open() || launchedAt!=0 || tick<selectedAt)throw new IllegalArgumentException("stale maneuver launch");return copy(tick,0);}
     public MeleeManeuver closed(long tick){if(!open() || tick<selectedAt)throw new IllegalArgumentException("stale maneuver closure");return copy(launchedAt,tick);}

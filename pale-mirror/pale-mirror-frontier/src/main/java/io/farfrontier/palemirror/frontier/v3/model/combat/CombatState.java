@@ -147,6 +147,7 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
     public CombatState maneuver(MeleeManeuver value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,ImmutableLookupMap.withEntry(maneuvers,value.owner(),value),engagements,followups,readiness);}
     public boolean maneuverOpen(SubjectId owner){var value=maneuvers.get(owner);return value!=null && value.open();}
     public boolean maneuverBusy(SubjectId owner,long tick,ManeuverRules rules){var value=maneuvers.get(owner);return value!=null && value.busy(tick,rules);}
+    public boolean maneuverBlocksStrike(SubjectId owner,long tick,ManeuverRules rules){var value=maneuvers.get(owner);return value!=null && value.blocksStrike(tick,rules);}
     public CombatState withEngagement(CombatEngagement value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,
             ImmutableLookupMap.withEntry(engagements,value.key(),value),followups,readiness);}
     public CombatState withoutEngagement(CombatEngagement.Key key){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,ImmutableLookupMap.withoutEntry(engagements,key),followups,readiness);}

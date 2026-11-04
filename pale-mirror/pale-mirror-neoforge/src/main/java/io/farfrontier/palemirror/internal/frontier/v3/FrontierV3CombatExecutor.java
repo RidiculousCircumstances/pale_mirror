@@ -82,7 +82,8 @@ public final class FrontierV3CombatExecutor {
                 state=runtime.decodedState().orElseThrow();
                 order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
             }
-            if(state.combat().maneuverBusy(order.owner(),tick,rules.maneuvers())){
+            boolean contactHandoff=CombatEngagementPlanner.contactHandoff(state.combat(),order,actuation,attack,tick,rules);
+            if(state.combat().maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff){
                 FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"MANEUVER_BUSY",distance,separating,motion.lateral(),canSpend);continue;
             }
             var maneuverFacts=new MeleeManeuvers.Facts(distance,separating,visible && threateningSwing(fighter,target,rules));
@@ -120,14 +121,16 @@ public final class FrontierV3CombatExecutor {
             }
             if(!canSpend || decision!=MeleeTactics.Decision.ATTACK || !slotReady)continue;
             var approach=state.actorMovements().get(order.execution().actorId());
-            if(approach!=null && !capabilities.require(order.execution()).permitsApproach(state,approach)){
+            if(approach!=null && !contactHandoff && !capabilities.require(order.execution()).permitsApproach(state,approach)){
                 FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"MOVEMENT_CHECKPOINT",distance,separating,motion.lateral(),canSpend);continue;
             }
             var strike=new MeleeStrike(order.owner(),order.revision(),actuation,order.target(),order.weapon(),item.condition(),profile,attack,
                     targetPort(target).identity().incarnation(),tick+1,tick);
-            var result=FrontierV3CommandSubmission.submit(runtime,"combat-prepare",order.owner().value(),new CombatEvent.Prepared(strike));
+            var result=FrontierV3CommandSubmission.propose(runtime,"combat-prepare",order.owner().value(),new CombatEvent.Prepared(strike));
             FrontierV3CombatTrace.strike(level,fighter,target,strike,"PREPARE_SUBMITTED",
-                    result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending?"PENDING_"+pending.reason().name():result.getClass().getSimpleName());
+                    result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending?"PENDING_"+pending.reason().name()
+                        :result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected rejected?rejected.toString()
+                        :contactHandoff?"CONTACT_HANDOFF_"+result.getClass().getSimpleName():result.getClass().getSimpleName());
             trace(order,"PREPARE",result);
         }
     }
@@ -192,7 +195,7 @@ public final class FrontierV3CombatExecutor {
         // parent-owned local guidance are reversible presentation, not permission to apply damage.
         // Overlap them with external journal admission instead of serializing another windup after it.
         FrontierV3CombatPresentation.start(level,fighter,strike,state.bootstrap().ruleset().melee(),target);
-        FrontierV3MeleeGuidance.observe(level,state,runtime::decodedState,fighter,target,strike,
+        FrontierV3MeleeGuidance.observe(level,state,runtime,fighter,target,strike,
                 FrontierV3CombatPresentation.track(level,fighter,strike,state.bootstrap().ruleset().melee(),target),runtime.executionView().orElseThrow().instant().ticks());
         var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->{
                     var current=runtime.decodedState().orElseThrow();
@@ -253,7 +256,7 @@ public final class FrontierV3CombatExecutor {
             Mob fighter,LivingEntity target,MeleeStrike strike){
         var state=runtime.decodedState().orElseThrow();var rules=state.bootstrap().ruleset().melee();
         var admission=prepareImpact(level,fighter,target,strike,rules,runtime.executionView().orElseThrow().instant().ticks());
-        FrontierV3MeleeGuidance.observe(level,state,runtime::decodedState,fighter,target,strike,
+        FrontierV3MeleeGuidance.observe(level,state,runtime,fighter,target,strike,
                 FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),runtime.executionView().orElseThrow().instant().ticks());
         FrontierV3CombatTrace.strike(level,fighter,target,strike,"ADMISSION",admission.waitingFor().orElse("READY"));
         return admission;

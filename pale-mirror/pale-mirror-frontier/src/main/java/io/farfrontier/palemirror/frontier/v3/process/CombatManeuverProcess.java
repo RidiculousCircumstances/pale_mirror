@@ -31,6 +31,30 @@ public final class CombatManeuverProcess {
         var events=new ArrayList<>(ready.events());events.add(new ProposedEvent(order.owner(),selected));events.addAll(capability.wake(following,order.execution(),tick));
         return new CommandPlan.Accepted(List.copyOf(events));
     }
+    /** Contact interrupts the same movement owner before closing its burst and preparing the weapon.
+     * No arrival is fabricated, and no uncheckpointed movement/attack overlap may enter replay. */
+    static CommandPlan contactStrike(FrontierWorldState state,CombatEvent.Prepared prepared,long tick){
+        var strike=prepared.strike();var ports=CombatComposition.CAPABILITIES;
+        var order=CombatTransitions.requireOrder(state,ports,strike.attacker(),tick);
+        var rules=state.bootstrap().ruleset().melee();var maneuver=state.combat().maneuvers().get(order.owner());
+        if(!CombatEngagementPlanner.contactHandoff(state.combat(),order,strike.attacker(),strike.attack(),tick,rules))
+            return FrontierWorldCommandPlanner.rejected("strike cannot replace this maneuver");
+        var movement=state.actorMovements().get(order.execution().actorId());
+        if(movement!=null && (!movement.executionId().equals(order.execution()) || !movement.order().equals(maneuver.order())
+                || !(movement.context() instanceof ActorMovementContext.CombatManeuverLeg leg)
+                || !leg.owner().equals(order.owner()) || leg.attemptOrdinal()!=maneuver.attemptOrdinal()))
+            return FrontierWorldCommandPlanner.rejected("contact strike lost its exact burst movement");
+        var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,order.execution(),tick);
+        if(assessment instanceof ActivityInterruptionPlanner.Waiting)
+            return FrontierWorldCommandPlanner.rejected("contact strike awaits exact movement checkpoint");
+        var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,order.execution().actorId());
+        var closed=new CombatEvent.ManeuverClosed(order.owner(),maneuver.attemptOrdinal());
+        var following=CombatTransitions.apply(ready.following(),order.owner(),closed,tick,ports);
+        CombatTransitions.apply(following,order.owner(),prepared,tick,ports);
+        var events=new ArrayList<>(ready.events());events.add(new ProposedEvent(order.owner(),closed));
+        events.add(new ProposedEvent(order.owner(),prepared));events.addAll(ports.require(order.execution()).wake(following,order.execution(),tick));
+        return new CommandPlan.Accepted(List.copyOf(events));
+    }
     public static List<ProposedEvent> progress(FrontierWorldState state,ScheduledAction action,ActorExecutionId execution,long tick){
         var m=state.combat().maneuvers().get(execution.activityOwnerId());if(m==null || !m.actor().execution().equals(execution))throw new IllegalArgumentException("foreign maneuver continuation");
         var cap=CombatComposition.CAPABILITIES.require(execution);var rules=state.bootstrap().ruleset().melee().maneuvers();

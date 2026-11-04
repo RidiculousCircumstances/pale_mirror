@@ -42,7 +42,7 @@ public final class CombatTransitions {
             if(!subject.equals(strike.owner()) || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
                     || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon()) || strike.preparedAt()!=tick
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
-                    || combat.maneuverBusy(strike.owner(),tick,state.bootstrap().ruleset().melee().maneuvers())
+                    || combat.maneuverBlocksStrike(strike.owner(),tick,state.bootstrap().ruleset().melee().maneuvers())
                     || tick<combat.nextAttack().getOrDefault(strike.owner(),0L)
                     || state.actorMovements().containsKey(order.execution().actorId())
                         && !capabilities.require(order.execution()).permitsApproach(state,state.actorMovements().get(order.execution().actorId())))

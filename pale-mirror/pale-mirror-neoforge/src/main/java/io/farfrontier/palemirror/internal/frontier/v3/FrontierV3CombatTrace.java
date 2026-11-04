@@ -204,6 +204,17 @@ public final class FrontierV3CombatTrace {
             row.addProperty("navigationDone",mob.getNavigation().isDone());var goal=mob.getNavigation().getTargetPos();
             if(goal!=null){row.addProperty("navigationX",goal.getX());row.addProperty("navigationY",goal.getY());row.addProperty("navigationZ",goal.getZ());}
         }
+        if(entity instanceof Mob mob){
+            FrontierV3LocalGoalCorrection.declared(mob).ifPresent(correction->{
+                var local=new JsonObject();local.addProperty("token",correction.token());local.addProperty("expiresAt",correction.expiresAt());
+                local.addProperty("x",correction.station().x());local.addProperty("y",correction.station().y());local.addProperty("z",correction.station().z());
+                row.add("localCorrection",local);
+            });
+            FrontierV3LocalGoalCorrection.consumption(mob).ifPresent(consumed->{
+                var local=new JsonObject();local.addProperty("token",consumed.token());local.addProperty("atTick",consumed.atTick());
+                local.addProperty("status",consumed.status());local.addProperty("reason",consumed.reason());row.add("correctionConsumption",local);
+            });
+        }
         var binding=FrontierV3ActorOwnerBinding.from(entity);
         if(binding.isPresent() && entity.level() instanceof ServerLevel level) {
             var declaration=binding.orElseThrow().declaration();row.addProperty("actor",declaration.actorId().value());row.addProperty("bodyEpoch",declaration.epoch());

@@ -80,6 +80,12 @@ public final class FrontierV3CombatPresentation {
                 && marker.getInt("phase")==CombatGesturePayload.Phase.PREPARING.wireTag()
                 && level.getGameTime()>=marker.getLong("startedAtTick");
     }
+    /** Local motion belongs to this cue's finite active lifetime, never to a rolling refresh timeout. */
+    static java.util.OptionalLong guidanceDeadline(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules){
+        if(!preparationRetained(level,body,strike))return java.util.OptionalLong.empty();
+        long end=body.getPersistentData().getCompound(KEY).getLong("startedAtTick")+rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks();
+        return level.getGameTime()<=end?java.util.OptionalLong.of(end):java.util.OptionalLong.empty();
+    }
     /** Validation reads the retained clock; it never starts a pose or changes native NBT. */
     static boolean strikeWindow(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules){
         var marker=body.getPersistentData().getCompound(KEY);long elapsed=level.getGameTime()-marker.getLong("startedAtTick");

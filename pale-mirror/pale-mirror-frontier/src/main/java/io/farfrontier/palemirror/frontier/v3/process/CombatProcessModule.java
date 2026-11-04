@@ -30,7 +30,8 @@ final class CombatProcessModule implements FrontierWorldProcessModule {
         }else{var observer=event instanceof CombatEvent.WeaponObserved value?value.observer():((CombatEvent.PositionBlocked)event).observer();
             execution=observer.execution();owner=execution.activityOwnerId();}
         try{
-            if(event instanceof CombatEvent.Prepared){
+            if(event instanceof CombatEvent.Prepared prepared){
+                if(state.combat().maneuverOpen(owner))return CombatManeuverProcess.contactStrike(state,prepared,tick);
                 var move=state.actorMovements().get(execution.actorId());
                 if(move!=null){
                     if(!move.executionId().equals(execution) || !capabilities.require(execution).permitsApproach(state,move))

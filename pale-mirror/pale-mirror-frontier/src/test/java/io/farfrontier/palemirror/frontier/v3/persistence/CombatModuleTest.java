@@ -290,6 +290,22 @@ class CombatModuleTest {
         state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
         assertFalse(CombatEngagementPlanner.permitsStrike(state,c,third,MeleeAttack.SWEEP,100,rules),"immediate contact shares the same two-strike cap");
     }
+    @Test void contactHandoffCannotBorrowAnEvasionStaleStanceOrBody(){
+        var rules=MeleeRules.initial();var order=order(1,Optional.empty());
+        var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var m=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),TARGET.offset(1,0,0),100,104,0,200,0,140);
+        var state=CombatState.empty().enlisted(order,105,rules).maneuver(m).stance(new MeleeStance(actor,order.target(),true,true,105));
+        assertTrue(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,105,rules));
+        assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.LUNGE,105,rules));
+        assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,125,rules));
+        assertFalse(CombatEngagementPlanner.contactHandoff(state,order,new ActorActuationId(new ActorBodyId(order.execution().actorId(),2),order.execution()),MeleeAttack.QUICK,105,rules));
+        assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,103,rules));
+        var evasion=new MeleeManeuver(actor,m.weapon(),m.target(),MeleeManeuver.Kind.BACKSTEP,101,m.origin(),m.station(),100,104,0,200,0,140);
+        assertFalse(CombatEngagementPlanner.contactHandoff(state.maneuver(evasion),order,actor,MeleeAttack.QUICK,105,rules));
+        assertTrue(evasion.closed(105).blocksStrike(105,rules.maneuvers()));
+        assertFalse(m.closed(105).blocksStrike(105,rules.maneuvers()));
+        assertTrue(m.closed(105).busy(105,rules.maneuvers()),"attack handoff does not grant a second maneuver");
+    }
     @Test void allMechanicalIngressHasAnExactCodecAndRejectsTruncation(){
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var events=List.<CombatEvent>of(new CombatEvent.WeaponDefined(order.execution(),order.weapon(),SWORD),new CombatEvent.WeaponObserved(actor,order.weapon(),SWORD),

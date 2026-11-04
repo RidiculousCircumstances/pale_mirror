@@ -58,7 +58,7 @@ public final class CombatEngagementPlanner {
         return stance!=null && stance.attackReady() && stance.current(order,tick,rules)
                 && ActorBodyAuthority.retainsPhysicalCustody(state,order.execution().actorId())
                 && ActorBodyAuthority.current(state,order.execution().actorId()).equals(stance.observer().body())
-                && !combat.pending().containsKey(order.owner()) && !combat.maneuverBusy(order.owner(),tick,rules.maneuvers())
+                && !combat.pending().containsKey(order.owner()) && !combat.maneuverBlocksStrike(order.owner(),tick,rules.maneuvers())
                 && tick>=combat.nextAttack().getOrDefault(order.owner(),0L)
                 && combat.affords(order.owner(),tick,rules.readiness().quickCost(),rules);
     }
@@ -74,13 +74,21 @@ public final class CombatEngagementPlanner {
     public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
         var plan=state.engagements().get(CombatEngagement.Key.of(order));
         if(plan==null || state.pending().containsKey(order.owner()) || state.recovering(order.owner(),tick)
-                || state.maneuverBusy(order.owner(),tick,rules.maneuvers()) || !state.affords(order.owner(),tick,rules.readiness().cost(attack),rules)
+                || state.maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff(state,order,observer,attack,tick,rules) || !state.affords(order.owner(),tick,rules.readiness().cost(attack),rules)
                 || plan.participants().keySet().stream().filter(state.pending()::containsKey).limit(rules.engagements().maximumWaveSize()).count()>=rules.engagements().maximumWaveSize())return false;
         if(plan.permits(order,observer,tick,rules.engagements()))return true;
         var member=plan.participants().get(order.owner());var stance=state.stances().get(order.owner());
         return attack!=MeleeAttack.LUNGE && member!=null && member.execution().equals(order.execution())
                 && observer.execution().equals(order.execution()) && stance!=null && stance.observer().equals(observer)
                 && stance.current(order,tick,rules) && stance.attackReady() && stance.holding();
+    }
+    /** Admission preview only: the process must checkpoint and close this exact burst before Prepared. */
+    public static boolean contactHandoff(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
+        var maneuver=state.maneuvers().get(order.owner());var stance=state.stances().get(order.owner());
+        return attack!=MeleeAttack.LUNGE && maneuver!=null && maneuver.open() && maneuver.kind()==MeleeManeuver.Kind.BURST
+                && maneuver.launchedAt()>0 && tick>=maneuver.launchedAt() && tick<maneuver.launchedAt()+rules.maneuvers().travelTicks()
+                && maneuver.matches(order) && maneuver.actor().equals(observer)
+                && stance!=null && stance.observer().equals(observer) && stance.current(order,tick,rules) && stance.holding() && stance.attackReady();
     }
     /** Consumes an existing reservation when present; the retained pending strike itself owns immediate admission. */
     public static CombatState committed(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer){

@@ -14,12 +14,15 @@ class FrontierV3LocalGoalCorrectionTest {
         var station=SurfaceAnchor.at(0,63,0);var correction=station.offset(1,0,1);
         var order=new MovementOrder(execution.activityOwnerId(),execution.actorId(),1,1,List.of(station),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION);
         var envelope=LocalNavigationEnvelope.around(station.standingBody(),correction.standingBody());
-        var value=new FrontierV3LocalGoalCorrection.Correction(body,order,1,correction,envelope,120);
+        var owned=new java.util.concurrent.atomic.AtomicBoolean(true);
+        var value=new FrontierV3LocalGoalCorrection.Correction(body,order,1,correction,envelope,120,owned::get);
+        assertTrue(value.current(body,order,106),"a delayed shared consumer keeps the exact phase-owned target beyond two ticks");
         assertTrue(value.current(body,order,120));assertFalse(value.current(body,order,121));
         assertFalse(order.arrivedAt(correction));
         assertFalse(value.current(new ActorActuationId(new ActorBodyId(execution.actorId(),2),execution),order,100));
         var successor=new MovementOrder(order.ownerId(),order.actorId(),1,2,order.legalStations(),order.capability(),order.arrivalPolicy());
         assertFalse(value.current(body,successor,100));
-        assertThrows(IllegalArgumentException.class,()->new FrontierV3LocalGoalCorrection.Correction(body,order,1,station.offset(20,0,0),envelope,120));
+        owned.set(false);assertFalse(value.current(body,order,106),"withdrawn attack revokes guidance before its time limit");
+        assertThrows(IllegalArgumentException.class,()->new FrontierV3LocalGoalCorrection.Correction(body,order,1,station.offset(20,0,0),envelope,120,owned::get));
     }
 }
