@@ -15,14 +15,14 @@
     },
     {
       "type": "command",
-      "command": "/give @s minecraft:iron_sword 2"
+      "command": "/execute unless data entity @s Inventory[{id:\"minecraft:iron_sword\"}] run give @s minecraft:iron_sword 2"
     },
     {
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "x": -1465,
-        "y": 65,
+        "y": 64,
         "z": -1344
       },
       "settleMs": 0
