@@ -48,8 +48,16 @@
       ]
     },
     {
-      "type": "command",
-      "command": "/execute in pale_mirror:frontier_graybox run tp @s -1486 80 -1360"
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "position"
+        }
+      },
+      "settleMs": 0
     },
     {
       "type": "visit_nearest_entity",
