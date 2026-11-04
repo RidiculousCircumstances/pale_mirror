@@ -1,5 +1,19 @@
 # Active continuity — 2026-11-04
 
+## Latest human recording request — capture did not start
+
+User asked to inspect the new fight. Read-only current MAIN logs and recorder
+status prove capture7e353337-608a-42ea-af6f-becc7eae5b50 failed OPEN_FAILED at
+18:16:00 local: all16retained JSONL slots occupied. No new human trace file exists;
+latest2c242f04 is the earlier pilot, not the human fight. Do not attribute its
+combat results to this user's session. rd joined18:15:38,left18:17:04.
+Archived12old finalized JSONL (+matching JFR sidecars) without deletion under
+runtime debug/pale-mirror/combat/archive/20261104-before-human-duel-retest/;
+manifest.json retains SHA256/completeness. Four latest captures remain at top
+level;12slots now free. Source unchanged; no server/player/world mutation/restart.
+Need user to repeat recording and confirm RECORDING before fight; no battle
+analysis is possible for the failed capture. Prior delivery below remains valid.
+
 ## Active delivery — local duel tactics / pressure response
 
 User authorized full repair; delivered. Sole main/no agents/push/new goal.

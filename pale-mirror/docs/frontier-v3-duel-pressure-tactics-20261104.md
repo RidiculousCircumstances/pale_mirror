@@ -125,3 +125,13 @@ Human balance, visual readability and resistance to a skilled player's repeated
 knockback remain manual playtest questions. The test pilot has survival mode and
 ordinary movement but1000maxhealth so it can finish the diagnostic sequence;
 this is not a difficulty or mortality test.
+
+## Subsequent human recording — unavailable
+
+At18:16:00local, capture7e353337-608a-42ea-af6f-becc7eae5b50 fails OPEN_FAILED:
+all16recording slots occupied. No human battle trace was written; previous pilot
+capture2c242f04 must not be presented as that fight. Archived12older finalized
+captures with matching JFR sidecars, retaining exact bytes and a SHA256 manifest,
+under runtime debug/pale-mirror/combat/archive/20261104-before-human-duel-retest/.
+Four latest files remain top-level, leaving12slots. No code/deploy/player/world
+change. The human fight needs a new recording; wait for RECORDING before combat.
