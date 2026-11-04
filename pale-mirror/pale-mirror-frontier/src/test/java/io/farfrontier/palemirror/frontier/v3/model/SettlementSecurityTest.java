@@ -702,7 +702,7 @@ class SettlementSecurityTest {
         var station=new SurfaceAnchor(contact(r).position()).offset(1,0,0);
         var contender=new CombatOrder(other.execution(),other.revision(),other.weapon(),new CombatPartyId(new SubjectId("party:independent")),first.engagement(),first.targetPosition(),21001,1000,
                 state.actorLocations().get(other.execution().actorId()).supportingSurface(),state.actorLocations().get(other.execution().actorId()).navigationProfile(),Optional.of(station),
-                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0),combatProfile(),CombatSkillId.SWORD);
+                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0),combatProfile(),CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
         var occupied=apply(state,first.owner(),new CombatEvent.PositionPlanned(first.execution(),first.target(),first.targetPosition(),Optional.of(station),MeleePosition.Reason.RESERVED),21001);
         assertThrows(IllegalArgumentException.class,()->MeleePositions.requireClaim(occupied,contender,station,21002));
         MeleePositions.requireClaim(occupied,contender,station,21082);

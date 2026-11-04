@@ -63,7 +63,8 @@ public final class CombatTransitions {
                 throw new IllegalArgumentException("followup lacks exact unspent missed-lunge continuation");
             var permitted=capabilities.require(order.execution()).areaTargets(state,order,tick);
             if(strike.additional().stream().anyMatch(v->!permitted.contains(v.target())))throw new IllegalArgumentException("area strike contains an unpermitted target");
-            if(!strike.actorProfile().equals(order.profile()) || !strike.profile().skill().equals(order.weaponSkill()) || !subject.equals(strike.owner()) || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
+            if(!order.techniques().contains(strike.attack()) || !strike.actorProfile().equals(order.profile()) || !strike.profile().skill().equals(order.weaponSkill()) || !subject.equals(strike.owner())
+            || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
                     || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon()) || strike.preparedAt()!=tick
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
                     || combat.maneuverBlocksStrike(strike.owner(),tick,state.bootstrap().ruleset().melee().maneuvers())

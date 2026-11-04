@@ -72,7 +72,8 @@ public final class MeleeDuelPolicy {
             return Choice.of(prior.permitsContactTransition(order.profile()) && (!prior.open() || prior.launchedAt()>0 || prior.kind()==MeleeManeuver.Kind.PURSUIT_RUN) && contact && attackReady
                     ?Action.ATTACK:Action.WAIT);
         var stance=combat.stances().get(order.owner());
-        if(facts.threateningSwing() && stance!=null && stance.current(order,tick,rules) && stance.threat().reacts(order.profile(),tick)){
+        if((facts.threateningSwing() || harm.isPresent() && tick>=harm.getAsLong() && tick-harm.getAsLong()<=rules.training().number("observation.counterTicks"))
+                && facts.distance()<=rules.maneuvers().hurtGapMicros()/1_000_000.0 && stance!=null && stance.current(order,tick,rules) && stance.threat().reacts(order.profile(),tick)){
             var defensive=side(combat,order,tick,rules,memory(combat,order,tick,rules,harm),allowed);
             if(defensive.isPresent() && order.style().lateralWeight()>=order.style().retreatWeight())return Choice.maneuver(defensive.orElseThrow());
             if(allowed.contains(MeleeManeuver.Kind.BLOCK) && CombatMechanics.permits(order.profile(),MeleeManeuver.Kind.BLOCK)

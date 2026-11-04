@@ -6,14 +6,14 @@ public final class CombatTechniqueSelection {
     public static MeleeAttack choose(CombatState state,CombatOrder order,ActorActuationId actor,long incarnation,long tick,
             WeaponProfile weapon,double distance,double separating,double lateral,MeleeRules rules){
         var next=state.followups().get(order.owner());
-        if(next!=null && next.matches(order,actor,incarnation,tick) && CombatMechanics.unlocked(order.profile(),weapon,next.next())
+        if(next!=null && next.matches(order,actor,incarnation,tick) && order.techniques().contains(next.next()) && CombatMechanics.unlocked(order.profile(),weapon,next.next())
                 && MeleeTactics.opportunity(weapon,next.next(),distance,rules))return next.next();
         var stance=state.stances().get(order.owner());var observed=stance!=null && stance.current(order,tick,rules)?stance.threat():CombatThreatObservation.none();
         var prior=state.maneuvers().get(order.owner());boolean evaded=prior!=null && prior.matches(order) && !prior.open() && !prior.kind().closing()
             && prior.kind()!=MeleeManeuver.Kind.BLOCK && tick>=prior.closedAt() && tick-prior.closedAt()<=rules.training().number("observation.counterTicks");
         var options=new ArrayList<Weighted>();
         for(var t:rules.training().techniques()){
-            if(!CombatMechanics.unlocked(order.profile(),weapon,t.id()) || !MeleeTactics.opportunity(weapon,t.id(),distance,rules)
+            if(!order.techniques().contains(t.id()) || !CombatMechanics.unlocked(order.profile(),weapon,t.id()) || !MeleeTactics.opportunity(weapon,t.id(),distance,rules)
                     || !state.affords(order.owner(),tick,CombatMechanics.cost(order.profile(),rules.readiness().cost(t.id())),rules))continue;
             if(separating>0.1 && !t.id().guidesApproach())continue;
             boolean legal=switch(t.use()){
@@ -39,7 +39,7 @@ public final class CombatTechniqueSelection {
             if(t.timing().preparationTicks()>6)weight=Math.max(1,weight*(100-order.style().effortReserve())/100);
             options.add(new Weighted(t.id(),weight));
         }
-        if(options.isEmpty())return distance>weapon.reach() && CombatMechanics.unlocked(order.profile(),weapon,MeleeAttack.LUNGE)?MeleeAttack.LUNGE:MeleeAttack.BASIC_CUT;
+        if(options.isEmpty())return distance>weapon.reach() && order.techniques().contains(MeleeAttack.LUNGE) && CombatMechanics.unlocked(order.profile(),weapon,MeleeAttack.LUNGE)?MeleeAttack.LUNGE:order.fallback();
         long salt=order.execution().actorId().value().hashCode()^state.nextAttack().getOrDefault(order.owner(),0L);
         salt=(salt^(salt>>>30))*0xbf58476d1ce4e5b9L;salt=(salt^(salt>>>27))*0x94d049bb133111ebL;salt^=salt>>>31;
         int pick=(int)Math.floorMod(salt,options.stream().mapToInt(Weighted::weight).sum());

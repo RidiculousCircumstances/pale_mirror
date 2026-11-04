@@ -15,7 +15,7 @@ final class FrontierV3CombatObservation {
         boolean harmed=swing?(body.hurtTime>0 || prior.swing() && prior.harmed()):false;
         long began=swing && !prior.swing()?tick:prior.began();long missed=!swing && prior.swing() && !prior.harmed()?tick:prior.missed();
         SAMPLES.put(body,new Sample(actor,target.getUUID(),target.getId(),tick,swing,harmed,began,missed));
-        return new CombatThreatObservation(swing?began:-1,missed,opponents);
+        return new CombatThreatObservation(began,missed,opponents);
     }
     private FrontierV3CombatObservation(){}
 }

@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.*;
@@ -42,7 +43,13 @@ final class FrontierV3MeleeGuidance {
                 Math.max(1.0,strike.profile().reach()-state.bootstrap().ruleset().melee().rangeHysteresisMicros()/1_000_000.0):1.0;
         var station=SurfaceAnchor.at((int)Math.floor(target.getX()+direction.x*separation),contact.y(),(int)Math.floor(target.getZ()+direction.z*separation));
         if(strike.attack()==MeleeAttack.LATERAL || strike.attack()==MeleeAttack.FLANK || strike.attack()==MeleeAttack.RETREAT){
-            var options=MeleeFootwork.candidates(state.combat(),permission.orElseThrow(),strike.attack(),origin.orElseThrow().supportingSurface(),contact,tick,state.bootstrap().ruleset().melee());
+            if(prior.filter(value->value.token()==strike.attemptOrdinal()).isPresent())return;
+            java.util.List<SurfaceAnchor> supported;
+            try{
+                var knowledge=CombatComposition.CAPABILITIES.require(execution).maneuverKnowledge(state,execution);
+                supported=PedestrianInteractionStations.within(knowledge.geometry(),origin.orElseThrow().supportingSurface(),4,Set.of()).stream().filter(knowledge::clearStation).toList();
+            }catch(KnownPedestrianNavigation.RouteUnavailable waiting){trace(level,fighter,target,strike,"FOOTWORK_GEOMETRY_"+waiting.status());return;}
+            var options=MeleeFootwork.candidates(state.combat(),permission.orElseThrow(),strike.attack(),origin.orElseThrow().supportingSurface(),contact,supported,tick,state.bootstrap().ruleset().melee());
             var selected=options.stream().filter(p->MeleePositions.available(state,permission.orElseThrow(),p,tick)).findFirst();
             if(selected.isEmpty())return;station=selected.orElseThrow();
         }

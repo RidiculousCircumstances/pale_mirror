@@ -77,7 +77,8 @@ public final class CombatEngagementPlanner {
     /** Real close contact may spend an ordinary strike now, while the encounter still caps live commitments. */
     public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
         var plan=state.engagements().get(CombatEngagement.Key.of(order));
-        if(plan==null || state.pending().containsKey(order.owner()) || state.recovering(order.owner(),tick)
+        if(!order.techniques().contains(attack) || !order.profile().knows(order.weaponSkill(),rules.training().require(attack).minimum())
+                || plan==null || state.pending().containsKey(order.owner()) || state.recovering(order.owner(),tick)
                 || state.maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff(state,order,observer,attack,tick,rules) && !closedDefenceContact(state,order,observer,tick,rules) || !state.affords(order.owner(),tick,
             CombatMechanics.cost(order.profile(),rules.readiness().cost(attack)),rules)
                 || plan.participants().keySet().stream().filter(state.pending()::containsKey).limit(rules.engagements().maximumWaveSize()).count()>=rules.engagements().maximumWaveSize())return false;

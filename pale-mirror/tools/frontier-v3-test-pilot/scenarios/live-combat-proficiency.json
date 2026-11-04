@@ -37,9 +37,9 @@
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
-        "x": -1486,
+        "x": -1512,
         "y": 64,
-        "z": -1360
+        "z": -1372
       },
       "settleMs": 0
     },

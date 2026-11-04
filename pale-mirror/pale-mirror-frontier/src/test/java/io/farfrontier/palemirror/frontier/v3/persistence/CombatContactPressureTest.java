@@ -19,7 +19,8 @@ class CombatContactPressureTest {
         return new CombatOrder(new ActorExecutionId(new SubjectId("resident:contact-"+i),ActorActivityKind.COURIER,new SubjectId("shipment:contact-"+i),1),
                 1,new SubjectId("item:contact-"+i),new CombatPartyId(new SubjectId("party:contact")),
                 new CombatEnvelope(new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"minecraft:overworld"),CombatEnvelope.Kind.SELF_DEFENCE,TARGET,32),
-                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:pressing")),combatProfile(),CombatSkillId.SWORD);
+                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:pressing")),combatProfile(),CombatSkillId.SWORD,
+            java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
     }
     @Test void observedCoordinatesSupplyTheSameVectorToLeadAndRadialDecisions(){
         var motion=CombatMotion.between(10,20,11,22,4);

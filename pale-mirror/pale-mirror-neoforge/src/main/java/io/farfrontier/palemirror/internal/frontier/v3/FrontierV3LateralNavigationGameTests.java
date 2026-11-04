@@ -45,7 +45,7 @@ public final class FrontierV3LateralNavigationGameTests {
                         CombatEnvelope.Kind.SELF_DEFENCE,source,8),
                 source.offset(2,0,0),100,100,source,io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER,Optional.empty(),CombatStyleCatalog.standard().require(
                         new CombatStyleId("frontier:mobile")),
-                CombatProfileGeneration.create(139,1),CombatSkillId.SWORD);
+                CombatProfileGeneration.create(139,1),CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
         var scope=new FrontierV3NavigationScope.ObservedWorld(new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(origin.getX()-2,origin.getZ()-2,6,6));
         var ranked=MeleeManeuvers.rank(order,
                 MeleeManeuver.Kind.SIDESTEP_RIGHT,

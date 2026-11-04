@@ -23,7 +23,8 @@ final class GuardCombatCapability implements CombatCapability {
             return new CombatOrder(execution,duty.revision(),duty.weapon(),new CombatPartyId(duty.home()),response.engagement(),new SurfaceAnchor(contact.position()),
                     contact.atTick(),state.bootstrap().ruleset().security().contactLifetime(),observer,state.actorLocations().get(execution.actorId()).navigationProfile(),
                     duty.mission().filter(m->m.response().equals(Optional.of(contact.target()))).map(GuardMission::station),
-            state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()),state.humanPopulation().resident(execution.actorId()).combatProfile(),CombatSkillId.SWORD);
+            state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()),state.humanPopulation().resident(execution.actorId()).combatProfile(),
+            CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
         });
     }
     public boolean permitsApproach(FrontierWorldState state,ActorMovement movement){

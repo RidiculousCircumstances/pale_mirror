@@ -23,7 +23,7 @@ class CombatTrainingTest {
         var target=new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(1,2),"minecraft:overworld");var at=SurfaceAnchor.at(0,63,0);
         return new CombatOrder(new ActorExecutionId(actor,ActorActivityKind.COURIER,owner,1),1,new SubjectId("item:test-sword"),
             new CombatPartyId(new SubjectId("party:training-test")),new CombatEnvelope(target,CombatEnvelope.Kind.SELF_DEFENCE,at,24),
-            at,100,1000,at.offset(2,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:mobile")),profile,CombatSkillId.SWORD);
+            at,100,1000,at.offset(2,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:mobile")),profile,CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
     }
     @Test void independentTrainingUnlocksButAgilityChangesExecutionRatherThanGrantingMoves(){
         var novice=profile(0,9,0,100);var skilledSlow=profile(60,55,50,0);var skilledFast=profile(60,55,50,100);
@@ -90,5 +90,30 @@ class CombatTrainingTest {
         assertFalse(block.closed(120).ready(MeleeManeuver.Kind.BLOCK,144));
         assertThrows(IllegalArgumentException.class,()->new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BACKSTEP,101,at,at,100,0,0,0,145,140,0));
         assertTrue(CombatMechanics.blockReduction(order.profile())<1000,"no complete immunity");
+    }
+    @Test void anObservedShortSwingCanInviteDelayedDefenceAfterRealHarmButCannotBecomeHiddenFutureInput(){
+        var order=order(profile(50,0,50,25));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var state=CombatState.empty().observed(new CombatState.Armament(order.execution(),order.weapon(),SWORD)).enlisted(order,100,RULES)
+            .stance(new MeleeStance(actor,order.target(),true,true,100,Optional.empty(),new CombatThreatObservation(100,-1,1)));
+        var facts=new MeleeManeuvers.Facts(2,0,false);var allowed=Set.of(MeleeManeuver.Kind.BLOCK);
+        assertEquals(MeleeManeuver.Kind.BLOCK,MeleeDuelPolicy.choose(state,order,facts,106,RULES,OptionalLong.of(101),allowed,true).maneuver().orElseThrow());
+        assertNotEquals(MeleeDuelPolicy.Action.MANEUVER,MeleeDuelPolicy.choose(state,order,facts,101,RULES,OptionalLong.of(101),allowed,true).action(),"reaction time still applies");
+        assertNotEquals(MeleeDuelPolicy.Action.MANEUVER,MeleeDuelPolicy.choose(state,order,facts,106,RULES,OptionalLong.empty(),allowed,true).action(),"an idle target supplies no future threat");
+        assertNotEquals(MeleeDuelPolicy.Action.MANEUVER,MeleeDuelPolicy.choose(state,order,facts,113,RULES,OptionalLong.of(101),allowed,true).action(),"old sight cannot authorize defence");
+    }
+    @Test void anotherMobDeclaresItsSupportedRepertoireWithoutInheritingHumanKicks(){
+        var original=order(profile(100,100,100,50));
+        var restricted=new CombatOrder(original.execution(),original.revision(),original.weapon(),original.party(),original.engagement(),original.targetPosition(),
+            original.observedAt(),original.lifetime(),original.actorPosition(),original.navigation(),original.station(),original.style(),original.profile(),original.weaponSkill(),
+            Set.of(MeleeAttack.BASIC_CUT),MeleeAttack.BASIC_CUT);
+        var actor=new ActorActuationId(new ActorBodyId(restricted.execution().actorId(),1),restricted.execution());
+        var state=CombatState.empty().observed(new CombatState.Armament(restricted.execution(),restricted.weapon(),SWORD)).enlisted(restricted,100,RULES);
+        assertEquals(MeleeAttack.BASIC_CUT,CombatTechniqueSelection.choose(state,restricted,actor,1,100,SWORD,1,0,0,RULES));
+    }
+    @Test void techniqueFootworkUsesKnownNonFlatSupportAndDoesNotInventABlockedSurface(){
+        var order=order(profile(100,100,100,50));var origin=order.actorPosition();var target=order.targetPosition();
+        var step=origin.offset(0,1,1);var tooHigh=origin.offset(0,5,1);var state=CombatState.empty().enlisted(order,100,RULES);
+        assertEquals(List.of(step),MeleeFootwork.candidates(state,order,MeleeAttack.LATERAL,origin,target,List.of(step,tooHigh),100,RULES));
+        assertTrue(MeleeFootwork.candidates(state,order,MeleeAttack.LATERAL,origin,target,List.of(),100,RULES).isEmpty());
     }
 }
