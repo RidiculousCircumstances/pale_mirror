@@ -1,6 +1,57 @@
 # Active continuity — 2026-11-04
 
-## Current objective and authority
+## Active increment — combat flight recorder delivered
+
+User requested console-controlled N-tick positions and attack/damage history
+following a bare-hand circling report. No AI/balance changed. Old MAIN logs show
+Eli Stone killed by rd at12:00:53 and rd killed by Nora Bell at12:00:58; detailed
+old attack/miss/position history is absent, so exact old cause is unconfirmed.
+
+IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror CLEAN
+HEAD f705ad7d2180fd81aadb460d1ec01114eabd6b41 (feature ea88de7a1).
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same.
+PACK tracked clean at888ed90d5e3b80b18c278107aa83bb003b541f69; preexisting
+untracked .f0v-baseline/ preserved. GOV unrelated WIP preserved. Sole main;
+no subagents/push/goal. Standing reviewed commit+verified deploy completed.
+
+Commands: `pale_mirror v3 combat_trace start rd 2 180`, `status`, `stop`.
+Wait for RECORDING before battle; manual stop/expiry/disconnect exports JSONL
+and raw JFR under runtime debug/pale-mirror/combat. Background lifecycle/export;
+50k events/64MiB JFR/128MiB JSON/16 retained captures, explicit completeness
+footer. Native positions, body identity/activity, weapon, readiness, changed
+combat gates, preparation/impact/actual damage/death are read-only observations;
+no runtime settling, physical demand or gameplay authority. Offline analyzer:
+tools/engineering/combat_trace.py. No schema/network/client update/world reset.
+Report docs/frontier-v3-combat-tracing-20261104.md owns detailed operation/evidence.
+
+Verified: /tmp/pm-combat-recording-final-check.log PASS73s (guardrails,
+2actual JFR tests,17native strike tests). Native new case proves positions,
+actual post-damage event, complete export and unchanged damage. Final packaging
+PASS12s; clean detached release guardrails/JAR/package PASS14s. Initial new-code
+JFR destination/stop double-dump error fixed. No affected red check retained.
+
+MAIN /home/rd/far-frontier-server, far-frontier-v3-live.service;
+actual Java22 PID3744466/wrapper3744440, epoch1793777932;
+world skill-combat-schema328-seed139-20261104 retained, no reset.
+Installed SHA512 e4d0a5ba8db9a6a6579b2f54e9ea76863f99b83003c4f3c50c4d8d4d60986fe8e8cfd678999da95e5c9d8a36eace6af23ce90bb473d18b1b3f0a795893ec9059.
+Receipts /tmp/pm-combat-recording-{preflight,publish,stop,install,verify}.log;
+native all-dimensions-saved + old JVM/ports exit before install. Verify PASS;
+first pre-ready verify correctly refused absent socket, subsequent fresh verify
+passed after normal startup. No new quarantine observed; no human state edited.
+
+Checked-in live-combat-trace.json fullpack20FPS/privateXvfb probe
+run a566a7a1-b4ea-4243-b9bd-831749c9a186 PASS. Capture
+4bb7ac23-1815-4e1f-8b22-a020693fa688:710/710 events, complete=true,
+DURATION, no dataLoss/exportLimit. Analyzer verified selected player and managed
+resident identities; IMPL/build/combat-trace-20261104/live-{manifest,summary}.json.
+This ordinary command/file smoke has no attack or visual/balance acceptance;
+actual damage subscription is covered by native test. Client/private display
+exited; recording SAVED, no active capture or background monitoring.
+Next: user enables recorder before a real fight, then agent analyzes that exact
+file for per-attempt cause. No new user-fight trace exists yet. Earlier guard
+implementation/evidence below is historical, not newly repeated acceptance.
+
+## Previous objective and authority
 
 User authorized full five-point skill-dependent guard combat implementation;
 then emphasized fast/agile player movement. Sole main; no subagents, push or
