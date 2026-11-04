@@ -63,7 +63,8 @@
       },
       "maxDistance": 128,
       "timeoutMs": 30000,
-      "standOff": 2
+      "standOff": 2,
+      "workerId": "resident:1-16"
     },
     {
       "type": "assert_fixture",
@@ -110,7 +111,8 @@
       },
       "maxDistance": 128,
       "timeoutMs": 30000,
-      "standOff": 0
+      "standOff": 0,
+      "workerId": "resident:1-16"
     },
     {
       "type": "command",
@@ -129,7 +131,8 @@
         }
       },
       "maxDistance": 64,
-      "timeoutMs": 30000
+      "timeoutMs": 30000,
+      "workerId": "resident:1-16"
     },
     {
       "type": "attack_nearest_entity",
@@ -146,7 +149,8 @@
       "requireRemoval": false,
       "requireDamage": true,
       "timeoutMs": 30000,
-      "causalMilestone": "player_harmed_declared_guard"
+      "causalMilestone": "player_harmed_declared_guard",
+      "workerId": "resident:1-16"
     },
     {
       "type": "wait_until_diagnostic",
