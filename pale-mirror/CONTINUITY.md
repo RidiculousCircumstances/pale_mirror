@@ -1,6 +1,6 @@
 # Active continuity — 2026-11-04
 
-## Active increment — combat flight recorder delivered
+## Current result — human combat trace analyzed; producer retention defect open
 
 User requested console-controlled N-tick positions and attack/damage history
 following a bare-hand circling report. No AI/balance changed. Old MAIN logs show
@@ -47,9 +47,27 @@ resident identities; IMPL/build/combat-trace-20261104/live-{manifest,summary}.js
 This ordinary command/file smoke has no attack or visual/balance acceptance;
 actual damage subscription is covered by native test. Client/private display
 exited; recording SAVED, no active capture or background monitoring.
-Next: user enables recorder before a real fight, then agent analyzes that exact
-file for per-attempt cause. No new user-fight trace exists yet. Earlier guard
-implementation/evidence below is historical, not newly repeated acceptance.
+Human said ready; analyzed capture146c5de2-2bdf-485d-8fc7-cc655e715c09.
+CRITICAL diagnostic limitation:25972expected/12036exported, complete=false;
+first71.73s evicted by unrelated JFR events in64MiB recording. Last67.5s
+sequences13937..25972 contiguous; do not claim full battle or request another
+long capture until producer scope/retention repaired. SAVED is not complete.
+Detailed human-fight section in the same report owns exact evidence/limits;
+IMPL/build/combat-trace-20261104/user-fight-summary.json.
+Retained53.7s to player death:3guards,3hits(allNora,4damage),13player punches;
+rd emptyhand/adventure,3HP survived49.95s without another hit. About20TPS.
+Observed median moving speed player4.24 vs guards1.97–1.98blocks/sec; three
+close SWEEP opportunities gated WAVE_SLOT, none prepared in retained interval.
+11prepared:3hits/3out-of-reachmisses/3earlycancels/2NOT_APPLIED. Submission to
+visible cue5–7ticks; exact wait breakdown unconfirmed. QUICK separation2.16→5.71
+includes confirmed player punch/native knockback, not proved wrong-direction
+navigation. Expired visible cue precondition can classify CANCELLED instead of
+physical MISS; per-operation exact refusal not captured. No EFFORT gates.
+No code/balance/deployment changed by this analysis. User-facing result is
+findings, not repaired combat; current source/runtime identities remain as above.
+Next potential fixes: scoped lossless recorder; opportunistic close admission
+within group caps; approach/timing; explicit expired-attack terminal semantics.
+Earlier guard implementation/evidence below is historical.
 
 ## Previous objective and authority
 

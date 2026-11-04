@@ -133,3 +133,87 @@ loaded-body formatting and complete readable export. The live smoke performs
 no attacks and is not proof of guard balance; actual damage capture is the
 separately described native test. All task client/private-display processes
 exited. MAIN remains running with no active recorder. No push performed.
+
+## Human fight capture — 2026-11-04 13:02–13:04 local
+
+Capture146c5de2-2bdf-485d-8fc7-cc655e715c09, same deployed source/JVM/world.
+Operator stopped at13:04:59; no client or gameplay mutation by investigation.
+Raw files remain in runtime debug/pale-mirror/combat; analyzer output is
+IMPL/build/combat-trace-20261104/user-fight-summary.json.
+
+**Partial recording:** expected25972 observations, exported12036; sequences
+13937..25972 are contiguous. The first71.73seconds were evicted; retained
+08:03:51.686–08:04:59.186UTC spans67.50seconds. Footer correctly declares
+complete=false even though command status says SAVED. JFR summary proves that
+unrelated ExecutionStage/DelayPoint/clock events dominate the64MiB rolling
+recording, evicting early combat data. Current recording selection/retention is
+therefore insufficient for the promised ordinary session duration. Do not
+present the analyzer totals as the full fight or request another long fight
+until this producer defect is repaired. A correction must preserve the scoped
+combat stream independently of unrelated concurrent JFR events, rather than
+merely increasing the global byte cap or concealing the completeness failure.
+
+Verified retained fight segment until death: native ticks29716..30790,
+53.7seconds, three armed guards (Owen Ash resident1-3, Nora Bell resident1-16,
+Vera Moss resident1-8). Names alone are ambiguous: another nearby Nora Bell
+is a different body. The exact UUID/actor bindings disambiguate them.
+All recorded rd position samples show adventure mode and empty main hand.
+Three actual guard hits, all Nora, four damage each;13actual one-damage player
+hits against the guards. Player health starts11 in this retained segment,
+falls to3 at08:03:55.439UTC, then next hit/death at08:04:45.387UTC:
+a49.95second interval without another recorded guard hit. No guard death is
+present in the retained interval; nothing is inferred about the evicted part.
+Native ticks and canonical ticks both advance1350 over67.4997seconds, about20TPS;
+this does not prove no individual tick spike, but persistent tick debt is not
+the observed cause of the slow pressure in this interval.
+
+Concrete contributing observations and source boundaries:
+
+- During sampled planar motion before death, rd's median moving speed is4.24
+  blocks/sec; each guard's is about1.97–1.98. Guards move during roughly71–74%
+  of consecutive samples. These are observed displacement statistics, not
+  attribute values or a claim of a universally correct balance. Ordinary
+  CombatLocomotion explicitly chooses WALK/CAREFUL, with RUN for bounded
+  pending closing attacks/maneuvers. Reaching and maintaining weapon contact
+  is difficult against this circling player.
+- Three SWEEP opportunities are directly observed at ranges2.03/2.04/2.09;
+  each is gated WAVE_SLOT. No SWEEP is subsequently prepared in this retained
+  interval. Example Vera at native29852/canonical112561 has a slot opening
+  at112562, distance2.03, but her next decision at29864 is APPROACH at4.15.
+  Another Vera sweep at30650/canonical113359 waits for113360; by30662 the
+  admitted technique is LUNGE at3.42 and cancels three ticks later at4.37.
+  CombatEngagementPlanner adds assembly/release/slot gates; immediate contact
+  is a transient fact and current policy may lose it while coordinating.
+  This is observed lost opportunity, not proof that every WAVE_SLOT is invalid.
+- Eleven PREPARE_SUBMITTED attempts:3HIT,3explicit OUT_OF_REACH misses,
+  3early OUTSIDE_APPROACH_ALLOWANCE cancellations,2OPERATION:NOT_APPLIED.
+  Submission-to-gesture delay is5–7native ticks for the eight visible cues;
+  visible preparation then adds its ordinary4/8ticks. This extra admission
+  delay is measured, but the trace lacks a complete per-transaction wait
+  breakdown: WAITING_DURABILITY is observed, so attributing all delay to disk
+  latency would exceed evidence. At successful/explicit-miss lunge contact,
+  missed distances3.42/3.81/3.39 exceed weapon reach3.0; enlarging damage reach
+  would hide the approach/timing issue rather than explain it.
+- Nora QUICK attempt113327 begins at2.16, is visibly cued five ticks later
+  at3.27, and terminates NOT_APPLIED14ticks after submission at5.71. rd hits
+  Nora at30618; health9→8, hurtTime8 at30620, velocity roughly(0.325,0.121)
+  away from rd. The initial displacement is consistent with native knockback,
+  not established autonomous navigation in the wrong direction. Player also
+  retreats. Do not turn that example into an unproved stale-route defect.
+- Two visible attempts terminate NOT_APPLIED just after their preparation+
+  contact lifetime. Source precondition preparationOpen rejects expired cues
+  before applyImpact; NOT_APPLIED becomes CANCELLED. Thus there is a reachable
+  distinction between an explicit physical MISS and an expired visible attack
+  cancelled before impact. Followup behavior depends on that distinction.
+  Exact refusal predicate is not recorded, so window expiry is source-supported
+  and timing-consistent, not a uniquely proven cause for each operation.
+- No EFFORT gate was recorded; decision readiness minima are59–70. No claim
+  that fatigue caused the long hit gap. None of the guard position samples
+  reports horizontalCollision; this alone cannot rule out actor avoidance.
+
+Investigation changed no combat parameters, source, server process, world or
+human state. Recorder is SAVED/inactive, no task client running. Next engineering
+issues: lossless bounded scoped recording, opportunistic close-strike admission
+inside coordinated attack limits, moving-target approach/visible timing, and
+explicit terminal semantics for expired visible attacks. These need coherent
+source repairs and focused verification; this report does not claim them fixed.
