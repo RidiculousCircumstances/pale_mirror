@@ -340,6 +340,8 @@ class KnownPedestrianRouteKnowledgeTest {
         assertTrue(PedestrianLocalDeparture.departure(state, start).traversable(List.of(start)));
         assertTrue(!PedestrianLocalDeparture.publicPosition(state, start),
                 "an escape passage does not grant permission to park on an internal station");
+        assertTrue(PedestrianLocalDeparture.publicContinuation(state,List.of(start)).isEmpty(),
+                "a private-only candidate is unavailable, not a world-wide planning invariant failure");
         var knowledge = PedestrianLocalDeparture.departure(state, start).forActor(state, new SubjectId("resident:7-12"));
         var exterior = SettlementServiceAccessPoints.depotPort(state, new SubjectId("settlement:7")).exteriorApproach();
         var exit = knowledge.plannedBetween(start, exterior);

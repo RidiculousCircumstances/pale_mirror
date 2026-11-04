@@ -93,7 +93,7 @@ class ResidentMealKnownNavigationTest {
         assertTrue(accepted.humanPopulation().meals().get(actor).coldTravel().isPresent());
         var route = waitingStep.plannedRoute().orElseThrow().route();
         assertTrue(port.accessBoundary().cleared(route.getLast().standingBody()));
-        assertTrue(port.accessBoundary().allowsWaitingRoute(PedestrianLocalDeparture.publicContinuation(waiting, route)));
+        assertTrue(port.accessBoundary().allowsWaitingRoute(PedestrianLocalDeparture.publicContinuation(waiting, route).orElseThrow()));
         var reentry = new java.util.ArrayList<>(route);
         reentry.add(port.serviceSurface());
         reentry.add(route.getLast());

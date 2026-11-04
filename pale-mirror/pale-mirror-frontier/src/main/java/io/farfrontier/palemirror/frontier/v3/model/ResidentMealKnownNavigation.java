@@ -108,13 +108,16 @@ public final class ResidentMealKnownNavigation {
                     .filter(availableWaitingStation).toList();
         KnownPedestrianNavigation.RouteUnavailable lastUnavailable = null;
         for (SurfaceAnchor destination : destinations) {
-            if (start.equals(destination)) return List.of(start);
+            if (start.equals(destination)) {
+                if(directService || PedestrianLocalDeparture.publicContinuation(state,List.of(start)).filter(port.accessBoundary()::allowsWaitingRoute).isPresent())return List.of(start);
+                continue;
+            }
             MovementOrder outdoor = new MovementOrder(meal.residentId(), meal.residentId(),
                     FrontierWireTags.tag(meal.phase()), 1L, List.of(destination),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
                 List<SurfaceAnchor> route = routeKnowledge.plannedPath(start, outdoor);
-                if (!directService && !port.accessBoundary().allowsWaitingRoute(PedestrianLocalDeparture.publicContinuation(state, route))) continue;
+                if (!directService && PedestrianLocalDeparture.publicContinuation(state, route).filter(port.accessBoundary()::allowsWaitingRoute).isEmpty()) continue;
                 return route;
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 lastUnavailable = unavailable;
@@ -138,7 +141,7 @@ public final class ResidentMealKnownNavigation {
                 if (!ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
                     throw new IllegalArgumentException("accepted meal entrance lost its access turn");
             } else if (!waitingStationAvailable(state, meal, end)
-                    || !port.accessBoundary().allowsWaitingRoute(PedestrianLocalDeparture.publicContinuation(state, route)))
+                    || PedestrianLocalDeparture.publicContinuation(state, route).filter(port.accessBoundary()::allowsWaitingRoute).isEmpty())
                 throw new IllegalArgumentException("accepted meal approach is not a current waiting destination");
         } else if (!port.accessBoundary().cleared(end.standingBody()))
             throw new IllegalArgumentException("accepted meal clearance does not clear its access boundary");

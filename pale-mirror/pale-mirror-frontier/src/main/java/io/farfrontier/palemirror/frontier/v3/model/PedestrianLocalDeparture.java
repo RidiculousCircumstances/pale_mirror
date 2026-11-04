@@ -26,12 +26,12 @@ public final class PedestrianLocalDeparture {
     }
 
     /** A private-station escape precedes an outdoor approach; it is not an unauthorized re-entry. */
-    public static List<SurfaceAnchor> publicContinuation(FrontierWorldState state, List<SurfaceAnchor> route) {
+    public static java.util.Optional<List<SurfaceAnchor>> publicContinuation(FrontierWorldState state, List<SurfaceAnchor> route) {
         var start = route.getFirst();
-        if (publicPosition(state, start)) return route;
+        if (publicPosition(state, start)) return java.util.Optional.of(route);
         for (int index = 0; index < route.size(); index++)
-            if (publicPosition(state, route.get(index))) return route.subList(index, route.size());
-        throw new IllegalArgumentException("private departure route never reaches public geometry");
+            if (publicPosition(state, route.get(index))) return java.util.Optional.of(route.subList(index, route.size()));
+        return java.util.Optional.empty();
     }
 
     private static List<KnownPedestrianRouteKnowledge.SettlementPassage> exits(FrontierWorldState state, SurfaceAnchor start) {
