@@ -1,5 +1,25 @@
 # Active continuity — 2026-11-04
 
+## Latest — human combat recording diagnosed, no code changed
+
+User new bare-hand moving-fight report. Full capturef8defb8f-09c4-42c9-b618-
+b83da6eadba9,7898events/no loss,692ticks/34.5965s allSURVIVAL, same deployedf70/
+world332/native3141150.8punches/8damage vs4guard hits/16damage;12actual swings,
+8MISS allOUT_OF_REACH/4HIT;1earliercancel. Not global tick lag or creative immunity.
+Exact source bug: Executor derives scalar motion from observed coordinate pairs
+but supplies target.getDeltaMovement x/z to MeleeManeuvers.Facts/MeleePursuit.lead.
+19/22run proposals pass zero vector;16of those have clearly nonzero observed
+radial/lateral speed. Predictor thus usually has no lead for moving player.
+Other connected issues: closing movement ends at contact admission; QUICK/SWEEP
+lack bounded guidance (closesDistance=false), so punch+retreat opens distance from
+2.5-3to4-6during7-12tick QUICK pipeline.3ticks precede every published cue;
+not yet split into journal/scheduler, no claim of slow disk. Finite runs work but
+mostly walking/committed lateral; fatigue not main cause.34maneuverrefusals24PLANNING/
+10tactical0, not proof planner overloaded. Bothnear6 in119samples but0>=60degree
+separation: named flank not achieved; residual angle cause unproven before motion
+fix. Details docs/frontier-v3-human-combat-review-20261104.md. No source/runtime/
+player mutations, no new tests/client/agents/goal/push. IMPL clean60ebe26a0.
+
 ## Delivered — visible resident combat styles
 
 Implemented f70feb0ec, focused final99frontier+8NeoForge checks/guardrails/jar/
