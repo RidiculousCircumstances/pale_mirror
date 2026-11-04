@@ -11,7 +11,7 @@ public record CombatReadinessRules(int capacity, int recoveryDelayTicks, int rec
             if (cost < 1 || cost > capacity) throw new IllegalArgumentException("invalid combat effort cost");
     }
     public int cost(MeleeAttack attack) { return switch (attack) {
-        case QUICK -> quickCost; case LUNGE -> lungeCost; case SWEEP -> sweepCost; case FOLLOWUP -> followupCost;
+        case QUICK -> quickCost; case LUNGE -> lungeCost; case SWEEP -> sweepCost; case FOLLOWUP -> followupCost;default->Math.min(capacity,Math.max(quickCost,CombatTrainingCatalog.standard().require(attack).timing().preparationTicks()*3));
     }; }
     public int cost(MeleeManeuver.Kind kind) { return kind.closing() ? burstCost : backstepCost; }
     public static CombatReadinessRules initial() { return new CombatReadinessRules(100,16,2,14,30,24,18,35,25); }

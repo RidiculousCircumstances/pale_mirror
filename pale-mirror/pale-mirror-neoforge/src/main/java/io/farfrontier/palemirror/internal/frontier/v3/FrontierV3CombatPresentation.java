@@ -20,7 +20,7 @@ public final class FrontierV3CombatPresentation {
     private static final String KEY="pm_v3_combat_windup";
     static long start(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules,LivingEntity target){
         return begin(level,body,strike.owner().value(),strike.attemptOrdinal(),strike.attacker().body().physicalEpoch(),CombatGesture.strike(strike.attack()),
-            (int)rules.windup(strike.attack()),rules.techniques().require(strike.attack()).activeTicks(),rules.techniques().require(strike.attack()).recoveryTicks(),target);
+            (int)strike.timing(rules).preparationTicks(),strike.timing(rules).activeTicks(),strike.timing(rules).recoveryTicks(),target);
     }
     static long begin(ServerLevel level,Mob body,String owner,long ordinal,long epoch,CombatGesture gesture,int preparation,int active,int recovery,LivingEntity target){
         var marker=body.getPersistentData().getCompound(KEY);
@@ -34,7 +34,7 @@ public final class FrontierV3CombatPresentation {
                 case LUNGE -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_STRONG;
                 case SWEEP -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP;
                 case QUICK,FOLLOWUP -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_WEAK;
-                case BURST,BACKSTEP -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_NODAMAGE;
+                default -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_NODAMAGE;
             };
             level.playSound(null,body.blockPosition(),sound,net.minecraft.sounds.SoundSource.NEUTRAL,0.5f,1.0f);
         }
@@ -44,6 +44,12 @@ public final class FrontierV3CombatPresentation {
         var marker=body.getPersistentData().getCompound(KEY);
         if(!marker.getString("owner").equals(m.owner().value()) || marker.getLong("ordinal")!=m.attemptOrdinal() || marker.getInt("phase")!=CombatGesturePayload.Phase.PREPARING.wireTag())return;
         marker.putLong("startedAtTick",level.getGameTime()-marker.getInt("preparation"));marker.putInt("phase",CombatGesturePayload.Phase.IMPACT.wireTag());body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
+    }
+    static java.util.OptionalDouble defenceFacing(Mob body,MeleeManeuver maneuver){
+        var marker=body.getPersistentData().getCompound(KEY);
+        return marker.getString("owner").equals(maneuver.owner().value()) && marker.getLong("ordinal")==maneuver.attemptOrdinal()
+            && marker.getLong("epoch")==maneuver.actor().body().physicalEpoch() && marker.getInt("phase")==CombatGesturePayload.Phase.IMPACT.wireTag()
+            ?java.util.OptionalDouble.of(marker.getFloat("facingYaw")):java.util.OptionalDouble.empty();
     }
     static void maneuverEnded(ServerLevel level,Mob body,MeleeManeuver m){finish(level,body,m.owner().value(),m.attemptOrdinal(),CombatGesturePayload.Phase.CANCELLED);}
     static void impact(ServerLevel level,Mob body,MeleeStrike strike,LivingEntity target){
@@ -57,14 +63,14 @@ public final class FrontierV3CombatPresentation {
         long elapsed=level.getGameTime()-marker.getLong("startedAtTick");
         return marker.getLong("epoch")==strike.attacker().body().physicalEpoch()
                 && marker.getInt("phase")==CombatGesturePayload.Phase.PREPARING.wireTag()
-                && elapsed>=0 && elapsed<rules.windup(strike.attack());
+                && elapsed>=0 && elapsed<strike.timing(rules).preparationTicks();
     }
     /** Track only during early preparation. The final commitment and contact use a frozen facing. */
     static boolean track(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules,LivingEntity target){
         if(!strike.attack().guidesApproach())return false;
         var marker=body.getPersistentData().getCompound(KEY);long now=level.getGameTime();
         long elapsed=now-marker.getLong("startedAtTick");
-        long tracking=Math.min(rules.windup(strike.attack())-1,Math.max(1,(rules.windup(strike.attack())*rules.engagements().aimTrackPermille()+999)/1000));
+        long tracking=Math.min(strike.timing(rules).preparationTicks()-1,Math.max(1,(strike.timing(rules).preparationTicks()*rules.engagements().aimTrackPermille()+999)/1000));
         if(!marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal()
                 || marker.getLong("epoch")!=strike.attacker().body().physicalEpoch()
                 || marker.getInt("phase")!=CombatGesturePayload.Phase.PREPARING.wireTag() || elapsed<0 || elapsed>=tracking)return false;
@@ -98,7 +104,7 @@ public final class FrontierV3CombatPresentation {
     /** Local motion belongs to this cue's finite active lifetime, never to a rolling refresh timeout. */
     static java.util.OptionalLong guidanceDeadline(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules){
         if(!preparationRetained(level,body,strike))return java.util.OptionalLong.empty();
-        long end=body.getPersistentData().getCompound(KEY).getLong("startedAtTick")+rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks();
+        long end=body.getPersistentData().getCompound(KEY).getLong("startedAtTick")+strike.timing(rules).preparationTicks()+strike.timing(rules).activeTicks();
         return level.getGameTime()<=end?java.util.OptionalLong.of(end):java.util.OptionalLong.empty();
     }
     /** Validation reads the retained clock; it never starts a pose or changes native NBT. */
@@ -107,7 +113,7 @@ public final class FrontierV3CombatPresentation {
         return marker.getString("owner").equals(strike.owner().value()) && marker.getLong("ordinal")==strike.attemptOrdinal()
                 && marker.getLong("epoch")==strike.attacker().body().physicalEpoch()
                 && marker.getInt("phase")!=CombatGesturePayload.Phase.CANCELLED.wireTag()
-                && elapsed>=rules.windup(strike.attack()) && elapsed<=rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks();
+                && elapsed>=strike.timing(rules).preparationTicks() && elapsed<=strike.timing(rules).preparationTicks()+strike.timing(rules).activeTicks();
     }
     static boolean strikeArc(Mob body,LivingEntity target,MeleeStrike strike,MeleeRules rules){
         var marker=body.getPersistentData().getCompound(KEY);
@@ -118,6 +124,7 @@ public final class FrontierV3CombatPresentation {
                         case LUNGE -> rules.engagements().lungeTurnDegrees();
                         case SWEEP -> rules.techniques().sweepHalfAngleDegrees();
                         case QUICK,FOLLOWUP -> rules.engagements().quickTurnDegrees();
+                        default -> rules.training().require(strike.attack()).halfAngle();
                     });
     }
     static void cancel(ServerLevel level,Mob body,MeleeStrike strike){FrontierV3LocalGoalCorrection.withdraw(body,strike.attacker(),strike.attemptOrdinal());finish(level,body,strike,CombatGesturePayload.Phase.CANCELLED);}

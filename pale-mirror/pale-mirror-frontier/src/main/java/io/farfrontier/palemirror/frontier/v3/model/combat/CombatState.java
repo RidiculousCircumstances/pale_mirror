@@ -128,14 +128,16 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
         boolean missed=outcome==MeleeOutcome.MISS;
         if(!value.equals(pending.get(value.owner())) || tick<value.preparedAt())throw new IllegalArgumentException("stale melee completion");
         boolean continueMiss=missed && value.attack()==MeleeAttack.LUNGE && tick>=value.impactAt(rules);
+        var continuation=rules.training().require(value.attack()).next();
+        boolean continueChain=outcome!=MeleeOutcome.CANCELLED && continuation.isPresent() && value.attack()!=MeleeAttack.LUNGE;
         var next=ImmutableLookupMap.withoutEntry(followups,value.owner());
-        if(continueMiss)next=ImmutableLookupMap.withEntry(next,value.owner(),new MeleeFollowup(value.attacker(),value.target(),value.weapon(),
-                value.targetIncarnation(),value.attemptOrdinal(),tick,Math.addExact(tick,rules.followup().windowTicks())));
+        if(continueMiss || continueChain)next=ImmutableLookupMap.withEntry(next,value.owner(),new MeleeFollowup(value.attacker(),value.target(),value.weapon(),
+                value.targetIncarnation(),value.attemptOrdinal(),tick,Math.addExact(tick,rules.followup().windowTicks()),continueChain?continuation.orElseThrow():MeleeAttack.FOLLOWUP));
         var priorExchange=exchanges.get(value.owner());
         var exchange=(priorExchange!=null && priorExchange.matches(value)?priorExchange:MeleeExchange.first(value))
                 .completed(outcome,tick,rules.maneuvers().duel());
         return new CombatState(ImmutableLookupMap.withoutEntry(pending,value.owner()),
-                ImmutableLookupMap.withEntry(nextAttack,value.owner(),Math.max(Math.addExact(tick,continueMiss?rules.followup().recoveryTicks():rules.techniques().require(value.attack()).recoveryTicks()),
+                ImmutableLookupMap.withEntry(nextAttack,value.owner(),Math.max(Math.addExact(tick,continueMiss?rules.followup().recoveryTicks():value.timing(rules).recoveryTicks()),
                         Math.addExact(value.preparedAt(),value.profile().attackIntervalTicks()))),armaments,obstructions,stances,positions,evasions,maneuvers,engagements,next,readiness,ImmutableLookupMap.withEntry(exchanges,value.owner(),exchange));
     }
     public CombatState blocked(CombatOrder order,SurfaceAnchor station,long tick,MeleeRules rules){

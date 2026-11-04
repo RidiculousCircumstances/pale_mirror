@@ -78,7 +78,8 @@ public final class CombatEngagementPlanner {
     public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
         var plan=state.engagements().get(CombatEngagement.Key.of(order));
         if(plan==null || state.pending().containsKey(order.owner()) || state.recovering(order.owner(),tick)
-                || state.maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff(state,order,observer,attack,tick,rules) || !state.affords(order.owner(),tick,rules.readiness().cost(attack),rules)
+                || state.maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff(state,order,observer,attack,tick,rules) && !closedDefenceContact(state,order,observer,tick,rules) || !state.affords(order.owner(),tick,
+            CombatMechanics.cost(order.profile(),rules.readiness().cost(attack)),rules)
                 || plan.participants().keySet().stream().filter(state.pending()::containsKey).limit(rules.engagements().maximumWaveSize()).count()>=rules.engagements().maximumWaveSize())return false;
         if(plan.permits(order,observer,tick,rules.engagements()))return true;
         var member=plan.participants().get(order.owner());var stance=state.stances().get(order.owner());
@@ -89,11 +90,18 @@ public final class CombatEngagementPlanner {
     /** Admission preview only: the process must checkpoint and close this exact approach before Prepared. */
     public static boolean contactHandoff(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
         var maneuver=state.maneuvers().get(order.owner());var stance=state.stances().get(order.owner());
-        return attack!=MeleeAttack.LUNGE && maneuver!=null && maneuver.open() && maneuver.kind().closing()
+        return attack!=MeleeAttack.LUNGE && maneuver!=null && maneuver.open() && maneuver.permitsContactTransition(order.profile())
                 && (maneuver.launchedAt()>0 && tick>=maneuver.launchedAt() && tick<maneuver.launchedAt()+rules.maneuvers().travelTicks(maneuver.kind())
                     || maneuver.kind()==MeleeManeuver.Kind.PURSUIT_RUN && maneuver.launchedAt()==0)
                 && maneuver.matches(order) && maneuver.actor().equals(observer)
                 && stance!=null && stance.observer().equals(observer) && stance.current(order,tick,rules) && stance.attackReady();
+    }
+    /** The same canonical transaction just checkpointed this exact learned evade-to-contact transition. */
+    public static boolean closedDefenceContact(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long tick,MeleeRules rules){
+        var m=state.maneuvers().get(order.owner());var stance=state.stances().get(order.owner());
+        return m!=null && !m.open() && m.closedAt()==tick && m.launchedAt()>0 && !m.kind().closing()
+            && m.permitsContactTransition(order.profile()) && m.matches(order) && m.actor().equals(observer)
+            && stance!=null && stance.observer().equals(observer) && stance.current(order,tick,rules) && stance.attackReady();
     }
     /** Consumes an existing reservation when present; the retained pending strike itself owns immediate admission. */
     public static CombatState committed(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer){

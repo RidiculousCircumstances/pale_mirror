@@ -25,8 +25,8 @@ public final class MeleeManeuvers {
                 && (facts.distance()>=rules.distantGapMicros()/1_000_000.0 || facts.separatingSpeed()>=rules.retreatSpeedMicros()/1_000_000.0)?MeleeManeuver.Kind.BURST:null;
         if(kind==MeleeManeuver.Kind.BURST && MeleePositions.weapon(combat,order)
                 .filter(profile->facts.distance()<=rules.burstDistance()+profile.reach()).isEmpty())return Optional.empty();
-        return kind!=null && combat.affords(order.owner(),tick,melee.readiness().cost(kind),melee)
-                && allowed.contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
+        return kind!=null && combat.affords(order.owner(),tick,CombatMechanics.cost(order.profile(),melee.readiness().cost(kind)),melee)
+                && allowed.contains(kind) && CombatMechanics.permits(order.profile(),kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
     }
     public static Optional<SurfaceAnchor> destination(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,KnownPedestrianRouteKnowledge knowledge,long tick){
         return destination(state,order,kind,knowledge,tick,new Facts(distance(order.actorPosition(),order.targetPosition()),0)).station();
@@ -34,6 +34,7 @@ public final class MeleeManeuvers {
     public record Destination(Optional<SurfaceAnchor> station,String detail) { }
     public static Destination destination(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,KnownPedestrianRouteKnowledge knowledge,long tick,Facts facts){
         var rules=state.bootstrap().ruleset().melee().maneuvers();var origin=order.actorPosition();var target=order.targetPosition();
+        if(kind==MeleeManeuver.Kind.BLOCK)return new Destination(Optional.of(origin),"stationary weapon defence");
         int radius=rules.distance(kind);
         var physical=PedestrianInteractionStations.within(knowledge.geometry(),origin,radius*2,Set.of()).stream().filter(knowledge::clearStation).toList();
         var access=ServiceAccessCoordinator.transientDestinations(state,order.execution().actorId());
@@ -65,8 +66,9 @@ public final class MeleeManeuvers {
         if(gap<1.0E-6)return List.of();
         double dx=(target.x()-origin.x())/gap,dz=(target.z()-origin.z())/gap;
         var shape=rules.duel().shape();
-        double desiredX=origin.x()+dx*shape.forwardMicros()/1_000_000.0+dz*kind.side()*shape.lateralMicros()/1_000_000.0;
-        double desiredZ=origin.z()+dz*shape.forwardMicros()/1_000_000.0-dx*kind.side()*shape.lateralMicros()/1_000_000.0;
+        double forwardDistance=kind==MeleeManeuver.Kind.ADVANCE_LEFT || kind==MeleeManeuver.Kind.ADVANCE_RIGHT?1.0:kind==MeleeManeuver.Kind.DIAGONAL_LEFT || kind==MeleeManeuver.Kind.DIAGONAL_RIGHT?-0.5:0;
+        double desiredX=origin.x()+dx*forwardDistance+dz*kind.side()*shape.lateralMicros()/1_000_000.0;
+        double desiredZ=origin.z()+dz*forwardDistance-dx*kind.side()*shape.lateralMicros()/1_000_000.0;
         return candidates.stream().filter(point->{
             double x=point.x()-origin.x(),z=point.z()-origin.z();
             double side=(dz*x-dx*z)*kind.side(),forward=dx*x+dz*z;
@@ -74,7 +76,7 @@ public final class MeleeManeuvers {
             return Math.abs(point.x()-origin.x())+Math.abs(point.z()-origin.z())<=rules.distance(kind) && order.engagement().contains(point)
                     && point.y()<=origin.y()+order.navigation().stepUpBlocks()
                     && point.y()>=origin.y()-order.navigation().dropBlocks()
-                    && side>=shape.minimumSideMicros()/1_000_000.0 && forward>=shape.minimumForwardMicros()/1_000_000.0
+                    && side>=shape.minimumSideMicros()/1_000_000.0 && forward>=Math.min(shape.minimumForwardMicros()/1_000_000.0,forwardDistance-0.5)
                     && forward<=shape.maximumForwardMicros()/1_000_000.0 && next>=shape.minimumGapMicros()/1_000_000.0
                     && next<=gap+shape.radialSlackMicros()/1_000_000.0;
         }).distinct().sorted(Comparator.comparingDouble((SurfaceAnchor point)->Math.hypot(point.x()-desiredX,point.z()-desiredZ))
@@ -102,7 +104,8 @@ public final class MeleeManeuvers {
         var previous=state.combat().maneuvers().get(order.owner());var rules=state.bootstrap().ruleset().melee().maneuvers();
         return new MeleeManeuver(actor,order.weapon(),order.target(),kind,tick+1,order.actorPosition(),station,tick,0,0,
             kind==MeleeManeuver.Kind.BURST?tick+rules.burstCooldown():previous==null?0:previous.burstReadyAt(),
-            kind.lateral()?tick+rules.duel().lateralCooldown():kind==MeleeManeuver.Kind.BACKSTEP?tick+rules.retreatCooldown():previous==null?0:previous.retreatReadyAt(),
+            kind==MeleeManeuver.Kind.BLOCK?tick+CombatTrainingCatalog.standard().number("defence.blockCooldown"):kind.lateral()?tick+(order.profile().knows(CombatSkillId.EVASION,
+            CombatTrainingCatalog.standard().number("defence.chain"))?rules.duel().lateralCooldown()/2:rules.duel().lateralCooldown()):kind==MeleeManeuver.Kind.BACKSTEP?tick+rules.retreatCooldown():previous==null?0:previous.retreatReadyAt(),
             tick+(kind==MeleeManeuver.Kind.PURSUIT_RUN?rules.pursuit().sharedCooldown():kind.lateral()?rules.duel().sharedCooldown():rules.sharedCooldown()),
             kind==MeleeManeuver.Kind.PURSUIT_RUN?tick+rules.pursuit().cooldown():previous==null?0:previous.runReadyAt());
     }

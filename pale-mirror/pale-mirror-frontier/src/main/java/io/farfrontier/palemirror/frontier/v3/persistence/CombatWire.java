@@ -24,12 +24,13 @@ final class CombatWire {
     static void strike(DataOutputStream out,MeleeStrike value)throws IOException{
         id(out,value.owner());out.writeLong(value.ownerRevision());actuation(out,value.attacker());target(out,value.target());id(out,value.weapon());condition(out,value.before());
         profile(out,value.profile());out.writeByte(value.attack().wireTag());
-        out.writeLong(value.targetIncarnation());out.writeLong(value.attemptOrdinal());out.writeLong(value.preparedAt());
+        out.writeLong(value.targetIncarnation());out.writeLong(value.attemptOrdinal());out.writeLong(value.preparedAt());CombatProfileCodec.write(out,value.actorProfile());out.writeByte(value.additional().size());
+        for(var victim:value.additional()){target(out,victim.target());out.writeLong(victim.incarnation());}
     }
     static MeleeStrike strike(DataInputStream in)throws IOException{
         var duty=id(in);long revision=in.readLong();var attacker=actuation(in);var target=target(in);var weapon=id(in);var before=condition(in);
         var profile=profile(in);var attack=MeleeAttack.require(in.readUnsignedByte());
-        return new MeleeStrike(duty,revision,attacker,target,weapon,before,profile,attack,in.readLong(),in.readLong(),in.readLong());
+        return new MeleeStrike(duty,revision,attacker,target,weapon,before,profile,attack,in.readLong(),in.readLong(),in.readLong(),CombatProfileCodec.read(in),victims(in));
     }
     static void engagement(DataOutputStream out,CombatEnvelope value)throws IOException {
         target(out,value.target());out.writeByte(value.kind().wireTag());FrontierWorldStateCodec.writePosition(out,value.anchor().support());out.writeInt(value.radius());
@@ -37,8 +38,9 @@ final class CombatWire {
     static CombatEnvelope engagement(DataInputStream in)throws IOException {
         return new CombatEnvelope(target(in),CombatEnvelope.Kind.require(in.readUnsignedByte()),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readInt());
     }
-    static void profile(DataOutputStream out,WeaponProfile p)throws IOException{out.writeUTF(p.itemKind());out.writeDouble(p.damage());out.writeLong(p.attackIntervalTicks());out.writeDouble(p.reach());out.writeInt(p.wear());}
-    static WeaponProfile profile(DataInputStream in)throws IOException{return new WeaponProfile(in.readUTF(),in.readDouble(),in.readLong(),in.readDouble(),in.readInt());}
+    static void profile(DataOutputStream out,WeaponProfile p)throws IOException{out.writeUTF(p.itemKind());out.writeDouble(p.damage());out.writeLong(p.attackIntervalTicks());out.writeDouble(p.reach());
+            out.writeInt(p.wear());out.writeUTF(p.skill().value());}
+    static WeaponProfile profile(DataInputStream in)throws IOException{return new WeaponProfile(in.readUTF(),in.readDouble(),in.readLong(),in.readDouble(),in.readInt(),new CombatSkillId(in.readUTF()));}
     static void maneuver(DataOutputStream out,MeleeManeuver v)throws IOException{
         actuation(out,v.actor());id(out,v.weapon());target(out,v.target());out.writeByte(v.kind().wireTag());out.writeLong(v.attemptOrdinal());
         FrontierWorldStateCodec.writePosition(out,v.origin().support());FrontierWorldStateCodec.writePosition(out,v.station().support());
@@ -51,6 +53,12 @@ final class CombatWire {
     }
     static java.util.Optional<CombatFacing> facing(DataInputStream in)throws IOException{
         return in.readBoolean()?java.util.Optional.of(new CombatFacing(in.readInt(),in.readInt())):java.util.Optional.empty();
+    }
+    static void threat(DataOutputStream out,CombatThreatObservation value)throws IOException{out.writeLong(value.swingAt());out.writeLong(value.missedAt());out.writeByte(value.opponents());}
+    static CombatThreatObservation threat(DataInputStream in)throws IOException{return new CombatThreatObservation(in.readLong(),in.readLong(),in.readUnsignedByte());}
+    static java.util.List<CombatVictim> victims(DataInputStream in)throws IOException{
+        int count=in.readUnsignedByte();if(count>4)throw new IllegalArgumentException("area participant bound");
+        var values=new java.util.ArrayList<CombatVictim>();for(int i=0;i<count;i++)values.add(new CombatVictim(target(in),in.readLong()));return java.util.List.copyOf(values);
     }
     private CombatWire(){}
 }

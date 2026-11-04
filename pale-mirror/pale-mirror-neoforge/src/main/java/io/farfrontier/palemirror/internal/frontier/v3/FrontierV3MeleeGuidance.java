@@ -41,9 +41,17 @@ final class FrontierV3MeleeGuidance {
         double separation=strike.attack()==MeleeAttack.QUICK?Math.max(1.0,contactGap):strike.attack()==MeleeAttack.FOLLOWUP?
                 Math.max(1.0,strike.profile().reach()-state.bootstrap().ruleset().melee().rangeHysteresisMicros()/1_000_000.0):1.0;
         var station=SurfaceAnchor.at((int)Math.floor(target.getX()+direction.x*separation),contact.y(),(int)Math.floor(target.getZ()+direction.z*separation));
+        if(strike.attack()==MeleeAttack.LATERAL || strike.attack()==MeleeAttack.FLANK || strike.attack()==MeleeAttack.RETREAT){
+            var options=MeleeFootwork.candidates(state.combat(),permission.orElseThrow(),strike.attack(),origin.orElseThrow().supportingSurface(),contact,tick,state.bootstrap().ruleset().melee());
+            var selected=options.stream().filter(p->MeleePositions.available(state,permission.orElseThrow(),p,tick)).findFirst();
+            if(selected.isEmpty())return;station=selected.orElseThrow();
+        }
+        final var selectedStation=station;
         int radius=strike.attack().closesDistance()?state.bootstrap().ruleset().melee().engagements().lungeCorrectionBlocks():state.bootstrap().ruleset().melee().engagements().contactCorrectionBlocks();
+        if(strike.attack()==MeleeAttack.FLANK)radius=state.bootstrap().ruleset().melee().training().number("footwork.flankRadius");
+        final int permittedRadius=radius;
         if(origin.orElseThrow().supportingSurface().manhattanDistance(station)>radius
-                && order.legalStations().stream().noneMatch(p->p.manhattanDistance(station)<=radius)){trace(level,fighter,target,strike,"OUTSIDE_LATITUDE");return;}
+                && order.legalStations().stream().noneMatch(p->p.manhattanDistance(selectedStation)<=permittedRadius)){trace(level,fighter,target,strike,"OUTSIDE_LATITUDE");return;}
         if(strike.attack()==MeleeAttack.QUICK
                 && Math.hypot(station.x()+0.5-target.getX(),station.z()+0.5-target.getZ())
                     >=Math.hypot(fighter.getX()-target.getX(),fighter.getZ()-target.getZ())){trace(level,fighter,target,strike,"CONTACT_RETAINED");return;}

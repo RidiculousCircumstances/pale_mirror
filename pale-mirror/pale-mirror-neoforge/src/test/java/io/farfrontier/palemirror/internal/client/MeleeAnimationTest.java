@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.client;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+
 import io.farfrontier.palemirror.internal.network.CombatGesture;
 import io.farfrontier.palemirror.internal.network.CombatGesturePayload;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,7 @@ class MeleeAnimationTest {
     }
     @Test void everyManeuverUsesItsFullLifetimeWithoutEnlargingWeaponContactWindows(){
         var rules=MeleeRules.initial().maneuvers();
-        for(var kind:io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver.Kind.values()){
+        for(var kind:MeleeManeuver.Kind.values()){
             var gesture=CombatGesture.maneuver(kind);
             var cue=new CombatGesturePayload(1,new UUID(1,2),1,1,gesture,CombatGesturePayload.Phase.IMPACT,
                     100,100+rules.preparation(kind),rules.preparation(kind),rules.travelTicks(kind),rules.recovery(kind),0,0);
@@ -51,7 +53,7 @@ class MeleeAnimationTest {
                     rules.preparation(kind)+rules.travelTicks(kind)-1)).lean()));
         }
         for(var gesture:CombatGesture.values()){
-            int bound=gesture==CombatGesture.BURST || gesture==CombatGesture.BACKSTEP?60:20;
+            int bound=gesture.maximumActiveTicks();
             assertDoesNotThrow(()->new CombatGesturePayload(1,new UUID(1,2),1,1,gesture,
                     CombatGesturePayload.Phase.IMPACT,100,101,1,bound,1,0,0));
             assertThrows(IllegalArgumentException.class,()->new CombatGesturePayload(1,new UUID(1,2),1,1,gesture,
@@ -72,5 +74,17 @@ class MeleeAnimationTest {
         assertEquals(before,atCancel);
         var recovered=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.CANCELLED,19,5));
         assertEquals(MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,0,0)),recovered);
+    }
+    @Test void learnedTechniquesHaveReadablePhysicalPosesAndEveryStrikeReturnsToReady(){
+        for(var attack:MeleeAttack.values()){
+            var gesture=CombatGesture.strike(attack);var timing=MeleeRules.initial().techniques().require(attack);
+            assertEquals(MeleeAnimation.sample(frame(gesture,CombatGesturePayload.Phase.PREPARING,0,0)),
+                MeleeAnimation.sample(frame(gesture,CombatGesturePayload.Phase.IMPACT,timing.preparationTicks()+timing.activeTicks()+timing.recoveryTicks(),0)));
+        }
+        var kick=MeleeAnimation.sample(frame(CombatGesture.KICK,CombatGesturePayload.Phase.IMPACT,4,4));assertTrue(kick.leg()<-1);
+        var risingDraw=MeleeAnimation.sample(frame(CombatGesture.RISING,CombatGesturePayload.Phase.PREPARING,6,0));
+        var risingEnd=MeleeAnimation.sample(frame(CombatGesture.RISING,CombatGesturePayload.Phase.IMPACT,11,8));
+        assertTrue(risingDraw.shoulder()>0 && risingEnd.shoulder()<-2,"rising cut genuinely travels upward");
+        assertNotEquals(kick,risingEnd);
     }
 }

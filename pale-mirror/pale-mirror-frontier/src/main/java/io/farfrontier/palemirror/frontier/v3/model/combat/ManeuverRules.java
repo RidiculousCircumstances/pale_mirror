@@ -17,9 +17,10 @@ public record ManeuverRules(int preparation,int travelTicks,int recovery,int bur
     public static ManeuverRules initial(){return new ManeuverRules(4,20,6,100,60,40,30,3,1,2200,1500,3_500_000,8_000_000,4_500_000,30_000,1_000_000,4_000_000);}
     public MeleeDuelRules duel(){return MeleeDuelRules.initial();}
     public PursuitRules pursuit(){return PursuitRules.initial();}
-    public int preparation(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.PURSUIT_RUN?pursuit().preparation():kind.lateral()?duel().preparation():preparation;}
-    public int travelTicks(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.PURSUIT_RUN?pursuit().travelTicks():kind.lateral()?duel().travelTicks():travelTicks;}
-    public int recovery(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.PURSUIT_RUN?pursuit().recovery():kind.lateral()?duel().recovery():recovery;}
+    public int preparation(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.BLOCK?2: kind==MeleeManeuver.Kind.PURSUIT_RUN?pursuit().preparation():kind.lateral()?duel().preparation():preparation;}
+    public int travelTicks(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.BLOCK?CombatTrainingCatalog.standard().number("defence.blockTicks"): kind==MeleeManeuver.Kind.PURSUIT_RUN?
+            pursuit().travelTicks():kind.lateral()?duel().travelTicks():travelTicks;}
+    public int recovery(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.BLOCK?6: kind==MeleeManeuver.Kind.PURSUIT_RUN?pursuit().recovery():kind.lateral()?duel().recovery():recovery;}
     public int distance(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.PURSUIT_RUN?pursuit().distance():kind.lateral()?duel().lateralDistance():kind==MeleeManeuver.Kind.BURST?burstDistance:retreatDistance;}
     public int pacePermille(MeleeManeuver.Kind kind){return kind==MeleeManeuver.Kind.PURSUIT_RUN?pursuit().pacePermille():kind.lateral()?duel().pacePermille():kind==MeleeManeuver.Kind.BURST?burstPacePermille:retreatPacePermille;}
     public String canonicalText(){

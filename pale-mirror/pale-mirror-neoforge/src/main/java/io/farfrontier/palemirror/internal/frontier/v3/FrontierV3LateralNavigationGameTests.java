@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.PaleMirrorMod;
@@ -34,22 +35,23 @@ public final class FrontierV3LateralNavigationGameTests {
         var owner=new io.farfrontier.palemirror.frontier.v3.api.SubjectId("combat:lateral-path");
         var execution=new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(id,
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GUARD,owner,1);
-        var target=new io.farfrontier.palemirror.frontier.v3.model.combat.CombatTarget(
-                io.farfrontier.palemirror.frontier.v3.model.combat.CombatTarget.Kind.HOSTILE_MOB,new java.util.UUID(20,21),"minecraft:overworld");
+        var target=new CombatTarget(
+                CombatTarget.Kind.HOSTILE_MOB,new java.util.UUID(20,21),"minecraft:overworld");
         var source=SurfaceAnchor.at(origin.getX(),origin.getY(),origin.getZ());
-        var order=new io.farfrontier.palemirror.frontier.v3.model.combat.CombatOrder(execution,1,
+        var order=new CombatOrder(execution,1,
                 new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:lateral-sword"),
-                new io.farfrontier.palemirror.frontier.v3.model.combat.CombatPartyId(owner),
-                new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope(target,
-                        io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope.Kind.SELF_DEFENCE,source,8),
+                new CombatPartyId(owner),
+                new CombatEnvelope(target,
+                        CombatEnvelope.Kind.SELF_DEFENCE,source,8),
                 source.offset(2,0,0),100,100,source,io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER,Optional.empty(),CombatStyleCatalog.standard().require(
-                        new CombatStyleId("frontier:mobile")));
+                        new CombatStyleId("frontier:mobile")),
+                CombatProfileGeneration.create(139,1),CombatSkillId.SWORD);
         var scope=new FrontierV3NavigationScope.ObservedWorld(new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(origin.getX()-2,origin.getZ()-2,6,6));
-        var ranked=io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuvers.rank(order,
-                io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver.Kind.SIDESTEP_RIGHT,
-                List.of(source.offset(0,0,1),source.offset(1,1,1)),io.farfrontier.palemirror.frontier.v3.model.combat.ManeuverRules.initial());
+        var ranked=MeleeManeuvers.rank(order,
+                MeleeManeuver.Kind.SIDESTEP_RIGHT,
+                List.of(source.offset(0,0,1),source.offset(1,1,1)),ManeuverRules.initial());
         helper.assertTrue(ranked.size()==2 && ranked.getFirst().equals(source.offset(0,0,1)),"fixture presents a preferred but physically obstructed side");
-        var chosen=io.farfrontier.palemirror.frontier.v3.model.combat.MeleePositions.reachable(ranked,3,point->{
+        var chosen=MeleePositions.reachable(ranked,3,point->{
             if(!FrontierV3GoalNavigation.canReach(level,actor,FrontierV3GoalNavigation.Goal.station(point,scope)))
                 throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable("actual low roof");
         }).orElseThrow();

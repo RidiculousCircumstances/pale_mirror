@@ -44,10 +44,14 @@ public final class MeleeDuelPolicy {
                 default -> (order.execution().actorId().value().hashCode()&1)==0?1:-1;
             };
         }
-        var kind=side>0?MeleeManeuver.Kind.SIDESTEP_LEFT:MeleeManeuver.Kind.SIDESTEP_RIGHT;
-        if(!allowed.contains(kind))kind=kind==MeleeManeuver.Kind.SIDESTEP_LEFT?MeleeManeuver.Kind.SIDESTEP_RIGHT:MeleeManeuver.Kind.SIDESTEP_LEFT;
-        return allowed.contains(kind) && (prior==null || prior.ready(kind,tick))
-                && combat.affords(order.owner(),tick,rules.readiness().cost(kind),rules)?Optional.of(kind):Optional.empty();
+        var kind=order.profile().knows(CombatSkillId.EVASION,rules.training().number("defence.advance"))
+            ?(side>0?MeleeManeuver.Kind.ADVANCE_LEFT:MeleeManeuver.Kind.ADVANCE_RIGHT)
+            :order.profile().knows(CombatSkillId.EVASION,rules.training().number("defence.diagonal"))
+            ?(side>0?MeleeManeuver.Kind.DIAGONAL_LEFT:MeleeManeuver.Kind.DIAGONAL_RIGHT)
+            :(side>0?MeleeManeuver.Kind.SIDESTEP_LEFT:MeleeManeuver.Kind.SIDESTEP_RIGHT);
+        if((!allowed.contains(kind) || !CombatMechanics.permits(order.profile(),kind)))kind=kind.opposite();
+        return allowed.contains(kind) && CombatMechanics.permits(order.profile(),kind) && (prior==null || prior.ready(kind,tick))
+                && combat.affords(order.owner(),tick,CombatMechanics.cost(order.profile(),rules.readiness().cost(kind)),rules)?Optional.of(kind):Optional.empty();
     }
     public static Choice choose(FrontierWorldState state,CombatOrder order,MeleeManeuvers.Facts facts,long tick,CombatCapability capability) {
         var profile=MeleePositions.weapon(state.combat(),order);
@@ -65,8 +69,18 @@ public final class MeleeDuelPolicy {
         if(combat.pending().containsKey(order.owner()))return Choice.of(Action.WAIT);
         var prior=combat.maneuvers().get(order.owner());
         if(prior!=null && prior.busy(tick,rules.maneuvers()))
-            return Choice.of(prior.kind().closing() && (!prior.open() || prior.launchedAt()>0 || prior.kind()==MeleeManeuver.Kind.PURSUIT_RUN) && contact && attackReady
+            return Choice.of(prior.permitsContactTransition(order.profile()) && (!prior.open() || prior.launchedAt()>0 || prior.kind()==MeleeManeuver.Kind.PURSUIT_RUN) && contact && attackReady
                     ?Action.ATTACK:Action.WAIT);
+        var stance=combat.stances().get(order.owner());
+        if(facts.threateningSwing() && stance!=null && stance.current(order,tick,rules) && stance.threat().reacts(order.profile(),tick)){
+            var defensive=side(combat,order,tick,rules,memory(combat,order,tick,rules,harm),allowed);
+            if(defensive.isPresent() && order.style().lateralWeight()>=order.style().retreatWeight())return Choice.maneuver(defensive.orElseThrow());
+            if(allowed.contains(MeleeManeuver.Kind.BLOCK) && CombatMechanics.permits(order.profile(),MeleeManeuver.Kind.BLOCK)
+                    && (prior==null || prior.ready(MeleeManeuver.Kind.BLOCK,tick))
+                    && combat.affords(order.owner(),tick,CombatMechanics.cost(order.profile(),rules.readiness().backstepCost()),rules))
+                return Choice.maneuver(MeleeManeuver.Kind.BLOCK);
+            if(defensive.isPresent())return Choice.maneuver(defensive.orElseThrow());
+        }
         if(contact && attackReady && !combat.recovering(order.owner(),tick) && CombatFormation.pressureNeeded(combat,order,tick,rules))return Choice.of(Action.ATTACK);
         if(!contact && facts.distance()>rules.maneuvers().duel().maximumGapMicros()/1_000_000.0
                 && CombatFormation.pressureNeeded(combat,order,tick,rules) && !combat.recovering(order.owner(),tick)){
@@ -85,7 +99,7 @@ public final class MeleeDuelPolicy {
     private static Choice styled(CombatState combat,CombatOrder order,MeleeManeuvers.Facts facts,long tick,MeleeRules rules,
             OptionalLong harm,Set<MeleeManeuver.Kind> allowed,boolean attackReady,boolean contact){
         var style=order.style();var options=new java.util.ArrayList<Weighted>();var prior=combat.maneuvers().get(order.owner());
-        int attackCost=rules.readiness().cost(contact?MeleeAttack.QUICK:MeleeAttack.LUNGE)+(contact?0:style.effortReserve());
+        int attackCost=CombatMechanics.cost(order.profile(),rules.readiness().cost(contact?MeleeAttack.QUICK:MeleeAttack.LUNGE))+(contact?0:style.effortReserve());
         if(attackReady && CombatReadiness.available(combat.readiness().get(order.owner()),tick,rules.readiness())>=attackCost)
             options.add(new Weighted(Choice.of(Action.ATTACK),style.attackWeight()));
         if(!contact){
@@ -113,8 +127,8 @@ public final class MeleeDuelPolicy {
     private static void offer(java.util.List<Weighted> options,CombatState combat,CombatOrder order,MeleeManeuver.Kind kind,int weight,
             Set<MeleeManeuver.Kind> allowed,long tick,MeleeRules rules){
         var prior=combat.maneuvers().get(order.owner());
-        if(weight==0 || !allowed.contains(kind) || prior!=null && !prior.ready(kind,tick)
-                || CombatReadiness.available(combat.readiness().get(order.owner()),tick,rules.readiness())<rules.readiness().cost(kind)+order.style().effortReserve())return;
+        if(weight==0 || (!allowed.contains(kind) || !CombatMechanics.permits(order.profile(),kind)) || prior!=null && !prior.ready(kind,tick)
+                || CombatReadiness.available(combat.readiness().get(order.owner()),tick,rules.readiness())<CombatMechanics.cost(order.profile(),rules.readiness().cost(kind))+order.style().effortReserve())return;
         options.add(new Weighted(Choice.maneuver(kind),prior!=null && prior.kind()==kind?Math.max(1,weight/2):weight));
     }
     private MeleeDuelPolicy() { }

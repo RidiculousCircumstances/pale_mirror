@@ -6,6 +6,7 @@ import java.util.*;
 /** Role adapter supplies permission/reference and lifecycle feedback; it never applies a hit. */
 public interface CombatCapability {
     ActorActivityKind kind();
+    CombatProfile profile(FrontierWorldState state,ActorExecutionId execution);
     void requireReference(FrontierWorldState state,ActorExecutionId execution);
     void requirePending(FrontierWorldState state,MeleeStrike strike);
     List<CombatOrder> orders(FrontierWorldState state,long tick);
@@ -18,7 +19,8 @@ public interface CombatCapability {
     OptionalLong harmedAt(FrontierWorldState state,CombatOrder order);
     Set<MeleeManeuver.Kind> maneuvers();
     List<ProposedEvent> wake(FrontierWorldState state,ActorExecutionId execution,long tick);
-    Optional<Fact> targetEnded(FrontierWorldState state,MeleeStrike strike);
+    Set<CombatTarget> areaTargets(FrontierWorldState state,CombatOrder order,long tick);
+    Optional<Fact> targetEnded(FrontierWorldState state,ActorActuationId actor,CombatTarget target);
     record Fact(SubjectId subject,FrontierPayload payload) {
         public Fact {Objects.requireNonNull(subject);Objects.requireNonNull(payload);}
     }

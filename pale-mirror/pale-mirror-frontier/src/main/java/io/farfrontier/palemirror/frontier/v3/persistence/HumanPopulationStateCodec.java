@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+
 import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
@@ -429,6 +431,7 @@ final class HumanPopulationStateCodec {
         for(var factor:characteristics.movementModifiers().factors().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output,factor.getKey().value()); output.writeInt(factor.getValue());
         }
+        CombatProfileCodec.write(output,resident.combatProfile());
     }
 
     private static ResidentProfile readProfile(DataInputStream input, boolean hasCapabilityProfile) throws IOException {
@@ -457,6 +460,6 @@ final class HumanPopulationStateCodec {
             throw new IllegalArgumentException("duplicate movement modifier");
         return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), name,
                 birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers, work,
-                    new ResidentMovementModifiers(movementBase,movement)),style);
+                    new ResidentMovementModifiers(movementBase,movement)),style,CombatProfileCodec.read(input));
     }
 }

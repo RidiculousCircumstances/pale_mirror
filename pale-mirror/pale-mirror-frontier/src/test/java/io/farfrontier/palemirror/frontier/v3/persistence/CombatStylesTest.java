@@ -15,14 +15,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class CombatStylesTest {
     private static final MeleeRules RULES=MeleeRules.initial();
     private static final SurfaceAnchor TARGET=SurfaceAnchor.at(0,63,0);
-    private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1);
+    private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1,CombatSkillId.SWORD);
     private static CombatStyle style(String name){return RULES.styles().require(new CombatStyleId("frontier:"+name));}
     private static CombatOrder order(int i,CombatStyle style){
         var owner=new SubjectId("shipment:style-"+i);var actor=new SubjectId("resident:style-"+i);
         var enemy=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"minecraft:overworld");
         return new CombatOrder(new ActorExecutionId(actor,ActorActivityKind.COURIER,owner,1),1,new SubjectId("item:style-"+i),
                 new CombatPartyId(new SubjectId("party:styles")),new CombatEnvelope(enemy,CombatEnvelope.Kind.SELF_DEFENCE,TARGET,32),
-                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),style);
+                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),style,combatProfile(),CombatSkillId.SWORD);
     }
     private static CombatState armed(CombatOrder order){return CombatState.empty().observed(new CombatState.Armament(order.execution(),order.weapon(),SWORD));}
     private static MeleeDuelPolicy.Choice choose(CombatState state,CombatOrder order,MeleeManeuvers.Facts facts,long tick,boolean attack){
@@ -57,12 +57,13 @@ class CombatStylesTest {
         var pressing=order(1,style("pressing"));var cautious=order(1,style("cautious"));
         assertEquals(candidates.getFirst(),MeleePositions.rank(pressing,SWORD,candidates,List.of(),sector,RULES,Optional.empty()).getFirst());
         assertEquals(candidates.getLast(),MeleePositions.rank(cautious,SWORD,candidates,List.of(),sector,RULES,Optional.empty()).getFirst());
-        var shortWeapon=new WeaponProfile("short",2,20,1,1);
+        var shortWeapon=new WeaponProfile("short",2,20,1,1,CombatSkillId.SWORD);
         assertTrue(RULES.holdReach(shortWeapon,true,cautious.style())<=shortWeapon.reach());
         var actor=new ActorActuationId(new ActorBodyId(pressing.execution().actorId(),1),pressing.execution());
         var move=new MeleeManeuver(actor,pressing.weapon(),pressing.target(),MeleeManeuver.Kind.BACKSTEP,101,
                 pressing.actorPosition(),pressing.actorPosition().offset(1,0,0),100,101,0,0,160,140,0);
-        assertEquals(MeleeDuelPolicy.Action.WAIT,choose(armed(pressing).maneuver(move),pressing,new MeleeManeuvers.Facts(2.8,0),105,true).action());
+        assertEquals(MeleeDuelPolicy.Action.ATTACK,choose(armed(pressing).maneuver(move),pressing,new MeleeManeuvers.Facts(2.8,0),105,true).action(),"trained evasion can hand contact to the weapon");
+        assertFalse(move.closed(105).ready(MeleeManeuver.Kind.BACKSTEP,105),"contact transition cannot reset the defensive cooldown");
     }
     @Test void personalReferenceSurvivesRoleTrainingRelocationSnapshotAndUnknownDefinitionsFail(){
         var state=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:combat-styles"),139));
@@ -80,10 +81,10 @@ class CombatStylesTest {
         assertEquals(back,MeleePositions.rank(order,SWORD,List.of(front,back),List.of(),sector,RULES,facing).getFirst());
         assertEquals(front,MeleePositions.rank(order,SWORD,List.of(front,back),List.of(),sector,RULES,Optional.empty()).getFirst());
         var body=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var state=armed(order).stance(new MeleeStance(body,order.target(),false,false,100,facing));
+        var state=armed(order).stance(new MeleeStance(body,order.target(),false,false,100,facing,CombatThreatObservation.none()));
         assertEquals(facing,MeleeRearApproach.facing(state,order,100,RULES));
         assertTrue(MeleeRearApproach.facing(state,order,113,RULES).isEmpty(),"an old sighting cannot supply a live facing");
-        assertTrue(MeleeRearApproach.facing(state.stance(new MeleeStance(body,order.target(),true,true,100,facing)),order,100,RULES).isEmpty(),
+        assertTrue(MeleeRearApproach.facing(state.stance(new MeleeStance(body,order.target(),true,true,100,facing,CombatThreatObservation.none())),order,100,RULES).isEmpty(),
                 "real contact must not be sacrificed for another orbit");
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
@@ -97,5 +98,12 @@ class CombatStylesTest {
             String invalid=text.replace("pressing.attack=120","pressing.attack=0");assertNotEquals(text,invalid);
             assertThrows(IllegalArgumentException.class,()->CombatStyleCatalog.read(new ByteArrayInputStream(invalid.getBytes(StandardCharsets.UTF_8))));
         }
+    }
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
     }
 }

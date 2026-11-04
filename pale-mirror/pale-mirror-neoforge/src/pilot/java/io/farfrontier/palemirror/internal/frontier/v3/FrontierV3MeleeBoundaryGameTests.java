@@ -59,7 +59,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
         var point=helper.absolutePos(new BlockPos(4,8,4));player.setPos(point.getX()+0.5,point.getY(),point.getZ()+0.5);
         var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setPos(player.position());
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(7,8,4));target.setNoAi(true);
-        var weapon=FrontierV3WeaponProfiles.read(new ItemStack(Items.IRON_SWORD));
+        var weapon=FrontierV3WeaponProfiles.read(new ItemStack(Items.IRON_SWORD),CombatSkillId.SWORD);
         helper.assertTrue(Math.abs(weapon.reach()-player.entityInteractionRange())<0.0001,"weapon and survival player use the same interaction attribute");
         for(double distance:new double[]{2.5,2.9,3.1,3.4}){
             target.setPos(player.getX()+distance+target.getBbWidth()/2.0,player.getY(),player.getZ());
@@ -97,14 +97,18 @@ public final class FrontierV3MeleeBoundaryGameTests {
             fighter.discard();player.discard();helper.succeed();
         });
     }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void risingStrikeUsesDurableContactAndCannotReplayKnockback(GameTestHelper helper){durableAdmission(helper,MeleeAttack.RISING);}
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void kickUsesShortPhysicalContactAndCannotReplay(GameTestHelper helper){durableAdmission(helper,MeleeAttack.KICK);}
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void circularContactUsesItsOwnDurableCueAndCannotReplay(GameTestHelper helper){durableAdmission(helper,MeleeAttack.CIRCLE);}
     private static void durableAdmission(GameTestHelper helper,MeleeAttack attack){
         var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
-        var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),attack);
-        helper.assertTrue(io.farfrontier.palemirror.internal.network.CombatGesture.strike(attack)
-                ==(attack==MeleeAttack.FOLLOWUP?io.farfrontier.palemirror.internal.network.CombatGesture.FOLLOWUP
-                    :attack==MeleeAttack.QUICK?io.farfrontier.palemirror.internal.network.CombatGesture.QUICK
-                    :io.farfrontier.palemirror.internal.network.CombatGesture.LUNGE),"the attack has its own warning");
+        var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),attack,"durable-"+attack.name().toLowerCase(Locale.ROOT));
+        if(attack==MeleeAttack.KICK)target.setPos(fighter.getX()+0.8,fighter.getY(),fighter.getZ());
+        helper.assertTrue(io.farfrontier.palemirror.internal.network.CombatGesture.strike(attack).name().equals(attack.name()),"the attack has its own warning");
 
         var actorPort=FrontierV3OperationEntityParticipant.nativeObject(fighter);
         var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);var ports=List.of(actorPort,targetPort);
@@ -118,11 +122,11 @@ public final class FrontierV3MeleeBoundaryGameTests {
             // Keep canonical time initially at Prepared: both preparations must run concurrently.
             long canonical=strike.preparedAt()+level.getGameTime()-visibleSince.get();
             var admission=FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,canonical);
-            if(level.getGameTime()-visibleSince.get()==rules.windup(strike.attack()))
+            if(level.getGameTime()-visibleSince.get()==strike.timing(rules).preparationTicks())
                 helper.assertTrue(admission.ready(),"aligned clocks need one windup, not canonical then native");
             return admission;
         },()->{
-            helper.assertTrue(level.getGameTime()-visibleSince.get()>=rules.windup(strike.attack()),"native cue must last its complete preparation after admission");
+            helper.assertTrue(level.getGameTime()-visibleSince.get()>=strike.timing(rules).preparationTicks(),"native cue must last its complete preparation after admission");
             helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules),"effect needs a live finite impact window");
             helper.assertTrue(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"actual production contact effect accepted");hits.incrementAndGet();
             return FrontierV3NativeEffect.Outcome.APPLIED;
@@ -132,7 +136,8 @@ public final class FrontierV3MeleeBoundaryGameTests {
                     ()->FrontierV3CombatPresentation.preparationAvailable(level,fighter,strike),effect,()->hits.get()==1);
             if(level.getGameTime()<admittedAfter)helper.assertTrue(visibleSince.get()==-1 && target.getHealth()==health,"waiting for admission must neither animate nor hurt");
             if(!result.complete())return;
-            helper.assertTrue(target.getHealth()==health-6 && hits.get()==1,"one native hit, not merely a swing");
+            helper.assertTrue(Math.abs(target.getHealth()-(health-CombatMechanics.damage(strike.actorProfile(),strike.profile(),strike.attack())))<0.001 && hits.get()==1,
+                "one calibrated native hit, not merely a swing");
             var observed=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->false,effect,()->hits.get()==1);
             helper.assertTrue(observed.complete() && hits.get()==1,"completed native receipts never repeat the damage");
             FrontierV3CombatPresentation.cancel(level,fighter,strike);
@@ -157,7 +162,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
             attempts.incrementAndGet();return FrontierV3NativeEffect.Outcome.APPLIED;
         });
         helper.onEachTick(()->{
-            if(level.getGameTime()-began<=rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks())return;
+            if(level.getGameTime()-began<=strike.timing(rules).preparationTicks()+strike.timing(rules).activeTicks())return;
             var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,
                     ()->FrontierV3CombatPresentation.preparationRetained(level,fighter,strike),effect,()->attempts.get()==1);
             if(!result.complete())return;
@@ -179,7 +184,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
             float corrected=fighter.getPersistentData().getCompound("pm_v3_combat_windup").getFloat("facingYaw");
             helper.assertTrue(corrected<0 && corrected>=-rules.engagements().aimTurnDegreesPerTick(),"no instantaneous right-angle homing");yaw.set(corrected);
         });
-        helper.runAfterDelay(rules.windup(strike.attack()),()->{
+        helper.runAfterDelay(strike.timing(rules).preparationTicks(),()->{
             target.setPos(fighter.getX()+0.5,fighter.getY(),fighter.getZ()+2);
             helper.assertFalse(FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),"impact cannot keep tracking a circling player");
             helper.assertTrue(fighter.getPersistentData().getCompound("pm_v3_combat_windup").getFloat("facingYaw")==yaw.get(),"committed facing remains frozen");
@@ -197,7 +202,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(8,8,4));target.setNoAi(true);target.setNoGravity(true);
         var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),MeleeAttack.FOLLOWUP);float health=target.getHealth();
         FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
-        helper.runAfterDelay(rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks(),()->{
+        helper.runAfterDelay(strike.timing(rules).preparationTicks()+strike.timing(rules).activeTicks(),()->{
             helper.assertTrue(FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,strike.impactAt(rules)).ready(),
                     "a finite completed swing can be recorded as a miss");
             helper.assertFalse(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"short step allowance is not damage reach");
@@ -273,6 +278,38 @@ public final class FrontierV3MeleeBoundaryGameTests {
             });
         });
     }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void circularStrikeAccountsEveryParticipantAndSkipsRevokedTargetsWithoutReplay(GameTestHelper helper){
+        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        fighter.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,new ItemStack(Items.IRON_SWORD));
+        var primary=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,6));primary.setNoAi(true);primary.setNoGravity(true);
+        var other=helper.spawn(EntityType.VILLAGER,new BlockPos(6,8,4));other.setNoAi(true);other.setNoGravity(true);
+        var revoked=helper.spawn(EntityType.VILLAGER,new BlockPos(2,8,4));revoked.setNoAi(true);revoked.setNoGravity(true);
+        var second=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,other.getUUID(),level.dimension().location().toString());
+        var third=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,revoked.getUUID(),level.dimension().location().toString());
+        var raw=strike(level.getGameTime(),MeleeAttack.CIRCLE,"area-participants");
+        var strike=new MeleeStrike(raw.owner(),raw.ownerRevision(),raw.attacker(),raw.target(),raw.weapon(),raw.before(),raw.profile(),raw.attack(),raw.targetIncarnation(),
+            raw.attemptOrdinal(),raw.preparedAt(),raw.actorProfile(),List.of(new CombatVictim(second,FrontierV3OperationEntityParticipant.nativeObject(other).identity().incarnation()),
+                new CombatVictim(third,FrontierV3OperationEntityParticipant.nativeObject(revoked).identity().incarnation())));
+        var ports=List.of(FrontierV3OperationEntityParticipant.nativeObject(fighter),FrontierV3OperationEntityParticipant.nativeObject(primary),
+            FrontierV3OperationEntityParticipant.nativeObject(other),FrontierV3OperationEntityParticipant.nativeObject(revoked));
+        var declaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.owner(),"strike-"+strike.attemptOrdinal(),strike.toString(),
+            ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
+        var applied=new AtomicBoolean();var attempts=new AtomicInteger();float untouched=revoked.getHealth();var rules=MeleeRules.initial();
+        var effect=new FrontierV3NativeEffect(()->FrontierV3CombatExecutor.prepareImpact(level,fighter,primary,strike,rules,level.getGameTime()),()->{
+            attempts.incrementAndGet();helper.assertTrue(FrontierV3CombatExecutor.applyDeclaredImpact(level,fighter,primary,strike,rules,Set.of(second),ignored->{}),"real area contact");
+            applied.set(true);return FrontierV3NativeEffect.Outcome.APPLIED;
+        });
+        helper.onEachTick(()->{
+            var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->FrontierV3CombatPresentation.preparationAvailable(level,fighter,strike),effect,applied::get);
+            if(!result.complete())return;
+            helper.assertTrue(primary.getHealth()<20 && other.getHealth()<20,"both explicitly permitted physical targets receive damage");
+            helper.assertTrue(revoked.getHealth()==untouched,"revoked permission must prevent collateral damage");
+            var again=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->false,effect,applied::get);
+            helper.assertTrue(again.complete() && attempts.get()==1,"multi-participant operation cannot replay any impact");
+            fighter.discard();primary.discard();other.discard();revoked.discard();helper.succeed();
+        });
+    }
     private static MeleeStrike strike(long tick){return strike(tick,MeleeAttack.LUNGE);}
     private static MeleeStrike strike(long tick,MeleeAttack attack){
         return strike(tick,attack,attack==MeleeAttack.FOLLOWUP?"recovery-test":"windup-test");
@@ -285,7 +322,14 @@ public final class FrontierV3MeleeBoundaryGameTests {
                 new ActorActuationId(new ActorBodyId(actor.actorId(),1),actor),
                 new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"minecraft:overworld"),
                 new SubjectId("item:windup-sword"),new ItemCondition(250,0),
-                FrontierV3WeaponProfiles.read(new ItemStack(Items.IRON_SWORD)),attack,1,tick+1,tick);
+                FrontierV3WeaponProfiles.read(new ItemStack(Items.IRON_SWORD),CombatSkillId.SWORD),attack,1,tick+1,tick,combatProfile(),java.util.List.of());
     }
     private FrontierV3MeleeBoundaryGameTests() { }
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
+    }
 }

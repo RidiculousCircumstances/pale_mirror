@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+
 import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
@@ -12,7 +14,7 @@ import java.io.IOException;
 
 /** Wire codecs owned by the human-population boundary. */
 final class HumanPopulationPayloadCodecs {
-    private static final int BORN_FORMAT = 0x52424f34; // RBO4: explicit combat style reference on birth.
+    private static final int BORN_FORMAT = 0x52424f35; // RBO5: explicit actor combat profile on birth.
     private HumanPopulationPayloadCodecs() { }
 
     static PayloadCodec starvationIntegrated() {
@@ -572,6 +574,7 @@ final class HumanPopulationPayloadCodecs {
         for (HumanCapability capability : HumanCapability.values()) output.writeByte(resident.capability(capability));
         writeCharacteristics(output, resident.characteristics());
         FrontierWorldPayloadCodecs.writeString(output,resident.combatStyle().value());
+        CombatProfileCodec.write(output,resident.combatProfile());
     }
     private static ResidentProfile readProfile(DataInputStream input) throws IOException {
         var id = FrontierWorldPayloadCodecs.readSubject(input); var household = FrontierWorldPayloadCodecs.readSubject(input); var settlement = FrontierWorldPayloadCodecs.readSubject(input);
@@ -583,7 +586,7 @@ final class HumanPopulationPayloadCodecs {
         for (HumanCapability capability : HumanCapability.values()) capabilities.put(capability, input.readUnsignedByte());
         return new ResidentProfile(id.value(), household.value(), settlement.value(), FrontierWireTags.require(ResidentRole.class, role),
                 name, birthTick, skills, capabilities, readCharacteristics(input),
-                new CombatStyleId(FrontierWorldPayloadCodecs.readString(input)));
+                new CombatStyleId(FrontierWorldPayloadCodecs.readString(input)),CombatProfileCodec.read(input));
     }
 
     private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {

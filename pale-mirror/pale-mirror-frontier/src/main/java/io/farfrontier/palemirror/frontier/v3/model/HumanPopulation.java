@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+
 import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleCatalog;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
@@ -102,7 +104,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 households.putIfAbsent(householdId, new Household(householdId, settlement.id()));
                 ResidentProfile profile = new ResidentProfile(resident.id(), householdId, settlement.id(), resident.role(),
                         ResidentNames.create(bootstrap.seed(), resident.id()),
-                        -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal),CombatStyleCatalog.standard().forBirth(bootstrap.seed(),resident.id()));
+                        -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal),CombatStyleCatalog.standard().forBirth(bootstrap.seed(),resident.id()),
+            CombatProfileGeneration.create(bootstrap.seed(),resident.id().value().hashCode()));
                 profile = profile.withCharacteristics(ResidentCharacteristics.initial(
                         bootstrap.ruleset().residentLife(), resident.id()));
                 residents.put(resident.id(), profile);

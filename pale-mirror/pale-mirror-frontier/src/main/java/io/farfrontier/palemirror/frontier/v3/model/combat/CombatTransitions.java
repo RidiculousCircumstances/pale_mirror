@@ -36,10 +36,10 @@ public final class CombatTransitions {
                     || !m.equals(MeleeManeuvers.selected(state,order,m.actor(),m.kind(),m.station(),tick))
                     || !MeleeManeuvers.useful(state,order,m.kind(),m.station())
                     || m.kind().lateral() && MeleeManeuvers.rank(order,m.kind(),List.of(m.station()),state.bootstrap().ruleset().melee().maneuvers()).isEmpty()
-                    || !capabilities.require(order.execution()).maneuvers().contains(m.kind()) || combat.pending().containsKey(subject)
+                    || !CombatMechanics.permits(order.profile(),m.kind()) || !capabilities.require(order.execution()).maneuvers().contains(m.kind()) || combat.pending().containsKey(subject)
                     || prior!=null && !prior.ready(m.kind(),tick) || state.actorMovements().containsKey(order.execution().actorId()))
                 throw new IllegalArgumentException("maneuver lacks exact current permission, checkpoint or cooldown");
-            combat=combat.releasePosition(subject).maneuver(m).spent(subject,tick,state.bootstrap().ruleset().melee().readiness().cost(m.kind()),state.bootstrap().ruleset().melee());
+            combat=combat.releasePosition(subject).maneuver(m).spent(subject,tick,CombatMechanics.cost(order.profile(),state.bootstrap().ruleset().melee().readiness().cost(m.kind())),state.bootstrap().ruleset().melee());
             if(m.kind().lateral())combat=combat.withExchange(subject,MeleeDuelPolicy.memory(state,order,tick,capabilities.require(execution)).repositioned(m.kind()));
         }else if(event instanceof CombatEvent.ManeuverLaunched launch){
             var m=combat.maneuvers().get(subject);var order=requireOrder(state,capabilities,launch.observer(),tick);
@@ -56,14 +56,18 @@ public final class CombatTransitions {
         }else if(event instanceof CombatEvent.Prepared prepared){
             var strike=prepared.strike();var order=requireOrder(state,capabilities,strike.attacker(),tick);var item=state.inventory().items().get(strike.weapon());
             var followup=combat.followups().get(strike.owner());
-            if(strike.attack()==MeleeAttack.FOLLOWUP && (followup==null
+            if(state.bootstrap().ruleset().melee().training().require(strike.attack()).use()==CombatTrainingCatalog.Use.CONTINUATION && (followup==null
+                    || followup.next()!=strike.attack()
                     || !followup.matches(order,strike.attacker(),strike.targetIncarnation(),tick)
                     || strike.attemptOrdinal()<=followup.missedOrdinal()))
                 throw new IllegalArgumentException("followup lacks exact unspent missed-lunge continuation");
-            if(!subject.equals(strike.owner()) || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
+            var permitted=capabilities.require(order.execution()).areaTargets(state,order,tick);
+            if(strike.additional().stream().anyMatch(v->!permitted.contains(v.target())))throw new IllegalArgumentException("area strike contains an unpermitted target");
+            if(!strike.actorProfile().equals(order.profile()) || !strike.profile().skill().equals(order.weaponSkill()) || !subject.equals(strike.owner()) || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
                     || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon()) || strike.preparedAt()!=tick
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
                     || combat.maneuverBlocksStrike(strike.owner(),tick,state.bootstrap().ruleset().melee().maneuvers())
+                        && !CombatEngagementPlanner.closedDefenceContact(combat,order,strike.attacker(),tick,state.bootstrap().ruleset().melee())
                     || tick<combat.nextAttack().getOrDefault(strike.owner(),0L)
                     || state.actorMovements().containsKey(order.execution().actorId())
                         && !capabilities.require(order.execution()).permitsApproach(state,state.actorMovements().get(order.execution().actorId())))
@@ -71,12 +75,12 @@ public final class CombatTransitions {
             if(!CombatEngagementPlanner.permitsStrike(combat,order,strike.attacker(),strike.attack(),tick,state.bootstrap().ruleset().melee()))
                 throw new IllegalArgumentException("strike has no current close-contact or coordinated admission");
             combat=CombatEngagementPlanner.committed(combat,order,strike.attacker())
-                    .prepared(strike).spent(subject,tick,state.bootstrap().ruleset().melee().readiness().cost(strike.attack()),state.bootstrap().ruleset().melee());
+                    .prepared(strike).spent(subject,tick,CombatMechanics.cost(order.profile(),state.bootstrap().ruleset().melee().readiness().cost(strike.attack())),state.bootstrap().ruleset().melee());
         }else if(event instanceof CombatEvent.Completed outcome){
             var strike=Objects.requireNonNull(combat.pending().get(outcome.owner()),"pending melee attempt");
             capabilities.require(strike.attacker().execution()).requirePending(state,strike);
             if(!subject.equals(outcome.owner()) || outcome.outcome()!=MeleeOutcome.CANCELLED && tick<strike.impactAt(state.bootstrap().ruleset().melee()) || outcome.attemptOrdinal()!=strike.attemptOrdinal()
-                    || !outcome.after().equals(outcome.applied() && strike.profile().wear()>0?strike.before().wear(strike.profile().wear()):strike.before()))
+                    || !outcome.after().equals(outcome.applied() && strike.wear()>0?strike.before().wear(strike.wear()):strike.before()))
                 throw new IllegalArgumentException("melee outcome lost its exact effect/wear declaration");
             var item=state.inventory().items().get(strike.weapon());
             if(outcome.applied() && item!=null){

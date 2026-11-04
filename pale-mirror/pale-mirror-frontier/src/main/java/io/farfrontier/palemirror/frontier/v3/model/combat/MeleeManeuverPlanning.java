@@ -15,7 +15,7 @@ public final class MeleeManeuverPlanning {
         var result=MeleeManeuvers.destination(state,order,preferred,knowledge,tick,facts);
         if(result.station().isPresent())return new Assessment(Optional.of(new Candidate(preferred,result.station().orElseThrow())),result.detail());
         if(preferred.lateral()){
-            var other=preferred==MeleeManeuver.Kind.SIDESTEP_LEFT?MeleeManeuver.Kind.SIDESTEP_RIGHT:MeleeManeuver.Kind.SIDESTEP_LEFT;
+            var other=preferred.opposite();
             if(capability.maneuvers().contains(other)){
                 var alternative=MeleeManeuvers.destination(state,order,other,knowledge,tick,facts);
                 if(alternative.station().isPresent())return new Assessment(Optional.of(new Candidate(other,alternative.station().orElseThrow())),alternative.detail());

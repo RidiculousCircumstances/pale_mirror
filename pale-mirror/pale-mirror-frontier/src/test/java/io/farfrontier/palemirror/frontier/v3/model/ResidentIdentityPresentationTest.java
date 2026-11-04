@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatSkillId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
@@ -22,7 +25,7 @@ class ResidentIdentityPresentationTest {
         assertEquals("Unassigned", view.role());
         assertEquals("Idle", view.activity());
         var forgedName = new ResidentProfile(person.id(), person.householdId(), person.settlementId(), person.role(),
-                "Another Name", person.birthTick(), person.skills(), person.capabilities(),person.combatStyle());
+                "Another Name", person.birthTick(), person.skills(), person.capabilities(),person.combatStyle(),combatProfile());
         assertThrows(IllegalArgumentException.class, () -> recovered.humanPopulation().withProfile(forgedName));
     }
 
@@ -32,7 +35,14 @@ class ResidentIdentityPresentationTest {
         var person = state.humanPopulation().residents().values().iterator().next();
         for (String invalid : new String[]{"", " leading", "line\nname", "a".repeat(49)}) {
             assertThrows(IllegalArgumentException.class, () -> new ResidentProfile(person.id(), person.householdId(),
-                    person.settlementId(), person.role(), invalid, person.birthTick(), person.skills(), person.capabilities(),person.combatStyle()));
+                    person.settlementId(), person.role(), invalid, person.birthTick(), person.skills(), person.capabilities(),person.combatStyle(),combatProfile()));
         }
+    }
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
     }
 }

@@ -19,7 +19,7 @@ final class CombatStateCodec {
         }
         out.writeInt(state.stances().size());for(var v:state.stances().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){
             id(out,v.getKey());var stance=v.getValue();actuation(out,stance.observer());target(out,stance.target());out.writeBoolean(stance.holding());out.writeBoolean(stance.attackReady());out.writeLong(stance.atTick());
-                facing(out,stance.targetFacing());
+                facing(out,stance.targetFacing());threat(out,stance.threat());
         }
         out.writeInt(state.positions().size());for(var v:state.positions().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){
             id(out,v.getKey());var point=v.getValue();ActorExecutionStateCodec.writeId(out,point.execution());target(out,point.target());FrontierWorldStateCodec.writePosition(out,point.targetPosition().support());
@@ -32,7 +32,7 @@ out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeBy
         out.writeInt(state.followups().size());
         for(var f:state.followups().values().stream().sorted(Comparator.comparing(MeleeFollowup::owner)).toList()){
             actuation(out,f.actor());target(out,f.target());id(out,f.weapon());out.writeLong(f.targetIncarnation());
-            out.writeLong(f.missedOrdinal());out.writeLong(f.openedAt());out.writeLong(f.expiresAt());
+            out.writeLong(f.missedOrdinal());out.writeLong(f.openedAt());out.writeLong(f.expiresAt());out.writeByte(f.next().wireTag());
         }
         out.writeInt(state.readiness().size());
         for(var entry:state.readiness().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){
@@ -59,7 +59,7 @@ out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeBy
             unique(blocked,key,new CombatState.Obstruction(execution,target,point,stations,tick));
         }
         n=count(in);var stances=new LinkedHashMap<SubjectId,MeleeStance>();
-        for(int i=0;i<n;i++)unique(stances,id(in),new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readBoolean(),in.readLong(),facing(in)));
+        for(int i=0;i<n;i++)unique(stances,id(in),new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readBoolean(),in.readLong(),facing(in),CombatWire.threat(in)));
         n=count(in);var positions=new LinkedHashMap<SubjectId,MeleePosition>();
         for(int i=0;i<n;i++){
             var key=id(in);var execution=ActorExecutionStateCodec.readId(in);var target=target(in);var point=new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
@@ -71,7 +71,7 @@ unique(positions,key,new MeleePosition(execution,target,point,station,in.readInt
         for(int i=0;i<n;i++){var value=CombatEngagementCodec.read(in);if(engagements.putIfAbsent(value.key(),value)!=null)throw new IllegalArgumentException("duplicate encounter");}
         n=count(in);var followups=new LinkedHashMap<SubjectId,MeleeFollowup>();
         for(int i=0;i<n;i++){
-            var f=new MeleeFollowup(actuation(in),target(in),id(in),in.readLong(),in.readLong(),in.readLong(),in.readLong());
+            var f=new MeleeFollowup(actuation(in),target(in),id(in),in.readLong(),in.readLong(),in.readLong(),in.readLong(),MeleeAttack.require(in.readUnsignedByte()));
             unique(followups,f.owner(),f);
         }
         n=count(in);var readiness=new LinkedHashMap<SubjectId,CombatReadiness>();

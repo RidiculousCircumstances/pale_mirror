@@ -17,9 +17,10 @@ public record MeleeTechniques(Technique quick,Technique lunge,Technique sweep,in
                 || sweepHalfAngleDegrees<45 || sweepHalfAngleDegrees>100)throw new IllegalArgumentException("invalid sweep policy");
     }
     public Technique require(MeleeAttack attack){
-        return switch(attack){case QUICK->quick;case LUNGE->lunge;case SWEEP->sweep;case FOLLOWUP->MeleeFollowupRules.initial().technique();};}
+        return switch(attack){case QUICK->quick;case LUNGE->lunge;case SWEEP->sweep;case FOLLOWUP->CombatTrainingCatalog.standard().require(attack).timing();default->CombatTrainingCatalog.standard().require(attack).timing();};}
     public static MeleeTechniques initial(){
-        return new MeleeTechniques(new Technique(2,3,6,350_000),new Technique(8,4,14,650_000),new Technique(6,3,12,0),2_200_000,100_000,100);
+        var data=CombatTrainingCatalog.standard();
+        return new MeleeTechniques(data.require(MeleeAttack.QUICK).timing(),data.require(MeleeAttack.LUNGE).timing(),data.require(MeleeAttack.SWEEP).timing(),2_200_000,100_000,100);
     }
     public String canonicalText(){
         return "quick="+quick.canonicalText()+"|lunge="+lunge.canonicalText()

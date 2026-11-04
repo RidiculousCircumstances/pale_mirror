@@ -80,7 +80,7 @@ class LayeredPedestrianNavigationTest {
         var target=new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(1,2),"minecraft:overworld");
         var order=new CombatOrder(execution,1,new SubjectId("item:sword"),
                 new CombatPartyId(new SubjectId("party:test")),new CombatEnvelope(target,CombatEnvelope.Kind.AREA_DEFENCE,origin,32),enemy,1,100,origin,UnitNavigationProfile.VILLAGER,Optional.empty(),
-                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0));
+                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0),combatProfile(),CombatSkillId.SWORD);
         var landing=SurfaceAnchor.at(2,60,0);
         var ranked=MeleeManeuvers.rank(order,MeleeManeuver.Kind.BURST,List.of(landing),ManeuverRules.initial());assertEquals(List.of(landing),ranked);
         BiFunction<Integer,Integer,List<SurfaceAnchor>> levels=(x,z)->List.of(SurfaceAnchor.at(x,58+x,z));
@@ -152,5 +152,12 @@ class LayeredPedestrianNavigationTest {
             assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(dense, denseStart, denseEnd).orElseThrow().status());
             KnownPedestrianNavigation.requireRoute(dense, planner.peek(dense, denseStart, denseEnd).orElseThrow().route());
         }
+    }
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
     }
 }

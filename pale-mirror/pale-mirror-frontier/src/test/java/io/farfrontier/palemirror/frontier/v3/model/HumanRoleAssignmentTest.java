@@ -1,4 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+import io.farfrontier.palemirror.frontier.v3.model.combat.CombatSkillId;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 
 import io.farfrontier.palemirror.frontier.v3.model.combat.CombatStyleId;
@@ -45,7 +48,7 @@ class HumanRoleAssignmentTest {
         Map<HumanCapability, Integer> capabilities = new EnumMap<>(original.capabilities());
         capabilities.put(HumanCapability.SECURITY, 100);
         ResidentProfile retrained = new ResidentProfile(original.id(), original.householdId(), original.settlementId(), original.role(),
-                original.name(), original.birthTick(), original.skills(), capabilities,original.combatStyle());
+                original.name(), original.birthTick(), original.skills(), capabilities,original.combatStyle(),combatProfile());
         state = state.withHumanPopulation(state.humanPopulation().withProfile(retrained));
 
         assertEquals(original.id(), state.humanPopulation().resident(original.id()).id());
@@ -59,13 +62,13 @@ class HumanRoleAssignmentTest {
         FrontierWorldState state = initial("frontier:human-profile-migration");
         ResidentProfile original = state.humanPopulation().resident(new SubjectId("resident:1-1"));
         ResidentProfile legacy = new ResidentProfile(original.id(), original.householdId(), original.settlementId(), ResidentRole.CRAFTER,
-                original.name(), original.birthTick(), original.skills(),new CombatStyleId("frontier:pressing"));
+                original.name(), original.birthTick(), original.skills(),new CombatStyleId("frontier:pressing"),combatProfile());
 
         assertEquals(original.name(), legacy.name());
         assertEquals(legacy.skill(ResidentSkill.CRAFTING), legacy.capability(HumanCapability.INDUSTRY));
         assertThrows(IllegalArgumentException.class, () -> state.humanPopulation().withProfile(new ResidentProfile(original.id(),
                 new SubjectId("household:foreign"), original.settlementId(), original.role(), original.name(), original.birthTick(),
-                original.skills(), original.capabilities(),original.combatStyle())));
+                original.skills(), original.capabilities(),original.combatStyle(),combatProfile())));
     }
 
     @Test
@@ -128,14 +131,14 @@ class HumanRoleAssignmentTest {
 
     private static ResidentProfile born(FrontierWorldState state, String id, ResidentRole role) {
         ResidentProfile parent = state.humanPopulation().resident(new SubjectId("resident:1-1"));
-        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, "Test Resident", 0L, parent.skills(),new CombatStyleId("frontier:pressing"));
+        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, "Test Resident", 0L, parent.skills(),new CombatStyleId("frontier:pressing"),combatProfile());
     }
 
     private static ResidentProfile born(FrontierWorldState state, String id, ResidentRole role, ResidentSkill skill, int value) {
         ResidentProfile parent = state.humanPopulation().resident(new SubjectId("resident:1-1"));
         Map<ResidentSkill, Integer> skills = new EnumMap<>(parent.skills());
         skills.put(skill, value);
-        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, "Test Resident", 0L, skills,new CombatStyleId("frontier:pressing"));
+        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, "Test Resident", 0L, skills,new CombatStyleId("frontier:pressing"),combatProfile());
     }
 
     private static ExactInventory withBread(ExactInventory inventory, SubjectId settlement) {
@@ -157,4 +160,11 @@ class HumanRoleAssignmentTest {
     }
 
 
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
+    }
 }

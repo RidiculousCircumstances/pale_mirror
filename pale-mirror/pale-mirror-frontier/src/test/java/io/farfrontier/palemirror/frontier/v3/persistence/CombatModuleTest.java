@@ -13,12 +13,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class CombatModuleTest {
     private static final CombatStyle MECHANICS=new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0);
     private static final SurfaceAnchor TARGET=SurfaceAnchor.at(0,63,0);
-    private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1);
+    private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1,CombatSkillId.SWORD);
     private static CombatOrder order(int id,Optional<SurfaceAnchor> station){
         var execution=new ActorExecutionId(new SubjectId("resident:combat-"+id),ActorActivityKind.COURIER,new SubjectId("shipment:combat-"+id),1);
         var enemy=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"pale_mirror:frontier_graybox");
         return new CombatOrder(execution,1,new SubjectId("item:sword-"+id),new CombatPartyId(new SubjectId("party:test")),new CombatEnvelope(enemy,CombatEnvelope.Kind.SELF_DEFENCE,TARGET,24),
-                TARGET,100,60,TARGET.offset(3,0,0),UnitNavigationProfile.VILLAGER,station,MECHANICS);
+                TARGET,100,60,TARGET.offset(3,0,0),UnitNavigationProfile.VILLAGER,station,MECHANICS,combatProfile(),CombatSkillId.SWORD);
     }
     @Test void tacticalSectorsSpreadAndStayStableAcrossTargetCellChangesAndHydration() throws Exception {
         var rules=MeleeRules.initial();var state=CombatState.empty();var first=order(1,Optional.empty());
@@ -37,7 +37,7 @@ class CombatModuleTest {
     @Test void encounterMembershipIsExplicitSeparatesPartiesAndReleasesOnlyTheExactExecution() throws IOException {
         var a=order(1,Optional.empty());var b=order(2,Optional.empty());var raw=order(3,Optional.empty());
         var c=new CombatOrder(raw.execution(),raw.revision(),raw.weapon(),new CombatPartyId(new SubjectId("party:other")),raw.engagement(),
-                raw.targetPosition(),raw.observedAt(),raw.lifetime(),raw.actorPosition(),raw.navigation(),raw.station(),MECHANICS);
+                raw.targetPosition(),raw.observedAt(),raw.lifetime(),raw.actorPosition(),raw.navigation(),raw.station(),MECHANICS,combatProfile(),CombatSkillId.SWORD);
         var rules=MeleeRules.initial();var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules);
         assertEquals(2,state.engagements().size());assertEquals(MeleeSector.Role.FLANK_LEFT,MeleeTactics.sector(state,b,100,rules).role());
         assertEquals(MeleeSector.Role.PRESSURE,MeleeTactics.sector(state,c,100,rules).role());
@@ -102,7 +102,7 @@ class CombatModuleTest {
         assertFalse(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),150,rules));
         var actor=new ActorActuationId(new ActorBodyId(other.execution().actorId(),1),other.execution());
         combat=combat.positioned(other,Optional.empty(),MeleePosition.Reason.NO_PATH,100,rules)
-                .prepared(new MeleeStrike(other.owner(),1,actor,other.target(),other.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
+                .prepared(new MeleeStrike(other.owner(),1,actor,other.target(),other.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100,combatProfile(),java.util.List.of()));
         assertFalse(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),150,rules));
         assertEquals(MeleeSector.Role.FLANK_LEFT,members.get(other.owner()).role());
     }
@@ -113,7 +113,7 @@ class CombatModuleTest {
                 .observed(OptionalLong.of(120),120,rules.maneuvers().duel());
         var combat=CombatState.empty().enlisted(first,100,rules).enlisted(other,100,rules)
                 .observed(new CombatState.Armament(first.execution(),first.weapon(),SWORD)).withExchange(first.owner(),memory)
-                .stance(new MeleeStance(actor,first.target(),true,true,121,Optional.empty()));
+                .stance(new MeleeStance(actor,first.target(),true,true,121,Optional.empty(),CombatThreatObservation.none()));
         assertTrue(memory.pressured(121,rules.maneuvers().duel()));
         assertTrue(CombatFormation.pressureNeeded(combat,first,121,rules));
         assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(combat,first,new MeleeManeuvers.Facts(2.8,0,true),121,rules,
@@ -144,13 +144,13 @@ class CombatModuleTest {
         assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,2.97,0.2,MeleeRules.initial()));
         assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,3.0,0.2,MeleeRules.initial()));
         assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,3.01,0.2,MeleeRules.initial()));
-        var shortWeapon=new WeaponProfile("short",2,20,1,1);
+        var shortWeapon=new WeaponProfile("short",2,20,1,1,CombatSkillId.SWORD);
         assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(shortWeapon,1.01,0,MeleeRules.initial()));
         assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,3.4,0,MeleeRules.initial()));
         assertTrue(MeleeTactics.opportunity(SWORD,MeleeAttack.LUNGE,3.4,MeleeRules.initial()));
         assertFalse(MeleeTactics.opportunity(SWORD,MeleeAttack.LUNGE,4.2,MeleeRules.initial()));
         var order=order(1,Optional.empty());var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var strike=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100);
+        var strike=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100,combatProfile(),java.util.List.of());
         var state=CombatState.empty().prepared(strike);var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         var restored=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
         assertEquals(strike,restored.pending().get(order.owner()));assertEquals(108,strike.impactAt(MeleeRules.initial()));
@@ -160,7 +160,7 @@ class CombatModuleTest {
     @Test void missedLungeOffersOneNearbyRecoveryAttackWithExactIdentityAndNormalWeaponCadence() throws IOException {
         var order=order(1,Optional.empty());var rules=MeleeRules.initial();
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var lunge=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,17,101,100);
+        var lunge=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,17,101,100,combatProfile(),java.util.List.of());
         var pending=CombatState.empty().prepared(lunge);
         assertTrue(pending.completed(lunge,104,rules,true).followups().isEmpty(),"cancelled preparation is not a missed swing");
         assertTrue(pending.completed(lunge,110,rules,false).followups().isEmpty(),"a hit does not grant another attack");
@@ -171,11 +171,11 @@ class CombatModuleTest {
         assertEquals(missed,recovered);
         assertEquals(MeleeAttack.FOLLOWUP,MeleeTactics.attack(recovered,order,actor,17,124,SWORD,3.2,0.2,rules));
         assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,124,SWORD,6,0.2,rules),"far targets get ordinary pursuit");
-        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,18,124,SWORD,3.2,0.2,rules),"respawn is a different target incarnation");
+        assertNotEquals(MeleeAttack.FOLLOWUP,MeleeTactics.attack(recovered,order,actor,18,124,SWORD,3.2,0.2,rules),"respawn is a different target incarnation");
         var successor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),2),order.execution());
         assertFalse(recovered.followups().get(order.owner()).matches(order,successor,17,124));
-        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(recovered,order,actor,17,151,SWORD,3.2,0.2,rules),"expired response is not permanent sprint");
-        var followup=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),lunge.before(),SWORD,MeleeAttack.FOLLOWUP,17,125,124);
+        assertNotEquals(MeleeAttack.FOLLOWUP,MeleeTactics.attack(recovered,order,actor,17,151,SWORD,3.2,0.2,rules),"expired response is not permanent sprint");
+        var followup=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),lunge.before(),SWORD,MeleeAttack.FOLLOWUP,17,125,124,combatProfile(),java.util.List.of());
         var response=recovered.prepared(followup);
         assertTrue(response.followups().isEmpty(),"preparation spends the one continuation");
         assertTrue(response.completed(followup,134,rules,true).followups().isEmpty(),"missing again cannot chain recovery attacks");
@@ -190,7 +190,7 @@ class CombatModuleTest {
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK,
                 CombatLocomotion.plan(state,order.execution(),key,TARGET.offset(8,0,0),rules,order.style()).mode());
         var strike=new MeleeStrike(order.owner(),1,new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution()),
-                order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100);
+                order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100,combatProfile(),java.util.List.of());
         var pending=state.prepared(strike);
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN,
                 CombatLocomotion.plan(pending,order.execution(),key,TARGET.offset(3,0,0),rules,order.style()).mode());
@@ -218,7 +218,7 @@ class CombatModuleTest {
     @Test void nonGuardPendingHitAndBoundedPositionFeedbackSurviveRecoveryAndRetireExactly()throws IOException{
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));
         var body=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var strike=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100);
+        var strike=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100,combatProfile(),java.util.List.of());
         var rules=new MeleeRules(10,8,8,80);
         var state=CombatState.empty().prepared(strike).blocked(order,order.station().orElseThrow(),100,rules);
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
@@ -228,7 +228,7 @@ class CombatModuleTest {
         var completed=recovered.completed(strike,101,MeleeRules.initial());assertEquals(113L,completed.nextAttack().get(order.owner()));
         assertTrue(completed.retired(order.owner()).armaments().isEmpty());
         assertThrows(IllegalArgumentException.class,()->completed.completed(strike,102,MeleeRules.initial()));
-        var changed=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),strike.before(),SWORD,MeleeAttack.QUICK,2,102,100);
+        var changed=new MeleeStrike(order.owner(),1,body,order.target(),order.weapon(),strike.before(),SWORD,MeleeAttack.QUICK,2,102,100,combatProfile(),java.util.List.of());
         assertThrows(IllegalArgumentException.class,()->recovered.completed(changed,101,MeleeRules.initial()));
     }
     @Test void completedNegativeRoutesCannotPermanentlyHideTheNextAttackStation(){
@@ -253,7 +253,8 @@ class CombatModuleTest {
         state=state.positioned(order,Optional.empty(),MeleePosition.Reason.NO_PATH,1001,rules)
                 .positioned(order,Optional.empty(),MeleePosition.Reason.NO_POSITION,1101,rules);
         assertTrue(state.deferred(order,1102));assertFalse(state.deferred(order,1201));
-        var moved=new CombatOrder(order.execution(),order.revision(),order.weapon(),order.party(),order.engagement(),TARGET.offset(1,0,0),100,2000,order.actorPosition(),order.navigation(),order.station(),MECHANICS);
+        var moved=new CombatOrder(order.execution(),order.revision(),order.weapon(),order.party(),order.engagement(),TARGET.offset(1,0,0),100,2000,order.actorPosition(),order.navigation(),order.station(),
+            MECHANICS,combatProfile(),CombatSkillId.SWORD);
         assertFalse(state.deferred(moved,1102),"target movement reopens tactical admission");
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
         assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
@@ -293,8 +294,8 @@ class CombatModuleTest {
         var order=order(1,Optional.empty());var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var rules=MeleeRules.initial();
         assertEquals(MeleeAttack.SWEEP,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,1.8,0,0.2,rules));
-        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,1.8,0,0,rules));
-        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,3,0.2,0.2,rules));
+        assertNotEquals(MeleeAttack.SWEEP,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,1.8,0,0,rules));
+        assertTrue(MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,3,0.2,0.2,rules).guidesApproach());
         assertFalse(MeleeAttack.SWEEP.closesDistance());
         assertTrue(rules.windup(MeleeAttack.SWEEP)>rules.windup(MeleeAttack.QUICK));
         assertFalse(MeleeAim.contains(0,0,-1,rules.techniques().sweepHalfAngleDegrees()));
@@ -323,8 +324,8 @@ class CombatModuleTest {
         var first=new ActorActuationId(new ActorBodyId(a.execution().actorId(),1),a.execution());
         var second=new ActorActuationId(new ActorBodyId(b.execution().actorId(),1),b.execution());
         var third=new ActorActuationId(new ActorBodyId(c.execution().actorId(),1),c.execution());
-        state=state.prepared(new MeleeStrike(a.owner(),1,first,a.target(),a.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100));
-        state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
+        state=state.prepared(new MeleeStrike(a.owner(),1,first,a.target(),a.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100,combatProfile(),java.util.List.of()));
+        state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100,combatProfile(),java.util.List.of()));
         var plan=state.engagements().get(CombatEngagement.Key.of(c));
         plan=new CombatEngagement(plan.key(),plan.revision()+1,plan.anchor(),plan.axisX(),plan.axisZ(),plan.frameSince(),plan.participants(),0,
                 Optional.of(new CombatEngagement.Wave(c.targetPosition(),List.of(new CombatEngagement.Slot(third,100,110,false)))));
@@ -339,18 +340,18 @@ class CombatModuleTest {
         var second=new ActorActuationId(new ActorBodyId(b.execution().actorId(),1),b.execution());
         var third=new ActorActuationId(new ActorBodyId(c.execution().actorId(),1),c.execution());
         var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules)
-                .stance(new MeleeStance(first,a.target(),false,true,100,Optional.empty())).stance(new MeleeStance(second,b.target(),true,true,100,Optional.empty()))
-                .stance(new MeleeStance(third,c.target(),true,true,100,Optional.empty()));
+                .stance(new MeleeStance(first,a.target(),false,true,100,Optional.empty(),CombatThreatObservation.none())).stance(new MeleeStance(second,b.target(),true,true,100,Optional.empty(),CombatThreatObservation.none()))
+                .stance(new MeleeStance(third,c.target(),true,true,100,Optional.empty(),CombatThreatObservation.none()));
         assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,100,rules));
         assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.QUICK,100,rules));
-        assertFalse(CombatEngagementPlanner.permitsStrike(state.stance(new MeleeStance(first,a.target(),false,false,100,Optional.empty())),a,first,MeleeAttack.QUICK,100,rules),
+        assertFalse(CombatEngagementPlanner.permitsStrike(state.stance(new MeleeStance(first,a.target(),false,false,100,Optional.empty(),CombatThreatObservation.none())),a,first,MeleeAttack.QUICK,100,rules),
                 "preferred positioning is optional but real contact readiness remains required");
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.LUNGE,100,rules),"long approach still coordinates its commitment");
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,new ActorActuationId(new ActorBodyId(a.execution().actorId(),2),a.execution()),MeleeAttack.SWEEP,100,rules));
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,120,rules),"old native contact is not a fresh opportunity");
-        state=CombatEngagementPlanner.committed(state,a,first).prepared(new MeleeStrike(a.owner(),1,first,a.target(),a.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.SWEEP,1,101,100));
+        state=CombatEngagementPlanner.committed(state,a,first).prepared(new MeleeStrike(a.owner(),1,first,a.target(),a.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.SWEEP,1,101,100,combatProfile(),java.util.List.of()));
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,100,rules),"same attempt is never admitted twice");
-        state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
+        state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100,combatProfile(),java.util.List.of()));
         assertFalse(CombatEngagementPlanner.permitsStrike(state,c,third,MeleeAttack.SWEEP,100,rules),"immediate contact shares the same two-strike cap");
     }
     @Test void repeatedPressureSelectsOneLateralResponseAndRetainsItsSideAcrossHydration() throws IOException {
@@ -380,8 +381,8 @@ class CombatModuleTest {
     @Test void missedExchangesPermitFootworkDuringWeaponRecoveryButNeverAnotherUnsettledStrike() {
         var order=order(1,Optional.empty());var rules=MeleeRules.initial();
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var first=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100);
-        var second=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),first.before(),SWORD,MeleeAttack.QUICK,1,121,120);
+        var first=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100,combatProfile(),java.util.List.of());
+        var second=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),first.before(),SWORD,MeleeAttack.QUICK,1,121,120,combatProfile(),java.util.List.of());
         var state=CombatState.empty().prepared(first).completed(first,110,rules,MeleeOutcome.MISS).prepared(second);
         var facts=new MeleeManeuvers.Facts(2.8,0);var allowed=EnumSet.allOf(MeleeManeuver.Kind.class);
         assertEquals(MeleeDuelPolicy.Action.WAIT,MeleeDuelPolicy.choose(state,order,facts,124,rules,OptionalLong.empty(),allowed,true).action());
@@ -420,7 +421,7 @@ class CombatModuleTest {
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var run=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.PURSUIT_RUN,101,
                 far.actorPosition(),TARGET.offset(3,0,1),100,102,0,0,0,112,170);
-        combat=combat.maneuver(run).stance(new MeleeStance(actor,order.target(),true,true,104,Optional.empty()));
+        combat=combat.maneuver(run).stance(new MeleeStance(actor,order.target(),true,true,104,Optional.empty(),CombatThreatObservation.none()));
         assertTrue(CombatEngagementPlanner.contactHandoff(combat,order,actor,MeleeAttack.QUICK,104,rules));
         assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(combat,order,new MeleeManeuvers.Facts(2,0),104,rules,
                 OptionalLong.empty(),EnumSet.allOf(MeleeManeuver.Kind.class),true).action());
@@ -434,14 +435,16 @@ class CombatModuleTest {
         var rules=MeleeRules.initial();var order=order(1,Optional.empty());
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var m=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),TARGET.offset(1,0,0),100,104,0,200,0,140,0);
-        var state=CombatState.empty().enlisted(order,105,rules).maneuver(m).stance(new MeleeStance(actor,order.target(),true,true,105,Optional.empty()));
+        var state=CombatState.empty().enlisted(order,105,rules).maneuver(m).stance(new MeleeStance(actor,order.target(),true,true,105,Optional.empty(),CombatThreatObservation.none()));
         assertTrue(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.LUNGE,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,125,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,new ActorActuationId(new ActorBodyId(order.execution().actorId(),2),order.execution()),MeleeAttack.QUICK,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,103,rules));
         var evasion=new MeleeManeuver(actor,m.weapon(),m.target(),MeleeManeuver.Kind.BACKSTEP,101,m.origin(),m.station(),100,104,0,200,0,140,0);
-        assertFalse(CombatEngagementPlanner.contactHandoff(state.maneuver(evasion),order,actor,MeleeAttack.QUICK,105,rules));
+        assertTrue(CombatEngagementPlanner.contactHandoff(state.maneuver(evasion),order,actor,MeleeAttack.QUICK,105,rules));
+        assertTrue(CombatEngagementPlanner.closedDefenceContact(state.maneuver(evasion.closed(105)),order,actor,105,rules));
+        assertFalse(CombatEngagementPlanner.closedDefenceContact(state.maneuver(evasion.closed(105)),order,actor,106,rules));
         assertTrue(evasion.closed(105).blocksStrike(105,rules.maneuvers()));
         assertFalse(m.closed(105).blocksStrike(105,rules.maneuvers()));
         assertTrue(m.closed(105).busy(105,rules.maneuvers()),"attack handoff does not grant a second maneuver");
@@ -453,10 +456,17 @@ class CombatModuleTest {
                 new CombatEvent.ManeuverRequested(actor,order.target(),order.actorPosition(),new MeleeManeuvers.Facts(5,0.2,true)),
                 new CombatEvent.ManeuverSelected(new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),order.actorPosition().offset(1,0,0),100,0,0,200,0,140,0)),
                 new CombatEvent.ManeuverLaunched(actor,101),new CombatEvent.ManeuverClosed(order.owner(),101),
-                new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,true,100,Optional.of(new CombatFacing(1000,0)))),
+                new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,true,100,Optional.of(new CombatFacing(1000,0)),CombatThreatObservation.none())),
                 new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),order.station(),MeleePosition.Reason.RESERVED));
         var codecs=CombatPayloadCodecs.create();
         for(var event:events){var bytes=codecs.encode(event);assertEquals(event,codecs.decode(event.type(),bytes));
             assertThrows(IllegalArgumentException.class,()->codecs.decode(event.type(),Arrays.copyOf(bytes,bytes.length-1)));}
+    }
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
     }
 }

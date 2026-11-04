@@ -114,6 +114,12 @@ public final class FrontierV3CombatTrace {
             record(session,kind,row);
         } catch(RuntimeException failure) {failed(session,failure);}
     }
+    static void defence(ServerLevel level,Mob body,LivingEntity target,String kind,float before,float after){
+        var session=interested(level,body,target);if(session==null)return;
+        try{var row=base(level);row.add("fighter",body(body));row.add("target",body(target));row.addProperty("action",kind);
+            row.addProperty("before",before);row.addProperty("after",after);record(session,"defence",row);
+        }catch(RuntimeException failure){failed(session,failure);}
+    }
     static void unavailable(ServerLevel level,CombatOrder order,String reason) {
         var session=SESSIONS.get(level.getServer());
         if(session==null || !session.capture.running() || !session.tracked.contains(order.target().entity())
@@ -131,7 +137,7 @@ public final class FrontierV3CombatTrace {
         try {
             var row=base(level);row.add("fighter",body(fighter));row.add("target",body(target));row.addProperty("owner",order.owner().value());
             row.addProperty("attack",attack.name());row.addProperty("gate",gate);row.addProperty("distance",distance);
-            row.addProperty("combatStyle",order.style().id().value());row.addProperty("rearApproachWeight",order.style().rearWeight());
+            row.add("combatProfile",FrontierV3CombatProfileView.json(order.profile()));row.addProperty("combatStyle",order.style().id().value());row.addProperty("rearApproachWeight",order.style().rearWeight());
             row.addProperty("observedTargetVx",targetVelocityX);row.addProperty("observedTargetVz",targetVelocityZ);
             row.addProperty("separatingSpeed",separating);row.addProperty("lateralSpeed",lateral);row.addProperty("canSpend",canSpend);row.addProperty("orderRevision",order.revision());
             var runtime=FrontierV3ServerLifecycle.runtimeFor(level.getServer());var state=runtime==null?null:runtime.decodedState().orElse(null);
@@ -231,7 +237,7 @@ public final class FrontierV3CombatTrace {
                     var owner=current.activityOwnerId();var combat=state.combat();
                     var capabilities=io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES;
                     if(capabilities.supports(current.activityKind()))capabilities.current(state,current,runtime.calendarInstant().orElseThrow()).ifPresent(order->{
-                        row.addProperty("combatStyle",order.style().id().value());
+                        row.add("combatProfile",FrontierV3CombatProfileView.json(order.profile()));row.addProperty("combatStyle",order.style().id().value());
                         var plan=combat.engagements().get(CombatEngagement.Key.of(order));
                         var member=plan==null?null:plan.participants().get(owner);
                         if(member!=null && member.execution().equals(current)){

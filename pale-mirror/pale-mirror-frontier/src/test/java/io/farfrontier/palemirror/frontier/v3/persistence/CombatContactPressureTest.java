@@ -14,12 +14,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class CombatContactPressureTest {
     private static final MeleeRules RULES=MeleeRules.initial();
     private static final SurfaceAnchor TARGET=SurfaceAnchor.at(0,63,0);
-    private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1);
+    private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1,CombatSkillId.SWORD);
     private static CombatOrder order(int i){
         return new CombatOrder(new ActorExecutionId(new SubjectId("resident:contact-"+i),ActorActivityKind.COURIER,new SubjectId("shipment:contact-"+i),1),
                 1,new SubjectId("item:contact-"+i),new CombatPartyId(new SubjectId("party:contact")),
                 new CombatEnvelope(new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"minecraft:overworld"),CombatEnvelope.Kind.SELF_DEFENCE,TARGET,32),
-                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:pressing")));
+                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:pressing")),combatProfile(),CombatSkillId.SWORD);
     }
     @Test void observedCoordinatesSupplyTheSameVectorToLeadAndRadialDecisions(){
         var motion=CombatMotion.between(10,20,11,22,4);
@@ -36,11 +36,11 @@ class CombatContactPressureTest {
         var flank=CombatLocomotion.plan(combat,second.execution(),key,second.actorPosition(),RULES,second.style());
         assertTrue(pressure.multiplierPermille()>1000);assertTrue(flank.multiplierPermille()>pressure.multiplierPermille());
         var body=new ActorActuationId(new ActorBodyId(first.execution().actorId(),1),first.execution());
-        var strike=new MeleeStrike(first.owner(),1,body,first.target(),first.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100);
+        var strike=new MeleeStrike(first.owner(),1,body,first.target(),first.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100,combatProfile(),java.util.List.of());
         combat=combat.prepared(strike);var gait=CombatLocomotion.plan(combat,first.execution(),key,first.actorPosition(),RULES,first.style());
         assertEquals(LocomotionMode.RUN,gait.mode());assertTrue(MeleeAttack.QUICK.guidesApproach());assertFalse(MeleeAttack.QUICK.closesDistance());
         assertFalse(MeleeAttack.SWEEP.guidesApproach());
-        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(combat,first,body,1,100,SWORD,1.8,.2,.3,RULES),"retreat must not invite a slow stationary sweep");
+        assertTrue(MeleeTactics.attack(combat,first,body,1,100,SWORD,1.8,.2,.3,RULES).guidesApproach(),"retreat requires a guided contact strike");
     }
     @Test void reachableButStalledFlankChangesSideAndItsProgressSurvivesRecovery()throws IOException{
         var first=order(1);var second=order(2);var combat=CombatState.empty().enlisted(first,100,RULES)
@@ -60,7 +60,14 @@ class CombatContactPressureTest {
         assertFalse(CombatFormation.reframe(plan,changed,CombatState.empty(),119,RULES.engagements()));
         assertTrue(CombatFormation.reframe(plan,changed,CombatState.empty(),120,RULES.engagements()));
         var body=new ActorActuationId(new ActorBodyId(first.execution().actorId(),1),first.execution());
-        var pending=CombatState.empty().prepared(new MeleeStrike(first.owner(),1,body,first.target(),first.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,121,120));
+        var pending=CombatState.empty().prepared(new MeleeStrike(first.owner(),1,body,first.target(),first.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,121,120,combatProfile(),java.util.List.of()));
         assertFalse(CombatFormation.reframe(plan,changed,pending,120,RULES.engagements()));
+    }
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
     }
 }

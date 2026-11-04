@@ -85,7 +85,7 @@ public final class CombatManeuverProcess {
             && ActorBodyAuthority.retainsPhysicalCustody(state,execution.actorId()) && ActorBodyAuthority.current(state,execution.actorId()).equals(m.actor().body());
         var movement=state.actorMovements().get(execution.actorId());
         boolean expired=tick>=(m.launchedAt()==0?m.selectedAt()+80:m.launchedAt()+rules.travelTicks(m.kind()));
-        if(!permitted || expired || m.launchedAt()>0 && m.order().arrivedAt(state.actorLocations().get(execution.actorId()).supportingSurface())){
+        if(!permitted || expired || m.kind()!=MeleeManeuver.Kind.BLOCK && m.launchedAt()>0 && m.order().arrivedAt(state.actorLocations().get(execution.actorId()).supportingSurface())){
             var result=new ArrayList<ProposedEvent>();
             if(movement!=null){
                 if(!(movement.context() instanceof ActorMovementContext.CombatManeuverLeg leg) || leg.attemptOrdinal()!=m.attemptOrdinal())throw new IllegalArgumentException("maneuver lost exclusive route");
@@ -95,7 +95,7 @@ public final class CombatManeuverProcess {
             }
             result.add(new ProposedEvent(m.owner(),new CombatEvent.ManeuverClosed(m.owner(),m.attemptOrdinal())));result.addAll(later(action,tick+rules.recovery(m.kind())));return List.copyOf(result);
         }
-        if(m.launchedAt()>0 && movement==null){
+        if(m.kind()!=MeleeManeuver.Kind.BLOCK && m.launchedAt()>0 && movement==null){
             var move=new ActorMovement(m.order(),tick,new ActorMovementContext.CombatManeuverLeg(m.owner(),m.attemptOrdinal()),execution);
             var events=new ArrayList<>(ActorMovementProcess.planStart(move));events.addAll(later(action,m.launchedAt()+rules.travelTicks(m.kind())));return List.copyOf(events);
         }

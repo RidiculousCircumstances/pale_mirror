@@ -15,6 +15,7 @@ public final class ResidentVisuals {
             var pose=MeleeAnimation.sample(frame);var hand=actor.getMainArm();float mirror=hand==HumanoidArm.RIGHT?1:-1;
             rig.arm(hand,pose.shoulder(),pose.elbow(),mirror*pose.yaw(),mirror*pose.roll());
             rig.arm(hand.getOpposite(),-0.7f,-0.6f,0,-mirror*0.25f);
+            rig.leg(true,pose.leg());
             rig.torso(mirror*pose.torso(),pose.lean());
             float nativeYaw=Mth.rotLerp(partial,actor.yBodyRotO,actor.yBodyRot);
             rig.look(Mth.clamp(Mth.wrapDegrees(frame.payload().facingYaw()-MeleeAnimation.facingYaw(frame,nativeYaw)),-60,60)*Mth.DEG_TO_RAD,

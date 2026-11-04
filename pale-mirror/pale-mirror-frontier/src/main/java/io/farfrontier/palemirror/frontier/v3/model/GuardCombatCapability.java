@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.security.*;
 import java.util.*;
 /** Guard-owned adapter. The combat module never inspects guard appointments or settlement politics. */
 final class GuardCombatCapability implements CombatCapability {
+    public CombatProfile profile(FrontierWorldState state,ActorExecutionId execution){GuardAuthority.require(state,execution);return state.humanPopulation().resident(execution.actorId()).combatProfile();}
     public ActorActivityKind kind(){return ActorActivityKind.GUARD;}
     public void requireReference(FrontierWorldState state,ActorExecutionId execution){GuardAuthority.require(state,execution);}
     public void requirePending(FrontierWorldState state,MeleeStrike strike){GuardAuthority.requirePendingCombat(state.strategicPlans(),strike);}
@@ -21,7 +22,8 @@ final class GuardCombatCapability implements CombatCapability {
             var observer=ActorMovementProjection.bodyAt(state,execution.actorId(),tick).supportingSurface();
             return new CombatOrder(execution,duty.revision(),duty.weapon(),new CombatPartyId(duty.home()),response.engagement(),new SurfaceAnchor(contact.position()),
                     contact.atTick(),state.bootstrap().ruleset().security().contactLifetime(),observer,state.actorLocations().get(execution.actorId()).navigationProfile(),
-                    duty.mission().filter(m->m.response().equals(Optional.of(contact.target()))).map(GuardMission::station),state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()));
+                    duty.mission().filter(m->m.response().equals(Optional.of(contact.target()))).map(GuardMission::station),
+            state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()),state.humanPopulation().resident(execution.actorId()).combatProfile(),CombatSkillId.SWORD);
         });
     }
     public boolean permitsApproach(FrontierWorldState state,ActorMovement movement){
@@ -53,9 +55,14 @@ final class GuardCombatCapability implements CombatCapability {
         var duty=GuardAuthority.require(state,execution);
         return List.of(GuardContinuation.wake(duty.id(),tick),SecurityReview.wake(duty.home(),tick));
     }
-    public Optional<Fact> targetEnded(FrontierWorldState state,MeleeStrike strike){
-        var duty=GuardAuthority.require(state,strike.attacker().execution());
-        var contact=state.security().contact(duty.home(),strike.target());
-        return contact==null?Optional.empty():Optional.of(new Fact(duty.home(),new SecurityEvent.ContactEnded(strike.attacker(),duty.home(),strike.target(),contact.revision())));
+    public Set<CombatTarget> areaTargets(FrontierWorldState state,CombatOrder order,long tick){
+        var duty=GuardAuthority.require(state,order.execution());
+        return state.security().contactsIn(duty.home()).stream().filter(c->c.current(tick,state.bootstrap().ruleset().security().contactLifetime())
+            && order.engagement().contains(new SurfaceAnchor(c.position()))).map(SecurityState.Contact::target).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+    public Optional<Fact> targetEnded(FrontierWorldState state,ActorActuationId actor,CombatTarget target){
+        var duty=GuardAuthority.require(state,actor.execution());
+        var contact=state.security().contact(duty.home(),target);
+        return contact==null?Optional.empty():Optional.of(new Fact(duty.home(),new SecurityEvent.ContactEnded(actor,duty.home(),target,contact.revision())));
     }
 }

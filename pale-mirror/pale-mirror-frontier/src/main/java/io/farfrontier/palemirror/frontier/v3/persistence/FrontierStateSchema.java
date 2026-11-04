@@ -27,7 +27,7 @@ final class FrontierStateSchema {
     // Every resident retains its declared combat-style definition reference, including newborn payloads.
     // Encounter frame commitment and actual flank-progress evidence survive recovery.
     // Fresh native facing is explicit optional observation for personal rear-approach preference.
-    static final int VERSION = 334;
+    static final int VERSION = 335;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.combat.*;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.internal.presentation.PlayerContextCard;
@@ -17,15 +19,17 @@ final class FrontierV3ResidentCard {
         lines.add("Task: " + view.task());
         lines.add("Role: " + view.role() + " · " + view.activity());
         lines.add("Combat style: " + state.bootstrap().ruleset().melee().styles().require(person.combatStyle()).name());
-        lines.add("Skills: Agr " + person.skill(ResidentSkill.AGRICULTURE) + " · Build "
-                + person.skill(ResidentSkill.BUILDING) + " · Craft " + person.skill(ResidentSkill.CRAFTING));
-        lines.add("Sec " + person.skill(ResidentSkill.SECURITY) + " · Med " + person.skill(ResidentSkill.MEDICINE)
-                + " · Haul " + person.skill(ResidentSkill.LOGISTICS));
-        lines.add("Abilities: Agr " + person.capability(HumanCapability.AGRICULTURE) + " · Ext "
-                + person.capability(HumanCapability.EXTRACTION) + " · Ind " + person.capability(HumanCapability.INDUSTRY)
-                + " · Eng " + person.capability(HumanCapability.ENGINEERING));
-        lines.add("Log " + person.capability(HumanCapability.LOGISTICS) + " · Med " + person.capability(HumanCapability.MEDICINE)
-                + " · Sec " + person.capability(HumanCapability.SECURITY) + " · Civic " + person.capability(HumanCapability.CIVIC));
+        var combat=person.combatProfile();var attributes=combat.attributes();
+        lines.add("Combat: Sword "+combat.skill(CombatSkillId.SWORD)
+            +" · Evade "+combat.skill(CombatSkillId.EVASION)
+            +" · Defence "+combat.skill(CombatSkillId.WEAPON_DEFENCE));
+        lines.add("Str "+attributes.strength()+" · Agi "+attributes.agility()+" · End "+attributes.endurance()+" · Per "+attributes.perception()+" · Tough "+attributes.toughness());
+        lines.add("Skills: Agr "+person.skill(ResidentSkill.AGRICULTURE)+" · Build "+person.skill(ResidentSkill.BUILDING)
+            +" · Craft "+person.skill(ResidentSkill.CRAFTING)+" · Sec "+person.skill(ResidentSkill.SECURITY)+" · Med "+person.skill(ResidentSkill.MEDICINE)+" · Haul "+person.skill(ResidentSkill.LOGISTICS));
+        lines.add("Abilities: Agr "+person.capability(HumanCapability.AGRICULTURE)+" · Ext "+person.capability(HumanCapability.EXTRACTION)
+            +" · Ind "+person.capability(HumanCapability.INDUSTRY)+" · Eng "+person.capability(HumanCapability.ENGINEERING)
+            +" · Log "+person.capability(HumanCapability.LOGISTICS)+" · Med "+person.capability(HumanCapability.MEDICINE)
+            +" · Sec "+person.capability(HumanCapability.SECURITY)+" · Civic "+person.capability(HumanCapability.CIVIC));
         lines.add("Hunger ×" + rate(person.characteristics().effectiveMetabolismPermille(tick))
                 + " · " + state.humanPopulation().nutrition(actor).status().name().toLowerCase(Locale.ROOT));
         var modifiers = person.characteristics().workModifiers().modifiers().values().stream()

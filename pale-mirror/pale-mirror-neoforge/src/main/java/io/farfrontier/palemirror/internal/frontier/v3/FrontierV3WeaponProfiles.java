@@ -8,7 +8,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 /** Actual version-matched item/mod attribute input, not a sword-name damage table. */
 final class FrontierV3WeaponProfiles {
-    static WeaponProfile read(ItemStack stack) {
+    static WeaponProfile read(ItemStack stack,CombatSkillId skill) {
         var modifiers=stack.getAttributeModifiers();
         var damage=new ItemAttributeModifiers(modifiers.modifiers().stream().filter(value->value.attribute().equals(Attributes.ATTACK_DAMAGE)).toList(),false)
                 .compute(1.0,EquipmentSlot.MAINHAND);
@@ -17,7 +17,7 @@ final class FrontierV3WeaponProfiles {
         if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("weapon has no supported attack interval");
         double reach=new ItemAttributeModifiers(modifiers.modifiers().stream().filter(value->value.attribute().equals(Attributes.ENTITY_INTERACTION_RANGE)).toList(),false)
                 .compute(3.0,EquipmentSlot.MAINHAND);
-        return new WeaponProfile(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),damage,(long)Math.ceil(20.0/speed),reach,1);
+        return new WeaponProfile(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),damage,(long)Math.ceil(20.0/speed),reach,1,skill);
     }
     private FrontierV3WeaponProfiles(){}
 }

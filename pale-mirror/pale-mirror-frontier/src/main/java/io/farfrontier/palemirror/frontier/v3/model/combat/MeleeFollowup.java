@@ -6,9 +6,9 @@ import java.util.Objects;
 
 /** One expiring continuation of an exact missed lunge, never another chase or hit permission. */
 public record MeleeFollowup(ActorActuationId actor, CombatTarget target, SubjectId weapon,
-        long targetIncarnation, long missedOrdinal, long openedAt, long expiresAt) {
+        long targetIncarnation, long missedOrdinal, long openedAt, long expiresAt,MeleeAttack next) {
     public MeleeFollowup {
-        Objects.requireNonNull(actor); Objects.requireNonNull(target); Objects.requireNonNull(weapon);
+        Objects.requireNonNull(actor); Objects.requireNonNull(target); Objects.requireNonNull(weapon);Objects.requireNonNull(next);
         if (targetIncarnation < 1 || missedOrdinal < 1 || openedAt < 0 || expiresAt <= openedAt)
             throw new IllegalArgumentException("invalid missed-lunge continuation");
     }

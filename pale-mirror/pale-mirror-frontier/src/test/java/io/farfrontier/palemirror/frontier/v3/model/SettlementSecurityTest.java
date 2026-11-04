@@ -11,7 +11,13 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 class SettlementSecurityTest {
-    private static final class Fixture {static final FrontierWorldState ARMED=GuardDutyTest.armed();}
+    private static final class Fixture {static final FrontierWorldState ARMED=mechanicalFixture();
+        private static FrontierWorldState mechanicalFixture(){
+            var state=GuardDutyTest.armed();var population=state.humanPopulation();
+            for(var person:population.residents().values())population=population.withProfile(new ResidentProfile(person.id(),person.householdId(),person.settlementId(),person.role(),
+                person.name(),person.birthTick(),person.skills(),person.capabilities(),person.characteristics(),person.combatStyle(),combatProfile()));
+            return state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(population));
+        }}
     private record Ready(FrontierWorldState state,GuardDuty duty,ActorActuationId body,UUID offender){}
     private Ready ready(){
         var state=Fixture.ARMED;var duty=state.strategicPlans().guards().values().iterator().next();
@@ -40,7 +46,7 @@ class SettlementSecurityTest {
         // Canonical fixture supplies the actual sword attributes; native resolution has its adapter tests.
         var combat=state.combat();
         for(var duty:GuardEquipment.in(state,home))if(GuardEquipment.held(state,duty))combat=combat.observed(new CombatState.Armament(
-                duty.execution(),duty.weapon(),new WeaponProfile(state.inventory().items().get(duty.weapon()).itemKind(),6,13,3,1)));
+                duty.execution(),duty.weapon(),new WeaponProfile(state.inventory().items().get(duty.weapon()).itemKind(),6,13,3,1,CombatSkillId.SWORD)));
         return state.withChanges(FrontierWorldStateUpdate.begin().combat(combat));
     }
     /** These unit fixtures test an exact strike's lifecycle; grant its tactical slot explicitly, without bypassing actuation/weapon checks. */
@@ -63,7 +69,7 @@ class SettlementSecurityTest {
         state=allocated(state,21001);
         for(var order:CombatComposition.CAPABILITIES.orders(state,21001)){
             var item=state.inventory().items().get(order.weapon());
-            state=apply(state,order.owner(),new CombatEvent.WeaponDefined(order.execution(),order.weapon(),new WeaponProfile(item.itemKind(),6,13,3,1)),21001);
+            state=apply(state,order.owner(),new CombatEvent.WeaponDefined(order.execution(),order.weapon(),new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD)),21001);
         }
         assertEquals(2,state.combat().engagements().values().iterator().next().participants().size());
         return new Ready(state,r.duty(),r.body(),r.offender());
@@ -72,7 +78,7 @@ class SettlementSecurityTest {
         var r=pair();var state=r.state();var orders=CombatComposition.CAPABILITIES.orders(state,21001);
         for(var order:orders){
             var body=new ActorActuationId(ActorBodyAuthority.current(state,order.execution().actorId()),order.execution());
-            state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(body,order.target(),true,true,21001,Optional.empty())),21001);
+            state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(body,order.target(),true,true,21001,Optional.empty(),CombatThreatObservation.none())),21001);
         }
         var order=orders.getFirst();var key=CombatEngagement.Key.of(order);var wave=state.combat().engagements().get(key).wave().orElseThrow();
         assertEquals(2,wave.slots().size());assertEquals(wave.slots().getFirst().opensAt(),wave.slots().get(1).opensAt(),"different sides share a short attack window");
@@ -80,7 +86,7 @@ class SettlementSecurityTest {
         assertFalse(CombatEngagementPlanner.permitsStrike(state.combat(),order,slot.participant(),slot.opensAt()-1,state.bootstrap().ruleset().melee()));
         var item=state.inventory().items().get(order.weapon());
         var strike=new MeleeStrike(order.owner(),order.revision(),new ActorActuationId(ActorBodyAuthority.current(state,order.execution().actorId()),order.execution()),
-                order.target(),order.weapon(),item.condition(),state.combat().armaments().get(order.owner()).profile(),MeleeAttack.QUICK,1,slot.opensAt()+1,slot.opensAt());
+                order.target(),order.weapon(),item.condition(),state.combat().armaments().get(order.owner()).profile(),MeleeAttack.QUICK,1,slot.opensAt()+1,slot.opensAt(),combatProfile(),java.util.List.of());
         state=apply(state,order.owner(),new CombatEvent.Prepared(strike),slot.opensAt());
         state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertFalse(CombatEngagementPlanner.permitsStrike(state.combat(),order,slot.participant(),slot.opensAt(),state.bootstrap().ruleset().melee()));
@@ -90,17 +96,17 @@ class SettlementSecurityTest {
     }
     @Test void oneReadyFighterDoesNotWaitForeverForAnUnreachableFlanker(){
         var r=pair();var state=r.state();var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
-        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21001,Optional.empty())),21001);
+        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21001,Optional.empty(),CombatThreatObservation.none())),21001);
         var key=CombatEngagement.Key.of(order);assertTrue(state.combat().engagements().get(key).wave().isEmpty());
         long now=21001+state.bootstrap().ruleset().melee().engagements().assemblyTicks();
-        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,now,Optional.empty())),now);
+        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,now,Optional.empty(),CombatThreatObservation.none())),now);
         var wave=state.combat().engagements().get(key).wave().orElseThrow();assertEquals(1,wave.slots().size());
         assertTrue(CombatEngagementPlanner.permitsStrike(state.combat(),order,wave.slots().getFirst().participant(),wave.slots().getFirst().opensAt(),state.bootstrap().ruleset().melee()));
     }
     @Test void attackOpportunityDoesNotRequireStoppingAndConfirmedFlankFailureDoesNotBecomeAnEndlessWait(){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
-        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),false,true,21001,Optional.empty())),21001);
+        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),false,true,21001,Optional.empty(),CombatThreatObservation.none())),21001);
         assertFalse(state.combat().holding(order,21001,state.bootstrap().ruleset().melee()));
         assertTrue(CombatEngagementPlanner.permitsStrike(state.combat(),order,r.body(),21001,state.bootstrap().ruleset().melee()));
         r=pair();state=r.state();
@@ -190,11 +196,11 @@ class SettlementSecurityTest {
                 new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.CombatManeuverLeg(m.owner(),m.attemptOrdinal()),r.body().execution());
         state=ActorMovementProcess.reduceStarted(state,actor,new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(move));
         var observed=enemy.offset(-2,0,0).standingBody();state=state.withActorBody(actor,observed);
-        state=apply(state,m.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21006,Optional.empty())),21006);
+        state=apply(state,m.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21006,Optional.empty(),CombatThreatObservation.none())),21006);
         var item=state.inventory().items().get(order.weapon());
         order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21006).orElseThrow();
         var strike=new MeleeStrike(order.owner(),order.revision(),r.body(),order.target(),order.weapon(),item.condition(),
-                state.combat().armaments().get(order.owner()).profile(),MeleeAttack.QUICK,1,21007,21006);
+                state.combat().armaments().get(order.owner()).profile(),MeleeAttack.QUICK,1,21007,21006,combatProfile(),java.util.List.of());
         var exact=state;
         assertThrows(IllegalArgumentException.class,()->apply(exact,m.owner(),new CombatEvent.Prepared(strike),21006),"replay cannot bypass the movement owner");
         var commandId=new CommandId("test:burst-contact");
@@ -289,15 +295,15 @@ class SettlementSecurityTest {
     }
     @Test void recoveryStrikeRequiresAnUnspentMissForThisExactActorAndTargetIncarnation(){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
-        var item=state.inventory().items().get(r.duty().weapon());var profile=new WeaponProfile(item.itemKind(),6,13,3,1);
-        var lunge=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),profile,MeleeAttack.LUNGE,17,21002,21001);
+        var item=state.inventory().items().get(r.duty().weapon());var profile=new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD);
+        var lunge=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),profile,MeleeAttack.LUNGE,17,21002,21001,combatProfile(),java.util.List.of());
         state=apply(strikeSlot(state,lunge),lunge.owner(),new CombatEvent.Prepared(lunge),21001);
         state=apply(state,lunge.owner(),new CombatEvent.Completed(lunge.owner(),lunge.attemptOrdinal(),MeleeOutcome.MISS,item.condition()),21009);
         state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         long responseAt=state.combat().nextAttack().get(lunge.owner());
-        var response=new MeleeStrike(lunge.owner(),lunge.ownerRevision(),lunge.attacker(),lunge.target(),lunge.weapon(),lunge.before(),profile,MeleeAttack.FOLLOWUP,17,responseAt+1,responseAt);
+        var response=new MeleeStrike(lunge.owner(),lunge.ownerRevision(),lunge.attacker(),lunge.target(),lunge.weapon(),lunge.before(),profile,MeleeAttack.FOLLOWUP,17,responseAt+1,responseAt,combatProfile(),java.util.List.of());
         var admitted=strikeSlot(state,response);var exact=admitted;
-        var forged=new MeleeStrike(response.owner(),response.ownerRevision(),response.attacker(),response.target(),response.weapon(),response.before(),profile,MeleeAttack.FOLLOWUP,18,responseAt+1,responseAt);
+        var forged=new MeleeStrike(response.owner(),response.ownerRevision(),response.attacker(),response.target(),response.weapon(),response.before(),profile,MeleeAttack.FOLLOWUP,18,responseAt+1,responseAt,combatProfile(),java.util.List.of());
         assertThrows(IllegalArgumentException.class,()->apply(exact,response.owner(),new CombatEvent.Prepared(forged),responseAt));
         assertThrows(IllegalArgumentException.class,()->apply(exact.withChanges(FrontierWorldStateUpdate.begin().combat(exact.combat().withoutFollowup(response.owner()))),response.owner(),new CombatEvent.Prepared(response),responseAt));
         admitted=apply(admitted,response.owner(),new CombatEvent.Prepared(response),responseAt);
@@ -310,7 +316,7 @@ class SettlementSecurityTest {
         state=allocated(state,21001);
         var item=state.inventory().items().get(r.duty().weapon());
         var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),
-                new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21002,21001);
+                new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.QUICK,17,21002,21001,combatProfile(),java.util.List.of());
         state=apply(strikeSlot(state,strike),r.duty().id(),new CombatEvent.Prepared(strike),21001);
         state=apply(state,r.duty().home(),new SecurityEvent.ContactEnded(r.body(),r.duty().home(),strike.target(),1),21002);
         assertEquals(strike,state.combat().pending().get(r.duty().id()),"ending contact cannot discard an unsettled native effect");
@@ -318,7 +324,7 @@ class SettlementSecurityTest {
         assertFalse(ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD).checkpoint(state,r.duty().execution()).ready());
         var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));var pending=state;
         var forged=new MeleeStrike(strike.owner(),strike.ownerRevision()+1,strike.attacker(),strike.target(),strike.weapon(),strike.before(),strike.profile(),MeleeAttack.QUICK,
-                strike.targetIncarnation(),strike.attemptOrdinal(),strike.preparedAt());
+                strike.targetIncarnation(),strike.attemptOrdinal(),strike.preparedAt(),combatProfile(),java.util.List.of());
         assertThrows(IllegalArgumentException.class,()->pending.withChanges(FrontierWorldStateUpdate.begin().combat(CombatState.empty().prepared(forged))));
         assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition()),21002));
         state=apply(state,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition().wear(1)),21009);
@@ -413,7 +419,7 @@ class SettlementSecurityTest {
         assertTrue(GuardResponse.investigating(state,owner,21100));
         var unseenWeapon=state.inventory().items().get(owner.weapon());
         var unseenStrike=new MeleeStrike(owner.id(),owner.revision(),r.body(),contact(r).target(),owner.weapon(),
-                unseenWeapon.condition(),new WeaponProfile(unseenWeapon.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21101,21100);
+                unseenWeapon.condition(),new WeaponProfile(unseenWeapon.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.QUICK,17,21101,21100,combatProfile(),java.util.List.of());
         var investigatingState=state;var investigatingDuty=owner;
         assertThrows(IllegalArgumentException.class,()->apply(investigatingState,investigatingDuty.id(),
                 new CombatEvent.Prepared(unseenStrike),21100),"an investigation cannot authorize an attack without a live contact");
@@ -446,7 +452,7 @@ class SettlementSecurityTest {
         var action=GuardContinuation.progress(duty.id(),21002);
         var weapon=state.inventory().items().get(duty.weapon());
         var strike=new MeleeStrike(duty.id(),duty.revision(),r.body(),contact(r).target(),duty.weapon(),weapon.condition(),
-                new WeaponProfile(weapon.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21003,21002);
+                new WeaponProfile(weapon.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.QUICK,17,21003,21002,combatProfile(),java.util.List.of());
         var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,new CommandId("test:approach-melee"),state.bootstrap().worldId(),Revision.ZERO,
                 new SimInstant(21002),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(new CommandId("test:approach-melee")),new CombatEvent.Prepared(strike));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
@@ -483,7 +489,7 @@ class SettlementSecurityTest {
         state=new GuardMissionSelected(duty.id(),duty.revision(),response).apply(state,duty.id(),21001);
         duty=state.strategicPlans().guards().get(duty.id());var item=state.inventory().items().get(duty.weapon());
         var strike=new MeleeStrike(duty.id(),duty.revision(),r.body(),contact(r).target(),duty.weapon(),item.condition(),
-                new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21002,21001);
+                new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.QUICK,17,21002,21001,combatProfile(),java.util.List.of());
         state=apply(strikeSlot(state,strike),duty.id(),new CombatEvent.Prepared(strike),21001);
         state=apply(state,duty.id(),new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition().wear(1)),21009);
         var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),21009).orElseThrow();
@@ -601,7 +607,8 @@ class SettlementSecurityTest {
     @Test void windupRejectsEarlyDamageAndCancellationReleasesTheActorWithoutWear(){
         var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
         var item=state.inventory().items().get(r.duty().weapon());
-        var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.QUICK,17,21002,21001);
+        var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.QUICK,17,
+            21002,21001,combatProfile(),java.util.List.of());
         var pending=apply(strikeSlot(state,strike),r.duty().id(),new CombatEvent.Prepared(strike),21001);
         assertEquals(CombatStatus.WINDING_UP,CombatStatus.read(pending,CombatComposition.CAPABILITIES,r.duty().execution(),21002));
         assertThrows(IllegalArgumentException.class,()->apply(pending,r.duty().id(),new CombatEvent.Completed(r.duty().id(),strike.attemptOrdinal(),MeleeOutcome.HIT,item.condition().wear(1)),21002));
@@ -619,8 +626,8 @@ class SettlementSecurityTest {
         duty=state.strategicPlans().guards().get(duty.id());var body=state.actorLocations().get(duty.execution().actorId()).body();
         var before=state;
         var foreign=new ActorActuationId(new ActorBodyId(duty.execution().actorId(),999),duty.execution());
-        assertThrows(IllegalArgumentException.class,()->apply(before,r.duty().id(),new CombatEvent.StanceObserved(new MeleeStance(foreign,contact(r).target(),true,true,21002,Optional.empty())),21002));
-        state=apply(state,duty.id(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),contact(r).target(),true,true,21002,Optional.empty())),21002);
+        assertThrows(IllegalArgumentException.class,()->apply(before,r.duty().id(),new CombatEvent.StanceObserved(new MeleeStance(foreign,contact(r).target(),true,true,21002,Optional.empty(),CombatThreatObservation.none())),21002));
+        state=apply(state,duty.id(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),contact(r).target(),true,true,21002,Optional.empty(),CombatThreatObservation.none())),21002);
         assertEquals(body,state.actorLocations().get(duty.execution().actorId()).body());
         assertTrue(state.combat().positions().containsKey(duty.id()),"native holding retains its bounded tactical sector rather than reassigning it to a peer");
         var events=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21003),21003);
@@ -641,7 +648,7 @@ class SettlementSecurityTest {
                 new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(move));
         var item=state.inventory().items().get(duty.weapon());
         var strike=new MeleeStrike(duty.id(),duty.revision(),r.body(),contact(r).target(),item.id(),item.condition(),
-                new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.LUNGE,1,21002,21001);
+                new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.LUNGE,1,21002,21001,combatProfile(),java.util.List.of());
         state=apply(strikeSlot(state,strike),duty.id(),new CombatEvent.Prepared(strike),21001);
         var pending=state;var owner=duty;
         assertEquals(move,pending.actorMovements().get(duty.execution().actorId()));
@@ -656,7 +663,7 @@ class SettlementSecurityTest {
         var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
         var item=state.inventory().items().get(r.duty().weapon());
         var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),
-                new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.LUNGE,1,21002,21001);
+                new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.LUNGE,1,21002,21001,combatProfile(),java.util.List.of());
         state=apply(strikeSlot(state,strike),r.duty().id(),new CombatEvent.Prepared(strike),21001);
         var actor=r.duty().execution().actorId();var location=state.actorLocations().get(actor);
         state=ActorBodyAuthority.died(state,new ActorBodyDied(r.body().body(),location.body(),location.condition().health(),
@@ -695,7 +702,7 @@ class SettlementSecurityTest {
         var station=new SurfaceAnchor(contact(r).position()).offset(1,0,0);
         var contender=new CombatOrder(other.execution(),other.revision(),other.weapon(),new CombatPartyId(new SubjectId("party:independent")),first.engagement(),first.targetPosition(),21001,1000,
                 state.actorLocations().get(other.execution().actorId()).supportingSurface(),state.actorLocations().get(other.execution().actorId()).navigationProfile(),Optional.of(station),
-                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0));
+                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0),combatProfile(),CombatSkillId.SWORD);
         var occupied=apply(state,first.owner(),new CombatEvent.PositionPlanned(first.execution(),first.target(),first.targetPosition(),Optional.of(station),MeleePosition.Reason.RESERVED),21001);
         assertThrows(IllegalArgumentException.class,()->MeleePositions.requireClaim(occupied,contender,station,21002));
         MeleePositions.requireClaim(occupied,contender,station,21082);
@@ -714,7 +721,7 @@ class SettlementSecurityTest {
         assertTrue(capability.navigationOrder(state,duty.execution()).isEmpty());
         var item=state.inventory().items().get(duty.weapon());
         var strike=new MeleeStrike(duty.id(),duty.revision(),r.body(),contact(r).target(),item.id(),item.condition(),
-                new WeaponProfile(item.itemKind(),6,13,3,1),MeleeAttack.LUNGE,17,21003,21002);
+                new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD),MeleeAttack.LUNGE,17,21003,21002,combatProfile(),java.util.List.of());
         state=apply(strikeSlot(state,strike),duty.id(),new CombatEvent.Prepared(strike),21002);
         assertFalse(state.actorMovements().containsKey(duty.execution().actorId()));
         assertEquals(Optional.of(duty.missionOrder()),capability.navigationOrder(state,duty.execution()));
@@ -750,10 +757,10 @@ class SettlementSecurityTest {
     @Test void coldWeaponDefinitionEnablesPlanningButCannotAuthorizeANativeHit(){
         var r=ready();var state=offence(r);state=apply(state,r.duty().home(),seen(r,contact(r)),21001);state=allocated(state,21001);
         state=ActorBodyAuthority.released(state,r.body().body());state=state.withChanges(FrontierWorldStateUpdate.begin().combat(CombatState.empty()));
-        var item=state.inventory().items().get(r.duty().weapon());var profile=new WeaponProfile(item.itemKind(),6,13,3,1);
+        var item=state.inventory().items().get(r.duty().weapon());var profile=new WeaponProfile(item.itemKind(),6,13,3,1,CombatSkillId.SWORD);
         state=CombatTransitions.apply(state,r.duty().id(),new CombatEvent.WeaponDefined(r.duty().execution(),item.id(),profile),21002,CombatComposition.CAPABILITIES);
         assertEquals(profile,state.combat().armaments().get(r.duty().id()).profile());
-        var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),profile,MeleeAttack.QUICK,1,21003,21002);
+        var strike=new MeleeStrike(r.duty().id(),r.duty().revision(),r.body(),contact(r).target(),item.id(),item.condition(),profile,MeleeAttack.QUICK,1,21003,21002,combatProfile(),java.util.List.of());
         var cold=state;
         assertThrows(IllegalArgumentException.class,()->CombatTransitions.apply(cold,r.duty().id(),new CombatEvent.Prepared(strike),21002,CombatComposition.CAPABILITIES));
     }
@@ -771,4 +778,11 @@ class SettlementSecurityTest {
                 new SecurityEvent.Incident(duty.home(),falseBody,fact.attacker(),fact.victimPosition(),Optional.empty(),1),21001));
     }
 
+    private static CombatProfile combatProfile(){
+        var attributes=new CombatAttributes(50,50,50,50,50);
+        return new CombatProfile(attributes,java.util.Map.of(
+            CombatSkillId.SWORD,100,
+            CombatSkillId.EVASION,100,
+            CombatSkillId.WEAPON_DEFENCE,100));
+    }
 }
