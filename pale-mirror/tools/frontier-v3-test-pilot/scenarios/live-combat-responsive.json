@@ -184,43 +184,39 @@
       "causalMilestone": "ordinary_guard_attack_caused_native_health_loss"
     },
     {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "x": -1476,
-        "y": 64,
-        "z": -1310
-      },
-      "settleMs": 0
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:1-3",
+      "causalMilestone": "retain_original_combat_subject_before_ordinary_circling"
     },
     {
       "type": "observe_entity_motion",
       "id": "circling-player-pursuit",
       "entityType": "minecraft:villager",
-      "nameContains": "Alex Rowan",
+      "nameContains": "Owen Ash",
       "durationTicks": 400,
       "sampleEveryTicks": 1,
       "timeoutMs": 45000,
       "maxDistance": 48,
       "observerCircuit": [
         {
-          "x": -3,
-          "z": -3
+          "x": -2,
+          "z": -2
         },
         {
-          "x": 3,
-          "z": -3
+          "x": 2,
+          "z": -2
         },
         {
-          "x": 3,
-          "z": 3
+          "x": 2,
+          "z": 2
         },
         {
-          "x": -3,
-          "z": 3
+          "x": -2,
+          "z": 2
         }
       ],
-      "workerId": "resident:1-17"
+      "workerId": "resident:1-3"
     },
     {
       "type": "wait_until_player_health",
