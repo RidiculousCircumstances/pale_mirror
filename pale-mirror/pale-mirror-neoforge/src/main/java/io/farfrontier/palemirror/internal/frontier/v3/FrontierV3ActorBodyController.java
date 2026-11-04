@@ -103,14 +103,14 @@ final class FrontierV3ActorBodyController {
         if (runtime.decodedState().orElseThrow().actorLocations().get(declaration.actorId())
                 .condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return true;
         FrontierV3BodyOperationIntegration.recover(level, runtime.decodedState().orElseThrow(), ledger, declaration.actorId());
-        ledger.retireDeadActor(runtime.decodedState().orElseThrow(), declaration.actorId());
         ledger.persist(level, state.bootstrap().worldId());
         FrontierV3GoalNavigation.retireIncarnation(body, id);
         resources.settle();
         // A witnessed death is handled even while an exact resource owner awaits
         // confirmation. The explicit fatality outbox retains corpse/aftermath custody;
         // its registered recovery path calls finish again after those receipts commit.
-        FrontierV3BodyFatalityOperation.finish(level, runtime, fatality, id);
+        if(FrontierV3BodyFatalityOperation.finish(level, runtime, fatality, id))
+            retireDeadActor(level,runtime.decodedState().orElseThrow(),declaration.actorId());
         return true;
     }
 
@@ -358,6 +358,11 @@ final class FrontierV3ActorBodyController {
             return false;
         try { return ActorBodyAuthority.current(state, declaration.actorId()).physicalEpoch() == declaration.epoch(); }
         catch (IllegalArgumentException absentOrStale) { return false; }
+    }
+
+    static boolean recognizesSourceJoin(ServerLevel level,FrontierWorldState state,net.minecraft.world.entity.Entity entity){
+        return retainsRecordedBody(level,state,entity) || recognizesRecordedBody(level,state,entity)
+                || FrontierV3BodyFatalityOperation.recognizesCorpse(level,state,entity);
     }
 
     /** A joining private admission can precede the UUID index, never replace another object. */
@@ -618,6 +623,12 @@ final class FrontierV3ActorBodyController {
         return true;
     }
 
+    /** Native provenance stays available until the sole fatality owner releases it. */
+    static void retireDeadActor(ServerLevel level,FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.api.SubjectId actor){
+        if(FrontierV3BodyFatalityOperation.holdsActor(level,actor))return;
+        var ledger=FrontierV3AmbientCarrierLedger.get(level,state.bootstrap().worldId());
+        ledger.retireDeadActor(state,actor);ledger.persist(level,state.bootstrap().worldId());
+    }
     /** Bounded actor probes supply candidates; historical scene membership never authorizes removal. */
     static void cleanRetired(ServerLevel level, FrontierWorldState state,
                              io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId) {
@@ -627,8 +638,7 @@ final class FrontierV3ActorBodyController {
             // A native column may arrive after startup recovery. Its positive
             // admission evidence must be reconsidered before the body is discarded.
             FrontierV3BodyOperationIntegration.recover(level, state, ledger, actorId);
-            ledger.retireDeadActor(state, actorId);
-            ledger.persist(level, state.bootstrap().worldId());
+            retireDeadActor(level,state,actorId);
         }
         var entity = level.getEntity(SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId));
         if (entity instanceof Mob body) discardRetired(level, state, body);

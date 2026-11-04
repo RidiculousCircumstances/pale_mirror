@@ -60,6 +60,27 @@ final class FrontierV3BodyFatalityOperation {
         return complete;
     }
 
+    static boolean holdsActor(ServerLevel level,io.farfrontier.palemirror.frontier.v3.api.SubjectId actor){
+        return FrontierV3OperationLedger.get(level).hasOpen(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,actor);
+    }
+    /** A saved corpse is admitted only to discharge its exact retained fatality,
+     * never as a living actor or permission to rerun death/loot. */
+    static boolean recognizesCorpse(ServerLevel level,FrontierWorldState state,net.minecraft.world.entity.Entity body){
+        if(!(body instanceof Mob mob) || mob.isAlive() || !FrontierV3ActorBodyController.recognizesRetiredDeadBody(level,state,body))return false;
+        var indexed=level.getEntity(body.getUUID());if(indexed!=null && indexed!=body)return false;
+        var declaration=FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
+        String key=state.bootstrap().worldId().value()+"/epoch:"+declaration.epoch()+"/residence:"
+                +body.getPersistentData().getLong(FrontierV3ActorBodyController.RESIDENCE_KEY);
+        var ledger=FrontierV3OperationLedger.get(level);
+        var operation=ledger.find(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,declaration.actorId(),key).orElse(null);
+        if(operation==null || operation.ownerClosed() || operation.cancelled() || operation.declaration().participants().size()!=1)return false;
+        var participant=operation.declaration().participants().iterator().next();var retained=ledger.ownerCommand(operation.ticket()).orElse(null);
+        return participant.medium()==FrontierV3OperationReceipt.Medium.ENTITIES && participant.identity().equals(body.getUUID().toString())
+                && participant.incarnation()==body.getPersistentData().getLong(FrontierV3NativeOperationMarkers.LIFETIME)
+                && retained!=null && retained.closure()==FrontierV3OperationLedger.OwnerCommand.Closure.EXPLICIT_OWNER
+                && retained.consequence() instanceof ActorBodyDied death && death.body().actorId().equals(declaration.actorId()) && death.body().physicalEpoch()==declaration.epoch()
+                && FrontierV3NativeOperationMarkers.contains(body.getPersistentData(),operation.nativeReceipt(participant));
+    }
     static boolean holdsBody(ServerLevel level, FrontierWorldState state, net.minecraft.world.entity.Entity body) {
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElse(null);
         if (declaration == null || !declaration.entityId().equals(body.getUUID())) return false;
@@ -99,13 +120,13 @@ final class FrontierV3BodyFatalityOperation {
             state = runtime.decodedState().orElseThrow();
             var carriers = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
             FrontierV3BodyOperationIntegration.recover(level, state, carriers, consequence.body().actorId());
-            carriers.retireDeadActor(state, consequence.body().actorId()); carriers.persist(level, state.bootstrap().worldId());
             var snapshot = FrontierV3BodyResourceSnapshot.decode(retained.context());
             snapshot.settle(level, runtime, operation.ticket());
             if (entity instanceof Mob body && FrontierV3ActorBodyController.recognizesRetiredDeadBody(level, state, body))
                 FrontierV3ActorDeathResourceComposition.recover(level, runtime, body, consequence.body(),
                         snapshot);
-            finish(level, runtime, operation.ticket(), consequence.body());
+            if(finish(level, runtime, operation.ticket(), consequence.body()))
+                FrontierV3ActorBodyController.retireDeadActor(level,runtime.decodedState().orElseThrow(),consequence.body().actorId());
         }
     }
 }

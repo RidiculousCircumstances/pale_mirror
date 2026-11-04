@@ -760,8 +760,7 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
         return composeSourceJoin(() -> observeEntityJoin(runtime, entity),
                 () -> entity.level() instanceof ServerLevel level && runtime.decodedState()
-                        .map(state -> FrontierV3ActorBodyController.retainsRecordedBody(level, state, entity)
-                                || FrontierV3ActorBodyController.recognizesRecordedBody(level, state, entity)).orElse(false));
+                        .map(state -> FrontierV3ActorBodyController.recognizesSourceJoin(level,state,entity)).orElse(false));
     }
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier,

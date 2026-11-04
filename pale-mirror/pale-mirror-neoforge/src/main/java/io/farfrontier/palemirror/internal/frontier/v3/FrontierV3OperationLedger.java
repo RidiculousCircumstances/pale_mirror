@@ -63,6 +63,8 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     private long nextSequence;
     private boolean quiescing;
     private final Map<Key, UUID> byOwner = new HashMap<>();
+    private record ProtocolOwner(FrontierV3OperationReceipt.Protocol protocol, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner) { }
+    private final Map<ProtocolOwner, Set<UUID>> byProtocolOwner = new HashMap<>();
     /** Derived, bounded recovery index; never a second durable operation owner. */
     private final Map<FrontierV3OperationReceipt.Protocol, LinkedHashSet<UUID>> byProtocol = new EnumMap<>(FrontierV3OperationReceipt.Protocol.class);
     private final Set<UUID> unattempted = new HashSet<>();
@@ -110,6 +112,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
             if (!ticket.equals(value.ticket()) || byOwner.putIfAbsent(Key.of(value.declaration()), ticket) != null)
                 throw new IllegalArgumentException("competing recovered physical operation");
             byProtocol.computeIfAbsent(value.declaration().protocol(), ignored -> new LinkedHashSet<>()).add(ticket);
+            byProtocolOwner.computeIfAbsent(new ProtocolOwner(value.declaration().protocol(),value.declaration().owner()),ignored->new HashSet<>()).add(ticket);
             if (value.sequence() >= nextSequence) throw new IllegalArgumentException("physical operation beyond issued sequence");
             pendingParticipants = Math.addExact(pendingParticipants, value.declaration().participants().size());
         });
@@ -146,6 +149,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         nextSequence = Math.incrementExact(nextSequence);
         operations.put(value.ticket(), value); byOwner.put(Key.of(declaration), value.ticket());
         byProtocol.computeIfAbsent(declaration.protocol(), ignored -> new LinkedHashSet<>()).add(value.ticket());
+        byProtocolOwner.computeIfAbsent(new ProtocolOwner(declaration.protocol(),declaration.owner()),ignored->new HashSet<>()).add(value.ticket());
         pendingParticipants += declaration.participants().size();
         observedSince.put(value.ticket(), System.nanoTime());
         if (declaration.participants().stream().noneMatch(p -> (p.medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT || p.medium() == FrontierV3OperationReceipt.Medium.OBSERVED_EVENT)))
@@ -163,6 +167,10 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
             io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String operation) {
         var ticket = byOwner.get(new Key(protocol, owner, operation));
         return ticket == null ? Optional.empty() : Optional.of(require(ticket));
+    }
+    /** Derived exact owner index; no scan of unrelated operations or change to probe order. */
+    boolean hasOpen(FrontierV3OperationReceipt.Protocol protocol, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner){
+        return byProtocolOwner.getOrDefault(new ProtocolOwner(protocol,owner),Set.of()).stream().anyMatch(ticket->!require(ticket).ownerClosed());
     }
     /** Must follow persist(). Even matching preimages do not permit replay after restart. */
     boolean beginAttempt(UUID ticket) {
@@ -347,6 +355,8 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         observedSince.remove(ticket);
         pendingParticipants -= value.declaration().participants().size();
         operations.remove(ticket); byOwner.remove(Key.of(value.declaration()), ticket);
+        var ownerKey=new ProtocolOwner(value.declaration().protocol(),value.declaration().owner());
+        var owned=byProtocolOwner.get(ownerKey);owned.remove(ticket);if(owned.isEmpty())byProtocolOwner.remove(ownerKey);
         var command = ownerCommands.remove(ticket);
         if (command != null) pendingOwnerContextBytes -= command.contextSize();
         unattempted.remove(ticket); setDirty();

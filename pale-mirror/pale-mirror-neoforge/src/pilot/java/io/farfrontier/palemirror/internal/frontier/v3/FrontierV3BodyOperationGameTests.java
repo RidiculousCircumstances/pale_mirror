@@ -102,6 +102,7 @@ public final class FrontierV3BodyOperationGameTests {
         var outbox=FrontierV3ResourceHandoffLedger.get(level);
         var transfer=new java.util.concurrent.atomic.AtomicReference<FrontierV3EntityResourceDropTransaction>();
         var finished=new java.util.concurrent.atomic.AtomicBoolean();
+        var rejoined=new java.util.concurrent.atomic.AtomicReference<Mob>();
         helper.onEachTick(()->{
             if(finished.get())return;
             try{
@@ -116,7 +117,22 @@ public final class FrontierV3BodyOperationGameTests {
                                 && body.getInventory().getItem(3).isEmpty(),"one actual native transfer precedes canonical acknowledgement");
                         helper.assertTrue(!FrontierV3UnitInventoryDeathResources.settled(runtime.decodedState().orElseThrow(),id),"pending acknowledgement cannot release source accounting early");
                         helper.assertValueEqual(FrontierV3EntityResourceDropTransaction.read(pending.save()),pending,"pending consequence survives outbox hydration");
-                        transfer.set(pending);
+                        var current=runtime.decodedState().orElseThrow();
+                        FrontierV3ActorBodyController.cleanRetired(level,current,actor);
+                        helper.assertTrue(FrontierV3AmbientCarrierLedger.get(level,current.bootstrap().worldId()).knownBodyResidence(actor,
+                                body.getPersistentData().getLong(FrontierV3ActorBodyController.RESIDENCE_KEY)),"pending fatality keeps native residency through ordinary cleanup");
+                        var saved=body.saveWithoutId(new net.minecraft.nbt.CompoundTag());
+                        var restored=net.minecraft.world.entity.EntityType.VILLAGER.create(level);restored.load(saved);restored.setUUID(body.getUUID());
+                        helper.assertFalse(FrontierV3BodyFatalityOperation.recognizesCorpse(level,current,restored),"a duplicate corpse cannot bypass the UUID index");
+                        body.remove(net.minecraft.world.entity.Entity.RemovalReason.UNLOADED_TO_CHUNK);
+                        long lifetime=restored.getPersistentData().getLong(FrontierV3NativeOperationMarkers.LIFETIME);
+                        restored.getPersistentData().putLong(FrontierV3NativeOperationMarkers.LIFETIME,lifetime+1);
+                        helper.assertFalse(FrontierV3BodyFatalityOperation.recognizesCorpse(level,current,restored),"another native lifetime cannot borrow fatality custody");
+                        restored.getPersistentData().putLong(FrontierV3NativeOperationMarkers.LIFETIME,lifetime);
+                        helper.assertTrue(FrontierV3ServerLifecycle.observeSourceJoin(level,runtime,restored).verifiedV3Carrier(),"exact serialized corpse passes the real join composition only for aftermath");
+                        helper.assertFalse(FrontierV3ActorBodyController.recognizes(current,restored),"corpse admission is never living execution authority");
+                        helper.assertTrue(level.addFreshEntity(restored),"serialized native corpse rejoins for retained receipt recovery");
+                        rejoined.set(restored);transfer.set(pending);
                     });
                 });
                 helper.assertValueEqual(runtime.status().kind(),FrontierV3RuntimeStatus.Kind.ACTIVE,"delayed aftermath is ordinary progress, not quarantine");
@@ -129,10 +145,10 @@ public final class FrontierV3BodyOperationGameTests {
                 FrontierV3BodyFatalityOperation.reconcile(level,runtime);
                 helper.assertValueEqual(runtime.decodedState().orElseThrow(),current,"repeated recovery cannot replay death or duplicate stock");
                 finished.set(true);delayed.set(false);while(!tasks.isEmpty())tasks.remove().run();
-                body.discard();FrontierV3AmbientActorExecutor.forget(runtime);runtime.shutdown();disk.close();helper.succeed();
+                body.discard();if(rejoined.get()!=null)rejoined.get().discard();FrontierV3AmbientActorExecutor.forget(runtime);runtime.shutdown();disk.close();helper.succeed();
             }catch(RuntimeException failure){
                 finished.set(true);delayed.set(false);while(!tasks.isEmpty())tasks.remove().run();
-                body.discard();FrontierV3AmbientActorExecutor.forget(runtime);runtime.shutdown();disk.close();throw failure;
+                body.discard();if(rejoined.get()!=null)rejoined.get().discard();FrontierV3AmbientActorExecutor.forget(runtime);runtime.shutdown();disk.close();throw failure;
             }
         });
     }

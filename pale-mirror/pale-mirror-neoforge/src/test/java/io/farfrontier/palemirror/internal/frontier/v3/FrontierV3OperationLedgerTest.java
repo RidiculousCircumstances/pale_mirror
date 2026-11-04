@@ -138,6 +138,19 @@ class FrontierV3OperationLedgerTest {
         assertEquals(List.of(second), recovered.probe(first.declaration().protocol(), 1));
         assertTrue(recovered.probe(FrontierV3OperationReceipt.Protocol.BODY_FATALITY, 1).isEmpty());
     }
+    @Test void exactOwnerIndexSurvivesHydrationAndNeverPinsAnotherOwnerOrClosedOperation(){
+        var ledger=FrontierV3OperationLedger.inMemory();var declaration=declaration("owner-lifetime");var op=ledger.prepare(declaration);
+        assertTrue(ledger.hasOpen(declaration.protocol(),declaration.owner()));
+        assertFalse(ledger.hasOpen(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,declaration.owner()));
+        assertFalse(ledger.hasOpen(declaration.protocol(),new SubjectId("actor:foreign")));
+        var recovered=FrontierV3OperationLedger.load(ledger.save(new CompoundTag(),null),null);
+        assertTrue(recovered.hasOpen(declaration.protocol(),declaration.owner()));
+        assertTrue(ledger.cancelUnattempted(op.ticket()));
+        assertFalse(ledger.hasOpen(declaration.protocol(),declaration.owner()));
+        for(var participant:declaration.participants())recovered.applied(op.nativeReceipt(participant));
+        recovered.closeOwner(op.ticket());
+        assertFalse(recovered.hasOpen(declaration.protocol(),declaration.owner()));
+    }
     private static final WorldId WORLD = new WorldId("frontier:operation-test");
     private static final ResourceLocation DIMENSION = ResourceLocation.parse("minecraft:overworld");
     private static final FrontierV3OperationReceipt.Participant BODY = new FrontierV3OperationReceipt.Participant(
