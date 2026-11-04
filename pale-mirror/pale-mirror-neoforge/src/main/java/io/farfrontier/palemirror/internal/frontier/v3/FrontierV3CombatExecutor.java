@@ -137,27 +137,15 @@ public final class FrontierV3CombatExecutor {
             var strike=new MeleeStrike(order.owner(),order.revision(),actuation,order.target(),order.weapon(),item.condition(),profile,attack,
                     targetPort(target).identity().incarnation(),tick+1,tick);
             var result=FrontierV3CommandSubmission.propose(runtime,"combat-prepare",order.owner().value(),new CombatEvent.Prepared(strike));
-            // Publication callback starts reversible preparation on the exact accepted attempt;
-            // no speculative cue, movement or damage is granted to a predecessor/durability wait.
-            runtime.afterCommand(result,()->publishedPreparation(level,runtime,fighter,target,strike));
+            // Queue the exact native intent as soon as canonical publication completes.
+            // Its own durable admission, not queueing, starts the visible contact clock.
+            runtime.afterCommand(result,()->execute(level,runtime,strike));
             FrontierV3CombatTrace.strike(level,fighter,target,strike,"PREPARE_SUBMITTED",
                     result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending?"PENDING_"+pending.reason().name()
                         :result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected rejected?rejected.toString()
                         :contactHandoff?"CONTACT_HANDOFF_"+result.getClass().getSimpleName():result.getClass().getSimpleName());
             trace(order,"PREPARE",result);
         }
-    }
-    private static void publishedPreparation(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
-            Mob fighter,LivingEntity target,MeleeStrike strike){
-        var state=runtime.decodedState().orElseThrow();
-        if(!fighter.isAlive() || !target.isAlive() || !strike.equals(state.combat().pending().get(strike.owner()))
-                || !canActuate(state,strike) || level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(),strike.attacker().execution().actorId()))!=fighter
-                || level.getEntity(strike.target().entity())!=target
-                || targetPort(target).identity().incarnation()!=strike.targetIncarnation())return;
-        var rules=state.bootstrap().ruleset().melee();
-        FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
-        FrontierV3MeleeGuidance.observe(level,state,runtime,fighter,target,strike,
-                FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),runtime.executionView().orElseThrow().instant().ticks());
     }
     private static void execute(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,MeleeStrike strike) {
         var state=runtime.decodedState().orElseThrow();
@@ -217,17 +205,13 @@ public final class FrontierV3CombatExecutor {
                     strike.toString(),ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
         }
         FrontierV3CombatTrace.strike(level,fighter,target,strike,"CANONICAL_READY","PUBLISHED");
-        // The canonical preparation already owns this exact body/target attempt. A warning and
-        // parent-owned local guidance are reversible presentation, not permission to apply damage.
-        // Overlap them with external journal admission instead of serializing another windup after it.
-        FrontierV3CombatPresentation.start(level,fighter,strike,state.bootstrap().ruleset().melee(),target);
-        FrontierV3MeleeGuidance.observe(level,state,runtime,fighter,target,strike,
-                FrontierV3CombatPresentation.track(level,fighter,strike,state.bootstrap().ruleset().melee(),target),runtime.executionView().orElseThrow().instant().ticks());
+        // Native preparation begins in prepareStrike only after this intent is durable.
+        // Storage waiting cannot consume the visible windup or its finite contact window.
         var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->{
                     var current=runtime.decodedState().orElseThrow();
                     return canActuate(current,strike) && strike.equals(current.combat().pending().get(strike.owner())) && target.isAlive() && fighter.isAlive()
                             && fighter.hasLineOfSight(target)
-                            && FrontierV3CombatPresentation.preparationRetained(level,fighter,strike)
+                            && FrontierV3CombatPresentation.preparationAvailable(level,fighter,strike)
                             && CombatComposition.CAPABILITIES.current(current,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks())
                                 .filter(order->order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent()
                             && current.inventory().items().containsKey(strike.weapon())

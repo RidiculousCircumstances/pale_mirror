@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model.combat;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode;
-/** Ordinary approach stays at walking pace; only bounded, cooldown-owned maneuvers accelerate.
+/** Tactical approaches use a combat gait; only bounded, cooldown-owned maneuvers use full pursuit pace.
  * Shared combat movement intention. The role supplies its actor's base gait; UAE/navigation alone actuates. */
 public final class CombatLocomotion {
     public record Intent(LocomotionMode mode,int multiplierPermille) {}

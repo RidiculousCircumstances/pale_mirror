@@ -129,7 +129,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
         });
         helper.onEachTick(()->{
             var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,
-                    ()->true,effect,()->hits.get()==1);
+                    ()->FrontierV3CombatPresentation.preparationAvailable(level,fighter,strike),effect,()->hits.get()==1);
             if(level.getGameTime()<admittedAfter)helper.assertTrue(visibleSince.get()==-1 && target.getHealth()==health,"waiting for admission must neither animate nor hurt");
             if(!result.complete())return;
             helper.assertTrue(target.getHealth()==health-6 && hits.get()==1,"one native hit, not merely a swing");
@@ -137,6 +137,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
             helper.assertTrue(observed.complete() && hits.get()==1,"completed native receipts never repeat the damage");
             FrontierV3CombatPresentation.cancel(level,fighter,strike);
             helper.assertFalse(FrontierV3CombatPresentation.preparationRetained(level,fighter,strike),"a cancelled exact cue cannot be restarted");
+            helper.assertFalse(FrontierV3CombatPresentation.preparationAvailable(level,fighter,strike),"cancelled exact presentation cannot enter native admission again");
             fighter.discard();target.discard();helper.succeed();
         });
     }

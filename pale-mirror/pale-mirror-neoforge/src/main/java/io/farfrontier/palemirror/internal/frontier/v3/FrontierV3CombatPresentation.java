@@ -81,6 +81,12 @@ public final class FrontierV3CombatPresentation {
         marker.putFloat("facingYaw",(float)Math.toDegrees(Math.atan2(-direction.x,direction.z)));
         marker.putFloat("facingPitch",(float)-Math.toDegrees(Math.atan2(direction.y,Math.hypot(direction.x,direction.z))));
     }
+    /** Exact canonical authority may admit an unstarted cue; a cancelled matching cue stays cancelled. */
+    static boolean preparationAvailable(ServerLevel level,Mob body,MeleeStrike strike){
+        var marker=body.getPersistentData().getCompound(KEY);
+        return !marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal()
+                || preparationRetained(level,body,strike);
+    }
     /** Expiry ends damage eligibility, not the obligation to settle this already-visible swing as a miss. */
     static boolean preparationRetained(ServerLevel level,Mob body,MeleeStrike strike){
         var marker=body.getPersistentData().getCompound(KEY);
