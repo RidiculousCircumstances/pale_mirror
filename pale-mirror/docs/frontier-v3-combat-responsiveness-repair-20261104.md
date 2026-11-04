@@ -373,3 +373,76 @@ causal defects; no blanket knockback immunity or unmeasured difficulty buff is
 justified by this trace alone. No gameplay/source/runtime/player/world mutation
 or deployment was performed in this analysis. Machine-readable evidence:
 IMPL/build/combat-knockback-20261104/{summary,findings}.json.
+
+
+## Implemented follow-up — passive native physics and actual-reach contact
+
+The common body registration now enables native travel even without an active
+path. NoAI remains set, vanilla task selection is suppressed separately, and
+expired path inputs clear without erasing velocity. The removed Y-only fallback
+is not replaced by another custom integrator: LivingEntity.travel owns gravity,
+drag, collision and external impulses in its normal turn. This also covers a
+leg waiting on a native path retry. Horse grazing suppression still belongs to
+active steering, not passive physics registration. Loot pickup remains disabled
+by the common body creator/controller; no resource owner is bypassed.
+
+Ordinary QUICK contact uses actual weapon reach even if the opponent retreats.
+SWEEP and exact missed-lunge FOLLOWUP selection remain; outside contact LUNGE
+still coordinates its approach. Native non-LUNGE readiness requires real reach,
+not an approach allowance. Fresh contact admission and burst handoff no longer
+require the preferred pressure hold; unavailable contact still refuses. Received
+harm cannot prefer BACKSTEP over an already reachable opponent. Existing exact
+membership/body/attempt fences, readiness/effort, cadence, live pending cap,
+cue and native damage/LOS/contact validation remain. No damage/reach/knockback
+resistance buff, new actuator, schema, client protocol or rules hash change.
+The existing immutable rules snapshot still retains the old quick-range hints;
+they no longer restrict actual contact and were not rewritten in the live world.
+
+Verification so far: guardrails/CombatModule/pilot compile PASS10s; ambient physics
+11native PASS31s, including a new actual-knockback component regression proving
+one integration, stale steering suppression, drag/landing, blocked-path waiting,
+wall collision and subsequent shared navigation. Local navigation45native PASS:
+non-flat/low-roof/farmland paths and physical intervention remain covered. One
+old grounded test asserted the retired gravity bridge's private zero Y velocity;
+it now runs actual native turns and checks support, health and no fall accumulation.
+Native travel normally retains its next downward impulse while on the floor.
+The new physics fixture initially expected a permanent BLOCKED response where
+the production navigator truthfully returns IN_PROGRESS/path-unavailable during
+a bounded retry; its assertion now tests the actual no-control failure state.
+Both corrected full affected slices pass. Strike17native PASS, including actual
+hit, cancellation/expiry, interposed bodies and visible-swing contact. These are
+component/boundary checks, not a claim that human hoe kiting is impossible.
+Human will test the installed balance; no additional pilot or human state edit.
+
+
+Delivery: production063cf9436 and source/release239de34095cd2d8d80e111e5476fcbe44e5cd4f0.
+The detached full build exposed an obsolete common-join audit expecting the
+pre45 internal retainsRecordedBody/recognizesRecordedBody call names directly
+in ServerLifecycle. The current body owner already composes those with exact
+corpse recognition behind recognizesSourceJoin, and passive recognition behind
+recognizesPassiveBody. The audit now checks that public common boundary and
+keeps its prohibition on family admission bypasses. Six cases PASS4s. The broad
+unit worker was stopped after that classified failure; no full-suite green
+claim. Focused final detached13adapter/boundary cases+guardrails/JAR/package
+PASS9s; source21CombatModule+4persistence+10domain architecture and7adapter/bounds
+cases PASS10s. Unmatched GuardDutyModuleTest filter is not GuardDuty evidence.
+Native body-lifetime27PASS28s additionally preserves corpse/death/drop recovery
+under the expanded passive physics scope. No extra client campaign was launched:
+the user explicitly owns the next human combat playtest. Components do not prove
+that kiting or every future balance exploit is eliminated.
+
+MAIN /home/rd/far-frontier-server / far-frontier-v3-live.service,
+Java22PID490312/wrapper490288, start1793790352, unchanged
+skill-combat-schema328-seed139-20261104, seed139/rootr31/schema328.
+Pinned SHA512:
+`29a7af1dd6ec0e47caaa77033246e6cb1eb0cd8ece16aeebb874148d50e14ea70795ca0bcc30c0fbc6d8f2dee4b546dd64dfc412d1205ce6fce401e261f8c23e`.
+Receipts /tmp/pm-combat-passive-{preflight,publish,stop,install,verify}.log:
+native dimensions saved and old process/ports exited; exact installer completed
+before final start. First early verify refused absent socket; ready verification
+passed. Summary1117423/310699 is statusok/green with0required/scene/inventory
+conflicts; subsequent status1118777/311011 confirms canonical progress/no
+fastforward request. Existing fatality/drop obligations wait on loaded evidence,
+not silently claimed closed; initial lease recovery warning remains explicit.
+No fresh ERROR, tick failure or quarantine observed. No human mode, health,
+equipment, inventory or world edited. Client update not needed. Code/release clean;
+PACK trackedclean888ed90 with preexisting .f0v-baseline/; unrelated GOV WIP retained.

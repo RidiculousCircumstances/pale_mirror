@@ -1,5 +1,50 @@
 # Active continuity — 2026-11-04
 
+## Delivered — passive physics and full-reach melee contact
+
+User authorized repair after capture45d4ee60; user will test combat balance.
+Sole main, no agents/push/new goal. Production063cf9436; final source/release
+CLEAN239de34095cd2d8d80e111e5476fcbe44e5cd4f0 adds current body-join audit repair.
+Registered bodies now receive passive native impulse/drag/gravity/collision even
+idle, hurt, recovering or path-blocked. Manual Y-only integration removed;
+vanilla task selection suppressed, absent route clears steering not velocity.
+Actual weapon reach selects QUICK even against retreat; preferred pressure hold
+cannot veto fresh contact/burst handoff. Effort/cadence/live cap/identity/native
+contact fences stay. Existing immutable quick-selection hints remain snapshot
+metadata, not contact limits. No hash/schema/protocol/world reset or human edit.
+
+Focused guardrails/21combat+4persistence+10domainarchitecture+7adapter/bounds/
+architecture checks and JAR/package PASS10s. Native physics11PASS31s;
+local navigation45PASS; strikes17PASS; body-lifetime27PASS28s. New actual knockback
+regression checks one integration, stale steering, drag/landing, blocked retry,
+wall collision and navigation resumption. Old floor test checks real support/
+health/fall rather than retired private Y-velocity zero. Initial new fixture
+misclassified retry IN_PROGRESS as BLOCKED; corrected exact failure witness.
+Full detached build encountered an obsolete pre45 common-join call-name audit;
+its broad unit worker was explicitly stopped, not claimed green. The audit now
+checks current recognizesSourceJoin/recognizesPassiveBody (including corpse
+admission), retaining family-bypass refusal. All6cases PASS4s. Final detached
+13adapter/boundary checks+guardrails/JAR/package PASS9s. Unmatched GuardDuty filter
+provided no GuardDuty test evidence. Logs /tmp/pm-combat-passive-{check,native,
+navigation,strikes,body-lifetime,final,boundary-check,release-final}.log.
+
+MAIN running far-frontier-v3-live.service, Java22PID490312/wrapper490288,
+start1793790352; same skill-combat-schema328-seed139-20261104 seed139/rootr31.
+SHA512:
+29a7af1dd6ec0e47caaa77033246e6cb1eb0cd8ece16aeebb874148d50e14ea70795ca0bcc30c0fbc6d8f2dee4b546dd64dfc412d1205ce6fce401e261f8c23e.
+Root preflight/publish/install/fresh verify PASS; native all-dimensions-saved,
+old JVM/ports exited before install; installer completed before new start.
+Receipts /tmp/pm-combat-passive-{preflight,publish,stop,install,verify}.log.
+First pre-ready verify correctly refused absent socket, final ready verify PASS.
+Fresh summary revision1117423/instant310699 statusok/green,0required/scene/
+inventoryconflicts; later status1118777/311011 proves canonical progress,
+no fastforward request. Existing BODY_FATALITY/ENTITY_RESOURCE_DROP await actual
+loaded recovery evidence and1ambient lease is UNKNOWN at restart; not newly
+classified as closed. No new ERROR/tick failure/quarantine observed.
+No task client started; human hoe-kiting/balance outcome remains unproved.
+Client update unnecessary. PACK trackedclean888ed90/preexisting.f0v-baseline/;
+GOV unrelated WIP preserved, stage only ledger/report/two owned boundary lines.
+
 ## Latest human trace — hoe pressure / passive physics defect
 
 User reports controlling guard by repeated hoe hit/knockback. Read-only capture
