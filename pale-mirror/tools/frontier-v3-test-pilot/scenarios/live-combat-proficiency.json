@@ -62,6 +62,18 @@
       ]
     },
     {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-22",
+          "field": "position"
+        }
+      },
+      "settleMs": 0
+    },
+    {
       "type": "visit_nearest_entity",
       "entityType": "minecraft:villager",
       "nameContains": {
@@ -143,14 +155,18 @@
       "pollIntervalMs": 100
     },
     {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "x": -1472,
-        "y": 64,
-        "z": -1336
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "secondGuardName"
+        }
       },
-      "settleMs": 0
+      "workerId": "resident:1-22",
+      "maxDistance": 64,
+      "timeoutMs": 30000
     },
     {
       "type": "observe_entity_motion",
@@ -163,9 +179,9 @@
         }
       },
       "workerId": "resident:1-16",
-      "maxDistance": 16,
+      "maxDistance": 64,
       "timeoutMs": 60000,
-      "id": "pair-arrival-on-open-ground",
+      "id": "pair-arrival-at-actual-contact",
       "durationTicks": 200,
       "sampleEveryTicks": 1
     },
@@ -222,13 +238,8 @@
       "requireDamage": true
     },
     {
-      "type": "walk",
-      "position": {
-        "x": -1476,
-        "y": 64,
-        "z": -1336
-      },
-      "timeoutMs": 15000
+      "type": "wait",
+      "ms": 400
     },
     {
       "type": "observe_entity_motion",
@@ -243,7 +254,7 @@
       "workerId": "resident:1-16",
       "maxDistance": 64,
       "timeoutMs": 15000,
-      "id": "response-after-punch-and-retreat-1",
+      "id": "response-after-repeated-punch-1",
       "durationTicks": 40,
       "sampleEveryTicks": 1
     },
@@ -265,13 +276,8 @@
       "requireDamage": true
     },
     {
-      "type": "walk",
-      "position": {
-        "x": -1472,
-        "y": 64,
-        "z": -1340
-      },
-      "timeoutMs": 15000
+      "type": "wait",
+      "ms": 400
     },
     {
       "type": "observe_entity_motion",
@@ -286,7 +292,7 @@
       "workerId": "resident:1-16",
       "maxDistance": 64,
       "timeoutMs": 15000,
-      "id": "response-after-punch-and-retreat-2",
+      "id": "response-after-repeated-punch-2",
       "durationTicks": 40,
       "sampleEveryTicks": 1
     },
@@ -308,13 +314,8 @@
       "requireDamage": true
     },
     {
-      "type": "walk",
-      "position": {
-        "x": -1470,
-        "y": 64,
-        "z": -1336
-      },
-      "timeoutMs": 15000
+      "type": "wait",
+      "ms": 400
     },
     {
       "type": "observe_entity_motion",
@@ -329,7 +330,7 @@
       "workerId": "resident:1-16",
       "maxDistance": 64,
       "timeoutMs": 15000,
-      "id": "response-after-punch-and-retreat-3",
+      "id": "response-after-repeated-punch-3",
       "durationTicks": 40,
       "sampleEveryTicks": 1
     },
@@ -351,13 +352,8 @@
       "requireDamage": true
     },
     {
-      "type": "walk",
-      "position": {
-        "x": -1472,
-        "y": 64,
-        "z": -1332
-      },
-      "timeoutMs": 15000
+      "type": "wait",
+      "ms": 400
     },
     {
       "type": "observe_entity_motion",
@@ -372,7 +368,7 @@
       "workerId": "resident:1-16",
       "maxDistance": 64,
       "timeoutMs": 15000,
-      "id": "response-after-punch-and-retreat-4",
+      "id": "response-after-repeated-punch-4",
       "durationTicks": 40,
       "sampleEveryTicks": 1
     },
@@ -483,7 +479,7 @@
     },
     {
       "after": 7,
-      "name": "pair-open-ground-arrival",
+      "name": "pair-at-actual-contact",
       "presentation": "clean"
     },
     {
