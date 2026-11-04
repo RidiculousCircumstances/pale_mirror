@@ -11,14 +11,15 @@ pale_mirror v3 combat_trace stop
 ```
 
 The interval is 1..20 native server ticks; duration 1..600 real seconds. Defaults
-are 2 ticks / 180 seconds. Wait for RECORDING before the fight. Opening JFR is
+are 2 ticks / 180 seconds. Wait for RECORDING before the fight. Partial completion is INCOMPLETE, never SAVED. Opening the scoped writer is
 asynchronous: STARTING is not a recording acknowledgement. Stop is asynchronous:
 EXPORTING then SAVED; the completion log/next status supplies both paths.
 Expiry and player disconnect stop automatically. A stopped server explicitly
 finishes the capture; only final server shutdown may wait up to 10 seconds for
 its diagnostic export. This wait is absent from normal ticks and commands.
 One capture may be active/exporting per server. Files remain under runtime
-`debug/pale-mirror/combat/combat-<UUID>.jsonl` and the matching `.jfr`.
+`debug/pale-mirror/combat/combat-<UUID>.jsonl`. Current captures do not start
+a JVM recording; earlier `.jfr` evidence is retained unchanged.
 No world reset, client protocol change or client update is required.
 
 ## Recorded evidence
@@ -52,22 +53,24 @@ separately. Capture does not modify these decisions or the damage predicate.
 
 ## Storage and analysis
 
-`CombatTraceCapture` owns optional JFR lifecycle/export; `FrontierV3CombatTrace`
-owns operator-selected observation scope and native event subscriptions. The
-command branch delegates to that one recorder. Existing combat owners supply
-read-only observation hooks; none receives a new behavior/scheduler dependency.
-JFR writes bounded background chunks; starting/stopping/dumping and JSONL export
-run on one daemon worker with a bounded queue. Disabled tracing uses constant
-lookups, no entity scan, serialization or recording worker. Sampling/serialization
-while enabled is bounded extra server work, not a claim of zero overhead.
+`CombatTraceCapture` owns one optional bounded JSONL writer; `FrontierV3CombatTrace`
+owns operator-selected observation scope and native event subscriptions. Common
+combat supplies read-only hooks, never a second gameplay owner. The server
+copies/serializes each observation and offers it without waiting to a1024-row
+queue. One daemon consumes immutable rows and performs all file I/O. Starting,
+finishing, duration expiry and export do not wait for disk on ordinary ticks.
+A terminal server shutdown alone may wait up to10seconds for diagnostic closure.
+Disabled tracing performs no body scan, serialization or writer work.
 
-Safety caps: 50,000 observations; JFR maxSize 64MiB; JSONL export 128MiB; at most 16
-retained raw capture files before a new start explicitly refuses and asks that
-completed captures be archived. There is no silent evidence deletion. Sequence,
-expected/written counts, JFR loss, export limit and terminal reason make gaps or
-aborted captures explicit. SAVED means files are available; footer complete must
-still be checked before treating absence as evidence. A hard process failure may
-leave only JFR emergency data, not a completed JSONL; no crash-completeness claim.
+Safety caps:50000observations;8192characters per row;128MiB output;16retained
+JSONL captures. A cap, failed storage, observation failure or writer queue
+saturation is explicit. INCOMPLETE never becomes SAVED. Sequence and expected/
+written counts plus the footer must still be checked before treating absence
+as evidence. The writer retains the beginning until an explicit stop/cap;
+unrelated JVM-wide JFR traffic cannot evict it. No silent evidence deletion,
+server-thread file flush, unbounded queue or claim of crash-complete recording.
+New producer d91c6d285 supersedes the old JFR producer discussed historically
+below; `dataLoss` now reports missing scoped rows, not a JVM JFR event.
 
 ```bash
 python3 tools/engineering/combat_trace.py /absolute/path/combat-UUID.jsonl
@@ -134,7 +137,7 @@ no attacks and is not proof of guard balance; actual damage capture is the
 separately described native test. All task client/private-display processes
 exited. MAIN remains running with no active recorder. No push performed.
 
-## Human fight capture — 2026-11-04 13:02–13:04 local
+## Historical human fight — old producer, 2026-11-04 13:02–13:04 local
 
 Capture146c5de2-2bdf-485d-8fc7-cc655e715c09, same deployed source/JVM/world.
 Operator stopped at13:04:59; no client or gameplay mutation by investigation.
@@ -217,3 +220,9 @@ issues: lossless bounded scoped recording, opportunistic close-strike admission
 inside coordinated attack limits, moving-target approach/visible timing, and
 explicit terminal semantics for expired visible attacks. These need coherent
 source repairs and focused verification; this report does not claim them fixed.
+
+The producer and combat findings above are addressed by
+[the subsequent responsiveness repair](frontier-v3-combat-responsiveness-repair-20261104.md).
+Its full client story passed, and the new scoped capture2068/2068rows includes
+actual circling SWEEP damage and safe encounter release. Old evicted observations
+remain missing; the repair does not reconstruct them.

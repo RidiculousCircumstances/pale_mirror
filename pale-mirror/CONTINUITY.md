@@ -1,6 +1,62 @@
 # Active continuity — 2026-11-04
 
-## Current result — human combat trace analyzed; producer retention defect open
+## Delivered repair — combat responsiveness and scoped recorder
+
+User authorized repairs. Sole main, no agents/push/new goal. Production commit
+d91c6d285cc9b00528bedd62d27271d71a221595: JSONL-only bounded background writer
+replaces shared JFR retention; truthful INCOMPLETE/FAILED. Exact fresh close
+holding/attack-ready QUICK/SWEEP/FOLLOWUP admits without wave delay under same
+two-pending cap/readiness/cadence/body identity. Published canonical preparation
+starts reversible cue and parent-owned local guidance while external journal
+admission runs; no damage before durable operation intent. Expired exact cue
+settles through journaled MISS without late damage/replay. Flankers can begin
+bounded bursts before their final flank; endpoint geometry/sector/contact and
+existing cooldown/effort stay. Close contact wins over retreat from an old blow.
+No weapon buff/permanent sprint/schema/hashed-rule change. Same world retained.
+
+IMPL CLEAN HEAD8e8c04022 includes only scenario successors to production d91.
+RELEASE CLEAN detached d91. PACK tracked clean888ed90; preexisting untracked
+.f0v-baseline/ retained. GOV unrelated WIP preserved. Stage only owned ledger,
+two combat reports and exact two boundary lines. Main report:
+docs/frontier-v3-combat-responsiveness-repair-20261104.md.
+
+/tmp/pm-combat-responsive-final.log PASS28s:guardrails,20CombatModule,
+11GuardDuty,4FrontierPersistenceCodec,3recorder,JAR/package. Final scene-strikes
+17native PASS64s incl actual async journal expiry→one miss/no damage/no replay.
+Detached release guardrails/JAR/package PASS9s. Validators pass. Initial invalid
+compileGameTestJava command corrected to compilePilotJava; not a product bug.
+Unmatched animation filter is not fresh render-test evidence. No affected red.
+
+MAIN /home/rd/far-frontier-server, far-frontier-v3-live.service,
+actual Java22PID3969462/wrapper3969428, start epoch1793781538,
+world skill-combat-schema328-seed139-20261104 retained. SHA512:
+dbc06f2d2ea2a37c3d51d28579b2767ad1e5fb70e3d3248a31ac93339b8aee3231615085a4697d00846dd10f118b380fc16d68963d0371677c943c07dd1e4bf6.
+Root receipts /tmp/pm-combat-responsive-{preflight,publish,stop,install,verify}.log;
+native save+old JVM/ports exit before installation; fresh verifyPASS; no new
+quarantine. No human state edited. Client update not required. Commands unchanged:
+`pale_mirror v3 combat_trace start rd 2 180`, status, stop. JSONL only; historical
+partial JFR/JSONL evidence kept.
+
+Fullpack20FPS/privateXvfb probe21948c4e-e820-4443-bd49-f6d8734cddbb PASS14actions:
+ordinary harm/response/player damage,400pose samples of ordinary circling
+(87.138blocks/400level ticks), dimension escape without additional damage,
+contact/responders/maneuvers released. Same guard:9SWEEPs,8hits/32damage,
+1out-of-reach miss;11total hits/12attempts. Actual changing rendered SWEEP/BURST/
+LUNGE; two frames personally reviewed. Capture3c890aba-db52-40ba-8675-2877a091c493
+2068/2068complete,no loss/cap. All12published canonical→cue delays0ticks,
+submission→cue2–3ticks. Artifacts IMPL/build/combat-responsive-20261104/
+live-local-{manifest,summary,phase-summary}.json. No universal human-balance claim.
+
+Earlier probes failed invalid fixture expectations (hostile count1 despite rd+
+pilot memory2; teleport between defence posts while following unavailable old
+responder). Final scenario checks selected contact UUID and circles original
+exact actor, retaining movement/damage/escape/release requirements. Detailed
+failure limits/receipts in report. Product mechanics unchanged between probes.
+All task clients/private displays exited. Recorder SAVED/inactive, no monitoring
+or verification process left; MAIN running. Human retest can assess difficulty.
+Historical diagnosis below precedes this delivered repair and is not current debt.
+
+## Historical diagnosis — superseded by delivered d91c6d285 repair
 
 User requested console-controlled N-tick positions and attack/damage history
 following a bare-hand circling report. No AI/balance changed. Old MAIN logs show
