@@ -14,6 +14,8 @@ public final class CombatCapabilities {
         var value=entries.get(execution.activityKind());
         if(value==null)throw new IllegalArgumentException("unregistered combat execution kind: "+execution.activityKind());return value;
     }
+    /** Read-only capability discovery, e.g. recording a mixture of combatants and ordinary bystanders. */
+    public boolean supports(ActorActivityKind kind){return entries.containsKey(Objects.requireNonNull(kind));}
     public Optional<CombatOrder> current(FrontierWorldState state,ActorExecutionId execution,long tick) {
         var value=require(execution);value.requireReference(state,execution);return value.current(state,execution,tick);
     }

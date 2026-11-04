@@ -224,7 +224,8 @@ public final class FrontierV3CombatTrace {
                 if(execution!=null)execution.current().ifPresent(current->{
                     row.addProperty("activity",current.activityKind().name());row.addProperty("owner",current.activityOwnerId().value());
                     var owner=current.activityOwnerId();var combat=state.combat();
-                    io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES.current(state,current,runtime.calendarInstant().orElseThrow()).ifPresent(order->{
+                    var capabilities=io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES;
+                    if(capabilities.supports(current.activityKind()))capabilities.current(state,current,runtime.calendarInstant().orElseThrow()).ifPresent(order->{
                         var plan=combat.engagements().get(CombatEngagement.Key.of(order));
                         var member=plan==null?null:plan.participants().get(owner);
                         if(member!=null && member.execution().equals(current)){

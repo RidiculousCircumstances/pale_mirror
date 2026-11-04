@@ -129,6 +129,16 @@
       "pollIntervalMs": 100
     },
     {
+      "type": "walk",
+      "position": {
+        "x": -1524,
+        "y": 64,
+        "z": -1360
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "ordinary_retreat_to_open_ground_for_group_maneuver_check"
+    },
+    {
       "type": "observe_entity_motion",
       "entityType": "minecraft:villager",
       "nameContains": {
@@ -252,7 +262,7 @@
   ],
   "assertions": [
     {
-      "after": 10,
+      "after": 11,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -267,12 +277,12 @@
   ],
   "frames": [
     {
-      "after": 4,
+      "after": 5,
       "name": "pair-pressure-and-flank",
       "presentation": "clean"
     },
     {
-      "after": 7,
+      "after": 8,
       "name": "pair-circling-response",
       "presentation": "clean"
     }
