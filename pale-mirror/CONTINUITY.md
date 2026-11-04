@@ -1,5 +1,32 @@
 # Active continuity — 2026-11-04
 
+## Latest human trace analysis — remaining close-combat limitations
+
+User requested checking new captureb68568de-0e3f-4afb-b2d9-a437d5bc815f;
+read-only analysis complete. No code/deploy/client/world/difficulty mutation.
+9466/9466complete,52.81s/~20TPS. Same d91/PID3969462/world below.
+rd emptyhand19.2s then iron sword; five kills but initial victim HP4/19/12/20/4,
+so not five fresh full-health guards. Player20→12 via2hits. Seven visible attacks:
+2hits/4out-of-reach/1expired-window miss;5more early range cancels;onepreparation
+loses its attacker to death without terminal trace row (not proof of stuck state).
+All7published→cue0ticks, submit→cue3–4; prior timing/recorder fixes observed.
+
+Remaining evidenced limitations: player median moving4.07blocks/s,guards1.93–2.0;
+MANEUVER_BUSY suppresses4QUICK/SWEEP opportunities at1.43–2.06range. Owen LUNGE
+retains old native nav destination and loses gap2.79→4.74 without being struck.
+Exact local-correction refusal/expiry not traced. Source counterexample: correction
+TTL2native ticks vs bounded ambient probe/ACTOR-before-EFFECT and predecessor
+waits without a2tickconsumer guarantee. Contract needs exact attempt/phase-bound
+lifetime and consumed guidance, not arbitrary TTL inflation. Short-window cadence
+also merits review; only2tickpositions, so an unsampled valid contact is unproved.
+Easy difficulty confirmed by actual console query and dependency Player.hurt/
+NeoForge IScalingFunction.DEFAULT: base6→4against player is ordinary scaling.
+No difficulty adjustment. Full findings/qualifications appended to
+combat-responsiveness-repair report; offline files in IMPL/build/combat-responsive-
+20261104/user-new-fight-{summary,findings}.json. Next possible work: closing
+correction consumer/lifetime, contact-aware maneuver→strike, approach vs real
+hit/retreat/knockback. No new repair claim. Source/runtime identities unchanged.
+
 ## Delivered repair — combat responsiveness and scoped recorder
 
 User authorized repairs. Sole main, no agents/push/new goal. Production commit

@@ -119,3 +119,76 @@ All task clients/private displays exited after each bounded check. Final recorde
 status SAVED/inactive, MAIN running. Human can repeat combat with unchanged
 console commands. The runtime mechanics and producer repair are delivered;
 human judgement of skill/fun/difficulty remains separate.
+
+## Subsequent human fight — 14:16–14:17 local
+
+User requested analysis of captureb68568de-0e3f-4afb-b2d9-a437d5bc815f only.
+No code, world, difficulty, player state or server process was changed.
+Same production d91c6d285/JVM3969462/world. Complete9466/9466rows, no loss/cap;
+about52.81seconds,1056native and1056canonical ticks,19.996TPS. Offline artifacts:
+IMPL/build/combat-responsive-20261104/user-new-fight-{summary,findings}.json.
+
+rd adventure/unarmoured, empty hand for the first19.2seconds, then iron sword.
+Five recorded kills: Owen Ash, Alex Bell resident1-born-2, Vera Moss, Alex Rowan,
+Nora Bell. Initial captured health respectively4/19/12/20/4; these are not five
+fresh full-health opponents. Owen died to four one-point punches; remaining
+kills used the sword. Player20→12health via two actual four-point guard hits.
+Seven visible weapon attacks:2hits,4OUT_OF_REACH,1WINDOW_CLOSED. Five more
+attempts cancel OUTSIDE_APPROACH_ALLOWANCE before a cue. Thirteenth preparation
+is followed by its attacker's death without a terminal trace row; absence of that
+row is not proof that canonical pending cleanup was stuck.
+
+Prior repairs are observed: seven CANONICAL_READY→cue delays0ticks;
+submission→cue3ticks for six attempts/4ticks for one. SWEEP now actually starts
+and one hits. Expired QUICK settles as MISS:WINDOW_CLOSED rather than a false
+unused cancellation. This human behavior is repeated approach/hit/retreat and
+knockback, not a controlled repetition of the pilot's constant circle. Do not
+claim equal conditions or extrapolate the pilot's8/9hit rate to human PvP.
+
+Remaining concrete issues/contributors:
+
+- Observed median moving pace rd4.07blocks/sec vs guards1.93–2.0. BURST is finite
+  and does occur, but ordinary pursuit cannot maintain this player's contact.
+  This is current policy, not new server tick debt. No EFFORT gate was observed.
+- The active maneuver gate suppresses actual close opportunities: Owen QUICK
+  at1.43, Alex Bell SWEEP at1.90and2.06, Alex Rowan QUICK at1.59all report
+  MANEUVER_BUSY. Source MeleeManeuver.busy is open travel or closed recovery;
+  executor checks it before strike admission. Thus reaching weapon contact
+  does not itself transition a closing maneuver into an available attack.
+- Owen LUNGE197071 prepares at native44513,distance2.79; visible44516,d3.28;
+  misses44528,d4.74. Native navigation target remains(-1501,64,-1317) through
+  these rows; fighter goes(-1499.17,-1314.97)→(-1500.53,-1316.53), while player
+  goes(-1502.21,-1314.13)→(-1504.69,-1313.48). No intervening hurt/knockback on
+  Owen. This observed closing attempt does not close the gap and retains its
+  previous native destination. The existing trace does not record each local
+  guidance offer/refusal/consumer, so its exact rejection/expiry cause remains
+  unconfirmed; a physical native path endpoint alone cannot prove that a
+  particular semantic correction was accepted.
+- Static counterexample: MeleeGuidance corrections expire after2native ticks,
+  while consumption is via the bounded ambient actor probe before combat EFFECT
+  in the shared physical pass. Canonical-predecessor waits and actor scheduling
+  have no guarantee of consumption in those2ticks. The pass may therefore drop
+  a still-owned closing correction before its consumer runs and keep the old
+  path. This is a source-level lifetime/consumer contract defect; it is not yet
+  uniquely correlated to the Owen attempt. Raising an arbitrary TTL alone would
+  not establish the required exact owner/attempt/phase lifetime or consumption.
+- The short QUICK197739 cue begins45184, contact window after4windup ticks
+  through45191. Admission at45189sees3.35range; at45192range2.60but window closed.
+  Position sample45190still3.141;45191is not sampled. Therefore missed contact
+  on an intervening tick is unproved. Actual executors commonly observed every
+  2–3ticks and global physical-pass admission waits for canonical predecessors;
+  a future contact-window repair must examine that cadence, not assert missing
+  per-tick evidence as a proven hit. Several other short attempts are knocked
+  back by an actual player hit, then outdistanced during warning.
+- Server config and read-only difficulty command both say Easy. Actual profile
+  base damage6 becomes4against rd while player's charged sword usually deals6.
+  Verified dependency snapshotac5901effb63: Player.hurt around903 delegates to
+  DamageScaling.getScalingFunction; NeoForge IScalingFunction.DEFAULT lines24–35
+  scales Easy damage to min(amount/2+1,amount) only for players. This is ordinary
+  difficulty scaling, not a corrupt weapon profile; no difficulty change made.
+
+Next engineering focus is actual consumption/lifetime of parent-owned closing
+corrections, contact-aware maneuver-to-strike transition and responsive approach
+under real hit/retreat/knockback. Keep shared UAE/navigation/body/effect authority,
+finite cues and dodge windows. Do not substitute raw damage/range buffs or a
+permanent sprint, or classify every legitimate timed dodge as a product bug.
