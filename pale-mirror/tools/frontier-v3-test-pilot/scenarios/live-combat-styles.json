@@ -178,9 +178,9 @@
       },
       "workerId": "resident:1-16",
       "maxDistance": 64,
-      "timeoutMs": 30000,
+      "timeoutMs": 60000,
       "id": "style-response-to-observed-harm",
-      "durationTicks": 180,
+      "durationTicks": 600,
       "sampleEveryTicks": 1
     },
     {
