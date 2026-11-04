@@ -11,6 +11,7 @@ class CombatTraceCaptureTest {
     @TempDir Path directory;
     @Test void recordingExportsExactObservedRowsAndClosesWithoutAcceptingLaterEvents()throws Exception {
         var metadata=new JsonObject();metadata.addProperty("playerName","тест");
+        var recordings=jdk.jfr.FlightRecorder.getFlightRecorder().getRecordings().size();
         var capture=new CombatTraceCapture(directory,30,metadata);
         capture.readiness().toCompletableFuture().get(15,TimeUnit.SECONDS);
         var position=new JsonObject();position.addProperty("x",1.25);position.addProperty("uuid","observed-body");
@@ -22,10 +23,11 @@ class CombatTraceCaptureTest {
         assertEquals(1.25,rows.get(1).get("x").getAsDouble());assertEquals(1,rows.get(1).get("sequence").getAsInt());
         assertEquals("damage_applied",rows.get(2).get("kind").getAsString());assertEquals(7.5,rows.get(2).get("x").getAsDouble());
         assertTrue(rows.getLast().get("complete").getAsBoolean());assertEquals("OPERATOR_STOP",rows.getLast().get("reason").getAsString());
-        assertTrue(Files.size(capture.jfr)>0);assertTrue(capture.status().startsWith("SAVED"));
+        assertEquals(recordings,jdk.jfr.FlightRecorder.getFlightRecorder().getRecordings().size(),"scoped capture never enables or shares JVM-wide event retention");
+        assertTrue(Files.size(capture.json)>0);assertTrue(capture.status().startsWith("SAVED"));
         capture.finish("DUPLICATE_STOP");assertEquals(rows.size(),Files.readAllLines(path).size());
     }
-    @Test void durationStopsTheActualRecorderAndStillProducesATerminalCompletenessReceipt()throws Exception {
+    @Test void durationStopsTheScopedWriterAndStillProducesATerminalCompletenessReceipt()throws Exception {
         var capture=new CombatTraceCapture(directory,1,new JsonObject());
         capture.readiness().toCompletableFuture().get(15,TimeUnit.SECONDS);
         capture.record("position",new JsonObject());
@@ -36,4 +38,18 @@ class CombatTraceCaptureTest {
         var lines=Files.readAllLines(path);var end=JsonParser.parseString(lines.getLast()).getAsJsonObject();
         assertTrue(end.get("complete").getAsBoolean());assertEquals(1,end.get("writtenEvents").getAsInt());
     }
+    @Test void failedStorageIsVisibleAndAnAbortedCaptureIsNeverReportedAsSaved()throws Exception {
+        var file=directory.resolve("not-a-directory");Files.writeString(file,"occupied");
+        var failed=new CombatTraceCapture(file,30,new JsonObject());
+        assertThrows(java.util.concurrent.ExecutionException.class,()->failed.completion().toCompletableFuture().get(15,TimeUnit.SECONDS));
+        assertTrue(failed.status().startsWith("FAILED"));
+        var aborted=new CombatTraceCapture(directory,30,new JsonObject());
+        aborted.readiness().toCompletableFuture().get(15,TimeUnit.SECONDS);
+        aborted.record("position",new JsonObject());aborted.finish("CAPTURE_ERROR");
+        aborted.completion().toCompletableFuture().get(15,TimeUnit.SECONDS);
+        assertTrue(aborted.status().startsWith("INCOMPLETE"));
+        var rows=Files.readAllLines(aborted.json);
+        assertFalse(JsonParser.parseString(rows.getLast()).getAsJsonObject().get("complete").getAsBoolean());
+    }
+
 }

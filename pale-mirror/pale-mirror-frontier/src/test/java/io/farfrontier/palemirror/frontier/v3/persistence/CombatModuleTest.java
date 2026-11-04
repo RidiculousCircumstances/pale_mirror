@@ -272,6 +272,24 @@ class CombatModuleTest {
         state=state.completed(state.pending().get(a.owner()),110,rules);
         assertTrue(CombatEngagementPlanner.permitsStrike(state,c,third,110,rules));
     }
+    @Test void closeNativeOpportunityDoesNotWaitForAGroupWaveButCannotBorrowAnotherBodyOrExceedItsCap(){
+        var rules=MeleeRules.initial();var a=order(1,Optional.empty());var b=order(2,Optional.empty());var c=order(3,Optional.empty());
+        var first=new ActorActuationId(new ActorBodyId(a.execution().actorId(),1),a.execution());
+        var second=new ActorActuationId(new ActorBodyId(b.execution().actorId(),1),b.execution());
+        var third=new ActorActuationId(new ActorBodyId(c.execution().actorId(),1),c.execution());
+        var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules)
+                .stance(new MeleeStance(first,a.target(),true,true,100)).stance(new MeleeStance(second,b.target(),true,true,100))
+                .stance(new MeleeStance(third,c.target(),true,true,100));
+        assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,100,rules));
+        assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.QUICK,100,rules));
+        assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.LUNGE,100,rules),"long approach still coordinates its commitment");
+        assertFalse(CombatEngagementPlanner.permitsStrike(state,a,new ActorActuationId(new ActorBodyId(a.execution().actorId(),2),a.execution()),MeleeAttack.SWEEP,100,rules));
+        assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,120,rules),"old native contact is not a fresh opportunity");
+        state=CombatEngagementPlanner.committed(state,a,first).prepared(new MeleeStrike(a.owner(),1,first,a.target(),a.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.SWEEP,1,101,100));
+        assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,100,rules),"same attempt is never admitted twice");
+        state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
+        assertFalse(CombatEngagementPlanner.permitsStrike(state,c,third,MeleeAttack.SWEEP,100,rules),"immediate contact shares the same two-strike cap");
+    }
     @Test void allMechanicalIngressHasAnExactCodecAndRejectsTruncation(){
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var events=List.<CombatEvent>of(new CombatEvent.WeaponDefined(order.execution(),order.weapon(),SWORD),new CombatEvent.WeaponObserved(actor,order.weapon(),SWORD),

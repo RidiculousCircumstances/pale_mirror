@@ -55,7 +55,8 @@ public final class FrontierV3CombatTrace {
         if(session.closing)return;
         session.closing=true;session.capture.finish(reason);session.tracked.clear();session.changes.clear();
         session.capture.completion().whenComplete((path,failure)->{
-            if(failure==null)PaleMirrorMod.LOGGER.info("PMV3_COMBAT_CAPTURE_SAVED capture={} file={}",session.capture.id,path);
+            if(failure==null && session.capture.status().startsWith("SAVED"))PaleMirrorMod.LOGGER.info("PMV3_COMBAT_CAPTURE_SAVED capture={} file={}",session.capture.id,path);
+            else if(failure==null)PaleMirrorMod.LOGGER.warn("PMV3_COMBAT_CAPTURE_INCOMPLETE {}",session.capture.status());
             else PaleMirrorMod.LOGGER.error("PMV3_COMBAT_CAPTURE_SAVE_FAILED capture={}",session.capture.id,failure);
         });
         PaleMirrorMod.LOGGER.info("PMV3_COMBAT_CAPTURE_END capture={} reason={} file={}",session.capture.id,reason,session.capture.json);
@@ -63,7 +64,7 @@ public final class FrontierV3CombatTrace {
     @SubscribeEvent public static void tick(ServerTickEvent.Post event) {
         var server=event.getServer();var session=SESSIONS.get(server);if(session==null || session.closing)return;
         if(session.capture.full() || session.capture.expired()) {finish(session,session.capture.full()?"EVENT_LIMIT":"DURATION");return;}
-        if(session.capture.finished()){finish(session,"OPEN_FAILED");return;}
+        if(session.capture.finished()){finish(session,session.capture.reason());return;}
         if(!session.capture.running() || server.getTickCount()<session.nextSample)return;
         session.nextSample=server.getTickCount()+session.interval;
         var player=server.getPlayerList().getPlayer(session.player);if(player==null){finish(session,"PLAYER_DISCONNECTED");return;}

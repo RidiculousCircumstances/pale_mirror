@@ -72,14 +72,13 @@ public final class FrontierV3CombatPresentation {
         marker.putFloat("facingYaw",(float)Math.toDegrees(Math.atan2(-direction.x,direction.z)));
         marker.putFloat("facingPitch",(float)-Math.toDegrees(Math.atan2(direction.y,Math.hypot(direction.x,direction.z))));
     }
-    /** An unused intent may wait for the journal; a started cue has one finite lifetime. */
-    static boolean preparationOpen(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules){
+    /** Expiry ends damage eligibility, not the obligation to settle this already-visible swing as a miss. */
+    static boolean preparationRetained(ServerLevel level,Mob body,MeleeStrike strike){
         var marker=body.getPersistentData().getCompound(KEY);
-        if(!marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal())return true;
-        long elapsed=level.getGameTime()-marker.getLong("startedAtTick");
-        return marker.getLong("epoch")==strike.attacker().body().physicalEpoch()
+        return marker.getString("owner").equals(strike.owner().value()) && marker.getLong("ordinal")==strike.attemptOrdinal()
+                && marker.getLong("epoch")==strike.attacker().body().physicalEpoch()
                 && marker.getInt("phase")==CombatGesturePayload.Phase.PREPARING.wireTag()
-                && elapsed>=0 && elapsed<=rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks();
+                && level.getGameTime()>=marker.getLong("startedAtTick");
     }
     /** Validation reads the retained clock; it never starts a pose or changes native NBT. */
     static boolean strikeWindow(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules){

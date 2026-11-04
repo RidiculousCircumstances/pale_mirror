@@ -10,7 +10,7 @@ import net.neoforged.neoforge.gametest.*;
 import java.nio.file.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Native damage subscribers and actual JFR export, without changing combat decisions. */
+/** Native damage subscribers and actual scoped JSONL export, without changing combat decisions. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3CombatTraceGameTests {
@@ -40,7 +40,7 @@ public final class FrontierV3CombatTraceGameTests {
                     helper.assertTrue(rows.stream().anyMatch(row->row.get("kind").getAsString().equals("damage_applied")
                             && row.getAsJsonObject("target").get("uuid").getAsString().equals(target.getUUID().toString())
                             && row.get("damage").getAsFloat()==1),"real post-damage event recorded separately from positions");
-                    Files.delete(file);Files.delete(file.resolveSibling("combat-"+id+".jfr"));
+                    Files.delete(file);
                     target.discard();player.discard();helper.succeed();
                 }
             } catch(Exception failure) {

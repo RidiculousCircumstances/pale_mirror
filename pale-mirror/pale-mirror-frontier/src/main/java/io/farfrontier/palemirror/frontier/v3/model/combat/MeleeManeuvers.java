@@ -20,7 +20,6 @@ public final class MeleeManeuvers {
                 && (facts.distance()>=rules.distantGapMicros()/1_000_000.0 || facts.separatingSpeed()>=rules.retreatSpeedMicros()/1_000_000.0)?MeleeManeuver.Kind.BURST:null;
         if(kind==MeleeManeuver.Kind.BURST && MeleePositions.weapon(state.combat(),order)
                 .filter(profile->facts.distance()<=rules.burstDistance()+profile.reach()).isEmpty())return Optional.empty();
-        if(kind==MeleeManeuver.Kind.BURST && !MeleeTactics.readyAt(state.combat(),order,order.actorPosition(),tick,state.bootstrap().ruleset().melee()))return Optional.empty();
         return kind!=null && state.combat().affords(order.owner(),tick,state.bootstrap().ruleset().melee().readiness().cost(kind),state.bootstrap().ruleset().melee())
                 && capability.maneuvers().contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
     }

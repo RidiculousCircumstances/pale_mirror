@@ -14,7 +14,7 @@ public enum CombatStatus {
         var stance=state.combat().stances().get(order.owner());
         if(stance!=null && stance.current(order,tick,state.bootstrap().ruleset().melee()) && stance.attackReady()){
             if(tick<state.combat().nextAttack().getOrDefault(order.owner(),0L))return RECOVERING;
-            return CombatEngagementPlanner.permitsStrike(state.combat(),order,stance.observer(),tick,state.bootstrap().ruleset().melee())
+            return CombatEngagementPlanner.permitsStrike(state.combat(),order,stance.observer(),stance.holding()?MeleeAttack.QUICK:MeleeAttack.LUNGE,tick,state.bootstrap().ruleset().melee())
                     ?READY_FOR_NATIVE_CHECK:COORDINATING_ATTACK;
         }
         if(MeleePositions.holding(state,order,tick))return HOLDING;

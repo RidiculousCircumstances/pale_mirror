@@ -68,8 +68,25 @@ public final class CombatEngagementPlanner {
         members.put(id,new CombatEngagement.Participant(member.engagement(),member.execution(),MeleeSector.Role.PRESSURE,member.renewedAt()));return true;
     }
     public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long tick,MeleeRules rules){
-        var plan=state.engagements().get(CombatEngagement.Key.of(order));return plan!=null && plan.permits(order,observer,tick,rules.engagements())
-                && plan.participants().keySet().stream().filter(state.pending()::containsKey).limit(rules.engagements().maximumWaveSize()).count()<rules.engagements().maximumWaveSize();
+        return permitsStrike(state,order,observer,MeleeAttack.LUNGE,tick,rules);
+    }
+    /** Real close contact may spend an ordinary strike now, while the encounter still caps live commitments. */
+    public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
+        var plan=state.engagements().get(CombatEngagement.Key.of(order));
+        if(plan==null || state.pending().containsKey(order.owner()) || state.recovering(order.owner(),tick)
+                || state.maneuverBusy(order.owner(),tick,rules.maneuvers()) || !state.affords(order.owner(),tick,rules.readiness().cost(attack),rules)
+                || plan.participants().keySet().stream().filter(state.pending()::containsKey).limit(rules.engagements().maximumWaveSize()).count()>=rules.engagements().maximumWaveSize())return false;
+        if(plan.permits(order,observer,tick,rules.engagements()))return true;
+        var member=plan.participants().get(order.owner());var stance=state.stances().get(order.owner());
+        return attack!=MeleeAttack.LUNGE && member!=null && member.execution().equals(order.execution())
+                && observer.execution().equals(order.execution()) && stance!=null && stance.observer().equals(observer)
+                && stance.current(order,tick,rules) && stance.attackReady() && stance.holding();
+    }
+    /** Consumes an existing reservation when present; the retained pending strike itself owns immediate admission. */
+    public static CombatState committed(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer){
+        var plan=Objects.requireNonNull(state.engagements().get(CombatEngagement.Key.of(order)));
+        boolean slot=plan.wave().stream().flatMap(value->value.slots().stream()).anyMatch(value->value.participant().equals(observer) && !value.committed());
+        return slot?state.withEngagement(plan.committed(observer)):state;
     }
     private CombatEngagementPlanner() { }
 }

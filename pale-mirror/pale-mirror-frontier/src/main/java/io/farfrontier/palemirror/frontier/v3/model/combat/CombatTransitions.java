@@ -47,9 +47,9 @@ public final class CombatTransitions {
                     || state.actorMovements().containsKey(order.execution().actorId())
                         && !capabilities.require(order.execution()).permitsApproach(state,state.actorMovements().get(order.execution().actorId())))
                 throw new IllegalArgumentException("melee lacks current owner/target/weapon/readiness");
-            if(!CombatEngagementPlanner.permitsStrike(combat,order,strike.attacker(),tick,state.bootstrap().ruleset().melee()))
-                throw new IllegalArgumentException("strike has no current unspent coordinated slot");
-            combat=combat.withEngagement(combat.engagements().get(CombatEngagement.Key.of(order)).committed(strike.attacker()))
+            if(!CombatEngagementPlanner.permitsStrike(combat,order,strike.attacker(),strike.attack(),tick,state.bootstrap().ruleset().melee()))
+                throw new IllegalArgumentException("strike has no current close-contact or coordinated admission");
+            combat=CombatEngagementPlanner.committed(combat,order,strike.attacker())
                     .prepared(strike).spent(subject,tick,state.bootstrap().ruleset().melee().readiness().cost(strike.attack()),state.bootstrap().ruleset().melee());
         }else if(event instanceof CombatEvent.Completed outcome){
             var strike=Objects.requireNonNull(combat.pending().get(outcome.owner()),"pending melee attempt");

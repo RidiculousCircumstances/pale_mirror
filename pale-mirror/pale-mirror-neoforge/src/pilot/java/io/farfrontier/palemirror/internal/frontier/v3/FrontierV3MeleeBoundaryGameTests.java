@@ -37,7 +37,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
         fighter.discard();target.discard();player.discard();helper.succeed();
     }
     @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
-    public static void durableAdmissionStartsTheFullWindupAndTheActualHitCannotReplay(GameTestHelper helper){
+    public static void effectAdmissionPreservesTheFullWindupAndTheActualHitCannotReplay(GameTestHelper helper){
         durableAdmission(helper,MeleeAttack.LUNGE);
     }
     @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
@@ -75,26 +75,40 @@ public final class FrontierV3MeleeBoundaryGameTests {
         });
         helper.onEachTick(()->{
             var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,
-                    ()->FrontierV3CombatPresentation.preparationOpen(level,fighter,strike,rules),effect,()->hits.get()==1);
+                    ()->true,effect,()->hits.get()==1);
             if(level.getGameTime()<admittedAfter)helper.assertTrue(visibleSince.get()==-1 && target.getHealth()==health,"waiting for admission must neither animate nor hurt");
             if(!result.complete())return;
             helper.assertTrue(target.getHealth()==health-6 && hits.get()==1,"one native hit, not merely a swing");
             var observed=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->false,effect,()->hits.get()==1);
             helper.assertTrue(observed.complete() && hits.get()==1,"completed native receipts never repeat the damage");
             FrontierV3CombatPresentation.cancel(level,fighter,strike);
-            helper.assertFalse(FrontierV3CombatPresentation.preparationOpen(level,fighter,strike,rules),"a cancelled exact cue cannot be restarted");
+            helper.assertFalse(FrontierV3CombatPresentation.preparationRetained(level,fighter,strike),"a cancelled exact cue cannot be restarted");
             fighter.discard();target.discard();helper.succeed();
         });
     }
-    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
-    public static void expiredWindupCannotTurnIntoALateHit(GameTestHelper helper){
-        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);
-        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);
-        var rules=MeleeRules.initial();var strike=strike(level.getGameTime());
-        FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
-        helper.runAfterDelay(rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks()+1,()->{
-            helper.assertFalse(FrontierV3CombatPresentation.preparationOpen(level,fighter,strike,rules),"expired preparation closes unused operation");
-            helper.assertFalse(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules),"no late hit even against a stationary target");
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void expiredWindupSettlesAsOneMissThroughTheJournalWithoutLateDamage(GameTestHelper helper){
+        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
+        var rules=MeleeRules.initial();var strike=strike(level.getGameTime());float health=target.getHealth();var attempts=new AtomicInteger();
+        long began=FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
+        var actorPort=FrontierV3OperationEntityParticipant.nativeObject(fighter);var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);
+        var ports=List.of(actorPort,targetPort);
+        var declaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.owner(),
+                "expired-strike-"+strike.attemptOrdinal(),strike.toString(),Set.of(actorPort.identity(),targetPort.identity()));
+        var effect=new FrontierV3NativeEffect(()->FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,
+                strike.preparedAt()+level.getGameTime()-began),()->{
+            helper.assertFalse(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"expired visible attempt is a miss, never late damage");
+            attempts.incrementAndGet();return FrontierV3NativeEffect.Outcome.APPLIED;
+        });
+        helper.onEachTick(()->{
+            if(level.getGameTime()-began<=rules.windup(strike.attack())+rules.techniques().require(strike.attack()).activeTicks())return;
+            var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,
+                    ()->FrontierV3CombatPresentation.preparationRetained(level,fighter,strike),effect,()->attempts.get()==1);
+            if(!result.complete())return;
+            helper.assertTrue(attempts.get()==1 && target.getHealth()==health,"one journaled miss settles without damage or cancellation");
+            var observed=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->false,effect,()->attempts.get()==1);
+            helper.assertTrue(observed.complete() && attempts.get()==1,"even an expired native attempt cannot replay");
             fighter.discard();target.discard();helper.succeed();
         });
     }

@@ -91,8 +91,8 @@ public final class FrontierV3CombatExecutor {
                 if(harmed.isPresent() && tick-harmed.getAsLong()<=rules.maneuvers().harmLifetime())
                     trace(order,"MANEUVER_WINDOW","tick="+tick+" harm="+harmed.getAsLong()+" facts="+maneuverFacts+" preferred="+MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())));
             }
-            // A defensive reaction may yield a hit; an optional gap-closing burst may not.
-            boolean retreat=MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution()))
+            // A real close opportunity wins over retreating from a blow that has already landed.
+            boolean retreat=!holding && MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution()))
                     .filter(kind->kind==MeleeManeuver.Kind.BACKSTEP).isPresent();
             if((!attackReady || retreat) && visible && (state.actorMovements().get(order.execution().actorId())==null
                     || capabilities.require(order.execution()).permitsManeuverInterruption(state,state.actorMovements().get(order.execution().actorId()),order))
@@ -104,7 +104,7 @@ public final class FrontierV3CombatExecutor {
             }
             var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,attackReady,
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),canSpend && item.condition().remaining()>=profile.wear()));
-            boolean slotReady=decision==MeleeTactics.Decision.ATTACK && canSpend && CombatEngagementPlanner.permitsStrike(state.combat(),order,actuation,tick,rules);
+            boolean slotReady=decision==MeleeTactics.Decision.ATTACK && canSpend && CombatEngagementPlanner.permitsStrike(state.combat(),order,actuation,attack,tick,rules);
             String traceGate=decision==MeleeTactics.Decision.WAIT
                     ?state.combat().pending().containsKey(order.owner())?"PENDING_EFFECT":!canSpend?"EFFORT":item.condition().remaining()<profile.wear()?"WEAPON_WORN":"RECOVERY"
                     :decision==MeleeTactics.Decision.ATTACK && !slotReady?"WAVE_SLOT":decision.name();
@@ -126,7 +126,8 @@ public final class FrontierV3CombatExecutor {
             var strike=new MeleeStrike(order.owner(),order.revision(),actuation,order.target(),order.weapon(),item.condition(),profile,attack,
                     targetPort(target).identity().incarnation(),tick+1,tick);
             var result=FrontierV3CommandSubmission.submit(runtime,"combat-prepare",order.owner().value(),new CombatEvent.Prepared(strike));
-            FrontierV3CombatTrace.strike(level,fighter,target,strike,"PREPARE_SUBMITTED",result.getClass().getSimpleName());
+            FrontierV3CombatTrace.strike(level,fighter,target,strike,"PREPARE_SUBMITTED",
+                    result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending?"PENDING_"+pending.reason().name():result.getClass().getSimpleName());
             trace(order,"PREPARE",result);
         }
     }
@@ -186,11 +187,18 @@ public final class FrontierV3CombatExecutor {
             declaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.owner(),"strike-"+strike.attemptOrdinal(),
                     strike.toString(),ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
         }
+        FrontierV3CombatTrace.strike(level,fighter,target,strike,"CANONICAL_READY","PUBLISHED");
+        // The canonical preparation already owns this exact body/target attempt. A warning and
+        // parent-owned local guidance are reversible presentation, not permission to apply damage.
+        // Overlap them with external journal admission instead of serializing another windup after it.
+        FrontierV3CombatPresentation.start(level,fighter,strike,state.bootstrap().ruleset().melee(),target);
+        FrontierV3MeleeGuidance.observe(level,state,runtime::decodedState,fighter,target,strike,
+                FrontierV3CombatPresentation.track(level,fighter,strike,state.bootstrap().ruleset().melee(),target),runtime.executionView().orElseThrow().instant().ticks());
         var result=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->{
                     var current=runtime.decodedState().orElseThrow();
                     return canActuate(current,strike) && strike.equals(current.combat().pending().get(strike.owner())) && target.isAlive() && fighter.isAlive()
                             && fighter.hasLineOfSight(target)
-                            && FrontierV3CombatPresentation.preparationOpen(level,fighter,strike,current.bootstrap().ruleset().melee())
+                            && FrontierV3CombatPresentation.preparationRetained(level,fighter,strike)
                             && CombatComposition.CAPABILITIES.current(current,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks())
                                 .filter(order->order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent()
                             && current.inventory().items().containsKey(strike.weapon())
