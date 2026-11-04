@@ -1,5 +1,40 @@
 # Active continuity — 2026-11-04
 
+## Latest analysis — repeated punch pressure / missing lateral response
+
+User reports the new fight still permits knockback control and asks analysis,
+not another implementation. Read-only capture3a9891cb-273d-4351-80e4-9468e0bf7180,
+final239/PID490312/world below.4097/4097complete,37.0s/740matchingnative/world/
+simulation ticks (~20TPS). rd Adventure/emptyhand throughout (not hoe in this
+capture);15charged1damage hits,10while recipient had a pending QUICK. Robin Fox
+1-2 HP11→2:9playerhits,9visibleQUICK/1hit/8out-of-reach misses plus3early cancels.
+Vera Baker1-19 HP17→11:6playerhits,9QUICK/4hits/5range misses. Five guard hits total;
+player20→4.6667; no kills captured. Robin2BACKSTEP, Vera2BURST, Mila1BURST: maneuvers
+exist but no lateral dodge. No sampled same-XZ/nonzero-horizontal-impulse freeze
+without horizontal collision among the three guards. No effort refusal in decisions.
+
+Source explains current loop: MeleeManeuver.Kind has only BURST/BACKSTEP;
+MeleeManeuvers.preference refuses during pending attack/recovery/busy; retained
+cooldowns shared40/retreat60/burst100ticks further bound admission. Executor98–102
+admits BACKSTEP only outside actual contact and otherwise selects reachable
+QUICK. Previous repair expanded contact through full weapon reach but kept that
+attack-over-defence priority. Robin native8353punched→8354QUICK selected at2.89/
+hurtTime9→8357rangecancel3.53 is concrete evidence. No sequential-pressure/miss
+adaptation selects a different approach. Group CombatApproach.arc only serves
+flank roles, not PRESSURE/SUPPORT; trace does not retain participants' roles,
+so exact historical Robin role is UNCONFIRMED. QUICK does not close distance;
+knockback or ordinary player retreat can move beyond reach during its finite cue.
+All13visible misses are OUT_OF_REACH, not aim/no-damage execution failure.
+
+Recommendation only: common duel tactic owner chooses strike/evade/reposition
+from observed incoming pressure and recent exchange outcomes; add bounded lateral/
+diagonal escape-and-reenter with stable chosen side and geometry proof, permitting
+safe interruption before commitment. Keep committed strike windows, physical
+knockback, cooldown/effort and exact UAE/navigation fences; group owner supplies
+sector constraints, navigator only executes. Do not simply circle continuously,
+remove knockback or add another mover. Artifacts IMPL/build/combat-pressure-20261104/
+{summary,findings}.json. No code/deploy/client/player/world mutation this turn.
+
 ## Delivered — passive physics and full-reach melee contact
 
 User authorized repair after capture45d4ee60; user will test combat balance.

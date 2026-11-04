@@ -446,3 +446,59 @@ not silently claimed closed; initial lease recovery warning remains explicit.
 No fresh ERROR, tick failure or quarantine observed. No human mode, health,
 equipment, inventory or world edited. Client update not needed. Code/release clean;
 PACK trackedclean888ed90 with preexisting .f0v-baseline/; unrelated GOV WIP retained.
+
+
+## Follow-up capture3a9891cb — missing adaptation to frontal punch pressure
+
+Read-only analysis of final239/PID490312 on the same world. Complete4097/4097,
+37.0seconds,740matching server/world/simulation ticks: ~20TPS. The observed player
+is Adventure and empty-handed throughout; this is not the prior hoe capture.
+Fifteen charged punches cause1damage each; ten land while the recipient retains
+QUICK preparation. Robin Fox1-2 starts11HP and ends2, receives9punches, makes
+9visibleQUICK attacks with1hit/8OUT_OF_REACH misses plus3early range cancellations.
+Vera Baker1-19 starts17HP and ends11, receives6punches and makes9QUICK attacks
+with4hits/5range misses. Player20→4.6667; no death recorded. These are injured
+initial guards, not a fresh full-health one-on-one kill. The event analyzer's
+summed native damage is not substituted for observed health accounting.
+
+Old passive-physics symptom is absent in these samples: among all three guards,
+no adjacent sampled identical X/Z with horizontal speed>.02 and no horizontal
+collision. This is two-tick sampled evidence, not a proof about unsampled ticks.
+No decision records an unaffordable strike. Robin performs two BACKSTEP cues,
+62ticks apart; Vera two BURST cues, Mila one. Therefore "no maneuvers" describes
+the ineffective tactical result, not literal absence of native maneuver events.
+
+The reachable source chain is decisive:
+
+- MeleeManeuver.Kind exposes only forward BURST and retreat BACKSTEP; there is no
+  lateral escape/re-entry action. BACKSTEP ranking increases radial distance,
+  rather than selecting the attacker's exposed side.
+- MeleeManeuvers.preference returns empty during pending strike, recovery or a
+  busy maneuver. Shared40tick and retreat60tick/burst100tick selection cooldowns
+  limit frequency further. Ten of fifteen punches occur inside pending QUICK.
+- FrontierV3CombatExecutor98–102 lets contact override the hurt/swing BACKSTEP
+  preference. The prior repair widened contact to actual weapon reach while
+  retaining that absolute priority. At native8353 Robin is punched;8354 selects
+  QUICK at2.89/hurtTime9;8357 cancels at3.53, outside its approach allowance.
+  The policy has no retained repeated-pressure outcome selecting a new side.
+- Common group flanking already exists in CombatApproach/MeleePositions but
+  its arc excludes PRESSURE/SUPPORT; it does not supply an individual defensive
+  answer to repeated frontal hits. Capture does not retain participants' sector
+  roles, so Robin's exact historical group role is unproved.
+- QUICK has no distance-closing guidance. Physical knockback and player retreat
+  can open the gap during preparation. Every13visible miss in this capture is
+  OUT_OF_REACH, not an angle refusal or a swallowed damage application. Some
+  misses have no intervening punch, so not all range failure is knockback-caused.
+
+Recommended direction, not implemented: common melee tactical arbitration over
+strike, evasion and repositioning, observing bounded recent hits/misses and actual
+opponent motion. A bounded lateral/diagonal step should break the frontal line,
+retain a stable side long enough to complete and re-enter from it, under real
+geometry, body/effort/cooldown constraints. Group encounter supplies sectors and
+space constraints; existing navigation/UAE remains sole movement owner. Permit
+only explicit safe preparation interruption, not arbitrary cancellation of an
+already committed hit. Preserve dodgeable windows and physical knockback; no
+permanent circling, blanket immunity, prediction of future inputs or parallel
+actuator is justified. No gameplay source, deployment or human/world state was
+changed in this analysis. Offline evidence is in
+IMPL/build/combat-pressure-20261104/{summary,findings}.json.
