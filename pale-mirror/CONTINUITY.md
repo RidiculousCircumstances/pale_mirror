@@ -1,5 +1,59 @@
 # Active continuity — 2026-11-04
 
+## Delivered — finite guidance and burst contact handoff
+
+User authorized repair after captureb685. Sole main; no agents/push/new goal.
+Production source3f1839cd4fccc1fbd8ee9e6d79b8e56c5caf5c92; IMPL CLEAN86438341e
+adds only test rendezvous successor. RELEASE CLEAN detached3f1839cd4. PACK tracked
+clean888ed90; preexisting .f0v-baseline/ retained. GOV unrelated WIP preserved;
+owned docs/boundaries recorded with this delivery. Details in combat-responsiveness report.
+
+Local correction now belongs to exact pending attempt and original cue/contact
+end, not rolling2tickTTL; offer wakes existing actor probe. Same native provider
+checks claim each continuation: cancellation/order/body/attempt/expiry revokes
+both offer and already-running path. Early tracking/final freeze, scope/collision/
+courtesy/weapon reach stay. Generic navigation has no combat-state branch; producer
+supplies explicit veto. Capture distinguishes offers/refusals and consumer receipt.
+
+Fresh exact close contact may replace a launched BURST through common movement
+checkpoint, interruption, exact closure and Prepared in one batch. Direct replay
+cannot bypass open maneuver; checkpoint wait is optional refusal. Closed burst
+keeps maneuver cooldown but can attack; BACKSTEP recovery stays committed. Same
+wave/live cap/effort/cadence/item checks. No difficulty/damage/reach/rules/schema
+change, permanent sprint, second actuator or world reset.
+
+/tmp/pm-combat-contact-check.log PASS33s:guardrails,78frontier cases,4adapter
+cases,compilePilot. Existing followup test hardcoded21014 despite installed-rule
+readiness21023; uses retained nextAttack now, keeps negative incarnation/token
+checks. Native scene-strikes17PASS64s at /tmp/pm-combat-contact-native.log.
+Detached guardrails/JAR/package PASS9s. No affected red.
+
+MAIN far-frontier-v3-live.service Java22PID194019/wrapper193995,
+world skill-combat-schema328-seed139-20261104 retained, seed139/rootr31/schema328,
+start1793785865. SHA512:
+48b1f5b81d3efd4fe4d4c7ff5c6c9259ed400bc4351a7f57cff4e546a2f1cb14341c797b50e2313910e9892ca8c4d786f469f1163b8cb03bd93f5a3bfd542c83.
+Receipts /tmp/pm-combat-contact-{preflight,publish,stop,install,verify}.log:
+native all-dimensions-saved/old JVM+ports exit, exact pinned install, fresh verifyOK.
+Current statusok/quarantineNORMAL/activeCases0; no combat/contact/maneuver left.
+No human state edited; no client update needed.
+
+Fullpack20FPS/privateXvfb probe4a6fb283-3884-419e-8c93-b99d53484ac2 PASS14actions:
+exact Iris Moss1-12 ordinary harm, native damage,400tick/88.923block player circuit,
+ordinary dimension escape with no further damage and responders/contact0. Capture
+f52e1174-a2e4-480f-b62c-340198ff15aa3822/3822complete/no loss.15guard hits/60damage
+incl4LUNGEhits;10misses retain reach/window/native defence checks.9offered attempt
+corrections have exact shared-consumer receipts (8path-started,1traffic wait).
+Other native zombies also dealt7x2.5; not credited to guards. Both actual rendered
+frames reviewed. IMPL/build/combat-contact-20261104/live-{current-post-manifest,
+summary}.json. This flow does not prove burst-contact occurred or human balance;
+canonical atomic handoff/refusal/replay/snapshot is covered by focused tests.
+
+Initial live probe failed before combat because Iris moved to an unobserved
+remote post; changed existing setup to visit her read-only current actor position
+before received-body rendezvous. No body teleport/forced canonical state. All
+task clients/private displays exited; capture finished on pilot disconnect.
+MAIN remains running for human check. Older results below are historical.
+
 ## Latest human trace analysis — remaining close-combat limitations
 
 User requested checking new captureb68568de-0e3f-4afb-b2d9-a437d5bc815f;

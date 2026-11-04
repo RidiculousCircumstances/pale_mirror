@@ -192,3 +192,66 @@ corrections, contact-aware maneuver-to-strike transition and responsive approach
 under real hit/retreat/knockback. Keep shared UAE/navigation/body/effect authority,
 finite cues and dodge windows. Do not substitute raw damage/range buffs or a
 permanent sprint, or classify every legitimate timed dodge as a product bug.
+
+
+## Follow-up repair from the next human fight
+
+Production `3f1839cd4fccc1fbd8ee9e6d79b8e56c5caf5c92` closes the evidenced
+lifetime/consumer contradiction. The exact attack producer retains its local
+correction until the original native preparation/contact deadline, rather than
+renewing a two-tick expiry. It wakes the existing actor probe. The generic
+provider retains exact parent/body/attempt permission and a producer-supplied
+veto: cancellation, a successor claim/order/body or deadline invalidates an
+already-running path at the native continuation boundary too. This is neither
+a second semantic goal nor a combat-specific navigation controller. Early aim
+tracking ends at the existing commitment point; later target motion cannot
+extend the deadline or continuously home the committed attack.
+
+The common combat process admits fresh close contact during a launched BURST
+only after the registered movement owner proves its checkpoint. Interruption,
+schedule cancellation, exact maneuver closure and `Prepared` share one event
+batch. Replay still rejects `Prepared` while a maneuver is open. A checkpoint
+wait is an unattempted policy refusal, not an effect receipt or fatal error.
+Closing a burst preserves maneuver cooldown while permitting its contact
+strike; BACKSTEP recovery remains committed. Item wear/damage still wait for
+normal durable physical operations. Difficulty, weapon reach/damage, effort,
+wave cap, hashed rules and schema remain unchanged.
+
+Focused guardrails/78 frontier cases/4 adapter cases/compilePilot passed in33s;
+17 actual Minecraft scene-strike cases passed in64s. This includes shared
+checkpoint refusal, no false arrival, duplicate-preparation rejection and
+snapshot round-trip. A preexisting followup fixture incorrectly prepared at
+21014 although its installed rule retained readiness21023; it now consumes the
+actual retained readiness instead of weakening cadence. Detached release
+JAR/package/guardrails passed in9s. Logs `/tmp/pm-combat-contact-{check,native,
+release}.log`. No affected test remains failing.
+
+The current MAIN deploy retains the same seed139/schema328 world and human
+outcomes. Actual Java22PID194019/wrapper193995, start1793785865,
+`far-frontier-v3-live.service`, pinned SHA512
+`48b1f5b81d3efd4fe4d4c7ff5c6c9259ed400bc4351a7f57cff4e546a2f1cb14341c797b50e2313910e9892ca8c4d786f469f1163b8cb03bd93f5a3bfd542c83`.
+Preflight/publish/graceful-stop/install/fresh verification receipts are
+`/tmp/pm-combat-contact-{preflight,publish,stop,install,verify}.log`. Final read-only
+settlement status isok/NORMAL/0cases,0contacts/responders/open maneuvers/windups.
+Server running; no client update or world reset required.
+
+Fullpack probe `4a6fb283-3884-419e-8c93-b99d53484ac2` passes all14 actions with
+exact Iris Moss/resident1-12, ordinary player harm,400 ticks/88.923blocks of
+circling, real native damage, dimension escape without additional damage, and
+terminal contact/responder release. Capture
+`f52e1174-a2e4-480f-b62c-340198ff15aa` is3822/3822complete/no loss. It records15
+guard hits/60 damage, including4 actual LUNGE hits, plus10 visible misses.
+Nine offered exact attempt corrections reach the shared consumer:8start a
+native path and1reports actual traffic waiting. Seven additional zombie hits
+of2.5damage are separate and are not attributed to the guards. Both linked
+rendered frames were personally inspected. Artifacts:
+`IMPL/build/combat-contact-20261104/live-current-post-manifest.json` and
+`live-summary.json`. This specific run does not prove the BURST contact-handoff
+branch occurred, nor establish human combat balance; the focused canonical
+check proves its atomic/recovery contract.
+
+The first client attempt failed before combat: Iris had moved from town to an
+unobserved post. Test-only successor `86438341e` updates existing setup to visit
+the exact actor's read-only current position before rendezvousing with its
+received physical body. No resident is teleported or pinned. All task clients
+and private displays are closed. The capture finished on pilot disconnect.
