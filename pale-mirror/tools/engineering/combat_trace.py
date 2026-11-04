@@ -56,11 +56,11 @@ def summarize(path):
                 uid = remember(row['fighter'])
                 gestures[uid][row['gesture']] += 1
             elif kind == 'damage_applied':
-                source, target = remember(row['source']), remember(row['target'])
+                source, target = remember(row.get('source')), remember(row['target'])
                 damage[(source, target)][0] += 1
                 damage[(source, target)][1] += row['damage']
             elif kind == 'death':
-                deaths.append({'source': remember(row['source']), 'target': remember(row['target']), 'result': row['result']})
+                deaths.append({'source': remember(row.get('source')), 'target': remember(row['target']), 'result': row['result']})
     if header is None:
         raise ValueError('missing capture header')
     complete = bool(footer and footer['complete'] and count == footer['writtenEvents'] == footer['expectedEvents']
