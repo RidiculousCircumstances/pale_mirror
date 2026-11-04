@@ -166,10 +166,10 @@
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
-          "field": "firstGuardName"
+          "field": "secondGuardName"
         }
       },
-      "workerId": "resident:1-16",
+      "workerId": "resident:1-22",
       "maxDistance": 64,
       "timeoutMs": 60000,
       "id": "pair-tracking-moving-player",

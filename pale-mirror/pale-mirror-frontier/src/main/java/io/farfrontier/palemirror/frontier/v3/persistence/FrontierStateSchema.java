@@ -26,7 +26,8 @@ final class FrontierStateSchema {
     // Cooperative flank intent and its retry/commitment clocks retain explicit ownership.
     // Every resident retains its declared combat-style definition reference, including newborn payloads.
     // Encounter frame commitment and actual flank-progress evidence survive recovery.
-    static final int VERSION = 333;
+    // Fresh native facing is explicit optional observation for personal rear-approach preference.
+    static final int VERSION = 334;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

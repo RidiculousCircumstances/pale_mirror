@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Mechanics use a non-guard execution; this fixture grants no new production combat role. */
 class CombatModuleTest {
-    private static final CombatStyle MECHANICS=new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0);
+    private static final CombatStyle MECHANICS=new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0);
     private static final SurfaceAnchor TARGET=SurfaceAnchor.at(0,63,0);
     private static final WeaponProfile SWORD=new WeaponProfile("minecraft:iron_sword",6,13,3,1);
     private static CombatOrder order(int id,Optional<SurfaceAnchor> station){
@@ -72,7 +72,7 @@ class CombatModuleTest {
                 "a moving target does not swap the assigned side on every observation");
         var left=order(2,Optional.empty()).atActorObservation(TARGET.offset(0,0,4));
         assertEquals(List.of(TARGET.offset(0,0,2)),MeleePositions.rank(left,SWORD,
-                List.of(TARGET.offset(2,0,0),TARGET.offset(0,0,2),TARGET.offset(0,0,-2)),List.of(),new MeleeSector(MeleeSector.Role.FLANK_LEFT,1000,0),MeleeRules.initial()));
+                List.of(TARGET.offset(2,0,0),TARGET.offset(0,0,2),TARGET.offset(0,0,-2)),List.of(),new MeleeSector(MeleeSector.Role.FLANK_LEFT,1000,0),MeleeRules.initial(),Optional.empty()));
     }
     @Test void failedFlankRetainsIntentAcrossHydrationAndRetriesADifferentSideWithoutAnOldFailureClock() throws IOException {
         var rules=MeleeRules.initial();var first=order(1,Optional.empty());var other=order(2,Optional.empty());
@@ -113,7 +113,7 @@ class CombatModuleTest {
                 .observed(OptionalLong.of(120),120,rules.maneuvers().duel());
         var combat=CombatState.empty().enlisted(first,100,rules).enlisted(other,100,rules)
                 .observed(new CombatState.Armament(first.execution(),first.weapon(),SWORD)).withExchange(first.owner(),memory)
-                .stance(new MeleeStance(actor,first.target(),true,true,121));
+                .stance(new MeleeStance(actor,first.target(),true,true,121,Optional.empty()));
         assertTrue(memory.pressured(121,rules.maneuvers().duel()));
         assertTrue(CombatFormation.pressureNeeded(combat,first,121,rules));
         assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(combat,first,new MeleeManeuvers.Facts(2.8,0,true),121,rules,
@@ -210,10 +210,10 @@ class CombatModuleTest {
     @Test void attackStationsSpreadAroundTheEnemyAndExcludeOverlapsAndOutOfRangeCells(){
         var east=TARGET.offset(1,0,0);var west=TARGET.offset(-1,0,0);var north=TARGET.offset(0,0,-1);
         var peer=order(2,Optional.of(east));var candidates=List.of(TARGET,east,west,north,TARGET.offset(4,0,0));
-        var ranked=MeleePositions.rank(order(1,Optional.empty()),SWORD,candidates,List.of(peer),new MeleeSector(MeleeSector.Role.FLANK_RIGHT,1000,0),MeleeRules.initial());
+        var ranked=MeleePositions.rank(order(1,Optional.empty()),SWORD,candidates,List.of(peer),new MeleeSector(MeleeSector.Role.FLANK_RIGHT,1000,0),MeleeRules.initial(),Optional.empty());
         assertEquals(north,ranked.getFirst());assertFalse(ranked.contains(east));assertFalse(ranked.contains(TARGET));assertFalse(ranked.contains(TARGET.offset(4,0,0)));
         var reversed=new ArrayList<>(candidates);Collections.reverse(reversed);
-        assertEquals(ranked,MeleePositions.rank(order(1,Optional.empty()),SWORD,reversed,List.of(peer),new MeleeSector(MeleeSector.Role.FLANK_RIGHT,1000,0),MeleeRules.initial()));
+        assertEquals(ranked,MeleePositions.rank(order(1,Optional.empty()),SWORD,reversed,List.of(peer),new MeleeSector(MeleeSector.Role.FLANK_RIGHT,1000,0),MeleeRules.initial(),Optional.empty()));
     }
     @Test void nonGuardPendingHitAndBoundedPositionFeedbackSurviveRecoveryAndRetireExactly()throws IOException{
         var order=order(1,Optional.of(TARGET.offset(1,0,0)));
@@ -339,11 +339,11 @@ class CombatModuleTest {
         var second=new ActorActuationId(new ActorBodyId(b.execution().actorId(),1),b.execution());
         var third=new ActorActuationId(new ActorBodyId(c.execution().actorId(),1),c.execution());
         var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules)
-                .stance(new MeleeStance(first,a.target(),false,true,100)).stance(new MeleeStance(second,b.target(),true,true,100))
-                .stance(new MeleeStance(third,c.target(),true,true,100));
+                .stance(new MeleeStance(first,a.target(),false,true,100,Optional.empty())).stance(new MeleeStance(second,b.target(),true,true,100,Optional.empty()))
+                .stance(new MeleeStance(third,c.target(),true,true,100,Optional.empty()));
         assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,100,rules));
         assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.QUICK,100,rules));
-        assertFalse(CombatEngagementPlanner.permitsStrike(state.stance(new MeleeStance(first,a.target(),false,false,100)),a,first,MeleeAttack.QUICK,100,rules),
+        assertFalse(CombatEngagementPlanner.permitsStrike(state.stance(new MeleeStance(first,a.target(),false,false,100,Optional.empty())),a,first,MeleeAttack.QUICK,100,rules),
                 "preferred positioning is optional but real contact readiness remains required");
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.LUNGE,100,rules),"long approach still coordinates its commitment");
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,new ActorActuationId(new ActorBodyId(a.execution().actorId(),2),a.execution()),MeleeAttack.SWEEP,100,rules));
@@ -420,7 +420,7 @@ class CombatModuleTest {
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var run=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.PURSUIT_RUN,101,
                 far.actorPosition(),TARGET.offset(3,0,1),100,102,0,0,0,112,170);
-        combat=combat.maneuver(run).stance(new MeleeStance(actor,order.target(),true,true,104));
+        combat=combat.maneuver(run).stance(new MeleeStance(actor,order.target(),true,true,104,Optional.empty()));
         assertTrue(CombatEngagementPlanner.contactHandoff(combat,order,actor,MeleeAttack.QUICK,104,rules));
         assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(combat,order,new MeleeManeuvers.Facts(2,0),104,rules,
                 OptionalLong.empty(),EnumSet.allOf(MeleeManeuver.Kind.class),true).action());
@@ -434,7 +434,7 @@ class CombatModuleTest {
         var rules=MeleeRules.initial();var order=order(1,Optional.empty());
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
         var m=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),TARGET.offset(1,0,0),100,104,0,200,0,140,0);
-        var state=CombatState.empty().enlisted(order,105,rules).maneuver(m).stance(new MeleeStance(actor,order.target(),true,true,105));
+        var state=CombatState.empty().enlisted(order,105,rules).maneuver(m).stance(new MeleeStance(actor,order.target(),true,true,105,Optional.empty()));
         assertTrue(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.LUNGE,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,125,rules));
@@ -453,7 +453,7 @@ class CombatModuleTest {
                 new CombatEvent.ManeuverRequested(actor,order.target(),order.actorPosition(),new MeleeManeuvers.Facts(5,0.2,true)),
                 new CombatEvent.ManeuverSelected(new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),order.actorPosition().offset(1,0,0),100,0,0,200,0,140,0)),
                 new CombatEvent.ManeuverLaunched(actor,101),new CombatEvent.ManeuverClosed(order.owner(),101),
-                new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,true,100)),
+                new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,true,100,Optional.of(new CombatFacing(1000,0)))),
                 new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),order.station(),MeleePosition.Reason.RESERVED));
         var codecs=CombatPayloadCodecs.create();
         for(var event:events){var bytes=codecs.encode(event);assertEquals(event,codecs.decode(event.type(),bytes));

@@ -72,7 +72,7 @@ class SettlementSecurityTest {
         var r=pair();var state=r.state();var orders=CombatComposition.CAPABILITIES.orders(state,21001);
         for(var order:orders){
             var body=new ActorActuationId(ActorBodyAuthority.current(state,order.execution().actorId()),order.execution());
-            state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(body,order.target(),true,true,21001)),21001);
+            state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(body,order.target(),true,true,21001,Optional.empty())),21001);
         }
         var order=orders.getFirst();var key=CombatEngagement.Key.of(order);var wave=state.combat().engagements().get(key).wave().orElseThrow();
         assertEquals(2,wave.slots().size());assertEquals(wave.slots().getFirst().opensAt(),wave.slots().get(1).opensAt(),"different sides share a short attack window");
@@ -90,17 +90,17 @@ class SettlementSecurityTest {
     }
     @Test void oneReadyFighterDoesNotWaitForeverForAnUnreachableFlanker(){
         var r=pair();var state=r.state();var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
-        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21001)),21001);
+        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21001,Optional.empty())),21001);
         var key=CombatEngagement.Key.of(order);assertTrue(state.combat().engagements().get(key).wave().isEmpty());
         long now=21001+state.bootstrap().ruleset().melee().engagements().assemblyTicks();
-        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,now)),now);
+        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,now,Optional.empty())),now);
         var wave=state.combat().engagements().get(key).wave().orElseThrow();assertEquals(1,wave.slots().size());
         assertTrue(CombatEngagementPlanner.permitsStrike(state.combat(),order,wave.slots().getFirst().participant(),wave.slots().getFirst().opensAt(),state.bootstrap().ruleset().melee()));
     }
     @Test void attackOpportunityDoesNotRequireStoppingAndConfirmedFlankFailureDoesNotBecomeAnEndlessWait(){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
-        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),false,true,21001)),21001);
+        state=apply(state,order.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),false,true,21001,Optional.empty())),21001);
         assertFalse(state.combat().holding(order,21001,state.bootstrap().ruleset().melee()));
         assertTrue(CombatEngagementPlanner.permitsStrike(state.combat(),order,r.body(),21001,state.bootstrap().ruleset().melee()));
         r=pair();state=r.state();
@@ -190,7 +190,7 @@ class SettlementSecurityTest {
                 new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.CombatManeuverLeg(m.owner(),m.attemptOrdinal()),r.body().execution());
         state=ActorMovementProcess.reduceStarted(state,actor,new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(move));
         var observed=enemy.offset(-2,0,0).standingBody();state=state.withActorBody(actor,observed);
-        state=apply(state,m.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21006)),21006);
+        state=apply(state,m.owner(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),order.target(),true,true,21006,Optional.empty())),21006);
         var item=state.inventory().items().get(order.weapon());
         order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21006).orElseThrow();
         var strike=new MeleeStrike(order.owner(),order.revision(),r.body(),order.target(),order.weapon(),item.condition(),
@@ -619,8 +619,8 @@ class SettlementSecurityTest {
         duty=state.strategicPlans().guards().get(duty.id());var body=state.actorLocations().get(duty.execution().actorId()).body();
         var before=state;
         var foreign=new ActorActuationId(new ActorBodyId(duty.execution().actorId(),999),duty.execution());
-        assertThrows(IllegalArgumentException.class,()->apply(before,r.duty().id(),new CombatEvent.StanceObserved(new MeleeStance(foreign,contact(r).target(),true,true,21002)),21002));
-        state=apply(state,duty.id(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),contact(r).target(),true,true,21002)),21002);
+        assertThrows(IllegalArgumentException.class,()->apply(before,r.duty().id(),new CombatEvent.StanceObserved(new MeleeStance(foreign,contact(r).target(),true,true,21002,Optional.empty())),21002));
+        state=apply(state,duty.id(),new CombatEvent.StanceObserved(new MeleeStance(r.body(),contact(r).target(),true,true,21002,Optional.empty())),21002);
         assertEquals(body,state.actorLocations().get(duty.execution().actorId()).body());
         assertTrue(state.combat().positions().containsKey(duty.id()),"native holding retains its bounded tactical sector rather than reassigning it to a peer");
         var events=GuardWorkProcess.progress(state,GuardContinuation.progress(duty.id(),21003),21003);
@@ -695,7 +695,7 @@ class SettlementSecurityTest {
         var station=new SurfaceAnchor(contact(r).position()).offset(1,0,0);
         var contender=new CombatOrder(other.execution(),other.revision(),other.weapon(),new CombatPartyId(new SubjectId("party:independent")),first.engagement(),first.targetPosition(),21001,1000,
                 state.actorLocations().get(other.execution().actorId()).supportingSurface(),state.actorLocations().get(other.execution().actorId()).navigationProfile(),Optional.of(station),
-                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0));
+                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0));
         var occupied=apply(state,first.owner(),new CombatEvent.PositionPlanned(first.execution(),first.target(),first.targetPosition(),Optional.of(station),MeleePosition.Reason.RESERVED),21001);
         assertThrows(IllegalArgumentException.class,()->MeleePositions.requireClaim(occupied,contender,station,21002));
         MeleePositions.requireClaim(occupied,contender,station,21082);

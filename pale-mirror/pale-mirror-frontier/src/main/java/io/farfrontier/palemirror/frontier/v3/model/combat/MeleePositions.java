@@ -85,10 +85,11 @@ public final class MeleePositions {
         if(physical.isEmpty())return missing?pendingGeometry(knowledge,order):new Choice(Optional.empty(),MeleePosition.Reason.NO_POSITION);
         var candidates=physical.stream().filter(station->available(state,order,station,tick)).toList();
         if(candidates.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.SPACE_OCCUPIED);
+        var facing=MeleeRearApproach.facing(state.combat(),order,tick,rules);
         var ranked=arc?candidates.stream().sorted(Comparator.comparingDouble((SurfaceAnchor station)->
-                CombatApproach.score(order,sector,station,rules.engagements())+crowding(order,station,activePeers,rules))
+                CombatApproach.score(order,sector,station,rules.engagements())+crowding(order,station,activePeers,rules)+MeleeRearApproach.cost(order,station,facing))
                 .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList()
-                :rank(order,weapon,candidates,activePeers,sector,rules);
+                :rank(order,weapon,candidates,activePeers,sector,rules,facing);
         try{var selected=reachable(ranked,rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
             if(selected.isEmpty() && missing)return pendingGeometry(knowledge,order);
             return new Choice(selected,selected.isPresent()?MeleePosition.Reason.RESERVED:MeleePosition.Reason.NO_PATH);
@@ -127,12 +128,13 @@ public final class MeleePositions {
     }
     /** Pure ranking API: the caller supplies geometry candidates, never a fabricated route. */
     public static List<SurfaceAnchor> rank(CombatOrder order,WeaponProfile weapon,List<SurfaceAnchor> candidates,
-            List<CombatOrder> peers,MeleeSector sector,MeleeRules rules){
+            List<CombatOrder> peers,MeleeSector sector,MeleeRules rules,Optional<CombatFacing> facing){
         var claimed=peers.stream().filter(peer->!peer.execution().equals(order.execution())).flatMap(peer->peer.station().stream()).collect(java.util.stream.Collectors.toSet());
         return candidates.stream().distinct().filter(station->legal(order,weapon,station) && !claimed.contains(station)
                 && (sector.role()==MeleeSector.Role.PRESSURE || sector.role()==MeleeSector.Role.SUPPORT
                     || sector.alignment(station,order.targetPosition())>=rules.engagements().flankAlignmentPermille()/1000.0))
-                .sorted(Comparator.comparingDouble((SurfaceAnchor station)->score(order,weapon,station,peers,rules)+rules.sectorWeightPermille()/1000.0*(1.0-sector.alignment(station,order.targetPosition())))
+                .sorted(Comparator.comparingDouble((SurfaceAnchor station)->score(order,weapon,station,peers,rules)+MeleeRearApproach.cost(order,station,
+                facing)+rules.sectorWeightPermille()/1000.0*(1.0-sector.alignment(station,order.targetPosition())))
                         .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
     }
     private static double score(CombatOrder order,WeaponProfile weapon,SurfaceAnchor station,List<CombatOrder> peers,MeleeRules rules){

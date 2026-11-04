@@ -55,8 +55,8 @@ class CombatStylesTest {
     @Test void preferredStationsDifferButShortWeaponReachAndCommittedCooldownRemainHard(){
         var sector=new MeleeSector(MeleeSector.Role.PRESSURE,1000,0);var candidates=List.of(TARGET.offset(2,0,0),TARGET.offset(3,0,0));
         var pressing=order(1,style("pressing"));var cautious=order(1,style("cautious"));
-        assertEquals(candidates.getFirst(),MeleePositions.rank(pressing,SWORD,candidates,List.of(),sector,RULES).getFirst());
-        assertEquals(candidates.getLast(),MeleePositions.rank(cautious,SWORD,candidates,List.of(),sector,RULES).getFirst());
+        assertEquals(candidates.getFirst(),MeleePositions.rank(pressing,SWORD,candidates,List.of(),sector,RULES,Optional.empty()).getFirst());
+        assertEquals(candidates.getLast(),MeleePositions.rank(cautious,SWORD,candidates,List.of(),sector,RULES,Optional.empty()).getFirst());
         var shortWeapon=new WeaponProfile("short",2,20,1,1);
         assertTrue(RULES.holdReach(shortWeapon,true,cautious.style())<=shortWeapon.reach());
         var actor=new ActorActuationId(new ActorBodyId(pressing.execution().actorId(),1),pressing.execution());
@@ -73,6 +73,21 @@ class CombatStylesTest {
                 .withCharacteristics(person.characteristics()).relocated(new SubjectId("settlement:other"),new SubjectId("household:other")).combatStyle());
         var codec=new FrontierWorldStateCodec();assertEquals(state,codec.decode(codec.encode(state)));
         assertThrows(IllegalArgumentException.class,()->person.withCombatStyle(new CombatStyleId("frontier:missing")));
+    }
+    @Test void rearPreferenceChangesTheApproachButFreshContactAndMissingSightDoNotCauseAnOrbit()throws IOException{
+        var order=order(1,style("cautious"));var front=TARGET.offset(1,0,2);var back=TARGET.offset(-1,0,2);
+        var facing=Optional.of(new CombatFacing(1000,0));var sector=new MeleeSector(MeleeSector.Role.FLANK_LEFT,1000,0);
+        assertEquals(back,MeleePositions.rank(order,SWORD,List.of(front,back),List.of(),sector,RULES,facing).getFirst());
+        assertEquals(front,MeleePositions.rank(order,SWORD,List.of(front,back),List.of(),sector,RULES,Optional.empty()).getFirst());
+        var body=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var state=armed(order).stance(new MeleeStance(body,order.target(),false,false,100,facing));
+        assertEquals(facing,MeleeRearApproach.facing(state,order,100,RULES));
+        assertTrue(MeleeRearApproach.facing(state,order,113,RULES).isEmpty(),"an old sighting cannot supply a live facing");
+        assertTrue(MeleeRearApproach.facing(state.stance(new MeleeStance(body,order.target(),true,true,100,facing)),order,100,RULES).isEmpty(),
+                "real contact must not be sacrificed for another orbit");
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        assertEquals(state,CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
+        assertTrue(CombatFacing.observed(0,0).isEmpty());assertThrows(IllegalArgumentException.class,()->new CombatFacing(0,0));
     }
     @Test void definitionsAreDataAndInvalidWeightsCannotSilentlyFallBack()throws IOException{
         try(var input=getClass().getResourceAsStream("/io/farfrontier/palemirror/frontier/v3/combat-styles.properties")){

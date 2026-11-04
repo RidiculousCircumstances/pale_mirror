@@ -27,7 +27,7 @@ final class CombatPayloadCodecs {
                     case CombatEvent.ManeuverLaunched v->{actuation(out,v.observer());out.writeLong(v.attemptOrdinal());}
                     case CombatEvent.ManeuverClosed v->{id(out,v.owner());out.writeLong(v.attemptOrdinal());}
                     case CombatEvent.StanceObserved value->{actuation(out,value.stance().observer());target(out,value.stance().target());
-                        out.writeBoolean(value.stance().holding());out.writeBoolean(value.stance().attackReady());out.writeLong(value.stance().atTick());}
+                        out.writeBoolean(value.stance().holding());out.writeBoolean(value.stance().attackReady());out.writeLong(value.stance().atTick());facing(out,value.stance().targetFacing());}
                     case CombatEvent.PositionPlanned value->{ActorExecutionStateCodec.writeId(out,value.execution());target(out,value.target());FrontierWorldStateCodec.writePosition(out,value.targetPosition().support());
                         out.writeBoolean(value.station().isPresent());if(value.station().isPresent())FrontierWorldStateCodec.writePosition(out,value.station().orElseThrow().support());out.writeByte(value.reason().wireTag());}
                     case CombatEvent.Prepared value->strike(out,value.strike());
@@ -46,7 +46,7 @@ final class CombatPayloadCodecs {
                 case CombatEvent.ManeuverSelected.TYPE->new CombatEvent.ManeuverSelected(maneuver(in));
                 case CombatEvent.ManeuverLaunched.TYPE->new CombatEvent.ManeuverLaunched(actuation(in),in.readLong());
                 case CombatEvent.ManeuverClosed.TYPE->new CombatEvent.ManeuverClosed(id(in),in.readLong());
-                case CombatEvent.StanceObserved.TYPE->new CombatEvent.StanceObserved(new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readBoolean(),in.readLong()));
+                case CombatEvent.StanceObserved.TYPE->new CombatEvent.StanceObserved(new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readBoolean(),in.readLong(),facing(in)));
                 case CombatEvent.PositionPlanned.TYPE->new CombatEvent.PositionPlanned(ActorExecutionStateCodec.readId(in),target(in),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
                         in.readBoolean()?Optional.of(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in))):Optional.empty(),MeleePosition.Reason.require(in.readUnsignedByte()));
                 case CombatEvent.Prepared.TYPE->new CombatEvent.Prepared(strike(in));

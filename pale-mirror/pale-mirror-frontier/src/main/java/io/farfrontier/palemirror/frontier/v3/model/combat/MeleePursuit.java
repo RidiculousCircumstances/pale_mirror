@@ -16,6 +16,7 @@ public final class MeleePursuit {
             MeleeManeuvers.Facts facts,long tick,MeleeRules rules){
         var origin=order.actorPosition();var target=order.targetPosition();var policy=rules.maneuvers().pursuit();
         var sector=MeleeTactics.sector(combat,order,tick,rules);boolean flank=CombatApproach.arc(order,sector,rules.engagements());
+        var facing=MeleeRearApproach.facing(combat,order,tick,rules);
         var lead=lead(facts,policy);double old=Math.hypot(origin.x()-target.x(),origin.z()-target.z());
         return candidates.stream().filter(p->!p.equals(origin) && order.engagement().contains(p)
                 && Math.abs(p.x()-origin.x())+Math.abs(p.z()-origin.z())<=policy.distance()
@@ -27,7 +28,7 @@ public final class MeleePursuit {
             .distinct().sorted(Comparator.comparingDouble((SurfaceAnchor p)->
                     (flank?CombatApproach.score(order,sector,p,rules.engagements()):0)
                     +Math.hypot(p.x()-target.x()-lead.x(),p.z()-target.z()-lead.z())
-                    +0.05*p.manhattanDistance(origin))
+                    +0.05*p.manhattanDistance(origin)+MeleeRearApproach.cost(order,p,facing))
                     .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
     }
     private MeleePursuit() { }

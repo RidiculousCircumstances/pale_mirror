@@ -19,6 +19,7 @@ final class CombatStateCodec {
         }
         out.writeInt(state.stances().size());for(var v:state.stances().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){
             id(out,v.getKey());var stance=v.getValue();actuation(out,stance.observer());target(out,stance.target());out.writeBoolean(stance.holding());out.writeBoolean(stance.attackReady());out.writeLong(stance.atTick());
+                facing(out,stance.targetFacing());
         }
         out.writeInt(state.positions().size());for(var v:state.positions().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){
             id(out,v.getKey());var point=v.getValue();ActorExecutionStateCodec.writeId(out,point.execution());target(out,point.target());FrontierWorldStateCodec.writePosition(out,point.targetPosition().support());
@@ -58,7 +59,7 @@ out.writeInt(point.widthMicros());out.writeInt(point.heightMicros());out.writeBy
             unique(blocked,key,new CombatState.Obstruction(execution,target,point,stations,tick));
         }
         n=count(in);var stances=new LinkedHashMap<SubjectId,MeleeStance>();
-        for(int i=0;i<n;i++)unique(stances,id(in),new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readBoolean(),in.readLong()));
+        for(int i=0;i<n;i++)unique(stances,id(in),new MeleeStance(actuation(in),target(in),in.readBoolean(),in.readBoolean(),in.readLong(),facing(in)));
         n=count(in);var positions=new LinkedHashMap<SubjectId,MeleePosition>();
         for(int i=0;i<n;i++){
             var key=id(in);var execution=ActorExecutionStateCodec.readId(in);var target=target(in);var point=new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));

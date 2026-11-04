@@ -78,9 +78,11 @@ public final class FrontierV3CombatExecutor {
             boolean contact=visible && distance<=profile.reach();
             boolean attackReady=visible && (attack==MeleeAttack.LUNGE
                     ?MeleeTactics.opportunity(profile,attack,distance,rules):contact);
+            var targetFacing=visible?CombatFacing.observed(target.getLookAngle().x,target.getLookAngle().z):java.util.Optional.<CombatFacing>empty();
             if(previous==null || !previous.observer().equals(actuation) || !previous.target().equals(order.target())
-                    || previous.holding()!=holding || previous.attackReady()!=attackReady || tick-previous.atTick()>=2L*rules.sensingInterval()){
-                FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,attackReady,tick)));
+                    || previous.holding()!=holding || previous.attackReady()!=attackReady || previous.targetFacing().isPresent() && targetFacing.isEmpty()
+                    || tick-previous.atTick()>=2L*rules.sensingInterval()){
+                FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,attackReady,tick,targetFacing)));
                 state=runtime.decodedState().orElseThrow();
                 order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
             }

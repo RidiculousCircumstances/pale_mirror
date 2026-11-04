@@ -131,11 +131,14 @@ public final class FrontierV3CombatTrace {
         try {
             var row=base(level);row.add("fighter",body(fighter));row.add("target",body(target));row.addProperty("owner",order.owner().value());
             row.addProperty("attack",attack.name());row.addProperty("gate",gate);row.addProperty("distance",distance);
-            row.addProperty("combatStyle",order.style().id().value());
+            row.addProperty("combatStyle",order.style().id().value());row.addProperty("rearApproachWeight",order.style().rearWeight());
             row.addProperty("observedTargetVx",targetVelocityX);row.addProperty("observedTargetVz",targetVelocityZ);
             row.addProperty("separatingSpeed",separating);row.addProperty("lateralSpeed",lateral);row.addProperty("canSpend",canSpend);row.addProperty("orderRevision",order.revision());
             var runtime=FrontierV3ServerLifecycle.runtimeFor(level.getServer());var state=runtime==null?null:runtime.decodedState().orElse(null);
             if(state!=null) {
+                var stance=state.combat().stances().get(order.owner());
+                if(stance!=null && stance.current(order,runtime.calendarInstant().orElseThrow(),state.bootstrap().ruleset().melee()))stance.targetFacing().ifPresent(facing->{
+                    row.addProperty("observedFacingX",facing.x());row.addProperty("observedFacingZ",facing.z());row.addProperty("facingObservedAt",stance.atTick());});
                 var plan=state.combat().engagements().get(CombatEngagement.Key.of(order));
                 if(plan!=null)plan.wave().ifPresent(wave->{
                     var slots=new JsonArray();for(var slot:wave.slots()) {

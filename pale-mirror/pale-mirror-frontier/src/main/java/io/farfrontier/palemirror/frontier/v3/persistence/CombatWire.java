@@ -46,5 +46,11 @@ final class CombatWire {
     }
     static MeleeManeuver maneuver(DataInputStream in)throws IOException{return new MeleeManeuver(actuation(in),id(in),target(in),MeleeManeuver.Kind.require(in.readUnsignedByte()),in.readLong(),
         new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong());}
+    static void facing(DataOutputStream out,java.util.Optional<CombatFacing> value)throws IOException{
+        out.writeBoolean(value.isPresent());if(value.isPresent()){out.writeInt(value.orElseThrow().x());out.writeInt(value.orElseThrow().z());}
+    }
+    static java.util.Optional<CombatFacing> facing(DataInputStream in)throws IOException{
+        return in.readBoolean()?java.util.Optional.of(new CombatFacing(in.readInt(),in.readInt())):java.util.Optional.empty();
+    }
     private CombatWire(){}
 }

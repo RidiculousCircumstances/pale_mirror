@@ -17,7 +17,7 @@ public final class CombatStyleCatalog {
             var id=new CombatStyleId(key);var prefix="style."+key+".";
             var style=new CombatStyle(id,required(data,prefix+"name"),number(data,prefix+"gap"),number(data,prefix+"attack"),
                     number(data,prefix+"run"),number(data,prefix+"burst"),number(data,prefix+"lateral"),number(data,prefix+"retreat"),
-                    number(data,prefix+"approach"),number(data,prefix+"reserve"));
+                    number(data,prefix+"approach"),number(data,prefix+"reserve"),number(data,prefix+"rear"));
             if(definitions.putIfAbsent(id,style)!=null)throw new IllegalArgumentException("duplicate combat style");
         }
         if(definitions.isEmpty() || definitions.size()>32)throw new IllegalArgumentException("unbounded combat style catalog");
