@@ -522,8 +522,8 @@ final class FrontierV3ActorBodyController {
     }
 
     /** Physics belongs to the physical incarnation, never its ambient/work presentation.
-     * Native navigation supplies gravity while steering; its stop leaves this same bridge
-     * alive, without double-integrating an active native path or awarding goal arrival.
+     * Native travel supplies passive physics independently of steering or path availability.
+     * Registration never integrates another turn or awards goal arrival.
      */
     private static void ensureOrdinaryPhysics(Mob body) {
         if (!FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(body))

@@ -62,10 +62,9 @@ final class FrontierV3ControlledMobMotion {
     private static final Map<Mob, StationaryPresentation> STATION_SETTLING = new IdentityHashMap<>();
     private static final int STATION_SETTLE_TICKS = 6;
     /**
-     * HOT bodies deliberately retain NoAI, so their vertical travel cannot be delegated to the
-     * vanilla goal loop.  Registration is weak and has no canonical meaning: it merely keeps
-     * the same ordinary gravity/collision path alive at every entity-pre turn, including an
-     * intentionally stationary body after a player removes its support.
+     * HOT bodies retain NoAI to suppress independent task selection, not passive physics.
+     * Weak registration enables ordinary native travel, gravity, drag and collision even
+     * without a path. It has no route or canonical-progress authority.
      */
     private static final Map<Mob, Boolean> ORDINARY_PHYSICS = new WeakHashMap<>();
     /**
@@ -353,7 +352,6 @@ final class FrontierV3ControlledMobMotion {
      * client-visible stop/start cadence seen after scheduler/lease integration.
      */
     static void advanceAtEntityBoundary(Mob actor) {
-        if (ORDINARY_PHYSICS.containsKey(actor)) advanceOrdinaryGravity(actor);
         advance(actor);
     }
 
@@ -428,32 +426,9 @@ final class FrontierV3ControlledMobMotion {
     }
 
     /**
-     * Applies only the vanilla-style vertical gravity/collision half that a NoAI Mob skips.
-     * This has no lateral target, route, cursor, or canonical-progress authority.  It exists so
-     * a retained HOT body whose real support is removed falls and takes ordinary collision/fall
-     * outcomes instead of retaining the last projected Y coordinate as a hover datum.
-     */
-    static void advanceOrdinaryGravity(Mob actor) {
-        if (actor == null || actor.isRemoved() || !actor.isAlive() || actor.isNoGravity()) return;
-        Vec3 before = actor.position();
-        Vec3 velocity = actor.getDeltaMovement();
-        double vertical = Math.max(-0.98D, (velocity.y - 0.08D) * 0.98D);
-        actor.move(MoverType.SELF, new Vec3(0.0D, vertical, 0.0D));
-        boolean moved = actor.position().y < before.y - 1.0E-8D;
-        // Calling Entity.move directly at this narrow NoAI boundary does not reliably refresh
-        // the vanilla onGround flag before the next tracker turn.  Collision itself is the
-        // authoritative fact: a downward intent that made no vertical progress struck the
-        // retained floor and must not accumulate a synthetic fall velocity.  Conversely an
-        // unsupported body still moves downward and retains ordinary gravity/fall behavior.
-        boolean downwardCollision = vertical < 0.0D && !moved;
-        actor.setDeltaMovement(velocity.x, actor.onGround() || downwardCollision ? 0.0D : vertical, velocity.z);
-        if (moved) publishAcceptedMove(actor);
-    }
-
-    /**
-     * Restores the ordinary vertical physics path without selecting a movement target.  The
-     * actual fall turn is intentionally the next entity-pre boundary: invoking it from the
-     * server-post executor as well would double-integrate gravity for a frequently probed body.
+     * Registers passive native physics without choosing a target or integrating a turn here.
+     * LivingEntity.travel owns the one collision/gravity/impulse integration in its normal tick;
+     * neither entity-pre steering nor server-post executors integrate a second physics turn.
      */
     static void restoreOrdinaryPhysics(Mob actor) {
         if (actor == null) return;

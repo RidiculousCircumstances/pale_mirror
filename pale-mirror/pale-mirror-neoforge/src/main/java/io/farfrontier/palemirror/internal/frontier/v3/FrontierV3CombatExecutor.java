@@ -75,7 +75,9 @@ public final class FrontierV3CombatExecutor {
             boolean tacticalReady=MeleeTactics.readyAt(state.combat(),order,new SurfaceAnchor(new BlockPosition(fighter.getOnPos().getX(),fighter.getOnPos().getY(),fighter.getOnPos().getZ())),tick,rules);
             // A preferred flank is a movement goal, never a veto on real close contact.
             boolean holding=visible && distance<=holdReach;
-            boolean attackReady=visible && MeleeTactics.opportunity(profile,attack,distance,rules);
+            boolean contact=visible && distance<=profile.reach();
+            boolean attackReady=visible && (attack==MeleeAttack.LUNGE
+                    ?MeleeTactics.opportunity(profile,attack,distance,rules):contact);
             if(previous==null || !previous.observer().equals(actuation) || !previous.target().equals(order.target())
                     || previous.holding()!=holding || previous.attackReady()!=attackReady || tick-previous.atTick()>=2L*rules.sensingInterval()){
                 FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,attackReady,tick)));
@@ -93,7 +95,7 @@ public final class FrontierV3CombatExecutor {
                     trace(order,"MANEUVER_WINDOW","tick="+tick+" harm="+harmed.getAsLong()+" facts="+maneuverFacts+" preferred="+MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())));
             }
             // A real close opportunity wins over retreating from a blow that has already landed.
-            boolean retreat=!holding && MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution()))
+            boolean retreat=!contact && MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution()))
                     .filter(kind->kind==MeleeManeuver.Kind.BACKSTEP).isPresent();
             if((!attackReady || retreat) && visible && (state.actorMovements().get(order.execution().actorId())==null
                     || capabilities.require(order.execution()).permitsManeuverInterruption(state,state.actorMovements().get(order.execution().actorId()),order))

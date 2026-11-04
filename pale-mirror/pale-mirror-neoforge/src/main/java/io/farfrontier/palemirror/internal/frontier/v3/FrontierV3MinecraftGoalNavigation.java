@@ -258,10 +258,8 @@ final class FrontierV3MinecraftGoalNavigation {
             var failure = FAILURES.get(actor);
             if (failure == null) return false;
             if (!failure.permission().current(actor)) { stop(actor); return false; }
-            // An unfinished jump may temporarily make GroundPathNavigation unable to
-            // replan. Keep ordinary collision/gravity alive while the bounded retry
-            // waits for the same body to land; NoAI otherwise freezes it in mid-air.
-            FrontierV3ControlledMobMotion.advanceOrdinaryGravity(actor);
+            // Waiting for a retry retains no steering command. The registered body still
+            // receives passive native travel, including external impulses and landing.
             return true;
         }
         if (!control.permission().current(actor)) { stop(actor); return false; }

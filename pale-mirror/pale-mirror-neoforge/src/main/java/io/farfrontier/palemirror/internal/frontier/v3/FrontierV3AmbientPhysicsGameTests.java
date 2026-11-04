@@ -45,6 +45,63 @@ import java.util.Optional;
 public final class FrontierV3AmbientPhysicsGameTests {
     private FrontierV3AmbientPhysicsGameTests() { }
 
+    /** Native travel must consume a hit impulse once, even with no steering/path owner. */
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full")
+    public static void idleNoAiBodyConsumesKnockbackAndDragWithoutSteeringOrWallPenetration(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(4, 4, 4));
+        for (int x = -3; x <= 6; x++) for (int z = -2; z <= 2; z++) {
+            level.setBlock(origin.offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+            for (int y = 1; y <= 5; y++) level.setBlock(origin.offset(x, y, z), Blocks.AIR.defaultBlockState(), 3);
+        }
+        for (int y = 1; y <= 4; y++) level.setBlock(origin.offset(5, y, 0), Blocks.STONE.defaultBlockState(), 3);
+        Villager body = EntityType.VILLAGER.create(level);
+        if (body == null) throw new IllegalStateException("test body unavailable");
+        body.setNoAi(true); body.setPos(origin.getX() + .5, origin.getY() + 1, origin.getZ() + .5);
+        level.addFreshEntity(body);
+        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(body);
+        body.setOnGround(true);
+        body.knockback(.4, -1, 0);
+        body.setZza(1); // A retired path's input is not a continuing steering permission.
+        Vec3 before = body.position();
+        FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(body);
+        helper.assertTrue(body.position().equals(before), "entity-pre must not integrate a second physical turn");
+        body.aiStep();
+        helper.assertTrue(Math.abs(body.getX() - before.x - .4) < .001 && Math.abs(body.getZ() - before.z) < .001,
+                "idle NoAI must consume real horizontal knockback, without stale steering: " + body.position());
+        helper.assertTrue(body.getY() > before.y && body.getDeltaMovement().x < .4,
+                "native travel owns vertical impulse and horizontal drag too");
+        for (int turn = 0; turn < 30; turn++) {
+            FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(body); body.aiStep();
+        }
+        double restingX = body.getX();
+        helper.assertTrue(Math.abs(body.getDeltaMovement().x) < .01 && body.onGround(),
+                "the impulse must dissipate and land, rather than accumulate while no path exists");
+        var scope = new FrontierV3NavigationScope.ObservedWorld(new WorldBounds(origin.getX() - 3, origin.getZ() - 2, 10, 5));
+        var obstructed = SurfaceAnchor.at(origin.getX() + 5, origin.getY(), origin.getZ());
+        var refused = FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(obstructed, scope));
+        helper.assertTrue(!FrontierV3GoalNavigation.controls(body) && body.getNavigation().isDone()
+                        && refused.reason().startsWith("minecraft-path-unavailable"),
+                "fixture must retain a genuinely obstructed path request, including its normal retry wait: " + refused);
+        body.knockback(1, -1, 0);
+        for (int turn = 0; turn < 20; turn++) {
+            FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(body); body.aiStep();
+        }
+        helper.assertTrue(body.getX() > restingX && body.getBoundingBox().maxX <= origin.getX() + 5.001,
+                "a later hit must move the same idle body but stop at actual wall collision");
+        helper.assertTrue(body.isNoAi() && body.getNavigation().isDone(),
+                "passive physics must not enable a vanilla task or create a path");
+        FrontierV3GoalNavigation.stop(body);
+        var reachable = SurfaceAnchor.at(origin.getX() + 4, origin.getY(), origin.getZ() + 1);
+        for (int turn = 0; turn < 100 && !FrontierV3SemanticMovement.arrived(level, body, reachable); turn++) {
+            FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(reachable, scope));
+            FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(body); body.aiStep();
+        }
+        helper.assertTrue(FrontierV3SemanticMovement.arrived(level, body, reachable),
+                "the same body must resume owned native navigation after the impulse/blocked wait: " + body.position());
+        FrontierV3GoalNavigation.stop(body); body.discard(); helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void nativeFollowingPreservesThePathWhileStoppedPedestrianRequiresAnActualDetour(GameTestHelper helper) {
         var level = helper.getLevel();

@@ -82,9 +82,14 @@ class CombatModuleTest {
         assertTrue(MeleeAim.contains(0,Math.sin(Math.toRadians(30)),Math.cos(Math.toRadians(30)),sector));
         assertFalse(MeleeAim.contains(0,0,-1,sector),"wide sword arc never hits straight behind the committed facing");
     }
-    @Test void attackChoiceUsesObservedDistanceAndRetreatButNeverGrantsExtraDamageReach() throws IOException {
+    @Test void contactStrikeUsesFullWeaponReachEvenAgainstRetreatButNeverGrantsExtraDamageReach() throws IOException {
         assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,1.2,0,MeleeRules.initial()));
-        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,1.2,0.2,MeleeRules.initial()));
+        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,1.2,0.2,MeleeRules.initial()));
+        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,2.97,0.2,MeleeRules.initial()));
+        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(SWORD,3.0,0.2,MeleeRules.initial()));
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,3.01,0.2,MeleeRules.initial()));
+        var shortWeapon=new WeaponProfile("short",2,20,1,1);
+        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(shortWeapon,1.01,0,MeleeRules.initial()));
         assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(SWORD,3.4,0,MeleeRules.initial()));
         assertTrue(MeleeTactics.opportunity(SWORD,MeleeAttack.LUNGE,3.4,MeleeRules.initial()));
         assertFalse(MeleeTactics.opportunity(SWORD,MeleeAttack.LUNGE,4.2,MeleeRules.initial()));
@@ -233,7 +238,7 @@ class CombatModuleTest {
         var rules=MeleeRules.initial();
         assertEquals(MeleeAttack.SWEEP,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,1.8,0,0.2,rules));
         assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,1.8,0,0,rules));
-        assertEquals(MeleeAttack.LUNGE,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,3,0.2,0.2,rules));
+        assertEquals(MeleeAttack.QUICK,MeleeTactics.attack(CombatState.empty(),order,actor,1,100,SWORD,3,0.2,0.2,rules));
         assertFalse(MeleeAttack.SWEEP.closesDistance());
         assertTrue(rules.windup(MeleeAttack.SWEEP)>rules.windup(MeleeAttack.QUICK));
         assertFalse(MeleeAim.contains(0,0,-1,rules.techniques().sweepHalfAngleDegrees()));
@@ -278,10 +283,12 @@ class CombatModuleTest {
         var second=new ActorActuationId(new ActorBodyId(b.execution().actorId(),1),b.execution());
         var third=new ActorActuationId(new ActorBodyId(c.execution().actorId(),1),c.execution());
         var state=CombatState.empty().enlisted(a,100,rules).enlisted(b,100,rules).enlisted(c,100,rules)
-                .stance(new MeleeStance(first,a.target(),true,true,100)).stance(new MeleeStance(second,b.target(),true,true,100))
+                .stance(new MeleeStance(first,a.target(),false,true,100)).stance(new MeleeStance(second,b.target(),true,true,100))
                 .stance(new MeleeStance(third,c.target(),true,true,100));
         assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,100,rules));
         assertTrue(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.QUICK,100,rules));
+        assertFalse(CombatEngagementPlanner.permitsStrike(state.stance(new MeleeStance(first,a.target(),false,false,100)),a,first,MeleeAttack.QUICK,100,rules),
+                "preferred positioning is optional but real contact readiness remains required");
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.LUNGE,100,rules),"long approach still coordinates its commitment");
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,new ActorActuationId(new ActorBodyId(a.execution().actorId(),2),a.execution()),MeleeAttack.SWEEP,100,rules));
         assertFalse(CombatEngagementPlanner.permitsStrike(state,a,first,MeleeAttack.SWEEP,120,rules),"old native contact is not a fresh opportunity");

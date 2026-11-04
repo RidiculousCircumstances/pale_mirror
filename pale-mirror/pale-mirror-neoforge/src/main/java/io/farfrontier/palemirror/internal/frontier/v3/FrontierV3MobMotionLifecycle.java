@@ -6,9 +6,22 @@ import net.minecraft.world.entity.Mob;
 public final class FrontierV3MobMotionLifecycle {
     private FrontierV3MobMotionLifecycle() { }
 
-    /** Mixin guard: only a body with a retained HOT Minecraft path may travel under NoAI. */
+    /** Steering remains exclusive to the current navigation permission. */
     public static boolean usesMinecraftGoalNavigation(Mob mob) {
         return FrontierV3GoalNavigation.controls(mob);
+    }
+
+    /** Passive native physics belongs to the body, including while idle, hurt or path-blocked. */
+    public static boolean usesMinecraftPhysics(Mob mob) {
+        return !mob.level().isClientSide() && (FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(mob)
+                || usesMinecraftGoalNavigation(mob));
+    }
+
+    /** Clear expired steering inputs, never the physical velocity imparted by a hit or collision. */
+    public static void suppressUnownedSteering(Mob mob) {
+        if (!usesMinecraftGoalNavigation(mob)) {
+            mob.setXxa(0); mob.setYya(0); mob.setZza(0); mob.setJumping(false);
+        }
     }
 
     public static void advanceAtEntityBoundary(Mob mob) {

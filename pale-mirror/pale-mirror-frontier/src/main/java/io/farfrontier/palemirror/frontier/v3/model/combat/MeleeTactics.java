@@ -11,8 +11,9 @@ public final class MeleeTactics {
     public static MeleeAttack attack(WeaponProfile weapon,double distance,double separatingSpeed,MeleeRules rules){
         if(!Double.isFinite(distance) || distance<0 || !Double.isFinite(separatingSpeed))
             throw new IllegalArgumentException("invalid observed melee separation");
-        return distance<=Math.min(rules.techniques().quickDistanceMicros()/1_000_000.0,weapon.reach()*rules.techniques().quickReachPermille()/1000.0)
-                && separatingSpeed<rules.techniques().retreatSpeedMicros()/1_000_000.0?MeleeAttack.QUICK:MeleeAttack.LUNGE;
+        // An already reachable opponent needs a contact strike, even while retreating.
+        // Approach preferences must not shorten the actual weapon's contact range.
+        return distance<=weapon.reach()?MeleeAttack.QUICK:MeleeAttack.LUNGE;
     }
     public static MeleeAttack attack(CombatState state,CombatOrder order,
             io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long incarnation,long tick,

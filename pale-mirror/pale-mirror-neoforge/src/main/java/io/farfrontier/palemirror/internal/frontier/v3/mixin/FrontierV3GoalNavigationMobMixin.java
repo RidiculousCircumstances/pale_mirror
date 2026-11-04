@@ -13,13 +13,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 abstract class FrontierV3GoalNavigationMobMixin {
     @Inject(method = "isEffectiveAi", at = @At("HEAD"), cancellable = true, require = 1)
     private void frontierV3$allowOwnedPhysicalTravel(CallbackInfoReturnable<Boolean> callback) {
-        if (FrontierV3MobMotionLifecycle.usesMinecraftGoalNavigation((Mob)(Object)this))
+        if (FrontierV3MobMotionLifecycle.usesMinecraftPhysics((Mob)(Object)this))
             callback.setReturnValue(true);
     }
 
     @Inject(method = "serverAiStep", at = @At("HEAD"), cancellable = true, require = 1)
     private void frontierV3$suppressVanillaTaskOwners(CallbackInfo callback) {
-        if (FrontierV3MobMotionLifecycle.usesMinecraftGoalNavigation((Mob)(Object)this))
+        var mob = (Mob)(Object)this;
+        if (FrontierV3MobMotionLifecycle.usesMinecraftPhysics(mob)) {
+            FrontierV3MobMotionLifecycle.suppressUnownedSteering(mob);
             callback.cancel();
+        }
     }
 }

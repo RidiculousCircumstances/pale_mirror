@@ -80,7 +80,7 @@ public final class CombatEngagementPlanner {
         var member=plan.participants().get(order.owner());var stance=state.stances().get(order.owner());
         return attack!=MeleeAttack.LUNGE && member!=null && member.execution().equals(order.execution())
                 && observer.execution().equals(order.execution()) && stance!=null && stance.observer().equals(observer)
-                && stance.current(order,tick,rules) && stance.attackReady() && stance.holding();
+                && stance.current(order,tick,rules) && stance.attackReady();
     }
     /** Admission preview only: the process must checkpoint and close this exact burst before Prepared. */
     public static boolean contactHandoff(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
@@ -88,7 +88,7 @@ public final class CombatEngagementPlanner {
         return attack!=MeleeAttack.LUNGE && maneuver!=null && maneuver.open() && maneuver.kind()==MeleeManeuver.Kind.BURST
                 && maneuver.launchedAt()>0 && tick>=maneuver.launchedAt() && tick<maneuver.launchedAt()+rules.maneuvers().travelTicks()
                 && maneuver.matches(order) && maneuver.actor().equals(observer)
-                && stance!=null && stance.observer().equals(observer) && stance.current(order,tick,rules) && stance.holding() && stance.attackReady();
+                && stance!=null && stance.observer().equals(observer) && stance.current(order,tick,rules) && stance.attackReady();
     }
     /** Consumes an existing reservation when present; the retained pending strike itself owns immediate admission. */
     public static CombatState committed(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer){

@@ -922,9 +922,14 @@ public final class FrontierV3LocalNavigationGameTests {
         FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
 
         helper.runAfterDelay(1, () -> {
-            for (int turn = 0; turn < 16; turn++) FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+            for (int turn = 0; turn < 16; turn++) {
+                FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker); worker.aiStep();
+            }
+            // Native travel retains its next downward gravity impulse even while standing.
+            // Verify physical support/health, not the retired Y-only bridge's zero velocity.
             helper.assertTrue(Math.abs(worker.getY() - support.getY() - 1.0D) <= 0.01D
-                            && Math.abs(worker.getDeltaMovement().y) <= 1.0E-8D,
+                            && worker.onGround() && worker.fallDistance == 0 && worker.isAlive()
+                            && worker.getHealth() == worker.getMaxHealth(),
                     "a grounded retained body must keep its exact hand-off floor without synthetic fall momentum: position="
                             + worker.position() + " velocity=" + worker.getDeltaMovement());
             FrontierV3ControlledMobMotion.stop(worker);
