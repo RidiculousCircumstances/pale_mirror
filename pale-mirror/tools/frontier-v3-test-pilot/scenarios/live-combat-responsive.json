@@ -197,7 +197,7 @@
       "type": "observe_entity_motion",
       "id": "circling-player-pursuit",
       "entityType": "minecraft:villager",
-      "nameContains": "Owen Ash",
+      "nameContains": "Alex Rowan",
       "durationTicks": 400,
       "sampleEveryTicks": 1,
       "timeoutMs": 45000,
@@ -220,7 +220,7 @@
           "z": 3
         }
       ],
-      "workerId": "resident:1-3"
+      "workerId": "resident:1-17"
     },
     {
       "type": "wait_until_player_health",
