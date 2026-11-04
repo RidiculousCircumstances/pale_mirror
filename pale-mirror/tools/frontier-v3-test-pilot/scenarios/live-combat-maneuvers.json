@@ -167,8 +167,7 @@
         "status": "ok",
         "security": {
           "contactCount": 1,
-          "responseStatus": "ENGAGED",
-          "selfDefenders": 1
+          "responseStatus": "ENGAGED"
         }
       },
       "timeoutMs": 60000,
