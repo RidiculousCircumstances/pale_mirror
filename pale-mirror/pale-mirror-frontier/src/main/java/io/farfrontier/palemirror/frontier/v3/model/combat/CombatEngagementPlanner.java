@@ -69,7 +69,7 @@ public final class CombatEngagementPlanner {
     }
     public static boolean permitsStrike(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,long tick,MeleeRules rules){
         var plan=state.engagements().get(CombatEngagement.Key.of(order));return plan!=null && plan.permits(order,observer,tick,rules.engagements())
-                && state.pending().keySet().stream().filter(plan.participants()::containsKey).count()<rules.engagements().maximumWaveSize();
+                && plan.participants().keySet().stream().filter(state.pending()::containsKey).limit(rules.engagements().maximumWaveSize()).count()<rules.engagements().maximumWaveSize();
     }
     private CombatEngagementPlanner() { }
 }
