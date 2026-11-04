@@ -1,4 +1,59 @@
-# Active continuity — 2026-11-04
+# Active continuity — 2026-11-05
+
+## Delivered — moving-opponent contact / tactical gait / rear approach
+
+User authorized diagnosed combat fixes, variable gait/longer maneuvers and personal
+rear-approach preference. Sole main; no new goal, agents or push. IMPL
+/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror CLEAN a1582151d;
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror CLEAN detached same.
+Commits6d5a9cc71 (motion/contact/formation/gait),64cee2e66 (native contact clock),
+a1582151d (observed-facing rear preference). PACK tracked clean888ed90, existing
+.f0v-baseline/ preserved. GOV unrelated WIP preserved; only owned report, ledger
+and exact moving_opponent_combat_boundary staged. Report owns full evidence:
+docs/frontier-v3-moving-combat-20261105.md.
+
+Coordinate-derived full x/z feeds prediction. Common engagement owns committed
+frame/progress and alternate-side retry. Pressure/flank approach gait2100/2400,
+finite pursuit8blocks/40ticks/90cooldown. QUICK2/SWEEP6 preparation; QUICK bounded
+contact guidance never retreats from its target. Exact published native strike
+queues eagerly; visible preparation/contact clock starts AFTER durable external
+intent. Existing reach, LOS, arc, body/weapon identity, cancellation and no-replay
+remain. Fresh optional observed target facing drives data weights0/80/160 inside
+legal assigned sectors; ready contact beats rear preference. No hidden input or
+full stealth system. Schema334 intentionally rejects older worlds; network4 stays.
+
+Final MAIN far-frontier-v3-live.service, /home/rd/far-frontier-server,
+world combat-contact-final-schema334-seed139-20261104, seed139/rootr31;
+wrapper3621810/nativeJava22 3621836,start1793818651. SHA512:
+dd6b534e3a1c67364ecac08fb58c1647923bfd0cb65978194a8f8968c04e704752306a53da284c84ffb53a58f13c91a92597cf1e1da11a3494a31164879e1e5c.
+/tmp/pm-contact-rear-{release,preflight,publish,install,verify-runtime}.log PASS.
+Normal saved stops23:26/23:46 were deployment, not crash. Preserve world333/
+trace36c0 and world332/humanf8def diagnostic evidence. No rd state edited.
+
+Focused78common+6animation checks passed across dependency-valid runs; native21
+scene-strikes PASS before rear-only stance/ranking addition (entry unchanged).
+Final release guardrails/JAR/package PASS9s. First live333 found3/4QUICK expiry
+before durable native admission; fixed64cee. Three new native assertions wrongly
+expected PREPARING after APPLIED/IMPACT; corrected before-effect predicate, retained
+cancel/no-replay negatives. Rear fixture corrected equal-sector comparison, never
+weakened group pressure. No affected red check remains.
+
+Exact final fullpack20FPS/privateXvfb: equipment01cec335 PASS9 (ordinary2sword
+donation, NOT natural production); battle44c50fac PASS26 checked-in actions.
+Capturebfb40986-9080-472a-bbad-aa3c8dfdfa09 complete6504/no loss. Task5punches/5damage
+vs17guard hits/68damage; both within6blocks189samples, >=60degrees97samples,
+max178.91degrees.29run proposals,21nonzero observed-motion vectors. Two remaining
+WINDOW_CLOSED are actual arc dodges with contact-window checks, not consumed
+journal wait. Actual final pair frame reviewed: upright equipped guards. Scenario
+ordinary leave proved0responders/contacts/maneuvers and retained COLD styles.
+IMPL/build/contact-pressure-20261104/final-{equipment-manifest,moving-manifest,
+observed-summary}.json. No universal human-difficulty or statistical rear-bias claim.
+
+All task clients/Xvfb exited; pmcontacttest deopped. Human rd then joined and fought
+independently: latest settlement1@8201 statusok/NORMAL/0activeCases,5ready guards,
+2responders/1contact for rd, not failed task cleanup. Leave that human encounter
+alone; do not globally stop captures or clear contacts. Runtime remains running.
+Next work only user-directed manual feedback. Earlier sections are historical.
 
 ## Latest — human combat recording diagnosed, no code changed
 
