@@ -45,7 +45,7 @@ public final class CombatTransitions {
             var m=combat.maneuvers().get(subject);var order=requireOrder(state,capabilities,launch.observer(),tick);
             if(m==null || !m.open() || !m.actor().equals(launch.observer()) || m.attemptOrdinal()!=launch.attemptOrdinal() || !m.matches(order)
                     || !MeleeManeuvers.useful(state,order,m.kind(),m.station())
-                    || tick<m.selectedAt()+state.bootstrap().ruleset().melee().maneuvers().preparation())throw new IllegalArgumentException("stale or premature maneuver launch");
+                    || tick<m.selectedAt()+state.bootstrap().ruleset().melee().maneuvers().preparation(m.kind()))throw new IllegalArgumentException("stale or premature maneuver launch");
             combat=combat.maneuver(m.launched(tick));
         }else if(event instanceof CombatEvent.ManeuverClosed close){
             var m=combat.maneuvers().get(subject);
