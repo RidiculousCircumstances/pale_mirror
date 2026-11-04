@@ -1,5 +1,30 @@
 # Active continuity — 2026-11-04
 
+## Delivered — pursuit presentation crash fix
+
+Human report server fell: MAIN19:54:42 local IllegalArgumentException invalid
+combat presentation at payload28 -> Presentation.begin -> Maneuvers.tick. Complete
+capture6d43f8be-565d-400c-9383-36f3bdb999e9 retains619events/no loss and first
+pending PURSUIT_RUN. Exact contradiction: rules travel30ticks, old common cue cap20.
+Fixed151ed1cc8 in clean IMPL and detached RELEASE: explicit movement60/weapon20
+wire bounds, detailed invalid values; network negotiation4. Client update REQUIRED,
+superseding previous server-only statement. No run clamping or exception suppression.
+6animation tests+guardrails PASS; native19required PASS40.86s/process65s, including
+actual all-kind begin/moving/copied-marker/codec/closure and unchanged no-replay/
+contact tests. First fixture uppercase SubjectId error corrected, not production.
+Receipts /tmp/pm-pursuit-cue-{verify,native-final,release}.log; release gates PASS9s.
+
+Committed/published/installed/verified; same330world/seed139 preserved with human
+trace and separate old storage conflict (not fixed). Service far-frontier-v3-live
+wrapperPID2277630,start1793804468,port25565, native Done20:01:20; verify OK at
+/tmp/pm-pursuit-cue-verify-runtime.log. SHA51230d8dc3a4b0a4ee87390a60e675227703692941bd0ef4985ec92bb8652154df6046858d1800dc62fc5b94eccdb340f22c70e757e0ca71c9241f80619dde6e659.
+Normal saved boundary19:54:44 preceded install; no forced process kill/reset/rd
+mutation. Settlement1@56099statusok/NORMAL,0activeCases,2guards ready/on duty
+NoraBell1-16,EliStone1-22, no active contacts. This is deployment+native regression,
+not graphical battle-balance acceptance; no test client was started. No agents/
+goal/push. PACK trackedclean888ed90, old.f0v-baseline/ preserved. User may update
+client and continue manual fight in same world. Details/limitations in pursuit doc.
+
 ## Delivered — finite pursuit and maneuver admission
 
 User accepted all5points; implemented/verified/committed/deployed. User will test

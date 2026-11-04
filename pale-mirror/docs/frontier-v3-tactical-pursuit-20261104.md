@@ -4,6 +4,49 @@ User accepted five changes following human capture6e4b5245: finite pursuit/flank
 runs, bounded observed-motion interception, contact handoff, legal evasion before
 withdrawal, and separation of transient access from parking restrictions.
 
+## Follow-up: first human pursuit crashed presentation (151ed1cc8)
+
+The prior delivery's “no client update” statement is superseded. Human capture
+`6d43f8be-565d-400c-9383-36f3bdb999e9` retained619events without loss. At19:54:42
+local the first pending PURSUIT_RUN reached native presentation and threw
+`IllegalArgumentException: invalid combat presentation` at payload constructor28.
+The runtime quarantined and stopped normally, saving the world/player and trace.
+
+Exact cause: canonical pursuit travel30ticks was passed unchanged into the
+visual cue, whose old common validator permitted active<=20 for every gesture.
+The prior domain/navigation/native strike tests did not cover that composition;
+claiming no client update was consequently wrong. The same bound exists in the
+client decoder, so suppressing the server exception alone cannot fix delivery.
+
+`CombatGesture.maximumActiveTicks` now explicitly allows finite movement cues
+BURST/BACKSTEP through60ticks (the accepted maneuver-policy upper bound), while
+weapon contact cues retain20. No clamping, shortened run, swallowed exception or
+new gameplay clock. Invalid packets report gesture/phase/identity/clocks/durations/
+facing. Network negotiation version4 rejects stale clients before combat instead
+of disconnecting at the first long movement cue. Client updater must run.
+
+A focused regression exercises every actual maneuver and strict upper/invalid
+bounds for each gesture. A native regression passes all maneuver rules through
+actual begin -> moving -> copied retained marker -> production cue -> network
+codec roundtrip -> closure; it also asserts presentation cannot damage the target.
+This reproduces the previously missing composition, including PURSUIT_RUN30.
+The first new native fixture used an uppercase test SubjectId and was rejected;
+its purpose was corrected, with no production relaxation.
+
+Evidence:6MeleeAnimation tests plus guardrails PASS;
+`/tmp/pm-pursuit-cue-native-final.log`19required native tests PASS40.86s, process65s;
+clean detached151ed1cc8 guardrails/JAR/package PASS9s
+(`/tmp/pm-pursuit-cue-release.log`). No battle balance or graphical product
+acceptance inferred. Reuse world330/seed139 and retained prior diagnostic storage
+conflict; that separate condition is not repaired by this fix.
+
+Follow-up deployment: root preflight/publish/install/verify PASS, same330world/
+seed139. Runtime wrapper2277630,start1793804468, native Done20:01:20. Installed
+SHA51230d8dc3a4b0a4ee87390a60e675227703692941bd0ef4985ec92bb8652154df6046858d1800dc62fc5b94eccdb340f22c70e757e0ca71c9241f80619dde6e659.
+Settlement1@56099statusok/NORMAL,0activeCases,2on-duty ready guards NoraBell/EliStone,
+no active contact. No human state edited, no client launched or graphical battle
+acceptance claimed in this correction. Prior unrelated storage incident retained.
+
 ## Responsibility and implementation
 
 Production4f6137ef4. Schema330 intentionally requires a fresh disposable world.
