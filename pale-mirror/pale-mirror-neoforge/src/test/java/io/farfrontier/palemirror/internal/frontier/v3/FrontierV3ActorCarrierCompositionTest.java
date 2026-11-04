@@ -293,14 +293,15 @@ class FrontierV3ActorCarrierCompositionTest {
                                     || name.equals("recognizesManagedAmbientCarrier"),
                                     "a family projection cannot grant source-join permission behind the common lifetime");
                             if (owner.equals(FrontierV3ActorBodyController.class.getName().replace('.', '/'))
-                                    && (name.equals("retainsRecordedBody") || name.equals("recognizesRecordedBody")))
+                                    && (name.equals("recognizesSourceJoin") || name.equals("recognizesPassiveBody")))
                                 recognition.add(name);
                         }
                     };
                 }
             }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
         }
-        assertEquals(Set.of("retainsRecordedBody", "recognizesRecordedBody"), recognition);
+        assertEquals(Set.of("recognizesSourceJoin", "recognizesPassiveBody"), recognition,
+                "live/corpse and passive joins remain behind the common body owner, not its private recognition helpers");
     }
 
     private static String classBytes(Class<?> type) {
