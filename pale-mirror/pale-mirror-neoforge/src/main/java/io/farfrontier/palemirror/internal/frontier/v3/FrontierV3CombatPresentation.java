@@ -29,6 +29,7 @@ public final class FrontierV3CombatPresentation {
             marker=new CompoundTag();marker.putString("owner",owner);marker.putLong("ordinal",ordinal);marker.putLong("epoch",epoch);marker.putInt("attack",gesture.wireTag());
             marker.putInt("preparation",preparation);marker.putInt("active",active);marker.putInt("recovery",recovery);marker.putLong("startedAtTick",level.getGameTime());
             marker.putInt("phase",CombatGesturePayload.Phase.PREPARING.wireTag());marker.putLong("aimAt",level.getGameTime());facing(marker,body,target);body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
+            FrontierV3CombatTrace.gesture(level,body,target,gesture.name(),ordinal,preparation,active,recovery);
             var sound=switch(gesture){
                 case LUNGE -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_STRONG;
                 case SWEEP -> net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP;

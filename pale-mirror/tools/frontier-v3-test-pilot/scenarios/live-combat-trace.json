@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "live_combat_trace",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -1465, "y": 65, "z": -1344 }, "settleMs": 0 },
+    { "type": "command", "command": "/pale_mirror v3 combat_trace start @s 2 10" }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 13000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [],
+  "frames": []
+}
