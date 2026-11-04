@@ -50,6 +50,15 @@ public final class FrontierV3CombatPresentation {
         FrontierV3LocalGoalCorrection.withdraw(body,strike.attacker(),strike.attemptOrdinal());
         finish(level,body,strike,CombatGesturePayload.Phase.IMPACT);
     }
+    /** No cue is reversible too; an existing cue must belong to this exact attempt and not be active. */
+    static boolean reversiblePreparation(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules){
+        var marker=body.getPersistentData().getCompound(KEY);
+        if(!marker.getString("owner").equals(strike.owner().value()) || marker.getLong("ordinal")!=strike.attemptOrdinal())return true;
+        long elapsed=level.getGameTime()-marker.getLong("startedAtTick");
+        return marker.getLong("epoch")==strike.attacker().body().physicalEpoch()
+                && marker.getInt("phase")==CombatGesturePayload.Phase.PREPARING.wireTag()
+                && elapsed>=0 && elapsed<rules.windup(strike.attack());
+    }
     /** Track only during early preparation. The final commitment and contact use a frozen facing. */
     static boolean track(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules,LivingEntity target){
         if(!strike.attack().closesDistance())return false;

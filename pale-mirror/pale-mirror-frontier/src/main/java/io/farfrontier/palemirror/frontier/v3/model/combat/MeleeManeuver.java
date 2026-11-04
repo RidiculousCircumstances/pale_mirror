@@ -9,8 +9,10 @@ public record MeleeManeuver(ActorActuationId actor,SubjectId weapon,CombatTarget
         SurfaceAnchor origin,SurfaceAnchor station,long selectedAt,long launchedAt,long closedAt,
         long burstReadyAt,long retreatReadyAt,long anyReadyAt) {
     public enum Kind {
-        BURST(1), BACKSTEP(2);
+        BURST(1), BACKSTEP(2), SIDESTEP_LEFT(3), SIDESTEP_RIGHT(4);
         private final int tag;Kind(int tag){this.tag=tag;}public int wireTag(){return tag;}
+        public boolean lateral(){return this==SIDESTEP_LEFT || this==SIDESTEP_RIGHT;}
+        public int side(){return this==SIDESTEP_LEFT?1:this==SIDESTEP_RIGHT?-1:0;}
         public static Kind require(int tag){for(var k:values())if(k.tag==tag)return k;throw new IllegalArgumentException("unknown melee maneuver");}
     }
     public MeleeManeuver {
@@ -29,9 +31,9 @@ public record MeleeManeuver(ActorActuationId actor,SubjectId weapon,CombatTarget
             && (!open() || original.equals(execution) && weapon.equals(currentWeapon));
     }
     public boolean matches(CombatOrder order){return actor.execution().equals(order.execution()) && weapon.equals(order.weapon()) && target.equals(order.target());}
-    public boolean busy(long tick,ManeuverRules rules){return open() || tick<closedAt+rules.recovery();}
+    public boolean busy(long tick,ManeuverRules rules){return open() || tick<closedAt+rules.recovery(kind);}
     /** A completed closing burst hands contact to the weapon; evasive recovery remains committed. */
-    public boolean blocksStrike(long tick,ManeuverRules rules){return open() || kind==Kind.BACKSTEP && tick<closedAt+rules.recovery();}
+    public boolean blocksStrike(long tick,ManeuverRules rules){return open() || kind!=Kind.BURST && tick<closedAt+rules.recovery(kind);}
     public boolean ready(Kind next,long tick){return !open() && tick>=anyReadyAt && tick>=(next==Kind.BURST?burstReadyAt:retreatReadyAt);}
     public MeleeManeuver launched(long tick){if(!open() || launchedAt!=0 || tick<selectedAt)throw new IllegalArgumentException("stale maneuver launch");return copy(tick,0);}
     public MeleeManeuver closed(long tick){if(!open() || tick<selectedAt)throw new IllegalArgumentException("stale maneuver closure");return copy(launchedAt,tick);}

@@ -25,6 +25,14 @@ public final class CombatManeuverProcess {
         Optional<SurfaceAnchor> station;
         try{station=MeleeManeuvers.destination(following,order,kind.orElseThrow(),capability.maneuverKnowledge(following,order.execution()),tick);}
         catch(KnownPedestrianNavigation.RouteUnavailable pending){return FrontierWorldCommandPlanner.rejected("maneuver route "+pending.status());}
+        if(station.isEmpty() && kind.orElseThrow().lateral()){
+            var other=kind.orElseThrow()==MeleeManeuver.Kind.SIDESTEP_LEFT?MeleeManeuver.Kind.SIDESTEP_RIGHT:MeleeManeuver.Kind.SIDESTEP_LEFT;
+            if(capability.maneuvers().contains(other)){
+                try{station=MeleeManeuvers.destination(following,order,other,capability.maneuverKnowledge(following,order.execution()),tick);}
+                catch(KnownPedestrianNavigation.RouteUnavailable pending){return FrontierWorldCommandPlanner.rejected("maneuver route "+pending.status());}
+                if(station.isPresent())kind=Optional.of(other);
+            }
+        }
         if(station.isEmpty())return FrontierWorldCommandPlanner.rejected("no safe bounded maneuver destination");
         var selected=new CombatEvent.ManeuverSelected(MeleeManeuvers.selected(following,order,request.observer(),kind.orElseThrow(),station.orElseThrow(),tick));
         CombatTransitions.apply(following,order.owner(),selected,tick,ports);
@@ -58,7 +66,7 @@ public final class CombatManeuverProcess {
     public static List<ProposedEvent> progress(FrontierWorldState state,ScheduledAction action,ActorExecutionId execution,long tick){
         var m=state.combat().maneuvers().get(execution.activityOwnerId());if(m==null || !m.actor().execution().equals(execution))throw new IllegalArgumentException("foreign maneuver continuation");
         var cap=CombatComposition.CAPABILITIES.require(execution);var rules=state.bootstrap().ruleset().melee().maneuvers();
-        if(!m.open())return later(action,Math.max(tick+1,m.closedAt()+rules.recovery()));
+        if(!m.open())return later(action,Math.max(tick+1,m.closedAt()+rules.recovery(m.kind())));
         boolean permitted=state.actorLocations().get(execution.actorId()).condition().status()==ActorLifeStatus.ALIVE
             && state.actorExecutions().current(execution.activityKind()).get(execution.actorId())!=null
             && state.actorExecutions().current(execution.activityKind()).get(execution.actorId()).equals(execution)
@@ -66,7 +74,7 @@ public final class CombatManeuverProcess {
                 .filter(order->m.matches(order) && MeleeManeuvers.useful(state,order,m.kind(),m.station())).isPresent()
             && ActorBodyAuthority.retainsPhysicalCustody(state,execution.actorId()) && ActorBodyAuthority.current(state,execution.actorId()).equals(m.actor().body());
         var movement=state.actorMovements().get(execution.actorId());
-        boolean expired=tick>=(m.launchedAt()==0?m.selectedAt()+80:m.launchedAt()+rules.travelTicks());
+        boolean expired=tick>=(m.launchedAt()==0?m.selectedAt()+80:m.launchedAt()+rules.travelTicks(m.kind()));
         if(!permitted || expired || m.launchedAt()>0 && m.order().arrivedAt(state.actorLocations().get(execution.actorId()).supportingSurface())){
             var result=new ArrayList<ProposedEvent>();
             if(movement!=null){
@@ -75,13 +83,13 @@ public final class CombatManeuverProcess {
                 if(assessment instanceof ActivityInterruptionPlanner.Waiting)return later(action,tick+state.bootstrap().ruleset().melee().sensingInterval());
                 result.addAll(((ActivityInterruptionPlanner.Ready)assessment).validate(state,execution.actorId()).events());
             }
-            result.add(new ProposedEvent(m.owner(),new CombatEvent.ManeuverClosed(m.owner(),m.attemptOrdinal())));result.addAll(later(action,tick+rules.recovery()));return List.copyOf(result);
+            result.add(new ProposedEvent(m.owner(),new CombatEvent.ManeuverClosed(m.owner(),m.attemptOrdinal())));result.addAll(later(action,tick+rules.recovery(m.kind())));return List.copyOf(result);
         }
         if(m.launchedAt()>0 && movement==null){
             var move=new ActorMovement(m.order(),tick,new ActorMovementContext.CombatManeuverLeg(m.owner(),m.attemptOrdinal()),execution);
-            var events=new ArrayList<>(ActorMovementProcess.planStart(move));events.addAll(later(action,m.launchedAt()+rules.travelTicks()));return List.copyOf(events);
+            var events=new ArrayList<>(ActorMovementProcess.planStart(move));events.addAll(later(action,m.launchedAt()+rules.travelTicks(m.kind())));return List.copyOf(events);
         }
-        return later(action,m.launchedAt()==0?m.selectedAt()+80:m.launchedAt()+rules.travelTicks());
+        return later(action,m.launchedAt()==0?m.selectedAt()+80:m.launchedAt()+rules.travelTicks(m.kind()));
     }
     private static List<ProposedEvent> later(ScheduledAction action,long tick){return List.of(new ProposedEvent(action.subject(),new ScheduleEffect.Rescheduled(action.id(),
         new ScheduledAction(action.id(),new SimInstant(tick),action.priority(),action.subject(),action.kind(),action.weight()))));}

@@ -10,26 +10,30 @@ public final class MeleeManeuvers {
         public Facts{if(!Double.isFinite(distance)||distance<0||!Double.isFinite(separatingSpeed))throw new IllegalArgumentException("invalid maneuver observations");}
     }
     public static Optional<MeleeManeuver.Kind> preference(FrontierWorldState state,CombatOrder order,Facts facts,long tick,CombatCapability capability){
-        var rules=state.bootstrap().ruleset().melee().maneuvers();var prior=state.combat().maneuvers().get(order.owner());
-        if(state.combat().recovering(order.owner(),tick)
-                || state.combat().pending().containsKey(order.owner()) || prior!=null && prior.busy(tick,rules))return Optional.empty();
-        var harm=capability.harmedAt(state,order);
+        return MeleeDuelPolicy.choose(state,order,facts,tick,capability).maneuver();
+    }
+    static Optional<MeleeManeuver.Kind> ordinaryPreference(CombatState combat,CombatOrder order,Facts facts,long tick,MeleeRules melee,
+            OptionalLong harm,Set<MeleeManeuver.Kind> allowed){
+        var rules=melee.maneuvers();var prior=combat.maneuvers().get(order.owner());
+        if(combat.recovering(order.owner(),tick)
+                || combat.pending().containsKey(order.owner()) || prior!=null && prior.busy(tick,rules))return Optional.empty();
         boolean hurt=harm.isPresent() && tick>=harm.getAsLong() && tick-harm.getAsLong()<=rules.harmLifetime();
         var kind=((hurt || facts.threateningSwing()) && facts.distance()<=rules.hurtGapMicros()/1_000_000.0 || facts.distance()<rules.crowdedGapMicros()/1_000_000.0)?MeleeManeuver.Kind.BACKSTEP:
             facts.distance()>=rules.minimumBurstGapMicros()/1_000_000.0 && facts.distance()<=rules.maximumBurstGapMicros()/1_000_000.0
                 && (facts.distance()>=rules.distantGapMicros()/1_000_000.0 || facts.separatingSpeed()>=rules.retreatSpeedMicros()/1_000_000.0)?MeleeManeuver.Kind.BURST:null;
-        if(kind==MeleeManeuver.Kind.BURST && MeleePositions.weapon(state.combat(),order)
+        if(kind==MeleeManeuver.Kind.BURST && MeleePositions.weapon(combat,order)
                 .filter(profile->facts.distance()<=rules.burstDistance()+profile.reach()).isEmpty())return Optional.empty();
-        return kind!=null && state.combat().affords(order.owner(),tick,state.bootstrap().ruleset().melee().readiness().cost(kind),state.bootstrap().ruleset().melee())
-                && capability.maneuvers().contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
+        return kind!=null && combat.affords(order.owner(),tick,melee.readiness().cost(kind),melee)
+                && allowed.contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
     }
     public static Optional<SurfaceAnchor> destination(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,KnownPedestrianRouteKnowledge knowledge,long tick){
         var rules=state.bootstrap().ruleset().melee().maneuvers();var origin=order.actorPosition();var target=order.targetPosition();
-        int radius=kind==MeleeManeuver.Kind.BURST?rules.burstDistance():rules.retreatDistance();
+        int radius=rules.distance(kind);
         var physical=PedestrianInteractionStations.within(knowledge.geometry(),origin,radius*2,Set.of()).stream()
             .filter(p->knowledge.clearStation(p) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(p.support())
                 && ServiceBoundaryComposition.turnoverPoint(state,p).isEmpty() && MeleePositions.available(state,order,p,tick)).toList();
         var candidates=rank(order,kind,physical,rules).stream().filter(point->useful(state,order,kind,point))
+                .filter(point->!kind.lateral() || compatibleSector(state,order,point,tick))
                 .filter(point->kind!=MeleeManeuver.Kind.BURST
                 || MeleeTactics.readyAt(state.combat(),order,point,tick,state.bootstrap().ruleset().melee())).toList();
         return MeleePositions.reachable(candidates,3,p->{var route=knowledge.plannedPath(origin,new MovementOrder(order.owner(),order.execution().actorId(),1,1,List.of(p),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION));
@@ -37,12 +41,39 @@ public final class MeleeManeuvers {
     }
     public static List<SurfaceAnchor> rank(CombatOrder order,MeleeManeuver.Kind kind,List<SurfaceAnchor> candidates,ManeuverRules rules){
         var origin=order.actorPosition();var target=order.targetPosition();double old=distance(origin,target);
-        int radius=kind==MeleeManeuver.Kind.BURST?rules.burstDistance():rules.retreatDistance();
+        int radius=rules.distance(kind);
+        if(kind.lateral())return lateralRank(order,kind,candidates,rules);
         return candidates.stream().filter(p->!p.equals(origin) && Math.abs(p.x()-origin.x())+Math.abs(p.z()-origin.z())<=radius
                 && p.y()<=origin.y()+radius*order.navigation().stepUpBlocks() && p.y()>=origin.y()-radius*order.navigation().dropBlocks() && order.engagement().contains(p)
                 && (kind==MeleeManeuver.Kind.BURST?distance(p,target)>=1.25 && distance(p,target)<old-0.75:distance(p,target)>old+0.5))
             .distinct().sorted(Comparator.comparingDouble((SurfaceAnchor p)->kind==MeleeManeuver.Kind.BURST?Math.abs(distance(p,target)-1.6):-distance(p,target))
                 .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
+    }
+    private static List<SurfaceAnchor> lateralRank(CombatOrder order,MeleeManeuver.Kind kind,List<SurfaceAnchor> candidates,ManeuverRules rules){
+        var origin=order.actorPosition();var target=order.targetPosition();double gap=distance(origin,target);
+        if(gap<1.0E-6)return List.of();
+        double dx=(target.x()-origin.x())/gap,dz=(target.z()-origin.z())/gap;
+        var shape=rules.duel().shape();
+        double desiredX=origin.x()+dx*shape.forwardMicros()/1_000_000.0+dz*kind.side()*shape.lateralMicros()/1_000_000.0;
+        double desiredZ=origin.z()+dz*shape.forwardMicros()/1_000_000.0-dx*kind.side()*shape.lateralMicros()/1_000_000.0;
+        return candidates.stream().filter(point->{
+            double x=point.x()-origin.x(),z=point.z()-origin.z();
+            double side=(dz*x-dx*z)*kind.side(),forward=dx*x+dz*z;
+            double next=distance(point,target);
+            return Math.abs(point.x()-origin.x())+Math.abs(point.z()-origin.z())<=rules.distance(kind) && order.engagement().contains(point)
+                    && point.y()<=origin.y()+order.navigation().stepUpBlocks()
+                    && point.y()>=origin.y()-order.navigation().dropBlocks()
+                    && side>=shape.minimumSideMicros()/1_000_000.0 && forward>=shape.minimumForwardMicros()/1_000_000.0
+                    && forward<=shape.maximumForwardMicros()/1_000_000.0 && next>=shape.minimumGapMicros()/1_000_000.0
+                    && next<=gap+shape.radialSlackMicros()/1_000_000.0;
+        }).distinct().sorted(Comparator.comparingDouble((SurfaceAnchor point)->Math.hypot(point.x()-desiredX,point.z()-desiredZ))
+                .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
+    }
+    private static boolean compatibleSector(FrontierWorldState state,CombatOrder order,SurfaceAnchor point,long tick){
+        var rules=state.bootstrap().ruleset().melee();var sector=MeleeTactics.sector(state.combat(),order,tick,rules);
+        if(sector.role()==MeleeSector.Role.PRESSURE || sector.role()==MeleeSector.Role.SUPPORT)return true;
+        return sector.alignment(point,order.targetPosition())>=Math.min(sector.alignment(order.actorPosition(),order.targetPosition()),
+                rules.engagements().flankAlignmentPermille()/1000.0);
     }
     /** A closing burst must finish within real weapon reach, not merely somewhere closer. */
     public static boolean useful(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,SurfaceAnchor station){
@@ -60,7 +91,8 @@ public final class MeleeManeuvers {
         var previous=state.combat().maneuvers().get(order.owner());var rules=state.bootstrap().ruleset().melee().maneuvers();
         return new MeleeManeuver(actor,order.weapon(),order.target(),kind,tick+1,order.actorPosition(),station,tick,0,0,
             kind==MeleeManeuver.Kind.BURST?tick+rules.burstCooldown():previous==null?0:previous.burstReadyAt(),
-            kind==MeleeManeuver.Kind.BACKSTEP?tick+rules.retreatCooldown():previous==null?0:previous.retreatReadyAt(),tick+rules.sharedCooldown());
+            kind.lateral()?tick+rules.duel().lateralCooldown():kind==MeleeManeuver.Kind.BACKSTEP?tick+rules.retreatCooldown():previous==null?0:previous.retreatReadyAt(),
+            tick+(kind.lateral()?rules.duel().sharedCooldown():rules.sharedCooldown()));
     }
     private MeleeManeuvers(){}
 }

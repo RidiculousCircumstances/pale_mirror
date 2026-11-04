@@ -297,6 +297,56 @@ class CombatModuleTest {
         state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
         assertFalse(CombatEngagementPlanner.permitsStrike(state,c,third,MeleeAttack.SWEEP,100,rules),"immediate contact shares the same two-strike cap");
     }
+    @Test void repeatedPressureSelectsOneLateralResponseAndRetainsItsSideAcrossHydration() throws IOException {
+        var order=order(1,Optional.empty());var rules=MeleeRules.initial();var duel=rules.maneuvers().duel();
+        var state=CombatState.empty().observed(new CombatState.Armament(order.execution(),order.weapon(),SWORD))
+                .recalled(order,OptionalLong.of(100),100,duel).recalled(order,OptionalLong.of(120),120,duel);
+        state=state.recalled(order,OptionalLong.of(120),121,duel);
+        assertEquals(2,state.exchanges().get(order.owner()).hits(),"the same harm observation is not another blow");
+        var allowed=EnumSet.allOf(MeleeManeuver.Kind.class);var facts=new MeleeManeuvers.Facts(2.8,0,true);
+        var choice=MeleeDuelPolicy.choose(state,order,facts,121,rules,OptionalLong.of(120),allowed,true);
+        assertEquals(MeleeDuelPolicy.Action.MANEUVER,choice.action());var kind=choice.maneuver().orElseThrow();assertTrue(kind.lateral());
+        var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),state);
+        var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        assertEquals(state,recovered);assertEquals(choice,MeleeDuelPolicy.choose(recovered,order,facts,121,rules,OptionalLong.of(120),allowed,true));
+        var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var m=new MeleeManeuver(actor,order.weapon(),order.target(),kind,122,order.actorPosition(),TARGET.offset(2,0,-1),121,122,130,0,145,133);
+        recovered=recovered.withExchange(order.owner(),recovered.exchanges().get(order.owner()).repositioned(kind)).maneuver(m);
+        assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(recovered,order,facts,134,rules,OptionalLong.of(120),allowed,true).action(),
+                "old pressure cannot cause continuous circling after the step ends");
+        assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(recovered,order,facts,140,rules,OptionalLong.of(139),allowed,true).action(),
+                "another blow cannot bypass the retained defensive cooldown");
+        assertEquals(kind,MeleeDuelPolicy.choose(recovered,order,facts,145,rules,OptionalLong.of(139),allowed,true).maneuver().orElseThrow(),
+                "a new exchange keeps its chosen side, rather than alternating every observation");
+        assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(state,order,facts,121,rules,OptionalLong.of(120),Set.of(),true).action(),
+                "an unavailable role capability cannot freeze an otherwise valid contact strike");
+    }
+    @Test void missedExchangesPermitFootworkDuringWeaponRecoveryButNeverAnotherUnsettledStrike() {
+        var order=order(1,Optional.empty());var rules=MeleeRules.initial();
+        var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var first=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100);
+        var second=new MeleeStrike(order.owner(),1,actor,order.target(),order.weapon(),first.before(),SWORD,MeleeAttack.QUICK,1,121,120);
+        var state=CombatState.empty().prepared(first).completed(first,110,rules,MeleeOutcome.MISS).prepared(second);
+        var facts=new MeleeManeuvers.Facts(2.8,0);var allowed=EnumSet.allOf(MeleeManeuver.Kind.class);
+        assertEquals(MeleeDuelPolicy.Action.WAIT,MeleeDuelPolicy.choose(state,order,facts,124,rules,OptionalLong.empty(),allowed,true).action());
+        state=state.completed(second,130,rules,MeleeOutcome.MISS);
+        assertTrue(state.recovering(order.owner(),131));
+        assertTrue(MeleeDuelPolicy.choose(state,order,facts,131,rules,OptionalLong.empty(),allowed,true).maneuver().orElseThrow().lateral());
+        assertEquals(136L,state.nextAttack().get(order.owner()),"footwork does not shorten the weapon's cadence");
+        var memory=state.exchanges().get(order.owner());
+        assertFalse(memory.pressured(130+rules.maneuvers().duel().pressureWindowTicks()+1,rules.maneuvers().duel()));
+        assertTrue(state.retired(order.owner()).exchanges().isEmpty(),"retired combat owners release their bounded memory");
+    }
+    @Test void lateralCandidatesBreakTheFrontalLineAndRespectHeightAndEngagementBounds() {
+        var order=order(1,Optional.empty());var rules=ManeuverRules.initial();
+        var candidates=List.of(TARGET.offset(2,0,-1),TARGET.offset(3,1,-1),TARGET.offset(2,0,1),TARGET.offset(1,0,0),TARGET.offset(3,3,-1));
+        var left=MeleeManeuvers.rank(order,MeleeManeuver.Kind.SIDESTEP_LEFT,candidates,rules);
+        assertFalse(left.isEmpty());assertTrue(left.stream().allMatch(point->point.z()>order.actorPosition().z()));
+        assertFalse(left.contains(TARGET.offset(3,3,-1)),"side selection cannot invent a climb outside body capability");
+        var right=MeleeManeuvers.rank(order,MeleeManeuver.Kind.SIDESTEP_RIGHT,candidates,rules);
+        assertEquals(List.of(TARGET.offset(2,0,1)),left);
+        assertTrue(right.stream().allMatch(point->point.z()<order.actorPosition().z()));
+    }
     @Test void contactHandoffCannotBorrowAnEvasionStaleStanceOrBody(){
         var rules=MeleeRules.initial();var order=order(1,Optional.empty());
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());

@@ -181,9 +181,49 @@ public final class FrontierV3MeleeBoundaryGameTests {
             fighter.discard();target.discard();helper.succeed();
         });
     }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void evasiveWithdrawalCancelsUnusedPreparationButCannotWithdrawAnActiveStrike(GameTestHelper helper){
+        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
+        fighter.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,new ItemStack(Items.IRON_SWORD));
+        var rules=MeleeRules.initial();var first=strike(level.getGameTime(),MeleeAttack.QUICK,"evasive-withdrawal");
+        var actorPort=FrontierV3OperationEntityParticipant.nativeObject(fighter);var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);
+        var ports=List.of(actorPort,targetPort);
+        var declaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,first.owner(),
+                "strike-"+first.attemptOrdinal(),first.toString(),Set.of(actorPort.identity(),targetPort.identity()));
+        FrontierV3CombatPresentation.start(level,fighter,first,rules,target);
+        var cancelled=FrontierV3CombatExecutor.withdrawPreparation(level,fighter,first,rules,declaration);
+        helper.assertTrue(cancelled.isPresent() && cancelled.orElseThrow().cancelled(),"unused damage authority must be sealed for cancellation before evasion");
+        var hydrated=FrontierV3OperationLedger.load(FrontierV3OperationLedger.get(level).save(new net.minecraft.nbt.CompoundTag(),level.registryAccess()),level.registryAccess());
+        helper.assertTrue(hydrated.find(declaration).orElseThrow().cancelled(),"journal hydration retains exact cancellation rather than a replayable preparation");
+        float health=target.getHealth();int wear=fighter.getMainHandItem().getDamageValue();var attempts=new AtomicInteger();
+        var effect=new FrontierV3NativeEffect(()->FrontierV3NativeEffect.Admission.READY,()->{
+            attempts.incrementAndGet();target.hurt(fighter.damageSources().mobAttack(fighter),6);return FrontierV3NativeEffect.Outcome.APPLIED;
+        });
+        FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->true,effect,()->false);
+        helper.assertTrue(attempts.get()==0 && target.getHealth()==health && fighter.getMainHandItem().getDamageValue()==wear,
+                "cancelled preparation cannot later apply damage or weapon wear");
+        helper.runAfterDelay(1,()->{
+            var active=strike(level.getGameTime(),MeleeAttack.QUICK,"evasive-withdrawal");
+            var activeDeclaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,active.owner(),
+                    "strike-"+active.attemptOrdinal(),active.toString(),declaration.participants());
+            FrontierV3CombatPresentation.start(level,fighter,active,rules,target);
+            helper.runAfterDelay((int)rules.windup(active.attack()),()->{
+                helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,active,rules),"fixture reached actual visible contact commitment");
+                helper.assertTrue(FrontierV3CombatExecutor.withdrawPreparation(level,fighter,active,rules,activeDeclaration).isEmpty(),
+                        "tactics cannot retract an active strike to dodge its recovery");
+                helper.assertTrue(FrontierV3OperationLedger.get(level).find(activeDeclaration).isEmpty(),
+                        "a refused withdrawal cannot fabricate a cancellation receipt");
+                fighter.discard();target.discard();helper.succeed();
+            });
+        });
+    }
     private static MeleeStrike strike(long tick){return strike(tick,MeleeAttack.LUNGE);}
     private static MeleeStrike strike(long tick,MeleeAttack attack){
-        var owner=new SubjectId(attack==MeleeAttack.FOLLOWUP?"guard:recovery-test":"guard:windup-test");
+        return strike(tick,attack,attack==MeleeAttack.FOLLOWUP?"recovery-test":"windup-test");
+    }
+    private static MeleeStrike strike(long tick,MeleeAttack attack,String purpose){
+        var owner=new SubjectId("guard:"+purpose);
         var actor=new ActorExecutionId(new SubjectId("resident:windup-test"),
                 ActorActivityKind.GUARD,owner,1);
         return new MeleeStrike(owner,1,

@@ -44,6 +44,15 @@ final class FrontierV3MinecraftOperation {
      * is still unused. Matching a native preimage after recovery is not evidence. */
     static Optional<FrontierV3OperationReceipt> cancelUnattempted(ServerLevel level,
             FrontierV3OperationReceipt.Declaration declaration) {
+        return cancelUnattempted(level,declaration,false);
+    }
+    /** Seals unused authority now; the caller's ordinary confirmation still fences disk durability. */
+    static Optional<FrontierV3OperationReceipt> cancelUnattemptedDeferred(ServerLevel level,
+            FrontierV3OperationReceipt.Declaration declaration) {
+        return cancelUnattempted(level,declaration,true);
+    }
+    private static Optional<FrontierV3OperationReceipt> cancelUnattempted(ServerLevel level,
+            FrontierV3OperationReceipt.Declaration declaration,boolean deferred) {
         if (!level.getServer().isSameThread()) throw new IllegalStateException("native cancellation outside server thread");
         var ledger = FrontierV3OperationLedger.get(level);
         if (!ledger.canPrepare(declaration)) {
@@ -58,7 +67,7 @@ final class FrontierV3MinecraftOperation {
         if (!ledger.sealUnattemptedCancellation(operation.ticket())) {
             FrontierV3OperationDiagnostics.result(level, operation, Status.AMBIGUOUS); return Optional.empty();
         }
-        ledger.persist(level);
+        if(deferred)ledger.persistAsync(level);else ledger.persist(level);
         return Optional.of(ledger.require(operation.ticket()));
     }
     /** A durable owner preparation without an operation entry could never have mutated

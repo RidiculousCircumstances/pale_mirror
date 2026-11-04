@@ -228,6 +228,17 @@ public final class FrontierV3CombatTrace {
                         row.addProperty("readiness",CombatReadiness.available(combat.readiness().get(owner),runtime.calendarInstant().orElseThrow(),state.bootstrap().ruleset().melee().readiness()));
                         row.addProperty("nextAttackAt",combat.nextAttack().getOrDefault(owner,0L));
                     }
+                    var maneuver=combat.maneuvers().get(owner);
+                    if(maneuver!=null && maneuver.actor().execution().equals(current)){
+                        row.addProperty("maneuverKind",maneuver.kind().name());row.addProperty("maneuverSelectedAt",maneuver.selectedAt());
+                        row.addProperty("maneuverLaunchedAt",maneuver.launchedAt());row.addProperty("maneuverClosedAt",maneuver.closedAt());
+                    }
+                    var exchange=combat.exchanges().get(owner);
+                    if(exchange!=null && exchange.execution().equals(current)){
+                        row.addProperty("recentHits",exchange.hits());row.addProperty("consecutiveMisses",exchange.misses());
+                        row.addProperty("lastHarmedAt",exchange.harmedAt());row.addProperty("pressureHandledThrough",exchange.handledThrough());
+                        row.addProperty("duelSide",exchange.side());
+                    }
                     var pending=combat.pending().get(owner);
                     if(pending!=null && pending.attacker().execution().equals(current)) {
                         row.addProperty("pendingAttack",pending.attack().name());row.addProperty("attempt",pending.attemptOrdinal());

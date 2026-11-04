@@ -94,16 +94,24 @@ public final class FrontierV3CombatExecutor {
                 if(harmed.isPresent() && tick-harmed.getAsLong()<=rules.maneuvers().harmLifetime())
                     trace(order,"MANEUVER_WINDOW","tick="+tick+" harm="+harmed.getAsLong()+" facts="+maneuverFacts+" preferred="+MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())));
             }
-            // A real close opportunity wins over retreating from a blow that has already landed.
-            boolean retreat=!contact && MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution()))
-                    .filter(kind->kind==MeleeManeuver.Kind.BACKSTEP).isPresent();
-            if((!attackReady || retreat) && visible && (state.actorMovements().get(order.execution().actorId())==null
-                    || capabilities.require(order.execution()).permitsManeuverInterruption(state,state.actorMovements().get(order.execution().actorId()),order))
-                    && MeleeManeuvers.preference(state,order,maneuverFacts,tick,capabilities.require(order.execution())).isPresent()){
-                var origin=FrontierV3SupportedBodyCapture.observe(level,fighter);if(origin.isEmpty())continue;
-                var requested=FrontierV3CommandSubmission.propose(runtime,"combat-maneuver",order.owner().value(),new CombatEvent.ManeuverRequested(actuation,order.target(),origin.orElseThrow().supportingSurface(),maneuverFacts));
-                if(!(requested instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected))continue;
-                trace(order,"MANEUVER_REFUSED",requested);
+            var tactic=MeleeDuelPolicy.choose(state,order,maneuverFacts,tick,capabilities.require(order.execution()),attackReady);
+            if(tactic.action()==MeleeDuelPolicy.Action.WAIT){
+                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,
+                        state.combat().pending().containsKey(order.owner())?"PENDING_EFFECT":state.combat().recovering(order.owner(),tick)?"RECOVERY":"MANEUVER_BUSY",
+                        distance,separating,motion.lateral(),canSpend);continue;
+            }
+            if(tactic.action()==MeleeDuelPolicy.Action.MANEUVER && visible && (state.actorMovements().get(order.execution().actorId())==null
+                    || capabilities.require(order.execution()).permitsManeuverInterruption(state,state.actorMovements().get(order.execution().actorId()),order))){
+                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"TACTIC_"+tactic.maneuver().orElseThrow(),distance,separating,motion.lateral(),canSpend);
+                var origin=FrontierV3SupportedBodyCapture.observe(level,fighter);
+                if(origin.isPresent()){
+                    var requested=FrontierV3CommandSubmission.propose(runtime,"combat-maneuver",order.owner().value(),
+                            new CombatEvent.ManeuverRequested(actuation,order.target(),origin.orElseThrow().supportingSurface(),maneuverFacts));
+                    if(!(requested instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected))continue;
+                    FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"TACTIC_REFUSED:"+requested,distance,separating,motion.lateral(),canSpend);
+                    trace(order,"MANEUVER_REFUSED",requested);
+                }
+                // A physically unavailable evasion must not prevent an otherwise safe contact attack.
             }
             var decision=MeleeTactics.decide(order,new MeleeTactics.Facts(tick,target.isAlive(),visible,attackReady,
                     state.combat().pending().containsKey(order.owner()),state.combat().nextAttack().getOrDefault(order.owner(),0L),canSpend && item.condition().remaining()>=profile.wear()));
@@ -163,6 +171,7 @@ public final class FrontierV3CombatExecutor {
                 || targetPort(target).identity().incarnation()!=strike.targetIncarnation())) {
             FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.owner().value(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,strike.before()));return;
         }
+        if(withdrawForEvasion(level,runtime,state,strike,fighter,target,retained))return;
         if(retained.isEmpty()){
             var permission=CombatComposition.CAPABILITIES.current(state,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks());
             boolean permissionMatches=permission.filter(order->order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent();
@@ -311,6 +320,41 @@ public final class FrontierV3CombatExecutor {
     }
     private static FrontierV3MinecraftOperation.Participant targetPort(LivingEntity target) {
         return target instanceof ServerPlayer player?FrontierV3OperationPlayers.currentHealth(player):FrontierV3OperationEntityParticipant.nativeObject(target);
+    }
+    /** A reversible preparation may yield only after its unused journal authority is withdrawn. */
+    private static boolean withdrawForEvasion(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
+            FrontierWorldState state,MeleeStrike strike,Mob fighter,LivingEntity target,java.util.Optional<FrontierV3OperationReceipt> retained){
+        var tick=runtime.executionView().orElseThrow().instant().ticks();
+        var order=CombatComposition.CAPABILITIES.current(state,strike.attacker().execution(),tick).orElse(null);
+        if(order==null || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon())
+                || !fighter.hasLineOfSight(target) || !FrontierV3CombatPresentation.reversiblePreparation(level,fighter,strike,state.bootstrap().ruleset().melee()))return false;
+        var capability=CombatComposition.CAPABILITIES.require(order.execution());
+        var memory=MeleeDuelPolicy.memory(state,order,tick,capability);
+        if(memory.signal()<=memory.withdrawnThrough())return false;
+        double distance=Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition()));
+        if(MeleeDuelPolicy.lateral(state,order,new MeleeManeuvers.Facts(distance,0,threateningSwing(fighter,target,state.bootstrap().ruleset().melee())),tick,capability).isEmpty())return false;
+        var declaration=retained.map(FrontierV3OperationReceipt::declaration).orElseGet(()->{
+            var actorPort=FrontierV3OperationEntityParticipant.current(fighter,strike.attacker().body().physicalEpoch());
+            var targetPort=targetPort(target);
+            return new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.owner(),
+                    "strike-"+strike.attemptOrdinal(),strike.toString(),java.util.Set.of(actorPort.identity(),targetPort.identity()));
+        });
+        var cancelled=withdrawPreparation(level,fighter,strike,state.bootstrap().ruleset().melee(),declaration);
+        if(cancelled.isEmpty())return false;
+        FrontierV3CombatTrace.strike(level,fighter,target,strike,"CANCELLED","TACTICAL_EVASION");
+        confirmMiss(level,runtime,strike,cancelled.orElseThrow().ticket());
+        return true;
+    }
+    /** Phase alone is insufficient: only a positive unused-operation cancellation withdraws damage authority. */
+    static java.util.Optional<FrontierV3OperationReceipt> withdrawPreparation(ServerLevel level,Mob fighter,MeleeStrike strike,MeleeRules rules,
+            FrontierV3OperationReceipt.Declaration declaration){
+        if(declaration.protocol()!=FrontierV3OperationReceipt.Protocol.MELEE_ATTACK || !declaration.owner().equals(strike.owner())
+                || !declaration.operation().equals("strike-"+strike.attemptOrdinal()) || !declaration.fingerprint().equals(strike.toString()))
+            throw new IllegalArgumentException("withdrawal lost its exact melee declaration");
+        if(!FrontierV3CombatPresentation.reversiblePreparation(level,fighter,strike,rules))return java.util.Optional.empty();
+        var cancelled=FrontierV3MinecraftOperation.cancelUnattemptedDeferred(level,declaration);
+        if(cancelled.isPresent())FrontierV3CombatPresentation.cancel(level,fighter,strike);
+        return cancelled;
     }
     private static void confirmMiss(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
             MeleeStrike strike, UUID ticket) {

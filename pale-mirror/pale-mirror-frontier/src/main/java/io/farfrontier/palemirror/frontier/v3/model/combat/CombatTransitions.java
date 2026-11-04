@@ -11,15 +11,36 @@ public final class CombatTransitions {
     }
     public static FrontierWorldState apply(FrontierWorldState state,SubjectId subject,CombatEvent event,long tick,CombatCapabilities capabilities){
         var combat=state.combat();var inventory=state.inventory();var update=FrontierWorldStateUpdate.begin();
+        var execution=switch(event){
+            case CombatEvent.Prepared v->v.strike().attacker().execution();
+            case CombatEvent.Completed v->state.combat().pending().get(v.owner()).attacker().execution();
+            case CombatEvent.ManeuverRequested v->v.observer().execution();
+            case CombatEvent.ManeuverSelected v->v.maneuver().actor().execution();
+            case CombatEvent.ManeuverLaunched v->v.observer().execution();
+            case CombatEvent.ManeuverClosed v->state.combat().maneuvers().get(v.owner()).actor().execution();
+            case CombatEvent.StanceObserved v->v.stance().observer().execution();
+            case CombatEvent.PositionPlanned v->v.execution();
+            case CombatEvent.WeaponDefined v->v.execution();
+            case CombatEvent.WeaponObserved v->v.observer().execution();
+            case CombatEvent.PositionBlocked v->v.observer().execution();
+        };
+        if(execution.equals(state.actorExecutions().current(execution.activityKind()).get(execution.actorId()))
+                && combat.armaments().containsKey(execution.activityOwnerId())){
+            var current=capabilities.current(state,execution,tick).filter(value->value.current(tick));
+            if(current.isPresent())combat=combat.recalled(current.orElseThrow(),capabilities.require(execution).harmedAt(state,current.orElseThrow()),
+                    tick,state.bootstrap().ruleset().melee().maneuvers().duel());
+        }
         if(event instanceof CombatEvent.ManeuverSelected selected){
             var m=selected.maneuver();var order=requireOrder(state,capabilities,m.actor(),tick).atActorObservation(m.origin());var prior=combat.maneuvers().get(subject);
             if(!subject.equals(m.owner()) || !m.matches(order) || !state.bootstrap().bounds().contains(m.origin().support()) || !order.engagement().contains(m.origin()) || !order.engagement().contains(m.station())
                     || !m.equals(MeleeManeuvers.selected(state,order,m.actor(),m.kind(),m.station(),tick))
                     || !MeleeManeuvers.useful(state,order,m.kind(),m.station())
+                    || m.kind().lateral() && MeleeManeuvers.rank(order,m.kind(),List.of(m.station()),state.bootstrap().ruleset().melee().maneuvers()).isEmpty()
                     || !capabilities.require(order.execution()).maneuvers().contains(m.kind()) || combat.pending().containsKey(subject)
                     || prior!=null && !prior.ready(m.kind(),tick) || state.actorMovements().containsKey(order.execution().actorId()))
                 throw new IllegalArgumentException("maneuver lacks exact current permission, checkpoint or cooldown");
             combat=combat.releasePosition(subject).maneuver(m).spent(subject,tick,state.bootstrap().ruleset().melee().readiness().cost(m.kind()),state.bootstrap().ruleset().melee());
+            if(m.kind().lateral())combat=combat.withExchange(subject,MeleeDuelPolicy.memory(state,order,tick,capabilities.require(execution)).repositioned(m.kind()));
         }else if(event instanceof CombatEvent.ManeuverLaunched launch){
             var m=combat.maneuvers().get(subject);var order=requireOrder(state,capabilities,launch.observer(),tick);
             if(m==null || !m.open() || !m.actor().equals(launch.observer()) || m.attemptOrdinal()!=launch.attemptOrdinal() || !m.matches(order)
@@ -63,7 +84,7 @@ public final class CombatTransitions {
                     throw new IllegalArgumentException("melee receipt conflicts with current exact weapon condition");
                 if(!item.condition().equals(outcome.after())){inventory=inventory.changeCondition(item,outcome.after());update.inventory(inventory);}
             }
-            combat=combat.completed(strike,tick,state.bootstrap().ruleset().melee(),outcome.outcome()==MeleeOutcome.MISS);
+            combat=combat.completed(strike,tick,state.bootstrap().ruleset().melee(),outcome.outcome());
         }else if(event instanceof CombatEvent.PositionPlanned position){
             state.actorExecutions().requireCurrent(position.execution());
             var order=capabilities.current(state,position.execution(),tick).filter(value->value.current(tick)).orElseThrow(()->new IllegalArgumentException("expired melee position consumer"));
@@ -101,23 +122,14 @@ public final class CombatTransitions {
                 combat=combat.blocked(order,blocked.station(),tick,state.bootstrap().ruleset().melee());
             }
         }
-        var execution=switch(event){
-            case CombatEvent.Prepared v->v.strike().attacker().execution();
-            case CombatEvent.Completed v->state.combat().pending().get(v.owner()).attacker().execution();
-            case CombatEvent.ManeuverRequested v->v.observer().execution();
-            case CombatEvent.ManeuverSelected v->v.maneuver().actor().execution();
-            case CombatEvent.ManeuverLaunched v->v.observer().execution();
-            case CombatEvent.ManeuverClosed v->state.combat().maneuvers().get(v.owner()).actor().execution();
-            case CombatEvent.StanceObserved v->v.stance().observer().execution();
-            case CombatEvent.PositionPlanned v->v.execution();
-            case CombatEvent.WeaponDefined v->v.execution();
-            case CombatEvent.WeaponObserved v->v.observer().execution();
-            case CombatEvent.PositionBlocked v->v.observer().execution();
-        };
+
         if(execution.equals(state.actorExecutions().current(execution.activityKind()).get(execution.actorId()))){
             var order=capabilities.current(state,execution,tick).filter(value->value.current(tick));
             if(order.isPresent()){
-                var current=order.orElseThrow();combat=combat.enlisted(current,tick,state.bootstrap().ruleset().melee());
+                var current=order.orElseThrow();
+                if(combat.armaments().containsKey(current.owner()))combat=combat.recalled(current,capabilities.require(execution).harmedAt(state,current),tick,
+                        state.bootstrap().ruleset().melee().maneuvers().duel());
+                combat=combat.enlisted(current,tick,state.bootstrap().ruleset().melee());
                 combat=CombatEngagementPlanner.reconcile(state,combat,inventory,CombatEngagement.Key.of(current),tick,capabilities);
             }else combat=combat.withdrawn(execution);
         }else combat=combat.withdrawn(execution);

@@ -31,8 +31,9 @@ final class FrontierV3CombatManeuvers {
                 continue;
             }
             var rules=state.bootstrap().ruleset().melee().maneuvers();
-            long start=FrontierV3CombatPresentation.begin(level,body,m.owner().value(),m.attemptOrdinal(),m.actor().body().physicalEpoch(),CombatGesture.maneuver(m.kind()),rules.preparation(),rules.travelTicks(),rules.recovery(),target);
-            if(level.getGameTime()-start>=rules.preparation() && runtime.executionView().orElseThrow().instant().ticks()>=m.selectedAt()+rules.preparation())
+            long start=FrontierV3CombatPresentation.begin(level,body,m.owner().value(),m.attemptOrdinal(),m.actor().body().physicalEpoch(),CombatGesture.maneuver(m.kind()),rules.preparation(m.kind()),
+                rules.travelTicks(m.kind()),rules.recovery(m.kind()),target);
+            if(level.getGameTime()-start>=rules.preparation(m.kind()) && runtime.executionView().orElseThrow().instant().ticks()>=m.selectedAt()+rules.preparation(m.kind()))
                 FrontierV3CommandSubmission.propose(runtime,"combat-maneuver-launch",m.owner().value(),new CombatEvent.ManeuverLaunched(m.actor(),m.attemptOrdinal()));
         }
         CURSOR.put(level,cursor);

@@ -30,12 +30,12 @@ public final class CombatManeuverMovementProvider implements ActorMovementProvid
         var m=work(state,move);var rules=state.bootstrap().ruleset().melee().maneuvers();
         if(!ActorBodyAuthority.retainsPhysicalCustody(state,move.executionId().actorId())
                 || !ActorBodyAuthority.current(state,move.executionId().actorId()).equals(m.actor().body())
-                || tick<m.launchedAt() || tick>=m.launchedAt()+rules.travelTicks() || CombatComposition.CAPABILITIES.current(state,move.executionId(),tick).filter(m::matches).isEmpty())
+                || tick<m.launchedAt() || tick>=m.launchedAt()+rules.travelTicks(m.kind()) || CombatComposition.CAPABILITIES.current(state,move.executionId(),tick).filter(m::matches).isEmpty())
             return MovementPermission.hold(MovementPermission.Reason.INACTIVE_MEMBER);
         return MovementPermission.allow(pace(state,m));
     }
     private TravelPace pace(FrontierWorldState state,MeleeManeuver m){var normal=ActorExecutionComposition.CAPABILITIES.require(m.actor().execution().activityKind()).navigationPace(state,m.actor().execution()).orElseThrow();
-        var r=state.bootstrap().ruleset().melee().maneuvers();return new TravelPace(normal.blocksPerTick()*(m.kind()==MeleeManeuver.Kind.BURST?r.burstPacePermille():r.retreatPacePermille())/1000.0);}
+        var r=state.bootstrap().ruleset().melee().maneuvers();return new TravelPace(normal.blocksPerTick()*r.pacePermille(m.kind())/1000.0);}
     public long ticksPerEdge(FrontierWorldState state,ActorMovement move){return Math.max(1,(long)Math.ceil(1/pace(state,work(state,move)).blocksPerTick()));}
     public ActorExecutionState arrivalAuthority(FrontierWorldState state,ActorMovement move){validate(state,move);return state.actorExecutions();}
     public ActorExecutionState interruptionAuthority(FrontierWorldState state,ActorMovement move){return arrivalAuthority(state,move);}
