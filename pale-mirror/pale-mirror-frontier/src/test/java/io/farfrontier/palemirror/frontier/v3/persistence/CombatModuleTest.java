@@ -51,7 +51,7 @@ class CombatModuleTest {
     @Test void waveSlotsAreSingleUseFencedAndRetainTheirUseAcrossRecovery() throws IOException {
         var a=order(1,Optional.empty());var observer=new ActorActuationId(new ActorBodyId(a.execution().actorId(),1),a.execution());
         var plan=CombatEngagement.first(a,100);var key=plan.key();
-        plan=new CombatEngagement(key,2,plan.anchor(),plan.axisX(),plan.axisZ(),plan.participants(),100,
+        plan=new CombatEngagement(key,2,plan.anchor(),plan.axisX(),plan.axisZ(),plan.frameSince(),plan.participants(),100,
                 Optional.of(new CombatEngagement.Wave(a.targetPosition(),List.of(new CombatEngagement.Slot(observer,104,110,false)))));
         assertFalse(plan.permits(a,observer,103,EngagementRules.initial()));assertTrue(plan.permits(a,observer,104,EngagementRules.initial()));
         assertFalse(plan.permits(a,new ActorActuationId(new ActorBodyId(a.execution().actorId(),2),a.execution()),104,EngagementRules.initial()));
@@ -61,7 +61,7 @@ class CombatModuleTest {
         var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
         assertFalse(recovered.engagements().get(key).permits(a,observer,105,EngagementRules.initial()));
         var foreign=order(2,Optional.empty());var retained=plan;
-        assertThrows(IllegalArgumentException.class,()->new CombatEngagement(key,3,retained.anchor(),retained.axisX(),retained.axisZ(),retained.participants(),100,
+        assertThrows(IllegalArgumentException.class,()->new CombatEngagement(key,3,retained.anchor(),retained.axisX(),retained.axisZ(),retained.frameSince(),retained.participants(),100,
                 Optional.of(new CombatEngagement.Wave(a.targetPosition(),List.of(new CombatEngagement.Slot(new ActorActuationId(new ActorBodyId(foreign.execution().actorId(),1),foreign.execution()),104,110,false))))));
     }
     @Test void encounterChoosesTheNearerFreeFlankAndDoesNotPullItBackAcrossTheTarget(){
@@ -82,7 +82,7 @@ class CombatModuleTest {
         assertFalse(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),139,rules),"assignment gets time to execute");
         assertTrue(CombatFormation.reconcile(members,orders,combat,plan.axisX(),plan.axisZ(),140,rules));
         assertEquals(MeleeSector.Role.SUPPORT,members.get(other.owner()).role());assertEquals(MeleeSector.Role.FLANK_LEFT,members.get(other.owner()).preferredRole());
-        plan=new CombatEngagement(plan.key(),plan.revision()+1,plan.anchor(),plan.axisX(),plan.axisZ(),members,0,Optional.empty());
+        plan=new CombatEngagement(plan.key(),plan.revision()+1,plan.anchor(),plan.axisX(),plan.axisZ(),plan.frameSince(),members,0,Optional.empty());
         combat=combat.withEngagement(plan).reassigned(other.execution());
         var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),combat);
         var restored=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));assertEquals(combat,restored);
@@ -261,7 +261,7 @@ class CombatModuleTest {
     }
     @Test void holdingUsesTwoStrictWeaponBoundariesAndCannotExpandAttackReach(){
         var rules=MeleeRules.initial();assertEquals(2.2,rules.holdReach(SWORD,false,MECHANICS),0.0001);assertEquals(2.55,rules.holdReach(SWORD,true,MECHANICS),0.0001);
-        assertEquals(4,rules.windup(MeleeAttack.QUICK));assertEquals(8,rules.windup(MeleeAttack.LUNGE));
+        assertEquals(2,rules.windup(MeleeAttack.QUICK));assertEquals(8,rules.windup(MeleeAttack.LUNGE));
         var order=order(1,Optional.empty());
         assertEquals(MeleeTactics.Decision.APPROACH,MeleeTactics.decide(order,new MeleeTactics.Facts(101,true,true,false,false,100,true)));
     }
@@ -326,7 +326,7 @@ class CombatModuleTest {
         state=state.prepared(new MeleeStrike(a.owner(),1,first,a.target(),a.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.LUNGE,1,101,100));
         state=state.prepared(new MeleeStrike(b.owner(),1,second,b.target(),b.weapon(),new ItemCondition(250,0),SWORD,MeleeAttack.QUICK,1,101,100));
         var plan=state.engagements().get(CombatEngagement.Key.of(c));
-        plan=new CombatEngagement(plan.key(),plan.revision()+1,plan.anchor(),plan.axisX(),plan.axisZ(),plan.participants(),0,
+        plan=new CombatEngagement(plan.key(),plan.revision()+1,plan.anchor(),plan.axisX(),plan.axisZ(),plan.frameSince(),plan.participants(),0,
                 Optional.of(new CombatEngagement.Wave(c.targetPosition(),List.of(new CombatEngagement.Slot(third,100,110,false)))));
         state=state.withEngagement(plan);
         assertFalse(CombatEngagementPlanner.permitsStrike(state,c,third,100,rules));

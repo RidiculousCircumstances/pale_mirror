@@ -25,7 +25,8 @@ public final class MeleeTactics {
             WeaponProfile weapon,double distance,double separatingSpeed,double lateralSpeed,MeleeRules rules){
         if(!Double.isFinite(lateralSpeed) || lateralSpeed<0)throw new IllegalArgumentException("invalid observed lateral speed");
         if(distance<=Math.min(weapon.reach(),rules.techniques().sweepDistanceMicros()/1_000_000.0)
-                && lateralSpeed>=rules.techniques().sweepSpeedMicros()/1_000_000.0)return MeleeAttack.SWEEP;
+                && lateralSpeed>=rules.techniques().sweepSpeedMicros()/1_000_000.0
+                && separatingSpeed<=rules.techniques().sweepSpeedMicros()/1_000_000.0)return MeleeAttack.SWEEP;
         var followup=state.followups().get(order.owner());
         return followup!=null && followup.matches(order,observer,incarnation,tick)
                 && opportunity(weapon,MeleeAttack.FOLLOWUP,distance,rules)?MeleeAttack.FOLLOWUP

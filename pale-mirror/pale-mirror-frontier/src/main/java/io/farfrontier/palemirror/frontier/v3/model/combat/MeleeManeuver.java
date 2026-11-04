@@ -20,7 +20,7 @@ public record MeleeManeuver(ActorActuationId actor,SubjectId weapon,CombatTarget
         Objects.requireNonNull(actor);Objects.requireNonNull(weapon);Objects.requireNonNull(target);Objects.requireNonNull(kind);Objects.requireNonNull(origin);Objects.requireNonNull(station);
         if(attemptOrdinal<1 || selectedAt<0 || launchedAt<0 || closedAt<0 || launchedAt>0 && launchedAt<selectedAt
                 || closedAt>0 && (closedAt<selectedAt || launchedAt>closedAt) || origin.equals(station)
-                || origin.manhattanDistance(station)>(kind==Kind.PURSUIT_RUN?12:6)
+                || origin.manhattanDistance(station)>(kind==Kind.PURSUIT_RUN?16:6)
                 || burstReadyAt<0 || retreatReadyAt<0 || runReadyAt<0 || anyReadyAt<selectedAt)throw new IllegalArgumentException("invalid melee maneuver");
     }
     public SubjectId owner(){return actor.execution().activityOwnerId();}

@@ -61,7 +61,7 @@ public final class FrontierV3CombatPresentation {
     }
     /** Track only during early preparation. The final commitment and contact use a frozen facing. */
     static boolean track(ServerLevel level,Mob body,MeleeStrike strike,MeleeRules rules,LivingEntity target){
-        if(!strike.attack().closesDistance())return false;
+        if(!strike.attack().guidesApproach())return false;
         var marker=body.getPersistentData().getCompound(KEY);long now=level.getGameTime();
         long elapsed=now-marker.getLong("startedAtTick");
         long tracking=Math.min(rules.windup(strike.attack())-1,Math.max(1,(rules.windup(strike.attack())*rules.engagements().aimTrackPermille()+999)/1000));

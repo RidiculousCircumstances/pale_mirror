@@ -76,13 +76,35 @@ public final class FrontierV3MeleeBoundaryGameTests {
     public static void recoveryStrikeUsesItsOwnCueAndCannotReplayItsHit(GameTestHelper helper){
         durableAdmission(helper,MeleeAttack.FOLLOWUP);
     }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void quickContactRetainsVisiblePreparationDurableAdmissionAndNoReplay(GameTestHelper helper){
+        durableAdmission(helper,MeleeAttack.QUICK);
+    }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void movingServerPlayerWithZeroNativeImpulseStillSuppliesObservedPursuitVelocity(GameTestHelper helper){
+        var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
+        var player=helper.makeMockServerPlayerInLevel();var p=helper.absolutePos(new BlockPos(6,8,4));player.setPos(p.getX(),p.getY(),p.getZ());
+        var strike=strike(helper.getLevel().getGameTime(),MeleeAttack.QUICK,"observed-motion");
+        var first=FrontierV3CombatExecutor.observedMotion(fighter,player,strike.attacker(),true,4);
+        helper.assertTrue(first.x()==0 && first.z()==0,"one observation has no invented velocity");
+        helper.runAfterDelay(1,()->{
+            player.setPos(player.getX()+.3,player.getY(),player.getZ()+.2);player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            var motion=FrontierV3CombatExecutor.observedMotion(fighter,player,strike.attacker(),true,4);
+            helper.assertTrue(motion.x()>0 && motion.z()>0,"player coordinates, not zero native impulse, drive pursuit prediction");
+            var changed=new ActorActuationId(new ActorBodyId(strike.attacker().body().actorId(),strike.attacker().body().physicalEpoch()+1),strike.attacker().execution());
+            var reset=FrontierV3CombatExecutor.observedMotion(fighter,player,changed,true,4);
+            helper.assertTrue(reset.x()==0 && reset.z()==0,"replacement body cannot inherit old target motion");
+            fighter.discard();player.discard();helper.succeed();
+        });
+    }
     private static void durableAdmission(GameTestHelper helper,MeleeAttack attack){
         var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
         var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),attack);
         helper.assertTrue(io.farfrontier.palemirror.internal.network.CombatGesture.strike(attack)
                 ==(attack==MeleeAttack.FOLLOWUP?io.farfrontier.palemirror.internal.network.CombatGesture.FOLLOWUP
-                    :io.farfrontier.palemirror.internal.network.CombatGesture.LUNGE),"the recovery response has its own warning");
+                    :attack==MeleeAttack.QUICK?io.farfrontier.palemirror.internal.network.CombatGesture.QUICK
+                    :io.farfrontier.palemirror.internal.network.CombatGesture.LUNGE),"the attack has its own warning");
 
         var actorPort=FrontierV3OperationEntityParticipant.nativeObject(fighter);
         var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);var ports=List.of(actorPort,targetPort);

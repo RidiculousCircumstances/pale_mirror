@@ -5,6 +5,8 @@ public enum MeleeAttack {
     private final int tag;
     MeleeAttack(int tag){this.tag=tag;}
     public boolean closesDistance(){return switch(this){case QUICK,SWEEP->false;case LUNGE,FOLLOWUP->true;};}
+    /** Bounded target-relative footwork, separate from the long attack's closing semantics. */
+    public boolean guidesApproach(){return this!=SWEEP;}
     public int wireTag(){return tag;}
     public static MeleeAttack require(int tag){
         for(var value:values())if(value.tag==tag)return value;

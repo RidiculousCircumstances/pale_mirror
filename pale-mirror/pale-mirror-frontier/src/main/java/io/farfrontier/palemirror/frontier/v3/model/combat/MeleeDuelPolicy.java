@@ -68,6 +68,12 @@ public final class MeleeDuelPolicy {
             return Choice.of(prior.kind().closing() && (!prior.open() || prior.launchedAt()>0 || prior.kind()==MeleeManeuver.Kind.PURSUIT_RUN) && contact && attackReady
                     ?Action.ATTACK:Action.WAIT);
         if(contact && attackReady && !combat.recovering(order.owner(),tick) && CombatFormation.pressureNeeded(combat,order,tick,rules))return Choice.of(Action.ATTACK);
+        if(!contact && facts.distance()>rules.maneuvers().duel().maximumGapMicros()/1_000_000.0
+                && CombatFormation.pressureNeeded(combat,order,tick,rules) && !combat.recovering(order.owner(),tick)){
+            var closing=new java.util.ArrayList<Weighted>();
+            offer(closing,combat,order,MeleeManeuver.Kind.PURSUIT_RUN,order.style().runWeight(),allowed,tick,rules);
+            if(!closing.isEmpty())return closing.getFirst().choice();
+        }
         var lateral=lateral(combat,order,facts,tick,rules,harm,allowed);
         if(lateral.isPresent())return Choice.maneuver(lateral.orElseThrow());
         // Footwork can use weapon recovery; another weapon attack cannot.

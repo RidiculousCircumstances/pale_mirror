@@ -10,7 +10,7 @@ public record PursuitRules(int distance,int preparation,int travelTicks,int reco
                 || maximumLeadMicros<1 || maximumLeadMicros>3_000_000 || maximumVelocityMicros<1 || maximumVelocityMicros>1_000_000)
             throw new IllegalArgumentException("invalid tactical pursuit rules");
     }
-    public static PursuitRules initial(){return new PursuitRules(6,1,30,2,70,12,3000,6,2_000_000,350_000);}
+    public static PursuitRules initial(){return new PursuitRules(8,1,40,2,90,12,3000,6,2_000_000,350_000);}
     public String canonicalText(){return distance+":"+preparation+":"+travelTicks+":"+recovery+":"+cooldown+":"+sharedCooldown
             +":"+pacePermille+":"+leadTicks+":"+maximumLeadMicros+":"+maximumVelocityMicros;}
 }

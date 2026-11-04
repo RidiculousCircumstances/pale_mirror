@@ -49,7 +49,7 @@ class SettlementSecurityTest {
         var combat=state.combat().enlisted(order,strike.preparedAt(),state.bootstrap().ruleset().melee());
         var key=CombatEngagement.Key.of(order);var group=combat.engagements().get(key);
         var wave=new CombatEngagement.Wave(order.targetPosition(),List.of(new CombatEngagement.Slot(strike.attacker(),strike.preparedAt(),strike.preparedAt(),false)));
-        group=new CombatEngagement(key,group.revision()+1,group.anchor(),group.axisX(),group.axisZ(),group.participants(),0,Optional.of(wave));
+        group=new CombatEngagement(key,group.revision()+1,group.anchor(),group.axisX(),group.axisZ(),group.frameSince(),group.participants(),0,Optional.of(wave));
         return state.withChanges(FrontierWorldStateUpdate.begin().combat(combat.withEngagement(group)));
     }
     private Ready pair(){

@@ -23,9 +23,25 @@ public final class CombatFormation {
                     && tick-member.roleSince()>=policy.roleCommitmentTicks()
                     && tick-Math.max(point.sinceTick(),member.roleSince())>=policy.confirmedFlankFailureTicks()){
                 members.put(entry.getKey(),member.assigned(MeleeSector.Role.SUPPORT,tick));changed=true;
+            }else if(point!=null && point.reason()==MeleePosition.Reason.RESERVED){
+                int alignment=(int)Math.round(1000*new MeleeSector(member.role(),axisX,axisZ).alignment(order.actorPosition(),order.targetPosition()));
+                if(alignment>=policy.flankAlignmentPermille() || alignment>=member.bestAlignmentPermille()+policy.flankProgressPermille())
+                    members.put(entry.getKey(),member.progressed(alignment,tick));
+                else if(tick-member.roleSince()>=policy.roleCommitmentTicks() && tick-member.progressAt()>=policy.flankProgressTicks()){
+                    members.put(entry.getKey(),member.assigned(alternative(members,order,member.role(),axisX,axisZ),tick));changed=true;
+                }
             }
         }
         return changed;
+    }
+    /** Keep a committed frame through a swing/run, then orient the flank around the actual pressure fighter. */
+    public static boolean reframe(CombatEngagement plan,CombatOrder pressure,CombatState combat,long tick,EngagementRules rules){
+        if(tick-plan.frameSince()<rules.frameCommitmentTicks() || plan.participants().keySet().stream()
+                .anyMatch(owner->combat.pending().containsKey(owner) || combat.maneuverOpen(owner)))return false;
+        var bearing=MeleeSector.pressure(pressure.actorPosition(),pressure.targetPosition());
+        double norm=Math.hypot(plan.axisX(),plan.axisZ())*Math.hypot(bearing.axisX(),bearing.axisZ());
+        return CombatEngagement.distance(plan.anchor(),pressure.targetPosition())>=rules.rebaseDistance()
+                || (plan.axisX()*(double)bearing.axisX()+plan.axisZ()*(double)bearing.axisZ())/norm<Math.cos(Math.toRadians(rules.frameAngleDegrees()));
     }
     private static MeleeSector.Role alternative(Map<SubjectId,CombatEngagement.Participant> members,CombatOrder order,
             MeleeSector.Role failed,int axisX,int axisZ){

@@ -16,7 +16,7 @@ class MeleeAnimationTest {
         return new PaleMirrorCombatClient.Frame(cue,age);
     }
     @Test void techniquesHaveDistinctPreparationAndBothReturnToTheirReadyPose(){
-        var quick=MeleeAnimation.sample(frame(CombatGesture.QUICK,CombatGesturePayload.Phase.PREPARING,3,0));
+        var quick=MeleeAnimation.sample(frame(CombatGesture.QUICK,CombatGesturePayload.Phase.PREPARING,MeleeRules.initial().techniques().quick().preparationTicks()*0.75f,0));
         var preparation=MeleeRules.initial().techniques().require(MeleeAttack.LUNGE).preparationTicks();
         var lunge=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,preparation*0.75f,0));
         assertTrue(quick.shoulder()<-1.5f);assertTrue(lunge.elbow()<-1.8f);assertTrue(lunge.lean()<-0.1f);
@@ -29,9 +29,9 @@ class MeleeAnimationTest {
         }
     }
     @Test void sweepAndFollowupHaveSeparateReadableWarnings(){
-        var sweep=MeleeAnimation.sample(frame(CombatGesture.SWEEP,CombatGesturePayload.Phase.PREPARING,7.5f,0));
+        var sweep=MeleeAnimation.sample(frame(CombatGesture.SWEEP,CombatGesturePayload.Phase.PREPARING,MeleeRules.initial().techniques().sweep().preparationTicks()*0.75f,0));
         var follow=MeleeAnimation.sample(frame(CombatGesture.FOLLOWUP,CombatGesturePayload.Phase.PREPARING,4.5f,0));
-        var quick=MeleeAnimation.sample(frame(CombatGesture.QUICK,CombatGesturePayload.Phase.PREPARING,3,0));
+        var quick=MeleeAnimation.sample(frame(CombatGesture.QUICK,CombatGesturePayload.Phase.PREPARING,MeleeRules.initial().techniques().quick().preparationTicks()*0.75f,0));
         assertTrue(sweep.yaw()<-1.4);assertNotEquals(follow,quick);assertNotEquals(sweep,follow);
     }
     @Test void movementGesturesHaveDifferentBodyIntentAndCannotPlayAWeaponStrike(){

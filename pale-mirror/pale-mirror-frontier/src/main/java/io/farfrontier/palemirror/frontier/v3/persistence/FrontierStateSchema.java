@@ -25,7 +25,8 @@ final class FrontierStateSchema {
     // Shared combat effort and explicit visible-swing facts survive exact recovery.
     // Cooperative flank intent and its retry/commitment clocks retain explicit ownership.
     // Every resident retains its declared combat-style definition reference, including newborn payloads.
-    static final int VERSION = 332;
+    // Encounter frame commitment and actual flank-progress evidence survive recovery.
+    static final int VERSION = 333;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

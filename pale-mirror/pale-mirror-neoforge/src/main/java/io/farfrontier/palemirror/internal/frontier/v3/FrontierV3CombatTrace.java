@@ -124,7 +124,7 @@ public final class FrontierV3CombatTrace {
         } catch(RuntimeException failure) {failed(session,failure);}
     }
     static void decision(ServerLevel level,Mob fighter,LivingEntity target,CombatOrder order,MeleeAttack attack,String gate,
-            double distance,double separating,double lateral,boolean canSpend) {
+            double distance,double separating,double lateral,double targetVelocityX,double targetVelocityZ,boolean canSpend) {
         var session=interested(level,fighter,target);if(session==null)return;
         String key=fighter.getUUID()+":decision",value=target.getUUID()+":"+order.revision()+":"+attack+":"+gate+":"+canSpend;
         if(!changed(session,key,value))return;
@@ -132,6 +132,7 @@ public final class FrontierV3CombatTrace {
             var row=base(level);row.add("fighter",body(fighter));row.add("target",body(target));row.addProperty("owner",order.owner().value());
             row.addProperty("attack",attack.name());row.addProperty("gate",gate);row.addProperty("distance",distance);
             row.addProperty("combatStyle",order.style().id().value());
+            row.addProperty("observedTargetVx",targetVelocityX);row.addProperty("observedTargetVz",targetVelocityZ);
             row.addProperty("separatingSpeed",separating);row.addProperty("lateralSpeed",lateral);row.addProperty("canSpend",canSpend);row.addProperty("orderRevision",order.revision());
             var runtime=FrontierV3ServerLifecycle.runtimeFor(level.getServer());var state=runtime==null?null:runtime.decodedState().orElse(null);
             if(state!=null) {
@@ -233,6 +234,7 @@ public final class FrontierV3CombatTrace {
                         if(member!=null && member.execution().equals(current)){
                             row.addProperty("encounterRole",member.role().name());row.addProperty("preferredRole",member.preferredRole().name());
                             row.addProperty("roleSince",member.roleSince());
+                            row.addProperty("flankBestAlignment",member.bestAlignmentPermille());row.addProperty("flankProgressAt",member.progressAt());row.addProperty("frameSince",plan.frameSince());
                         }
                     });
                     var point=combat.positions().get(owner);

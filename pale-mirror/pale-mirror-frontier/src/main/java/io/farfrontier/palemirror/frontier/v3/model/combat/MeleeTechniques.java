@@ -19,7 +19,7 @@ public record MeleeTechniques(Technique quick,Technique lunge,Technique sweep,in
     public Technique require(MeleeAttack attack){
         return switch(attack){case QUICK->quick;case LUNGE->lunge;case SWEEP->sweep;case FOLLOWUP->MeleeFollowupRules.initial().technique();};}
     public static MeleeTechniques initial(){
-        return new MeleeTechniques(new Technique(4,3,6,350_000),new Technique(8,4,14,650_000),new Technique(10,3,16,0),2_200_000,100_000,100);
+        return new MeleeTechniques(new Technique(2,3,6,350_000),new Technique(8,4,14,650_000),new Technique(6,3,12,0),2_200_000,100_000,100);
     }
     public String canonicalText(){
         return "quick="+quick.canonicalText()+"|lunge="+lunge.canonicalText()

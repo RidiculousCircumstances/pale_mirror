@@ -211,7 +211,7 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
         for(var group:engagements.values())if(group.participants().containsKey(owner)){
             changed=true;var members=new LinkedHashMap<>(group.participants());members.remove(owner);
             if(members.isEmpty())groups.remove(group.key());
-            else{CombatEngagementPlanner.promote(members);groups.put(group.key(),new CombatEngagement(group.key(),group.revision()+1,group.anchor(),group.axisX(),group.axisZ(),members,0,Optional.empty()));}
+            else{CombatEngagementPlanner.promote(members);groups.put(group.key(),new CombatEngagement(group.key(),group.revision()+1,group.anchor(),group.axisX(),group.axisZ(),group.frameSince(),members,0,Optional.empty()));}
         }
         return changed?new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,groups,followups,readiness,exchanges):this;
     }

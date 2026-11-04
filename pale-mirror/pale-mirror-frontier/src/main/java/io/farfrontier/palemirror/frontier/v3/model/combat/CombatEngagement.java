@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 import java.util.*;
 
 /** Sole retained cooperative plan. Participants retain explicit identity; body/equipment/positions stay with their existing owners. */
-public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int axisX, int axisZ,
+public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int axisX, int axisZ,long frameSince,
         Map<SubjectId,Participant> participants, long assemblySince, Optional<Wave> wave) {
     public static final int MAX_PARTICIPANTS = 64;
     public record Key(CombatPartyId party, CombatTarget target) {
@@ -15,13 +15,15 @@ public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int
         public static Key of(CombatOrder order) { return new Key(order.party(),order.target()); }
     }
     public record Participant(Key engagement, ActorExecutionId execution, MeleeSector.Role role, long renewedAt,
-            MeleeSector.Role preferredRole,long roleSince) {
+            MeleeSector.Role preferredRole,long roleSince,int bestAlignmentPermille,long progressAt) {
         public Participant { Objects.requireNonNull(engagement); Objects.requireNonNull(execution); Objects.requireNonNull(role);Objects.requireNonNull(preferredRole);
-            if(roleSince<0 || renewedAt<0 || role!=MeleeSector.Role.SUPPORT && role!=preferredRole)
+            if(roleSince<0 || renewedAt<0 || progressAt<roleSince || bestAlignmentPermille < -1000 || bestAlignmentPermille>1000 || role!=MeleeSector.Role.SUPPORT && role!=preferredRole)
                 throw new IllegalArgumentException("invalid combat participation time/assignment"); }
-        public Participant renewed(long tick){return new Participant(engagement,execution,role,tick,preferredRole,roleSince);}
+        public Participant renewed(long tick){return new Participant(engagement,execution,role,tick,preferredRole,roleSince,bestAlignmentPermille,progressAt);}
         public Participant assigned(MeleeSector.Role next,long tick){return new Participant(engagement,execution,next,renewedAt,
-                next==MeleeSector.Role.SUPPORT?preferredRole:next,tick);}
+                next==MeleeSector.Role.SUPPORT?preferredRole:next,tick,-1000,tick);}
+        public Participant progressed(int alignment,long tick){return new Participant(engagement,execution,role,renewedAt,preferredRole,roleSince,alignment,tick);}
+        public Participant reframed(long tick){return progressed(-1000,tick);}
     }
     public record Slot(ActorActuationId participant, long opensAt, long closesAt, boolean committed) {
         public Slot { Objects.requireNonNull(participant); if(opensAt<0 || closesAt<opensAt)throw new IllegalArgumentException("invalid attack slot"); }
@@ -35,7 +37,7 @@ public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int
     }
     public CombatEngagement {
         Objects.requireNonNull(key);Objects.requireNonNull(anchor);Objects.requireNonNull(wave);participants=ImmutableLookupMap.copyOf(participants);
-        if(revision<1 || assemblySince<0 || axisX==0 && axisZ==0 || Math.abs((long)axisX)>1000 || Math.abs((long)axisZ)>1000
+        if(revision<1 || assemblySince<0 || frameSince<0 || axisX==0 && axisZ==0 || Math.abs((long)axisX)>1000 || Math.abs((long)axisZ)>1000
                 || participants.isEmpty() || participants.size()>MAX_PARTICIPANTS)throw new IllegalArgumentException("invalid engagement plan");
         for(var entry:participants.entrySet())if(!entry.getKey().equals(entry.getValue().execution().activityOwnerId()) || !key.equals(entry.getValue().engagement()))
             throw new IllegalArgumentException("foreign encounter participant");
@@ -46,18 +48,18 @@ public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int
     }
     public static CombatEngagement first(CombatOrder order,long tick) {
         var key=Key.of(order);var bearing=MeleeSector.pressure(order.actorPosition(),order.targetPosition());
-        var member=new Participant(key,order.execution(),MeleeSector.Role.PRESSURE,tick,MeleeSector.Role.PRESSURE,tick);
-        return new CombatEngagement(key,1,order.targetPosition(),bearing.axisX(),bearing.axisZ(),Map.of(order.owner(),member),0,Optional.empty());
+        var member=new Participant(key,order.execution(),MeleeSector.Role.PRESSURE,tick,MeleeSector.Role.PRESSURE,tick,-1000,tick);
+        return new CombatEngagement(key,1,order.targetPosition(),bearing.axisX(),bearing.axisZ(),tick,Map.of(order.owner(),member),0,Optional.empty());
     }
     public CombatEngagement admitted(CombatOrder order,long tick) {
         if(!key.equals(Key.of(order)))throw new IllegalArgumentException("foreign encounter admission");
         var existing=participants.get(order.owner());var role=existing!=null && existing.execution().equals(order.execution())?existing.preferredRole():nextRole(order);
         var member=existing!=null && existing.execution().equals(order.execution())?existing.renewed(tick)
-                :new Participant(key,order.execution(),role,tick,role,tick);
+                :new Participant(key,order.execution(),role,tick,role,tick,-1000,tick);
         var members=ImmutableLookupMap.withEntry(participants,order.owner(),member);
         // Replacing an execution cannot inherit its predecessor's coordinated attack slot.
         var retained=existing!=null && !existing.execution().equals(order.execution())?Optional.<Wave>empty():wave;
-        return new CombatEngagement(key,revision+1,anchor,axisX,axisZ,members,assemblySince,retained);
+        return new CombatEngagement(key,revision+1,anchor,axisX,axisZ,frameSince,members,assemblySince,retained);
     }
     private MeleeSector.Role nextRole(CombatOrder order) {
         var counts=new EnumMap<MeleeSector.Role,Integer>(MeleeSector.Role.class);
@@ -80,7 +82,7 @@ public record CombatEngagement(Key key, long revision, SurfaceAnchor anchor, int
         var value=wave.orElseThrow(()->new IllegalArgumentException("strike has no coordinated wave"));
         if(value.slots().stream().noneMatch(slot->slot.participant().equals(observer) && !slot.committed()))throw new IllegalArgumentException("missing exact unspent attack slot");
         var slots=value.slots().stream().map(slot->slot.participant().equals(observer)?new Slot(observer,slot.opensAt(),slot.closesAt(),true):slot).toList();
-        return new CombatEngagement(key,revision+1,anchor,axisX,axisZ,participants,assemblySince,Optional.of(new Wave(value.targetPosition(),slots)));
+        return new CombatEngagement(key,revision+1,anchor,axisX,axisZ,frameSince,participants,assemblySince,Optional.of(new Wave(value.targetPosition(),slots)));
     }
     public static double distance(SurfaceAnchor a,SurfaceAnchor b) { return Math.sqrt(Math.pow((double)a.x()-b.x(),2)+Math.pow((double)a.y()-b.y(),2)+Math.pow((double)a.z()-b.z(),2)); }
 }

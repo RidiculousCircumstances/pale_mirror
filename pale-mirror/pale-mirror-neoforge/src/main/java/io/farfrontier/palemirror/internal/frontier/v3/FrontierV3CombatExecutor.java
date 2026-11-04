@@ -86,9 +86,9 @@ public final class FrontierV3CombatExecutor {
             }
             boolean contactHandoff=CombatEngagementPlanner.contactHandoff(state.combat(),order,actuation,attack,tick,rules);
             if(state.combat().maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff){
-                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"MANEUVER_BUSY",distance,separating,motion.lateral(),canSpend);continue;
+                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"MANEUVER_BUSY",distance,separating,motion.lateral(),motion.x(),motion.z(),canSpend);continue;
             }
-            var maneuverFacts=new MeleeManeuvers.Facts(distance,separating,visible && threateningSwing(fighter,target,rules),target.getDeltaMovement().x,target.getDeltaMovement().z);
+            var maneuverFacts=new MeleeManeuvers.Facts(distance,separating,visible && threateningSwing(fighter,target,rules),motion.x(),motion.z());
             if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace")){
                 var harmed=capabilities.require(order.execution()).harmedAt(state,order);
                 if(harmed.isPresent() && tick-harmed.getAsLong()<=rules.maneuvers().harmLifetime())
@@ -98,17 +98,17 @@ public final class FrontierV3CombatExecutor {
             if(tactic.action()==MeleeDuelPolicy.Action.WAIT){
                 FrontierV3CombatTrace.decision(level,fighter,target,order,attack,
                         state.combat().pending().containsKey(order.owner())?"PENDING_EFFECT":state.combat().recovering(order.owner(),tick)?"RECOVERY":"MANEUVER_BUSY",
-                        distance,separating,motion.lateral(),canSpend);continue;
+                        distance,separating,motion.lateral(),motion.x(),motion.z(),canSpend);continue;
             }
             if(tactic.action()==MeleeDuelPolicy.Action.MANEUVER && visible && (state.actorMovements().get(order.execution().actorId())==null
                     || capabilities.require(order.execution()).permitsManeuverInterruption(state,state.actorMovements().get(order.execution().actorId()),order))){
-                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"TACTIC_"+tactic.maneuver().orElseThrow(),distance,separating,motion.lateral(),canSpend);
+                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"TACTIC_"+tactic.maneuver().orElseThrow(),distance,separating,motion.lateral(),motion.x(),motion.z(),canSpend);
                 var origin=FrontierV3SupportedBodyCapture.observe(level,fighter);
                 if(origin.isPresent()){
                     var requested=FrontierV3CommandSubmission.propose(runtime,"combat-maneuver",order.owner().value(),
                             new CombatEvent.ManeuverRequested(actuation,order.target(),origin.orElseThrow().supportingSurface(),maneuverFacts));
                     if(!(requested instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected))continue;
-                    FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"TACTIC_REFUSED:"+requested,distance,separating,motion.lateral(),canSpend);
+                    FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"TACTIC_REFUSED:"+requested,distance,separating,motion.lateral(),motion.x(),motion.z(),canSpend);
                     trace(order,"MANEUVER_REFUSED",requested);
                 }
                 // A physically unavailable evasion must not prevent an otherwise safe contact attack.
@@ -119,7 +119,7 @@ public final class FrontierV3CombatExecutor {
             String traceGate=decision==MeleeTactics.Decision.WAIT
                     ?state.combat().pending().containsKey(order.owner())?"PENDING_EFFECT":!canSpend?"EFFORT":item.condition().remaining()<profile.wear()?"WEAPON_WORN":"RECOVERY"
                     :decision==MeleeTactics.Decision.ATTACK && !slotReady?"WAVE_SLOT":decision.name();
-            FrontierV3CombatTrace.decision(level,fighter,target,order,attack,traceGate,distance,separating,motion.lateral(),canSpend);
+            FrontierV3CombatTrace.decision(level,fighter,target,order,attack,traceGate,distance,separating,motion.lateral(),motion.x(),motion.z(),canSpend);
             if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))trace(order,"OPPORTUNITY",
                     "distance="+distance+" visible="+visible+" tactical="+tacticalReady+" attack="+attack+" decision="+decision+" actor="+fighter.position()+" target="+target.position());
             if(decision==MeleeTactics.Decision.APPROACH){
@@ -132,17 +132,32 @@ public final class FrontierV3CombatExecutor {
             if(!canSpend || decision!=MeleeTactics.Decision.ATTACK || !slotReady)continue;
             var approach=state.actorMovements().get(order.execution().actorId());
             if(approach!=null && !contactHandoff && !capabilities.require(order.execution()).permitsApproach(state,approach)){
-                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"MOVEMENT_CHECKPOINT",distance,separating,motion.lateral(),canSpend);continue;
+                FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"MOVEMENT_CHECKPOINT",distance,separating,motion.lateral(),motion.x(),motion.z(),canSpend);continue;
             }
             var strike=new MeleeStrike(order.owner(),order.revision(),actuation,order.target(),order.weapon(),item.condition(),profile,attack,
                     targetPort(target).identity().incarnation(),tick+1,tick);
             var result=FrontierV3CommandSubmission.propose(runtime,"combat-prepare",order.owner().value(),new CombatEvent.Prepared(strike));
+            // Publication callback starts reversible preparation on the exact accepted attempt;
+            // no speculative cue, movement or damage is granted to a predecessor/durability wait.
+            runtime.afterCommand(result,()->publishedPreparation(level,runtime,fighter,target,strike));
             FrontierV3CombatTrace.strike(level,fighter,target,strike,"PREPARE_SUBMITTED",
                     result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending?"PENDING_"+pending.reason().name()
                         :result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected rejected?rejected.toString()
                         :contactHandoff?"CONTACT_HANDOFF_"+result.getClass().getSimpleName():result.getClass().getSimpleName());
             trace(order,"PREPARE",result);
         }
+    }
+    private static void publishedPreparation(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
+            Mob fighter,LivingEntity target,MeleeStrike strike){
+        var state=runtime.decodedState().orElseThrow();
+        if(!fighter.isAlive() || !target.isAlive() || !strike.equals(state.combat().pending().get(strike.owner()))
+                || !canActuate(state,strike) || level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(),strike.attacker().execution().actorId()))!=fighter
+                || level.getEntity(strike.target().entity())!=target
+                || targetPort(target).identity().incarnation()!=strike.targetIncarnation())return;
+        var rules=state.bootstrap().ruleset().melee();
+        FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
+        FrontierV3MeleeGuidance.observe(level,state,runtime,fighter,target,strike,
+                FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),runtime.executionView().orElseThrow().instant().ticks());
     }
     private static void execute(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,MeleeStrike strike) {
         var state=runtime.decodedState().orElseThrow();
@@ -300,16 +315,16 @@ public final class FrontierV3CombatExecutor {
         if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace"))io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
                 "PMV3_MELEE actor={} owner={} reason={} detail={}",order.execution().actorId().value(),order.owner().value(),reason,detail);
     }
-    private record ObservedMotion(double separating,double lateral) { }
-    private static ObservedMotion observedMotion(Mob fighter,LivingEntity target,ActorActuationId observer,boolean visible,int interval){
-        if(!visible){SIGHTINGS.remove(fighter);return new ObservedMotion(0,0);}
+    record ObservedMotion(double x,double z,double separating,double lateral) { }
+    static ObservedMotion observedMotion(Mob fighter,LivingEntity target,ActorActuationId observer,boolean visible,int interval){
+        if(!visible){SIGHTINGS.remove(fighter);return new ObservedMotion(0,0,0,0);}
         long now=fighter.level().getGameTime();
         var prior=SIGHTINGS.put(fighter,new Sighting(observer,target.getUUID(),target.getId(),now,target.position()));
         if(prior==null || !prior.observer().equals(observer) || !prior.target().equals(target.getUUID()) || prior.runtimeId()!=target.getId()
-                || now<=prior.at() || now-prior.at()>2L*interval)return new ObservedMotion(0,0);
-        var velocity=target.position().subtract(prior.position()).scale(1.0/(now-prior.at()));
+                || now<=prior.at() || now-prior.at()>2L*interval)return new ObservedMotion(0,0,0,0);
+        var velocity=CombatMotion.between(prior.position().x,prior.position().z,target.getX(),target.getZ(),now-prior.at());
         var radial=target.position().subtract(fighter.position()).multiply(1,0,1).normalize();
-        return new ObservedMotion(velocity.dot(radial),Math.abs(velocity.x*radial.z-velocity.z*radial.x));
+        return new ObservedMotion(velocity.x(),velocity.z(),velocity.separating(radial.x,radial.z),velocity.lateral(radial.x,radial.z));
     }
     /** Only an already visible native swing aimed toward this body can invite a dodge. */
     static boolean threateningSwing(Mob fighter,LivingEntity target,MeleeRules rules){
