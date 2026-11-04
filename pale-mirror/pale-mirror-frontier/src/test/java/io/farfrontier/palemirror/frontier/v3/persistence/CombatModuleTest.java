@@ -310,7 +310,7 @@ class CombatModuleTest {
         var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
         assertEquals(state,recovered);assertEquals(choice,MeleeDuelPolicy.choose(recovered,order,facts,121,rules,OptionalLong.of(120),allowed,true));
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var m=new MeleeManeuver(actor,order.weapon(),order.target(),kind,122,order.actorPosition(),TARGET.offset(2,0,-1),121,122,130,0,145,133);
+        var m=new MeleeManeuver(actor,order.weapon(),order.target(),kind,122,order.actorPosition(),TARGET.offset(2,0,-1),121,122,130,0,145,133,0);
         recovered=recovered.withExchange(order.owner(),recovered.exchanges().get(order.owner()).repositioned(kind)).maneuver(m);
         assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(recovered,order,facts,134,rules,OptionalLong.of(120),allowed,true).action(),
                 "old pressure cannot cause continuous circling after the step ends");
@@ -347,17 +347,44 @@ class CombatModuleTest {
         assertEquals(List.of(TARGET.offset(2,0,1)),left);
         assertTrue(right.stream().allMatch(point->point.z()<order.actorPosition().z()));
     }
+    @Test void pursuitUsesBoundedObservedLeadAndHandsContactToTheWeaponBeforeItsEndpoint() throws IOException {
+        var order=order(1,Optional.empty());var rules=MeleeRules.initial();var policy=rules.maneuvers().pursuit();
+        var combat=CombatState.empty().observed(new CombatState.Armament(order.execution(),order.weapon(),SWORD));
+        var far=order.atActorObservation(TARGET.offset(8,0,0));
+        var facts=new MeleeManeuvers.Facts(7.5,.2,false,0,.25);
+        assertEquals(Optional.of(MeleeManeuver.Kind.PURSUIT_RUN),MeleeDuelPolicy.choose(combat,far,facts,100,rules,
+                OptionalLong.empty(),EnumSet.allOf(MeleeManeuver.Kind.class),false).maneuver());
+        var lead=MeleePursuit.lead(facts,policy);assertEquals(0,lead.x());assertEquals(1.5,lead.z());
+        var excessive=MeleePursuit.lead(new MeleeManeuvers.Facts(8,0,false,100,100),policy);
+        assertTrue(Math.hypot(excessive.x(),excessive.z())<=policy.maximumLeadMicros()/1_000_000.0+1e-9);
+        var candidates=List.of(TARGET.offset(3,0,-1),TARGET.offset(3,0,1),TARGET.offset(9,0,0),TARGET.offset(3,5,0));
+        var ranked=MeleePursuit.rank(combat,far,candidates,facts,100,rules);
+        assertEquals(TARGET.offset(3,0,1),ranked.getFirst(),"observed travel favours a real reachable-side candidate");
+        assertFalse(ranked.contains(TARGET.offset(9,0,0)),"running cannot increase the pressure gap");
+        var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
+        var run=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.PURSUIT_RUN,101,
+                far.actorPosition(),TARGET.offset(3,0,1),100,102,0,0,0,112,170);
+        combat=combat.maneuver(run).stance(new MeleeStance(actor,order.target(),true,true,104));
+        assertTrue(CombatEngagementPlanner.contactHandoff(combat,order,actor,MeleeAttack.QUICK,104,rules));
+        assertEquals(MeleeDuelPolicy.Action.ATTACK,MeleeDuelPolicy.choose(combat,order,new MeleeManeuvers.Facts(2,0),104,rules,
+                OptionalLong.empty(),EnumSet.allOf(MeleeManeuver.Kind.class),true).action());
+        combat=combat.maneuver(run.closed(104));var bytes=new ByteArrayOutputStream();CombatStateCodec.write(new DataOutputStream(bytes),combat);
+        var recovered=CombatStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        assertFalse(recovered.maneuvers().get(order.owner()).ready(MeleeManeuver.Kind.PURSUIT_RUN,150));
+        assertFalse(recovered.maneuverBlocksStrike(order.owner(),104,rules.maneuvers()),"run recovery does not lock attacks");
+        assertTrue(recovered.maneuvers().get(order.owner()).ready(MeleeManeuver.Kind.PURSUIT_RUN,170));
+    }
     @Test void contactHandoffCannotBorrowAnEvasionStaleStanceOrBody(){
         var rules=MeleeRules.initial();var order=order(1,Optional.empty());
         var actor=new ActorActuationId(new ActorBodyId(order.execution().actorId(),1),order.execution());
-        var m=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),TARGET.offset(1,0,0),100,104,0,200,0,140);
+        var m=new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),TARGET.offset(1,0,0),100,104,0,200,0,140,0);
         var state=CombatState.empty().enlisted(order,105,rules).maneuver(m).stance(new MeleeStance(actor,order.target(),true,true,105));
         assertTrue(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.LUNGE,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,125,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,new ActorActuationId(new ActorBodyId(order.execution().actorId(),2),order.execution()),MeleeAttack.QUICK,105,rules));
         assertFalse(CombatEngagementPlanner.contactHandoff(state,order,actor,MeleeAttack.QUICK,103,rules));
-        var evasion=new MeleeManeuver(actor,m.weapon(),m.target(),MeleeManeuver.Kind.BACKSTEP,101,m.origin(),m.station(),100,104,0,200,0,140);
+        var evasion=new MeleeManeuver(actor,m.weapon(),m.target(),MeleeManeuver.Kind.BACKSTEP,101,m.origin(),m.station(),100,104,0,200,0,140,0);
         assertFalse(CombatEngagementPlanner.contactHandoff(state.maneuver(evasion),order,actor,MeleeAttack.QUICK,105,rules));
         assertTrue(evasion.closed(105).blocksStrike(105,rules.maneuvers()));
         assertFalse(m.closed(105).blocksStrike(105,rules.maneuvers()));
@@ -368,7 +395,7 @@ class CombatModuleTest {
         var events=List.<CombatEvent>of(new CombatEvent.WeaponDefined(order.execution(),order.weapon(),SWORD),new CombatEvent.WeaponObserved(actor,order.weapon(),SWORD),
                 new CombatEvent.PositionBlocked(actor,order.target(),order.station().orElseThrow()),
                 new CombatEvent.ManeuverRequested(actor,order.target(),order.actorPosition(),new MeleeManeuvers.Facts(5,0.2,true)),
-                new CombatEvent.ManeuverSelected(new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),order.actorPosition().offset(1,0,0),100,0,0,200,0,140)),
+                new CombatEvent.ManeuverSelected(new MeleeManeuver(actor,order.weapon(),order.target(),MeleeManeuver.Kind.BURST,101,order.actorPosition(),order.actorPosition().offset(1,0,0),100,0,0,200,0,140,0)),
                 new CombatEvent.ManeuverLaunched(actor,101),new CombatEvent.ManeuverClosed(order.owner(),101),
                 new CombatEvent.StanceObserved(new MeleeStance(actor,order.target(),true,true,100)),
                 new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),order.station(),MeleePosition.Reason.RESERVED));

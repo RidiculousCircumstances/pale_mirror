@@ -34,7 +34,7 @@ public final class CombatManeuverMovementProvider implements ActorMovementProvid
             return MovementPermission.hold(MovementPermission.Reason.INACTIVE_MEMBER);
         return MovementPermission.allow(pace(state,m));
     }
-    private TravelPace pace(FrontierWorldState state,MeleeManeuver m){var normal=ActorExecutionComposition.CAPABILITIES.require(m.actor().execution().activityKind()).navigationPace(state,m.actor().execution()).orElseThrow();
+    private TravelPace pace(FrontierWorldState state,MeleeManeuver m){var normal=CombatComposition.CAPABILITIES.require(m.actor().execution()).walkingPace(state,m.actor().execution());
         var r=state.bootstrap().ruleset().melee().maneuvers();return new TravelPace(normal.blocksPerTick()*r.pacePermille(m.kind())/1000.0);}
     public long ticksPerEdge(FrontierWorldState state,ActorMovement move){return Math.max(1,(long)Math.ceil(1/pace(state,work(state,move)).blocksPerTick()));}
     public ActorExecutionState arrivalAuthority(FrontierWorldState state,ActorMovement move){validate(state,move);return state.actorExecutions();}

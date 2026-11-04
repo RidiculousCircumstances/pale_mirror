@@ -119,7 +119,7 @@ class GuardDutyTest {
         var origin=state.actorLocations().get(actor).supportingSurface();
         var maneuver=new io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver(new ActorActuationId(body,duty.execution()),duty.weapon(),
             new io.farfrontier.palemirror.frontier.v3.model.combat.CombatTarget(io.farfrontier.palemirror.frontier.v3.model.combat.CombatTarget.Kind.PLAYER,new UUID(42,17),"pale_mirror:frontier_graybox"),
-            io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver.Kind.BACKSTEP,26001,origin,origin.offset(1,0,0),26000,26004,26020,0,26060,26040);
+            io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver.Kind.BACKSTEP,26001,origin,origin.offset(1,0,0),26000,26004,26020,0,26060,26040,0);
         state=state.withChanges(FrontierWorldStateUpdate.begin().combat(state.combat().maneuver(maneuver)));
         state=ActorBodyAuthority.released(state,body);
         var lot = new SubjectId("lot:guard-food"); var pocket = new SubjectId("custody:guard-food");
@@ -156,7 +156,7 @@ class GuardDutyTest {
         assertEquals(maneuver,state.combat().maneuvers().get(duty.id()),"completed attempt remains original history, never relabelled as the resumed body's actuation");
         assertTrue(maneuver.retainedBy(resumed.execution(),resumed.weapon()));
         assertFalse(new io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver(maneuver.actor(),maneuver.weapon(),maneuver.target(),maneuver.kind(),maneuver.attemptOrdinal(),
-            maneuver.origin(),maneuver.station(),26000,26004,0,0,26060,26040).retainedBy(resumed.execution(),resumed.weapon()),"an open attempt cannot cross execution generations");
+            maneuver.origin(),maneuver.station(),26000,26004,0,0,26060,26040,0).retainedBy(resumed.execution(),resumed.weapon()),"an open attempt cannot cross execution generations");
         assertEquals(state, codec.decode(codec.encode(state)));
     }
     @Test void wornSwordReturnsThroughStorageThenReleasesItsRepairReservation() {

@@ -42,9 +42,9 @@ final class CombatWire {
     static void maneuver(DataOutputStream out,MeleeManeuver v)throws IOException{
         actuation(out,v.actor());id(out,v.weapon());target(out,v.target());out.writeByte(v.kind().wireTag());out.writeLong(v.attemptOrdinal());
         FrontierWorldStateCodec.writePosition(out,v.origin().support());FrontierWorldStateCodec.writePosition(out,v.station().support());
-        out.writeLong(v.selectedAt());out.writeLong(v.launchedAt());out.writeLong(v.closedAt());out.writeLong(v.burstReadyAt());out.writeLong(v.retreatReadyAt());out.writeLong(v.anyReadyAt());
+        out.writeLong(v.selectedAt());out.writeLong(v.launchedAt());out.writeLong(v.closedAt());out.writeLong(v.burstReadyAt());out.writeLong(v.retreatReadyAt());out.writeLong(v.anyReadyAt());out.writeLong(v.runReadyAt());
     }
     static MeleeManeuver maneuver(DataInputStream in)throws IOException{return new MeleeManeuver(actuation(in),id(in),target(in),MeleeManeuver.Kind.require(in.readUnsignedByte()),in.readLong(),
-        new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong());}
+        new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong(),in.readLong());}
     private CombatWire(){}
 }

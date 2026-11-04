@@ -58,13 +58,16 @@ public final class MeleeDuelPolicy {
         if(combat.pending().containsKey(order.owner()))return Choice.of(Action.WAIT);
         var prior=combat.maneuvers().get(order.owner());
         if(prior!=null && prior.busy(tick,rules.maneuvers()))
-            return Choice.of(prior.kind()==MeleeManeuver.Kind.BURST && (!prior.open() || prior.launchedAt()>0) && contact && attackReady
+            return Choice.of(prior.kind().closing() && (!prior.open() || prior.launchedAt()>0 || prior.kind()==MeleeManeuver.Kind.PURSUIT_RUN) && contact && attackReady
                     ?Action.ATTACK:Action.WAIT);
         var lateral=lateral(combat,order,facts,tick,rules,harm,allowed);
         if(lateral.isPresent())return Choice.maneuver(lateral.orElseThrow());
         // Footwork can use weapon recovery; another weapon attack cannot.
         if(combat.recovering(order.owner(),tick))return Choice.of(Action.WAIT);
         if(contact)return Choice.of(attackReady?Action.ATTACK:Action.APPROACH);
+        if(allowed.contains(MeleeManeuver.Kind.PURSUIT_RUN) && (prior==null || prior.ready(MeleeManeuver.Kind.PURSUIT_RUN,tick))
+                && combat.affords(order.owner(),tick,rules.readiness().cost(MeleeManeuver.Kind.PURSUIT_RUN),rules))
+            return Choice.maneuver(MeleeManeuver.Kind.PURSUIT_RUN);
         var ordinary=MeleeManeuvers.ordinaryPreference(combat,order,facts,tick,rules,harm,allowed);
         return ordinary.map(Choice::maneuver).orElseGet(()->Choice.of(attackReady?Action.ATTACK:Action.APPROACH));
     }

@@ -12,6 +12,21 @@ public final class ServiceAccessCoordinator {
             SubjectId> EXIT_CANDIDATES = new ImmutableGroupView<>();
     private ServiceAccessCoordinator() { }
 
+    /** Brief supported maneuvers may use an unclaimed apron; the service turn and active exits remain exclusive.
+     * Final resting/parking policy is deliberately stricter and remains with ServiceAreaDestinations. */
+    public static java.util.function.Predicate<SurfaceAnchor> transientDestinations(FrontierWorldState state,SubjectId actor) {
+        var claims=ServiceDestinationClaims.excludedFor(state,actor);
+        return station->{
+            if(claims.contains(station))return false;
+            for(var point:ServiceBoundaryComposition.nearbyDeclarations(state,new TerrainColumn(station.x(),station.z()))){
+                if(point.boundary().occupied(station.standingBody()))return false;
+                var geometry=ServiceBoundaryComposition.geometry(state,point.identity());
+                if(geometry.egressSurfaces().contains(station) && !ServiceAccessCapabilities.current(state,point.pointId()).isEmpty())return false;
+            }
+            return true;
+        };
+    }
+
     /** Bulk/group events can move several actors even when their subject is not an actor. */
     public static java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
         var actors = new java.util.HashSet<SubjectId>();

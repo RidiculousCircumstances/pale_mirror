@@ -114,8 +114,8 @@ class SettlementSecurityTest {
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
         var far=order.atActorObservation(order.targetPosition().offset(8,0,0));
-        assertTrue(MeleeManeuvers.preference(state,far,new MeleeManeuvers.Facts(8,.2),21001,
-                CombatComposition.CAPABILITIES.require(order.execution())).isEmpty());
+        assertEquals(Optional.of(MeleeManeuver.Kind.PURSUIT_RUN),MeleeManeuvers.preference(state,far,new MeleeManeuvers.Facts(8,.2),21001,
+                CombatComposition.CAPABILITIES.require(order.execution())),"a tactical run need not end in weapon reach");
         var shortStep=far.actorPosition().offset(-3,0,0);
         assertFalse(MeleeManeuvers.useful(state,far,MeleeManeuver.Kind.BURST,shortStep));
         var bad=MeleeManeuvers.selected(state,far,r.body(),MeleeManeuver.Kind.BURST,shortStep,21001);
@@ -126,13 +126,27 @@ class SettlementSecurityTest {
         assertTrue(MeleeManeuvers.useful(state,order,MeleeManeuver.Kind.BURST,contact));
         assertTrue(MeleeManeuvers.useful(state,far,MeleeManeuver.Kind.BACKSTEP,shortStep),"defensive escape has a different purpose");
     }
-    @Test void maneuverKeepsItsExactGoalThroughSnapshotAndOnlyClosesAfterSharedMovementReleases(){
+    @Test void unclaimedServiceApronPermitsFiniteMovementWhileActualServiceAndDestinationClaimsStayExclusive(){
+        var r=ready();var state=r.state();var actor=r.body().execution().actorId();
+        var access=ServiceAccessCoordinator.transientDestinations(state,actor);
+        var point=ServiceBoundaryComposition.geometries(state).stream()
+                .filter(p->p.waitingSurfaces().stream().anyMatch(access)).findFirst().orElseThrow();
+        var station=point.waitingSurfaces().stream().filter(access).findFirst().orElseThrow();
+        assertTrue(ServiceAreaDestinations.temporary(point,station),"parking and finite movement have distinct policy");
+        assertFalse(access.test(point.station()),"a maneuver never claims the service turn");
+        var other=state.actorLocations().keySet().stream().filter(id->!id.equals(actor)).findFirst().orElseThrow();
+        state=state.withActorBody(other,station.standingBody());
+        assertFalse(ServiceAccessCoordinator.transientDestinations(state,actor).test(station),"real body claims still exclude a landing");
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value=MeleeManeuver.Kind.class,names={"BACKSTEP","PURSUIT_RUN"})
+    void maneuverKeepsItsExactGoalThroughSnapshotAndOnlyClosesAfterSharedMovementReleases(MeleeManeuver.Kind kind){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
-        var m=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.BACKSTEP,order.actorPosition().offset(-1,0,0),21001);
+        var m=MeleeManeuvers.selected(state,order,r.body(),kind,order.actorPosition().offset(-1,0,0),21001);
         state=apply(state,m.owner(),new CombatEvent.ManeuverSelected(m),21001);
         var snapshot=new FrontierWorldStateCodec();state=snapshot.decode(snapshot.encode(state));assertEquals(m,state.combat().maneuvers().get(m.owner()));
-        var preparing=state;assertThrows(IllegalArgumentException.class,()->apply(preparing,m.owner(),new CombatEvent.ManeuverLaunched(r.body(),m.attemptOrdinal()),21002));
+        var preparing=state;assertThrows(IllegalArgumentException.class,()->apply(preparing,m.owner(),new CombatEvent.ManeuverLaunched(r.body(),m.attemptOrdinal()),21001));
         state=apply(state,m.owner(),new CombatEvent.ManeuverLaunched(r.body(),m.attemptOrdinal()),21005);
         var events=GuardWorkProcess.progress(state,GuardContinuation.progress(m.owner(),21005),21005);
         var start=events.stream().map(ProposedEvent::payload).filter(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted.class::isInstance)
@@ -140,8 +154,8 @@ class SettlementSecurityTest {
         state=ActorMovementProcess.reduceStarted(state,r.body().execution().actorId(),start);var move=start.movement();
         assertEquals(m.order(),move.order());assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.Provider.COMBAT_MANEUVER,move.context().provider());
         var permission=ActorMovementProviders.require(move).movementPermission(state,move,order.actorPosition(),21005,ActorPositionView.canonical(state,21005));
-        assertTrue(permission.allowed());assertTrue(permission.pace().orElseThrow().blocksPerTick()>ActorExecutionComposition.CAPABILITIES.require(r.body().execution().activityKind()).navigationPace(state,
-            r.body().execution()).orElseThrow().blocksPerTick());
+        assertTrue(permission.allowed());assertEquals(CombatComposition.CAPABILITIES.require(r.body().execution()).walkingPace(state,r.body().execution()).blocksPerTick()
+            *state.bootstrap().ruleset().melee().maneuvers().pacePermille(kind)/1000.0,permission.pace().orElseThrow().blocksPerTick(),1e-10,"one base gait, never double-applied acceleration");
         var unloaded=ActorBodyAuthority.released(state,r.body().body());
         var provider=ActorMovementProviders.require(move);
         assertFalse(provider.movementPermission(unloaded,move,order.actorPosition(),21006,ActorPositionView.canonical(unloaded,21006)).allowed());
@@ -156,16 +170,20 @@ class SettlementSecurityTest {
             new SimInstant(21006),r.body().execution().actorId(),CauseChain.root(new CommandId("test:maneuver")),interruption);
         state=FrontierWorldProcessCatalog.reduce("actor-movement",state,fact);
         state=apply(state,m.owner(),new CombatEvent.ManeuverClosed(m.owner(),m.attemptOrdinal()),21006);
-        assertFalse(state.combat().maneuvers().get(m.owner()).open());assertFalse(state.combat().maneuvers().get(m.owner()).ready(MeleeManeuver.Kind.BACKSTEP,21020));
-        assertTrue(state.combat().maneuvers().get(m.owner()).ready(MeleeManeuver.Kind.BACKSTEP,21101));
+        assertFalse(state.combat().maneuvers().get(m.owner()).open());assertFalse(state.combat().maneuvers().get(m.owner()).ready(kind,21020));
+        assertTrue(state.combat().maneuvers().get(m.owner()).ready(kind,21101));
+        var other=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.SIDESTEP_LEFT,order.actorPosition().offset(0,0,1),21021);
+        assertEquals(m.runReadyAt(),other.runReadyAt(),"a different maneuver cannot refill the run cooldown");
         assertTrue(state.combat().retired(m.owner()).maneuvers().isEmpty());
     }
-    @Test void closeContactCheckpointsTheExactBurstAndPreparesOneStrikeWithoutClaimingItsDestination(){
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value=MeleeManeuver.Kind.class,names={"BURST","PURSUIT_RUN"})
+    void closeContactCheckpointsTheExactBurstAndPreparesOneStrikeWithoutClaimingItsDestination(MeleeManeuver.Kind kind){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
         var actor=r.duty().execution().actorId();var enemy=new SurfaceAnchor(contact(r).position());
         state=state.withActorBody(actor,enemy.offset(-4,0,0).standingBody());
         var order=CombatComposition.CAPABILITIES.current(state,r.duty().execution(),21001).orElseThrow();
-        var m=MeleeManeuvers.selected(state,order,r.body(),MeleeManeuver.Kind.BURST,enemy.offset(-1,0,0),21001);
+        var m=MeleeManeuvers.selected(state,order,r.body(),kind,enemy.offset(-1,0,0),21001);
         state=apply(state,m.owner(),new CombatEvent.ManeuverSelected(m),21001);
         state=apply(state,m.owner(),new CombatEvent.ManeuverLaunched(r.body(),m.attemptOrdinal()),21005);
         var move=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(m.order(),21005,

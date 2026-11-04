@@ -41,6 +41,9 @@ final class GuardCombatCapability implements CombatCapability {
     public KnownPedestrianRouteKnowledge maneuverKnowledge(FrontierWorldState state,ActorExecutionId execution){
         var duty=GuardAuthority.require(state,execution);return KnownPedestrianRouteKnowledge.forPublicJourney(state,duty.home(),List.of()).forActor(state,execution.actorId());
     }
+    public io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace walkingPace(FrontierWorldState state,ActorExecutionId execution){
+        GuardAuthority.require(state,execution);return ResidentWalkingPace.read(state,execution.actorId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK);
+    }
     public OptionalLong harmedAt(FrontierWorldState state,CombatOrder order){
         var duty=GuardAuthority.require(state,order.execution());return state.security().awareness().harmsIn(duty.home()).stream()
             .filter(h->h.key().victim().equals(order.execution().actorId()) && h.key().attacker().equals(order.target())).mapToLong(h->h.atTick()).max();

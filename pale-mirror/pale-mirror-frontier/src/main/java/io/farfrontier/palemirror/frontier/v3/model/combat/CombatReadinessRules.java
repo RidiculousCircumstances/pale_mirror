@@ -13,7 +13,7 @@ public record CombatReadinessRules(int capacity, int recoveryDelayTicks, int rec
     public int cost(MeleeAttack attack) { return switch (attack) {
         case QUICK -> quickCost; case LUNGE -> lungeCost; case SWEEP -> sweepCost; case FOLLOWUP -> followupCost;
     }; }
-    public int cost(MeleeManeuver.Kind kind) { return kind == MeleeManeuver.Kind.BURST ? burstCost : backstepCost; }
+    public int cost(MeleeManeuver.Kind kind) { return kind.closing() ? burstCost : backstepCost; }
     public static CombatReadinessRules initial() { return new CombatReadinessRules(100,16,2,14,30,24,18,35,25); }
     public String canonicalText() { return capacity+":"+recoveryDelayTicks+":"+recoveryPerTick+":"+quickCost+":"+lungeCost
             +":"+sweepCost+":"+followupCost+":"+burstCost+":"+backstepCost; }

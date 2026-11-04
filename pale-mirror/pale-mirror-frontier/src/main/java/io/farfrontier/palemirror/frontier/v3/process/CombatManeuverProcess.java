@@ -8,6 +8,23 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.*;
 /** Common bounded maneuver lifecycle. No appointment, attack effect or native motion writer. */
 public final class CombatManeuverProcess {
+    /** Read-only preview; physical unused-operation cancellation remains the adapter's separate authority. */
+    public static MeleeManeuverPlanning.Assessment evasion(FrontierWorldState state,CombatEvent.ManeuverRequested request,long tick){
+        var ports=CombatComposition.CAPABILITIES;var order=CombatTransitions.requireOrder(state,ports,request.observer(),tick);
+        var capability=ports.require(order.execution());
+        if(!order.target().equals(request.target()) || !state.bootstrap().bounds().contains(request.origin().support())
+                || !order.engagement().contains(request.origin()))return refused("evasion lost its current target or origin");
+        var kind=MeleeDuelPolicy.lateral(state,order,request.facts(),tick,capability);
+        if(kind.isEmpty())return refused("no current evasive opportunity");
+        var movement=state.actorMovements().get(order.execution().actorId());
+        if(movement!=null && !capability.permitsManeuverInterruption(state,movement,order))return refused("evasion cannot replace this movement purpose");
+        var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,order.execution(),tick);
+        if(assessment instanceof ActivityInterruptionPlanner.Waiting)return refused("evasion awaits exact movement checkpoint");
+        var following=((ActivityInterruptionPlanner.Ready)assessment).validate(state,order.execution().actorId()).following();
+        order=CombatTransitions.requireOrder(following,ports,request.observer(),tick).atActorObservation(request.origin());
+        return MeleeManeuverPlanning.assess(following,order,kind.orElseThrow(),request.facts(),tick);
+    }
+    private static MeleeManeuverPlanning.Assessment refused(String reason){return new MeleeManeuverPlanning.Assessment(Optional.empty(),reason);}
     static CommandPlan request(FrontierWorldState state,CombatEvent.ManeuverRequested request,long tick){
         var ports=CombatComposition.CAPABILITIES;var order=CombatTransitions.requireOrder(state,ports,request.observer(),tick);
         if(!order.target().equals(request.target()))return FrontierWorldCommandPlanner.rejected("maneuver target changed");
@@ -22,24 +39,17 @@ public final class CombatManeuverProcess {
         if(assessment instanceof ActivityInterruptionPlanner.Waiting)return FrontierWorldCommandPlanner.rejected("maneuver awaits exact movement checkpoint");
         var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(state,order.execution().actorId());var following=ready.following();
         order=CombatTransitions.requireOrder(following,ports,request.observer(),tick).atActorObservation(request.origin());
-        Optional<SurfaceAnchor> station;
-        try{station=MeleeManeuvers.destination(following,order,kind.orElseThrow(),capability.maneuverKnowledge(following,order.execution()),tick);}
+        MeleeManeuverPlanning.Assessment destination;
+        try{destination=MeleeManeuverPlanning.assess(following,order,kind.orElseThrow(),request.facts(),tick);}
         catch(KnownPedestrianNavigation.RouteUnavailable pending){return FrontierWorldCommandPlanner.rejected("maneuver route "+pending.status());}
-        if(station.isEmpty() && kind.orElseThrow().lateral()){
-            var other=kind.orElseThrow()==MeleeManeuver.Kind.SIDESTEP_LEFT?MeleeManeuver.Kind.SIDESTEP_RIGHT:MeleeManeuver.Kind.SIDESTEP_LEFT;
-            if(capability.maneuvers().contains(other)){
-                try{station=MeleeManeuvers.destination(following,order,other,capability.maneuverKnowledge(following,order.execution()),tick);}
-                catch(KnownPedestrianNavigation.RouteUnavailable pending){return FrontierWorldCommandPlanner.rejected("maneuver route "+pending.status());}
-                if(station.isPresent())kind=Optional.of(other);
-            }
-        }
-        if(station.isEmpty())return FrontierWorldCommandPlanner.rejected("no safe bounded maneuver destination");
-        var selected=new CombatEvent.ManeuverSelected(MeleeManeuvers.selected(following,order,request.observer(),kind.orElseThrow(),station.orElseThrow(),tick));
+        if(destination.candidate().isEmpty())return FrontierWorldCommandPlanner.rejected("no safe bounded maneuver destination: "+destination.detail());
+        var candidate=destination.candidate().orElseThrow();
+        var selected=new CombatEvent.ManeuverSelected(MeleeManeuvers.selected(following,order,request.observer(),candidate.kind(),candidate.station(),tick));
         CombatTransitions.apply(following,order.owner(),selected,tick,ports);
         var events=new ArrayList<>(ready.events());events.add(new ProposedEvent(order.owner(),selected));events.addAll(capability.wake(following,order.execution(),tick));
         return new CommandPlan.Accepted(List.copyOf(events));
     }
-    /** Contact interrupts the same movement owner before closing its burst and preparing the weapon.
+    /** Contact interrupts the same movement owner before closing its approach and preparing the weapon.
      * No arrival is fabricated, and no uncheckpointed movement/attack overlap may enter replay. */
     static CommandPlan contactStrike(FrontierWorldState state,CombatEvent.Prepared prepared,long tick){
         var strike=prepared.strike();var ports=CombatComposition.CAPABILITIES;
@@ -51,7 +61,7 @@ public final class CombatManeuverProcess {
         if(movement!=null && (!movement.executionId().equals(order.execution()) || !movement.order().equals(maneuver.order())
                 || !(movement.context() instanceof ActorMovementContext.CombatManeuverLeg leg)
                 || !leg.owner().equals(order.owner()) || leg.attemptOrdinal()!=maneuver.attemptOrdinal()))
-            return FrontierWorldCommandPlanner.rejected("contact strike lost its exact burst movement");
+            return FrontierWorldCommandPlanner.rejected("contact strike lost its exact approach movement");
         var assessment=new ActorMovementInterruptionPlanner().assessForOwnerTransition(state,order.execution(),tick);
         if(assessment instanceof ActivityInterruptionPlanner.Waiting)
             return FrontierWorldCommandPlanner.rejected("contact strike awaits exact movement checkpoint");

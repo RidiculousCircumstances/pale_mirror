@@ -51,6 +51,7 @@ final class FrontierV3MinecraftGoalNavigation {
     static int retryIntervalTicks() { return RETRY_TICKS; }
     private static final int STALLED_TICKS = 80;
     private static final double SPEED = 0.70D;
+    private static final double MAX_PACED_SPEED = 1.0D; // Safety bound for an exact owner-issued distance pace, not the ambient walking default.
     private static final Map<Mob, Control> ACTIVE = new WeakHashMap<>();
     private static final Map<Mob, Failure> FAILURES = new WeakHashMap<>();
     private static final Map<Mob, CrossingWait> CROSSINGS = new WeakHashMap<>();
@@ -470,7 +471,7 @@ final class FrontierV3MinecraftGoalNavigation {
             var support = actor.getBlockPosBelowThatAffectsMyMovement();
             double friction = actor.level().getBlockState(support).getFriction(actor.level(), support, actor);
             return FrontierV3NavigationPace.speedModifier(new io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace(pace.blocksPerTick() * following),
-                    actor.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED), friction, SPEED);
+                    actor.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED), friction, MAX_PACED_SPEED);
         }).orElse(SPEED * Math.sqrt(following));
     }
 

@@ -14,6 +14,7 @@ public interface CombatCapability {
     /** A role may yield reversible routine travel to self-defence before its normal intercept is selected. */
     boolean permitsManeuverInterruption(FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement movement,CombatOrder order);
     KnownPedestrianRouteKnowledge maneuverKnowledge(FrontierWorldState state,ActorExecutionId execution);
+    io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace walkingPace(FrontierWorldState state,ActorExecutionId execution);
     OptionalLong harmedAt(FrontierWorldState state,CombatOrder order);
     Set<MeleeManeuver.Kind> maneuvers();
     List<ProposedEvent> wake(FrontierWorldState state,ActorExecutionId execution,long tick);

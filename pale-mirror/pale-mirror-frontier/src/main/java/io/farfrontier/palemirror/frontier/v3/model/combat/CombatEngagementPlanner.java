@@ -82,11 +82,12 @@ public final class CombatEngagementPlanner {
                 && observer.execution().equals(order.execution()) && stance!=null && stance.observer().equals(observer)
                 && stance.current(order,tick,rules) && stance.attackReady();
     }
-    /** Admission preview only: the process must checkpoint and close this exact burst before Prepared. */
+    /** Admission preview only: the process must checkpoint and close this exact approach before Prepared. */
     public static boolean contactHandoff(CombatState state,CombatOrder order,io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId observer,MeleeAttack attack,long tick,MeleeRules rules){
         var maneuver=state.maneuvers().get(order.owner());var stance=state.stances().get(order.owner());
-        return attack!=MeleeAttack.LUNGE && maneuver!=null && maneuver.open() && maneuver.kind()==MeleeManeuver.Kind.BURST
-                && maneuver.launchedAt()>0 && tick>=maneuver.launchedAt() && tick<maneuver.launchedAt()+rules.maneuvers().travelTicks()
+        return attack!=MeleeAttack.LUNGE && maneuver!=null && maneuver.open() && maneuver.kind().closing()
+                && (maneuver.launchedAt()>0 && tick>=maneuver.launchedAt() && tick<maneuver.launchedAt()+rules.maneuvers().travelTicks(maneuver.kind())
+                    || maneuver.kind()==MeleeManeuver.Kind.PURSUIT_RUN && maneuver.launchedAt()==0)
                 && maneuver.matches(order) && maneuver.actor().equals(observer)
                 && stance!=null && stance.observer().equals(observer) && stance.current(order,tick,rules) && stance.attackReady();
     }

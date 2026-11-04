@@ -88,7 +88,7 @@ public final class FrontierV3CombatExecutor {
             if(state.combat().maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff){
                 FrontierV3CombatTrace.decision(level,fighter,target,order,attack,"MANEUVER_BUSY",distance,separating,motion.lateral(),canSpend);continue;
             }
-            var maneuverFacts=new MeleeManeuvers.Facts(distance,separating,visible && threateningSwing(fighter,target,rules));
+            var maneuverFacts=new MeleeManeuvers.Facts(distance,separating,visible && threateningSwing(fighter,target,rules),target.getDeltaMovement().x,target.getDeltaMovement().z);
             if(Boolean.getBoolean("pale_mirror.frontier_v3.combat_trace")){
                 var harmed=capabilities.require(order.execution()).harmedAt(state,order);
                 if(harmed.isPresent() && tick-harmed.getAsLong()<=rules.maneuvers().harmLifetime())
@@ -332,7 +332,19 @@ public final class FrontierV3CombatExecutor {
         var memory=MeleeDuelPolicy.memory(state,order,tick,capability);
         if(memory.signal()<=memory.withdrawnThrough())return false;
         double distance=Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition()));
-        if(MeleeDuelPolicy.lateral(state,order,new MeleeManeuvers.Facts(distance,0,threateningSwing(fighter,target,state.bootstrap().ruleset().melee())),tick,capability).isEmpty())return false;
+        var facts=new MeleeManeuvers.Facts(distance,0,threateningSwing(fighter,target,state.bootstrap().ruleset().melee()));
+        var lateral=MeleeDuelPolicy.lateral(state,order,facts,tick,capability);
+        if(lateral.isEmpty())return false;
+        var origin=FrontierV3SupportedBodyCapture.observe(level,fighter);if(origin.isEmpty())return false;
+        try{
+            var assessment=io.farfrontier.palemirror.frontier.v3.process.CombatManeuverProcess.evasion(state,
+                    new CombatEvent.ManeuverRequested(strike.attacker(),strike.target(),origin.orElseThrow().supportingSurface(),facts),tick);
+            if(assessment.candidate().isEmpty()){
+                FrontierV3CombatTrace.strike(level,fighter,target,strike,"EVASION_REFUSED",assessment.detail());return false;
+            }
+        }catch(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending){
+            FrontierV3CombatTrace.strike(level,fighter,target,strike,"EVASION_REFUSED","route "+pending.status());return false;
+        }
         var declaration=retained.map(FrontierV3OperationReceipt::declaration).orElseGet(()->{
             var actorPort=FrontierV3OperationEntityParticipant.current(fighter,strike.attacker().body().physicalEpoch());
             var targetPort=targetPort(target);

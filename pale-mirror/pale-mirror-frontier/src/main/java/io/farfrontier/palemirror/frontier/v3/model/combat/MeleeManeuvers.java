@@ -5,9 +5,11 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 import java.util.*;
 /** Shared tactical selection. Roles provide permission/knowledge; navigation proves traversability. */
 public final class MeleeManeuvers {
-    public record Facts(double distance,double separatingSpeed,boolean threateningSwing){
+    public record Facts(double distance,double separatingSpeed,boolean threateningSwing,double targetVelocityX,double targetVelocityZ){
         public Facts(double distance,double separatingSpeed){this(distance,separatingSpeed,false);}
-        public Facts{if(!Double.isFinite(distance)||distance<0||!Double.isFinite(separatingSpeed))throw new IllegalArgumentException("invalid maneuver observations");}
+        public Facts(double distance,double separatingSpeed,boolean threateningSwing){this(distance,separatingSpeed,threateningSwing,0,0);}
+        public Facts{if(!Double.isFinite(distance)||distance<0||!Double.isFinite(separatingSpeed)
+                || !Double.isFinite(targetVelocityX) || !Double.isFinite(targetVelocityZ))throw new IllegalArgumentException("invalid maneuver observations");}
     }
     public static Optional<MeleeManeuver.Kind> preference(FrontierWorldState state,CombatOrder order,Facts facts,long tick,CombatCapability capability){
         return MeleeDuelPolicy.choose(state,order,facts,tick,capability).maneuver();
@@ -27,17 +29,26 @@ public final class MeleeManeuvers {
                 && allowed.contains(kind) && (prior==null || prior.ready(kind,tick))?Optional.of(kind):Optional.empty();
     }
     public static Optional<SurfaceAnchor> destination(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,KnownPedestrianRouteKnowledge knowledge,long tick){
+        return destination(state,order,kind,knowledge,tick,new Facts(distance(order.actorPosition(),order.targetPosition()),0)).station();
+    }
+    public record Destination(Optional<SurfaceAnchor> station,String detail) { }
+    public static Destination destination(FrontierWorldState state,CombatOrder order,MeleeManeuver.Kind kind,KnownPedestrianRouteKnowledge knowledge,long tick,Facts facts){
         var rules=state.bootstrap().ruleset().melee().maneuvers();var origin=order.actorPosition();var target=order.targetPosition();
         int radius=rules.distance(kind);
-        var physical=PedestrianInteractionStations.within(knowledge.geometry(),origin,radius*2,Set.of()).stream()
-            .filter(p->knowledge.clearStation(p) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(p.support())
-                && ServiceBoundaryComposition.turnoverPoint(state,p).isEmpty() && MeleePositions.available(state,order,p,tick)).toList();
-        var candidates=rank(order,kind,physical,rules).stream().filter(point->useful(state,order,kind,point))
+        var physical=PedestrianInteractionStations.within(knowledge.geometry(),origin,radius*2,Set.of()).stream().filter(knowledge::clearStation).toList();
+        var access=ServiceAccessCoordinator.transientDestinations(state,order.execution().actorId());
+        var publicSpace=physical.stream().filter(access).toList();
+        var space=publicSpace.stream().filter(p->MeleePositions.available(state,order,p,tick)).toList();
+        var ranked=kind==MeleeManeuver.Kind.PURSUIT_RUN
+                ?MeleePursuit.rank(state.combat(),order,space,facts,tick,state.bootstrap().ruleset().melee()):rank(order,kind,space,rules);
+        var candidates=ranked.stream().filter(point->useful(state,order,kind,point))
                 .filter(point->!kind.lateral() || compatibleSector(state,order,point,tick))
                 .filter(point->kind!=MeleeManeuver.Kind.BURST
                 || MeleeTactics.readyAt(state.combat(),order,point,tick,state.bootstrap().ruleset().melee())).toList();
-        return MeleePositions.reachable(candidates,3,p->{var route=knowledge.plannedPath(origin,new MovementOrder(order.owner(),order.execution().actorId(),1,1,List.of(p),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION));
+        var station=MeleePositions.reachable(candidates,3,p->{
+            var route=knowledge.plannedPath(origin,new MovementOrder(order.owner(),order.execution().actorId(),1,1,List.of(p),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION));
             if(route.size()>radius+2)throw new KnownPedestrianNavigation.RouteUnavailable(PedestrianRouteResult.Status.NO_PATH,"maneuver detour exceeds bounded distance");});
+        return new Destination(station,"geometry="+physical.size()+",access="+publicSpace.size()+",space="+space.size()+",tactical="+candidates.size()+",route="+station.isPresent());
     }
     public static List<SurfaceAnchor> rank(CombatOrder order,MeleeManeuver.Kind kind,List<SurfaceAnchor> candidates,ManeuverRules rules){
         var origin=order.actorPosition();var target=order.targetPosition();double old=distance(origin,target);
@@ -92,7 +103,8 @@ public final class MeleeManeuvers {
         return new MeleeManeuver(actor,order.weapon(),order.target(),kind,tick+1,order.actorPosition(),station,tick,0,0,
             kind==MeleeManeuver.Kind.BURST?tick+rules.burstCooldown():previous==null?0:previous.burstReadyAt(),
             kind.lateral()?tick+rules.duel().lateralCooldown():kind==MeleeManeuver.Kind.BACKSTEP?tick+rules.retreatCooldown():previous==null?0:previous.retreatReadyAt(),
-            tick+(kind.lateral()?rules.duel().sharedCooldown():rules.sharedCooldown()));
+            tick+(kind==MeleeManeuver.Kind.PURSUIT_RUN?rules.pursuit().sharedCooldown():kind.lateral()?rules.duel().sharedCooldown():rules.sharedCooldown()),
+            kind==MeleeManeuver.Kind.PURSUIT_RUN?tick+rules.pursuit().cooldown():previous==null?0:previous.runReadyAt());
     }
     private MeleeManeuvers(){}
 }

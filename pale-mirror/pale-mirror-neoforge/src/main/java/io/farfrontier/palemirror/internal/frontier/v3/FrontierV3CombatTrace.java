@@ -232,6 +232,7 @@ public final class FrontierV3CombatTrace {
                     if(maneuver!=null && maneuver.actor().execution().equals(current)){
                         row.addProperty("maneuverKind",maneuver.kind().name());row.addProperty("maneuverSelectedAt",maneuver.selectedAt());
                         row.addProperty("maneuverLaunchedAt",maneuver.launchedAt());row.addProperty("maneuverClosedAt",maneuver.closedAt());
+                        row.addProperty("runReadyAt",maneuver.runReadyAt());
                     }
                     var exchange=combat.exchanges().get(owner);
                     if(exchange!=null && exchange.execution().equals(current)){

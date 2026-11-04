@@ -20,4 +20,11 @@ class FrontierV3NavigationPaceTest {
         assertThrows(IllegalArgumentException.class, () -> new TravelPace(0));
         assertThrows(IllegalArgumentException.class, () -> new TravelPace(Double.NaN));
     }
+    @Test void ownerIssuedRunPaceIsNotSilentlyClampedToTheAmbientWalkingModifier(){
+        var run=new TravelPace(.3);
+        double modifier=FrontierV3NavigationPace.speedModifier(run,.5,.6,1);
+        assertTrue(modifier>.7,"six-block-per-second gait needs more than the old ambient-only cap");
+        double speed=modifier*.5;
+        assertEquals(run.blocksPerTick(),speed*speed*.98*(.21600002/Math.pow(.6,3))/(1-.6*.91),1e-10);
+    }
 }
