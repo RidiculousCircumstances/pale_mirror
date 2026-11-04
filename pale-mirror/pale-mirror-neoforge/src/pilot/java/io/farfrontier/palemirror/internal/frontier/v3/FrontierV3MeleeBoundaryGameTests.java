@@ -22,6 +22,38 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3MeleeBoundaryGameTests {
     @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void fullManeuverLifetimeSurvivesNativePresentationAndClientWireDecode(GameTestHelper helper){
+        var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);
+        var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);float health=target.getHealth();
+        var rules=MeleeRules.initial().maneuvers();
+        for(var kind:MeleeManeuver.Kind.values()){
+            var identity=strike(level.getGameTime(),MeleeAttack.QUICK,"presentation-"+kind.name().toLowerCase(Locale.ROOT));
+            var origin=new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(
+                    new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4,7,4));
+            var maneuver=new MeleeManeuver(identity.attacker(),identity.weapon(),identity.target(),kind,1,
+                    origin,origin.offset(1,0,0),level.getGameTime(),0,0,0,0,level.getGameTime(),0);
+            FrontierV3CombatPresentation.begin(level,fighter,maneuver.owner().value(),maneuver.attemptOrdinal(),
+                    maneuver.actor().body().physicalEpoch(),io.farfrontier.palemirror.internal.network.CombatGesture.maneuver(kind),
+                    rules.preparation(kind),rules.travelTicks(kind),rules.recovery(kind),target);
+            FrontierV3CombatPresentation.maneuverMoving(level,fighter,maneuver.launched(level.getGameTime()));
+            var marker=fighter.getPersistentData().getCompound("pm_v3_combat_windup").copy();
+            var cue=FrontierV3CombatPresentation.cue(level,fighter,marker);
+            helper.assertTrue(cue.active()==rules.travelTicks(kind),"native cue retains full maneuver lifetime: "+kind);
+            helper.assertTrue(cue.phase()==io.farfrontier.palemirror.internal.network.CombatGesturePayload.Phase.IMPACT,"moving cue starts");
+            var buffer=new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(),level.registryAccess());
+            try{
+                var codec=io.farfrontier.palemirror.internal.network.CombatGesturePayload.STREAM_CODEC;
+                codec.encode(buffer,cue);
+                helper.assertTrue(codec.decode(buffer).equals(cue),"client decoder accepts the exact native maneuver cue: "+kind);
+            }finally{buffer.release();}
+            FrontierV3CombatPresentation.maneuverEnded(level,fighter,maneuver.closed(level.getGameTime()));
+            helper.assertTrue(FrontierV3CombatPresentation.cue(level,fighter,fighter.getPersistentData().getCompound("pm_v3_combat_windup"))
+                    .phase()==io.farfrontier.palemirror.internal.network.CombatGesturePayload.Phase.CANCELLED,"closed maneuver retracts its cue");
+        }
+        helper.assertTrue(target.getHealth()==health,"movement presentation cannot cause damage");
+        fighter.discard();target.discard();helper.succeed();
+    }
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
     public static void swordUsesTheSameEyeToHitboxRangeAsTheSurvivalPlayer(GameTestHelper helper){
         var player=helper.makeMockServerPlayerInLevel();player.setGameMode(GameType.SURVIVAL);
         var point=helper.absolutePos(new BlockPos(4,8,4));player.setPos(point.getX()+0.5,point.getY(),point.getZ()+0.5);

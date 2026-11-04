@@ -123,7 +123,7 @@ public final class FrontierV3CombatPresentation {
         if(!marker.getString("owner").equals(owner) || marker.getLong("ordinal")!=ordinal || marker.getInt("phase")==CombatGesturePayload.Phase.CANCELLED.wireTag())return;
         marker.putInt("phase",phase.wireTag());body.getPersistentData().put(KEY,marker);broadcast(level,body,marker);
     }
-    private static CombatGesturePayload cue(ServerLevel level,Mob body,CompoundTag marker){
+    static CombatGesturePayload cue(ServerLevel level,Mob body,CompoundTag marker){
         return new CombatGesturePayload(body.getId(),body.getUUID(),marker.getLong("epoch"),marker.getLong("ordinal"),
             CombatGesture.require(marker.getInt("attack")),CombatGesturePayload.Phase.require(marker.getInt("phase")),
             marker.getLong("startedAtTick"),level.getGameTime(),marker.getInt("preparation"),marker.getInt("active"),marker.getInt("recovery"),marker.getFloat("facingYaw"),marker.getFloat("facingPitch"));

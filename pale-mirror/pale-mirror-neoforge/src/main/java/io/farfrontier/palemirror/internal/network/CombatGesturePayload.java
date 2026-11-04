@@ -25,7 +25,10 @@ public record CombatGesturePayload(int entityId,UUID body,long epoch,long attemp
     public CombatGesturePayload {
         java.util.Objects.requireNonNull(body);java.util.Objects.requireNonNull(attack);java.util.Objects.requireNonNull(phase);
         if(entityId<0 || epoch<1 || attempt<1 || startedAt<0 || sampledAt<startedAt || preparation<1 || preparation>40
-                || active<1 || active>20 || recovery<1 || recovery>40 || !Float.isFinite(facingYaw) || !Float.isFinite(facingPitch) || Math.abs(facingPitch)>90)throw new IllegalArgumentException("invalid combat presentation");
+                || active<1 || active>attack.maximumActiveTicks() || recovery<1 || recovery>40 || !Float.isFinite(facingYaw) || !Float.isFinite(facingPitch) || Math.abs(facingPitch)>90)
+            throw new IllegalArgumentException("invalid combat presentation: gesture="+attack+" phase="+phase+" entity="+entityId
+                    +" epoch="+epoch+" attempt="+attempt+" started="+startedAt+" sampled="+sampledAt
+                    +" preparation="+preparation+" active="+active+" recovery="+recovery+" yaw="+facingYaw+" pitch="+facingPitch);
     }
     public Type<? extends CustomPacketPayload> type(){return TYPE;}
     /** Brief visual ready stance bridges the weapon cooldown without another gameplay clock. */

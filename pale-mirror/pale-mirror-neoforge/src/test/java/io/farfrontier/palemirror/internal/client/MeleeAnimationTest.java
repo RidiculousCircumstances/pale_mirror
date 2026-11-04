@@ -40,6 +40,24 @@ class MeleeAnimationTest {
         var forward=MeleeAnimation.sample(new PaleMirrorCombatClient.Frame(burst,7));var retreat=MeleeAnimation.sample(new PaleMirrorCombatClient.Frame(back,7));
         assertTrue(forward.lean()>0.2);assertTrue(retreat.lean()<0);assertNotEquals(forward,retreat);
     }
+    @Test void everyManeuverUsesItsFullLifetimeWithoutEnlargingWeaponContactWindows(){
+        var rules=MeleeRules.initial().maneuvers();
+        for(var kind:io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver.Kind.values()){
+            var gesture=CombatGesture.maneuver(kind);
+            var cue=new CombatGesturePayload(1,new UUID(1,2),1,1,gesture,CombatGesturePayload.Phase.IMPACT,
+                    100,100+rules.preparation(kind),rules.preparation(kind),rules.travelTicks(kind),rules.recovery(kind),0,0);
+            assertEquals(rules.travelTicks(kind),cue.active());
+            assertTrue(Float.isFinite(MeleeAnimation.sample(new PaleMirrorCombatClient.Frame(cue,
+                    rules.preparation(kind)+rules.travelTicks(kind)-1)).lean()));
+        }
+        for(var gesture:CombatGesture.values()){
+            int bound=gesture==CombatGesture.BURST || gesture==CombatGesture.BACKSTEP?60:20;
+            assertDoesNotThrow(()->new CombatGesturePayload(1,new UUID(1,2),1,1,gesture,
+                    CombatGesturePayload.Phase.IMPACT,100,101,1,bound,1,0,0));
+            assertThrows(IllegalArgumentException.class,()->new CombatGesturePayload(1,new UUID(1,2),1,1,gesture,
+                    CombatGesturePayload.Phase.IMPACT,100,101,1,bound+1,1,0,0));
+        }
+    }
     @Test void longAttackSweepsAcrossTheBodyDuringContactInsteadOfHoldingAStraightThrust(){
         var technique=MeleeRules.initial().techniques().require(MeleeAttack.LUNGE);
         var drawn=MeleeAnimation.sample(frame(CombatGesture.LUNGE,CombatGesturePayload.Phase.PREPARING,technique.preparationTicks()*0.75f,0));
