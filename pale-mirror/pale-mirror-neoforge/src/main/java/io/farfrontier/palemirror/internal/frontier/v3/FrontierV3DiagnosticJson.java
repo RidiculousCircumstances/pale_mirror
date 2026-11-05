@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
-
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
@@ -442,7 +442,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"starving\":" + starving
                 + ",\"nextNeedReviewAt\":" + (nextNeedReview.isPresent() ? Long.toString(nextNeedReview.getAsLong()) : "null") + "}"
                 + ",\"farmAnchor\":" + position(geometry.farmAnchor())
-                + ",\"routeSurface\":" + position(geometry.routeSurface()) + ",\"layout\":" + FrontierV3SettlementLayoutDiagnostic.read(state, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport.settlement(state.bootstrap(), subject)) + "}";
+                + ",\"routeSurface\":" + position(geometry.routeSurface()) + ",\"layout\":" + FrontierV3SettlementLayoutDiagnostic.read(state, FrontierWorldStateSupport.settlement(state.bootstrap(), subject)) + "}";
     }
 
     /**
