@@ -11,6 +11,22 @@
   },
   "setup": [
     {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "layout": {
+              "revision": 1
+            }
+          }
+        }
+      ]
+    },
+    {
       "type": "command",
       "command": "/gamemode spectator"
     },
