@@ -533,3 +533,20 @@ reuse binding are retained under IMPL/build/combat-engagements; detailed finding
 limits and deployment are in `frontier-v3-coordinated-combat-20261103.md`.
 Frames were reviewed but show one foreground fighter and a second sword at the
 edge; no full-cohort visual tactics, full-pack M3 or global performance claim.
+
+## Shared manual passages and service turnover — 2026-11-05
+
+Source438099a82 adds a movement capability and native reversible interaction,
+not a new canonical work process, movement owner or resource-operation family.
+The existing common navigator retains all path/actuation authority. Exact native
+wooden-door and fence-gate opening, player-close reopening, safe passage and
+closing have focused native coverage; actual collision/semantic station and
+nonoperating/iron-door negatives retain their hard boundaries. Bounded ephemeral
+close claims are invalidated by external writes and never replayed after restart.
+COLD transit can use only explicit native-compiled alternate geometry; no
+background door-animation claim is made. Schema337 rejects earlier actor/geometry
+wire state. The shared service clearance uses native egress before parking search
+and does not mark a meal, equipment pickup or job complete.
+
+See `frontier-v3-manual-passages-and-access-20261105.md` for build, real-client
+evidence, deployment identity and limits. No new M3 or whole-life promotion.

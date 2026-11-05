@@ -1,129 +1,102 @@
 # Active continuity — 2026-11-05
 
-## Latest read-only follow-up: swords
+## Current assignment and result
 
-User reports swords eventually taken, after a delay. Same live4c0d368ce world;
-no product/runtime mutation. At40108 depot had three exact player-contributed
-iron swords in slots9/10/11; all three duties EQUIPPING and native navigators
-idle in separate waiting pockets. Logs15:01:06–15:01:14 explicitly show service
-access/waiting outside; first arrival15:03:55, later15:04:00 and15:04:07. At45115
-NoraBell,LeonLake,VeraMoss all ON_DUTY/guardsReady3; actual actor custody confirmed
-by decoded immutable snapshot at43200. Delay includes roughly3minutes waiting
-for shared storage access, not failed sword recognition. Which exact earlier
-visitor held that turn throughout is UNCONFIRMED: earlier canonical snapshots
-were compacted and old log does not retain a complete grant/holder timeline.
-Do not call the delay normal or fixed. Compact receipts at IMPL
-`build/guard-equipment-inspect/receipts/`. No new tests/client/deploy/code edits.
+User requested a systemic fix for excessive shared storage/equipment delays and
+a common ability to open/close doors/gates, including a guard following through
+a door closed by the player. Main alone; no subagents, goal or push requested.
+Standing commit/deployment instruction applied. Source work and deployment
+finished. Common mechanics have native evidence; complete graphical guard-door
+pursuit remains UNCONFIRMED due an invalid player waypoint/placement fixture.
+Do not call that client run passing, whole-life/M3 or instantaneous service.
 
-## Assignment and result
+Result, exact diagnosis, owners, classified failures and receipts:
+`docs/frontier-v3-manual-passages-and-access-20261105.md`.
 
-Accepted task completed: shared pedestrian preference for ordinary passages over
-furniture and safe departure from partially supported fractional poses. Main
-alone; no subagents, goal or push requested. Standing reviewed commit/deployment
-policy applied. User worlds disposable; human rd and unrelated WIP untouched.
+Two concrete latency defects fixed: idle occupants formerly searched final
+parking before egress; ordinary input-to-station HOT movement did not publish
+its actual first service-boundary exit because it lacked a special clearance
+job context. Shared egress now precedes parking, and every actor-movement leg
+observes indexed operational boundaries at its actual retained origin. The
+sole body controller publishes departure; work/order/cargo remain intact.
+ServiceAccessCoordinator alone arbitrates, now exposes bounded reason/current
+blocking actor in container diagnostics and change-only waits.
 
-Common immutable building spatial preferences feed COLD local/regional/goal
-fields and HOT native expansion; patrol/combat destination scoring uses the same
-policy. Soft costs never grant collision, access, arrival or body authority.
-Required obstacle crossing remains possible. Partial-shape transit gets bounded
-collision-proved footprint contacts only if centring fails, preserving connected
-components/swept edges. Semantic work stations still need a clear centre. No
-canonical XYZ writer or wire schema change. Traversal cost12 is in hashed
-FrontierRuleset.pedestrianTraversal, so final release uses a fresh world.
+Native manually operable paired doors and fence gates now use the common HOT
+navigator's sealed permission and explicit persisted operatesPassages profile.
+Actual collision/exact station/body placement remain physical; only capable
+transit uses explicit native-compiled opened geometry, also in COLD/authored
+certificates. Common reversible native property writes use existing managed
+block knowledge fencing. Bounded ephemeral close claims protect followers,
+are revoked by external writes and never replayed after unload/restart. Iron
+doors stay blocked; no invented trapdoor/mod support, resource journal or mover.
+Wire337 rejects336. Hashed manual reach1.5blocks. No public-content publication.
 
-During same-world deployment a real parked-production review crash at106324 was
-fixed: exact job-address reconsideration replaces strict reschedule of an absent
-one-shot progress review. The registered kind explicitly accepts reconsideration
-and scheduled recovery retains that capability. Same world resumed without new
-quarantine; Nora left the seat, ate and returned to guard movement. Original
-required diagnostic incident was retained history, not silently cleared.
+## Repositories and delivery
 
-Result/receipts/limits:
-`docs/frontier-v3-pedestrian-passages-result-20261105.md`.
-Original diagnosis/pose/trace:
-`docs/frontier-v3-bakery-guard-navigation-investigation-20261105.md`.
-No remaining implementation/deployment work for this task. No broad economy,
-combat balance, universal furniture avoidance or TPS claim. Client evidence is
-scoped exploratory, not formal whole-life/human candidate promotion.
-
-## Repositories and commits
-
-- IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Git root parent,
-  branch `feat/baker-carry-orders-20260926`, clean4c0d368cecc31fb45fe1c802a535394558b70dd8.
+- IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Gitroot parent,
+  branch `feat/baker-carry-orders-20260926`, clean2ea05fb7859243b33bc4bc7b43cee7991a9343d8.
 - RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror`, clean detachedsame.
-- f8d1b657c: passage preferences, partial contacts, native/client scenarios.
-  ad26a8971: production wake/recovery.443f12bff: hashed passage balance and player
-  setup.4c0d368ce: existing patrol body-loss test waits for actual HOT admission.
-- PACK `/home/rd/proj/minecraft`, trackedclean888ed90; pre-existing untracked
-  `.f0v-baseline/` preserved. No tracked deployment edits; hosted ignored artifacts
-  published and installed with exact checksums through PACK scripts.
-- GOV `/home/rd/proj/pm-governance/pale-mirror`, Git root parent. Task changes only
-  this ledger, original investigation, result and one exact
-  `pedestrian_surface_preferences` architecture field. Extensive unrelated WIP
-  preserved. Do not stage whole architecture/contract/provenance files.
-- No public push: current supplied MineColonies building derivative remains
-  private test content without established redistribution rights.
+-438099a82: shared immediate egress, access diagnosis and manual passages.
+  04fdc48e2: physical service exit for all movement legs and bounded jumping
+  player walker.2ea05fb78: corrected safe exterior player fixture only.
+- PACK `/home/rd/proj/minecraft`, trackedclean888ed90d5e3b80b18c278107aa83bb003b541f69;
+  pre-existing untracked `.f0v-baseline/` preserved, ignored hosted artifacts
+  updated through PACK scripts. No tracked pack modifications or push.
+- GOV `/home/rd/proj/pm-governance/pale-mirror`, Gitroot parent. Task changes
+  only this ledger, task report, exact manual_passage_boundary architecture
+  field and one materialization classification appendix. Extensive unrelated
+  WIP preserved; never stage whole architecture/contract/AGENTS/skill files.
 
-## Live runtime
+Live `/home/rd/far-frontier-server`, `far-frontier-v3-live.service` active,
+wrapper452023, restart1793878254. World
+`manual-passages-final-seed139-20261105`, seed139/r31/schema337. Old
+`authored-buildings-nav-rules-seed139-20261105` saved all dimensions16:10:17,
+retained for historical queue diagnosis. Intermediate task337 world saved
+16:25:43 and retained for the source-exit delay. Final world saved16:30:23,
+normal restart on exact final binary; preflight/publish/pinnedinstall/verifierPASS.
 
-`/home/rd/far-frontier-server`, `far-frontier-v3-live.service` active. WrapperPID
-4016602; start1793870972, dedicated ready14:29:45. Final world
-`authored-buildings-nav-rules-seed139-20261105`, seed139/r31/schema336. Fresh
-world required by hashed passage balance; previous world
-`authored-buildings-schema336-seed139-20261105` retained for stall/crash evidence,
-normal all-dimensions-save14:24:48 before selection changed.
-
-Final release4c0d368ce SHA512:
-`6d9adf16fa773f10bf882a8c5616f5df1f7762263b73d30aef26822a72cee172d7dabd3bb8afbf8a43f4203e71b647f32d7084c1e30749a221865ed0222c126d`.
+Main JAR SHA512:
+`3efc1cc68f1ff5f02f36615a049d5760fa33c7c96fff20d99bb8d79723ca12904b826686aec7042a0b3e91d26ed3ee73e9b721e5d87c9fd293a81f1317c17885`.
 Visuals unchanged SHA512:
 `2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601`.
-Preflight, pinned install and final deploy verifierPASS. Native summary at874,
-revision1330:statusok/green, required/inventory/scene/replica conflicts0,
-incidentIndex0,12settlements/319residents. Progress explicitly NOT_ASSESSED.
-Task client/private display exited; PMBakeryAudit deopped,0players; unrelated
-operators and human profile preserved. No background monitoring is running.
+Summary4669 green, required/scene/inventory conflicts0, incidentIndex0;
+three guardsReady/quarantineNORMAL. Progress NOT_ASSESSED. Task20FPS client
+and private display exited; PMDoorAudit and its lowercase alias deopped,
+0players, human rd/unrelated operators preserved. No monitoring running.
 BuildJDK21 `/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2`;
 runtimeJava22 `/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`.
 
-## Verification and evidence
+## Evidence and limits
 
-Initial integration: native439 and NeoForge920passed; Frontier2331 had one stale
-terrain-r31 fixture whitelist, corrected with dependent76passing. Guardrails and
-build/package pass. Production follow-up affected42passed. Final ruleset/contact/
-fields/station40passed; final native local-navigation48/48 and patrol4/4passed;
-clean detached final JAR/package verificationPASS. An accidental aggregate native
-invocation exposed a legacy patrol test tick121 async-readiness assumption;
-converted it to the adjacent finite15-second semantic readiness helper, preserving
-actual HOT body removal and exact blocked reason. Aggregate stopped/classified,
-not represented as another full passing run. No runtime deadline/budget inflated.
+Full integration2333Frontier had one obsolete production-approach expectation;
+NeoForge920passed. Corrected focused130Frontier+99NeoForge, guardrails/build/
+packagePASS. Native442 had one obsolete patrol tick121 readiness assumption;
+all51local navigation passed, including3manual-passage cases. Corrected patrol
+4/4passed using the adjacent existing finite15s semantic readiness helper.
+Final generic source-exit change:26affected Frontier and47pilot/parserPASS,
+guardrails/package/detachedreleasePASS. Actual native building export passed.
+No broad performance/economy/combat balance or full442green rerun claim.
 
-Original complete user combat tracecd22dace-4aee-4dad-a0e9-d3106501e19f,
-10,372events, NoraBell/resident:1-16, epoch4. Exact overhanging WEST stair-seat
-pose reproduced in pure actual authored geometry and native departure test.
-Full-pack20FPS exploratory courtyard check run6655ddd9-5c3a-4c08-a522-890dd42b8208
-completed13actions/two opened frames: pursuit around table, changed target,
-received strikes. Pilot knockback disabled mid-run to let primitive waypoint
-walker complete; scenario now declares it. Native exact-seat test does not.
-Later final replay invalid because guard had patrolled to a distant post; stopped,
-not counted as success. No actor teleport/repair to force acceptance. Two earlier
-method failures (out-of-leash teleport/wall-crossing waypoint) also not accepted.
+Historical three-minute sword wait: all three actually equipped eventually,
+exact earlier incumbent UNCONFIRMED. First438live run first-ready42seconds;
+new logs proved FinnWood's storage occupancy lasted until station arrival.
+Final04live first-ready26seconds; other guards followed. Different episodes,
+not a controlled benchmark. Native tests prove manual wood-door reopen/pass/
+close, gate pass/close and iron/damaged-pair negatives. Graphical run failed
+on an unsafe player-offset/straight waypoint. Final scenario uses a fixed
+exterior pre-provocation position, explicit jumping and correct initially-open
+entrance; syntax checked, NOT replayed. Receipt/build logs under IMPL
+`build/passages-native/`, `/tmp/pm-passages-*`. Earlier player-only levitation
+debug action was not native acceptance; no NPC teleport/repair.
 
-Bounded logs/receipts retained IMPL `build/walk-preference/receipts/`; client
-`build/walk-preference/courtyard-full-pack-passages.json` plus linked PNGs.
-Completed task traces3109…/0950… archived reversibly under combat/archive to free
-capture capacity; original user trace retained in place.
+## Retained earlier context
 
-## Earlier building vertical retained
-
-First real Medieval Spruce bakery implemented/deployed previously. Catalog
-style/function/template/hash, rotated3D rooms/zones/passages/workplaces feed common
-geometry, navigation, production, storage and structural custody. Other buildings
-remain explicit grayboxes. No independent controller or Create simulation.
-Developer export/set/point/validate/overlay writes drafts and bounded30s
-player-local markers, never activates/pastes live content.
-See `docs/frontier-v3-authored-buildings-result-20261105.md` and its plan for exact
-provenance, source hashes, native63wheat→21bread/restart/HOT-COLD evidence and
-full-pack review. ARR derivative private only. Native machine at−1490,66,−1347;
-interior observer−1495,65,−1347 in graybox dimension. Doors initially open; no
-automatic opening gameplay. Prior combat context archived under
-`docs/archive/continuity-20261105-before-authored-buildings.md`.
+Shared furniture preference/partial support and parked-production wake fixes
+are in `docs/frontier-v3-pedestrian-passages-result-20261105.md` and original
+`docs/frontier-v3-bakery-guard-navigation-investigation-20261105.md`.
+Original user combat tracecd22dace-4aee-4dad-a0e9-d3106501e19f retained.
+Medieval Spruce bakery/developer tooling/provenance and native bread/restart
+evidence: `docs/frontier-v3-authored-buildings-result-20261105.md`. Other
+buildings remain grayboxes. Supplied MineColonies derivative remains private;
+redistribution rights not established. No other assignment/goal is active.
