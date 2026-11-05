@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -33,13 +33,17 @@ public final class InfectionTreatmentWorksite {
         return List.copyOf(values);
     }
 
+    private static final ImmutableResultView<String, RegionalBlockSet> OCCUPANCY = new ImmutableResultView<>(4);
+
     static Set<BlockPosition> immutableOccupancy(FrontierBootstrap bootstrap) {
-        Set<BlockPosition> occupied = new LinkedHashSet<>();
-        for (Settlement settlement : bootstrap.settlements()) {
-            occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(bootstrap.terrain(), settlement.structures()));
-        }
-        occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(bootstrap.hive().organs()));
-        return Set.copyOf(occupied);
+        return OCCUPANCY.get(List.of(bootstrap), "immutable-fabric", () -> {
+            var parts = new ArrayList<RegionalBlockSet>();
+            for (var settlement : bootstrap.settlements())
+                parts.add(RegionalBlockSet.copyOf(FrontierSettlementActorSlots.intactStructureOccupancy(
+                        bootstrap.terrain(), settlement.structures())));
+            parts.add(RegionalBlockSet.copyOf(FrontierGrayboxPlan.intactOrganOccupancy(bootstrap.hive().organs())));
+            return RegionalBlockSet.union(parts);
+        });
     }
 
     private static boolean clear(SurfaceAnchor station, Set<BlockPosition> occupied) {

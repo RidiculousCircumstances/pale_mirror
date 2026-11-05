@@ -862,7 +862,11 @@ class FrontierV3AmbientAdmissionPolicyTest {
                     GrayboxCell cell = cells.get(position);
                     return cell != null && (cell.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || cell.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE)
                             && !cells.containsKey(position.offset(0, 1, 0)) && !cells.containsKey(position.offset(0, 2, 0));
-                }).findFirst().orElseThrow();
+                }).sorted(java.util.Comparator.comparingLong(position -> {
+                    var origin = state.actorLocations().get(attacker).supportingSurface().support();
+                    long x = (long) position.x() - origin.x(), z = (long) position.z() - origin.z();
+                    return x * x + z * z;
+                })).findFirst().orElseThrow();
         Map<SubjectId, ActorLocation> locations = new LinkedHashMap<>(state.actorLocations());
         ActorLocation original = locations.get(attacker);
         locations.put(attacker, new ActorLocation(BodyPosition.above(new SurfaceAnchor(substitute)), original.condition(), original.kind(), original.navigationProfile()));
