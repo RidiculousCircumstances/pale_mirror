@@ -1,102 +1,98 @@
 # Active continuity — 2026-11-05
 
-## Current assignment and result
+## Current result
 
-User requested a systemic fix for excessive shared storage/equipment delays and
-a common ability to open/close doors/gates, including a guard following through
-a door closed by the player. Main alone; no subagents, goal or push requested.
-Standing commit/deployment instruction applied. Source work and deployment
-finished. Common mechanics have native evidence; complete graphical guard-door
-pursuit remains UNCONFIRMED due an invalid player waypoint/placement fixture.
-Do not call that client run passing, whole-life/M3 or instantaneous service.
+User requested the existing developer layout tool extended and used to repair
+the bakery's brick-wall appearance. Implemented, verified, committed and deployed.
+Main alone, no subagents/goal/push requested. Standing delivery policy applied;
+user worlds disposable, human rd and unrelated operators/WIP preserved.
+No remaining implementation/deployment work in this scope.
 
-Result, exact diagnosis, owners, classified failures and receipts:
-`docs/frontier-v3-manual-passages-and-access-20261105.md`.
+Report: `docs/frontier-v3-equipment-layout-authoring-20261105.md`.
+Source usage: IMPL `tools/buildings/README.md`.
 
-Two concrete latency defects fixed: idle occupants formerly searched final
-parking before egress; ordinary input-to-station HOT movement did not publish
-its actual first service-boundary exit because it lacked a special clearance
-job context. Shared egress now precedes parking, and every actor-movement leg
-observes indexed operational boundaries at its actual retained origin. The
-sole body controller publishes departure; work/order/cargo remain intact.
-ServiceAccessCoordinator alone arbitrates, now exposes bounded reason/current
-blocking actor in container diagnostics and change-only waits.
+Concrete source defect was unrotated ProductionBenchBlock/default native state
+despite rotated building fabric/operator. Markup2 now explicitly declares
+workplace equipment type and local front; BuildingPlacement alone transforms
+them. Schema338 StationSpec persists exact world front. Shared native adapter
+uses it for initial placement, adoption and stored decoding; native block/player
+placement, rotation/mirror and4model variants match all current equipment.
+Front must face the declared adjacent operator; missing/backwards data fails.
+Final follow-up separates wrong-pose refusal for NEW adoption from inventory
+provider recognition: rotating an existing machine cannot erase its container
+identity/custody or freeze stock. No guessed orientation or forced repair.
 
-Native manually operable paired doors and fence gates now use the common HOT
-navigator's sealed permission and explicit persisted operatesPassages profile.
-Actual collision/exact station/body placement remain physical; only capable
-transit uses explicit native-compiled opened geometry, also in COLD/authored
-certificates. Common reversible native property writes use existing managed
-block knowledge fencing. Bounded ephemeral close claims protect followers,
-are revoked by external writes and never replayed after unload/restart. Iron
-doors stay blocked; no invented trapdoor/mod support, resource journal or mover.
-Wire337 rejects336. Hashed manual reach1.5blocks. No public-content publication.
+Existing export/set/point/overlay remain draft owners; new equipment/preview
+commands use them. Actual registered machine geometry is inserted before shared
+entrance-to-port validation. Real models and front/zone annotations render only
+for the requesting operator, max32 within128blocks,600client-turn expiry and
+exact receiving-world lifetime. No blocks/entities/inventories/collisions change,
+no live activation/paste, no alternate gameplay planner. Runtime production,
+common navigation and structural custody retain their owners. Protocol6 requires
+client update. Existing current stations retain their normal logical slot ports;
+no new Create processing or equipment adapter is claimed.
 
-## Repositories and delivery
+## Source and runtime identity
 
 - IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Gitroot parent,
-  branch `feat/baker-carry-orders-20260926`, clean2ea05fb7859243b33bc4bc7b43cee7991a9343d8.
+  branch `feat/baker-carry-orders-20260926`, cleanb5cc158462a91951f406a48fbff03b7be29fdb9c.
+  ca5b2a1a1 implements tool/orientation; b5cc15846 separates placement/stock identity.
 - RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror`, clean detachedsame.
--438099a82: shared immediate egress, access diagnosis and manual passages.
-  04fdc48e2: physical service exit for all movement legs and bounded jumping
-  player walker.2ea05fb78: corrected safe exterior player fixture only.
 - PACK `/home/rd/proj/minecraft`, trackedclean888ed90d5e3b80b18c278107aa83bb003b541f69;
-  pre-existing untracked `.f0v-baseline/` preserved, ignored hosted artifacts
-  updated through PACK scripts. No tracked pack modifications or push.
-- GOV `/home/rd/proj/pm-governance/pale-mirror`, Gitroot parent. Task changes
-  only this ledger, task report, exact manual_passage_boundary architecture
-  field and one materialization classification appendix. Extensive unrelated
-  WIP preserved; never stage whole architecture/contract/AGENTS/skill files.
+  pre-existing untracked `.f0v-baseline/` preserved. Hosted ignored artifacts
+  published/index checked/pinned installed through PACK scripts. No tracked
+  pack change or push.
+- GOV `/home/rd/proj/pm-governance/pale-mirror`, Gitroot parent. Task changes only
+  this ledger, equipment-layout report and exact equipment_layout_authoring_boundary
+  architecture field. Extensive unrelated WIP remains; never stage whole
+  architecture, AGENTS, contract, materialization or skill files.
 
 Live `/home/rd/far-frontier-server`, `far-frontier-v3-live.service` active,
-wrapper452023, restart1793878254. World
-`manual-passages-final-seed139-20261105`, seed139/r31/schema337. Old
-`authored-buildings-nav-rules-seed139-20261105` saved all dimensions16:10:17,
-retained for historical queue diagnosis. Intermediate task337 world saved
-16:25:43 and retained for the source-exit delay. Final world saved16:30:23,
-normal restart on exact final binary; preflight/publish/pinnedinstall/verifierPASS.
+wrapper706280, restart1793882211. World
+`equipment-layout-schema338-seed139-20261105`, seed139/r31/schema338. Previous
+337world saved all dimensions17:21:27 and retained. Current338world normal saves
+17:26:38 and17:36:12; two normal same-world recoveries. Final preflight/install/
+verifierPASS. Source buildJava21, runtimeJava22.
 
-Main JAR SHA512:
-`3efc1cc68f1ff5f02f36615a049d5760fa33c7c96fff20d99bb8d79723ca12904b826686aec7042a0b3e91d26ed3ee73e9b721e5d87c9fd293a81f1317c17885`.
+Final main JAR SHA512:
+`367f05575d870b3a868a935a9bbcc78c79e50e9b5cbf03d01c87d8fb5cfbc9e4d0dc68bf61dadf8d92003e49aa7d5ce33b355d3adae03a6fcd67ea7226655389`.
 Visuals unchanged SHA512:
 `2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601`.
-Summary4669 green, required/scene/inventory conflicts0, incidentIndex0;
-three guardsReady/quarantineNORMAL. Progress NOT_ASSESSED. Task20FPS client
-and private display exited; PMDoorAudit and its lowercase alias deopped,
-0players, human rd/unrelated operators preserved. No monitoring running.
-BuildJDK21 `/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2`;
+Final summary in IMPL `build/equipment-layout-native/delivery-summary.txt`: green,
+required/inventory/scene conflicts0, no new quarantine; progress NOT_ASSESSED.
+Task20FPS client/private display exited; PMBakeryAudit deopped,0players; no
+background monitoring. JDK21 path `/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2`;
 runtimeJava22 `/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`.
 
-## Evidence and limits
+## Verification
 
-Full integration2333Frontier had one obsolete production-approach expectation;
-NeoForge920passed. Corrected focused130Frontier+99NeoForge, guardrails/build/
-packagePASS. Native442 had one obsolete patrol tick121 readiness assumption;
-all51local navigation passed, including3manual-passage cases. Corrected patrol
-4/4passed using the adjacent existing finite15s semantic readiness helper.
-Final generic source-exit change:26affected Frontier and47pilot/parserPASS,
-guardrails/package/detachedreleasePASS. Actual native building export passed.
-No broad performance/economy/combat balance or full442green rerun claim.
+Full guardrails/check/build/package:2334Frontier,920NeoForge,443native and
+2dedicated native authoring passed. Focused Node scenario56passed. Client-only
+receiving-world expiry follow-up compiled/guardrails/package passed; final
+placement-versus-inventory follow-up unit2/native2 passed. No obsolete failures
+were suppressed. Old schemas/markup intentionally rejected, fresh world used.
 
-Historical three-minute sword wait: all three actually equipped eventually,
-exact earlier incumbent UNCONFIRMED. First438live run first-ready42seconds;
-new logs proved FinnWood's storage occupancy lasted until station arrival.
-Final04live first-ready26seconds; other guards followed. Different episodes,
-not a controlled benchmark. Native tests prove manual wood-door reopen/pass/
-close, gate pass/close and iron/damaged-pair negatives. Graphical run failed
-on an unsafe player-offset/straight waypoint. Final scenario uses a fixed
-exterior pre-provocation position, explicit jumping and correct initially-open
-entrance; syntax checked, NOT replayed. Receipt/build logs under IMPL
-`build/passages-native/`, `/tmp/pm-passages-*`. Earlier player-only levitation
-debug action was not native acceptance; no NPC teleport/repair.
+Real full-pack carrier `live-building-equipment-layout.json`,
+SHA2560793190d583f1639f31d866949d469b1c9b0455585a205973365baca12ec470a.
+First native actual-face/tool/preview/menu13actions passed, runf67856dd…;
+normal restart replay passed, runbd749871…; exact final binary replay passed
+3bdeaaf6-21d1-4949-9216-2b644ae82ee1. Receipts under IMPL
+`build/equipment-layout-native/`. Actual west-facing packet and clear oven-front
+PNG verified; real registered model/annotation preview and ordinary menu frames
+opened/reviewed. Tool-authored draft equals packaged properties semantically;
+compiled geometry bytes equal packaged certificate. Prior task drafts retained
+in this evidence directory before re-export, not gameplay edits. A connection
+reset at completed client shutdown is a task-runner disconnect, not server crash.
+No whole-life M3, economy/performance/combat balance or Create compatibility claim.
 
-## Retained earlier context
+## Retained context
 
-Shared furniture preference/partial support and parked-production wake fixes
-are in `docs/frontier-v3-pedestrian-passages-result-20261105.md` and original
-`docs/frontier-v3-bakery-guard-navigation-investigation-20261105.md`.
-Original user combat tracecd22dace-4aee-4dad-a0e9-d3106501e19f retained.
-Medieval Spruce bakery/developer tooling/provenance and native bread/restart
-evidence: `docs/frontier-v3-authored-buildings-result-20261105.md`. Other
-buildings remain grayboxes. Supplied MineColonies derivative remains private;
-redistribution rights not established. No other assignment/goal is active.
+Earlier door/access delivery: `docs/frontier-v3-manual-passages-and-access-20261105.md`.
+Its native door/gate checks passed; its full graphical guard-pursuit fixture
+remains unconfirmed, not silently closed by this layout work. Furniture/contact
+and production wake corrections: `docs/frontier-v3-pedestrian-passages-result-20261105.md`.
+Original combat tracecd22dace-4aee-4dad-a0e9-d3106501e19f retained.
+Medieval Spruce bakery provenance/developer basis and earlier bread/recovery
+evidence: `docs/frontier-v3-authored-buildings-result-20261105.md`. Other buildings
+remain grayboxes; supplied MineColonies derivative remains private test content
+without established redistribution rights. No other active assignment/goal.
