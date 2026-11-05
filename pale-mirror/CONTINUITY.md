@@ -1,5 +1,20 @@
 # Active continuity — 2026-11-05
 
+## Latest read-only follow-up: swords
+
+User reports swords eventually taken, after a delay. Same live4c0d368ce world;
+no product/runtime mutation. At40108 depot had three exact player-contributed
+iron swords in slots9/10/11; all three duties EQUIPPING and native navigators
+idle in separate waiting pockets. Logs15:01:06–15:01:14 explicitly show service
+access/waiting outside; first arrival15:03:55, later15:04:00 and15:04:07. At45115
+NoraBell,LeonLake,VeraMoss all ON_DUTY/guardsReady3; actual actor custody confirmed
+by decoded immutable snapshot at43200. Delay includes roughly3minutes waiting
+for shared storage access, not failed sword recognition. Which exact earlier
+visitor held that turn throughout is UNCONFIRMED: earlier canonical snapshots
+were compacted and old log does not retain a complete grant/holder timeline.
+Do not call the delay normal or fixed. Compact receipts at IMPL
+`build/guard-equipment-inspect/receipts/`. No new tests/client/deploy/code edits.
+
 ## Assignment and result
 
 Accepted task completed: shared pedestrian preference for ordinary passages over
