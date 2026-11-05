@@ -195,7 +195,7 @@ export function validateScenario(scenario) {
       // administrative world mutations still cannot masquerade as evidence-bearing actions.
       const authoring = phase === 'actions' && action?.type === 'command'
         && typeof action.command === 'string' && action.command.length <= 8192
-        && /^\/pale_mirror v3 building (export|set|point|equipment|validate|preview|overlay) [^\r\n]+$/.test(action.command);
+        && /^\/pale_mirror v3 building ((export|set|point|equipment|validate|preview|overlay)|layout (export|move|street|connect|validate|overview|overlay|preview)) [^\r\n]+$/.test(action.command);
       if (!action || !allowed.has(action.type) && !authoring) throw new Error(`unsupported ${phase} action: ${action?.type}`);
       if (action.causalMilestone !== undefined && (typeof action.causalMilestone !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(action.causalMilestone))) {
         throw new Error('causalMilestone needs a stable bounded identifier');
@@ -606,7 +606,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
-        && ['farmAnchor', 'routeSurface', 'firstGuardPosition'].includes(reference.field))
+        && ['farmAnchor', 'routeSurface', 'firstGuardPosition', 'layout.firstHousingAnchor'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'shipment:') && reference.field === 'actorBody')

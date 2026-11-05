@@ -29,6 +29,13 @@ public record SettlementAccessPort(SubjectId settlementId, SubjectId hallId, Fac
     public static SettlementAccessPort forHall(SettlementStructure hall) {
         Objects.requireNonNull(hall, "settlement Hall");
         if (hall.kind() != StructureKind.HALL) throw new IllegalArgumentException("only a settlement Hall owns a public access port");
+        if(hall.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+            var port=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(hall).primaryEntrance();
+            var exterior=port.exteriorApproach();
+            if(exterior.size()<2)throw new IllegalArgumentException("Hall entry requires assembly and route supports");
+            return new SettlementAccessPort(hall.settlementId(),hall.id(),hall.facing(),port.interiorConnector(),port.thresholdSurface(),
+                    exterior.getLast(),exterior.get(exterior.size()-2));
+        }
         SurfaceAnchor center = new SurfaceAnchor(hall.anchor()); FacilityFacing facing = hall.facing();
         return new SettlementAccessPort(hall.settlementId(), hall.id(), facing, facing.step(center, 3), facing.step(center, 4),
                 facing.step(center, 5), facing.step(center, 6));
@@ -40,7 +47,7 @@ public record SettlementAccessPort(SubjectId settlementId, SubjectId hallId, Fac
     public List<SurfaceAnchor> ownedSurfaces() { return List.of(assemblySurface); }
     public FacilityTraversalPort topologyPort() {
         return new FacilityTraversalPort(hallId, facing, List.of(routeSurface, assemblySurface), throatSurface,
-                interiorSurface, List.of(assemblySurface), java.util.Set.of(TraversalCapability.PEDESTRIAN));
+                interiorSurface, List.of(assemblySurface), List.of(), java.util.Set.of(TraversalCapability.PEDESTRIAN));
     }
 
     /** Explicit convenience projections for block-plan writers; movement code must use surfaces. */

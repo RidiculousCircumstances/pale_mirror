@@ -40,9 +40,13 @@ public final class ProductionFacilityLayout {
     }
     public static SurfaceAnchor metalStorageStation(SettlementStructure facility) {
         requireSmeltery(facility);
+        if(facility.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+            return facility.placement().support(facility.definition().anchor("metal_station"));
         return facility.facing().stepRight(SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach(), 2);
     }
     public static BlockPosition metalStoragePosition(SettlementStructure facility) {
+        if(facility.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+            return facility.placement().world(facility.definition().anchor("metal_storage")).offset(0,1,0);
         return facility.facing().stepRight(metalStorageStation(facility), 1).support().offset(0, 1, 0);
     }
     public static ContainerRecord metalStorage(SettlementStructure facility) {

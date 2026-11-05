@@ -1,0 +1,15 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "craftsmanship/metallurgy/smeltery2.blueprint",
+  "sourceSha256": "97cf46d4f13a7def71232071b5cac761c4076e483f4a3a1d55d35cad56ef8fb1",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "explicit vanilla dependency substitutions",
+    "cropped buried foundation and terrain placeholders; graybox environmental water replaced by coarse dirt",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities or block-entity NBT"
+  ],
+  "blocks": 793,
+  "beds": 0
+}

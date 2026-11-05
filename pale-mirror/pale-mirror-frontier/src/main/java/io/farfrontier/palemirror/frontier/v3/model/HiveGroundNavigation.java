@@ -169,7 +169,9 @@ public final class HiveGroundNavigation {
             blocked.add(new SurfaceAnchor(cell.offset(0, -1, 0)));
             blocked.add(new SurfaceAnchor(cell.offset(0, -2, 0)));
         }
-        return Set.copyOf(blocked);
+        // Large authored fabric has many equal coordinate hashes. Preserve the private
+        // hash table instead of rebuilding it as the JDK linear-probing immutable set.
+        return java.util.Collections.unmodifiableSet(blocked);
     }
 
     static SurfaceAnchor surfaceAt(FrontierWorldState state, HiveOrgan home, int x, int z) {

@@ -24,7 +24,7 @@ final class FrontierV3BlockStates {
             if (property == null) throw new IllegalArgumentException("unknown block property");
             state = set(state, property, entry.getValue());
         }
-        if (!describe(state).equals(descriptor)) throw new IllegalArgumentException("incomplete block declaration");
+        if (!describe(state).equals(descriptor)) throw new IllegalArgumentException("incomplete block declaration: " + descriptor + "; expected " + describe(state));
         return state;
     }
     private static <T extends Comparable<T>> String name(BlockState state, Property<T> property) {

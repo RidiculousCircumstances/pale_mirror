@@ -19,7 +19,9 @@ public final class FrontierV3BuildingAuthoringGameTests {
             template = "bastion/mobs/empty",
             timeoutTicks = 30)
     public static void compileDeclaredNativeCollisionFacts(GameTestHelper helper) throws Exception {
+        var failures=new java.util.ArrayList<String>();
         for (var path : BuildingCatalog.assetPaths()) {
+          try {
             var prefix = "/io/farfrontier/palemirror/frontier/v3/buildings/" + path;
             byte[] bytes;
             try (var input =
@@ -49,7 +51,11 @@ public final class FrontierV3BuildingAuthoringGameTests {
                             BuildingDefinitionFormat.properties(markup),
                             blocks,
                             BuildingCatalog.sha256(markup, bytes));
-                FrontierV3BuildingAuthoring.validate(definition, decoded);
+            // Preserve actual compiled facts even when annotation validation fails, so the
+            // content author can diagnose all assets in one pass. This is not promotion.
+            var certificate=Path.of("building-authoring",path+".geometry");
+            Files.createDirectories(certificate.getParent());Files.writeString(certificate,facts,StandardCharsets.UTF_8);
+            FrontierV3BuildingAuthoring.validate(definition, decoded);
             helper.assertTrue(
                     !decoded.isEmpty(), "registry compilation must have actual collision facts");
             // Task-owned build output, consumed deliberately by the content author, never live
@@ -57,7 +63,9 @@ public final class FrontierV3BuildingAuthoringGameTests {
             var output = Path.of("building-authoring", path + ".geometry");
             Files.createDirectories(output.getParent());
             Files.writeString(output, facts, StandardCharsets.UTF_8);
+          } catch(Exception failure) {failures.add(path+": "+failure.getClass().getSimpleName()+": "+failure.getMessage());}
         }
+        helper.assertTrue(failures.isEmpty(),String.join("; ",failures));
         helper.succeed();
     }
 

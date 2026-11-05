@@ -2,17 +2,17 @@
 
 One content definition owns geometry and local annotations. Existing world generation,
 structural custody, storage, production and navigation remain the gameplay owners.
-The checked-in Medieval Spruce bakery is a **private test derivative**, not a grant of
+The checked-in Medieval Spruce set is a **private test derivative**, not a grant of
 redistribution rights. Exact upstream source and substitutions are in its provenance
-file and `import_medieval_spruce.py`. No MineColonies runtime is required.
+files, `import_medieval_spruce.py` and `import_settlement_set.py`. No MineColonies runtime is required.
 
 `catalog.properties` declares the styles, every style's functional selections,
 asset paths and storage-category membership. A missing selection never chooses a
-fallback. Current other functions explicitly select their retained graybox templates.
+fallback. All settlement functions select Medieval Spruce templates; housing has explicit one-, two-, three- and five-bed variants.
 A selected structure retains style/template/content hash. Content changes require a
 fresh world under the current schema policy.
 
-Markup format2 explicitly declares each workplace's `equipmentType` and local
+Markup format3 explicitly declares each workplace's `equipmentType` and local
 `facing`. The front points from the machine support towards its adjacent operator
 support. Missing/backwards declarations are errors; no direction is guessed.
 
@@ -87,3 +87,46 @@ Compile/check the packaged native geometry with the `building-authoring` GameTes
 slice. Its authoring output lives under the run directory's `building-authoring/`;
 copy the reviewed certificate into the matching asset, then verify/build again.
 This asset-only check is not evidence of a baker completing a real production job.
+
+## Settlement planning
+
+The retained settlement plan owns its style, stable plot/building IDs, occupied
+parcel envelopes, flush paving and extension fronts. Genesis selects one of three
+seed-reproducible street schemes; recovery reads the stored plan. Future extension
+can append plots and streets without moving existing buildings. This does not add
+a construction process, home occupancy or sleep AI. Beds are exact head/foot pairs;
+destruction removes physical capacity, without inventing a bed assignment.
+
+Operator commands edit a bounded draft only:
+
+```
+/pale_mirror v3 building layout export settlement:1 village_trial
+/pale_mirror v3 building layout overview village_trial
+/pale_mirror v3 building layout move village_trial structure:1-housing-1 ~ ~ ~ SOUTH
+/pale_mirror v3 building layout street village_trial ~ ~ ~ ~20 ~ ~
+/pale_mirror v3 building layout connect village_trial
+/pale_mirror v3 building layout validate village_trial
+/pale_mirror v3 building layout overlay village_trial
+/pale_mirror v3 building layout preview village_trial structure:1-housing-1
+```
+
+`settlement.properties` and `overview.svg` live in the same draft directory as the
+building editor. Move/rotate retains the exact building and plot identities;
+`connect` uses the genesis frontage compiler. Validation checks surveyed terrain,
+real native collision geometry, parcel separation and connected public entrances.
+The selected-building preview uses real static block models, at most4096 within128
+blocks, expires after600 client ticks, and never writes the world. Unloaded chunks
+remain unloaded. No block-entity renderer, Create mechanism, internal house route
+or bed-access guarantee is implied by a static preview or bed count.
+
+Import the remaining pinned set with `nbtlib==2.0.4`:
+
+```
+python tools/buildings/import_settlement_set.py --sources <facility-blueprints> \
+  --housing <residence-blueprints> --output <asset-directory>
+```
+
+The importer verifies every source checksum from `settlement_sources.json` and
+writes provenance for each adaptation. Potted plants replace free decorative
+plants, environmental water basins become dry ground, and stations/containers use
+explicit semantic anchors. No upstream inventories, entities or runtime are imported.

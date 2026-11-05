@@ -257,7 +257,7 @@ class TraversalTopologyTest {
         FrontierBootstrap surveyed = FrontierBootstrapper.create(new WorldId("frontier:terrain-resident-ingress"), 91L,
                 FrontierRulesets.production(), terrain);
         Settlement settlement = surveyed.settlements().getFirst();
-        int beds = surveyed.ruleset().facilityCapacity().intactHousingBeds();
+        int beds = SettlementBeds.declaredCapacity(settlement);
         SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(surveyed.bounds(), terrain, settlement, beds);
         FrontierWorldState state = FrontierWorldState.initial(surveyed);
         FrontierGrayboxPlan graybox = FrontierGrayboxPlan.compile(state);
@@ -305,7 +305,7 @@ class TraversalTopologyTest {
 
         TerrainSurfacePlan unreachableTerrain = terrain;
         assertThrows(IllegalArgumentException.class, () -> SettlementResidentIngressPlan.compile(surveyed.bounds(), unreachableTerrain,
-                settlement, surveyed.ruleset().facilityCapacity().intactHousingBeds()),
+                settlement, SettlementBeds.declaredCapacity(settlement)),
                 "the compiler must reject an unreachable site instead of cutting an unbounded ramp or inventing another entrance");
     }
 }

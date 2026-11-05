@@ -1,0 +1,15 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "fundamentals/hospital2.blueprint",
+  "sourceSha256": "1d41bc0514c803362bb9d66959cb8915ed3efb3fe030a5261810b5fba59d049a",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "explicit vanilla dependency substitutions",
+    "cropped buried foundation and terrain placeholders; graybox environmental water replaced by coarse dirt",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities or block-entity NBT"
+  ],
+  "blocks": 639,
+  "beds": 2
+}

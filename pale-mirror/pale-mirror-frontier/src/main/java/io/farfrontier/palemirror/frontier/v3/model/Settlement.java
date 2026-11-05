@@ -8,7 +8,7 @@ import java.util.Objects;
 /** A named autonomous settlement and its exact bootstrap residents and structures. */
 public record Settlement(
         SubjectId id, String displayName, BlockPosition anchor,
-        List<Resident> residents, List<SettlementStructure> structures
+        List<Resident> residents, List<SettlementStructure> structures, SettlementLayout layout
 ) {
     public Settlement {
         Objects.requireNonNull(id, "settlement id");
@@ -18,9 +18,10 @@ public record Settlement(
         structures = List.copyOf(structures);
         if (residents.size() < 20 || residents.size() > 40) throw new IllegalArgumentException("settlement must start with 20 to 40 residents");
         var kinds = structures.stream().map(SettlementStructure::kind).collect(java.util.stream.Collectors.toSet());
-        if (kinds.size() != structures.size() || !kinds.containsAll(java.util.Set.of(StructureKind.HALL,
+        if (!kinds.containsAll(java.util.Set.of(StructureKind.HALL,
                 StructureKind.HOUSING, StructureKind.FARM, StructureKind.WORKSHOP, StructureKind.DEPOT, StructureKind.INFIRMARY)))
-            throw new IllegalArgumentException("settlement requires unique facilities and its core bootstrap functions");
+            throw new IllegalArgumentException("settlement requires its core bootstrap functions");
+        Objects.requireNonNull(layout, "settlement layout").requireBuildings(structures);
         if (residents.stream().anyMatch(resident -> !id.equals(resident.settlementId()))
                 || structures.stream().anyMatch(structure -> !id.equals(structure.settlementId()))) {
             throw new IllegalArgumentException("settlement child ownership does not match");

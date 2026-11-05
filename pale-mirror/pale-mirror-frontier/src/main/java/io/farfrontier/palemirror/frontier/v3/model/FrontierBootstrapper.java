@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.KeyedRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /** Deterministic generator for the single supported fresh-world Frontier v3 profile. */
 public final class FrontierBootstrapper {
@@ -24,10 +25,23 @@ public final class FrontierBootstrapper {
 
     /** Creates a fresh world from explicitly surveyed immutable support data. */
     public static FrontierBootstrap create(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
+        return create(worldId,seed,ruleset,terrain,java.util.Optional.empty());
+    }
+
+    public static FrontierBootstrap restoreLayouts(WorldId worldId,long seed,FrontierRuleset ruleset,TerrainSurfacePlan terrain,
+            java.util.Map<SubjectId,SettlementLayoutPlanner.Result> layouts) {
+        if(layouts.size()!=ruleset.worldLayout().settlements().size())throw new IllegalArgumentException("incomplete retained settlement layout manifest");
+        return create(worldId,seed,ruleset,terrain,java.util.Optional.of(java.util.Map.copyOf(layouts)));
+    }
+    private static FrontierBootstrap create(WorldId worldId,long seed,FrontierRuleset ruleset,TerrainSurfacePlan terrain,
+            java.util.Optional<java.util.Map<SubjectId,SettlementLayoutPlanner.Result>> layouts) {
         java.util.Objects.requireNonNull(ruleset, "ruleset");
         java.util.Objects.requireNonNull(terrain, "terrain surface plan");
         List<Settlement> settlements = new ArrayList<>(ruleset.worldLayout().settlements().size());
-        for (int index = 0; index < ruleset.worldLayout().settlements().size(); index++) settlements.add(settlement(seed, index, ruleset, terrain));
+        for (int index = 0; index < ruleset.worldLayout().settlements().size(); index++) {
+            var id=new SubjectId("settlement:"+(index+1));
+            settlements.add(settlement(seed,index,ruleset,terrain,layouts.map(values->java.util.Objects.requireNonNull(values.get(id),"missing retained settlement layout"))));
+        }
         SubjectId hiveId = new SubjectId("hive:frontier");
         List<HiveNest> provisionalNests = List.of(
                 new HiveNest(new SubjectId("nest:seed-west"), hiveId, new BlockPosition(-420, 0, 420)),
@@ -97,45 +111,43 @@ public final class FrontierBootstrapper {
         };
     }
 
-    private static Settlement settlement(long seed, int index, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
+    private static Settlement settlement(long seed, int index, FrontierRuleset ruleset, TerrainSurfacePlan terrain, java.util.Optional<SettlementLayoutPlanner.Result> retained) {
         SubjectId settlementId = new SubjectId("settlement:" + (index + 1));
         BlockPosition horizontalAnchor = ruleset.worldLayout().settlements().get(index);
-        List<SettlementStructure> structures = new ArrayList<>();
-        for (StructureKind kind : StructureKind.values()) {
-            if (kind == StructureKind.SMELTERY && ruleset.production().recipes().stream()
-                    .noneMatch(recipe -> recipe.capability() == ProductionStationSpec.Capability.SMELTING)) continue;
-            if (kind == StructureKind.FORGE && ruleset.production().recipes().stream()
-                    .noneMatch(recipe -> recipe.capability() == ProductionStationSpec.Capability.FABRICATION)) continue;
-            if (kind == StructureKind.WOODSHOP && ruleset.production().recipes().stream()
-                    .noneMatch(recipe -> recipe.capability() == ProductionStationSpec.Capability.WOODWORKING)) continue;
-            int[] offset = switch (kind) {
-                case HALL -> new int[]{0, 0}; case HOUSING -> new int[]{-20, -12};
-                case FARM -> new int[]{20, -12}; case WORKSHOP -> new int[]{-16, 14};
-                case DEPOT -> new int[]{20, 14}; case INFIRMARY -> new int[]{0, 22};
-                case SMELTERY -> new int[]{-8, -20};
-                case FORGE -> new int[]{-20, -26};
-                case WOODSHOP -> new int[]{-34, -26};
-            };
-            structures.add(new SettlementStructure(new SubjectId("structure:" + (index + 1) + "-" + kind.name().toLowerCase(Locale.ROOT)),
-                    settlementId, kind, horizontalAnchor.offset(offset[0], 0, offset[1]), FacilityFacing.WEST,
-                    io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.standard().select(
-                        io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.defaultStyle(), kind)));
-        }
-        int deckY = SettlementStructureFootprint.settlementDeckY(terrain, structures);
-        BlockPosition anchor = horizontalAnchor.offset(0, deckY, 0);
-        structures.replaceAll(structure -> new SettlementStructure(structure.id(), structure.settlementId(), structure.kind(),
-                structure.anchor().offset(0, deckY, 0), structure.facing(), structure.building()));
-        io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingLayoutValidation.requireSeparateFabric(structures);
         int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
-        // Compile exact future bed surfaces from the same immutable deck geometry before
-        // attaching the initial residents; no temporary invalid Settlement exists.
-        List<BlockPosition> placements = SettlementResidentIngressPlan.compile(ruleset.worldLayout().bounds(), terrain, settlementId, anchor, structures,
-                ruleset.facilityCapacity().intactHousingBeds()).homeSlots().subList(0, residents);
+        var content=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.standard();
+        var style=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.defaultStyle();
+        var requests=new ArrayList<SettlementLayoutPlanner.Request>();
+        for(var kind:StructureKind.values()) {
+            if(kind==StructureKind.HOUSING)continue;
+            if(kind==StructureKind.SMELTERY && ruleset.production().recipes().stream().noneMatch(recipe->recipe.capability()==ProductionStationSpec.Capability.SMELTING))continue;
+            if(kind==StructureKind.FORGE && ruleset.production().recipes().stream().noneMatch(recipe->recipe.capability()==ProductionStationSpec.Capability.FABRICATION))continue;
+            if(kind==StructureKind.WOODSHOP && ruleset.production().recipes().stream().noneMatch(recipe->recipe.capability()==ProductionStationSpec.Capability.WOODWORKING))continue;
+            requests.add(new SettlementLayoutPlanner.Request(new SubjectId("structure:"+(index+1)+"-"+kind.name().toLowerCase(Locale.ROOT)),kind,content.select(style,kind)));
+        }
+        int capacity=0,house=0;var variants=content.variants(style,StructureKind.HOUSING);
+        while(capacity<residents+SettlementLayoutRules.standard().spareBeds()) {
+            var selected=house<SettlementLayoutRules.standard().smallHouseCount()
+                    ? variants.get(Math.floorMod(Objects.hash(seed,settlementId,house),variants.size()))
+                    : variants.stream().max(java.util.Comparator.comparingInt(v->content.require(v,StructureKind.HOUSING).beds().size())).orElseThrow();
+            int beds=content.require(selected,StructureKind.HOUSING).beds().size();
+            if(beds==0)throw new IllegalArgumentException("housing template has no declared beds");
+            requests.add(new SettlementLayoutPlanner.Request(new SubjectId("structure:"+(index+1)+"-housing-"+(++house)),StructureKind.HOUSING,selected));capacity+=beds;
+        }
+        var anchor=new BlockPosition(horizontalAnchor.x(),terrain.supportYAt(horizontalAnchor.x(),horizontalAnchor.z()),horizontalAnchor.z());
+        var planned=retained.orElseGet(()->SettlementLayoutPlanner.plan(seed,settlementId,style,anchor,terrain,ruleset.worldLayout().bounds(),requests));
+        SettlementLayoutValidation.validate(planned,terrain,ruleset.worldLayout().bounds());
+        if(!planned.layout().settlementId().equals(settlementId))throw new IllegalArgumentException("retained layout belongs to another settlement");
+        capacity=planned.buildings().stream().filter(b->b.kind()==StructureKind.HOUSING).mapToInt(b->b.definition().beds().size()).sum();
+        if(capacity<residents)throw new IllegalArgumentException("retained layout lacks resident bed capacity");
+        var structures=planned.buildings();
+        var placements=SettlementResidentIngressPlan.compile(ruleset.worldLayout().bounds(),terrain,settlementId,anchor,structures,
+                planned.layout(),Math.max(residents,capacity)).homeSlots().subList(0,residents);
         List<Resident> people = new ArrayList<>(residents);
         for (int ordinal = 0; ordinal < residents; ordinal++) {
             people.add(new Resident(new SubjectId("resident:" + (index + 1) + "-" + (ordinal + 1)), settlementId,
                     ResidentRole.values()[ordinal % ResidentRole.values().length], placements.get(ordinal)));
         }
-        return new Settlement(settlementId, ruleset.worldLayout().settlementNames().get(index), anchor, people, structures);
+        return new Settlement(settlementId, ruleset.worldLayout().settlementNames().get(index), anchor, people, structures, planned.layout());
     }
 }

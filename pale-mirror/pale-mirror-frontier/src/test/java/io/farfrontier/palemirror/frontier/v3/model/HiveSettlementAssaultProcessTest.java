@@ -254,7 +254,7 @@ class HiveSettlementAssaultProcessTest {
         Fixture fixture = fixture(true);
         Settlement settlement = FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), fixture.sighting().settlementId());
         SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(fixture.state().bootstrap().bounds(),
-                fixture.state().bootstrap().terrain(), settlement, fixture.state().bootstrap().ruleset().facilityCapacity().intactHousingBeds());
+                fixture.state().bootstrap().terrain(), settlement, SettlementBeds.declaredCapacity(settlement));
         java.util.Set<BlockPosition> perimeter = ingress.perimeterSurfaces().stream().map(SurfaceAnchor::support)
                 .collect(java.util.stream.Collectors.toSet());
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(fixture.state(),

@@ -211,7 +211,7 @@ class FrontierRulesetTest {
     void canonicalFacilityAndColdCombatReadTheSelectedRuleset() {
         FrontierRuleset production = FrontierRulesets.production();
         FrontierRuleset selected = new FrontierRuleset("frontier-v3-test-ruleset-r2", production.schemaVersion(), production.cadence(), production.spatial(),
-                production.rates(), new FrontierRuleset.FacilityCapacity(51, 17, 5, 9, 5, 3, 4, 2),
+                production.rates(), new FrontierRuleset.FacilityCapacity(5, 9, 5, 3, 4, 2),
                 new FrontierRuleset.Combat(FixedScalar.whole(9), FixedScalar.whole(7), FixedScalar.whole(11), FixedScalar.whole(8), FixedScalar.whole(6)),
                 production.hiveCommand());
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ruleset-projection"), 644L, selected));

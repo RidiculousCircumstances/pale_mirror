@@ -80,6 +80,7 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         for (Settlement settlement : settlements) {
             append(text, settlement.id(), settlement.anchor());
             text.append('|').append(settlement.displayName());
+            text.append('|').append(java.util.Base64.getEncoder().encodeToString(SettlementLayoutFormat.encode(new SettlementLayoutPlanner.Result(settlement.structures(),settlement.layout()))));
             settlement.residents().forEach(resident -> { append(text, resident.id(), resident.home()); text.append(':').append(resident.role()); });
             settlement.structures().forEach(structure -> { append(text, structure.id(), structure.anchor()); text.append(':').append(structure.kind()).append(':').append(structure.facing())
                     .append(':').append(structure.building().style().value())

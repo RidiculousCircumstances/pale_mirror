@@ -231,10 +231,14 @@ public final class FrontierV3RoutePatrolGameTests {
                 List.of(StrategicTaskRequirement.AVAILABLE_GUARD),
                 List.of(),
                 StrategicTaskStatus.ACTIVE);
+        var hall = settlement.structures().stream().filter(b -> b.kind() == StructureKind.HALL).findFirst().orElseThrow();
+        var staging = SettlementAccessPort.forHall(hall);
+        initial = initial.withActorBody(leader, staging.routeSurface().standingBody())
+                .withActorBody(scout, staging.assemblySurface().standingBody());
         RouteUnitManifest unit = RouteUnitManifest.patrol(taskId, leader, List.of(scout));
         // The test's loaded template cell receives a translated complete fresh-world topology,
         // never a local replacement route. Admission and the COLD assembly remain production
-        // transitions; only the first physical HOT edge is asserted by this GameTest.
+        // transitions; the pair starts at the declared Hall staging surfaces; only the first physical HOT edge is asserted by this GameTest.
         RoutePatrol patrol = RoutePatrol.planned(initial, task, settlement, unit);
         FrontierWorldState state = initial.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceStarted(state, settlement.id(),
@@ -255,7 +259,7 @@ public final class FrontierV3RoutePatrolGameTests {
         List<Settlement> settlements = source.settlements().stream().map(settlement -> new Settlement(settlement.id(), settlement.displayName(),
                 translate.apply(settlement.anchor()), settlement.residents().stream().map(resident -> new Resident(resident.id(), resident.settlementId(),
                 resident.role(), translate.apply(resident.home()))).toList(), settlement.structures().stream().map(structure -> new SettlementStructure(
-                structure.id(), structure.settlementId(), structure.kind(), translate.apply(structure.anchor()), structure.facing(), structure.building())).toList())).toList();
+                structure.id(), structure.settlementId(), structure.kind(), translate.apply(structure.anchor()), structure.facing(), structure.building())).toList(), settlement.layout().translated(dx,dy,dz))).toList();
         List<HiveNest> nests = source.hive().seedNests().stream().map(nest -> new HiveNest(nest.id(), nest.hiveId(), translate.apply(nest.anchor()))).toList();
         List<HiveOrgan> organs = source.hive().organs().stream().map(organ -> new HiveOrgan(organ.id(), organ.hiveId(), organ.nestId(), organ.kind(),
                 translate.apply(organ.anchor()), organ.containerId())).toList();

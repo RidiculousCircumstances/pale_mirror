@@ -1,0 +1,62 @@
+# Minecraft registry collision facts; regenerate through building authoring, never hand-edit.
+2|minecraft:coarse_dirt|minecraft:dirt|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:cobblestone|minecraft:cobblestone|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:crafting_table|minecraft:crafting_table|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:dirt_path|minecraft:dirt|	1	true	0.0,0.0,0.0,1.0,0.9375,1.0
+2|minecraft:gravel|minecraft:gravel|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:iron_bars|minecraft:iron_bars|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0
+2|minecraft:iron_bars|minecraft:iron_bars|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:ladder|minecraft:ladder|facing=east,waterlogged=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:ladder|minecraft:ladder|facing=north,waterlogged=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:ladder|minecraft:ladder|facing=south,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:ladder|minecraft:ladder|facing=west,waterlogged=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:rail|minecraft:rail|shape=ascending_east,waterlogged=false	1	true	
+2|minecraft:rail|minecraft:rail|shape=ascending_north,waterlogged=false	1	true	
+2|minecraft:rail|minecraft:rail|shape=ascending_south,waterlogged=false	1	true	
+2|minecraft:rail|minecraft:rail|shape=ascending_west,waterlogged=false	1	true	
+2|minecraft:rail|minecraft:rail|shape=east_west,waterlogged=false	1	true	
+2|minecraft:rail|minecraft:rail|shape=north_south,waterlogged=false	1	true	
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,0.625,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.375,0.625,1.5,0.625;0.375,0.0,0.0,0.625,1.5,0.375;0.375,0.0,0.625,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=true,waterlogged=true,west=true	1	false	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625;0.375,0.0,0.625,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=true,waterlogged=true,west=true	1	false	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625;0.375,0.0,0.0,0.625,1.5,0.375
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=false,waterlogged=true,west=true	1	false	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0;0.625,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=true,waterlogged=true,west=false	1	false	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_log|minecraft:spruce_log|axis=x	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_log|minecraft:spruce_log|axis=y	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_log|minecraft:spruce_log|axis=z	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_planks|minecraft:spruce_planks|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_slab|minecraft:spruce_slab|type=bottom,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0
+2|minecraft:spruce_slab|minecraft:spruce_slab|type=double,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_slab|minecraft:spruce_slab|type=top,waterlogged=false	1	true	0.0,0.5,0.0,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=top,shape=straight,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:spruce_wood|minecraft:spruce_wood|axis=y	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:wall_torch|minecraft:torch|facing=east	1	true	
+2|minecraft:wall_torch|minecraft:torch|facing=north	1	true	
+2|minecraft:wall_torch|minecraft:torch|facing=south	1	true	
+2|minecraft:wall_torch|minecraft:torch|facing=west	1	true	
+2|minecraft:white_terracotta|minecraft:white_terracotta|	1	true	0.0,0.0,0.0,1.0,1.0,1.0

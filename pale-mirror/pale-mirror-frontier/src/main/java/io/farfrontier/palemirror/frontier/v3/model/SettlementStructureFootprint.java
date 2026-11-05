@@ -42,7 +42,7 @@ public final class SettlementStructureFootprint {
         LinkedHashSet<BlockPosition> fill = new LinkedHashSet<>();
         for (SurfaceAnchor surface : supportSurfaces(structure)) {
             int terrainY = terrain.supportYAt(surface.x(), surface.z());
-            if (terrainY > surface.y() || terrainY == surface.y()
+            if (terrainY >= surface.y()
                     && structure.definition().representation() != io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
                 throw new IllegalArgumentException("surveyed terrain occupies or exceeds structure floor at " + surface.support());
             }
@@ -59,10 +59,7 @@ public final class SettlementStructureFootprint {
         for (SettlementStructure structure : provisionalStructures) for (SurfaceAnchor surface : supportSurfaces(structure)) {
             highest = Math.max(highest, terrain.supportYAt(surface.x(), surface.z()));
         }
-        for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(provisionalStructures)) {
-            highest = Math.max(highest, terrain.supportYAt(surface.x(), surface.z()));
-        }
-        return Math.addExact(highest, 1);
+        return highest;
     }
 
     public static int width(StructureKind kind) {

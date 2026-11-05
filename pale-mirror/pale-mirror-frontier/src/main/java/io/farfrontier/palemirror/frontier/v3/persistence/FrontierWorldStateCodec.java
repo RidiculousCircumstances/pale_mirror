@@ -71,6 +71,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeString(output, FrontierWorldProcessCatalog.physicalLifecycleFingerprint());
                 writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed()); writeRuleset(output, state.bootstrap().ruleset());
                 TerrainSurfacePlanCodec.write(output, state.bootstrap().terrain());
+                SettlementLayoutManifestCodec.write(output,state.bootstrap());
                 InitialFieldLayoutManifestCodec.write(output, state.bootstrap().initialFieldLayouts());
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
@@ -124,8 +125,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
             FrontierRuleset ruleset = readRuleset(input); TerrainSurfacePlan terrain = TerrainSurfacePlanCodec.read(input);
+            var layouts=SettlementLayoutManifestCodec.read(input);
             Map<SubjectId, ResourceFieldLayout> initialFieldLayouts = InitialFieldLayoutManifestCodec.read(input);
-            FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset, terrain, initialFieldLayouts);
+            FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset, terrain, initialFieldLayouts,layouts);
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
@@ -172,20 +174,28 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
     }
     private FrontierBootstrap bootstrapFor(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain,
-                                            Map<SubjectId, ResourceFieldLayout> initialFieldLayouts) {
+                                            Map<SubjectId, ResourceFieldLayout> initialFieldLayouts,Map<SubjectId,SettlementLayoutPlanner.Result> layouts) {
         if (pinnedBootstrap == null) {
-            return FrontierBootstrapCache.resolve(worldId, seed, ruleset, terrain, initialFieldLayouts);
+            return FrontierBootstrapCache.resolve(worldId, seed, ruleset, terrain, initialFieldLayouts,layouts);
         }
         if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed || !pinnedBootstrap.ruleset().equals(ruleset)
                 || !pinnedBootstrap.terrain().equals(terrain) || !pinnedBootstrap.initialFieldLayouts().equals(initialFieldLayouts)) {
             throw new IllegalArgumentException("Frontier v3 state belongs to a different pinned bootstrap");
+        }
+        if (layouts.size() != pinnedBootstrap.settlements().size())
+            throw new IllegalArgumentException("snapshot settlement layout membership differs from pinned bootstrap");
+        for(var settlement:pinnedBootstrap.settlements()) {
+            var retained=layouts.get(settlement.id());
+            if(retained==null||!retained.layout().equals(settlement.layout())||!retained.buildings().equals(settlement.structures()))
+                throw new IllegalArgumentException("snapshot layout differs from pinned settlement plan");
         }
         return pinnedBootstrap;
     }
     private void verifyPinnedBootstrap(FrontierBootstrap bootstrap) {
         if (pinnedBootstrap != null && (!pinnedBootstrap.worldId().equals(bootstrap.worldId()) || pinnedBootstrap.seed() != bootstrap.seed()
                 || !pinnedBootstrap.ruleset().equals(bootstrap.ruleset()) || !pinnedBootstrap.terrain().equals(bootstrap.terrain())
-                || !pinnedBootstrap.initialFieldLayouts().equals(bootstrap.initialFieldLayouts()))) {
+                || !pinnedBootstrap.initialFieldLayouts().equals(bootstrap.initialFieldLayouts())
+                || !pinnedBootstrap.settlements().equals(bootstrap.settlements()))) {
             throw new IllegalArgumentException("cannot encode Frontier v3 state for a different pinned bootstrap");
         }
     }

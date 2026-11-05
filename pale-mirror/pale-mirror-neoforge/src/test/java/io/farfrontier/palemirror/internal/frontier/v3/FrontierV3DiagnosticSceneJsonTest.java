@@ -281,9 +281,8 @@ class FrontierV3DiagnosticSceneJsonTest {
         FrontierWorldState baseline = runtime.decodedState().orElseThrow();
         SubjectId settlement = baseline.bootstrap().settlements().getFirst().id();
         java.util.List<BlockPosition> waypoints = baseline.routeTopology().settlementWaypoints(baseline.bootstrap(), settlement);
-        java.util.List<BlockPosition> bypass = java.util.List.of(waypoints.get(0), waypoints.get(1),
-                waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
-                waypoints.get(2), waypoints.get(3));
+        java.util.List<BlockPosition> bypass = io.farfrontier.palemirror.frontier.v3.model.DeclaredRouteFixtures.bypass(
+                baseline.bootstrap(), baseline.routeTopology(), settlement);
         java.util.List<BlockPosition> workCells = FrontierRouteNetwork.constructionCells(
                 baseline.bootstrap(), baseline.routeTopology(), settlement, bypass);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:diagnostic-route"), settlement,
@@ -304,4 +303,27 @@ class FrontierV3DiagnosticSceneJsonTest {
         assertTrue(changed.routeConstructions().get(project.id()).confirmedCells() == 0,
                 "read-only route diagnostics never advance a project");
     }
+    @Test
+    void exposesDeclaredGradeFactsWithoutSurveyingOrChangingTheRoute(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:diagnostic-stepped-route-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+
+        String topology = FrontierV3DiagnosticJson.render("route_topology", "settlement:1", checkpoint, state, Optional.empty());
+
+        assertTrue(topology.contains("\"status\":\"ok\"") && topology.contains("\"gradedEdges\":4")
+                        && topology.contains("\"maximumGrade\":1"),
+                "one bounded read-only diagnostic exposes the declared topology grade rather than a Minecraft height-map guess");
+        var graph = state.routeTopology().settlementTraversalTopology(state.bootstrap(), new SubjectId("settlement:1"));
+        var edge = graph.edges().stream().filter(e -> e.grade() == 1).findFirst().orElseThrow();
+        var from = graph.nodes().get(edge.from()); var to = graph.nodes().get(edge.to());
+        assertTrue(topology.contains("\"from\":{\"x\":"+from.x()+",\"y\":"+from.y()+",\"z\":"+from.z()+"}")
+                && topology.contains("\"to\":{\"x\":"+to.x()+",\"y\":"+to.y()+",\"z\":"+to.z()+"}"));
+        assertTrue(runtime.decodedState().orElseThrow().equals(state), "a route-topology diagnostic may not mutate canonical state");
+        runtime.shutdown();
+    }
+
+
 }

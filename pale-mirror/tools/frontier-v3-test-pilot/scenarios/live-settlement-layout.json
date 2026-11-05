@@ -1,0 +1,227 @@
+{
+  "schema": 1,
+  "id": "live_settlement_layout",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 10
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "layout": {
+              "revision": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "routeSurface"
+        }
+      },
+      "settleMs": 0,
+      "offset": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      }
+    },
+    {
+      "type": "command",
+      "command": "/tp @s ~ ~110 ~"
+    }
+  ],
+  "actions": [
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "routeSurface"
+        }
+      }
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building layout export settlement:1 settlement_layout_review"
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building layout validate settlement_layout_review"
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building layout overview settlement_layout_review"
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building layout overlay settlement_layout_review"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.firstHousingAnchor"
+        }
+      },
+      "settleMs": 0,
+      "offset": {
+        "x": 12,
+        "y": 5,
+        "z": 12
+      }
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.firstHousingAnchor"
+        }
+      }
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building layout preview settlement_layout_review structure:1-housing-1"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "settleMs": 0,
+      "offset": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      }
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "status": "ok",
+        "replica": {
+          "state": "OBSERVED_CURRENT"
+        },
+        "custody": {
+          "status": "ACQUIRED"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 14,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "layout": {
+          "revision": 1
+        }
+      }
+    },
+    {
+      "after": 15,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 1,
+      "name": "settlement-street-and-building-overview"
+    },
+    {
+      "after": 7,
+      "name": "mixed-housing-exterior"
+    },
+    {
+      "after": 8,
+      "name": "house-layout-preview",
+      "presentation": "player"
+    },
+    {
+      "after": 12,
+      "name": "authored-depot-accessible-inventory",
+      "presentation": "player"
+    }
+  ]
+}

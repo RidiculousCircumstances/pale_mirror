@@ -511,6 +511,10 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(dormantBioformJson.contains("\"cocoonHome\":{\"hibernaculum\":\"organ:"),
                 "the exact durable cocoon custody must be inspectable without mutating canonical state");
         assertTrue(itemJson.contains("\"custody\":{"));
+        var layout = JsonParser.parseString(settlementJson.substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject().getAsJsonObject("layout");
+        assertEquals(1, layout.get("revision").getAsInt());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.SettlementBeds.declaredCapacity(state.bootstrap().settlements().getFirst()), layout.get("declaredHousingBeds").getAsInt());
+        assertEquals(layout.get("declaredHousingBeds"), layout.get("availableHousingBeds"));
         assertTrue(settlementJson.contains("\"harvestAdmission\":\"NO_READY_SITE\""));
         assertTrue(settlementJson.contains("\"strategic\":{"));
         assertTrue(settlementJson.contains("\"quarantine\":\"NORMAL\"") && settlementJson.contains("\"activeCases\":0"),
@@ -682,25 +686,6 @@ class FrontierV3DiagnosticJsonTest {
 
 
     @Test
-    void exposesDeclaredGradeFactsWithoutSurveyingOrChangingTheRoute(@TempDir Path directory) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:diagnostic-stepped-route-test"), 41L),
-                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        FrontierWorldState state = runtime.decodedState().orElseThrow();
-
-        String topology = FrontierV3DiagnosticJson.render("route_topology", "settlement:1", checkpoint, state, Optional.empty());
-
-        assertTrue(topology.contains("\"status\":\"ok\"") && topology.contains("\"gradedEdges\":4")
-                        && topology.contains("\"maximumGrade\":1"),
-                "one bounded read-only diagnostic exposes the declared topology grade rather than a Minecraft height-map guess");
-        assertTrue(topology.contains("\"from\":{\"x\":-370,\"y\":64,\"z\":-343}")
-                        && topology.contains("\"to\":{\"x\":-371,\"y\":65,\"z\":-343}"));
-        assertTrue(runtime.decodedState().orElseThrow().equals(state), "a route-topology diagnostic may not mutate canonical state");
-        runtime.shutdown();
-    }
-
-    @Test
     void exposesOneExactTransitCursorWithoutAdvancingTheJourney(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierV3FixtureCatalog.residentTransitConfiguration(new WorldId("frontier:diagnostic-transit-test"), 91L),
@@ -788,7 +773,7 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
-        BlockPosition position = state.routeTopology().settlementWaypoints(state.bootstrap(), settlement).get(1);
+        BlockPosition position = io.farfrontier.palemirror.frontier.v3.model.DeclaredRouteFixtures.networkSurface(state.bootstrap(), state.routeTopology(), settlement);
         FrontierWorldState damaged = state.recordPhysicalDelta(new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK,
                         FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
@@ -814,7 +799,8 @@ class FrontierV3DiagnosticJsonTest {
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-delta-test"), 95L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        BlockPosition position = new BlockPosition(-380, 64, -304);
+        var current = runtime.decodedState().orElseThrow();
+        BlockPosition position = io.farfrontier.palemirror.frontier.v3.model.DeclaredRouteFixtures.networkSurface(current.bootstrap(),current.routeTopology(),current.bootstrap().settlements().getFirst().id());
         FrontierWorldState changed = runtime.decodedState().orElseThrow().recordPhysicalDelta(new PhysicalDelta(position,
                 PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
@@ -822,12 +808,12 @@ class FrontierV3DiagnosticJsonTest {
                         new SubjectId("route:frontier-network"))),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:123e4567-e89b-12d3-a456-426614174000"));
 
-        String delta = FrontierV3DiagnosticJson.render("physical_delta", "-380,64,-304", checkpoint, changed, Optional.empty());
+        String delta = FrontierV3DiagnosticJson.render("physical_delta", position.x()+","+position.y()+","+position.z(), checkpoint, changed, Optional.empty());
         String malformed = FrontierV3DiagnosticJson.render("physical_delta", "route:frontier-network", checkpoint, changed, Optional.empty());
 
         assertTrue(delta.contains("\"status\":\"ok\"") && delta.contains("\"deltaKind\":\"KNOWN_SEMANTIC_LOSS\""));
         assertTrue(delta.contains("\"owner\":\"route:frontier-network\"") && delta.contains("\"semanticPart\":\"ROUTE_SURFACE\""));
-        assertTrue(delta.contains("\"causeKind\":\"PLAYER\"") && delta.contains("\"trace\":\"physical-delta:-380,64,-304\""));
+        assertTrue(delta.contains("\"causeKind\":\"PLAYER\"") && delta.contains("\"trace\":\"physical-delta:"+position.x()+","+position.y()+","+position.z()+"\""));
         assertFalse(delta.contains("123e4567-e89b-12d3-a456-426614174000"));
         assertTrue(malformed.contains("\"status\":\"not_found\""));
     }

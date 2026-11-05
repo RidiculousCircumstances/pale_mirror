@@ -1,0 +1,15 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "craftsmanship/metallurgy/blacksmith2.blueprint",
+  "sourceSha256": "da30d24de6cf993840160c177e8e1ed9c8db2682092f100ec38881194cfdf509",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "explicit vanilla dependency substitutions",
+    "cropped buried foundation and terrain placeholders; graybox environmental water replaced by coarse dirt",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities or block-entity NBT"
+  ],
+  "blocks": 528,
+  "beds": 0
+}

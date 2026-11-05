@@ -11,10 +11,13 @@ import java.util.*;
  * Closed content catalogue. Style selections are explicit data; unknown content has no fallback.
  */
 public final class BuildingCatalog {
-    public record Style(BuildingStyleId id, Map<StructureKind, BuildingTemplateId> templates) {
+    public record Style(BuildingStyleId id, Map<StructureKind, BuildingTemplateId> templates, Map<StructureKind, List<BuildingTemplateId>> variants) {
         public Style {
             Objects.requireNonNull(id);
             templates = Map.copyOf(templates);
+            var copy=new EnumMap<StructureKind,List<BuildingTemplateId>>(StructureKind.class);
+            variants.forEach((kind,values)->copy.put(kind,List.copyOf(values)));
+            variants=Map.copyOf(copy);
             if (!templates.keySet().equals(EnumSet.allOf(StructureKind.class)))
                 throw new IllegalArgumentException("incomplete building style");
         }
@@ -51,6 +54,12 @@ public final class BuildingCatalog {
         for (var value : styles) {
             if (s.putIfAbsent(value.id(), value) != null)
                 throw new IllegalArgumentException("duplicate building style");
+            value.variants().forEach((kind,ids)-> {
+                if(ids.isEmpty() || ids.size()>32 || new HashSet<>(ids).size()!=ids.size())
+                    throw new IllegalArgumentException("invalid building variants");
+                for(var id:ids) if(!d.containsKey(id) || !d.get(id).functions().contains(kind))
+                    throw new IllegalArgumentException("unsupported building variant");
+            });
             value.templates()
                     .forEach(
                             (kind, id) -> {
@@ -100,6 +109,7 @@ public final class BuildingCatalog {
                                         v ->
                                                 v.id().value()
                                                         + '='
+                                                        + v.variants().entrySet().stream().sorted(Map.Entry.comparingByKey()).map(Object::toString).collect(java.util.stream.Collectors.joining(";")) + '|'
                                                         + v.templates().entrySet().stream()
                                                                 .map(
                                                                         e ->
@@ -128,7 +138,7 @@ public final class BuildingCatalog {
     }
 
     public String canonicalText() {
-        return canonical;
+        return canonical + '|' + SettlementLayoutRules.canonicalText();
     }
 
     private static Map<String, Set<String>> readCategories(Map<String, String> manifest) {
@@ -167,10 +177,19 @@ public final class BuildingCatalog {
     }
 
     public BuildingDefinition require(BuildingPlanRef selected, StructureKind function) {
-        var expected = select(selected.style(), function);
-        if (!expected.equals(selected))
+        var style=styles.get(selected.style());
+        var definition=require(selected.template());
+        if(style==null || !definition.functions().contains(function) || !definition.sha256().equals(selected.sha256())
+                || !style.templates().get(function).equals(selected.template())
+                    && !style.variants().getOrDefault(function,List.of()).contains(selected.template()))
             throw new IllegalArgumentException("stale or foreign building content selection");
-        return require(selected.template());
+        return definition;
+    }
+
+    public List<BuildingPlanRef> variants(BuildingStyleId styleId, StructureKind function) {
+        var style=Objects.requireNonNull(styles.get(styleId), "unknown building style");
+        return style.variants().getOrDefault(function,List.of(style.templates().get(function))).stream()
+                .map(id -> new BuildingPlanRef(styleId,id,require(id).sha256())).toList();
     }
 
     public byte[] markup(BuildingTemplateId id) {
@@ -212,11 +231,16 @@ public final class BuildingCatalog {
                                 Objects.requireNonNull(
                                         manifest.get("style." + name + "." + kind.name()),
                                         "missing style function")));
+            var variants=new EnumMap<StructureKind,List<BuildingTemplateId>>(StructureKind.class);
+            for(var kind:StructureKind.values()) {
+                var values=manifest.get("style."+name+"."+kind.name()+".variants");
+                if(values!=null)variants.put(kind,Arrays.stream(values.split(",")).map(BuildingTemplateId::new).toList());
+            }
             styles.add(
                     new Style(
                             new BuildingStyleId(
                                     Objects.requireNonNull(manifest.get("style." + name + ".id"))),
-                            selected));
+                            selected, variants));
         }
         return new BuildingCatalog(
                 definitions,
@@ -317,6 +341,8 @@ public final class BuildingCatalog {
                 production ? Map.of(workplace.id(), workplace) : Map.of(),
                 production ? Optional.of(entry.id()) : Optional.empty(),
                 production ? Optional.of(workplace.id()) : Optional.empty(),
+                Map.of(),
+                Map.of(),
                 Map.of());
     }
 

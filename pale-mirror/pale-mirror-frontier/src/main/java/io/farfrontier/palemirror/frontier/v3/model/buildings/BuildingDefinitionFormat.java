@@ -9,7 +9,11 @@ import java.util.*;
 /** One bounded authoring format used by packaged content and developer import/export. */
 public final class BuildingDefinitionFormat {
     public static Map<String, String> properties(byte[] bytes) {
-        if (bytes.length > 262_144)
+        return properties(bytes,262_144);
+    }
+    public static Map<String,String> properties(byte[] bytes,int maximum) {
+        if(maximum<1 || maximum>2_097_152)throw new IllegalArgumentException("invalid property bound");
+        if (bytes.length > maximum)
             throw new IllegalArgumentException("building markup exceeds bound");
         var p =
                 new Properties() {
@@ -59,7 +63,7 @@ public final class BuildingDefinitionFormat {
             Map<BlockPosition, BuildingDefinition.Block> blocks,
             String sha256) {
         var r = new Reader(source);
-        if (r.integer("format") != 2)
+        if (r.integer("format") != 3)
             throw new IllegalArgumentException("unsupported building markup format");
         var id = new BuildingTemplateId(r.take("id"));
         int version = r.integer("version");
@@ -123,6 +127,13 @@ public final class BuildingDefinitionFormat {
         }
         var entrance = r.optional("primaryEntrance");
         var workplace = r.optional("primaryWorkplace");
+        var anchors=new LinkedHashMap<String, BlockPosition>();
+        for(var name:r.names("anchors")) anchors.put(name,point(r.take("anchor."+name)));
+        var beds=new LinkedHashMap<String, BuildingDefinition.Bed>();
+        for(var name:r.names("beds")) {
+            var key="bed."+name;
+            beds.put(name,new BuildingDefinition.Bed(name,point(r.take(key+".head")),point(r.take(key+".foot"))));
+        }
         r.finished();
         return new BuildingDefinition(
                 id,
@@ -140,6 +151,8 @@ public final class BuildingDefinitionFormat {
                 workplaces,
                 entrance,
                 workplace,
+                anchors,
+                beds,
                 blocks);
     }
 

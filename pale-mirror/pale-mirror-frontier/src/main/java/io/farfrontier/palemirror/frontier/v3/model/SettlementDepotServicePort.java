@@ -55,6 +55,13 @@ public record SettlementDepotServicePort(SubjectId settlementId, SubjectId depot
             ThreadLocal.withInitial(java.util.IdentityHashMap::new);
 
     private static SettlementDepotServicePort compileDepot(SettlementStructure depot) {
+        if(depot.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+            var layout=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(depot);var port=layout.primaryEntrance();var exterior=port.exteriorApproach();
+            if(exterior.size()<2)throw new IllegalArgumentException("depot entry lacks its service approach");
+            return new SettlementDepotServicePort(depot.settlementId(),depot.id(),depot.facing(),exterior.get(exterior.size()-2),exterior.getLast(),port.thresholdSurface(),
+                    layout.placement().support(layout.definition().anchor("container")),
+                    java.util.stream.Stream.of("station_left","station_right","loading_left","loading_right").map(key->layout.placement().support(layout.definition().anchor(key))).toList());
+        }
         SurfaceAnchor center = new SurfaceAnchor(depot.anchor());
         int exteriorDistance = exteriorDistance(depot.facing());
         SurfaceAnchor threshold = depot.facing().step(center, exteriorDistance - 1);
@@ -88,7 +95,7 @@ public record SettlementDepotServicePort(SubjectId settlementId, SubjectId depot
     }
     public FacilityTraversalPort topologyPort() {
         return new FacilityTraversalPort(depotId, facing, List.of(exteriorApproach, serviceSurface), thresholdSurface,
-                socketSurface, stations, Set.of(TraversalCapability.PEDESTRIAN));
+                socketSurface, stations, stations, Set.of(TraversalCapability.PEDESTRIAN));
     }
 
     private static int exteriorDistance(FacilityFacing facing) {

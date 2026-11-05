@@ -315,7 +315,7 @@ class EngineeringEquipmentVisitTest {
                 .limit(members).map(ResidentProfile::id).toList();
         assertEquals(members, actors.size());
         if (maintenance) {
-            var cell = state.routeTopology().settlementWaypoints(state.bootstrap(), settlement.id()).get(2);
+            var cell = DeclaredRouteFixtures.networkSurface(state.bootstrap(), state.routeTopology(), settlement.id());
             state = state.recordPhysicalDelta(new PhysicalDelta(cell, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                     Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)),
                     Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:equipment-fixture"));

@@ -167,7 +167,8 @@ final class FrontierResourceSiteHarvestFixture {
                 .orElseThrow(() -> new IllegalStateException("harvest fixture has no retained COLD continuation"));
         long instant = 2_100L;
         ResourceSiteHarvestJob job = harvest.job();
-        for (int step = 0; step < 256; step++) {
+        // The retained street/parcel layout may place the field farther from equipment.
+        for (int step = 0; step < 2_048; step++) {
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
             if (ResourceSiteHarvestGoal.actorAtWorkCell(state, job)
                     && goal.arrivedAt(state.actorLocations().get(job.workerId()).supportingSurface())) break;

@@ -111,7 +111,7 @@ class RoutePatrolProcessTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 712L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
-        BlockPosition obstruction = initial.routeTopology().settlementWaypoints(initial.bootstrap(), settlement).get(1);
+        BlockPosition obstruction = DeclaredRouteFixtures.networkSurface(initial.bootstrap(), initial.routeTopology(), settlement);
         PhysicalDelta delta = new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:blast");
         CommandId id = new CommandId("command:route-patrol-observation");

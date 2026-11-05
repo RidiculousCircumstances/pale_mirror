@@ -506,7 +506,7 @@ public final class FrontierRulesets {
                         6_000L, 1_000L, 8_000L, 1_600L, 20L, 3_200L, 100L, 2_400L, 2_400L),
                 new FrontierRuleset.Spatial(160, 160, 32, 48, 64, 128, 16, 64, 12),
                 new FrontierRuleset.Rates(new FixedScalar(125_000L), new FixedScalar(250_000L), FixedScalar.whole(100L), FixedScalar.whole(2L)),
-                new FrontierRuleset.FacilityCapacity(48, 16, 4, 8, 4, 2, 3, 1),
+                new FrontierRuleset.FacilityCapacity(4, 8, 4, 2, 3, 1),
                 new FrontierRuleset.Combat(FixedScalar.whole(4), FixedScalar.whole(2), FixedScalar.whole(6), FixedScalar.whole(3), FixedScalar.ONE),
                 new FrontierRuleset.HiveCommand(6, 1, 2, 1, 200L, 100L), FrontierRuleset.ResidentLife.initial(),
                 coldTravelTicksPerEdge);

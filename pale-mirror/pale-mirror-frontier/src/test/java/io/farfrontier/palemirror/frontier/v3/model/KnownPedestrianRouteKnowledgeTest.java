@@ -27,7 +27,7 @@ class KnownPedestrianRouteKnowledgeTest {
     @Test void advisoryGeometryCannotReplaceTheOwnersCacheOrHideAChangedPhysicalFact() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:geometry-worker-isolation"), 20260918065L));
         var home = state.bootstrap().settlements().getFirst();
-        var surface = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var surface = DeclaredRouteFixtures.openStreet(state, home);
         var owner = KnownPedestrianRouteKnowledge.forFrontier(state);
         assertTrue(owner.traversable(List.of(surface)));
         var proof = owner.geometry().regionalRevision().orElseThrow();
@@ -91,7 +91,7 @@ class KnownPedestrianRouteKnowledgeTest {
                 new WorldId("frontier:meal-departure-height"), 20260918065L));
         var home = state.bootstrap().settlements().getFirst();
         var actor = home.residents().getFirst().id();
-        var known = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var known = DeclaredRouteFixtures.openStreet(state, home);
         var start = SurfaceAnchor.at(known.x(), known.y() + 5, known.z());
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, actor);
         var missing = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
@@ -129,7 +129,7 @@ class KnownPedestrianRouteKnowledgeTest {
     @Test void retainedContactCanLeaveAChestWithoutOpeningItAsATransitDestinationOrIgnoringDamage() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:raised-storage-departure"), 91L));
         var home = state.bootstrap().settlements().getFirst();
-        var ground = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var ground = DeclaredRouteFixtures.openStreet(state, home);
         var id = new SubjectId("container:raised-storage-departure");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, ground, Optional.empty(), ground);
         var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
@@ -188,7 +188,7 @@ class KnownPedestrianRouteKnowledgeTest {
     @Test void observedChestTopStillGrantsOnlyRetainedDepartureAfterRecovery() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:observed-chest-departure"), 91L));
         var home = state.bootstrap().settlements().getFirst();
-        var ground = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var ground = DeclaredRouteFixtures.openStreet(state, home);
         var id = new SubjectId("container:observed-chest-departure");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, ground, Optional.empty(), ground);
         var block = ground.support().offset(0, 1, 0);
@@ -222,10 +222,10 @@ class KnownPedestrianRouteKnowledgeTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:regional-provider"), 91L));
         var home = state.bootstrap().settlements().getFirst();
         var ground = KnownPedestrianGround.forFrontier(state);
-        var start = ground.at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var start = DeclaredRouteFixtures.openStreet(state, home);
         var end = ground.at(start.x() + 1, start.z());
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
-        var target = ground.at(home.anchor().x() + 100, home.anchor().z() + 100);
+        var target = new SurfaceAnchor(DeclaredRouteFixtures.networkSurface(state.bootstrap(),state.routeTopology(),home.id()));
         var id = new SubjectId("container:regional-warehouse");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, target, Optional.empty(), target);
         var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
@@ -277,7 +277,7 @@ class KnownPedestrianRouteKnowledgeTest {
     @Test void storageLifecycleInvalidatesRoutesOnlyWhenItsPhysicalFootprintChanges() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:storage-geometry"), 91L));
         var home = state.bootstrap().settlements().getFirst();
-        var station = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var station = DeclaredRouteFixtures.openStreet(state, home);
         var id = new SubjectId("container:geometry-warehouse");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, Optional.empty(), station);
         var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
@@ -337,14 +337,16 @@ class KnownPedestrianRouteKnowledgeTest {
     @Test void clearwaterPrivateStationCanBeExitedButCannotBecomeACourtesyRestingPosition() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:courtesy-private-station"), 20260918065L));
-        var start = SurfaceAnchor.at(136, 64, 14);
+        var workshop = state.bootstrap().settlements().get(6).structures().stream()
+                .filter(b -> b.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        var start = ProductionFacilityLayout.station(workshop).workerStation();
         assertTrue(PedestrianLocalDeparture.departure(state, start).traversable(List.of(start)));
         assertTrue(!PedestrianLocalDeparture.publicPosition(state, start),
                 "an escape passage does not grant permission to park on an internal station");
         assertTrue(PedestrianLocalDeparture.publicContinuation(state,List.of(start)).isEmpty(),
                 "a private-only candidate is unavailable, not a world-wide planning invariant failure");
         var knowledge = PedestrianLocalDeparture.departure(state, start).forActor(state, new SubjectId("resident:7-12"));
-        var exterior = SettlementServiceAccessPoints.depotPort(state, new SubjectId("settlement:7")).exteriorApproach();
+        var exterior = DeclaredRouteFixtures.openStreet(state, state.bootstrap().settlements().get(6));
         var exit = knowledge.plannedBetween(start, exterior);
         assertEquals(start, exit.getFirst());
         assertTrue(exit.size() > 1 && PedestrianLocalDeparture.publicPosition(state, exit.getLast()));
@@ -428,7 +430,7 @@ class KnownPedestrianRouteKnowledgeTest {
 
     @Test void aPublicAccessFloorIsSupportNotAnObstacleForAnyPedestrianCaller() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:public-floor"), 91L));
-        var surface = SurfaceAnchor.at(-365, 64, -318);
+        var surface = DeclaredRouteFixtures.openStreet(state, state.bootstrap().settlements().getFirst());
         var cells = FrontierGrayboxPlan.compile(state).cells();
         assertEquals(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE, cells.get(surface.support()).semanticPart());
         assertTrue(!cells.containsKey(surface.support().offset(0, 1, 0))
@@ -451,7 +453,7 @@ class KnownPedestrianRouteKnowledgeTest {
         var settlementId = new SubjectId("settlement:7");
         var port = SettlementServiceAccessPoints.depotPort(state, settlementId);
         var actorId = new SubjectId("resident:7-9");
-        var unsupported = SurfaceAnchor.at(133, 64, 14);
+        var unsupported = SurfaceAnchor.at(port.exteriorApproach().x(), port.exteriorApproach().y()+32, port.exteriorApproach().z());
         assertTrue(port.accessBoundary().cleared(unsupported.standingBody()));
         var candidates = KnownServiceExitNavigation.exitStations(state, settlementId,
                 FrontierWorldState.depotId(settlementId), actorId, unsupported);
@@ -463,7 +465,7 @@ class KnownPedestrianRouteKnowledgeTest {
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlementId,
                 List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
                         KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        assertTrue(candidates.stream().allMatch(surface -> surface.equals(knowledge.supportAt(surface.x(), surface.z()))));
+        assertTrue(candidates.stream().allMatch(surface -> knowledge.surfacesAt(surface.x(), surface.z()).contains(surface)));
         var supported = candidates.getFirst();
         assertEquals(List.of(supported), KnownServiceExitNavigation.exitStations(state, settlementId,
                 FrontierWorldState.depotId(settlementId), actorId, supported));
@@ -513,8 +515,10 @@ class KnownPedestrianRouteKnowledgeTest {
         var first = KnownServiceExitNavigation.plannedClearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
                 resident, resident, 0, 1L, port.serviceSurface());
         var blocked = first.getLast();
-        state = state.recordPhysicalDelta(new PhysicalDelta(blocked.support().offset(0, 1, 0),
-                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:preferred-exit-blocked"));
+        state = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(state.navigationGeometry().revision(),
+                Map.of(blocked.support().offset(0,1,0),io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID)))
+                .apply(state,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
         var alternate = KnownServiceExitNavigation.plannedClearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
                 resident, resident, 0, 1L, port.serviceSurface());
         assertTrue(!alternate.getLast().equals(blocked));
@@ -536,20 +540,24 @@ class KnownPedestrianRouteKnowledgeTest {
     @Test void clearwaterRoadHintsUseTheProjectedTopRatherThanTerrainUnderTheRoad() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:clearwater-road-support"), 20260918065L));
+        var elevated = DeclaredRouteFixtures.raised(state.bootstrap(),state.routeTopology(),new SubjectId("settlement:7"));
+        state = state.withRouteTopology(state.routeTopology().replaceSettlementRoute(state.bootstrap(),new SubjectId("settlement:7"),elevated));
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, new SubjectId("settlement:7"), List.of());
         org.junit.jupiter.api.Assertions.assertSame(knowledge,
                 KnownPedestrianRouteKnowledge.forSettlement(state.withActorBody(new SubjectId("resident:7-1"),
                         state.actorLocations().get(new SubjectId("resident:7-1")).body()),
                         new SubjectId("settlement:7"), List.of()),
                 "actor-only changes must not recompile immutable ground/obstacles");
-        BlockPosition road = new BlockPosition(115, 64, 14);
+        var terrain = state.bootstrap().terrain();
+        BlockPosition road = FrontierRouteNetwork.expandWaypoints(elevated).stream()
+                .filter(p -> p.y()>terrain.supportYAt(p.x(),p.z())).findFirst().orElseThrow();
         assertTrue(FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology()).surfaceCells().contains(road));
         assertEquals(new SurfaceAnchor(road), knowledge.supportAt(road.x(), road.z()));
         var recovered = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
-        assertEquals(knowledge.supportAt(115, 14),
+        assertEquals(knowledge.supportAt(road.x(), road.z()),
                 KnownPedestrianRouteKnowledge.forSettlement(recovered, new SubjectId("settlement:7"), List.of())
-                        .supportAt(115, 14));
+                        .supportAt(road.x(), road.z()));
     }
     @Test void crowdCannotTurnAServiceExitIntoPermanentKnownTerrain() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
@@ -636,9 +644,9 @@ class KnownPedestrianRouteKnowledgeTest {
                             KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR)));
             SurfaceAnchor exterior = FrontierTraversalPlan.facilityPort(facility).orElseThrow()
                     .exteriorApproach().getFirst();
-            assertEquals(SettlementPedestrianGround.surveyedSupport(state.bootstrap(),
-                    SettlementPedestrianGround.localSupports(state.bootstrap(), settlement.id()),
-                    exterior.x(), exterior.z()), route.supportAt(exterior.x(), exterior.z()));
+            assertEquals(exterior, SettlementPedestrianGround.surveyedSupport(state.bootstrap(),
+                    SettlementPedestrianGround.localSupports(state.bootstrap(), settlement.id()), exterior.x(), exterior.z()));
+            assertTrue(route.surfacesAt(exterior.x(), exterior.z()).contains(exterior));
             MovementOrder order = new MovementOrder(resident, resident, 0L, 1L, List.of(exterior),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             assertEquals(List.of(exterior), route.path(exterior, order));

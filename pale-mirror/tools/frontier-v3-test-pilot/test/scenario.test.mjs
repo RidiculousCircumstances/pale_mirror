@@ -21,6 +21,8 @@ test('scenario separates setup from evidence-bearing actions', () => {
   assert.throws(() => validateScenario({ ...scenario, actions: [{ type: 'command', command: '/kill @s' }] }), /unsupported actions action/);
   assert.doesNotThrow(() => validateScenario({ ...scenario, actions: [{ type: 'command', command: '/pale_mirror v3 building preview layout' }], assertions: [], frames: [] }));
   assert.throws(() => validateScenario({ ...scenario, actions: [{ type: 'command', command: '/pale_mirror v3 building paste layout' }] }), /unsupported actions action/);
+  assert.doesNotThrow(() => validateScenario({ ...scenario, actions: [{ type: 'command', command: '/pale_mirror v3 building layout preview draft structure:1-housing-1' }], assertions: [], frames: [] }));
+  assert.throws(() => validateScenario({ ...scenario, actions: [{ type: 'command', command: '/pale_mirror v3 building layout paste draft' }] }), /unsupported actions action/);
   assert.throws(() => validateScenario({ ...scenario, setup: [{ type: 'break', position: { x: 1, y: 2, z: 3 } }] }), /unsupported setup action/);
 });
 

@@ -19,7 +19,13 @@ public final class SettlementFacilityCapability {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(structure, "structure");
         StructureCondition condition = state.structureConditions().get(structure.id());
         if (condition == null) throw new IllegalArgumentException("unknown canonical structure: " + structure.id().value());
-        return forCondition(state.bootstrap().ruleset(), structure.kind(), condition);
+        if(structure.kind()!=StructureKind.HOUSING)return forCondition(state.bootstrap().ruleset(),structure.kind(),condition);
+        var damage=state.structureDamage().get(structure.id());
+        int beds=condition==StructureCondition.DESTROYED ? 0 : Math.toIntExact(structure.definition().beds().values().stream().filter(bed->{
+            if(damage==null)return true;
+            return !damage.cells().containsKey(structure.placement().world(bed.head())) && !damage.cells().containsKey(structure.placement().world(bed.foot()));
+        }).count());
+        return new Capability(structure.kind(),condition,beds,0);
     }
 
     public static Capability forCondition(FrontierRuleset ruleset, StructureKind kind, StructureCondition condition) {
@@ -30,10 +36,7 @@ public final class SettlementFacilityCapability {
             case DAMAGED -> 0;
             case DESTROYED -> -1;
         };
-        if (kind == StructureKind.HOUSING) {
-            return new Capability(kind, condition, condition == StructureCondition.INTACT ? capacity.intactHousingBeds()
-                    : condition == StructureCondition.DAMAGED ? capacity.damagedHousingBeds() : 0, 0);
-        }
+        if(kind==StructureKind.HOUSING)throw new IllegalArgumentException("housing capacity requires the exact building and bed aftermath");
         // Work capacity is intentionally a capability, not an assigned worker count. Later
         // allocation processes reserve named residents against it; no building invents people.
         return new Capability(kind, condition, 0, factor < 0 ? 0 : factor == 0 ? capacity.damagedWorkCapacity() : switch (kind) {

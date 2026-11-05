@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRuleset;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
 import io.farfrontier.palemirror.frontier.v3.model.TerrainSurfacePlan;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementLayoutPlanner;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,11 +27,16 @@ final class FrontierBootstrapCache {
 
     static FrontierBootstrap resolve(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain,
                                      Map<SubjectId, ResourceFieldLayout> initialFieldLayouts) {
-        Key key = new Key(worldId, seed, ruleset, terrain, Map.copyOf(initialFieldLayouts));
+        return resolve(worldId,seed,ruleset,terrain,initialFieldLayouts,Map.of());
+    }
+    static FrontierBootstrap resolve(WorldId worldId,long seed,FrontierRuleset ruleset,TerrainSurfacePlan terrain,
+            Map<SubjectId,ResourceFieldLayout> initialFieldLayouts,Map<SubjectId,SettlementLayoutPlanner.Result> layouts) {
+        Key key = new Key(worldId, seed, ruleset, terrain, Map.copyOf(initialFieldLayouts),Map.copyOf(layouts));
         synchronized (VALUES) {
             FrontierBootstrap known = VALUES.get(key);
             if (known != null) return known;
-            FrontierBootstrap baseline = FrontierBootstrapper.create(worldId, seed, ruleset, terrain);
+            FrontierBootstrap baseline = layouts.isEmpty() ? FrontierBootstrapper.create(worldId, seed, ruleset, terrain)
+                    : FrontierBootstrapper.restoreLayouts(worldId,seed,ruleset,terrain,layouts);
             FrontierBootstrap created = initialFieldLayouts.isEmpty() ? baseline : new FrontierBootstrap(
                     baseline.worldId(), baseline.seed(), baseline.bounds(), baseline.settlements(), baseline.hive(),
                     baseline.ruleset(), baseline.terrain(), initialFieldLayouts);
@@ -40,5 +46,5 @@ final class FrontierBootstrapCache {
     }
 
     private record Key(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain,
-                       Map<SubjectId, ResourceFieldLayout> initialFieldLayouts) { }
+                       Map<SubjectId, ResourceFieldLayout> initialFieldLayouts,Map<SubjectId,SettlementLayoutPlanner.Result> layouts) { }
 }

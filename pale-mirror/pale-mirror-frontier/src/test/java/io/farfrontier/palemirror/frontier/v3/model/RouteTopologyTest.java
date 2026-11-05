@@ -37,13 +37,13 @@ class RouteTopologyTest {
         assertFalse(damaged.routePassable(bootstrap, home));
         org.junit.jupiter.api.Assertions.assertSame(footprint, FrontierRouteNetwork.footprint(bootstrap, damaged),
                 "availability is not a new authored road declaration and is still enforced by the topology owner");
-        var replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(0, 0, 10),
-                baseline.get(2).offset(0, 0, 10), baseline.get(2), baseline.get(3));
+        var replacement = DeclaredRouteFixtures.bypass(bootstrap, topology, home);
         var changed = topology.replaceSettlementRoute(bootstrap, home, replacement);
         var newFootprint = FrontierRouteNetwork.footprint(bootstrap, changed);
         org.junit.jupiter.api.Assertions.assertNotSame(footprint, newFootprint);
-        assertTrue(newFootprint.surfaceCells().contains(replacement.get(2)));
-        assertFalse(footprint.surfaceCells().contains(replacement.get(2)), "the old view remains immutable");
+        var newSurface = newFootprint.surfaceCells().stream().filter(p -> !footprint.surfaceCells().contains(p)).findFirst().orElseThrow();
+        assertTrue(newFootprint.surfaceCells().contains(newSurface));
+        assertFalse(footprint.surfaceCells().contains(newSurface), "the old view remains immutable");
         var state = FrontierWorldState.initial(bootstrap).withRouteTopology(changed);
         var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(state));
         assertEquals(newFootprint, FrontierRouteNetwork.footprint(recovered.bootstrap(), recovered.routeTopology()));
@@ -74,14 +74,14 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-engineering-deck"), 96L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         SubjectId engineer = new SubjectId("resident:1-1");
-        BlockPosition start = new BlockPosition(-381, 64, -305);
+        BlockPosition deck = DeclaredRouteFixtures.networkSurface(bootstrap, initial.routeTopology(), bootstrap.settlements().getFirst().id());
+        BlockPosition start = deck.offset(0, 0, 1);
         java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(initial.actorLocations());
         locations.put(engineer, new ActorLocation(BodyPosition.above(new SurfaceAnchor(start)), locations.get(engineer).condition(), locations.get(engineer).kind(), locations.get(engineer).navigationProfile()));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
-        BlockPosition deck = FrontierRouteNetwork.surfaceAt(bootstrap, state.routeTopology(), -380, -305).orElseThrow();
-        assertEquals(new BlockPosition(-380, 64, -305), deck);
+        assertEquals(deck, FrontierRouteNetwork.surfaceAt(bootstrap, state.routeTopology(), deck.x(), deck.z()).orElseThrow());
 
-        List<List<BlockPosition>> candidates = EngineeringApproachCorridor.candidates(state, engineer, new BlockPosition(-345, 64, -325));
+        List<List<BlockPosition>> candidates = EngineeringApproachCorridor.candidates(state, engineer, deck.offset(0, 0, 2));
         assertFalse(candidates.isEmpty());
         for (List<BlockPosition> candidate : candidates) {
             for (BlockPosition cell : candidate) {
@@ -95,20 +95,19 @@ class RouteTopologyTest {
     void acceptedReplacementIsBoundedCanonicalAndCannotBeAnArbitraryPlayerPath() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-topology"), 91L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
-        List<BlockPosition> replacement = new ArrayList<>();
-        replacement.add(baseline.get(0)); replacement.add(baseline.get(1));
-        replacement.add(baseline.get(1).offset(-10, 0, 0)); replacement.add(baseline.get(2).offset(-10, 0, 0));
-        replacement.add(baseline.get(2)); replacement.addAll(baseline.subList(3, baseline.size()));
+        List<BlockPosition> replacement = DeclaredRouteFixtures.bypass(bootstrap, RouteTopology.initial(), settlement);
         RouteTopology topology = RouteTopology.initial().replaceSettlementRoute(bootstrap, settlement, replacement);
         assertEquals(replacement, topology.settlementWaypoints(bootstrap, settlement));
         assertEquals(0, RouteTopology.initial().replacementRoutes().size());
         FrontierWorldState state = FrontierWorldState.initial(bootstrap).withRouteTopology(topology);
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
         assertEquals(topology, state.withInventory(state.inventory()).routeTopology());
-        assertEquals(GrayboxMaterial.ROUTE, FrontierGrayboxPlan.compile(state).cells().get(replacement.get(2)).material());
+        var newSurface = FrontierRouteNetwork.surfaceCells(bootstrap, topology).stream()
+                .filter(p -> !FrontierRouteNetwork.surfaceCells(bootstrap).contains(p)).findFirst().orElseThrow();
+        assertEquals(GrayboxMaterial.ROUTE, FrontierGrayboxPlan.compile(state).cells().get(newSurface).material());
         assertEquals(GrayboxSemanticPart.ROUTE_SURFACE,
-                FrontierGrayboxPlan.intactSemanticCell(bootstrap, state.hiveColony(), topology, FrontierRouteNetwork.OWNER, replacement.get(2)).semanticPart());
-        BlockPosition retiredCell = new BlockPosition((baseline.get(1).x() + baseline.get(2).x()) / 2, baseline.get(1).y(), baseline.get(1).z());
+                FrontierGrayboxPlan.intactSemanticCell(bootstrap, state.hiveColony(), topology, FrontierRouteNetwork.OWNER, newSurface).semanticPart());
+        BlockPosition retiredCell = DeclaredRouteFixtures.networkSurface(bootstrap, RouteTopology.initial(), settlement);
         FrontierWorldState retainedLoss = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(retiredCell,
                 PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "explosion:test"))
                 .withRouteTopology(topology);
@@ -131,7 +130,7 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-topology-network"), 93L);
         FrontierWorldState state = FrontierWorldState.initial(bootstrap);
         for (var settlement : bootstrap.settlements()) {
-            BlockPosition corridor = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement.id()).get(2);
+            BlockPosition corridor = DeclaredRouteFixtures.networkSurface(bootstrap, state.routeTopology(), settlement.id());
             assertEquals(GrayboxMaterial.ROUTE, FrontierGrayboxPlan.compile(state).cells().get(corridor).material());
         }
     }
@@ -140,8 +139,7 @@ class RouteTopologyTest {
     void inactiveConstructionIsBoundedPersistedAndCannotBecomeTopologyByAccident() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction"), 94L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
-        List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0),
-                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3));
+        List<BlockPosition> replacement = DeclaredRouteFixtures.bypass(bootstrap, RouteTopology.initial(), settlement);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-1"), settlement, replacement, 0, RouteConstructionStatus.BUILDING);
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project, java.util.Optional.empty());
         assertEquals(FrontierRouteNetwork.constructionCells(bootstrap, state.routeTopology(), settlement, replacement),
@@ -156,13 +154,13 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction-work"), 95L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-work"), settlement,
-                List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3)),
+                DeclaredRouteFixtures.bypass(bootstrap, RouteTopology.initial(), settlement),
                 0, RouteConstructionStatus.BUILDING);
         SubjectId materialId = new SubjectId("item:route-work-concrete");
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project, java.util.Optional.empty()).withInventory(FrontierWorldState.initial(bootstrap).inventory());
         state = state.withInventory(state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(materialId, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 2, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
+                .store(new ExactItemStack(materialId, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE.repairItemKind(), 2, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
         var events = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 900L));
         PhysicalIntentPrepared loading = events.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
@@ -227,8 +225,7 @@ class RouteTopologyTest {
     void onlyAReadyCandidateCanCutOverTheCanonicalRouteTopology() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-cutover"), 96L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
-        List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0),
-                baseline.get(2), baseline.get(3));
+        List<BlockPosition> replacement = DeclaredRouteFixtures.bypass(bootstrap, RouteTopology.initial(), settlement);
         int required = FrontierRouteNetwork.constructionCells(bootstrap, RouteTopology.initial(), settlement, replacement).size();
         RouteConstruction ready = new RouteConstruction(new SubjectId("construction:cutover"), settlement, replacement, required, RouteConstructionStatus.READY);
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), ready, java.util.Optional.empty());
@@ -244,8 +241,7 @@ class RouteTopologyTest {
         FrontierWorldState state = FrontierWorldState.initial(bootstrap);
         Settlement settlement = bootstrap.settlements().getFirst();
         List<BlockPosition> baseline = state.routeTopology().settlementWaypoints(bootstrap, settlement.id());
-        List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0),
-                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3));
+        List<BlockPosition> replacement = DeclaredRouteFixtures.bypass(bootstrap, RouteTopology.initial(), settlement.id());
         ResidentProfile guard = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id()))
                 .filter(resident -> resident.capability(HumanCapability.SECURITY) >= 50).findFirst().orElseThrow();
@@ -255,8 +251,9 @@ class RouteTopologyTest {
         StrategicTask task = new StrategicTask(patrolTask, objective.id(), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
         List<ResidentProfile> patrolMembers = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
-        RoutePatrol active = RoutePatrol.planned(state, patrolTask, settlement,
-                RouteUnitManifest.patrol(patrolTask, patrolMembers.getFirst().id(), List.of(patrolMembers.get(1).id())));
+        var ingress = DeclaredRouteFixtures.stagedPatrol(state,settlement,patrolTask,patrolMembers.getFirst().id(),patrolMembers.get(1).id());
+        state=ingress.state();
+        RoutePatrol active = RoutePatrol.planned(state, patrolTask, settlement, ingress.unit());
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(active)
                 .confirmPatrolObstruction(patrolTask, baseline.get(1)).transitionTask(patrolTask, StrategicTaskStatus.COMPLETED);
         RoutePatrol terminal = plans.routePatrols().get(patrolTask);
@@ -283,7 +280,7 @@ class RouteTopologyTest {
     void observedRouteLossDeterministicallyStartsACanonicalPassableBypass() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-reroute"), 97L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement);
-        BlockPosition lossPosition = baseline.get(1);
+        BlockPosition lossPosition = DeclaredRouteFixtures.networkSurface(bootstrap, RouteTopology.initial(), settlement);
         FrontierWorldState damaged = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(lossPosition,
                 PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test"));
         var first = RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L));
@@ -294,7 +291,7 @@ class RouteTopologyTest {
     void everySettlementCanBypassItsMaterializedEgressWithoutAdoptingWorldGeometry() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-reroute-all"), 98L);
         for (Settlement settlement : bootstrap.settlements()) {
-            BlockPosition lossPosition = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement.id()).get(1);
+            BlockPosition lossPosition = DeclaredRouteFixtures.networkSurface(bootstrap, RouteTopology.initial(), settlement.id());
             FrontierWorldState damaged = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(lossPosition,
                     PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test"));
             assertTrue(RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L)).stream()

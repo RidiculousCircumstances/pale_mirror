@@ -12,22 +12,54 @@ import java.util.*;
  * private navigator, resource, placement executor or repair permission lives here.
  */
 final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provider {
-    private record Coverage(BuildingVolume volume, int airFromY) {}
+    private record Coverage(BuildingVolume volume, int airFromY, BuildingSpatialPlan plan) {}
 
     private record Image(
-            RegionalBlockMap<NavigationCell> cells,
-            Map<TerrainColumn, List<BlockPosition>> columns,
             Map<Region, Set<SubjectId>> owners,
-            Map<SubjectId, Coverage> coverage) {
+            Map<SubjectId, Coverage> coverage,
+            Map<Region, List<SettlementStructure>> tokens,
+            TerrainSurfacePlan terrain) {
         Optional<NavigationCell> declaration(BlockPosition position) {
-            var solid = cells.get(position);
-            if (solid != null) return Optional.of(solid);
+            NavigationCell found = null;
+            boolean declaredAir = false;
             for (var owner : owners.getOrDefault(Region.at(position), Set.of())) {
                 var part = coverage.get(owner);
-                if (position.y() >= part.airFromY() && part.volume().contains(position))
-                    return Optional.of(NavigationCell.AIR);
+                var block = part.plan().blocks().get(position);
+                if (block != null) {
+                    var material = (StructureMaterial.Authored) block.material();
+                    var fact =
+                            BuildingCollisionCatalog.standard(material.block())
+                                    .flatMap(NavigationObservation::cell)
+                                    .orElseThrow(
+                                            () ->
+                                                    new IllegalStateException(
+                                                            "authored content lacks compiled native"
+                                                                    + " collision at "
+                                                                    + position));
+                    if (found != null && !found.equals(fact))
+                        throw new IllegalArgumentException(
+                                "conflicting authored fabric at " + position);
+                    found = fact;
+                }
+                declaredAir |=
+                        position.y() >= part.airFromY()
+                                && position.y() > terrain.supportYAt(position.x(), position.z())
+                                && part.volume().contains(position);
             }
-            return Optional.empty();
+            return found != null
+                    ? Optional.of(found)
+                    : declaredAir ? Optional.of(NavigationCell.AIR) : Optional.empty();
+        }
+
+        List<BlockPosition> column(TerrainColumn column) {
+            var result = new ArrayList<BlockPosition>();
+            for (var owner :
+                    owners.getOrDefault(
+                            new Region(
+                                    Math.floorDiv(column.x(), 16), Math.floorDiv(column.z(), 16)),
+                            Set.of()))
+                result.addAll(coverage.get(owner).plan().columns().getOrDefault(column, List.of()));
+            return List.copyOf(result);
         }
     }
 
@@ -60,19 +92,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
                 () -> {
                     var values = new HashSet<NavigationBlockState>();
                     buildings(state.bootstrap())
-                            .forEach(
-                                    s ->
-                                            BuildingSpatialPlan.of(s)
-                                                    .blocks()
-                                                    .values()
-                                                    .forEach(
-                                                            cell ->
-                                                                    values.add(
-                                                                            ((StructureMaterial
-                                                                                                    .Authored)
-                                                                                            cell
-                                                                                                    .material())
-                                                                                    .block())));
+                            .forEach(s -> values.addAll(BuildingSpatialPlan.of(s).palette()));
                     return Set.copyOf(values);
                 });
     }
@@ -99,53 +119,27 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
     }
 
     private static Image image(FrontierBootstrap bootstrap) {
-        var cells = new HashMap<BlockPosition, NavigationCell>();
+        // The reusable placement projection already owns blocks and column indices.
+        // A bootstrap switch builds only a small regional placement directory, never
+        // another world-sized map of the exact same native block facts.
         var owners = new HashMap<Region, Set<SubjectId>>();
         var coverage = new HashMap<SubjectId, Coverage>();
+        var tokens = new HashMap<Region, List<SettlementStructure>>();
         for (var structure : buildings(bootstrap)) {
             var plan = BuildingSpatialPlan.of(structure);
             var bounds = plan.placement().volume(plan.definition().fabric());
-            coverage.put(structure.id(), new Coverage(bounds, structure.anchor().y()));
+            coverage.put(structure.id(), new Coverage(bounds, structure.anchor().y(), plan));
             for (int x = bounds.min().x() >> 4; x <= (bounds.max().x() - 1) >> 4; x++)
-                for (int z = bounds.min().z() >> 4; z <= (bounds.max().z() - 1) >> 4; z++)
-                    owners.computeIfAbsent(new Region(x, z), ignored -> new HashSet<>())
-                            .add(structure.id());
-            plan.blocks()
-                    .forEach(
-                            (position, block) -> {
-                                var material = (StructureMaterial.Authored) block.material();
-                                var fact =
-                                        BuildingCollisionCatalog.standard(material.block())
-                                                .flatMap(NavigationObservation::cell)
-                                                .orElseThrow(
-                                                        () ->
-                                                                new IllegalStateException(
-                                                                        "authored content lacks"
-                                                                            + " compiled native"
-                                                                            + " collision at "
-                                                                                + position));
-                                var prior = cells.putIfAbsent(position, fact);
-                                if (prior != null && !prior.equals(fact))
-                                    throw new IllegalArgumentException(
-                                            "conflicting authored fabric at " + position);
-                            });
+                for (int z = bounds.min().z() >> 4; z <= (bounds.max().z() - 1) >> 4; z++) {
+                    var region = new Region(x, z);
+                    owners.computeIfAbsent(region, ignored -> new HashSet<>()).add(structure.id());
+                    tokens.computeIfAbsent(region, ignored -> new ArrayList<>()).add(structure);
+                }
         }
-        var columns = new HashMap<TerrainColumn, List<BlockPosition>>();
-        cells.forEach(
-                (p, c) -> {
-                    if (!c.shape().boxes().isEmpty())
-                        columns.computeIfAbsent(
-                                        new TerrainColumn(p.x(), p.z()),
-                                        ignored -> new ArrayList<>())
-                                .add(p);
-                });
-        columns.replaceAll((k, v) -> List.copyOf(v));
-        owners.replaceAll((k, v) -> Set.copyOf(v));
+        owners.replaceAll((region, ids) -> Set.copyOf(ids));
+        tokens.replaceAll((region, parts) -> List.copyOf(parts));
         return new Image(
-                RegionalBlockMap.copyOf(cells),
-                Collections.unmodifiableMap(new HashMap<>(columns)),
-                Map.copyOf(owners),
-                Map.copyOf(coverage));
+                Map.copyOf(owners), Map.copyOf(coverage), Map.copyOf(tokens), bootstrap.terrain());
     }
 
     private record Snapshot(
@@ -165,7 +159,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
             if (owners == null) return Optional.empty();
             return Optional.of(
                     List.of(
-                            image.cells().token(region),
+                            image.tokens().get(region),
                             owners.stream()
                                     .sorted()
                                     .map(id -> Map.entry(id, conditions.get(id)))
@@ -192,7 +186,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
         @Override
         public BoundedPedestrianApproach.SurveyedSurface overlay(
                 BoundedPedestrianApproach.SurveyedSurface base) {
-            if (image.cells().isEmpty()) return base;
+            if (image.coverage().isEmpty()) return base;
             return KnownBlockSurfaceOverlay.apply(
                     base,
                     p ->
@@ -203,7 +197,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
                                                             cell,
                                                             KnownBlockSurfaceOverlay.Precedence
                                                                     .OBSERVATION_FIRST)),
-                    c -> image.columns().getOrDefault(c, List.of()),
+                    image::column,
                     area -> NavigationRegionCoverage.intersects(image.owners().keySet(), area),
                     p -> {
                         if (observations.cells().containsKey(p))

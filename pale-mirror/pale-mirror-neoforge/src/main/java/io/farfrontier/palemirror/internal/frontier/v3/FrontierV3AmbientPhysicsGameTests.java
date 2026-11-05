@@ -720,7 +720,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         List<Settlement> settlements = source.settlements().stream().map(settlement -> new Settlement(settlement.id(), settlement.displayName(),
                 translate.apply(settlement.anchor()), settlement.residents().stream().map(resident -> new Resident(resident.id(), resident.settlementId(),
                 resident.role(), translate.apply(resident.home()))).toList(), settlement.structures().stream().map(structure -> new SettlementStructure(
-                structure.id(), structure.settlementId(), structure.kind(), translate.apply(structure.anchor()), structure.facing(), structure.building())).toList())).toList();
+                structure.id(), structure.settlementId(), structure.kind(), translate.apply(structure.anchor()), structure.facing(), structure.building())).toList(), settlement.layout().translated(dx,dy,dz))).toList();
         List<HiveNest> nests = source.hive().seedNests().stream().map(nest -> new HiveNest(nest.id(), nest.hiveId(), translate.apply(nest.anchor()))).toList();
         List<HiveOrgan> organs = source.hive().organs().stream().map(organ -> new HiveOrgan(organ.id(), organ.hiveId(), organ.nestId(), organ.kind(),
                 translate.apply(organ.anchor()), organ.containerId())).toList();

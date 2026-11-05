@@ -60,8 +60,9 @@ public record FrontierTraversalPlan(
                             state.bootstrap().bounds(),
                             state.bootstrap().terrain(),
                             settlement,
-                            state.bootstrap().ruleset().facilityCapacity().intactHousingBeds());
-            put(topologies, residentIngress.topology().id(), residentIngress.topology());
+                            SettlementBeds.declaredCapacity(settlement));
+            if (!residentIngress.topology().equals(circulation))
+                throw new IllegalArgumentException("resident ingress must use its retained public street graph");
             for (SettlementStructure structure : settlement.structures()) {
                 FacilityTraversalPort port = facilityPort(structure).orElse(null);
                 if (port == null) continue;
@@ -97,29 +98,14 @@ public record FrontierTraversalPlan(
             var prior = PORT_VIEWS.get(structure);
             if (prior != null) return prior;
         }
-        var result =
-                structure.definition().representation()
-                                == io.farfrontier.palemirror.frontier.v3.model.buildings
-                                        .BuildingDefinition.Representation.AUTHORED
-                        ? Optional.of(
-                                io.farfrontier.palemirror.frontier.v3.model.buildings
-                                        .BuildingSpatialPlan.of(structure)
-                                        .primaryEntrance())
-                        : Optional.ofNullable(
-                                switch (structure.kind()) {
-                                    case HALL ->
-                                            SettlementAccessPort.forHall(structure).topologyPort();
-                                    case DEPOT ->
-                                            SettlementDepotServicePort.forDepot(structure)
-                                                    .topologyPort();
-                                    case WORKSHOP, SMELTERY, FORGE, WOODSHOP ->
-                                            SettlementWorkshopServicePort.forWorkshop(structure)
-                                                    .topologyPort();
-                                    case INFIRMARY ->
-                                            SettlementInfirmaryTreatmentPort.forInfirmary(structure)
-                                                    .topologyPort();
-                                    default -> null;
-                                });
+        var result=Optional.ofNullable(switch(structure.kind()) {
+            case HALL -> SettlementAccessPort.forHall(structure).topologyPort();
+            case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
+            case WORKSHOP,SMELTERY,FORGE,WOODSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
+            case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
+            case FARM,HOUSING -> structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED
+                    ? io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).primaryEntrance() : null;
+        });
         synchronized (PORT_VIEWS) {
             var prior = PORT_VIEWS.get(structure);
             if (prior != null) return prior;
@@ -133,15 +119,12 @@ public record FrontierTraversalPlan(
     /** All declared entrances share the same facility identity and current geometric truth. */
     public static java.util.List<FacilityTraversalPort> facilityPorts(
             SettlementStructure structure) {
-        if (structure.definition().representation()
-                == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition
-                        .Representation.AUTHORED)
-            return java.util.List.copyOf(
-                    io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(
-                                    structure)
-                            .entrances()
-                            .values());
-        return facilityPort(structure).stream().toList();
+        var primary=facilityPort(structure);
+        if(structure.definition().representation()!=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+            return primary.stream().toList();
+        var plan=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure);
+        var selected=structure.definition().primaryEntrance().orElseThrow();
+        return plan.entrances().entrySet().stream().map(entry->entry.getKey().equals(selected)?primary.orElseThrow():entry.getValue()).toList();
     }
 
     /** The named public topology a port must join, never a runtime nearest-route search. */

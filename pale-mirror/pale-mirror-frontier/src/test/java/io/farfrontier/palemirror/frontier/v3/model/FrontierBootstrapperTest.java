@@ -102,7 +102,7 @@ class FrontierBootstrapperTest {
         Settlement settlement = bootstrap.settlements().getFirst();
         int count = settlement.residents().size() + 1;
 
-        int housingBeds = bootstrap.ruleset().facilityCapacity().intactHousingBeds();
+        int housingBeds = SettlementBeds.declaredCapacity(settlement);
         List<BlockPosition> batch = FrontierSettlementActorSlots.residentSlots(bootstrap.bounds(), bootstrap.terrain(), settlement, housingBeds, count);
         for (int ordinal = 0; ordinal < count; ordinal++) {
             assertEquals(batch.get(ordinal), FrontierSettlementActorSlots.residentSlot(bootstrap.bounds(), bootstrap.terrain(), settlement, housingBeds, ordinal));
@@ -113,7 +113,7 @@ class FrontierBootstrapperTest {
     void initialResidentHomesAreDistributedAcrossTheCanonicalApron() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:distributed-homes"), 7L);
         Settlement settlement = bootstrap.settlements().getFirst();
-        int housingBeds = bootstrap.ruleset().facilityCapacity().intactHousingBeds();
+        int housingBeds = SettlementBeds.declaredCapacity(settlement);
         List<BlockPosition> homes = FrontierSettlementActorSlots.residentSlots(bootstrap.bounds(), bootstrap.terrain(), settlement,
                 housingBeds, settlement.residents().size());
 

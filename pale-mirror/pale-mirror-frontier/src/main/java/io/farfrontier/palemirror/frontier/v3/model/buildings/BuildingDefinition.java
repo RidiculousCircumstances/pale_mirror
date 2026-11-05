@@ -22,6 +22,8 @@ public record BuildingDefinition(
         Map<String, Workplace> workplaces,
         Optional<String> primaryEntrance,
         Optional<String> primaryWorkplace,
+        Map<String, BlockPosition> anchors,
+        Map<String, Bed> beds,
         Map<BlockPosition, Block> blocks) {
     public enum Representation {
         GRAYBOX,
@@ -141,6 +143,21 @@ public record BuildingDefinition(
         }
     }
 
+    /** A complete physical bed, independent of occupancy, sleep AI or access reservations. */
+    public record Bed(String id, BlockPosition head, BlockPosition foot) {
+        public Bed {
+            name(id); Objects.requireNonNull(head); Objects.requireNonNull(foot);
+            if (head.y() != foot.y() || Math.abs(head.x()-foot.x())+Math.abs(head.z()-foot.z()) != 1)
+                throw new IllegalArgumentException("bed must declare both adjacent halves");
+        }
+    }
+
+    public BlockPosition anchor(String name) {
+        var value=anchors.get(name);
+        if(value==null) throw new IllegalArgumentException("building lacks declared anchor "+name);
+        return value;
+    }
+
     public record Block(NavigationBlockState state, String repairItem, GrayboxSemanticPart part) {
         public Block {
             Objects.requireNonNull(state);
@@ -164,6 +181,8 @@ public record BuildingDefinition(
         zones = ordered(zones, 128);
         passages = ordered(passages, 64);
         workplaces = ordered(workplaces, 32);
+        anchors = ordered(anchors, 128);
+        beds = ordered(beds, 96);
         blocks = Map.copyOf(blocks);
         if (version < 1
                 || sha256 == null
@@ -172,6 +191,22 @@ public record BuildingDefinition(
                 || !parcel.contains(fabric)
                 || blocks.size() > 65_536)
             throw new IllegalArgumentException("invalid authored building declaration");
+        for(var entry:anchors.entrySet()) {
+            name(entry.getKey());
+            if(!parcel.contains(entry.getValue())) throw new IllegalArgumentException("anchor escaped building parcel");
+        }
+        var bedCells=new HashSet<BlockPosition>();
+        for(var entry:beds.entrySet()) {
+            var bed=entry.getValue();var head=blocks.get(bed.head());var foot=blocks.get(bed.foot());
+            if(!entry.getKey().equals(bed.id()) || head==null || foot==null || !head.state().kind().endsWith("_bed")
+                    || !head.state().kind().equals(foot.state().kind()) || !"head".equals(head.state().properties().get("part"))
+                    || !"foot".equals(foot.state().properties().get("part")) || !bedCells.add(bed.head()) || !bedCells.add(bed.foot()))
+                throw new IllegalArgumentException("invalid or overlapping physical bed halves");
+            var direction=FacilityFacing.valueOf(head.state().properties().get("facing").toUpperCase(Locale.ROOT));
+            if(!head.state().properties().get("facing").equals(foot.state().properties().get("facing"))
+                    || !bed.head().equals(bed.foot().offset(direction.x(),0,direction.z())))
+                throw new IllegalArgumentException("bed parts disagree with declared orientation");
+        }
         for (var entry : rooms.entrySet())
             if (!entry.getKey().equals(entry.getValue().id())
                     || !parcel.contains(entry.getValue().volume()))

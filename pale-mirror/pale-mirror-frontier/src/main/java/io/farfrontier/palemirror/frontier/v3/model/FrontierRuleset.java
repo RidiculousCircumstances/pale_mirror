@@ -532,12 +532,10 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     /** Structure output is world balance, while the capability projection remains pure code. */
-    public record FacilityCapacity(int intactHousingBeds, int damagedHousingBeds, int intactHallWorkCapacity,
+    public record FacilityCapacity(int intactHallWorkCapacity,
                                    int intactFarmWorkCapacity, int intactWorkshopWorkCapacity, int intactDepotWorkCapacity,
                                    int intactInfirmaryWorkCapacity, int damagedWorkCapacity) {
         public FacilityCapacity {
-            requirePositive(intactHousingBeds, "intact housing beds");
-            requirePositive(damagedHousingBeds, "damaged housing beds");
             requirePositive(intactHallWorkCapacity, "intact hall work capacity");
             requirePositive(intactFarmWorkCapacity, "intact farm work capacity");
             requirePositive(intactWorkshopWorkCapacity, "intact workshop work capacity");
@@ -548,7 +546,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
 
     private String canonicalText() {
-            return intactHousingBeds + "," + damagedHousingBeds + "," + intactHallWorkCapacity + "," + intactFarmWorkCapacity
+            return intactHallWorkCapacity + "," + intactFarmWorkCapacity
                     + "," + intactWorkshopWorkCapacity + "," + intactDepotWorkCapacity + "," + intactInfirmaryWorkCapacity + "," + damagedWorkCapacity;
         }
     }

@@ -104,13 +104,10 @@ public final class GrayboxQuarryPlan {
      * layout may cross all four centre lines; examine neighboring exterior ground
      * while retaining the same exact bounds/owner-overlap checks for every site. */
     private static List<ExteriorCandidate> exteriorCandidates(BlockPosition home, int distance, int spacing) {
-        var result = new ArrayList<ExteriorCandidate>();
-        for (int sideways : List.of(0, spacing, -spacing, 2 * spacing, -2 * spacing, 3 * spacing, -3 * spacing))
-            for (var facing : List.of(FacilityFacing.EAST, FacilityFacing.SOUTH, FacilityFacing.WEST, FacilityFacing.NORTH))
-                result.add(new ExteriorCandidate(home.offset(facing.x() * distance - facing.z() * sideways, 0,
-                        facing.z() * distance + facing.x() * sideways), facing));
-        return List.copyOf(result);
+        return ExteriorLandCandidates.around(home,distance,spacing,List.of(FacilityFacing.EAST,FacilityFacing.SOUTH,FacilityFacing.WEST,FacilityFacing.NORTH))
+                .stream().map(p->new ExteriorCandidate(p.anchor(),p.facing())).toList();
     }
+
     private static Optional<MineralDeposit> mineral(BlockPosition anchor, FacilityFacing facing, ExtractionRules rules,
             int producerIndex, SubjectId id) {
         return rules.pocket().filter(pocket -> producerIndex % pocket.producerPeriod() == 0).map(pocket -> {

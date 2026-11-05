@@ -17,6 +17,7 @@ import net.minecraft.network.protocol.common.custom.GameTestAddMarkerDebugPayloa
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3AuthoringDrafts.*;
 
 /**
  * Developer files and read-only bounded overlays. No paste, stock, execution or geometry writer.
@@ -86,6 +87,7 @@ public final class FrontierV3BuildingCommands {
                                                                                                         () ->
                                                                                                                 point(
                                                                                                                         c)))))))
+                .then(FrontierV3SettlementLayoutCommands.branch())
                 .then(equipmentBranch())
                 .then(Commands.literal("preview").then(Commands.argument("draft", StringArgumentType.word())
                         .executes(c -> run(c, () -> preview(c)))))
@@ -130,15 +132,16 @@ public final class FrontierV3BuildingCommands {
     private static String preview(CommandContext<CommandSourceStack> c) throws Exception {
         var player=c.getSource().getPlayerOrException();
         validate(c);var definition=definition(c);var transform=placement(c,markup(c));
-        var entries=new ArrayList<io.farfrontier.palemirror.internal.network.BuildingPreviewPayload.Equipment>();
+        var entries=new ArrayList<io.farfrontier.palemirror.internal.network.BuildingPreviewPayload.Model>();
         for(var work:definition.workplaces().values()){
             var position=transform.world(work.socket().offset(0,1,0));
             if(player.distanceToSqr(position.x()+.5,position.y()+.5,position.z()+.5)>128*128)
                 throw new IllegalArgumentException("preview must be within 128 blocks");
-            entries.add(new io.farfrontier.palemirror.internal.network.BuildingPreviewPayload.Equipment(
+            entries.add(new io.farfrontier.palemirror.internal.network.BuildingPreviewPayload.Model(
                     new net.minecraft.core.BlockPos(position.x(),position.y(),position.z()),
                     FrontierV3FixedContainerProviders.equipmentState(work.equipmentType(),transform.direction(work.facing()))));
         }
+        if(entries.size()>32)throw new IllegalArgumentException("equipment preview exceeds 32 workplaces");
         String markers=overlay(c);
         net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player,
                 new io.farfrontier.palemirror.internal.network.BuildingPreviewPayload(player.level().dimension().location(),entries));
@@ -159,40 +162,6 @@ public final class FrontierV3BuildingCommands {
             c.getSource()
                     .sendFailure(Component.literal("Building authoring: " + failure.getMessage()));
             return 0;
-        }
-    }
-
-    private static Path directory(CommandContext<CommandSourceStack> c) {
-        var name = StringArgumentType.getString(c, "draft");
-        if (!name.matches("[a-z0-9_-]{1,48}"))
-            throw new IllegalArgumentException("draft needs a bounded simple filename");
-        return c.getSource()
-                .getServer()
-                .getServerDirectory()
-                .resolve("debug/pale-mirror/buildings")
-                .resolve(name);
-    }
-
-    private static byte[] read(Path file, int maximum) throws java.io.IOException {
-        if (Files.isSymbolicLink(file) || !Files.isRegularFile(file) || Files.size(file) > maximum)
-            throw new IllegalArgumentException(
-                    "missing, symbolic or oversized draft file: " + file.getFileName());
-        return Files.readAllBytes(file);
-    }
-
-    private static void write(Path file, byte[] bytes) throws java.io.IOException {
-        if (Files.isSymbolicLink(file) || Files.isSymbolicLink(file.getParent()))
-            throw new IllegalArgumentException("symbolic draft path");
-        var temporary = Files.createTempFile(file.getParent(), ".building-", ".tmp");
-        try {
-            Files.write(temporary, bytes);
-            Files.move(
-                    temporary,
-                    file,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(temporary);
         }
     }
 

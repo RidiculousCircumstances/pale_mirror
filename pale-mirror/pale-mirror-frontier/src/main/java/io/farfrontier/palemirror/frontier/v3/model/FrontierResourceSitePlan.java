@@ -87,7 +87,7 @@ public final class FrontierResourceSitePlan {
         for (Settlement settlement : bootstrap.settlements()) {
             reserved.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(bootstrap.terrain(), settlement.structures()));
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
-                    bootstrap.ruleset().facilityCapacity().intactHousingBeds());
+                    SettlementBeds.declaredCapacity(settlement));
             reserved.addAll(ingress.foundationCells());
             ingress.ownedSurfaces().forEach(surface -> reserved.add(surface.support()));
             reserved.addAll(SettlementLocalCirculation.foundationCells(bootstrap.terrain(), settlement));
@@ -100,10 +100,13 @@ public final class FrontierResourceSitePlan {
                                                Set<BlockPosition> occupied, int fieldSide) {
         var bounds = bootstrap.bounds();
         // Content varies distance independently of settlement worker/route authority.
-        int distance = bootstrap.ruleset().worldLayout().productionSites() == FrontierWorldLayout.ProductionSites.DISPERSED
-                ? 24 + Math.floorMod(Objects.hash(bootstrap.seed(), settlement.id()), 4) * 24 : 0;
-        for (FacilityFacing side : candidateSides(farm.facing())) {
-            var anchor = new BlockPosition(farm.anchor().x() + side.x()*distance, farm.anchor().y(), farm.anchor().z() + side.z()*distance);
+        int extent=settlement.layout().plots().values().stream().mapToInt(plot->Math.max(
+                Math.max(Math.abs(plot.bounds().min().x()-settlement.anchor().x()),Math.abs(plot.bounds().max().x()-settlement.anchor().x())),
+                Math.max(Math.abs(plot.bounds().min().z()-settlement.anchor().z()),Math.abs(plot.bounds().max().z()-settlement.anchor().z())))).max().orElseThrow();
+        int distance=extent+FIELD_CLEARANCE+(bootstrap.ruleset().worldLayout().productionSites()==FrontierWorldLayout.ProductionSites.DISPERSED
+                ? 24+Math.floorMod(Objects.hash(bootstrap.seed(),settlement.id()),4)*24:0);
+        for(var proposal:ExteriorLandCandidates.around(settlement.anchor(),distance,fieldSide+FIELD_CLEARANCE*2,candidateSides(farm.facing()))) {
+            var side=proposal.facing();var anchor=proposal.anchor();
             var frame = new SettlementStructure(farm.id(), farm.settlementId(), farm.kind(), anchor, farm.facing(), farm.building());
             var footprint = cropSlots(frame, side, fieldSide).stream().map(crop -> new BlockPosition(crop.x(),
                     bootstrap.terrain().supportYAt(crop.x(), crop.z()) + 1, crop.z())).toList();

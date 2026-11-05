@@ -103,14 +103,14 @@ class StructuralRepairProcessTest {
     @Test
     void routeLossIsNeverAdmittedToGenericStructuralRepair() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:route-repair"), 91L));
-        BlockPosition routeCell = FrontierRouteNetwork.settlementWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id()).get(2);
+        BlockPosition routeCell = DeclaredRouteFixtures.networkSurface(state.bootstrap(), state.routeTopology(), state.bootstrap().settlements().getFirst().id());
         state = state.recordPhysicalDelta(new PhysicalDelta(routeCell, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "explosion:test"));
         SubjectId materialId = new SubjectId("item:route-repair-gray-concrete");
         FrontierWorldState noStock = state.withInventory(state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE));
         assertTrue(StructuralRepairProcess.plan(noStock, StructuralRepairProcess.scan(1, 800L)).stream().noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared));
-        state = noStock.withInventory(noStock.inventory().store(new ExactItemStack(materialId, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 1,
+        state = noStock.withInventory(noStock.inventory().store(new ExactItemStack(materialId, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE.repairItemKind(), 1,
                 new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
         assertTrue(StructuralRepairProcess.plan(state, StructuralRepairProcess.scan(1, 800L)).stream()
                 .noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared));

@@ -8,7 +8,7 @@ import java.util.Objects;
 
 /** Bounded exact physical-damage summary for one canonical settlement structure. */
 public record StructureDamage(SubjectId structureId, Map<BlockPosition, DamageCell> cells) {
-    public static final int MAX_CELLS = 1_024;
+    public static final int MAX_CELLS = 65_536;
 
     public StructureDamage {
         Objects.requireNonNull(structureId, "structure id");

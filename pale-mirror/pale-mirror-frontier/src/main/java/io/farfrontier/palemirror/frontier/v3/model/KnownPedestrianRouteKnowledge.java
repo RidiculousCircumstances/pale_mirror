@@ -117,7 +117,7 @@ public final class KnownPedestrianRouteKnowledge {
             KnownSiteGeometry.View sites) {
         var cache = cache();
         passages = List.copyOf(passages);
-        if (passages.isEmpty() || passages.size() > 8)
+        if (passages.isEmpty() || passages.size() > SettlementLayout.MAX_PLOTS * 2)
             throw new IllegalArgumentException("journey needs bounded declared facility passages");
         refresh(state, sites);
         JourneyKey key = new JourneyKey(passages);

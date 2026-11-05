@@ -255,12 +255,13 @@ class HumanPopulationProcessTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SettlementStructure housing = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow();
 
-        assertEquals(state.bootstrap().ruleset().facilityCapacity().intactHousingBeds(), SettlementFacilityCapability.housingCapacity(state, settlement.id()));
+        assertEquals(SettlementBeds.declaredCapacity(settlement), SettlementFacilityCapability.housingCapacity(state, settlement.id()));
         assertEquals(settlement.residents().size(), SettlementFacilityCapability.livingResidents(state, settlement.id()));
-        assertEquals(state.bootstrap().ruleset().facilityCapacity().damagedHousingBeds(),
-                SettlementFacilityCapability.forCondition(state.bootstrap().ruleset(), StructureKind.HOUSING, StructureCondition.DAMAGED).residentCapacity());
+        assertEquals(housing.definition().beds().size(),SettlementFacilityCapability.forStructure(state,housing).residentCapacity());
 
-        FrontierWorldState destroyed = state.withStructureCondition(housing.id(), StructureCondition.DESTROYED);
+        var withoutHomes=state;
+        for(var building:settlement.structures())if(building.kind()==StructureKind.HOUSING)withoutHomes=withoutHomes.withStructureCondition(building.id(),StructureCondition.DESTROYED);
+        final FrontierWorldState destroyed=withoutHomes;
         assertEquals(0, SettlementFacilityCapability.housingCapacity(destroyed, settlement.id()));
         ResidentProfile parent = destroyed.humanPopulation().resident(settlement.residents().getFirst().id());
         ResidentProfile newborn = new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
@@ -272,7 +273,7 @@ class HumanPopulationProcessTest {
         assertThrows(IllegalArgumentException.class, () -> destroyed.startResidentBirth(permit));
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state, 100L).boards().get(housing.id());
-        assertTrue(board.text().contains(settlement.residents().size() + " / " + state.bootstrap().ruleset().facilityCapacity().intactHousingBeds() + " RESIDENTS"));
+        assertTrue(board.text().contains("BEDS " + housing.definition().beds().size()));
     }
 
     private static FrontierWorldState state(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {

@@ -207,6 +207,8 @@ configurations {
 }
 
 tasks.withType(Test).configureEach {
+    // Authored settlement fixtures exercise the same bounded world projections as Frontier.
+    maxHeapSize = '4g'
     useJUnitPlatform()
 }
 

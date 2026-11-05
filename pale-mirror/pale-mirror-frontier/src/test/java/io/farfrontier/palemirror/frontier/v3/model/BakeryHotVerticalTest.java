@@ -556,8 +556,11 @@ class BakeryHotVerticalTest {
                 "a delivered job cannot retain an exact exit-cell obligation");
         var firstExit = StationWorkNavigation.path(state, state.productionJobs().get(job.id()));
         assertTrue(ServiceAccessCoordinator.boundary(state, depot).cleared(firstExit.getLast().standingBody()));
-        var exitObstructed = state.recordPhysicalDelta(new PhysicalDelta(firstExit.getLast().support().offset(0, 1, 0),
-                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:bakery-preferred-exit-blocked"));
+        var exitObstructed = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(
+                state.navigationGeometry().revision(), Map.of(firstExit.getLast().support().offset(0, 1, 0),
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID)))
+                .apply(state, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
         var alternativeExit = StationWorkNavigation.path(exitObstructed, exitObstructed.productionJobs().get(job.id()));
         assertNotEquals(firstExit.getLast(), alternativeExit.getLast());
         assertTrue(ServiceAccessCoordinator.boundary(exitObstructed, depot).cleared(alternativeExit.getLast().standingBody()));

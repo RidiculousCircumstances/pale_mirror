@@ -358,7 +358,7 @@ class EngineeringSpatialContinuationTest {
             state = FrontierWorldState.initial(state.bootstrap());
             state = FrontierEngineeringFixtures.withEquipment(state, state.bootstrap().settlements().getFirst().id());
             var settlement = state.bootstrap().settlements().getFirst();
-            var loss = state.routeTopology().settlementWaypoints(state.bootstrap(), settlement.id()).get(2);
+            var loss = DeclaredRouteFixtures.networkSurface(state.bootstrap(), state.routeTopology(), settlement.id());
             state = state.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                     Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)),
                     Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:engineering-spatial-repair"));

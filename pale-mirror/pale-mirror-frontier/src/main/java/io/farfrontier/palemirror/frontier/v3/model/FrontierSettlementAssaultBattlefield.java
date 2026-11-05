@@ -23,7 +23,7 @@ public final class FrontierSettlementAssaultBattlefield {
             return Optional.empty();
         }
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
-        long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
+        long settlementEnvelopeSquared = settlementEnvelopeSquared(settlement);
         Provider provider = providerView(state);
         Set<BlockPosition> occupied = new LinkedHashSet<>();
         for (SubjectId defender : defenderIds) {
@@ -71,7 +71,7 @@ public final class FrontierSettlementAssaultBattlefield {
             SettlementAssault assault, Provider provider) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
-        long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
+        long settlementEnvelopeSquared = settlementEnvelopeSquared(settlement);
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
         List<SubjectId> members = new ArrayList<>(assault.attackerIds()); members.addAll(assault.defenderIds());
         members.sort(Comparator.naturalOrder());
@@ -92,7 +92,7 @@ public final class FrontierSettlementAssaultBattlefield {
     }
 
     static boolean localClearFloor(FrontierWorldState state, Settlement settlement, BlockPosition position) {
-        return localClearFloor(state.bootstrap().bounds(), settlement.anchor(), residentEnvelopeSquared(state, settlement),
+        return localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared(settlement),
                 FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures()), position);
     }
 
@@ -142,7 +142,7 @@ public final class FrontierSettlementAssaultBattlefield {
     private static List<BlockPosition> declaredProviderFloors(FrontierWorldState state, Settlement settlement) {
         Provider provider = providerView(state);
         return SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
-                state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).perimeterSurfaces().stream()
+                SettlementBeds.declaredCapacity(settlement)).perimeterSurfaces().stream()
                 .map(SurfaceAnchor::support).sorted(Comparator.comparingLong((BlockPosition position) -> distanceSquared(settlement.anchor(), position))
                         .thenComparingInt(BlockPosition::x)
                         .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
@@ -159,11 +159,12 @@ public final class FrontierSettlementAssaultBattlefield {
         return nearby(anchor, position, settlementEnvelopeSquared) && FrontierSettlementActorSlots.clearFloor(bounds, structureCells, position);
     }
 
-    private static long residentEnvelopeSquared(FrontierWorldState state, Settlement settlement) {
-        return SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
-                        state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).homeSlots().stream()
+    private static long settlementEnvelopeSquared(Settlement settlement) {
+        // Occupied outdoor home slots are not the extent of a settlement. New plots
+        // and street ends remain inside its declared public-space envelope.
+        return settlement.layout().paving().stream()
                 .mapToLong(position -> distanceSquared(settlement.anchor(), position)).max()
-                .orElseThrow(() -> new IllegalArgumentException("settlement battlefield requires one planned resident home"));
+                .orElseThrow(() -> new IllegalArgumentException("settlement battlefield requires declared streets"));
     }
 
     private static boolean nearby(BlockPosition anchor, BlockPosition position, long settlementEnvelopeSquared) {

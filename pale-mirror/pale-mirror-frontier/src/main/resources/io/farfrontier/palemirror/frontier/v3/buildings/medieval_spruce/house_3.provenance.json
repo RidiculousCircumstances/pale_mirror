@@ -1,0 +1,15 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "fundamentals/altresidence3.blueprint",
+  "sourceSha256": "e70f4a6d7becbce59ff36f7531ec5e4bb7aadc62a97e056f657d001765bc277f",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "explicit vanilla dependency substitutions",
+    "cropped buried foundation and terrain placeholders; graybox environmental water replaced by coarse dirt",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities or block-entity NBT"
+  ],
+  "blocks": 1191,
+  "beds": 3
+}

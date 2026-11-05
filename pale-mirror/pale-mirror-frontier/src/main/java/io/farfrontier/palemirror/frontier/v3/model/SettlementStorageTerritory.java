@@ -16,12 +16,11 @@ public final class SettlementStorageTerritory {
     public static synchronized List<Area> areas(FrontierBootstrap bootstrap) {
         if (cached != bootstrap) {
             areas = bootstrap.settlements().stream().map(settlement -> {
-                var apron = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
-                        bootstrap.ruleset().facilityCapacity().intactHousingBeds()).perimeterSurfaces();
-                return new Area(settlement, apron.stream().mapToInt(SurfaceAnchor::x).min().orElseThrow(),
-                        apron.stream().mapToInt(SurfaceAnchor::x).max().orElseThrow(),
-                        apron.stream().mapToInt(SurfaceAnchor::z).min().orElseThrow(),
-                        apron.stream().mapToInt(SurfaceAnchor::z).max().orElseThrow());
+                var plots=settlement.layout().plots().values();var streets=settlement.layout().paving();
+                return new Area(settlement,Math.min(plots.stream().mapToInt(p->p.bounds().min().x()).min().orElseThrow(),streets.stream().mapToInt(BlockPosition::x).min().orElseThrow()),
+                        Math.max(plots.stream().mapToInt(p->p.bounds().max().x()-1).max().orElseThrow(),streets.stream().mapToInt(BlockPosition::x).max().orElseThrow()),
+                        Math.min(plots.stream().mapToInt(p->p.bounds().min().z()).min().orElseThrow(),streets.stream().mapToInt(BlockPosition::z).min().orElseThrow()),
+                        Math.max(plots.stream().mapToInt(p->p.bounds().max().z()-1).max().orElseThrow(),streets.stream().mapToInt(BlockPosition::z).max().orElseThrow()));
             }).toList();
             cached = bootstrap;
         }

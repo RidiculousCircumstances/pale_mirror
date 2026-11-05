@@ -29,7 +29,7 @@ public final class PaleMirrorBuildingPreviewClient {
                 || !value.dimension().equals(client.level.dimension().location()))return;
         var pose=event.getPoseStack();var camera=event.getCamera().getPosition();
         var buffers=client.renderBuffers().bufferSource();
-        for(var equipment:value.equipment()){
+        for(var equipment:value.models()){
             var p=equipment.position();
             if(p.distToCenterSqr(camera.x,camera.y,camera.z)>128*128 || !client.level.hasChunkAt(p))continue;
             pose.pushPose();

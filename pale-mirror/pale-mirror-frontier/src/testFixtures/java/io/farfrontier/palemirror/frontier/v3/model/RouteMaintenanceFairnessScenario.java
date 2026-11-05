@@ -32,7 +32,7 @@ final class RouteMaintenanceFairnessScenario {
         ExactInventory inventory = state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE);
         SubjectId coldSource = new SubjectId("item:fixture-maintenance-cold-source");
-        inventory = inventory.store(new ExactItemStack(coldSource, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 1,
+        inventory = inventory.store(new ExactItemStack(coldSource, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE.repairItemKind(), 1,
                 new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER,
                         inventory.firstFreeSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER).orElseThrow())));
         state = state.withInventory(inventory);
@@ -43,7 +43,7 @@ final class RouteMaintenanceFairnessScenario {
         // source. It lets the player load only the later worksite while the first exact source
         // remains naturally COLD at the real shared maintenance chest.
         SubjectId priorSource = new SubjectId("item:fixture-maintenance-loaded-source");
-        inventory = state.inventory().store(new ExactItemStack(priorSource, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 1,
+        inventory = state.inventory().store(new ExactItemStack(priorSource, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE.repairItemKind(), 1,
                 new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER,
                         state.inventory().firstFreeSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER).orElseThrow())));
         CargoBatch secondCargo = new CargoBatch(second.plannedCargoId(), FrontierRouteNetwork.OWNER, List.of(second.plannedCargoItemId()));

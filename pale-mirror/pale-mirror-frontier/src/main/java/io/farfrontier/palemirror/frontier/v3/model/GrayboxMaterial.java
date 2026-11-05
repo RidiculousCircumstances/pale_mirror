@@ -30,7 +30,7 @@ public enum GrayboxMaterial implements StructureMaterial {
 
     @Override public String wireIdentity() { return "1|" + name(); }
 
-    /** One repair unit is one ordinary Minecraft concrete item, never an aggregate resource. */
+    /** One repair unit is one ordinary Minecraft block item, never an aggregate resource. */
     public String repairItemKind() {
         return switch (this) {
             case HALL -> "minecraft:white_concrete";
@@ -52,7 +52,8 @@ public enum GrayboxMaterial implements StructureMaterial {
             case HIVE_MORPHER -> "minecraft:lime_concrete";
             case HIVE_SPORULATOR -> "minecraft:orange_concrete";
             case HIVE_SENSOR -> "minecraft:light_blue_concrete";
-            case ROUTE, ROUTE_FOUNDATION -> "minecraft:gray_concrete";
+            case ROUTE -> "minecraft:stone_bricks";
+            case ROUTE_FOUNDATION -> "minecraft:cobblestone";
             case WORKSITE, INFECTION -> throw new IllegalArgumentException("temporary/overlay geometry is not a structural repair material");
         };
     }

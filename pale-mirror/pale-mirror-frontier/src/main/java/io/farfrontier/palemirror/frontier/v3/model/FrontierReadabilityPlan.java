@@ -353,6 +353,8 @@ public final class FrontierReadabilityPlan {
     }
 
     private static BlockPosition structureBoardPosition(SettlementStructure structure, StructureCondition condition) {
+        if(structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+            return io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).primaryEntrance().exteriorApproach().getFirst().support().offset(0,3,0);
         int depth = switch (structure.kind()) {
             case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT -> 7;
             case HOUSING, INFIRMARY -> 6;
@@ -549,9 +551,8 @@ public final class FrontierReadabilityPlan {
         if (ProductionFacilityLayout.supports(structure.kind())) return condition != StructureCondition.INTACT
                 ? conditionText(condition) : AutomaticStationReadability.text(state, structure, atTick);
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
-        int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());
         int beds = SettlementFacilityCapability.forStructure(state, structure).residentCapacity();
-        return conditionText(condition) + "\n" + residents + " / " + beds + " RESIDENTS";
+        return conditionText(condition) + "\nBEDS " + beds + " / " + structure.definition().beds().size();
     }
 
     private static String foodText(FrontierWorldState state, SubjectId settlementId, long atTick) {

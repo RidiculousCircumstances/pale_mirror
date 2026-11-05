@@ -1,0 +1,261 @@
+[
+  {
+    "name": "hall",
+    "kind": "HALL",
+    "source": "fundamentals/townhall2.blueprint",
+    "sha256": "0de7053c7498f39e25611266f1a70db4b34be49eb82c73abe043c063cc469ed6",
+    "floor": 4,
+    "door": [
+      3,
+      7
+    ],
+    "front": "WEST"
+  },
+  {
+    "name": "infirmary",
+    "kind": "INFIRMARY",
+    "source": "fundamentals/hospital2.blueprint",
+    "sha256": "1d41bc0514c803362bb9d66959cb8915ed3efb3fe030a5261810b5fba59d049a",
+    "floor": 7,
+    "door": [
+      5,
+      10
+    ],
+    "front": "WEST",
+    "anchors": {
+      "patient": [
+        8,
+        7,
+        10
+      ],
+      "medic_left": [
+        8,
+        7,
+        9
+      ],
+      "medic_right": [
+        8,
+        7,
+        11
+      ]
+    }
+  },
+  {
+    "name": "depot",
+    "kind": "DEPOT",
+    "source": "craftsmanship/storage/warehouse2.blueprint",
+    "sha256": "b77691c2398537bd7deb5ccb2031059f93acbdaabb02ebd485852ef43f6e8f84",
+    "floor": 2,
+    "door": [
+      12,
+      7
+    ],
+    "front": "EAST",
+    "anchors": {
+      "container": [
+        11,
+        2,
+        7
+      ],
+      "station_left": [
+        13,
+        2,
+        6
+      ],
+      "station_right": [
+        13,
+        2,
+        8
+      ],
+      "loading_left": [
+        14,
+        2,
+        6
+      ],
+      "loading_right": [
+        14,
+        2,
+        8
+      ]
+    },
+    "zones": [
+      {
+        "id": "storage",
+        "use": "STORAGE",
+        "min": [
+          3,
+          3,
+          3
+        ],
+        "max": [
+          12,
+          7,
+          12
+        ],
+        "priority": 80
+      }
+    ]
+  },
+  {
+    "name": "smeltery",
+    "kind": "SMELTERY",
+    "source": "craftsmanship/metallurgy/smeltery2.blueprint",
+    "sha256": "97cf46d4f13a7def71232071b5cac761c4076e483f4a3a1d55d35cad56ef8fb1",
+    "floor": 2,
+    "door": [
+      0,
+      7
+    ],
+    "front": "WEST",
+    "work": {
+      "socket": [
+        11,
+        2,
+        4
+      ],
+      "front": "SOUTH",
+      "input": [
+        10,
+        2,
+        5
+      ],
+      "type": "pale_mirror:smelter"
+    },
+    "anchors": {
+      "metal_station": [
+        -2,
+        2,
+        10
+      ],
+      "metal_storage": [
+        -2,
+        2,
+        11
+      ]
+    }
+  },
+  {
+    "name": "forge",
+    "kind": "FORGE",
+    "source": "craftsmanship/metallurgy/blacksmith2.blueprint",
+    "sha256": "da30d24de6cf993840160c177e8e1ed9c8db2682092f100ec38881194cfdf509",
+    "floor": 1,
+    "door": [
+      10,
+      10
+    ],
+    "front": "SOUTH",
+    "work": {
+      "socket": [
+        12,
+        1,
+        4
+      ],
+      "front": "WEST",
+      "input": [
+        10,
+        1,
+        4
+      ],
+      "type": "pale_mirror:forge"
+    }
+  },
+  {
+    "name": "woodshop",
+    "kind": "WOODSHOP",
+    "source": "craftsmanship/carpentry/sawmill2.blueprint",
+    "sha256": "c6f25b276162eb2e65ec096abe51338ef99f3d0af776d91e24b7f355d56ac10a",
+    "floor": 3,
+    "door": [
+      10,
+      16
+    ],
+    "front": "SOUTH",
+    "work": {
+      "socket": [
+        9,
+        3,
+        13
+      ],
+      "front": "EAST",
+      "input": [
+        11,
+        3,
+        13
+      ],
+      "type": "pale_mirror:woodworking_bench"
+    }
+  },
+  {
+    "name": "farm",
+    "kind": "FARM",
+    "source": "agriculture/horticulture/farmer2.blueprint",
+    "sha256": "810856e1f30ac6fb2890e1ff9050b3fc6e285c423d36537cafcc006a51ca5b71",
+    "floor": 2,
+    "door": [
+      14,
+      7
+    ],
+    "front": "SOUTH"
+  },
+  {
+    "name": "house_1",
+    "kind": "HOUSING",
+    "source": "fundamentals/altresidence1.blueprint",
+    "sha256": "4e7b29ed53c0ff9166528eb864e2f91c074aefd31db8a77a3c68581ba5154dbc",
+    "floor": 2,
+    "door": [
+      10,
+      10
+    ],
+    "front": "SOUTH"
+  },
+  {
+    "name": "house_2",
+    "kind": "HOUSING",
+    "source": "fundamentals/altresidence2.blueprint",
+    "sha256": "cd761c9a23f6a8a7b697b5331ff713bb36620c1a8a199809cebd23cf4de4dc12",
+    "floor": 2,
+    "door": [
+      10,
+      10
+    ],
+    "front": "SOUTH",
+    "secondaryDoor": [
+      4,
+      9
+    ]
+  },
+  {
+    "name": "house_3",
+    "kind": "HOUSING",
+    "source": "fundamentals/altresidence3.blueprint",
+    "sha256": "e70f4a6d7becbce59ff36f7531ec5e4bb7aadc62a97e056f657d001765bc277f",
+    "floor": 2,
+    "door": [
+      10,
+      10
+    ],
+    "front": "SOUTH",
+    "secondaryDoor": [
+      4,
+      9
+    ]
+  },
+  {
+    "name": "house_5",
+    "kind": "HOUSING",
+    "source": "fundamentals/altresidence5.blueprint",
+    "sha256": "d63e11ecca134ecff4a3f5964d21e956e07b8018c0c390c625dd7c51b803ee12",
+    "floor": 2,
+    "door": [
+      10,
+      10
+    ],
+    "front": "SOUTH",
+    "secondaryDoor": [
+      4,
+      9
+    ]
+  }
+]

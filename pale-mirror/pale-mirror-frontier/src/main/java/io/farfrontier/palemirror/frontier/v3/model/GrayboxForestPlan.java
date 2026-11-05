@@ -126,6 +126,7 @@ public final class GrayboxForestPlan {
             new io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Operation(io.farfrontier.palemirror.frontier.v3.model.land.SiteUseState.Kind.FORESTRY,new io.farfrontier.palemirror.frontier.v3.api.SubjectId(rule.id())));
     }
     private boolean clear(int x, int z) {
+        if(SettlementLandIndex.intersectsPrivatePlots(bootstrap,x-3,z-3,x+3,z+3))return false;
         for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++)
             if (!bootstrap.bounds().contains(new BlockPosition(x + dx, 0, z + dz))
                     || protectedColumns.contains(new TerrainColumn(x + dx, z + dz))) return false;

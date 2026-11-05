@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementBeds;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -856,7 +857,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
                 .filter(actor -> !actor.equals(attacker)).map(actor -> state.actorLocations().get(actor).supportingSurface().support())
                 .collect(java.util.stream.Collectors.toSet());
         io.farfrontier.palemirror.frontier.v3.model.BlockPosition substitute = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
-                        state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).perimeterSurfaces().stream().map(SurfaceAnchor::support)
+                        SettlementBeds.declaredCapacity(settlement)).perimeterSurfaces().stream().map(SurfaceAnchor::support)
                 .filter(position -> !occupied.contains(position)).filter(position -> {
                     GrayboxCell cell = cells.get(position);
                     return cell != null && (cell.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || cell.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE)
@@ -932,7 +933,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
         List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> floors = cells.entrySet().stream()
                 .filter(entry -> entry.getValue().semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || entry.getValue().semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE)
                 .map(Map.Entry::getKey).filter(position -> SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
-                        state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).perimeterSurfaces().contains(new SurfaceAnchor(position)))
+                        SettlementBeds.declaredCapacity(settlement)).perimeterSurfaces().contains(new SurfaceAnchor(position)))
                 .filter(position -> !cells.containsKey(position.offset(0, 1, 0)) && !cells.containsKey(position.offset(0, 2, 0))).limit(members.size()).toList();
         assertEquals(members.size(), floors.size(), "fixture must retain declared perimeter floors for every named assault member");
         for (int index = 0; index < members.size(); index++) {

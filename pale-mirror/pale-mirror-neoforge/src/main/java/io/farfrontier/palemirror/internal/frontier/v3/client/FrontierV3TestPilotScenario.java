@@ -473,7 +473,7 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("actor") && (requiredId(reference, "id", "actor:") || requiredId(reference, "id", "resident:"))
                     && diagnosticField.equals("position"))
                 || (view.equals("settlement") && requiredId(reference, "id", "settlement:")
-                && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface") || diagnosticField.equals("firstGuardPosition")))
+                && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface") || diagnosticField.equals("firstGuardPosition") || diagnosticField.equals("layout.firstHousingAnchor")))
                 || (view.equals("process") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("cursor.retainedBody") || diagnosticField.equals("goal.station")))
                 || (view.equals("process") && requiredId(reference, "id", "shipment:") && diagnosticField.equals("actorBody"))

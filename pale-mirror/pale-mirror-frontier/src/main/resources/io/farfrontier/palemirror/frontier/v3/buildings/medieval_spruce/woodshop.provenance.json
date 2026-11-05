@@ -1,0 +1,15 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "craftsmanship/carpentry/sawmill2.blueprint",
+  "sourceSha256": "c6f25b276162eb2e65ec096abe51338ef99f3d0af776d91e24b7f355d56ac10a",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "explicit vanilla dependency substitutions",
+    "cropped buried foundation and terrain placeholders; graybox environmental water replaced by coarse dirt",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities or block-entity NBT"
+  ],
+  "blocks": 811,
+  "beds": 0
+}

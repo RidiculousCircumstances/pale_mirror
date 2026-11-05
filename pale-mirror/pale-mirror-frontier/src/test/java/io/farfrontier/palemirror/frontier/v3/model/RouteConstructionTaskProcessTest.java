@@ -110,7 +110,7 @@ class RouteConstructionTaskProcessTest {
         state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE).store(new ExactItemStack(new SubjectId("item:route-construction"), FrontierRouteNetwork.OWNER,
-                        "minecraft:gray_concrete", 1, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
+                        GrayboxMaterial.ROUTE.repairItemKind(), 1, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> musterPlan = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L));
         assertTrue(musterPlan.stream().noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared),
                 "a remote crew must first retain a depot journey rather than issue a tool across the world");

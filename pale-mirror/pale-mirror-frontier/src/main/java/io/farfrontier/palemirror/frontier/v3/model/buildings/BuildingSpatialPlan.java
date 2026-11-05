@@ -9,18 +9,26 @@ public record BuildingSpatialPlan(
         BuildingDefinition definition,
         BuildingPlacement placement,
         Map<BlockPosition, GrayboxCell> blocks,
+        Map<TerrainColumn, List<BlockPosition>> columns,
+        Set<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState> palette,
         Map<String, FacilityTraversalPort> entrances,
         Set<SurfaceAnchor> circulation,
-        Set<SurfaceAnchor> workstations) {
+        Set<SurfaceAnchor> workstations,
+        Set<SurfaceAnchor> authoredFloors) {
     // A projection has the lifetime of its immutable structure. Neither the key nor the
     // containing bootstrap is retained by its value; retired worlds must release their fabric.
     private static final Map<SettlementStructure, BuildingSpatialPlan> VIEWS = new WeakHashMap<>();
 
     public BuildingSpatialPlan {
         blocks = Collections.unmodifiableMap(new LinkedHashMap<>(blocks));
+        var immutableColumns = new HashMap<TerrainColumn, List<BlockPosition>>();
+        columns.forEach((column, values) -> immutableColumns.put(column, List.copyOf(values)));
+        columns = Collections.unmodifiableMap(immutableColumns);
+        palette = Set.copyOf(palette);
         entrances = Collections.unmodifiableMap(new LinkedHashMap<>(entrances));
         circulation = Set.copyOf(circulation);
         workstations = Set.copyOf(workstations);
+        authoredFloors = Set.copyOf(authoredFloors);
     }
 
     public static synchronized BuildingSpatialPlan of(SettlementStructure structure) {
@@ -31,11 +39,32 @@ public record BuildingSpatialPlan(
         var definition = structure.definition();
         var placement = structure.placement();
         var blocks = new LinkedHashMap<BlockPosition, GrayboxCell>();
+        var columns = new HashMap<TerrainColumn, List<BlockPosition>>();
+        var floors = new LinkedHashSet<SurfaceAnchor>();
+        var palette =
+                new HashSet<
+                        io.farfrontier.palemirror.frontier.v3.model.geometry
+                                .NavigationBlockState>();
         definition
                 .blocks()
                 .forEach(
                         (local, block) -> {
                             var point = placement.world(local);
+                            var nativeState = placement.state(block.state());
+                            palette.add(nativeState);
+                            switch (block.part()) {
+                                case FOUNDATION,
+                                                PUBLIC_ACCESS_SURFACE,
+                                                WORKSHOP_INPUT_STATION,
+                                                WORKSHOP_PROCESS_STATION ->
+                                        floors.add(new SurfaceAnchor(point));
+                                default -> {}
+                            }
+                            // Candidate cells only; the common collision provider decides support.
+                            columns.computeIfAbsent(
+                                            new TerrainColumn(point.x(), point.z()),
+                                            ignored -> new ArrayList<>())
+                                    .add(point);
                             blocks.put(
                                     point,
                                     new GrayboxCell(
@@ -45,8 +74,7 @@ public record BuildingSpatialPlan(
                                                             .SETTLEMENT_STRUCTURE,
                                                     structure.id()),
                                             new StructureMaterial.Authored(
-                                                    placement.state(block.state()),
-                                                    block.repairItem()),
+                                                    nativeState, block.repairItem()),
                                             block.part()));
                         });
         var stations = new LinkedHashSet<SurfaceAnchor>();
@@ -57,6 +85,9 @@ public record BuildingSpatialPlan(
                         work -> {
                             stations.add(placement.support(work.input()));
                             stations.add(placement.support(work.worker()));
+                            floors.add(placement.support(work.input()));
+                            floors.add(placement.support(work.worker()));
+                            floors.add(placement.support(work.socket()));
                         });
         var entrances = new LinkedHashMap<String, FacilityTraversalPort>();
         var circulation = new LinkedHashSet<SurfaceAnchor>();
@@ -76,6 +107,7 @@ public record BuildingSpatialPlan(
                             supports.get(threshold),
                             supports.get(threshold + 1),
                             List.copyOf(stations),
+                            List.of(),
                             Set.of(TraversalCapability.PEDESTRIAN)));
             circulation.addAll(supports);
         }
@@ -91,7 +123,15 @@ public record BuildingSpatialPlan(
                             circulation.add(placement.support(new BlockPosition(x, y - 1, z)));
             }
         return new BuildingSpatialPlan(
-                definition, placement, blocks, entrances, circulation, stations);
+                definition,
+                placement,
+                blocks,
+                columns,
+                palette,
+                entrances,
+                circulation,
+                stations,
+                floors);
     }
 
     public List<FacilityTraversalPort> publicEntrances() {
@@ -111,28 +151,6 @@ public record BuildingSpatialPlan(
                                         new IllegalArgumentException(
                                                 "building has no primary entrance"));
         return Objects.requireNonNull(entrances.get(id), "primary building entrance");
-    }
-
-    public Set<SurfaceAnchor> authoredFloors() {
-        var result = new LinkedHashSet<SurfaceAnchor>();
-        blocks.values().stream()
-                .filter(
-                        cell ->
-                                switch (cell.semanticPart()) {
-                                    case FOUNDATION,
-                                                    PUBLIC_ACCESS_SURFACE,
-                                                    WORKSHOP_INPUT_STATION,
-                                                    WORKSHOP_PROCESS_STATION ->
-                                            true;
-                                    default -> false;
-                                })
-                .forEach(cell -> result.add(new SurfaceAnchor(cell.position())));
-        for (var workplace : definition.workplaces().values()) {
-            result.add(placement.support(workplace.input()));
-            result.add(placement.support(workplace.worker()));
-            result.add(placement.support(workplace.socket()));
-        }
-        return Set.copyOf(result);
     }
 
     /** Spatial containment is geometry only, never a discovery of the owner of a pending action. */

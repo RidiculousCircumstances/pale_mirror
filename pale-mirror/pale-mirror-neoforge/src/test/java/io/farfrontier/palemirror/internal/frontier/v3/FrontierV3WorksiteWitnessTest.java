@@ -127,12 +127,19 @@ class FrontierV3WorksiteWitnessTest {
         var newPoint = plan.columns().getFirst().floor().support().offset(0, 2, 0);
         assertTrue(FrontierV3WorksiteRegistry.point(cleared, new net.minecraft.core.BlockPos(newPoint.x(), newPoint.y(), newPoint.z())).isEmpty());
         var nativePoint = FrontierV3WorksiteRegistry.point(next, new net.minecraft.core.BlockPos(newPoint.x(), newPoint.y(), newPoint.z())).orElseThrow();
-        assertEquals(WorksiteBlock.Role.RESOURCE, nativePoint.key().role()); assertTrue(nativePoint.key().cell() > 512);
+        assertEquals(WorksiteBlock.Role.RESOURCE, nativePoint.key().role()); assertTrue(nativePoint.key().cell() > old.cells().keySet().stream().mapToLong(Long::longValue).max().orElseThrow());
         assertNotSame(initialIndex, FrontierV3WorksiteRegistry.chunks(next));
         assertSame(FrontierV3WorksiteRegistry.chunks(next), FrontierV3WorksiteRegistry.chunks(next));
         var newKeys = ExtractionWorksiteBlocks.declared(next.extractionSites().deposits().get(old.site().id())).stream()
                 .collect(java.util.stream.Collectors.toMap(WorksiteBlock::position, WorksiteBlock::key));
-        assertTrue(newKeys.entrySet().containsAll(priorKeys.entrySet()));
+        var expanded = next.extractionSites().deposits().get(old.site().id());
+        for (var entry : priorKeys.entrySet()) {
+            if (entry.getValue().equals(newKeys.get(entry.getKey()))) continue;
+            var predecessor = ExtractionWorksiteBlocks.declaredAt(old, entry.getKey()).orElseThrow();
+            var successor = ExtractionWorksiteBlocks.declaredAt(expanded, entry.getKey()).orElseThrow();
+            assertTrue(ExtractionWorksiteBlocks.reclassification(expanded, predecessor, successor).isPresent(),
+                    "an old source keeps its exact key; natural ground may only become a source through the typed transition");
+        }
     }
     @Test void sourceDeclarationIndexIsReusedAcrossTurnsAndDepletionButRefreshesForAnotherManifest() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(

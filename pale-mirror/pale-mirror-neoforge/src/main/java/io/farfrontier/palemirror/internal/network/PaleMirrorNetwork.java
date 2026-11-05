@@ -17,8 +17,8 @@ public final class PaleMirrorNetwork {
     private PaleMirrorNetwork() { }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        // Longer movement cues require a matching decoder before play, not a failure during pursuit.
-        var registrar = event.registrar("6");
+        // Authored-fabric preview has a larger bounded model envelope; require a matching decoder.
+        var registrar = event.registrar("7");
         registrar.playToClient(BuildingPreviewPayload.TYPE,BuildingPreviewPayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{if(FMLEnvironment.dist==Dist.CLIENT)
                     io.farfrontier.palemirror.internal.client.PaleMirrorBuildingPreviewClient.receive(payload);}));

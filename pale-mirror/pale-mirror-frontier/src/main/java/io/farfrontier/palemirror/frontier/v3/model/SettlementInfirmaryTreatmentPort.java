@@ -45,6 +45,12 @@ public record SettlementInfirmaryTreatmentPort(SubjectId settlementId, SubjectId
     public static SettlementInfirmaryTreatmentPort forInfirmary(SettlementStructure infirmary) {
         Objects.requireNonNull(infirmary, "settlement infirmary");
         if (infirmary.kind() != StructureKind.INFIRMARY) throw new IllegalArgumentException("only an infirmary owns a treatment port");
+        if(infirmary.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+            var layout=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(infirmary);var port=layout.primaryEntrance();
+            return new SettlementInfirmaryTreatmentPort(infirmary.settlementId(),infirmary.id(),infirmary.facing(),port.interiorConnector(),port.thresholdSurface(),
+                    port.exteriorApproach().getLast(),port.exteriorApproach().getFirst(),layout.placement().support(layout.definition().anchor("patient")),
+                    java.util.stream.Stream.of("medic_left","medic_right").map(key->layout.placement().support(layout.definition().anchor(key))).toList());
+        }
         FacilityFacing facing = infirmary.facing();
         SurfaceAnchor center = new SurfaceAnchor(infirmary.anchor());
         SurfaceAnchor interior = facing.step(center, 2);
@@ -76,7 +82,7 @@ public record SettlementInfirmaryTreatmentPort(SubjectId settlementId, SubjectId
     public FacilityTraversalPort topologyPort() {
         return new FacilityTraversalPort(infirmaryId, facing, List.of(exteriorApproachSurface,
                 facing.step(approachSurface, 1), approachSurface), throatSurface,
-                interiorSurface, List.of(patientSurface, medicSurfaces.getFirst(), medicSurfaces.getLast()),
+                interiorSurface, List.of(patientSurface, medicSurfaces.getFirst(), medicSurfaces.getLast()), List.of(),
                 java.util.Set.of(TraversalCapability.PEDESTRIAN));
     }
     public List<SurfaceAnchor> ingressSurfaces() { return List.of(approachSurface, throatSurface, interiorSurface); }

@@ -27,7 +27,8 @@ final class FrontierV3GrayboxPalette {
             case HIVE_BROOD -> Blocks.PURPLE_CONCRETE;
             case HIVE_DIGESTER -> Blocks.BROWN_CONCRETE;
             case HIVE_SENSOR, WORKSITE -> Blocks.LIGHT_BLUE_CONCRETE;
-            case ROUTE, ROUTE_FOUNDATION -> Blocks.GRAY_CONCRETE;
+            case ROUTE -> Blocks.STONE_BRICKS;
+            case ROUTE_FOUNDATION -> Blocks.COBBLESTONE;
             case INFECTION -> throw new IllegalArgumentException("infection requires the dynamic overlay executor");
         }).defaultBlockState();
     }

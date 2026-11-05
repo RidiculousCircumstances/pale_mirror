@@ -78,7 +78,7 @@ final class FrontierEngineeringFixtures {
         SubjectId maintenance = FrontierRouteNetwork.MAINTENANCE_CONTAINER;
         SubjectId source = new SubjectId("item:fixture-engineering-worksite-concrete");
         inventory = inventory.withSurfaceStatus(maintenance, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(maintenance, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(source, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 1,
+                .store(new ExactItemStack(source, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE.repairItemKind(), 1,
                         new InventoryCustody.ContainerSlot(maintenance, inventory.firstFreeSlot(maintenance).orElseThrow())));
         CargoBatch cargo = new CargoBatch(project.plannedCargoId(), FrontierRouteNetwork.OWNER, List.of(project.plannedCargoItemId()));
         inventory = inventory.extractOneToCargo(source, cargo, project.plannedCargoItemId());

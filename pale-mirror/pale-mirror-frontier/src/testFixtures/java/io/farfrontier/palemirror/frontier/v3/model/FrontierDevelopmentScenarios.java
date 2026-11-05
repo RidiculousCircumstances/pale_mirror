@@ -40,8 +40,9 @@ final class FrontierDevelopmentScenarios {
                 Optional.empty(), 99, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(taskId, objectiveId, settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
-        RoutePatrol patrol = RoutePatrol.planned(state, task, settlement,
-                RouteUnitManifest.patrol(taskId, guards.getFirst().id(), List.of(guards.get(1).id())));
+        var ingress = DeclaredRouteFixtures.stagedPatrol(state,settlement,taskId,guards.getFirst().id(),guards.get(1).id());
+        state=ingress.state();
+        RoutePatrol patrol = RoutePatrol.planned(state, task, settlement, ingress.unit());
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         state = RoutePatrolProcess.reduceStarted(state, settlement.id(),
                 new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));
@@ -220,14 +221,24 @@ final class FrontierDevelopmentScenarios {
         // Establish an externally mobilised assault party. The production selector correctly
         // excludes cocoon-retained identities; this fixture explicitly owns only its test
         // precondition, rather than relying on an impossible direct COLD movement later.
+        // This scene/aftermath fixture starts with an already deployed local cohort.
+        // Long-distance hive marching is a separate carrier, not a hidden precondition
+        // for verifying native scene ownership on each new building set.
+        var publicCells = FrontierGrayboxPlan.compile(state).cells();
+        var front = settlement.layout().extensionFronts().getFirst();
+        var occupied = state.actorLocations().values().stream().map(ActorLocation::supportingSurface)
+                .collect(java.util.stream.Collectors.toSet());
+        var deployment = settlement.layout().paving().stream().map(SurfaceAnchor::new)
+                .filter(p -> !occupied.contains(p))
+                .filter(p -> FrontierSettlementAssaultBattlefield.providerAuthorizesFloor(
+                        at -> Optional.ofNullable(publicCells.get(at)), p.support()))
+                .sorted(java.util.Comparator.comparingInt((SurfaceAnchor p) -> Math.abs(p.x()-front.x())+Math.abs(p.z()-front.z()))
+                        .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).iterator();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.isExplosiveAssaulter() || bioform.isDefender() || bioform.isOverseer()) {
-                BlockPosition canonicalBodyCell = state.actorLocations().get(bioform.id()).supportingSurface().support();
-                // The bootstrap's dormant-hive positions are feet cells; the native graybox
-                // exposes their authored floor one cell below.  This fixture establishes the
-                // real mobilised precondition on that exact physical floor, rather than asking
-                // an approach scene to invent a higher substitute surface at hand-off time.
-                state = deployFixtureBioform(state, bioform.id(), canonicalBodyCell.offset(0, -1, 0));
+            if (bioform.nestId().equals(new SubjectId("nest:seed-west"))
+                    && (bioform.isExplosiveAssaulter() || bioform.isDefender() || bioform.isOverseer())) {
+                if (!deployment.hasNext()) throw new IllegalStateException("local assault ingress lacks declared public deployment surfaces");
+                state = deployFixtureBioform(state, bioform.id(), deployment.next().support());
             }
         }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
@@ -482,9 +493,11 @@ final class FrontierDevelopmentScenarios {
     static ResidentTransitFixture residentTransitFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement source = state.bootstrap().settlements().getFirst();
-        SubjectId housing = source.structures().stream().filter(value -> value.kind() == StructureKind.HOUSING).findFirst()
-                .orElseThrow(() -> new IllegalStateException("transit fixture needs source housing")).id();
-        state = state.withStructureCondition(housing, StructureCondition.DESTROYED);
+        // Several real homes now provide spare capacity: one small house loss need not displace anyone.
+        for (var housing : source.structures().stream().filter(value -> value.kind() == StructureKind.HOUSING).toList()) {
+            state = state.withStructureCondition(housing.id(), StructureCondition.DESTROYED);
+            if (SettlementFacilityCapability.housingCapacity(state, source.id()) < source.residents().size()) break;
+        }
         ResidentMigrationStarted started = PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 1L)).stream()
                 .map(ProposedEvent::payload).filter(ResidentMigrationStarted.class::isInstance).map(ResidentMigrationStarted.class::cast)
                 .findFirst().orElseThrow(() -> new IllegalStateException("transit fixture needs one displaced resident"));

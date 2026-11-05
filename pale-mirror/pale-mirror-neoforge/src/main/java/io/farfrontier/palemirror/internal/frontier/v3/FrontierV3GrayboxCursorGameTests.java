@@ -48,7 +48,7 @@ public final class FrontierV3GrayboxCursorGameTests {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, surface), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "a supported public access sill must materialize through ordinary owned projection");
-        helper.assertTrue(level.getBlockState(position).is(Blocks.GRAY_CONCRETE)
+        helper.assertTrue(level.getBlockState(position).is(Blocks.STONE_BRICKS)
                         && level.getBlockState(position).isFaceSturdy(level, position, net.minecraft.core.Direction.UP) && ledger.claim(position) != null
                         && ledger.claim(position).owner().equals("structure:access-hall")
                         && ledger.claim(position).semanticPart().equals(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE.name()),
@@ -152,8 +152,8 @@ public final class FrontierV3GrayboxCursorGameTests {
                 "the provider-owned graybox footing materializes before the raised deck");
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, upperSurface), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the adjacent raised declared terrain datum materializes the same owned route");
-        helper.assertTrue(level.getBlockState(lower).is(Blocks.GRAY_CONCRETE) && level.getBlockState(upper).is(Blocks.GRAY_CONCRETE)
-                        && level.getBlockState(upper.above()).is(Blocks.GRAY_CONCRETE) && ledger.claim(lower) != null
+        helper.assertTrue(level.getBlockState(lower).is(Blocks.STONE_BRICKS) && level.getBlockState(upper).is(Blocks.COBBLESTONE)
+                        && level.getBlockState(upper.above()).is(Blocks.STONE_BRICKS) && ledger.claim(lower) != null
                         && ledger.claim(upper) != null && ledger.claim(upper.above()) != null,
                 "one physical stepped corridor retains exact visible deck and footing provenance at both terrain levels");
         helper.succeed();
@@ -175,7 +175,7 @@ public final class FrontierV3GrayboxCursorGameTests {
                 "the terrain compiler's facility footing is normal owned materialization, not player scaffolding");
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, publicSill), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the public approach may materialize only over that exact claimed facility support");
-        helper.assertTrue(level.getBlockState(footing).is(Blocks.PINK_CONCRETE) && level.getBlockState(sill).is(Blocks.GRAY_CONCRETE)
+        helper.assertTrue(level.getBlockState(footing).is(Blocks.PINK_CONCRETE) && level.getBlockState(sill).is(Blocks.STONE_BRICKS)
                         && ledger.claim(footing) != null && ledger.claim(sill) != null,
                 "the elevated facility and approach retain distinguishable physical provenance at their distinct datums");
         helper.succeed();
@@ -223,14 +223,14 @@ public final class FrontierV3GrayboxCursorGameTests {
                 "the route deck must be an owned physical dependent, not scenery");
 
         var observed = FrontierV3GrayboxExecutor.preparePhysicalDeltas(level, ledger, foundation, "player:test").orElseThrow();
-        helper.assertValueEqual(observed.size(), 1, "breaking one raised support must not invent a loss for a concrete deck that vanilla retains");
+        helper.assertValueEqual(observed.size(), 1, "breaking one raised support must not invent a loss for a paved deck that vanilla retains");
         helper.assertTrue(observed.getFirst().position().equals(new BlockPosition(foundation.getX(), foundation.getY(), foundation.getZ()))
                         && ledger.claim(foundation) != null && !ledger.claim(foundation).conflicted()
                         && ledger.claim(deck) != null && !ledger.claim(deck).conflicted(),
                 "preparation has no repair or world-write authority before the durable command accepts");
         level.destroyBlock(foundation, false);
-        helper.assertTrue(level.getBlockState(deck).is(Blocks.GRAY_CONCRETE),
-                "Minecraft retains the self-supporting concrete deck, so its claim must not be falsely terminalized");
+        helper.assertTrue(level.getBlockState(deck).is(Blocks.STONE_BRICKS),
+                "Minecraft retains the self-supporting paved deck, so its claim must not be falsely terminalized");
         helper.succeed();
     }
 

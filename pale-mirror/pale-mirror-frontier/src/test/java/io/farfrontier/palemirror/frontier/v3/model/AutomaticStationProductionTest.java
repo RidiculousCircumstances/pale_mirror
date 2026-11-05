@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import static io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish;
 import org.junit.jupiter.api.Test;
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry;
 import static org.junit.jupiter.api.Assertions.*;
@@ -40,7 +41,11 @@ class AutomaticStationProductionTest {
             assertTrue(storage.storage().orElseThrow().filter().accepts("minecraft:raw_iron"));
             assertTrue(storage.storage().orElseThrow().filter().accepts("minecraft:iron_ingot"));
             assertFalse(storage.storage().orElseThrow().filter().accepts("minecraft:bread"));
-            assertTrue(SettlementLocalCirculation.surfaceCells(home).contains(ProductionFacilityLayout.metalStorageStation(facility).support()));
+            var knowledge=KnownPedestrianRouteKnowledge.forPublicJourney(state,home.id(),List.of());
+            var access=ProductionFacilityLayout.metalStorageStation(facility);
+            assertDoesNotThrow(()->knowledge.path(SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach(),
+                    new MovementOrder(home.id(),home.id(),0,1,List.of(access),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION)),
+                    "storage needs a real shared-navigation approach; it need not be a public street cell");
         }
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
         var spec = record.productionStation().orElseThrow();

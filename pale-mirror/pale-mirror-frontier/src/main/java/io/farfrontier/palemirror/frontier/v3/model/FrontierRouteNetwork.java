@@ -32,19 +32,35 @@ public final class FrontierRouteNetwork {
 
     private FrontierRouteNetwork() { }
 
-    public static List<BlockPosition> settlementWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId) {
+    private static final ImmutableResultView<SubjectId,List<BlockPosition>> ROUTES=new ImmutableResultView<>(SimulationCapacity.MAX_SETTLEMENTS*2);
+    public static List<BlockPosition> settlementWaypoints(FrontierBootstrap bootstrap,SubjectId settlementId) {
+        return ROUTES.get(List.of(bootstrap),settlementId,()->compileSettlementWaypoints(bootstrap,settlementId));
+    }
+    private static List<BlockPosition> compileSettlementWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("settlement lacks its Hall access port")));
         BlockPosition origin = access.routeSurface().support();
-        BlockPosition lane = origin.offset(0, 0, 36);
-        if (bootstrap.ruleset().worldLayout().roads() == FrontierWorldLayout.Roads.LOCAL_ACCESS)
-            return List.of(origin, lane, lane.offset(12, 0, 0));
-        BlockPosition laneJunction = surveyedGridSurface(bootstrap, junctionX(bootstrap), lane.z());
-        BlockPosition publicJunction = surveyedGridSurface(bootstrap, junctionX(bootstrap), bootstrap.bounds().minZ() + 512);
-        return List.of(origin, lane, laneJunction, publicJunction);
+        var front=settlement.layout().extensionFronts().stream().min(java.util.Comparator.comparingInt(p->
+                Math.abs(p.x()-origin.x())+Math.abs(p.z()-origin.z()))).orElseThrow();
+        var local=SettlementLocalCirculation.path(settlement,new SurfaceAnchor(origin),front);
+        var waypoints=new ArrayList<BlockPosition>();waypoints.add(origin);
+        for(int i=1;i<local.size()-1;i++) {
+            var a=local.get(i-1);var b=local.get(i);var c=local.get(i+1);
+            if(b.x()-a.x()!=c.x()-b.x() || b.z()-a.z()!=c.z()-b.z() || b.y()-a.y()!=c.y()-b.y())waypoints.add(b.support());
+        }
+        if(!waypoints.getLast().equals(front.support()))waypoints.add(front.support());
+        if(waypoints.size()==2)waypoints.add(1,local.get(local.size()/2).support());
+        var lane=front.support();
+        if(bootstrap.ruleset().worldLayout().roads()!=FrontierWorldLayout.Roads.LOCAL_ACCESS) {
+            var publicJunction=surveyedGridSurface(bootstrap,junctionX(bootstrap),bootstrap.bounds().minZ()+512);
+            var reserved=bootstrap.settlements().stream().flatMap(home->home.layout().plots().values().stream()).map(SettlementLayout.Plot::bounds).toList();
+            var connection=PlanCorridorSearch.connect(lane,publicJunction,bootstrap.bounds(),bootstrap.terrain(),reserved,1);
+            waypoints.addAll(connection.subList(1,connection.size()));
+        }
+        return List.copyOf(waypoints);
     }
 
     public static void validateSettlementWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
@@ -76,13 +92,13 @@ public final class FrontierRouteNetwork {
     }
 
     /**
-     * The finite production profile declares its junction 107 columns from the western bound.
+     * The content policy declares the shared junction inset from the western bound.
      * Keep that topology-relative datum here instead of smuggling an absolute overworld
      * coordinate into every reconstructed bootstrap: recovery and isolated physical fixtures
      * may legitimately preserve the same immutable profile at a translated world origin.
      */
     private static int junctionX(FrontierBootstrap bootstrap) {
-        return Math.addExact(bootstrap.bounds().minX(), 107);
+        return Math.addExact(bootstrap.bounds().minX(), SettlementLayoutRules.standard().globalRoadInset());
     }
 
     public static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap) {
@@ -114,8 +130,8 @@ public final class FrontierRouteNetwork {
         Set<BlockPosition> foundations = new LinkedHashSet<>();
         for (BlockPosition surface : surfaces) {
             int terrain = bootstrap.terrain().supportYAt(surface.x(), surface.z());
-            if (terrain >= surface.y()) {
-                throw new IllegalArgumentException("route surface is not above its immutable terrain support at " + surface);
+            if (terrain > surface.y()) {
+                throw new IllegalArgumentException("route surface is below its immutable terrain support at " + surface);
             }
             for (int y = terrain + 1; y < surface.y(); y++) {
                 BlockPosition footing = new BlockPosition(surface.x(), y, surface.z());
@@ -143,17 +159,11 @@ public final class FrontierRouteNetwork {
         return SEGMENTS.get(List.of(bootstrap, topology.replacementRoutes()), "declared-road-segments", () -> {
             var segments = new ArrayList<RoadSegment>();
             for (var settlement : bootstrap.settlements()) {
-                var anchor = settlement.anchor(); int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
-                segments.add(new RoadSegment(surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ)));
-                segments.add(new RoadSegment(surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ)));
                 var route = topology.settlementWaypoints(bootstrap, settlement.id());
                 for (int i = 1; i < route.size(); i++) segments.add(new RoadSegment(route.get(i - 1), route.get(i)));
             }
-            for (var link : bootstrap.ruleset().worldLayout().roadLinks()) {
-                var from = bootstrap.settlements().get(link.from()).anchor(); var to = bootstrap.settlements().get(link.to()).anchor();
-                segments.add(new RoadSegment(surveyedGridSurface(bootstrap, from.x() + 36, from.z() + 36),
-                        surveyedGridSurface(bootstrap, to.x() + 36, to.z() + 36)));
-            }
+            // Global corridors already join their declared common junction; local-access
+            // profiles deliberately have no extra centre-offset grid through occupied plots.
             var regions = new java.util.HashMap<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region, List<RoadSegment>>();
             for (var segment : segments) {
                 for (int x = Math.floorDiv(Math.min(segment.from().x(), segment.to().x()) - 1, 16);
@@ -176,6 +186,7 @@ public final class FrontierRouteNetwork {
             addCarriagewaySegment(cells, segment.from(), segment.to());
         // Long parallel roads cluster coordinate hashes in a flat Set.copyOf table.
         // Keep the immutable footprint in the shared spatial representation instead.
+        cells.removeIf(p->SettlementLandIndex.ownsFinish(bootstrap,p));
         return RegionalBlockSet.copyOf(cells);
     }
 
@@ -199,6 +210,7 @@ public final class FrontierRouteNetwork {
     /** True when a canonical floor cell is occupied by the one-block visible route surface. */
     public static boolean isSurfaceCell(FrontierBootstrap bootstrap, RouteTopology topology, BlockPosition position) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(position, "route position");
+        if(SettlementLandIndex.ownsFinish(bootstrap,position))return false;
         for (var segment : roadSegments(bootstrap, topology).near(position.x(), position.z()))
             if (onCarriagewaySegment(position, segment.from(), segment.to())) return true;
         return false;
@@ -229,25 +241,10 @@ public final class FrontierRouteNetwork {
      */
     public static boolean isFoundationCell(FrontierBootstrap bootstrap, RouteTopology topology, BlockPosition position) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(position, "route position");
-        int terrain = bootstrap.terrain().supportYAt(position.x(), position.z());
-        if (position.y() <= terrain) return false;
-        List<Settlement> settlements = bootstrap.settlements();
-        for (int index = 0; index < settlements.size(); index++) {
-            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
-            int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
-            if (supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ))
-                    || supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ))
-                    || index % 4 != 3 && supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, laneX, laneZ),
-                    surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ))
-                    || index < 8 && supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, laneX, laneZ),
-                    surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36))) return true;
-        }
-        for (Settlement settlement : settlements) {
-            List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
-            for (int index = 1; index < settlementRoute.size(); index++) {
-                if (supportsFoundationAt(position, terrain, settlementRoute.get(index - 1), settlementRoute.get(index))) return true;
-            }
-        }
+        int terrain=bootstrap.terrain().supportYAt(position.x(),position.z());
+        if(position.y()<=terrain)return false;
+        for(var segment:roadSegments(bootstrap,topology).near(position.x(),position.z()))
+            if(supportsFoundationAt(position,terrain,segment.from(),segment.to()))return true;
         return false;
     }
 
@@ -386,7 +383,7 @@ public final class FrontierRouteNetwork {
 
     /** One bootstrap-owned surface datum for a fixed-grid junction; never a Minecraft height query. */
     private static BlockPosition surveyedGridSurface(FrontierBootstrap bootstrap, int x, int z) {
-        return new BlockPosition(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 1), z);
+        return new BlockPosition(x, bootstrap.terrain().supportYAt(x, z), z);
     }
 
     /** Returns the deck elevation at one carriageway column, or a sentinel when it is outside. */

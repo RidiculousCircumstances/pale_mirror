@@ -99,10 +99,22 @@ public record BuildingPlacement(
                                                                             Integer.parseInt(value)
                                                                                     + 4 * turns(),
                                                                             16))
-                                                            : value;
+                                                            : key.equals("shape") ? rotatedShape(value) : value;
                             result.put(rotatedKey, rotatedValue);
                         });
         return new NavigationBlockState(local.kind(), result);
+    }
+
+    private String rotatedShape(String value) {
+        for(int i=0;i<turns();i++)value=switch(value) {
+            case "north_south" -> "east_west"; case "east_west" -> "north_south";
+            case "ascending_north" -> "ascending_east";case "ascending_east" -> "ascending_south";
+            case "ascending_south" -> "ascending_west";case "ascending_west" -> "ascending_north";
+            case "south_east" -> "south_west";case "south_west" -> "north_west";
+            case "north_west" -> "north_east";case "north_east" -> "south_east";
+            default -> value;
+        };
+        return value;
     }
 
     private String rotate(String direction) {

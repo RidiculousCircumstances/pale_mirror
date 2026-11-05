@@ -11,33 +11,52 @@ import java.util.Set;
 /**
  * Immutable semantic facility entrance compiled by the facility plan.
  *
- * <p>A port names its exterior approach, threshold and interior connector explicitly. It is not
- * a structure-centre offset for a physical adapter to reinterpret. The same value is used by
- * COLD topology compilation, HOT standing checks and Foundry clearance audits.</p>
+ * <p>A port names its exterior approach, threshold and interior connector explicitly. It is not a
+ * structure-centre offset for a physical adapter to reinterpret. The same value is used by COLD
+ * topology compilation, HOT standing checks and Foundry clearance audits.
  */
-public record FacilityTraversalPort(SubjectId facilityId, FacilityFacing facing,
-                                    List<SurfaceAnchor> exteriorApproach,
-                                    SurfaceAnchor thresholdSurface, SurfaceAnchor interiorConnector,
-                                    List<SurfaceAnchor> stations, Set<TraversalCapability> capabilities) {
+public record FacilityTraversalPort(
+        SubjectId facilityId,
+        FacilityFacing facing,
+        List<SurfaceAnchor> exteriorApproach,
+        SurfaceAnchor thresholdSurface,
+        SurfaceAnchor interiorConnector,
+        List<SurfaceAnchor> stations,
+        List<SurfaceAnchor> publicStations,
+        Set<TraversalCapability> capabilities) {
     public static final int MAX_APPROACH_SURFACES = 32;
     public static final int MAX_STATIONS = 16;
 
     public FacilityTraversalPort {
         facilityId = Objects.requireNonNull(facilityId, "facility port id");
         facing = Objects.requireNonNull(facing, "facility port facing");
-        exteriorApproach = List.copyOf(Objects.requireNonNull(exteriorApproach, "facility exterior approach"));
+        exteriorApproach =
+                List.copyOf(Objects.requireNonNull(exteriorApproach, "facility exterior approach"));
         thresholdSurface = Objects.requireNonNull(thresholdSurface, "facility threshold surface");
-        interiorConnector = Objects.requireNonNull(interiorConnector, "facility interior connector");
+        interiorConnector =
+                Objects.requireNonNull(interiorConnector, "facility interior connector");
         stations = List.copyOf(Objects.requireNonNull(stations, "facility stations"));
+        publicStations =
+                List.copyOf(Objects.requireNonNull(publicStations, "facility public stations"));
+        if (new LinkedHashSet<>(publicStations).size() != publicStations.size()
+                || !stations.containsAll(publicStations)) {
+            throw new IllegalArgumentException(
+                    "public stations must be unique declared facility stations");
+        }
         capabilities = Set.copyOf(Objects.requireNonNull(capabilities, "facility capabilities"));
-        if (exteriorApproach.isEmpty() || exteriorApproach.size() > MAX_APPROACH_SURFACES
-                || stations.size() > MAX_STATIONS || capabilities.isEmpty()
+        if (exteriorApproach.isEmpty()
+                || exteriorApproach.size() > MAX_APPROACH_SURFACES
+                || stations.size() > MAX_STATIONS
+                || capabilities.isEmpty()
                 || !capabilities.contains(TraversalCapability.PEDESTRIAN)) {
-            throw new IllegalArgumentException("facility traversal port bounds/capabilities are invalid");
+            throw new IllegalArgumentException(
+                    "facility traversal port bounds/capabilities are invalid");
         }
         List<SurfaceAnchor> ingress = new ArrayList<>(exteriorApproach);
-        ingress.add(thresholdSurface); ingress.add(interiorConnector);
-        if (new LinkedHashSet<>(ingress).size() != ingress.size() || !adjacentChain(ingress)
+        ingress.add(thresholdSurface);
+        ingress.add(interiorConnector);
+        if (new LinkedHashSet<>(ingress).size() != ingress.size()
+                || !adjacentChain(ingress)
                 || new LinkedHashSet<>(stations).size() != stations.size()
                 || stations.contains(thresholdSurface)) {
             throw new IllegalArgumentException("facility traversal port geometry is invalid");
@@ -50,7 +69,8 @@ public record FacilityTraversalPort(SubjectId facilityId, FacilityFacing facing,
     /** Exact ordered movement corridor, from public exterior to the facility interior. */
     public List<SurfaceAnchor> ingressSurfaces() {
         List<SurfaceAnchor> result = new ArrayList<>(exteriorApproach);
-        result.add(thresholdSurface); result.add(interiorConnector);
+        result.add(thresholdSurface);
+        result.add(interiorConnector);
         return List.copyOf(result);
     }
 
@@ -60,9 +80,15 @@ public record FacilityTraversalPort(SubjectId facilityId, FacilityFacing facing,
         return List.of(threshold.offset(0, 1, 0), threshold.offset(0, 2, 0));
     }
 
-    public TraversalTopology ingressTopology(TraversalTopologyId id, long revision, SubjectId provenance) {
-        return TraversalTopology.corridor(id, revision, provenance, TraversalKind.PEDESTRIAN,
-                capabilities, ingressSurfaces());
+    public TraversalTopology ingressTopology(
+            TraversalTopologyId id, long revision, SubjectId provenance) {
+        return TraversalTopology.corridor(
+                id,
+                revision,
+                provenance,
+                TraversalKind.PEDESTRIAN,
+                capabilities,
+                ingressSurfaces());
     }
 
     private static boolean adjacentChain(List<SurfaceAnchor> surfaces) {

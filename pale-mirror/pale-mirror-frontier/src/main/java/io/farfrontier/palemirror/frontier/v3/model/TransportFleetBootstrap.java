@@ -13,9 +13,8 @@ final class TransportFleetBootstrap {
         if (bootstrap.ruleset().schemaVersion() < 17) return TransportFleet.empty();
         var assets = new LinkedHashMap<SubjectId, TransportAsset>();
         for (var settlement : bootstrap.settlements()) {
-            // The common apron compiler owns this supported ground. The last of 48
-            // declared slots is beyond the bootstrap resident census (at most 40).
-            var apron = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement, 48);
+            // Layout reserves spare outdoor positions beyond the bootstrap census.
+            var apron = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement, SettlementBeds.declaredCapacity(settlement));
             var actor = new SubjectId("actor:pack/" + settlement.id().value().replace(':', '-'));
             var container = new SubjectId("container:pack/" + settlement.id().value().replace(':', '-'));
             assets.put(actor, new TransportAsset(actor, settlement.id(), TransportAsset.Kind.CHEST_DONKEY,

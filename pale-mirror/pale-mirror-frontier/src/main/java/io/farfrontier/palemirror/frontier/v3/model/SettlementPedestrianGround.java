@@ -55,7 +55,7 @@ public final class SettlementPedestrianGround {
             });
         });
         SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
-                bootstrap.ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().forEach(surface -> add(surfaces, surface));
+                SettlementBeds.declaredCapacity(settlement)).ownedSurfaces().forEach(surface -> add(surfaces, surface));
         return Collections.unmodifiableMap(new LinkedHashMap<>(surfaces));
     }
 

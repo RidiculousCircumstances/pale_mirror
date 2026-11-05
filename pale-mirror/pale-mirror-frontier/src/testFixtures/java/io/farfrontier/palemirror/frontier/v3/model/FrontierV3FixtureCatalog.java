@@ -635,23 +635,7 @@ public final class FrontierV3FixtureCatalog {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed);
         FrontierWorldState state = base.initialState();
         SubjectId settlementId = state.bootstrap().settlements().getFirst().id();
-        List<BlockPosition> baseline = FrontierRouteNetwork.settlementWaypoints(state.bootstrap(), settlementId);
-        BlockPosition origin = baseline.getFirst();
-        List<BlockPosition> declared = new ArrayList<>();
-        declared.add(origin);
-        // Step out west before climbing. The grade stays clear of the retained local flat
-        // carriageway, so every new support remains an ordinary player-placeable block.
-        declared.add(origin.offset(0, 0, -3));
-        declared.add(origin.offset(-4, 0, -3));
-        declared.add(origin.offset(-6, 2, -3));
-        declared.add(origin.offset(-8, 0, -3));
-        // Keep the declared test route outside actual building parcels, including the larger authored bakery.
-        declared.add(origin.offset(-40, 0, -3));
-        declared.add(origin.offset(-40, 0, 36));
-        // Join at the trunk's westward continuation rather than turning back across the same
-        // surveyed cells to the lane point; a traversal topology may not encode a retraced
-        // centre-line under duplicate node identities.
-        declared.addAll(baseline.subList(2, baseline.size()));
+        List<BlockPosition> declared = DeclaredRouteFixtures.raised(state.bootstrap(), state.routeTopology(), settlementId);
         RouteTopology topology = state.routeTopology().replaceSettlementRoute(state.bootstrap(), settlementId, declared);
         return configured(worldId, state.withRouteTopology(topology), base.initialInstant(), base.initialSchedules());
     }

@@ -22,7 +22,7 @@ public final class FrontierGrayboxPlan {
     // World-wide immutable declared fabric, indexed by region before HOT use.
     // The distant 4096x4096 profile has longer roads, not larger loaded scenes.
     // Native per-tick/region projection budgets are deliberately independent.
-    private static final int MAX_CELLS = SimulationCapacity.MAX_SETTLEMENTS * 8_192;
+    private static final int MAX_CELLS = SimulationCapacity.MAX_SETTLEMENTS * 65_536;
     // Exact immutable organ declarations, not current damage or cocoon occupancy.
     // Keep the few recurring seed/expanded views without recompiling their cells
     // on every colony validation or navigation query. Failed derivations never enter.
@@ -463,11 +463,15 @@ public final class FrontierGrayboxPlan {
      * Bootstrap placement and later births deliberately use this same authoritative geometry
      * rather than re-deriving a partial footprint for every candidate coordinate.
      */
+    private static final ImmutableResultView<String, Set<BlockPosition>> STRUCTURE_OCCUPANCY =
+            new ImmutableResultView<>(SimulationCapacity.MAX_SETTLEMENTS);
     static java.util.Set<BlockPosition> intactStructureOccupancy(TerrainSurfacePlan terrain, java.util.List<SettlementStructure> structures) {
         Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(structures, "structures");
-        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
-        structures.forEach(structure -> addStructure(cells, terrain, structure, StructureCondition.INTACT));
-        return java.util.Set.copyOf(cells.keySet());
+        return STRUCTURE_OCCUPANCY.get(List.of(terrain,structures), "intact", () -> {
+            Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+            structures.forEach(structure -> addStructure(cells, terrain, structure, StructureCondition.INTACT));
+            return io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(cells.keySet());
+        });
     }
 
     /** Public access floors support feet; they are not obstacles at their own support cell. */
@@ -475,7 +479,9 @@ public final class FrontierGrayboxPlan {
                                                                           java.util.List<SettlementStructure> structures) {
         Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(structures, "structures");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
-        structures.forEach(structure -> addStructure(cells, terrain, structure, StructureCondition.INTACT));
+        structures.stream().filter(structure -> structure.definition().representation()
+                        != io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+                .forEach(structure -> addStructure(cells, terrain, structure, StructureCondition.INTACT));
         return cells.entrySet().stream()
                 .filter(entry -> !(entry.getValue().material() instanceof StructureMaterial.Authored))
                 .filter(entry -> entry.getValue().semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
@@ -534,7 +540,7 @@ public final class FrontierGrayboxPlan {
         for (Settlement settlement : bootstrap.settlements()) {
             if (!settlement.id().equals(owner)) continue;
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
-                    bootstrap.ruleset().facilityCapacity().intactHousingBeds());
+                    SettlementBeds.declaredCapacity(settlement));
             if (ingress.foundationCells().contains(position)) {
                 return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, owner), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
             }
@@ -761,7 +767,7 @@ public final class FrontierGrayboxPlan {
         });
         for (Settlement settlement : bootstrap.settlements()) {
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
-                    bootstrap.ruleset().facilityCapacity().intactHousingBeds());
+                    SettlementBeds.declaredCapacity(settlement));
             for (BlockPosition foundation : ingress.foundationCells()) {
                 if (cells.containsKey(foundation)) continue;
                 add(cells, foundation, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
@@ -782,7 +788,7 @@ public final class FrontierGrayboxPlan {
         });
         for (Settlement settlement : bootstrap.settlements()) {
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
-                    bootstrap.ruleset().facilityCapacity().intactHousingBeds());
+                    SettlementBeds.declaredCapacity(settlement));
             for (SurfaceAnchor surface : SettlementPedestrianGround.localSupports(bootstrap, settlement.id()).values()) {
                 BlockPosition position = surface.support();
                 // The Hall route node is deliberately already route-network owned. Every other

@@ -48,7 +48,7 @@ public final class PatrolAssemblyCorridor {
         List<SurfaceAnchor> route = supply.linearCorridorSurfaces();
         if (route.size() < 3) throw new IllegalArgumentException("patrol assembly requires a surveyed first route edge");
         SettlementResidentIngressPlan.Plan residentIngress = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(),
-                state.bootstrap().terrain(), settlement, state.bootstrap().ruleset().facilityCapacity().intactHousingBeds());
+                state.bootstrap().terrain(), settlement, SettlementBeds.declaredCapacity(settlement));
         SurfaceAnchor routePort = route.getFirst();
         if (!residentIngress.topology().nodes().containsValue(routePort)) {
             throw new IllegalArgumentException("resident ingress does not join the declared Hall route port");

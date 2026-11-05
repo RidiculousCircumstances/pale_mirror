@@ -24,7 +24,7 @@ class PhysicalIntentExplicitIdentityArchitectureTest {
                 Files.walk(root.resolve("pale-mirror-neoforge/src/main/java")))) {
             files = paths.filter(path -> path.toString().endsWith(".java")).toList();
         }
-        String allProduction = files.stream().map(this::read).reduce("", String::concat);
+        String allProduction = files.stream().map(this::read).collect(java.util.stream.Collectors.joining());
         assertFalse(allProduction.contains("fixtureDefault"), "production must not infer a lifecycle owner from PhysicalIntentKind");
         assertFalse(allProduction.contains("fixtureOnly"), "typed role bindings must not retain a fixture or ownerless construction bridge");
         assertFalse(allProduction.contains("projectOrAssault"), "one nominal role must not be context-polymorphic");
