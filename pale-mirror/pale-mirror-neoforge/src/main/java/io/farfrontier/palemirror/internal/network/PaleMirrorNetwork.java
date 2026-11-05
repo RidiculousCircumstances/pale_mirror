@@ -18,7 +18,10 @@ public final class PaleMirrorNetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Longer movement cues require a matching decoder before play, not a failure during pursuit.
-        var registrar = event.registrar("5");
+        var registrar = event.registrar("6");
+        registrar.playToClient(BuildingPreviewPayload.TYPE,BuildingPreviewPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->{if(FMLEnvironment.dist==Dist.CLIENT)
+                    io.farfrontier.palemirror.internal.client.PaleMirrorBuildingPreviewClient.receive(payload);}));
         registrar.playToClient(ResidentWorkGesturePayload.TYPE,ResidentWorkGesturePayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{if(FMLEnvironment.dist==Dist.CLIENT)
                     io.farfrontier.palemirror.internal.client.PaleMirrorResidentWorkClient.receive(payload);}));

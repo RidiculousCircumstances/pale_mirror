@@ -16,6 +16,8 @@ class FrontierV3BuildingCommandsTest {
                     throws Exception {
         var root = FrontierV3BuildingCommands.branch().build();
         var identity = (ArgumentCommandNode<?, ?>) root.getChild("export").getChild("structure");
+        assertNotNull(root.getChild("equipment").getChild("draft").getChild("workplace").getChild("equipment").getChild("front"));
+        assertNotNull(root.getChild("preview").getChild("draft"));
         var reader = new StringReader("structure:1-workshop");
         assertEquals("structure:1-workshop", identity.getType().parse(reader).toString());
         assertFalse(reader.canRead());

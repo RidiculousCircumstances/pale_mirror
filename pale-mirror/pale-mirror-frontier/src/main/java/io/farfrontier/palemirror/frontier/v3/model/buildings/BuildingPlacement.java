@@ -22,7 +22,7 @@ public record BuildingPlacement(
     }
 
     public int turns() {
-        return Math.floorMod(direction(facing) - direction(authoredFacing), 4);
+        return Math.floorMod(directionIndex(facing) - directionIndex(authoredFacing), 4);
     }
 
     public BlockPosition world(BlockPosition local) {
@@ -72,6 +72,14 @@ public record BuildingPlacement(
         return new SurfaceAnchor(world(localSupport));
     }
 
+    public FacilityFacing direction(FacilityFacing local) {
+        return FacilityFacing.valueOf(rotate(local.name().toLowerCase(Locale.ROOT)).toUpperCase(Locale.ROOT));
+    }
+
+    public FacilityFacing localDirection(FacilityFacing world) {
+        return FacilityFacing.values()[Math.floorMod(world.ordinal() - turns(), 4)];
+    }
+
     public NavigationBlockState state(NavigationBlockState local) {
         var result = new TreeMap<String, String>();
         local.properties()
@@ -110,7 +118,7 @@ public record BuildingPlacement(
         return Set.of("north", "east", "south", "west").contains(value);
     }
 
-    private static int direction(FacilityFacing facing) {
+    private static int directionIndex(FacilityFacing facing) {
         return switch (facing) {
             case NORTH -> 0;
             case EAST -> 1;

@@ -1,1 +1,19 @@
-{"variants":{"":{"model":"pale_mirror:block/production_bench"}}}
+{
+  "variants": {
+    "facing=north": {
+      "model": "pale_mirror:block/production_bench"
+    },
+    "facing=east": {
+      "model": "pale_mirror:block/production_bench",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "pale_mirror:block/production_bench",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "pale_mirror:block/production_bench",
+      "y": 270
+    }
+  }
+}

@@ -16,7 +16,23 @@ import net.minecraft.world.phys.BlockHitResult;
 /** Physical installed equipment. Processing/custody are not block-placement policy. */
 public final class ProductionBenchBlock extends BaseEntityBlock {
     public static final MapCodec<ProductionBenchBlock> CODEC = simpleCodec(ProductionBenchBlock::new);
-    public ProductionBenchBlock(BlockBehaviour.Properties properties) { super(properties); }
+    public static final net.minecraft.world.level.block.state.properties.DirectionProperty FACING =
+            net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING;
+    public ProductionBenchBlock(BlockBehaviour.Properties properties) {
+        super(properties); registerDefaultState(stateDefinition.any().setValue(FACING, net.minecraft.core.Direction.NORTH));
+    }
+    @Override protected void createBlockStateDefinition(net.minecraft.world.level.block.state.StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) {
+        builder.add(FACING);
+    }
+    @Override public BlockState getStateForPlacement(net.minecraft.world.item.context.BlockPlaceContext context) {
+        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+    }
+    @Override protected BlockState rotate(BlockState state, net.minecraft.world.level.block.Rotation rotation) {
+        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
+    }
+    @Override protected BlockState mirror(BlockState state, net.minecraft.world.level.block.Mirror mirror) {
+        return state.rotate(mirror.getRotation(state.getValue(FACING)));
+    }
     @Override public MapCodec<ProductionBenchBlock> codec() { return CODEC; }
     @Override protected RenderShape getRenderShape(BlockState state) { return RenderShape.MODEL; }
     @Override public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {

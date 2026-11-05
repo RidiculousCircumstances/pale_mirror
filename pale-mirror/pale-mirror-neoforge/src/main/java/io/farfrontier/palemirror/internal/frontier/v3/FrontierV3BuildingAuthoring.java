@@ -10,6 +10,14 @@ import java.util.*;
  * Native content compiler. Reads registry shapes, never a live world's blocks or canonical state.
  */
 final class FrontierV3BuildingAuthoring {
+    static void validate(BuildingDefinition definition, Map<NavigationBlockState, NavigationObservation> shapes) {
+        BuildingGeometryValidation.validate(definition,
+                block -> Optional.ofNullable(shapes.get(block)).flatMap(NavigationObservation::cell),
+                work -> FrontierV3NavigationShapes.declared(
+                        FrontierV3FixedContainerProviders.equipmentState(work.equipmentType(), work.facing()),
+                        new BlockPosition(0, 64, 0), 384, -64).cell().orElseThrow());
+    }
+
     static String collisionFacts(Map<BlockPosition, BuildingDefinition.Block> blocks) {
         var palette = new TreeMap<String, StructureMaterial.Authored>();
         for (var facing : FacilityFacing.values()) {

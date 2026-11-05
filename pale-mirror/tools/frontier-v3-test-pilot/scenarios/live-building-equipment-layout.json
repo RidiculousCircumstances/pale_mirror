@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "id": "live_building_equipment_layout",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 180 0 true"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1495,
+        "y": 65,
+        "z": -1347
+      },
+      "settleMs": 0
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -5,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "block": "pale_mirror:production_bench",
+      "properties": {
+        "facing": "west"
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building export structure:1-workshop equipment_layout_review"
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building equipment equipment_layout_review oven pale_mirror:production_bench WEST"
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building validate equipment_layout_review"
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 building preview equipment_layout_review"
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-1-workshop-bakery-station",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "physicalSocket": {
+          "mismatch": ""
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 13,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "bakery-actual-oriented-front"
+    },
+    {
+      "after": 9,
+      "name": "equipment-layout-model-and-annotations",
+      "presentation": "player"
+    },
+    {
+      "after": 11,
+      "name": "oriented-equipment-inventory",
+      "presentation": "player"
+    }
+  ]
+}

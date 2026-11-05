@@ -22,6 +22,10 @@ public record ProductionStationInstalled(ContainerRecord container, BlockPositio
                 () -> new IllegalArgumentException("installed machine has no declared owning facility"));
         var supported = SettlementStructureFootprint.supportSurfaces(facility);
         ProductionPlaces.require(spec.capability(), facility);
+        var declared = ProductionFacilityLayout.station(facility);
+        if (!declared.equipmentType().equals(spec.equipmentType()) || !declared.facing().equals(spec.facing())
+                || !declared.socketSurface().equals(spec.socketSurface()) || !declared.workerStation().equals(spec.workerStation()))
+            throw new IllegalArgumentException("installed machine differs from the declared equipment mount");
         if (!subject.equals(spec.id()) || state.productionStations().machines().containsKey(subject)
                 || !state.bootstrap().bounds().contains(position) || !position.equals(spec.socketSurface().support().offset(0, 1, 0))
                 || state.structureConditions().get(facility.id()) != StructureCondition.INTACT

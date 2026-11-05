@@ -191,7 +191,12 @@ export function validateScenario(scenario) {
     const actions = scenario[phase] ?? [];
     if (!Array.isArray(actions)) throw new Error(`scenario ${phase} must be an array`);
     for (const action of actions) {
-      if (!action || !allowed.has(action.type)) throw new Error(`unsupported ${phase} action: ${action?.type}`);
+      // Developer authoring touches bounded draft files/client presentation only; arbitrary
+      // administrative world mutations still cannot masquerade as evidence-bearing actions.
+      const authoring = phase === 'actions' && action?.type === 'command'
+        && typeof action.command === 'string' && action.command.length <= 8192
+        && /^\/pale_mirror v3 building (export|set|point|equipment|validate|preview|overlay) [^\r\n]+$/.test(action.command);
+      if (!action || !allowed.has(action.type) && !authoring) throw new Error(`unsupported ${phase} action: ${action?.type}`);
       if (action.causalMilestone !== undefined && (typeof action.causalMilestone !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(action.causalMilestone))) {
         throw new Error('causalMilestone needs a stable bounded identifier');
       }

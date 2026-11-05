@@ -59,7 +59,7 @@ public final class BuildingDefinitionFormat {
             Map<BlockPosition, BuildingDefinition.Block> blocks,
             String sha256) {
         var r = new Reader(source);
-        if (r.integer("format") != 1)
+        if (r.integer("format") != 2)
             throw new IllegalArgumentException("unsupported building markup format");
         var id = new BuildingTemplateId(r.take("id"));
         int version = r.integer("version");
@@ -116,6 +116,8 @@ public final class BuildingDefinitionFormat {
                             point(r.take(p + ".input")),
                             point(r.take(p + ".worker")),
                             point(r.take(p + ".socket")),
+                            new ProductionEquipment.Id(r.take(p + ".equipmentType")),
+                            FacilityFacing.valueOf(r.take(p + ".facing")),
                             r.volume(p + ".equipment"),
                             r.volume(p + ".maintenance")));
         }

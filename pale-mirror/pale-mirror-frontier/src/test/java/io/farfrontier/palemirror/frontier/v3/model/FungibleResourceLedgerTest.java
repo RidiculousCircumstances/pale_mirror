@@ -52,7 +52,7 @@ class FungibleResourceLedgerTest {
         SubjectId stationAccount = new SubjectId("custody:bakery-station");
         ProductionStationSpec machine = new ProductionStationSpec(new SubjectId("station:bakery-one"),
                 new SubjectId("structure:bakery-one"), station, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
-                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1, 2);
+                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), FacilityFacing.WEST, 0, 1, 2);
         SubjectId wheatId = new SubjectId("lot:bakery-wheat");
         SubjectId claimId = new SubjectId("claim:bakery-wheat");
         SubjectId breadId = new SubjectId("lot:bakery-bread");
@@ -92,7 +92,7 @@ class FungibleResourceLedgerTest {
         var container = new SubjectId("container:port-machine");
         var machine = new ProductionStationSpec(new SubjectId("station:port-machine"), new SubjectId("structure:port-machine"),
                 container, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
-                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1, 2);
+                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), FacilityFacing.WEST, 0, 1, 2);
         var wheat = new ResourceLot(new SubjectId("lot:port-wheat"), OWNER, "minecraft:wheat", 3, "fixture:wheat", List.of());
         var coal = new ResourceLot(new SubjectId("lot:port-coal"), OWNER, "minecraft:coal", 3, "fixture:coal", List.of());
         var claim = new SubjectId("claim:port-wheat");
@@ -140,7 +140,7 @@ class FungibleResourceLedgerTest {
         SubjectId stationAccount = new SubjectId("custody:hot-bakery-station");
         ProductionStationSpec machine = new ProductionStationSpec(new SubjectId("station:hot-bakery"),
                 new SubjectId("structure:hot-bakery"), station, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
-                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1, 2);
+                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), FacilityFacing.WEST, 0, 1, 2);
         SubjectId wheatId = new SubjectId("lot:hot-bakery-wheat");
         SubjectId claimId = new SubjectId("claim:hot-bakery-wheat");
         ResourceLot wheat = new ResourceLot(wheatId, OWNER, "minecraft:wheat", 64, "harvest:hot", List.of());

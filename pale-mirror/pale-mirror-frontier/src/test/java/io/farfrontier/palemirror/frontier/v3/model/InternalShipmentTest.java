@@ -189,7 +189,7 @@ class InternalShipmentTest {
             assertTrue(ShipmentStorageRetargeted.eligible(state, shipment).isEmpty(), "absence waits without discarding in-flight fuel");
             var spec = new ProductionStationSpec(new SubjectId("station:resupplied-machine"), old.spec().facilityId(),
                     new SubjectId("container:resupplied-machine"), old.spec().equipmentType(), old.spec().capability(),
-                    old.station(), old.spec().socketSurface(), 0, 1, 2);
+                    old.station(), old.spec().socketSurface(), old.spec().facing(), 0, 1, 2);
             var record = new ContainerRecord(spec.containerId(), old.settlementId(), 3, ContainerPurpose.PRODUCTION_STATION,
                     Optional.of(spec), Optional.empty());
             state = new ProductionStationInstalled(record, position, List.of()).apply(state, spec.id(), BakeryStationInstallation::installed);

@@ -12,11 +12,17 @@ fallback. Current other functions explicitly select their retained graybox templ
 A selected structure retains style/template/content hash. Content changes require a
 fresh world under the current schema policy.
 
+Markup format2 explicitly declares each workplace's `equipmentType` and local
+`facing`. The front points from the machine support towards its adjacent operator
+support. Missing/backwards declarations are errors; no direction is guessed.
+
 Each asset consists of `.nbt` (native interchange, no entities or block NBT),
 `.blocks` (the exact neutral projection), `.properties` (rooms/zones/passages/workplaces)
 and `.geometry` (Minecraft-compiled collision certificate for every rotation).
 The authoring validator checks the native/neutral equality, actual registry block
-states and repair items, collision clearance and paths through the shared navigator.
+states and repair items, collision clearance and paths through the shared navigator with the actual
+registered equipment shapes installed. The template's reserved equipment volumes
+are checked before insertion; operator/input paths are checked afterwards.
 Do not hand-edit collision facts or replace stairs with guessed full cubes.
 
 ## In-game developer tool
@@ -29,7 +35,9 @@ Operator level 4, active v3 world:
 /pale_mirror v3 building point bakery_trial zone.storage.min ~ ~ ~
 /pale_mirror v3 building point bakery_trial zone.storage.max ~3 ~3 ~3
 /pale_mirror v3 building set bakery_trial zone.storage.priority 75
+/pale_mirror v3 building equipment bakery_trial oven pale_mirror:production_bench WEST
 /pale_mirror v3 building validate bakery_trial
+/pale_mirror v3 building preview bakery_trial
 ```
 
 Draft files live in the server's `debug/pale-mirror/buildings/<draft>/`.
@@ -41,6 +49,22 @@ value can be written as `""`. Files can also be edited externally and reimported
 `validate`; all entry points use the same strict bounded parser. Invalid intermediate
 edits stay in the draft and never become gameplay state.
 
+`equipment <draft> <workplace> <equipment-id> <world-front>` selects a registered
+equipment adapter, converts the supplied world compass direction into the retained
+local building frame, and moves the adjacent operator support to that front.
+`point` still edits socket/input/support/volume coordinates; use it before/after
+selection when relocating a workplace. Input and maintenance bounds remain explicit:
+validate rejects an incomplete or obstructed edit rather than moving surrounding
+architecture. Use `set` for full local declarations edited by scripts.
+
+`preview` first performs the same native validation, then shows the real registered
+models with their full orientation over the existing building, plus the annotation
+overlay. It is a requesting-client-only render projection: no blocks, inventories,
+entities or collisions change. At most32 models within128 blocks; each new preview
+replaces the old one, expires after600 client ticks, and clears on world/disconnect.
+Invalid drafts cannot be previewed. The current tool previews equipment in its
+retained building placement, not a separate live-paste or production activation.
+
 Overlay is an ordinary Minecraft debug marker projection, corners/labels by zone,
 entrance chains and input/operator/equipment/maintenance markers. It is sent only to
 the requesting player, within 128 blocks, at most 512 markers, expiring after 30 s.
@@ -50,8 +74,8 @@ Validation compiles current registry shapes and refreshes the draft certificate.
 It never activates a draft, pastes a building, grants passage through an obstacle,
 restores broken equipment or imports inventory. Promote reviewed draft files into
 the packaged catalogue and build normally. A current native observation (including
-a shut door) overrides pristine building geometry. This first vertical starts with
-open doors; no automatic door-opening gameplay was added.
+a shut door) overrides pristine building geometry. Current manual door/gate operation is owned by the shared navigator; developer
+annotations do not grant that capability or open a physical door.
 
 For the pinned asset adaptation use Python with `nbtlib==2.0.4`:
 

@@ -86,6 +86,9 @@ public final class FrontierV3BuildingCommands {
                                                                                                         () ->
                                                                                                                 point(
                                                                                                                         c)))))))
+                .then(equipmentBranch())
+                .then(Commands.literal("preview").then(Commands.argument("draft", StringArgumentType.word())
+                        .executes(c -> run(c, () -> preview(c)))))
                 .then(
                         Commands.literal("validate")
                                 .then(
@@ -96,6 +99,50 @@ public final class FrontierV3BuildingCommands {
                                 .then(
                                         Commands.argument("draft", StringArgumentType.word())
                                                 .executes(c -> run(c, () -> overlay(c)))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> equipmentBranch() {
+        return Commands.literal("equipment").then(Commands.argument("draft", StringArgumentType.word())
+                .then(Commands.argument("workplace", StringArgumentType.word())
+                .then(Commands.argument("equipment", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                .then(Commands.argument("front", StringArgumentType.word())
+                        .suggests((context,builder)->net.minecraft.commands.SharedSuggestionProvider.suggest(
+                                Arrays.stream(FacilityFacing.values()).map(Enum::name),builder))
+                        .executes(c -> run(c, () -> equipment(c)))))));
+    }
+
+    /** The supplied front is a world direction; file coordinates remain in the building's local frame. */
+    private static String equipment(CommandContext<CommandSourceStack> c) throws Exception {
+        var values=markup(c);var name=StringArgumentType.getString(c,"workplace");
+        if(!Arrays.asList(values.get("workplaces").split(",")).contains(name))
+            throw new IllegalArgumentException("unknown declared workplace " + name);
+        var type=new ProductionEquipment.Id(net.minecraft.commands.arguments.ResourceLocationArgument.getId(c,"equipment").toString());
+        FrontierV3FixedContainerProviders.equipmentBlock(type); // Closed native equipment adapter, not name inference.
+        var worldFront=FacilityFacing.valueOf(StringArgumentType.getString(c,"front").toUpperCase(Locale.ROOT));
+        var localFront=placement(c,values).localDirection(worldFront);var prefix="workplace."+name;
+        var socket=BuildingDefinitionFormat.point(values.get(prefix+".socket"));
+        values.put(prefix+".equipmentType",type.value());values.put(prefix+".facing",localFront.name());
+        values.put(prefix+".worker",coordinates(socket.offset(localFront.x(),0,localFront.z())));
+        write(directory(c).resolve("building.properties"),BuildingDefinitionFormat.encodeProperties(values));
+        return "Equipment " + name + "=" + type.value()+" front="+worldFront+" (local "+localFront+"). Operator support moved to the front; validate input, maintenance and access before promotion.";
+    }
+
+    private static String preview(CommandContext<CommandSourceStack> c) throws Exception {
+        var player=c.getSource().getPlayerOrException();
+        validate(c);var definition=definition(c);var transform=placement(c,markup(c));
+        var entries=new ArrayList<io.farfrontier.palemirror.internal.network.BuildingPreviewPayload.Equipment>();
+        for(var work:definition.workplaces().values()){
+            var position=transform.world(work.socket().offset(0,1,0));
+            if(player.distanceToSqr(position.x()+.5,position.y()+.5,position.z()+.5)>128*128)
+                throw new IllegalArgumentException("preview must be within 128 blocks");
+            entries.add(new io.farfrontier.palemirror.internal.network.BuildingPreviewPayload.Equipment(
+                    new net.minecraft.core.BlockPos(position.x(),position.y(),position.z()),
+                    FrontierV3FixedContainerProviders.equipmentState(work.equipmentType(),transform.direction(work.facing()))));
+        }
+        String markers=overlay(c);
+        net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player,
+                new io.farfrontier.palemirror.internal.network.BuildingPreviewPayload(player.level().dimension().location(),entries));
+        return "Validated equipment model preview for 30 seconds. No physical blocks or inventories changed. " + markers;
     }
 
     @FunctionalInterface
@@ -290,19 +337,12 @@ public final class FrontierV3BuildingCommands {
                 read(directory(c).resolve("building.nbt"), 16777216), definition.blocks());
         var compiled = FrontierV3BuildingAuthoring.collisionFacts(definition.blocks());
         var shapes = BuildingCollisionCatalog.decode(compiled.getBytes(StandardCharsets.UTF_8));
-        BuildingGeometryValidation.validate(
-                definition,
-                block ->
-                        Optional.ofNullable(shapes.get(block))
-                                .flatMap(
-                                        io.farfrontier.palemirror.frontier.v3.model.geometry
-                                                        .NavigationObservation
-                                                ::cell));
+        FrontierV3BuildingAuthoring.validate(definition, shapes);
         write(directory(c).resolve("building.geometry"), compiled.getBytes(StandardCharsets.UTF_8));
         return "Valid "
                 + definition.id().value()
                 + ": native registry, room connectivity, entrances, worker clearance and shared"
-                + " navigation paths. No live changes applied.";
+                + " navigation paths with installed equipment and matching machine/operator fronts. No live changes applied.";
     }
 
     private static String overlay(CommandContext<CommandSourceStack> c) throws Exception {
@@ -340,6 +380,8 @@ public final class FrontierV3BuildingCommands {
                             markers.put(
                                     w.worker().offset(0, 1, 0),
                                     new Marker("worker:" + id, 0x99FF00FF));
+                            markers.put(w.socket().offset(0,1,0), new Marker("model:"+id+":"+w.equipmentType().value(),0x99FF3333));
+                            markers.put(w.worker().offset(0,2,0), new Marker("FRONT:"+id+":"+transform.direction(w.facing()),0x9900FFCC));
                             corners(markers, w.equipment(), "equipment:" + id, 0x99FF3333);
                             corners(markers, w.maintenance(), "maintenance:" + id, 0x99FFAA33);
                         });

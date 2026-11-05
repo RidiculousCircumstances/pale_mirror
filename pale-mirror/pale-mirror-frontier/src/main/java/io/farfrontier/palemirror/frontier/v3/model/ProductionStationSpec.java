@@ -8,18 +8,18 @@ import java.util.*;
 public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectId containerId,
                                     ProductionEquipment.Id equipmentType,
                                     Capability capability, SurfaceAnchor workerStation,
-                                    SurfaceAnchor socketSurface, List<Integer> inputSlots, int outputSlot, OptionalInt fuelSlot,
+                                    SurfaceAnchor socketSurface, FacilityFacing facing, List<Integer> inputSlots, int outputSlot, OptionalInt fuelSlot,
                                     OptionalInt maintenanceSlot) {
     public ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectId containerId,
             ProductionEquipment.Id equipmentType, Capability capability, SurfaceAnchor workerStation,
-            SurfaceAnchor socketSurface, int inputSlot, int outputSlot, int fuelSlot) {
-        this(id, facilityId, containerId, equipmentType, capability, workerStation, socketSurface,
+            SurfaceAnchor socketSurface, FacilityFacing facing, int inputSlot, int outputSlot, int fuelSlot) {
+        this(id, facilityId, containerId, equipmentType, capability, workerStation, socketSurface, facing,
                 List.of(inputSlot), outputSlot, OptionalInt.of(fuelSlot), OptionalInt.empty());
     }
     public ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectId containerId,
             ProductionEquipment.Id equipmentType, Capability capability, SurfaceAnchor workerStation,
-            SurfaceAnchor socketSurface, int inputSlot, int outputSlot, int fuelSlot, OptionalInt maintenanceSlot) {
-        this(id, facilityId, containerId, equipmentType, capability, workerStation, socketSurface,
+            SurfaceAnchor socketSurface, FacilityFacing facing, int inputSlot, int outputSlot, int fuelSlot, OptionalInt maintenanceSlot) {
+        this(id, facilityId, containerId, equipmentType, capability, workerStation, socketSurface, facing,
                 List.of(inputSlot), outputSlot, OptionalInt.of(fuelSlot), maintenanceSlot);
     }
     public enum Capability {
@@ -42,6 +42,7 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
         Objects.requireNonNull(capability, "station capability");
         Objects.requireNonNull(workerStation, "station worker surface");
         Objects.requireNonNull(socketSurface, "station machine socket");
+        Objects.requireNonNull(facing, "declared machine front");
         inputSlots = List.copyOf(Objects.requireNonNull(inputSlots, "declared input inventory"));
         Objects.requireNonNull(fuelSlot, "declared optional fuel port");
         Objects.requireNonNull(maintenanceSlot, "declared maintenance port");
@@ -51,7 +52,8 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
         fuelSlot.ifPresent(declared::add); maintenanceSlot.ifPresent(declared::add);
         for (int slot : declared) if (slot < 0 || slot >= ContainerRecord.MAX_SLOTS || !slots.add(slot))
             throw new IllegalArgumentException("station port slots overlap or exceed capacity");
-        if (slots.size() != 1 + Collections.max(slots)
+        if (!facing.step(socketSurface, 1).equals(workerStation)
+                || slots.size() != 1 + Collections.max(slots)
                 || Math.abs(workerStation.x() - socketSurface.x()) + Math.abs(workerStation.z() - socketSurface.z()) != 1
                 || workerStation.y() != socketSurface.y())
             throw new IllegalArgumentException("station needs complete ports and adjacent worker/machine surfaces");
@@ -108,11 +110,14 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
             throw new IllegalArgumentException("graybox bakery requires its declared workshop facility");
         SettlementWorkshopServicePort port = SettlementWorkshopServicePort.forWorkshop(workshop);
         String suffix = workshop.id().value().replace(':', '-');
-        SurfaceAnchor machine = workshop.placement().support(workshop.definition().primaryWorkplaceDefinition().socket());
+        var mount = workshop.definition().primaryWorkplaceDefinition();
+        if (!mount.equipmentType().equals(ProductionEquipment.BENCH))
+            throw new IllegalArgumentException("bakery mount has foreign equipment type");
+        SurfaceAnchor machine = workshop.placement().support(mount.socket());
         if (!SettlementStructureFootprint.supportSurfaces(workshop).contains(machine))
             throw new IllegalArgumentException("bakery machine socket has no facility support");
         return new ProductionStationSpec(new SubjectId("station:" + suffix + "-bakery"), workshop.id(),
                 new SubjectId("container:" + suffix + "-bakery-station"), ProductionEquipment.BENCH, Capability.BAKING,
-                port.workStation(), machine, java.util.stream.IntStream.range(0, 9).boxed().toList(), 9, OptionalInt.of(10), OptionalInt.empty());
+                port.workStation(), machine, workshop.placement().direction(mount.facing()), java.util.stream.IntStream.range(0, 9).boxed().toList(), 9, OptionalInt.of(10), OptionalInt.empty());
     }
 }

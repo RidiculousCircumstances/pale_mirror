@@ -66,12 +66,12 @@ class ProductionStationSpecTest {
         SubjectId owner = new SubjectId("settlement:one");
         ProductionStationSpec station = new ProductionStationSpec(new SubjectId("station:bakery"), facility,
                 container, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
-                SurfaceAnchor.at(1, 64, 1), SurfaceAnchor.at(2, 64, 1), 0, 1, 2);
+                SurfaceAnchor.at(1, 64, 1), SurfaceAnchor.at(2, 64, 1), FacilityFacing.WEST, 0, 1, 2);
         assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(
                 new SubjectId("container:other"), owner, 27, ContainerPurpose.PRODUCTION_STATION, Optional.of(station)));
         assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(container, owner, 1, ContainerPurpose.PRODUCTION_STATION, Optional.of(station)));
         assertThrows(IllegalArgumentException.class, () -> new ProductionStationSpec(station.id(), facility, container,
-                station.equipmentType(), station.capability(), station.workerStation(), station.workerStation(), 0, 1, 2));
+                station.equipmentType(), station.capability(), station.workerStation(), station.workerStation(), station.facing(), 0, 1, 2));
     }
 
     @Test
@@ -95,7 +95,7 @@ class ProductionStationSpecTest {
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(machine, ActorContainerItemOrder.StationPort.OUTPUT),
                 machine.workerStation(), load.actorSlot(), load.goalOrdinal(), load.goalRevision()));
         ProductionStationSpec foreign = new ProductionStationSpec(machine.id(), new SubjectId("structure:foreign"),
-                machine.containerId(), machine.equipmentType(), machine.capability(), machine.workerStation(), machine.socketSurface(),
+                machine.containerId(), machine.equipmentType(), machine.capability(), machine.workerStation(), machine.socketSurface(), machine.facing(),
                 machine.inputSlots(), machine.outputSlot(), machine.fuelSlot(), machine.maintenanceSlot());
         ActorContainerItemOrder forged = new ActorContainerItemOrder(load.ownerId(), actor, load.direction(), wheat,
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(foreign, ActorContainerItemOrder.StationPort.INPUT),

@@ -56,8 +56,19 @@ final class FrontierV3FixedContainerProviders {
         if (provider == null) throw new IllegalArgumentException("unsupported equipment " + equipment);
         return provider.block().get();
     }
+    static net.minecraft.world.level.block.state.BlockState state(ContainerRecord record) {
+        return record.productionStation().map(spec -> equipmentState(spec.equipmentType(), spec.facing()))
+                .orElseGet(() -> block(record).defaultBlockState());
+    }
+    static net.minecraft.world.level.block.state.BlockState equipmentState(ProductionEquipment.Id type,
+            io.farfrontier.palemirror.frontier.v3.model.FacilityFacing facing) {
+        return equipmentBlock(type).defaultBlockState().setValue(
+                io.farfrontier.palemirror.internal.production.ProductionBenchBlock.FACING,
+                net.minecraft.core.Direction.valueOf(facing.name()));
+    }
     static boolean acceptsBlock(ContainerRecord record, net.minecraft.world.level.block.state.BlockState state) {
-        return require(record).accepts().test(state.getBlock());
+        return require(record).accepts().test(state.getBlock()) && (record.productionStation().isEmpty()
+                || state.equals(state(record)));
     }
     static Optional<FrontierV3PhysicalContainer> inspect(ServerLevel level, BlockPos pos, ContainerRecord record) {
         if (!FrontierV3LoadedWorld.ready(level, pos)) return Optional.empty();

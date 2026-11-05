@@ -194,6 +194,11 @@ class BuildingCatalogTest {
                 () -> catalog.select(new BuildingStyleId("test:absent"), StructureKind.WORKSHOP));
         for (var facing : FacilityFacing.values()) {
             var placement = definition.placement(new BlockPosition(10, 64, -15), facing);
+            var mount = definition.primaryWorkplaceDefinition();
+            var worldFront = placement.direction(mount.facing());
+            assertEquals(mount.facing(), placement.localDirection(worldFront));
+            assertEquals(placement.support(mount.worker()), worldFront.step(placement.support(mount.socket()), 1),
+                    "the declared machine front must face the transformed operator for every building rotation");
             for (var p :
                     List.of(
                             definition.origin(),
@@ -202,4 +207,21 @@ class BuildingCatalogTest {
                 assertEquals(p, placement.local(placement.world(p)));
         }
     }
+    @Test void equipmentMarkupRejectsMissingOrBackwardsFrontBeforeNativePlacement() {
+        var catalog=BuildingCatalog.standard();
+        var template=catalog.select(BuildingCatalog.MEDIEVAL_SPRUCE,StructureKind.WORKSHOP);
+        var definition=catalog.require(template,StructureKind.WORKSHOP);
+        var prefix="/io/farfrontier/palemirror/frontier/v3/buildings/medieval_spruce/bakery.properties";
+        try(var input=getClass().getResourceAsStream(prefix)) {
+            var markup=new HashMap<>(BuildingDefinitionFormat.properties(input.readAllBytes()));
+            markup.remove("workplace.oven.facing");
+            assertThrows(IllegalArgumentException.class,()->BuildingDefinitionFormat.decode(markup,definition.blocks(),definition.sha256()));
+            markup.put("workplace.oven.facing","NORTH");
+            assertThrows(IllegalArgumentException.class,()->BuildingDefinitionFormat.decode(markup,definition.blocks(),definition.sha256()),
+                    "an equipment face pointing into its rear wall cannot share the declared operator post");
+            markup.put("workplace.oven.facing","SOUTH");
+            assertEquals(definition,BuildingDefinitionFormat.decode(markup,definition.blocks(),definition.sha256()));
+        } catch(java.io.IOException failure){throw new java.io.UncheckedIOException(failure);}
+    }
+
 }

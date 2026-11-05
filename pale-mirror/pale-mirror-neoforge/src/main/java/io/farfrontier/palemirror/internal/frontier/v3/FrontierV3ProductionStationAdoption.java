@@ -29,13 +29,13 @@ final class FrontierV3ProductionStationAdoption {
             if (level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null
                     || state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed)
                         .anyMatch(surface -> surface.status() != ContainerSurfaceStatus.RETIRED && surface.position().equals(p))
-                    || !level.getBlockState(pos).is(FrontierV3FixedContainerProviders.equipmentBlock(placement.equipmentType()))
+                    || !level.getBlockState(pos).equals(FrontierV3FixedContainerProviders.equipmentState(placement.equipmentType(), placement.facing()))
                     || !(level.getBlockEntity(pos) instanceof ProductionBenchBlockEntity bench)
                     || !bench.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()
                     || !bench.getPersistentData().getString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY).isBlank()) continue;
             var containerId = new SubjectId("container:installed-" + UUID.randomUUID());
             var spec = new ProductionStationSpec(new SubjectId("station:installed-" + UUID.randomUUID()), facility.id(), containerId,
-                    placement.equipmentType(), placement.capability(), placement.workerStation(), placement.socketSurface(),
+                    placement.equipmentType(), placement.capability(), placement.workerStation(), placement.socketSurface(), placement.facing(),
                     java.util.stream.IntStream.range(0, ProductionBenchBlockEntity.INPUT_COUNT).boxed().toList(), ProductionBenchBlockEntity.OUTPUT,
                     placement.fuelSlot(), placement.maintenanceSlot());
             var slots = new HashMap<Integer, FungibleContainerLayout.Stack>(); var lots = new ArrayList<FixedContainerAdoption.PlacedResource>(); boolean admissible = true;

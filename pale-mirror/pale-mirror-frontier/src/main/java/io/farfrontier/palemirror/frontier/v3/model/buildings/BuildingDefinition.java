@@ -117,6 +117,8 @@ public record BuildingDefinition(
             BlockPosition input,
             BlockPosition worker,
             BlockPosition socket,
+            ProductionEquipment.Id equipmentType,
+            FacilityFacing facing,
             BuildingVolume equipment,
             BuildingVolume maintenance) {
         public Workplace {
@@ -125,9 +127,12 @@ public record BuildingDefinition(
             Objects.requireNonNull(input);
             Objects.requireNonNull(worker);
             Objects.requireNonNull(socket);
+            Objects.requireNonNull(equipmentType);
+            Objects.requireNonNull(facing);
             Objects.requireNonNull(equipment);
             Objects.requireNonNull(maintenance);
             if (input.equals(worker)
+                    || !worker.equals(socket.offset(facing.x(), 0, facing.z()))
                     || Math.abs(worker.x() - socket.x()) + Math.abs(worker.z() - socket.z()) != 1
                     || worker.y() != socket.y()
                     || !equipment.contains(socket.offset(0, 1, 0))

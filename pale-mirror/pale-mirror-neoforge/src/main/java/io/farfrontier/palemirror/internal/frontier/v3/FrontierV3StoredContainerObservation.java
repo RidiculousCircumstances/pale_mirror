@@ -32,7 +32,7 @@ final class FrontierV3StoredContainerObservation {
         }
         if (selected == null) return Optional.empty();
         var record = state.inventory().containers().get(id);
-        var entity = BlockEntity.loadStatic(pos, FrontierV3FixedContainerProviders.block(record).defaultBlockState(), selected.copy(), registries);
+        var entity = BlockEntity.loadStatic(pos, FrontierV3FixedContainerProviders.state(record), selected.copy(), registries);
         if (entity == null) return Optional.empty();
         var physical = FrontierV3FixedContainerProviders.observed(entity, record).orElse(null);
         if (physical == null || !physical.declared()) return Optional.empty();

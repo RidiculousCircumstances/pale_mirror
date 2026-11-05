@@ -1,1 +1,19 @@
-{"variants":{"":{"model":"pale_mirror:block/smelter"}}}
+{
+  "variants": {
+    "facing=north": {
+      "model": "pale_mirror:block/smelter"
+    },
+    "facing=east": {
+      "model": "pale_mirror:block/smelter",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "pale_mirror:block/smelter",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "pale_mirror:block/smelter",
+      "y": 270
+    }
+  }
+}

@@ -14,7 +14,8 @@ import java.util.function.Function;
 public final class BuildingGeometryValidation {
     public static void validate(
             BuildingDefinition definition,
-            Function<NavigationBlockState, Optional<NavigationCell>> shapes) {
+            Function<NavigationBlockState, Optional<NavigationCell>> shapes,
+            Function<BuildingDefinition.Workplace, NavigationCell> equipmentShapes) {
         var blocks = definition.blocks();
         var columns = new HashMap<TerrainColumn, List<SurfaceAnchor>>();
         var cells = new HashMap<BlockPosition, NavigationCell>();
@@ -36,6 +37,18 @@ public final class BuildingGeometryValidation {
                                         ignored -> new ArrayList<>())
                                 .add(new SurfaceAnchor(p));
                 });
+        var fabricCells = Map.copyOf(cells);
+        NavigationCollisionView fabricCollision = p -> definition.parcel().contains(p)
+                ? Optional.of(fabricCells.getOrDefault(p, NavigationCell.AIR)) : Optional.empty();
+        for (var work : definition.workplaces().values()) {
+            requireClearVolume(fabricCollision, work.equipment(), "equipment:" + work.id());
+            requireClearVolume(fabricCollision, work.maintenance(), "maintenance:" + work.id());
+            var position = work.socket().offset(0, 1, 0);
+            var shape = Objects.requireNonNull(equipmentShapes.apply(work), "registered equipment geometry");
+            cells.put(position, shape);
+            if (!shape.shape().boxes().isEmpty()) columns.computeIfAbsent(
+                    new TerrainColumn(position.x(), position.z()), ignored -> new ArrayList<>()).add(new SurfaceAnchor(position));
+        }
         NavigationCollisionView collisions =
                 p ->
                         definition.parcel().contains(p)
@@ -101,18 +114,14 @@ public final class BuildingGeometryValidation {
                             "non-traversable passage edge " + passage.id() + " at " + contact);
             }
         }
-        for (var work : definition.workplaces().values()) {
-            requireClearVolume(collisions, work.equipment(), "equipment:" + work.id());
-            requireClearVolume(collisions, work.maintenance(), "maintenance:" + work.id());
-        }
         for (var zone : definition.zones().values())
             if (zone.use() == BuildingDefinition.ZoneUse.EQUIPMENT)
-                requireClearVolume(collisions, zone.volume(), "equipment zone:" + zone.id());
+                requireClearVolume(fabricCollision, zone.volume(), "equipment zone:" + zone.id());
         var start = new SurfaceAnchor(definition.primaryEntranceDefinition().supports().getFirst());
         for (var work : definition.workplaces().values())
             for (var point : List.of(work.input(), work.worker())) {
                 var goal = new SurfaceAnchor(point);
-                if (geometry.blocked(goal))
+                if (!geometry.clearStation(goal))
                     throw new IllegalArgumentException(
                             "blocked workplace " + work.id() + " at " + point);
                 KnownPedestrianNavigation.route(

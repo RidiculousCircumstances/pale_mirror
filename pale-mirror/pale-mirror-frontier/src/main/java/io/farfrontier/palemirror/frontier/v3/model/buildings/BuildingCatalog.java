@@ -286,18 +286,20 @@ public final class BuildingCatalog {
                                 new BlockPosition(0, 0, 2)),
                         2,
                         true);
-        var workplace =
+        var workplace = !production ? null :
                 new BuildingDefinition.Workplace(
                         "work",
                         "workroom",
                         new BlockPosition(1, 0, 2),
                         new BlockPosition(2, 0, 2),
                         new BlockPosition(2, 0, 1),
+                        ProductionFacilityLayout.equipmentType(kind),
+                        FacilityFacing.SOUTH,
                         new BuildingVolume(new BlockPosition(2, 1, 1), new BlockPosition(3, 3, 2)),
                         new BuildingVolume(new BlockPosition(1, 1, 2), new BlockPosition(3, 3, 3)));
         var hash =
                 sha256(
-                        (id.value() + '|' + width + '|' + depth + '|' + height + "|graybox-v1")
+                        (id.value() + '|' + width + '|' + depth + '|' + height + "|graybox-v2-oriented-equipment")
                                 .getBytes(StandardCharsets.UTF_8));
         return new BuildingDefinition(
                 id,

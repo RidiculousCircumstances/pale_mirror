@@ -152,7 +152,7 @@ final class FrontierV3ContainerSurfaceExecutor {
             return;
         }
         if (level.getBlockState(target).isAir()) {
-            var block = FrontierV3FixedContainerProviders.block(state.inventory().containers().get(surface.containerId())).defaultBlockState();
+            var block = FrontierV3FixedContainerProviders.state(state.inventory().containers().get(surface.containerId()));
             if (!FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime,
                     List.of(new FrontierV3ManagedBlockWrites.PlannedWrite(target, block)),
                     () -> resumePrepared(level, runtime, surface.containerId()))) return;
@@ -189,7 +189,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                                                               FrontierWorldState state, ContainerSurface surface) {
         if (!level.getBlockState(target).isAir() || level.getBlockState(target.below()).isAir()) return null;
         var record = state.inventory().containers().get(surface.containerId());
-        var block = FrontierV3FixedContainerProviders.block(record).defaultBlockState();
+        var block = FrontierV3FixedContainerProviders.state(record);
         var support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow();
         if (!FrontierV3ContainerSocketProvenance.openingWrite(support, () -> level.setBlock(target, block, 3))) return null;
         var physical = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);

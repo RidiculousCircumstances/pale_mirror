@@ -12,6 +12,7 @@ final class ProductionStationSpecCodec {
         writeString(out, station.containerId().value()); writeString(out, station.equipmentType().value());
         out.writeByte(station.capability().wireTag()); writePosition(out, station.workerStation().support());
         writePosition(out, station.socketSurface().support());
+        writeString(out, station.facing().name());
         out.writeByte(station.inputSlots().size());
         for (int slot : station.inputSlots()) out.writeByte(slot);
         out.writeByte(station.outputSlot());
@@ -25,6 +26,7 @@ final class ProductionStationSpecCodec {
         var container = new SubjectId(readString(in)); var equipment = new ProductionEquipment.Id(readString(in));
         var capability = ProductionStationSpec.Capability.fromWireTag(in.readUnsignedByte());
         var worker = new SurfaceAnchor(readPosition(in)); var socket = new SurfaceAnchor(readPosition(in));
+        var facing = FacilityFacing.valueOf(readString(in));
         int size = in.readUnsignedByte();
         if (size < 1 || size > 9) throw new IllegalArgumentException("invalid station input inventory size");
         var inputs = new java.util.ArrayList<Integer>();
@@ -32,7 +34,7 @@ final class ProductionStationSpecCodec {
         int output = in.readUnsignedByte();
         var fuel = in.readBoolean() ? java.util.OptionalInt.of(in.readUnsignedByte()) : java.util.OptionalInt.empty();
         var maintenance = in.readBoolean() ? java.util.OptionalInt.of(in.readUnsignedByte()) : java.util.OptionalInt.empty();
-        return new ProductionStationSpec(id, facility, container, equipment, capability, worker, socket, inputs, output, fuel, maintenance);
+        return new ProductionStationSpec(id, facility, container, equipment, capability, worker, socket, facing, inputs, output, fuel, maintenance);
     }
 
     private ProductionStationSpecCodec() { }

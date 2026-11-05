@@ -49,14 +49,7 @@ public final class FrontierV3BuildingAuthoringGameTests {
                             BuildingDefinitionFormat.properties(markup),
                             blocks,
                             BuildingCatalog.sha256(markup, bytes));
-            BuildingGeometryValidation.validate(
-                    definition,
-                    block ->
-                            java.util.Optional.ofNullable(decoded.get(block))
-                                    .flatMap(
-                                            io.farfrontier.palemirror.frontier.v3.model.geometry
-                                                            .NavigationObservation
-                                                    ::cell));
+                FrontierV3BuildingAuthoring.validate(definition, decoded);
             helper.assertTrue(
                     !decoded.isEmpty(), "registry compilation must have actual collision facts");
             // Task-owned build output, consumed deliberately by the content author, never live
@@ -64,6 +57,27 @@ public final class FrontierV3BuildingAuthoringGameTests {
             var output = Path.of("building-authoring", path + ".geometry");
             Files.createDirectories(output.getParent());
             Files.writeString(output, facts, StandardCharsets.UTF_8);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
+    public static void equipmentModelsFollowDeclaredMountsAndAllNativeRotations(GameTestHelper helper) {
+        var state=io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.initial(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper.create(
+                        new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:equipment-facing"),139));
+        for(var home:state.bootstrap().settlements()) for(var facility:home.structures()) {
+            if(!io.farfrontier.palemirror.frontier.v3.model.ProductionFacilityLayout.supports(facility.kind()))continue;
+            var spec=io.farfrontier.palemirror.frontier.v3.model.ProductionFacilityLayout.station(facility);
+            var record=state.inventory().containers().get(spec.containerId());
+            var block=FrontierV3FixedContainerProviders.state(record);
+            var property=io.farfrontier.palemirror.internal.production.ProductionBenchBlock.FACING;
+            helper.assertTrue(block.getValue(property).name().equals(spec.facing().name()),"native machine must face its exact operator");
+            helper.assertTrue(FrontierV3FixedContainerProviders.acceptsBlock(record,block),"correct installation accepted");
+            helper.assertTrue(!FrontierV3FixedContainerProviders.acceptsBlock(record,block.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90)),
+                    "wrong orientation is not adopted or overwritten as the declared machine");
+            helper.assertTrue(block.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90).getValue(property)==block.getValue(property).getClockWise(),
+                    "native rotation must agree with mount rotation");
         }
         helper.succeed();
     }
