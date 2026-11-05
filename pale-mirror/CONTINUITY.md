@@ -1,98 +1,115 @@
 # Active continuity — 2026-11-05
 
-## Current result
+## Assignment and completed delivery
 
-User requested the existing developer layout tool extended and used to repair
-the bakery's brick-wall appearance. Implemented, verified, committed and deployed.
-Main alone, no subagents/goal/push requested. Standing delivery policy applied;
-user worlds disposable, human rd and unrelated operators/WIP preserved.
-No remaining implementation/deployment work in this scope.
+Accepted Medieval Spruce settlement rollout implemented, committed and deployed:
+remaining functional buildings, variable mixed housing/bed accounting, three
+reproducible street schemes, flush paving and bounded developer planning tool.
+Future expansion preserves occupied plot/building IDs and coordinates. Sleep,
+individual home/bed assignment, live economic expansion and construction AI deferred.
+Main alone; no subagents, goal or push requested. Standing scoped commit+verified
+disposable-server deployment applies. Preserve human rd/unrelated services and WIP.
 
-Report: `docs/frontier-v3-equipment-layout-authoring-20261105.md`.
-Source usage: IMPL `tools/buildings/README.md`.
+Plan: docs/frontier-v3-settlement-layout-plan-20261105.md. Implementation/ownership,
+verification and delivery: docs/frontier-v3-settlement-layout-implementation-20261105.md.
+Previous ledger archived at docs/archive/continuity-before-settlement-layout-20261105.md.
+No active client, display or monitor; server left running. Final response pending.
 
-Concrete source defect was unrotated ProductionBenchBlock/default native state
-despite rotated building fabric/operator. Markup2 now explicitly declares
-workplace equipment type and local front; BuildingPlacement alone transforms
-them. Schema338 StationSpec persists exact world front. Shared native adapter
-uses it for initial placement, adoption and stored decoding; native block/player
-placement, rotation/mirror and4model variants match all current equipment.
-Front must face the declared adjacent operator; missing/backwards data fails.
-Final follow-up separates wrong-pose refusal for NEW adoption from inventory
-provider recognition: rotating an existing machine cannot erase its container
-identity/custody or freeze stock. No guessed orientation or forced repair.
+## Repositories / identities
 
-Existing export/set/point/overlay remain draft owners; new equipment/preview
-commands use them. Actual registered machine geometry is inserted before shared
-entrance-to-port validation. Real models and front/zone annotations render only
-for the requesting operator, max32 within128blocks,600client-turn expiry and
-exact receiving-world lifetime. No blocks/entities/inventories/collisions change,
-no live activation/paste, no alternate gameplay planner. Runtime production,
-common navigation and structural custody retain their owners. Protocol6 requires
-client update. Existing current stations retain their normal logical slot ports;
-no new Create processing or equipment adapter is claimed.
+IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
+branch feat/baker-carry-orders-20260926, initial b5cc15846. Source commits dae577e04
+(main162 paths),7e9f6e439,1a9b2612c,23e8b984c,c9f207194. Later scenario-only camera
+corrections c7b39197e,ad97c5f04,f603f3391. IMPL clean finalf603f3391.
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror, clean detachedc9f207194,
+the exact deployed production ref. Later commits affect only native test scenarios;
+recovery pilot runs this release against checked-in IMPLf603 scenario.
+PACK /home/rd/proj/minecraft clean tracked888ed90d5; unrelated .f0v-baseline/ preserve.
+Only ignored hosted artifacts/checksums were published; no tracked pack commit needed.
+GOV parent Git repo has extensive unrelated WIP. Only own architecture field,
+new plan/report/archive and ledger may be committed. settlement_layout_boundary is
+staged through HEAD+exact-line blob; all other architecture edits remain unstaged.
+Never stage whole AGENTS/architecture or unrelated historical documents.
 
-## Source and runtime identity
+Production Core SHA512:
+b69b909dba00df102bc534c92706d7e8f3b4d931355cf9dcce2a322f85d5ac2b8083130730675ebe042895c939ca375e40043fcb39983fa015a11c227730ae04
+Unchanged Visuals:
+2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601
 
-- IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Gitroot parent,
-  branch `feat/baker-carry-orders-20260926`, cleanb5cc158462a91951f406a48fbff03b7be29fdb9c.
-  ca5b2a1a1 implements tool/orientation; b5cc15846 separates placement/stock identity.
-- RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror`, clean detachedsame.
-- PACK `/home/rd/proj/minecraft`, trackedclean888ed90d5e3b80b18c278107aa83bb003b541f69;
-  pre-existing untracked `.f0v-baseline/` preserved. Hosted ignored artifacts
-  published/index checked/pinned installed through PACK scripts. No tracked
-  pack change or push.
-- GOV `/home/rd/proj/pm-governance/pale-mirror`, Gitroot parent. Task changes only
-  this ledger, equipment-layout report and exact equipment_layout_authoring_boundary
-  architecture field. Extensive unrelated WIP remains; never stage whole
-  architecture, AGENTS, contract, materialization or skill files.
+## Responsibilities / implementation
 
-Live `/home/rd/far-frontier-server`, `far-frontier-v3-live.service` active,
-wrapper706280, restart1793882211. World
-`equipment-layout-schema338-seed139-20261105`, seed139/r31/schema338. Previous
-337world saved all dimensions17:21:27 and retained. Current338world normal saves
-17:26:38 and17:36:12; two normal same-world recoveries. Final preflight/install/
-verifierPASS. Source buildJava21, runtimeJava22.
+SettlementLayout owns bounded style/revision, stable plots/buildings, parcel bounds,
+streets and extension fronts; append-only extend rejects replacement. Schema339
+persists exact manifest; recovery never reruns allocator. Strict shared validation /
+properties/SVG compiler; no new construction writer. Planner reserves route departures,
+uses real template envelopes/ports and one of3 hashed schemes;14..18 buildings at139.
+Houses1/2/3/5 actual beds;25..43beds for21..35people. Bed-half destruction reduces
+capacity. All12 Spruce functions/templates imported from pinned upstreama9b03edfbb,
+hashes/provenance/collision certificates. Private ARR derivatives, no public push.
 
-Final main JAR SHA512:
-`367f05575d870b3a868a935a9bbcc78c79e50e9b5cbf03d01c87d8fb5cfbc9e4d0dc68bf61dadf8d92003e49aa7d5ce33b355d3adae03a6fcd67ea7226655389`.
-Visuals unchanged SHA512:
-`2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601`.
-Final summary in IMPL `build/equipment-layout-native/delivery-summary.txt`: green,
-required/inventory/scene conflicts0, no new quarantine; progress NOT_ASSESSED.
-Task20FPS client/private display exited; PMBakeryAudit deopped,0players; no
-background monitoring. JDK21 path `/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2`;
-runtimeJava22 `/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`.
+Functional ports use declared authored anchors; public service contacts are walkable
+but noParking. Street graph feeds common ingress/rest geometry. Exterior fields/quarries
+share land proposals and avoid private parcels; stone-brick roads are flush/cobble
+foundations, repair items match. Existing navigation/custody/storage/execution retain
+all gameplay authority. Developer building layout export/move/street/connect/validate/
+overview/overlay/selected preview shares compiler, bounded atomic drafts only.
+Network7 requires matching updated client. No live paste.
 
-## Verification
+Integration defects also repaired: regional authored geometry references retained
+blocks/columns/palette instead of repeatedly flattening world; exact memo/union avoids
+huge treatment Set.copyOf (captured native stack). Hive obstacle private HashSet avoids
+SetN probing; no new Hive behavior. Shipment strategies declare supportingFacility;
+economic owner no longer substitutes. Production/migration retain same actor profile
+at admission/continuation. Group cohesion excludes peer already at own exact terminal
+station from spacing arbitration; only movement owner confirms arrival/cargo/lease.
+Mining at equal urgency prefers directly available own-output deficit over prerequisite
+access work for another source; commodity-independent. No live speed gain claimed.
 
-Full guardrails/check/build/package:2334Frontier,920NeoForge,443native and
-2dedicated native authoring passed. Focused Node scenario56passed. Client-only
-receiving-world expiry follow-up compiled/guardrails/package passed; final
-placement-versus-inventory follow-up unit2/native2 passed. No obsolete failures
-were suppressed. Old schemas/markup intentionally rejected, fresh world used.
+## Verification receipts / limits
 
-Real full-pack carrier `live-building-equipment-layout.json`,
-SHA2560793190d583f1639f31d866949d469b1c9b0455585a205973365baca12ec470a.
-First native actual-face/tool/preview/menu13actions passed, runf67856dd…;
-normal restart replay passed, runbd749871…; exact final binary replay passed
-3bdeaaf6-21d1-4949-9216-2b644ae82ee1. Receipts under IMPL
-`build/equipment-layout-native/`. Actual west-facing packet and clear oven-front
-PNG verified; real registered model/annotation preview and ordinary menu frames
-opened/reviewed. Tool-authored draft equals packaged properties semantically;
-compiled geometry bytes equal packaged certificate. Prior task drafts retained
-in this evidence directory before re-export, not gameplay edits. A connection
-reset at completed client shutdown is a task-runner disconnect, not server crash.
-No whole-life M3, economy/performance/combat balance or Create compatibility claim.
+Skills read: foundry-audit, visual-audit, release-verification/matrix,
+server-ops/operations-map, client-investigation, worldgen-performance; protocol read.
+All12 native authoring assets PASS;44-file reimport exact;12 offline plan SVG/properties.
+Core443 GameTests PASS at1a9;6 affected native service tests PASS at23e;4 extraction
+native tests PASS on final production bytes. Domain324/Visuals79 unit tests pass.
+Full Frontier verification uses completed XML class partitions, not repeated broad
+runs: build/settlement-layout-review/integration-partition (IMPL), combined-receipt.json.
+NeoForge920 tests PASS; all13 classes needing fixture/oracle correction subsequently
+pass focused checks. Four tests of removed raised-apron/fixed-grid layout retired;
+current layout7 tests cover identities/extension/terrain/bed loss/recovery negatives.
+No timing tests added. Final release guardrails/focused last3 classes/build/package
+PASS: RELEASE build/settlement-layout-release-complete.log. Final same-ref repack hash
+matches deployment: settlement-layout-final-artifact-verification.log.
+Unchanged legacy Visuals lanes are NOT green: missing test-only navigation template,
+and separate natural-world survey0 sites. No active v3 defect proven by those failures.
 
-## Retained context
+Real full-pack client layout PASS: RELEASE build/settlement-layout-review/live-layout.json,
+run2c87b88b-b188-44b6-b81c-80b77bbba33e. Four actual frames opened. First near-wall
+house frame insufficient, corrected recovery street-eye camera. Graceful SAMEworld
+restart+graphical recovery PASS: live-layout-recovery.json,
+run190a8727-4e09-4be7-a681-69508aa2b3db. Three actual frames opened: coherent whole
+village, several complete house facades/roofs, native depot menu before/after restart.
+Terminal scene/inventory conflicts0. Original/recovered layout exports byte-identical,
+SHA2562e9f6e580eb3a3bb5e4296309bf47c6698cad776a3b385ba348471b970c2be79.
+Joined identity/frame/limits receipt RELEASE build/settlement-layout-review/delivery.json.
+Private Xvfb automation is not human M3. Bounded layout/menu/restart check does not
+claim full live economy or all worker progress. Initial camera trial failed from a
+double-added body offset/gravity; scenario corrected, no timeout/arrival weakening.
 
-Earlier door/access delivery: `docs/frontier-v3-manual-passages-and-access-20261105.md`.
-Its native door/gate checks passed; its full graphical guard-pursuit fixture
-remains unconfirmed, not silently closed by this layout work. Furniture/contact
-and production wake corrections: `docs/frontier-v3-pedestrian-passages-result-20261105.md`.
-Original combat tracecd22dace-4aee-4dad-a0e9-d3106501e19f retained.
-Medieval Spruce bakery provenance/developer basis and earlier bread/recovery
-evidence: `docs/frontier-v3-authored-buildings-result-20261105.md`. Other buildings
-remain grayboxes; supplied MineColonies derivative remains private test content
-without established redistribution rights. No other active assignment/goal.
+## Current runtime / final steps
+
+Live /home/rd/far-frontier-server, far-frontier-v3-live.service, wrapperPID2757086,
+start22:41:04+05. Fresh world settlement-layout-schema339-seed139-20261105 seed139.
+Old338 and new339 both stopped/saved normally at their respective transitions.
+PACK preflight/install/fresh startup/restart verifier PASS, no quarantine; logs in
+RELEASE build/settlement-layout-deploy-*.log and settlement-layout-restart-verify.log.
+Human rd connected before authorized restart; connection interrupted with notice;
+no account position/items edited. Preserve ordinary user session.
+BuildJava21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2;
+runtimeJava22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
+RCON helper exists in IMPL build/forestry-native/query-runtime.mjs; never print secrets.
+
+Final docs guardrails PASS. Scoped GOV plan/report/archive/ledger/map commit completes
+documentation; all unrelated WIP preserved. Final response should state delivered
+features, future-expansion limit and matching client update. No further broad tests,
+restart/reset or automatic push. Last ordinary list: human rd online, pilot absent.
