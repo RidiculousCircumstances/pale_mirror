@@ -12,7 +12,7 @@
   "setup": [
     {
       "type": "command",
-      "command": "/gamemode creative"
+      "command": "/gamemode spectator"
     },
     {
       "type": "command",
@@ -44,12 +44,7 @@
           "field": "routeSurface"
         }
       },
-      "settleMs": 0,
-      "offset": {
-        "x": 0,
-        "y": 1,
-        "z": 0
-      }
+      "settleMs": 0
     },
     {
       "type": "command",
@@ -137,6 +132,10 @@
       "timeoutMs": 60000
     },
     {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
       "type": "open_container",
       "position": {
         "diagnostic": {
@@ -163,7 +162,7 @@
   ],
   "assertions": [
     {
-      "after": 9,
+      "after": 10,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -174,7 +173,7 @@
       }
     },
     {
-      "after": 10,
+      "after": 11,
       "view": "summary",
       "id": "",
       "expect": {
@@ -194,7 +193,7 @@
       "name": "recovered-housing-exterior"
     },
     {
-      "after": 7,
+      "after": 8,
       "name": "recovered-depot-inventory",
       "presentation": "player"
     }
