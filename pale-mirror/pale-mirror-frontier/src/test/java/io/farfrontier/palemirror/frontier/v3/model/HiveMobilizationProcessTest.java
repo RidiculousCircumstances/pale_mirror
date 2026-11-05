@@ -180,7 +180,9 @@ class HiveMobilizationProcessTest {
     }
 
     @Test void oneRetainedParentSurvivesAssemblyTravelHotContactRestartAndReturn() {
-        FrontierWorldState state = depart(assemble(fixture()));
+        // This lifecycle fixture uses the east nest's adjacent settlement. Crossing
+        // other settlements' private fabric is a separate strategic-navigation concern.
+        FrontierWorldState state = depart(assemble(fixture(TerrainSurfacePlan.uniform(63), 11)));
         HiveMobilization parent = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
         SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
         SubjectId hive = state.bootstrap().hive().id();
@@ -889,10 +891,12 @@ class HiveMobilizationProcessTest {
 
     private static Fixture fixture() { return fixture(TerrainSurfacePlan.uniform(63)); }
 
-    private static Fixture fixture(TerrainSurfacePlan terrain) {
+    private static Fixture fixture(TerrainSurfacePlan terrain) { return fixture(terrain, 0); }
+
+    private static Fixture fixture(TerrainSurfacePlan terrain, int settlementIndex) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-mobilization"), 8128L,
                 FrontierRulesets.production(), terrain));
-        Settlement settlement = state.bootstrap().settlements().getFirst();
+        Settlement settlement = state.bootstrap().settlements().get(settlementIndex);
         FrontierWorldState initial = state;
         Bioform scout = initial.bootstrap().hive().bioforms().stream().filter(Bioform::isScout)
                 .filter(bioform -> initial.hiveColony().bioformLifecycles().get(bioform.id()).phase() == BioformLifecyclePhase.ACTIVE).findFirst().orElseThrow();

@@ -7,6 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReac
 final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.DECLARED_STORAGE; }
     @Override public ShipmentReceiverReplacement replacementPolicy() { return StorageShipmentReceiverReplacement.INSTANCE; }
+    @Override public java.util.Optional<SettlementStructure> supportingFacility(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        var storage = declaration(state, endpoint);
+        return storage.facilityId().map(id -> facility(state, storage));
+    }
     private ShipmentEndpoint.Storage declaration(FrontierWorldState state, ShipmentEndpoint endpoint) {
         if (!(endpoint instanceof ShipmentEndpoint.Storage storage))
             throw new IllegalArgumentException("storage endpoint has a foreign nominal schema");

@@ -102,7 +102,7 @@ class FrontierGrayboxPlanTest {
         assertEquals(first.cells(), second.cells());
         assertTrue(first.cells().size() > 10_000);
         assertTrue(first.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("structure:1-depot")
-                && cell.material() == GrayboxMaterial.DEPOT));
+                && cell.material() instanceof StructureMaterial.Authored));
         assertTrue(first.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("organ:west-ganglion")
                 && cell.semanticPart() == GrayboxSemanticPart.HIVE_TISSUE));
         assertTrue(first.cells().values().stream().anyMatch(cell -> cell.material() == GrayboxMaterial.ROUTE));
@@ -204,7 +204,10 @@ class FrontierGrayboxPlanTest {
         var plan = FrontierGrayboxPlan.compile(state);
 
         assertTrue(waypoints.stream().skip(1).allMatch(position -> plan.cells().containsKey(position)));
-        assertTrue(waypoints.stream().skip(1).allMatch(position -> plan.cells().get(position).ownerId().equals(FrontierRouteNetwork.OWNER)));
+        assertTrue(waypoints.stream().skip(1).allMatch(position -> java.util.Set.of(
+                PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE,
+                PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE).contains(plan.cells().get(position).semanticTarget().kind())));
+        assertTrue(waypoints.stream().anyMatch(p -> FrontierRouteNetwork.isSurfaceCell(state.bootstrap(), state.routeTopology(), p)));
     }
 
     @Test
@@ -214,14 +217,10 @@ class FrontierGrayboxPlanTest {
         state.bootstrap().settlements().forEach(settlement -> {
             SettlementStructure hall = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow();
             SettlementAccessPort port = SettlementAccessPort.forHall(hall);
-            assertEquals(new GrayboxCell(port.assemblyFloor(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, hall.id()), GrayboxMaterial.HALL, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
-                    plan.cells().get(port.assemblyFloor()), "public assembly sill must retain exact Hall provenance");
-            assertEquals(new GrayboxCell(port.routeFloor(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE),
-                    plan.cells().get(port.routeFloor()), "public assembly sill must join the route graph at its exact route cell");
-            assertEquals(new GrayboxCell(port.assemblyFloor(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, hall.id()), GrayboxMaterial.HALL, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
-                    plan.cells().get(port.assemblyFloor()), "Hall-owned sill must win the declared public-route seam");
-            port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
-                    "Hall throat must retain two body-clear cells: " + hall.id()));
+            assertAuthoredContact(state, plan, hall, port.assemblySurface());
+            assertTrue(settlement.layout().paving().contains(port.routeFloor()));
+            assertNotNull(plan.cells().get(port.routeFloor()), "Hall frontage joins the retained street graph");
+            assertAuthoredContact(state, plan, hall, port.topologyPort().thresholdSurface());
             assertEquals(FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), hall, port.assemblyFloor()), plan.cells().get(port.assemblyFloor()));
         });
     }
@@ -234,11 +233,8 @@ class FrontierGrayboxPlanTest {
         state.bootstrap().settlements().forEach(settlement -> {
             SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
             SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
-            port.ownedAccessSurfaces().forEach(surface -> assertEquals(new GrayboxCell(surface.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, infirmary.id()),
-                    GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
-                    plan.cells().get(surface.support()), "treatment access walk must retain exact infirmary provenance"));
-            port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
-                    "infirmary throat must retain two body-clear cells: " + infirmary.id()));
+            port.ownedAccessSurfaces().forEach(surface -> assertAuthoredContact(state, plan, infirmary, surface));
+            assertAuthoredContact(state, plan, infirmary, port.throatSurface());
             assertEquals(2, port.ingressSurfaces().size() - 1, "treatment ingress must retain two adjacent portal transitions");
             for (int index = 1; index < port.arrivalSurfaces().size(); index++) {
                 SurfaceAnchor previous = port.arrivalSurfaces().get(index - 1), current = port.arrivalSurfaces().get(index);
@@ -249,11 +245,7 @@ class FrontierGrayboxPlanTest {
             }
             for (int ordinal = 0; ordinal < 3; ordinal++) {
                 SurfaceAnchor floor = port.treatmentSurface(ordinal);
-                assertEquals(new GrayboxCell(floor.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, infirmary.id()), GrayboxMaterial.INFIRMARY,
-                        GrayboxSemanticPart.FOUNDATION), plan.cells().get(floor.support()),
-                        "treatment position must be a retained infirmary floor: " + infirmary.id());
-                assertEquals(null, plan.cells().get(floor.support().offset(0, 1, 0)), "treatment body clearance must stay open: " + infirmary.id());
-                assertEquals(null, plan.cells().get(floor.support().offset(0, 2, 0)), "treatment head clearance must stay open: " + infirmary.id());
+                assertAuthoredContact(state, plan, infirmary, floor);
             }
         });
     }
@@ -284,11 +276,8 @@ class FrontierGrayboxPlanTest {
             SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
             assertEquals(port.containerPosition(), state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).position(),
                     "the exact depot chest must use its semantic service socket");
-            port.ownedAccessSurfaces().forEach(surface -> assertEquals(new GrayboxCell(surface.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, depot.id()), GrayboxMaterial.DEPOT,
-                    GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), plan.cells().get(surface.support()),
-                    "the depot service floor must retain depot provenance"));
-            port.throatAirCells().forEach(cell -> assertEquals(null, plan.cells().get(cell),
-                    "the depot service doorway must retain two-body headroom"));
+            port.ownedAccessSurfaces().forEach(surface -> assertAuthoredContact(state, plan, depot, surface));
+            assertAuthoredContact(state, plan, depot, port.thresholdSurface());
             port.stations().forEach(station -> {
                 assertEquals(null, plan.cells().get(station.support().offset(0, 1, 0)), "service station feet cell must stay clear");
                 assertEquals(null, plan.cells().get(station.support().offset(0, 2, 0)), "service station head cell must stay clear");
@@ -358,6 +347,18 @@ class FrontierGrayboxPlanTest {
             assertEquals(null, plan.cells().get(position.offset(0, 2, 0)),
                     "active bioform head clearance must stay outside hive organ geometry: " + bioform.id());
         });
+    }
+
+    private static void assertAuthoredContact(FrontierWorldState state, FrontierGrayboxPlan plan,
+            SettlementStructure structure, SurfaceAnchor surface) {
+        var expected = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().get(surface.support());
+        assertNotNull(expected, "a declared facility contact needs its exact authored support");
+        assertEquals(expected, plan.cells().get(surface.support()));
+        assertEquals(structure.id(), expected.ownerId());
+        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, structure.settlementId(), java.util.List.of(
+                new KnownPedestrianRouteKnowledge.Passage(structure, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)))
+                .forProfile(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER);
+        assertTrue(knowledge.clearStation(surface), "native fractional geometry must leave body clearance: " + structure.id() + " " + surface);
     }
 
     private static FrontierWorldState initial() {

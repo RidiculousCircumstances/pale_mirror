@@ -14,7 +14,7 @@ import java.util.Optional;
  */
 public final class FrontierContainerSocketPlan {
     private FrontierContainerSocketPlan() { }
-    private record SupportKey(SubjectId owner, BlockPosition position) { }
+    private record SupportKey(SubjectId container, BlockPosition position) { }
     private static final ImmutableInputView<java.util.Map<SupportKey, Optional<GrayboxCell>>> STORAGE_SUPPORTS = new ImmutableInputView<>();
 
     /** Storage on an authored support waits for that geometry owner, just like other sockets.
@@ -24,8 +24,12 @@ public final class FrontierContainerSocketPlan {
         if (state.physicalDeltas().containsKey(position)) return Optional.empty();
         return STORAGE_SUPPORTS.get(java.util.List.of(state.bootstrap(), state.hiveColony(), state.routeTopology(),
                         state.inventory().containers(), state.inventory().surfaces()), java.util.HashMap::new)
-                .computeIfAbsent(new SupportKey(record.ownerId(), position), key -> Optional.ofNullable(
-                    FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), key.owner(), key.position())));
+                .computeIfAbsent(new SupportKey(record.id(), position), key -> {
+                    var facility = ShipmentEndpointComposition.supportingFacility(state, record.storage().orElseThrow().endpoint());
+                    return Optional.ofNullable(facility.isPresent()
+                            ? FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), facility.orElseThrow(), key.position())
+                            : FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), record.ownerId(), key.position()));
+                });
     }
 
     public static Optional<ContainerSocketSupport> declaredSupport(FrontierWorldState state, ContainerSurface surface) {
@@ -47,16 +51,12 @@ public final class FrontierContainerSocketPlan {
         BlockPosition position = new BlockPosition(surface.position().x(), surface.position().y() - 1, surface.position().z());
         if (state.physicalDeltas().containsKey(position)) return Optional.empty();
         if (surface.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) {
-            // This support is checked once per active surface turn.  Building the complete
-            // multi-settlement route-cell set here turns that bounded inspection into repeated
-            // whole-world allocation during fast-forward.  The route network already owns the
-            // equivalent topology-aware point predicate; use it without changing the immutable
-            // plan or the source of truth.
-            return FrontierRouteNetwork.isSurfaceCell(state.bootstrap(), state.routeTopology(), position)
-                    ? Optional.of(new GrayboxCell(position, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE))
-                    : Optional.empty();
+            var declared = FrontierRouteNetwork.maintenanceContainerSupport(state.bootstrap());
+            return declared.position().equals(position) ? Optional.of(declared) : Optional.empty();
         }
         ContainerRecord container = state.inventory().containers().get(surface.containerId());
+        if (container != null && container.purpose() == ContainerPurpose.RESOURCE_STORAGE)
+            return storageSupport(state, container, position);
         if (container != null && container.productionStation().isPresent()) {
             ProductionStationSpec station = container.productionStation().orElseThrow();
             if (!station.socketSurface().support().equals(position)) return Optional.empty();
@@ -82,7 +82,7 @@ public final class FrontierContainerSocketPlan {
             return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)
                     .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED)
                     .filter(structure -> SettlementDepotServicePort.forDepot(structure).socketSurface().support().equals(position))
-                    .map(structure -> new GrayboxCell(position, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id()), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION)).findFirst();
+                    .flatMap(structure -> Optional.ofNullable(FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), structure, position)).stream()).findFirst();
         }
         for (HiveOrgan organ : state.bootstrap().hive().organs()) {
             if (organ.containerId().filter(surface.containerId()::equals).isPresent() && organ.anchor().equals(position)) {

@@ -23,7 +23,7 @@ class RouteConstructionProcessIntegrationTest {
     @Test
     void scheduledPatrolConfirmsObservedRouteLossBeforeInPlaceMaintenanceStarts() {
         WorldId worldId = new WorldId("frontier:route-reroute-scheduled");
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 100L));
+        var engine = FrontierEngines.create(DeclaredRouteFixtures.hallStaged(FrontierWorldRuntimeDefinition.configuration(worldId, 100L)));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         BlockPosition loss = DeclaredRouteFixtures.networkSurface(initial.bootstrap(), initial.routeTopology(), settlement);

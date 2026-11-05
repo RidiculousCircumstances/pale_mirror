@@ -53,7 +53,7 @@ public final class ProductionFacilityLayout {
         var id = metalStorageId(facility); var access = metalStorageStation(facility);
         return new ContainerRecord(id, facility.settlementId(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
                 Optional.of(new ResourceStoragePolicy(new ShipmentEndpoint.Storage(facility.settlementId(), id, access,
-                        Optional.empty(), access), new ResourceStorageFilter(false, Set.of("minecraft:coal"),
+                        Optional.of(facility.id()), access), new ResourceStorageFilter(false, Set.of("minecraft:coal"),
                         Map.of("pale_mirror:ores", Set.of("minecraft:raw_iron"),
                                 "pale_mirror:ingots", Set.of("minecraft:iron_ingot"))), 100, ResourceStorageRole.WAREHOUSE)));
     }

@@ -206,7 +206,7 @@ class GuardDutyTest {
     @Test void equipmentApproachUsesThreeDimensionalGeometryRejectsDamageAndWithdrawsLostSource() {
         var state = armed(); var previous = state.strategicPlans().guards().values().iterator().next(); var actor = previous.execution().actorId();
         var home = FrontierWorldStateSupport.settlement(state.bootstrap(), previous.home());
-        var ground = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var ground = DeclaredRouteFixtures.openStreet(state, home);
         var id = new SubjectId("container:guard-raised-contact");
         var contact = KnownPedestrianGround.forFrontier(state).at(ground.x() + 1, ground.z());
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, contact, Optional.empty(), contact);

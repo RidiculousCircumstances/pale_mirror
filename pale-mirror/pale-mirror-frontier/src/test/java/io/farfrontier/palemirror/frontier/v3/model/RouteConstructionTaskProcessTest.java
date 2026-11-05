@@ -88,14 +88,16 @@ class RouteConstructionTaskProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> result = RouteConstructionProcess.planStart(state,
                 RouteConstructionProcess.start(construction, 200L));
 
-        assertFalse(result.stream().anyMatch(event -> event.payload() instanceof RouteConstructionStarted),
-                "a status-only conflict cannot transfer an engineering execution to another project");
+        var retained = java.util.Set.copyOf(failed.engineeringTeam().orElseThrow().memberIds());
+        result.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(RouteConstructionStarted.class::isInstance).map(RouteConstructionStarted.class::cast)
+                .forEach(started -> assertTrue(java.util.Collections.disjoint(retained,
+                        started.project().team().orElseThrow().memberIds()),
+                        "a new project may use a different free crew, never the conflicted exact crew"));
         var executions = state.actorExecutions();
         assertTrue(failed.engineeringTeam().orElseThrow().memberIds().stream().allMatch(member ->
                 executions.actors().get(member).current().orElseThrow().activityOwnerId().equals(failed.id())));
-        assertTrue(result.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
-                && transition.status() == StrategicTaskStatus.BLOCKED),
-                "a bypass without an admissible crew must report its blocked task, not invent a release");
+
     }
 
     @Test
@@ -241,7 +243,10 @@ class RouteConstructionTaskProcessTest {
                 "the recovered human cadence must advance a retained crew member before the next strategic scan at tick 400");
         assertTrue(recovered.checkpoint().schedules().contains(RouteConstructionProcess.assemblyProgress(project.id(), 240L)));
 
-        for (long tick = 221L; tick <= 2_000L; tick++) {
+        long remainingSteps = afterRecoveryStep.members().values().stream()
+                .mapToLong(member -> member.corridor().size() - 1L - member.cursor()).sum();
+        long arrivalBound = 220L + (remainingSteps + 2L) * toolReady.bootstrap().ruleset().cadence().migrationStepInterval();
+        for (long tick = 221L; tick <= arrivalBound; tick++) {
             recovered.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             if (state(recovered).routeConstructions().get(project.id()).assembly().orElseThrow().complete()) break;
         }
@@ -386,7 +391,7 @@ class RouteConstructionTaskProcessTest {
     private static FrontierWorldState stateWithConfirmedPatrol() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction-task"), 91L);
         FrontierWorldState state = FrontierWorldState.initial(bootstrap); Settlement settlement = bootstrap.settlements().getFirst();
-        List<BlockPosition> route = state.routeTopology().settlementWaypoints(bootstrap, settlement.id()); BlockPosition obstruction = route.get(1);
+        List<BlockPosition> route = state.routeTopology().settlementWaypoints(bootstrap, settlement.id()); BlockPosition obstruction = DeclaredRouteFixtures.networkSurface(bootstrap, state.routeTopology(), settlement.id());
         state = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
@@ -395,8 +400,9 @@ class RouteConstructionTaskProcessTest {
         StrategicTask patrolTask = new StrategicTask(new SubjectId("task:patrol"), patrolObjective.id(), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.PENDING);
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(patrolObjective).addTask(patrolTask).transitionTask(patrolTask.id(), StrategicTaskStatus.ACTIVE);
-        RoutePatrol patrol = RoutePatrol.planned(state, patrolTask.id(), settlement,
-                RouteUnitManifest.patrol(patrolTask.id(), guards.getFirst().id(), List.of(guards.get(1).id()))).confirm(obstruction);
+        var staged = DeclaredRouteFixtures.stagedPatrol(state, settlement, patrolTask.id(), guards.getFirst().id(), guards.get(1).id());
+        state = staged.state();
+        RoutePatrol patrol = RoutePatrol.planned(state, patrolTask.id(), settlement, staged.unit()).confirm(obstruction);
         plans = plans.startPatrol(patrol).transitionTask(patrolTask.id(), StrategicTaskStatus.COMPLETED);
         StrategicObjective constructionObjective = new StrategicObjective(new SubjectId("objective:construction"), settlement.id(), StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS,
                 Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);

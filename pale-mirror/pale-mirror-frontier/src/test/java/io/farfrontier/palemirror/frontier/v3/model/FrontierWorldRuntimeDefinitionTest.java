@@ -103,7 +103,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertTrue(!FrontierGrayboxPlan.compile(organDamaged).cells().containsKey(organCell.position()));
 
         List<BlockPosition> supplyRoute = FrontierRouteNetwork.settlementWaypoints(initial.bootstrap(), initial.bootstrap().settlements().getFirst().id());
-        BlockPosition routePosition = supplyRoute.get(2);
+        BlockPosition routePosition = DeclaredRouteFixtures.networkSurface(initial.bootstrap(), initial.routeTopology(), initial.bootstrap().settlements().getFirst().id());
         PhysicalDelta routeLoss = new PhysicalDelta(routePosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test");
         FrontierWorldState routeDamaged = initial.recordPhysicalDelta(routeLoss);

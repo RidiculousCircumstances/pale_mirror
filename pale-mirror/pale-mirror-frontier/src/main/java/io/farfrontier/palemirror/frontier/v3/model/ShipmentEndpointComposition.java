@@ -26,6 +26,9 @@ public final class ShipmentEndpointComposition {
     public static void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         port(endpoint).validate(state, endpoint);
     }
+    public static Optional<SettlementStructure> supportingFacility(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        return port(endpoint).supportingFacility(state, endpoint);
+    }
     static ShipmentReceiverReplacement replacementPolicy(ShipmentEndpoint endpoint) { return port(endpoint).replacementPolicy(); }
     public static KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, List<ShipmentEndpoint> endpoints) {
         endpoints = List.copyOf(endpoints);

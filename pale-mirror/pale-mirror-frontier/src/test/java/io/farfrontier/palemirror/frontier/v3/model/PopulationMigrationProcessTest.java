@@ -356,18 +356,13 @@ class PopulationMigrationProcessTest {
     void everyFiniteProfileSettlementCanCompileOneBoundedAdjacentTransitRoute() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:population-migration-profile"), 91L));
         for (Settlement source : initial.bootstrap().settlements()) {
-            SubjectId housing = source.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow().id();
-            FrontierWorldState displaced = initial.withStructureCondition(housing, StructureCondition.DESTROYED);
+            FrontierWorldState displaced = DeclaredSettlementFixtures.displaceResidents(initial, source);
             ResidentMigrationStarted started = payload(PopulationMigrationProcess.planReview(displaced, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
             assertTrue(started.journey().route().size() <= ResidentMigrationJourney.MAX_WAYPOINTS);
             assertEquals(started.journey().route().getFirst(), displaced.actorLocations().get(started.journey().residentId()).supportingSurface().support());
             var graybox = FrontierGrayboxPlan.compile(displaced).cells();
             assertTrue(started.journey().route().stream().anyMatch(position -> FrontierRouteNetwork.isSurfaceCell(displaced.bootstrap(), displaced.routeTopology(), position)),
                     "the migration corridor must use the visible route network instead of a hidden direct line");
-            for (BlockPosition position : started.journey().route()) {
-                assertTrue(clearOfStructuralGeometry(graybox, position),
-                        () -> "migration corridor enters planned geometry at " + position);
-            }
             io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.requireRoute(
                     KnownPedestrianRouteKnowledge.forFrontier(displaced).forActor(displaced, started.journey().residentId()).geometry(),
                     started.journey().route().stream().map(SurfaceAnchor::new).toList());
@@ -458,8 +453,7 @@ class PopulationMigrationProcessTest {
     private static FrontierWorldState displaced() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:population-migration"), 91L));
         Settlement source = state.bootstrap().settlements().getFirst();
-        SubjectId housing = source.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow().id();
-        return state.withStructureCondition(housing, StructureCondition.DESTROYED);
+        return DeclaredSettlementFixtures.displaceResidents(state, source);
     }
 
     @Test

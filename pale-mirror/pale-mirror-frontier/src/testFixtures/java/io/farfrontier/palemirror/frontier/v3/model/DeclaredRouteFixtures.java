@@ -104,6 +104,19 @@ public final class DeclaredRouteFixtures {
         return new PatrolIngress(staged, RouteUnitManifest.patrol(task, leader, List.of(scout)));
     }
 
+    /** A local patrol lifecycle fixture starts its chosen free crew at the declared Hall staging. */
+    public static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hallStaged(
+            io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base) {
+        var state = base.initialState();
+        var home = state.bootstrap().settlements().getFirst();
+        var guards = FrontierWorldStateSupport.availableRouteResidents(state, home.id(), HumanCapability.SECURITY);
+        state = stagedPatrol(state, home, new SubjectId("task:fixture-hall-staging"), guards.getFirst().id(), guards.get(1).id()).state();
+        return new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
+    }
+
     public static SurfaceAnchor openStreet(FrontierWorldState state, Settlement home) {
         var paving=home.layout().paving();
         var geometry=KnownPedestrianRouteKnowledge.forPublicJourney(state,home.id(),List.of());

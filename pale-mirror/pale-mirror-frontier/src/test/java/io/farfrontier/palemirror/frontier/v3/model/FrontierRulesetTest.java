@@ -219,7 +219,7 @@ class FrontierRulesetTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
 
         assertEquals(FixedScalar.whole(9), FrontierCombatRules.damage(state, guard));
-        assertEquals(51, SettlementFacilityCapability.housingCapacity(state, settlement.id()));
+        assertEquals(SettlementBeds.declaredCapacity(settlement), SettlementFacilityCapability.housingCapacity(state, settlement.id()));
         assertEquals(2, SettlementFacilityCapability.forCondition(selected, StructureKind.FARM, StructureCondition.DAMAGED).workCapacity());
     }
 

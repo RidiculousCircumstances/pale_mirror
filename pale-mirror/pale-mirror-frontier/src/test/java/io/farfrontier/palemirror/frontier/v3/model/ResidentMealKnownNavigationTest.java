@@ -21,7 +21,7 @@ class ResidentMealKnownNavigationTest {
                 new WorldId("frontier:meal-chest-departure"), 91L));
         var home = initial.bootstrap().settlements().getFirst();
         var actor = home.residents().getFirst().id();
-        var ground = KnownPedestrianGround.forFrontier(initial).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var ground = DeclaredRouteFixtures.openStreet(initial, home);
         var container = new SubjectId("container:meal-departure");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), container, ground, Optional.empty(), ground);
         var block = ground.support().offset(0, 1, 0);
@@ -62,7 +62,7 @@ class ResidentMealKnownNavigationTest {
                 new WorldId("frontier:r29-courtesy-meal"), 20260918065L));
         var settlement = initial.bootstrap().settlements().get(6);
         var actor = new SubjectId("resident:7-12");
-        var start = SurfaceAnchor.at(136, 64, 14);
+        var start = SettlementServiceAccessPoints.depotPort(initial, settlement.id()).thresholdSurface();
         var meal = testMeal(initial, settlement, actor, FrontierWorldState.depotId(settlement.id()), start);
         var state = withMeal(initial.withActorBody(actor, start.standingBody()), meal);
         var step = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
@@ -136,8 +136,11 @@ class ResidentMealKnownNavigationTest {
         var settlement = state.bootstrap().settlements().get(6);
         var actor = new SubjectId("resident:7-12");
         var depot = FrontierWorldState.depotId(settlement.id());
-        var meal = testMeal(state, settlement, actor, depot, SurfaceAnchor.at(134, 63, 16));
-        state = withMeal(state.withActorBody(actor, SurfaceAnchor.at(-111, 64, 14).standingBody()), meal);
+        var destination = SettlementServiceAccessPoints.depotPort(state, settlement.id()).exteriorApproach();
+        var remote = state.bootstrap().settlements().getFirst();
+        var origin = DeclaredRouteFixtures.networkSurface(state.bootstrap(), state.routeTopology(), remote.id());
+        var meal = testMeal(state, settlement, actor, depot, destination);
+        state = withMeal(state.withActorBody(actor, new SurfaceAnchor(origin).standingBody()), meal);
         var directState = state;
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> ResidentMealKnownNavigation.path(directState, meal));
         ResidentMealColdStep step;
@@ -241,13 +244,13 @@ class ResidentMealKnownNavigationTest {
         var port = SettlementDepotServicePort.forDepot(depot);
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                 new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        assertEquals(port.thresholdSurface(), knowledge.supportAt(port.thresholdSurface().x(), port.thresholdSurface().z()));
+        assertTrue(knowledge.traversable(List.of(port.thresholdSurface())), "the declared threshold remains traversable beneath an authored roof");
         var exits = ServiceClearanceTargets.egressRegion(port.accessBoundary(), knowledge);
         assertTrue(exits.stream().allMatch(surface -> knowledge.traversable(List.of(surface))));
-        assertTrue(exits.stream().noneMatch(surface -> surface.x() == 136 && surface.y() == 63),
-                "terrain beneath the floor/wall cannot be an exit station");
+        assertTrue(exits.stream().noneMatch(surface -> surface.equals(port.socketSurface())),
+                "an interior chest socket cannot be an exit station");
         var actor = new SubjectId("resident:7-1");
-        var stalePocket = SurfaceAnchor.at(135, 63, 16);
+        var stalePocket = exits.stream().sorted(java.util.Comparator.comparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).findFirst().orElseThrow();
         assertTrue(exits.contains(stalePocket));
         state = state.withActorBody(actor, stalePocket.standingBody());
         var meal = testMeal(state, settlement, actor, FrontierWorldState.depotId(settlement.id()), stalePocket);
@@ -427,7 +430,7 @@ class ResidentMealKnownNavigationTest {
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
         SurfaceAnchor side = port.stations().get(3);
-        assertEquals(SurfaceAnchor.at(134, 64, 13), side);
+        assertTrue(KnownPedestrianRouteKnowledge.forPublicJourney(initial, settlement.id(), List.of()).traversable(List.of(side)));
         var actors = new java.util.LinkedHashMap<>(initial.actorLocations());
         actors.put(resident, ActorLocation.standingOn(side, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));

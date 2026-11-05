@@ -91,8 +91,9 @@ class RoutePatrolProcessTest {
                 Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(taskId, objectiveId, settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), java.util.List.of(StrategicTaskRequirement.AVAILABLE_GUARD), java.util.List.of(), StrategicTaskStatus.ACTIVE);
-        RouteUnitManifest unit = RouteUnitManifest.patrol(taskId, guard, java.util.List.of(scout));
-        RoutePatrol patrol = RoutePatrol.planned(state, taskId, settlement, unit);
+        var staging = DeclaredRouteFixtures.stagedPatrol(state, settlement, taskId, guard, scout);
+        state = staging.state();
+        RoutePatrol patrol = RoutePatrol.planned(state, taskId, settlement, staging.unit());
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         state = RoutePatrolProcess.reduceStarted(state, settlement.id(),
                 new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));
@@ -108,7 +109,7 @@ class RoutePatrolProcessTest {
     @Test
     void exactGuardPatrolCreatesDurableEvidenceAndDefersBypassToSameCellMaintenance() {
         WorldId world = new WorldId("frontier:route-patrol");
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 712L));
+        var engine = FrontierEngines.create(DeclaredRouteFixtures.hallStaged(FrontierWorldRuntimeDefinition.configuration(world, 712L)));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         BlockPosition obstruction = DeclaredRouteFixtures.networkSurface(initial.bootstrap(), initial.routeTopology(), settlement);

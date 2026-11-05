@@ -181,7 +181,7 @@ class FieldEquipmentTest {
                 new ItemCondition(tool.condition().maximumDamage(), tool.condition().maximumDamage() - 2)));
         var due = ResourceSiteHarvestProcess.coldProgress(job, 22_301);
         boolean sawWork = false;
-        for (int step = 0; step < 256 && state.resourceSites().site(job.siteId()).harvestJob(job.id()).isPresent(); step++) {
+        for (int step = 0; step < 2048 && state.resourceSites().site(job.siteId()).harvestJob(job.id()).isPresent(); step++) {
             assertNotNull(due, "continuation must exist until the owner retires");
             var result = ResourceSiteHarvestProcessTest.stepCold(state, job.siteId(), due);
             state = result.state(); due = result.next();

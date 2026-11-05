@@ -493,11 +493,7 @@ final class FrontierDevelopmentScenarios {
     static ResidentTransitFixture residentTransitFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement source = state.bootstrap().settlements().getFirst();
-        // Several real homes now provide spare capacity: one small house loss need not displace anyone.
-        for (var housing : source.structures().stream().filter(value -> value.kind() == StructureKind.HOUSING).toList()) {
-            state = state.withStructureCondition(housing.id(), StructureCondition.DESTROYED);
-            if (SettlementFacilityCapability.housingCapacity(state, source.id()) < source.residents().size()) break;
-        }
+        state = DeclaredSettlementFixtures.displaceResidents(state, source);
         ResidentMigrationStarted started = PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 1L)).stream()
                 .map(ProposedEvent::payload).filter(ResidentMigrationStarted.class::isInstance).map(ResidentMigrationStarted.class::cast)
                 .findFirst().orElseThrow(() -> new IllegalStateException("transit fixture needs one displaced resident"));

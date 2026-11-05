@@ -376,6 +376,13 @@ class ConsolidatedGoodsTradeTest {
                 }
                 delivered |= mission.stage() == TransportMission.Stage.RETURNING;
                 if (!recovered && mission.stage() == TransportMission.Stage.OUTBOUND) {
+                    var group = state.unitGroups().groups().get(mission.groupId());
+                    var stations = group.journey().orElseThrow().stations();
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView atStations = id -> stations.get(id).standingBody();
+                    for (var member : group.members()) assertTrue(
+                            io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assessCurrent(state, group, member.actorId(), atStations,
+                                    io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission.allow()).allowed(),
+                            "all explicitly assigned terminal stations must form a settled legal formation");
                     var checkpoint = engine.checkpoint();
                     engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.recoverCanonicalStateAccess(configuration,
                             new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(world, Optional.of(

@@ -17,6 +17,8 @@ class PatrolAssemblyCorridorTest {
         List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
         RouteUnitManifest unit = RouteUnitManifest.patrol(new SubjectId("task:patrol-ingress"), candidates.getFirst().id(), List.of(candidates.get(1).id()));
 
+        var staged = DeclaredRouteFixtures.stagedPatrol(state, settlement, unit.ownerId(), unit.leaderId(), candidates.get(1).id());
+        state = staged.state();
         PatrolAssembly assembly = PatrolAssemblyCorridor.compile(state, unit.ownerId(), settlement, unit);
         TraversalTopology route = state.routeTopology().settlementTraversalTopology(state.bootstrap(), settlement.id());
         PatrolAssembly.Member leader = assembly.members().get(unit.leaderId());
@@ -41,6 +43,8 @@ class PatrolAssemblyCorridorTest {
         List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(blocked, settlement.id(), HumanCapability.SECURITY);
         RouteUnitManifest unit = RouteUnitManifest.patrol(new SubjectId("task:patrol-ingress-blocked"), candidates.getFirst().id(), List.of(candidates.get(1).id()));
 
+        var staged = DeclaredRouteFixtures.stagedPatrol(blocked, settlement, unit.ownerId(), unit.leaderId(), candidates.get(1).id());
+        blocked = staged.state();
         PatrolAssembly assembly = PatrolAssemblyCorridor.compile(blocked, unit.ownerId(), settlement, unit);
         assertEquals(TraversalAvailability.BLOCKED, assembly.members().get(unit.leaderId()).topology().edges().getLast().availability());
     }

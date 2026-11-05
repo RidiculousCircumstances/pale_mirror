@@ -63,6 +63,13 @@ public final class GroupTravelCohesion {
             if (observation.isEmpty())
                 return MovementPermission.hold(MovementPermission.Reason.POSITION_UNAVAILABLE, living.get(index).actorId());
             var actual = observation.orElseThrow();
+            // A peer already at its own assigned destination no longer travels.
+            // Obstacle-aware placement can put that station farther behind than
+            // nominal spacing. It must not hold the remaining travellers forever.
+            // This is read-only spacing arbitration, never an arrival receipt:
+            // the movement owner still confirms and retires each exact journey.
+            if (actual.equals(ActorPositionView.TravelPoint.at(group.journey().orElseThrow()
+                    .stations().get(living.get(index).actorId()).standingBody()))) continue;
             double peerProgress = route.projection(actual) + index * spacing;
             // Along-route progress alone orders the members, including U bends. Lateral
             // distance may stretch the envelope but may never reverse who yields.
@@ -79,6 +86,7 @@ public final class GroupTravelCohesion {
             }
             if (peerProgress < slowest) { slowest = peerProgress; slowestPeer = living.get(index).actorId(); }
         }
+        if (slowestPeer == null) return MovementPermission.allow(new TravelPace(basePace));
         // The hard envelope is unchanged. A held member resumes only after closing
         // to normal spacing, not one block below the same stop threshold.
         boolean recovering = previous.reason() == MovementPermission.Reason.GROUP_PROGRESS_STRETCH

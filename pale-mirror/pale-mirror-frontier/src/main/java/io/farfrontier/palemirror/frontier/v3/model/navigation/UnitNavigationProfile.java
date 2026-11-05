@@ -41,6 +41,6 @@ public record UnitNavigationProfile(int widthMicros, int heightMicros, int stepU
         return new UnitNavigationProfile(members.stream().mapToInt(UnitNavigationProfile::widthMicros).max().orElseThrow(),
                 members.stream().mapToInt(UnitNavigationProfile::heightMicros).max().orElseThrow(),
                 members.stream().mapToInt(UnitNavigationProfile::stepUpBlocks).min().orElseThrow(),
-                members.stream().mapToInt(UnitNavigationProfile::dropBlocks).min().orElseThrow(), shared, members.stream().anyMatch(UnitNavigationProfile::operatesPassages));
+                members.stream().mapToInt(UnitNavigationProfile::dropBlocks).min().orElseThrow(), shared, members.stream().allMatch(UnitNavigationProfile::operatesPassages));
     }
 }

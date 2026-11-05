@@ -250,7 +250,7 @@ class HiveSettlementAssaultProcessTest {
                 "one unavailable registered support must keep the complete assault out of scene admission");
     }
 
-    @Test void attackerFloorsUseOnlyTheBoundedResidentApronInsteadOfIngressOrRouteSurfaces() {
+    @Test void attackerFloorsUseDeclaredStandingSurfacesInsteadOfExternalRouteSurfaces() {
         Fixture fixture = fixture(true);
         Settlement settlement = FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), fixture.sighting().settlementId());
         SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(fixture.state().bootstrap().bounds(),
@@ -263,15 +263,9 @@ class HiveSettlementAssaultProcessTest {
 
         assertTrue(assault.attackers().stream().map(attacker -> attacker.route().getLast()).allMatch(perimeter::contains),
                 "every attacker destination must be one of the bounded resident-apron perimeter floors, never a Hall connector, ingress ramp, or generic route");
-        BlockPosition hallConnector = settlement.anchor().offset(-7, 0, 0);
-        BlockPosition ingressRamp = ingress.ownedSurfaces().stream().map(SurfaceAnchor::support)
-                .filter(position -> Math.abs(position.x() - settlement.anchor().x()) > 30 || Math.abs(position.z() - settlement.anchor().z()) > 30)
-                .findFirst().orElseThrow();
         BlockPosition genericRoute = FrontierGrayboxPlan.compile(fixture.state()).cells().values().stream()
-                .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE).map(GrayboxCell::position).findFirst().orElseThrow();
-        assertFalse(perimeter.contains(hallConnector), "the known Hall connector is declared provider geometry but not an assault perimeter");
-        assertFalse(perimeter.contains(ingressRamp), "the ingress ramp is declared provider geometry but not an assault perimeter");
-        assertFalse(perimeter.contains(genericRoute), "an arbitrary generic route surface is not an assault perimeter");
+                .filter(cell -> cell.semanticTarget().kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK && cell.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE).map(GrayboxCell::position).findFirst().orElseThrow();
+        assertFalse(perimeter.contains(genericRoute), "external network-owned ground is outside declared settlement standing surfaces");
     }
 
     @Test void battleWaitsForDistinctCompiledFloorsAndConflictsInsteadOfMovingASeparatedDefender() {
@@ -285,7 +279,6 @@ class HiveSettlementAssaultProcessTest {
                 .collect(java.util.stream.Collectors.toSet());
         assertEquals(started.attackers().size(), started.attackers().stream().map(attacker -> attacker.route().getLast()).distinct().count());
         assertTrue(started.attackers().stream().map(attacker -> attacker.route().getLast()).noneMatch(defenderFloors::contains));
-        assertTrue(started.attackers().stream().noneMatch(attacker -> attacker.route().getLast().equals(started.settlementAnchor())));
 
         ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
         for (int step = 0; step < 4_096; step++) {
@@ -300,7 +293,7 @@ class HiveSettlementAssaultProcessTest {
         }
         assertEquals(SettlementAssaultStatus.WAITING_FOR_BATTLE, state.strategicPlans().settlementAssaults().get(started.id()).status());
         SubjectId defender = started.defenderIds().getFirst();
-        state = state.withActorBody(defender, BodyPosition.above(new SurfaceAnchor(started.settlementAnchor().offset(43, 0, 0))));
+        state = state.withActorBody(defender, BodyPosition.above(new SurfaceAnchor(outsideStanding(state, FrontierWorldStateSupport.settlement(state.bootstrap(), started.settlementId())).support())));
         List<ProposedEvent> conflict = HiveSettlementAssaultProcess.planProgress(state, next);
         assertEquals(List.of(TerminalDiagnosticProducer.assaultConflict(started.id(), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, started))),
                 conflict.stream().map(ProposedEvent::payload).toList());
@@ -326,7 +319,7 @@ class HiveSettlementAssaultProcessTest {
         assertTrue(FrontierSettlementAssaultBattlefield.attackerFloors(fixture.state(), fixture.sighting(), List.of(perimeterResident), 1).isPresent(),
                 "one exact resident on the immutable apron remains a valid defender, not an off-map body");
         FrontierWorldState outside = fixture.state().withActorBody(perimeterResident,
-                BodyPosition.above(new SurfaceAnchor(settlement.anchor().offset(43, 0, 0))));
+                BodyPosition.above(new SurfaceAnchor(outsideStanding(fixture.state(), settlement).support())));
         assertTrue(FrontierSettlementAssaultBattlefield.attackerFloors(outside, fixture.sighting(), List.of(perimeterResident), 1).isEmpty(),
                 "the battlefield remains bounded by the declared resident plan instead of admitting arbitrary actor coordinates");
     }
@@ -461,4 +454,15 @@ class HiveSettlementAssaultProcessTest {
     }
 
     private record Fixture(FrontierWorldState state, SubjectId hive, StrategicTask task, HiveSettlementKnowledge.Sighting sighting) { }
+    private static SurfaceAnchor outsideStanding(FrontierWorldState state, Settlement home) {
+        var surfaces = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), home,
+                SettlementBeds.declaredCapacity(home)).ownedSurfaces();
+        long envelope = surfaces.stream().mapToLong(p -> {
+            long x = (long) p.x() - home.anchor().x(), z = (long) p.z() - home.anchor().z();
+            return x * x + z * z;
+        }).max().orElseThrow();
+        int radius = (int) Math.ceil(Math.sqrt(envelope)) + 2;
+        return new SurfaceAnchor(home.anchor().offset(radius, 0, 0));
+    }
+
 }

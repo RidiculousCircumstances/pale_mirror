@@ -216,6 +216,8 @@ class UnitNavigationProfileTest {
         assertEquals(location.navigationProfile(), location.withBody(floor(3, 2).standingBody()).navigationProfile());
         assertEquals(location.navigationProfile(), location.deadAt(location.body()).navigationProfile());
         var group = UnitNavigationProfile.enclosing(java.util.List.of(UnitNavigationProfile.VILLAGER, UnitNavigationProfile.DONKEY));
+        assertFalse(group.operatesPassages(), "a companion's capability cannot grant an independently moving member door operation");
+        assertTrue(UnitNavigationProfile.enclosing(java.util.List.of(UnitNavigationProfile.VILLAGER, UnitNavigationProfile.VILLAGER)).operatesPassages());
         assertEquals(UnitNavigationProfile.DONKEY.widthMicros(), group.widthMicros());
         assertEquals(UnitNavigationProfile.VILLAGER.heightMicros(), group.heightMicros());
         assertEquals(Set.of(TraversalCapability.PEDESTRIAN), group.capabilities());

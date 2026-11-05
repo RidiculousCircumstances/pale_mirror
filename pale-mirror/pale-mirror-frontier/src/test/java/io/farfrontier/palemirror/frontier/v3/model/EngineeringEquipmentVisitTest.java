@@ -328,7 +328,7 @@ class EngineeringEquipmentVisitTest {
                     0, RouteConstructionStatus.BUILDING, Optional.empty(), Optional.of(EngineeringRecoveryTeam.forWorkOrder(construction.id(), settlement.id(), actors)), Optional.empty());
             state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, EngineeringExecutionEvents.constructionStarted(state, work));
         }
-        var station = KnownPedestrianGround.forFrontier(state).at(settlement.anchor().x() + 20, settlement.anchor().z() + 20);
+        var station = DeclaredRouteFixtures.openStreet(state, settlement);
         var endpoint = new ShipmentEndpoint.Storage(settlement.id(), STORE, station, Optional.empty(), station);
         var container = new ContainerRecord(STORE, settlement.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
                 Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 100, ResourceStorageRole.WAREHOUSE)));

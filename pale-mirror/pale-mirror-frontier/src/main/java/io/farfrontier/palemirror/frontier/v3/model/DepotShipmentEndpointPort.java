@@ -5,6 +5,9 @@ import java.util.List;
 final class DepotShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.SETTLEMENT_DEPOT; }
     @Override public ShipmentReceiverReplacement replacementPolicy() { return StorageShipmentReceiverReplacement.INSTANCE; }
+    @Override public java.util.Optional<SettlementStructure> supportingFacility(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        validate(state, endpoint); return java.util.Optional.of(facility(state, endpoint));
+    }
     private SettlementStructure facility(FrontierWorldState state, ShipmentEndpoint endpoint) {
         return facility(state.bootstrap(), endpoint);
     }

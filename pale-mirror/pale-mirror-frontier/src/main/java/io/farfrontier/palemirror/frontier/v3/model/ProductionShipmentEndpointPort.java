@@ -6,6 +6,9 @@ import java.util.List;
 final class ProductionShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.PRODUCTION_PORT; }
     @Override public ShipmentReceiverReplacement replacementPolicy() { return ProductionShipmentReceiverReplacement.INSTANCE; }
+    @Override public java.util.Optional<SettlementStructure> supportingFacility(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        validate(state, endpoint); return java.util.Optional.of(facility(state.bootstrap(), declaration(endpoint)));
+    }
     private ShipmentEndpoint.ProductionPort declaration(ShipmentEndpoint endpoint) {
         if (!(endpoint instanceof ShipmentEndpoint.ProductionPort value))
             throw new IllegalArgumentException("production endpoint has foreign nominal schema");

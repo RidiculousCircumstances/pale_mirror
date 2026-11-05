@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -288,13 +289,12 @@ class FrontierV3FixtureCatalogTest {
         SettlementServiceWork work = engine.canonicalState().state().serviceWorks().values().iterator().next();
         var geometry = FrontierGrayboxPlan.compile(engine.canonicalState().state()).cells();
 
+        var current = engine.canonicalState().state();
+        var profile = current.actorLocations().get(work.workerId()).navigationProfile();
+        var collisions = SettlementServiceJourneyKnowledge.view(current, work).forActor(current, work.workerId()).geometry().collisions().orElseThrow();
         java.util.stream.Stream.concat(work.inputTraversal().linearCorridorSurfaces().stream(), work.workTraversal().linearCorridorSurfaces().stream())
-                .forEach(surface -> {
-                    assertTrue(!geometry.containsKey(surface.support().offset(0, 1, 0)),
-                            () -> "service corridor body feet collide with planned geometry at " + surface);
-                    assertTrue(!geometry.containsKey(surface.support().offset(0, 2, 0)),
-                            () -> "service corridor body head collides with planned geometry at " + surface);
-                });
+                .forEach(surface -> assertFalse(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry
+                        .contacts(collisions, surface, profile, .5, .5).isEmpty(), "service corridor must have native body clearance at " + surface));
     }
 
     @Test
@@ -408,8 +408,8 @@ class FrontierV3FixtureCatalogTest {
     void routeMaintenanceFairnessFixtureRetainsOneColdSourceAndOneIndependentLoadedWorksite() {
         FrontierWorldState state = FrontierV3FixtureCatalog.routeMaintenanceColdSourceFairnessConfiguration(
                 new WorldId("frontier:route-maintenance-fairness-fixture"), 41L).initialState();
-        RouteMaintenance cold = state.routeMaintenances().get(new SubjectId("maintenance:route--380-64--304"));
-        RouteMaintenance loaded = state.routeMaintenances().get(new SubjectId("maintenance:route--140-64--304"));
+        RouteMaintenance cold = state.routeMaintenances().values().stream().filter(m -> m.cargoId().isEmpty()).findFirst().orElseThrow();
+        RouteMaintenance loaded = state.routeMaintenances().values().stream().filter(m -> m.cargoId().isPresent()).findFirst().orElseThrow();
 
         assertTrue(cold != null && cold.cargoId().isEmpty());
         assertTrue(loaded != null && loaded.cargoId().isPresent() && loaded.assembly().orElseThrow().complete());

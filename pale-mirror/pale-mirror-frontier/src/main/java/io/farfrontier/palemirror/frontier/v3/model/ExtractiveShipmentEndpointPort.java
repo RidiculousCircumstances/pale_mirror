@@ -6,6 +6,9 @@ import java.util.List;
 final class ExtractiveShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.EXTRACTIVE_SITE; }
     @Override public ShipmentReceiverReplacement replacementPolicy() { return StorageShipmentReceiverReplacement.INSTANCE; }
+    @Override public java.util.Optional<SettlementStructure> supportingFacility(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        validate(state, endpoint); return java.util.Optional.empty(); // Worksite support belongs to the extraction declaration.
+    }
     private ExtractionSite site(FrontierWorldState state, ShipmentEndpoint endpoint) {
         if (!(endpoint instanceof ShipmentEndpoint.ExtractiveSite declared))
             throw new IllegalArgumentException("extractive endpoint has a foreign nominal schema");

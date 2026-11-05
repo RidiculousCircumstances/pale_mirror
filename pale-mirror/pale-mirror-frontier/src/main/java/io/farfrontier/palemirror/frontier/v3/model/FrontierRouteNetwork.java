@@ -86,9 +86,22 @@ public final class FrontierRouteNetwork {
      * becomes route authority.
      */
     public static BlockPosition maintenanceContainerPosition(FrontierBootstrap bootstrap) {
+        return maintenanceContainerSupport(bootstrap).position().offset(0, 1, 0);
+    }
+
+    /** Geometry ownership is declared here, independently of ownership of the stored stock. */
+    public static GrayboxCell maintenanceContainerSupport(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
-        int x = junctionX(bootstrap), z = Math.addExact(bootstrap.bounds().minZ(), 762);
-        return new BlockPosition(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 2), z);
+        if (bootstrap.ruleset().worldLayout().roads() == FrontierWorldLayout.Roads.HISTORICAL_GRID) {
+            var support = surveyedGridSurface(bootstrap, junctionX(bootstrap) + 1, bootstrap.bounds().minZ() + 512);
+            return new GrayboxCell(support, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, OWNER),
+                    GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        }
+        var home = bootstrap.settlements().getFirst();
+        var support = home.layout().paving().stream()
+                .min(java.util.Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::z)).orElseThrow();
+        return new GrayboxCell(support, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, home.id()),
+                GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
     }
 
     /**

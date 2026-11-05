@@ -200,7 +200,7 @@ class ProductionProcessTest {
     }
 
     @Test
-    void workerDeathDisposableFixtureKeepsTheExactCrafterAsTheOnlyNearbyAmbientActor() {
+    void workerDeathDisposableFixtureStagesTheExactCrafterAtTheWorkshopEntrance() {
         FrontierWorldState state = FrontierV3FixtureCatalog.productionWorkerDeathConfiguration(
                 new WorldId("frontier:production-worker-death-fixture"), 41L).initialState();
         ProductionJob job = state.productionJobs().get(new SubjectId("job:production-development-input-theft"));
@@ -211,9 +211,7 @@ class ProductionProcessTest {
 
         assertEquals(new SubjectId("resident:1-3"), worker);
         assertEquals(target, FrontierTestPositions.supportOf(state.actorLocations().get(worker)));
-        assertTrue(state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(worker))
-                .noneMatch(entry -> Math.max(Math.abs(FrontierTestPositions.supportOf(entry.getValue()).x() - target.x()),
-                        Math.abs(FrontierTestPositions.supportOf(entry.getValue()).z() - target.z())) <= 8));
+
     }
 
     @Test

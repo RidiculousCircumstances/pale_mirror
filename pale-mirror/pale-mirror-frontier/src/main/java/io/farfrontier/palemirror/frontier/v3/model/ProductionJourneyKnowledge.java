@@ -24,7 +24,7 @@ public final class ProductionJourneyKnowledge {
         var workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId()))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("production approach lost its declared facility"));
         return KnownPedestrianRouteKnowledge.forSettlement(state, job.settlementId(), List.of(
-                new KnownPedestrianRouteKnowledge.Passage(workshop, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
+                new KnownPedestrianRouteKnowledge.Passage(workshop, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS))).forActor(state, job.workerId());
     }
     public static StationApproachState checkpoint(ProductionJob job, SurfaceAnchor observed) {
         return job.spatial().observedAt(observed);

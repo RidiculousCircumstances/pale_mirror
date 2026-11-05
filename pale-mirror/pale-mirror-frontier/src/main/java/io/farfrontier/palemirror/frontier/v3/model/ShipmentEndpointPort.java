@@ -7,6 +7,8 @@ interface ShipmentEndpointPort {
     ShipmentEndpoint.Kind kind();
     ShipmentReceiverReplacement replacementPolicy();
     void validate(FrontierWorldState state, ShipmentEndpoint endpoint);
+    /** Explicit facility relationship, independent of the economic owner of its contents. */
+    java.util.Optional<SettlementStructure> supportingFacility(FrontierWorldState state, ShipmentEndpoint endpoint);
     /** Complete immutable inputs of validate, excluding its already declared endpoint argument. */
     default Object[] validationInputs(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var reads = validationReads(endpoint); var inputs = new Object[reads.size() + 1];

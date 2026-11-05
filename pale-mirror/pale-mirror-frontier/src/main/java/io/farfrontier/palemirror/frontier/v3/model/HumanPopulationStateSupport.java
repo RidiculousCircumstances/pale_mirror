@@ -64,7 +64,7 @@ public final class HumanPopulationStateSupport {
                 || advanced.nextRouteIndex() > journey.routeIndex() + ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS
                 || advanced.nextRouteIndex() >= journey.route().size()
                 || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()) || !coldAvailable(state, advanced.residentId())
-                || !KnownPedestrianRouteKnowledge.forFrontier(state).traversable(journey.route()
+                || !KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, journey.residentId()).traversable(journey.route()
                     .subList(journey.routeIndex(), advanced.nextRouteIndex() + 1).stream().map(SurfaceAnchor::new).toList())) {
             throw new IllegalArgumentException("migration advancement lacks its exact COLD hand-off");
         }
@@ -188,9 +188,9 @@ public final class HumanPopulationStateSupport {
     private static boolean routePassable(FrontierWorldState state, ResidentMigrationJourney journey) {
         int remaining = journey.spatial().pending() ? journey.nextRouteIndex() : journey.routeIndex();
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), journey.route().subList(remaining, journey.route().size()), state.physicalDeltas())) return false;
-        if (!KnownPedestrianRouteKnowledge.forFrontier(state).traversable(journey.route()
+        if (!KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, journey.residentId()).traversable(journey.route()
                 .subList(remaining, journey.route().size()).stream().map(SurfaceAnchor::new).toList())) return false;
-        return journey.rejoin().map(approach -> KnownPedestrianRouteKnowledge.forFrontier(state)
+        return journey.rejoin().map(approach -> KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, journey.residentId())
                 .traversable(approach.path().subList(approach.cursor(), approach.path().size()))).orElse(true);
     }
 

@@ -446,6 +446,13 @@ public final class FrontierGrayboxPlan {
     /** Full intact geometry, used to validate observed damage after the desired silhouette changes. */
     public static GrayboxCell intactStructureCell(TerrainSurfacePlan terrain, SettlementStructure structure, BlockPosition position) {
         Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(structure, "structure"); Objects.requireNonNull(position, "position");
+        if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+            var authored = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().get(position);
+            if (authored != null) return authored;
+            return SettlementStructureFootprint.foundationFill(terrain, structure).contains(position)
+                    ? new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id()),
+                            GrayboxMaterial.WORKSHOP, GrayboxSemanticPart.FOUNDATION) : null;
+        }
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         addStructure(cells, terrain, structure, StructureCondition.INTACT);
         return cells.get(position);

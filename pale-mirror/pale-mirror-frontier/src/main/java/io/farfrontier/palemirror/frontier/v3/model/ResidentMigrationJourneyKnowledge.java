@@ -19,7 +19,7 @@ public final class ResidentMigrationJourneyKnowledge {
     }
     public static Optional<TraversalRejoin> approach(FrontierWorldState state, ResidentMigrationJourney journey) {
         try {
-            return StationApproachNavigation.plan(KnownPedestrianRouteKnowledge.forFrontier(state),
+            return StationApproachNavigation.plan(KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, journey.residentId()),
                     journey.spatial(), order(journey, journey.routeRevision()));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)

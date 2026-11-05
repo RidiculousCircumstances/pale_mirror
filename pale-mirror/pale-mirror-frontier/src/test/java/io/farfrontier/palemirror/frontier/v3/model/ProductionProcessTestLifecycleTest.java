@@ -221,15 +221,20 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
 
         boolean reachedOutputReady = false;
         boolean transferredToCold = false;
-        while (state.productionJobs().containsKey(job.id())) {
+        int transitionBound = job.workTraversal().linearCorridorSurfaces().size() * 4 + 10_000;
+        for (int transition = 0; transition < transitionBound && state.productionJobs().containsKey(job.id()); transition++) {
             List<ProposedEvent> planned = ProductionProcess.planCompletion(state, action[0]);
             if (planned.getFirst().payload() instanceof ProductionColdWorkAdvanced advanced) {
                 state = ProductionProcess.reduceColdWorkAdvanced(state, prepared.settlementId(), advanced);
                 reachedOutputReady |= state.productionJobs().get(job.id()).workProgress().terminalEffectEligible();
                 transferredToCold |= state.productionJobs().get(job.id()).inputHold() instanceof ProductionInputHold.Cold;
                 action[0] = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.get(1).payload()).replacement();
+            } else if (planned.getFirst().payload() instanceof ScheduleEffect.Rescheduled resumed) {
+                assertTrue(resumed.replacement().dueAt().compareTo(action[0].dueAt()) > 0,
+                        "a real schedule boundary defers work without consuming input or finishing the job");
+                action[0] = resumed.replacement();
             } else {
-                ProductionCompleted completion = assertInstanceOf(ProductionCompleted.class, planned.getFirst().payload());
+                ProductionCompleted completion = assertInstanceOf(ProductionCompleted.class, planned.getFirst().payload(), () -> "unexpected continuation: " + planned);
                 state = ProductionProcess.reduceCompleted(state, prepared.settlementId(), completion);
             }
         }

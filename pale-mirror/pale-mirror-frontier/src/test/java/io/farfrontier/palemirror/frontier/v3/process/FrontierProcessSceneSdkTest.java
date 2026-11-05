@@ -389,8 +389,8 @@ class FrontierProcessSceneSdkTest {
         @Override public FrontierProcessSceneSdk.DescriptorDefinition definition() { return FrontierDurationProcessDriverRegistry.Family.POPULATION_MIGRATION.definition(); }
         @Override public TransitContext initial() {
             FrontierWorldState prepared = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:f0v-sdk-transit"), 91L));
-            Settlement source = prepared.bootstrap().settlements().getFirst(); SubjectId housing = source.structures().stream().filter(value -> value.kind() == StructureKind.HOUSING).findFirst().orElseThrow().id();
-            prepared = prepared.withStructureCondition(housing, StructureCondition.DESTROYED);
+            Settlement source = prepared.bootstrap().settlements().getFirst();
+            prepared = DeclaredSettlementFixtures.displaceResidents(prepared, source);
             EngineContext engine = advance(launch(prepared, List.of(PopulationMigrationProcess.review(1, 100L))), new SimInstant(100L), 16);
             SubjectId resident = state(engine).humanPopulation().migrations().keySet().stream().min(Comparator.naturalOrder()).orElseThrow();
             return new TransitContext(engine, resident);

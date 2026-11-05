@@ -14,8 +14,8 @@ final class RouteMaintenanceFairnessScenario {
 
     static FrontierDevelopmentScenarios.RouteMaintenanceFairnessFixture routeMaintenanceColdSourceFairnessFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
-        BlockPosition firstLoss = new BlockPosition(-380, 64, -304);
-        BlockPosition secondLoss = new BlockPosition(-140, 64, -304);
+        BlockPosition firstLoss = DeclaredRouteFixtures.networkSurface(state.bootstrap(), state.routeTopology(), state.bootstrap().settlements().get(0).id());
+        BlockPosition secondLoss = DeclaredRouteFixtures.networkSurface(state.bootstrap(), state.routeTopology(), state.bootstrap().settlements().get(1).id());
         state = state.recordPhysicalDelta(new PhysicalDelta(firstLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:cold-source"));
         state = state.recordPhysicalDelta(new PhysicalDelta(secondLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
