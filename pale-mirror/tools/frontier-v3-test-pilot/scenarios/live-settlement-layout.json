@@ -152,10 +152,6 @@
       "timeoutMs": 60000
     },
     {
-      "type": "command",
-      "command": "/gamemode creative"
-    },
-    {
       "type": "open_container",
       "position": {
         "diagnostic": {
@@ -182,7 +178,7 @@
   ],
   "assertions": [
     {
-      "after": 15,
+      "after": 14,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -193,7 +189,7 @@
       }
     },
     {
-      "after": 16,
+      "after": 15,
       "view": "summary",
       "id": "",
       "expect": {
@@ -218,7 +214,7 @@
       "presentation": "player"
     },
     {
-      "after": 13,
+      "after": 12,
       "name": "authored-depot-accessible-inventory",
       "presentation": "player"
     }

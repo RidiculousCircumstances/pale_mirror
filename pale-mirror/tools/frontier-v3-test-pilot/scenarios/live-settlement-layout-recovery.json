@@ -132,10 +132,6 @@
       "timeoutMs": 60000
     },
     {
-      "type": "command",
-      "command": "/gamemode creative"
-    },
-    {
       "type": "open_container",
       "position": {
         "diagnostic": {
@@ -162,7 +158,7 @@
   ],
   "assertions": [
     {
-      "after": 10,
+      "after": 9,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -173,7 +169,7 @@
       }
     },
     {
-      "after": 11,
+      "after": 10,
       "view": "summary",
       "id": "",
       "expect": {
@@ -193,7 +189,7 @@
       "name": "recovered-housing-exterior"
     },
     {
-      "after": 8,
+      "after": 7,
       "name": "recovered-depot-inventory",
       "presentation": "player"
     }
