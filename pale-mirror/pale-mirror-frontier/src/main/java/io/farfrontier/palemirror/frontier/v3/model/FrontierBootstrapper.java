@@ -123,6 +123,8 @@ public final class FrontierBootstrapper {
             if(kind==StructureKind.SMELTERY && ruleset.production().recipes().stream().noneMatch(recipe->recipe.capability()==ProductionStationSpec.Capability.SMELTING))continue;
             if(kind==StructureKind.FORGE && ruleset.production().recipes().stream().noneMatch(recipe->recipe.capability()==ProductionStationSpec.Capability.FABRICATION))continue;
             if(kind==StructureKind.WOODSHOP && ruleset.production().recipes().stream().noneMatch(recipe->recipe.capability()==ProductionStationSpec.Capability.WOODWORKING))continue;
+            if (kind == StructureKind.TEXTILE_WORKSHOP && ruleset.production().recipes().stream().noneMatch(recipe ->
+                    recipe.capability() == ProductionStationSpec.Capability.SPINNING || recipe.capability() == ProductionStationSpec.Capability.WEAVING)) continue;
             requests.add(new SettlementLayoutPlanner.Request(new SubjectId("structure:"+(index+1)+"-"+kind.name().toLowerCase(Locale.ROOT)),kind,content.select(style,kind)));
         }
         int capacity=0,house=0;var variants=content.variants(style,StructureKind.HOUSING);

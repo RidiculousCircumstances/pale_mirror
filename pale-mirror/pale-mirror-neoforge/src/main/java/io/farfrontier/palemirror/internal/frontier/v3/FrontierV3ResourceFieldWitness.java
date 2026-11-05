@@ -54,7 +54,7 @@ final class FrontierV3ResourceFieldWitness {
         @Override public int hashCode() { return Objects.hash(observedSoil, observedCrop, causationId); }
     }
 
-    /** The output half of one harvest effect; it does not itself mint canonical wheat. */
+    /** The output half of one harvest effect; it does not itself mint canonical crop output. */
     record HandEffect(SubjectId siteId, SubjectId jobId, SubjectId actorId, UUID entityId,
                       long authorityEpoch, int beforeCount,
                       io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction extraction) {
@@ -71,11 +71,11 @@ final class FrontierV3ResourceFieldWitness {
                     || extraction.execution().activityKind() != io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
                 throw new IllegalArgumentException("field hand effect borrows another extraction execution");
             if (!siteId.value().startsWith("site:") || authorityEpoch < 1 || beforeCount < 0 || beforeCount >= 64
-                    || beforeCount + extraction.quantity(io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.ITEM) > 64)
+                    || beforeCount + extraction.quantity(extraction.definition().coldOutput().getFirst().itemKind()) > 64)
                 throw new IllegalArgumentException("harvest hand effect lacks a bounded predecessor or authority");
         }
-        int afterCount() { return Math.addExact(beforeCount, extraction.quantity(
-                io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.ITEM)); }
+        String itemKind() { return extraction.definition().coldOutput().getFirst().itemKind(); }
+        int afterCount() { return Math.addExact(beforeCount, extraction.quantity(itemKind())); }
     }
 
     record CanonicalSource(WorldId worldId, Revision revision) {
@@ -545,7 +545,7 @@ final class FrontierV3ResourceFieldWitness {
         HandEffect hand = pending.handEffect().orElseThrow(() -> new IllegalArgumentException("field effect has no hand half"));
         if (prior.foreign().isPresent() || pending.handConfirmed()
                 || pending.completedSteps() != pending.transition().steps().size()
-                || !review.matches(hand) || review.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
+                || !review.matches(hand) || review.disposition() != FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT
                 || review.stack().orElseThrow().quantity() != hand.afterCount())
             throw new IllegalArgumentException("paired harvest lacks its exact observed worker-hand postcondition");
         return replace(id, new Cell(prior.committed(), Optional.of(new Pending(pending.transition(),

@@ -56,8 +56,13 @@ final class FrontierV3FixedContainerProviders {
     private static final Provider WOODWORKING = new Provider(PaleMirrorProductionStations.WOODWORKING,
             block -> block == PaleMirrorProductionStations.WOODWORKING.get(),
             entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
+    private static final Provider SPINNING = machine(PaleMirrorProductionStations.SPINNING);
+    private static final Provider WEAVING = machine(PaleMirrorProductionStations.WEAVING);
+    private static Provider machine(Supplier<? extends Block> block) {
+        return new Provider(block, actual -> actual == block.get(), entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
+    }
     private static final Map<ProductionEquipment.Id, Provider> EQUIPMENT = Map.of(
-            ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER, ProductionEquipment.FORGE, FORGE, ProductionEquipment.WOODWORKING, WOODWORKING);
+            ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER, ProductionEquipment.FORGE, FORGE, ProductionEquipment.WOODWORKING, WOODWORKING, ProductionEquipment.SPINNING, SPINNING, ProductionEquipment.WEAVING, WEAVING);
     private FrontierV3FixedContainerProviders() { }
     private static Provider require(ContainerRecord record) {
         if (record.purpose() == ContainerPurpose.RESOURCE_STORAGE)

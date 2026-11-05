@@ -262,18 +262,18 @@ public final class BuildingCatalog {
                 switch (kind) {
                     case HALL, DEPOT -> 8;
                     case FARM -> 9;
-                    case WORKSHOP, SMELTERY, FORGE, WOODSHOP, INFIRMARY, KITCHEN -> 7;
+                    case WORKSHOP, SMELTERY, FORGE, WOODSHOP, TEXTILE_WORKSHOP, INFIRMARY, KITCHEN -> 7;
                     case HOUSING -> 6;
                 };
         int depth =
                 switch (kind) {
-                    case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT, KITCHEN -> 7;
+                    case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, TEXTILE_WORKSHOP, DEPOT, KITCHEN -> 7;
                     case HOUSING, INFIRMARY -> 6;
                 };
         int height =
                 switch (kind) {
                     case HALL -> 5;
-                    case DEPOT, WORKSHOP, SMELTERY, FORGE, WOODSHOP -> 4;
+                    case DEPOT, WORKSHOP, SMELTERY, FORGE, WOODSHOP, TEXTILE_WORKSHOP -> 4;
                     default -> 3;
                 };
         var id =
@@ -289,7 +289,7 @@ public final class BuildingCatalog {
                                 StructureKind.WORKSHOP,
                                 StructureKind.SMELTERY,
                                 StructureKind.FORGE,
-                                StructureKind.WOODSHOP)
+                                StructureKind.WOODSHOP, StructureKind.TEXTILE_WORKSHOP)
                         .contains(kind);
         var room =
                 new BuildingDefinition.Room(
@@ -317,10 +317,19 @@ public final class BuildingCatalog {
                         new BlockPosition(1, 0, 2),
                         new BlockPosition(2, 0, 2),
                         new BlockPosition(2, 0, 1),
-                        ProductionFacilityLayout.equipmentType(kind),
+                        kind == StructureKind.TEXTILE_WORKSHOP ? ProductionEquipment.SPINNING : ProductionFacilityLayout.equipmentType(kind),
                         FacilityFacing.SOUTH,
                         new BuildingVolume(new BlockPosition(2, 1, 1), new BlockPosition(3, 3, 2)),
                         new BuildingVolume(new BlockPosition(1, 1, 2), new BlockPosition(3, 3, 3)));
+        var workplaces = new LinkedHashMap<String, BuildingDefinition.Workplace>();
+        if (production) workplaces.put(workplace.id(), workplace);
+        if (kind == StructureKind.TEXTILE_WORKSHOP) {
+            var loom = new BuildingDefinition.Workplace("weaving", "workroom", new BlockPosition(-1, 0, 2),
+                    new BlockPosition(-2, 0, 2), new BlockPosition(-2, 0, 1), ProductionEquipment.WEAVING, FacilityFacing.SOUTH,
+                    new BuildingVolume(new BlockPosition(-2, 1, 1), new BlockPosition(-1, 3, 2)),
+                    new BuildingVolume(new BlockPosition(-2, 1, 2), new BlockPosition(-1, 3, 3)));
+            workplaces.put(loom.id(), loom);
+        }
         var hash =
                 sha256(
                         (id.value() + '|' + width + '|' + depth + '|' + height + "|graybox-v2-oriented-equipment")
@@ -338,7 +347,7 @@ public final class BuildingCatalog {
                 production ? Map.of(room.id(), room) : Map.of(),
                 Map.of(),
                 production ? Map.of(entry.id(), entry) : Map.of(),
-                production ? Map.of(workplace.id(), workplace) : Map.of(),
+                Map.copyOf(workplaces),
                 production ? Optional.of(entry.id()) : Optional.empty(),
                 production ? Optional.of(workplace.id()) : Optional.empty(),
                 Map.of(),

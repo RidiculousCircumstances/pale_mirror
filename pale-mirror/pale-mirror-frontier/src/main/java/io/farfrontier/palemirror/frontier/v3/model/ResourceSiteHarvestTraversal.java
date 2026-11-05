@@ -280,7 +280,6 @@ public final class ResourceSiteHarvestTraversal {
 
     private static List<SurfaceAnchor> workReturnCorridor(FrontierBootstrap bootstrap, ResourceSite site) {
         Objects.requireNonNull(bootstrap, "harvest return bootstrap"); Objects.requireNonNull(site, "harvest return site");
-        if (site.kind() != ResourceSiteKind.WHEAT_FIELD) throw new IllegalArgumentException("resource-site return only supports wheat fields");
         SurfaceAnchor terminal = new SurfaceAnchor(site.cropSlots().getLast().offset(0, -1, 0));
         Set<BlockPosition> blocked = immutableBodyObstacles(bootstrap, site, null);
         for (int[] direction : List.of(new int[] {1, 0}, new int[] {0, -1}, new int[] {-1, 0}, new int[] {0, 1})) {

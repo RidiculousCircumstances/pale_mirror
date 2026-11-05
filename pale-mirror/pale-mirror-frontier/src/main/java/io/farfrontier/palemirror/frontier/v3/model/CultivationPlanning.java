@@ -17,19 +17,20 @@ public final class CultivationPlanning {
     private static Plan plan(FrontierWorldState state, SubjectId home, long atTick) {
         var rules = state.bootstrap().ruleset().fields().cultivation().orElseThrow();
         var sites = state.resourceSites();
-        var fields = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home))
+        var crop = state.bootstrap().ruleset().fields().cultivationCrop();
+        var fields = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home) && field.kind() == crop)
                 .filter(field -> state.structureConditions().get(field.facilityId()) == StructureCondition.INTACT)
                 .filter(field -> { var phase = sites.site(field.id()).phase(); return phase == ResourceSitePhase.GROWING
                         || phase == ResourceSitePhase.READY || phase == ResourceSitePhase.HARVESTING; })
                 .sorted(Comparator.comparing(ResourceSite::id)).toList();
         if (fields.isEmpty()) return new Plan(sites, state.siteUses(), List.of());
-        int area = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home))
+        int area = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home) && field.kind() == crop)
                 .mapToInt(field -> field.layout().cells().size()).sum();
         var survey = FieldDevelopmentLand.survey(state, home, fields, Math.max(0, rules.maximumCells() - area));
         var land = survey.cells();
         var accepted = state.companies().goodsTrade().participants().economicState(home);
         if (accepted.accepted().isEmpty() || accepted.awaitingResources(atTick,
-                state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().keySet()).contains(FieldHarvestExtraction.ITEM))
+                state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().keySet()).contains(crop.resourceKind()))
             return new Plan(sites, state.siteUses(), List.of());
         var economic = accepted.accepted().orElseThrow().cultivation().orElse(null);
         if (economic == null) return new Plan(sites, state.siteUses(), List.of());
@@ -45,15 +46,15 @@ public final class CultivationPlanning {
                         || sites.hasPendingCellMutation(field.id(), cell.id())) continue;
                 boolean planted = value.crop() == ResourceFieldCycle.Crop.GROWING || value.crop() == ResourceFieldCycle.Crop.MATURE;
                 candidates.add(new CultivationAreaPlanner.Cell(cell.crop(), planted ? CultivationAreaPlanner.Land.PLANTED : CultivationAreaPlanner.Land.RESERVE,
-                        FieldAgronomy.yield(state.bootstrap(), cell.crop()), estimate.lead(
-                                new FieldSupplyCapacity.Cell(cell.crop(), value, true)),
+                        FieldAgronomy.yield(state.bootstrap(), crop, cell.crop()), estimate.lead(
+                                new FieldSupplyCapacity.Cell(cell.crop(), value, true, crop)),
                         cycle.sowing().cells().contains(cell.id()), !planted && cycle.sowing().cells().contains(cell.id())));
             }
         }
         for (var cell : land) candidates.add(new CultivationAreaPlanner.Cell(cell.crop(), CultivationAreaPlanner.Land.NEW,
-                FieldAgronomy.yield(state.bootstrap(), cell.crop()), estimate.lead(
+                FieldAgronomy.yield(state.bootstrap(), crop, cell.crop()), estimate.lead(
                         new FieldSupplyCapacity.Cell(cell.crop(), new ResourceFieldCycle.CellState(cell.condition(),
-                                ResourceFieldCycle.Crop.ABSENT, 0, false, false), true)), false, false));
+                                ResourceFieldCycle.Crop.ABSENT, 0, false, false), true, crop)), false, false));
         var decision = new CultivationAreaPlanner().plan(new CultivationAreaPlanner.Request(
                 desired, safety, horizon, !safe, safe, rules, candidates));
         var next = sites;
@@ -64,15 +65,15 @@ public final class CultivationPlanning {
         var admitted = FieldLandAdmission.admit(state, next, home, fields, survey.select(additions), rules);
         next = admitted.sites();
         int selected = 0, planted = 0, reserve = 0; long output = 0, first = Long.MAX_VALUE;
-        for (var declaration : next.declarations().values()) if (declaration.settlementId().equals(home)) {
+        for (var declaration : next.declarations().values()) if (declaration.settlementId().equals(home) && declaration.kind() == crop) {
             var cycle = next.cycle(declaration.id()); selected += cycle.sowing().cells().size();
             for (var cell : cycle.layout().cells()) {
                 var value = cycle.cell(cell.id());
                 boolean plant = value.crop() == ResourceFieldCycle.Crop.GROWING || value.crop() == ResourceFieldCycle.Crop.MATURE;
                 if (plant) planted++; else if (value.soil().cultivable()) reserve++;
                 if (cycle.sowing().cells().contains(cell.id())) {
-                    output += FieldAgronomy.yield(state.bootstrap(), cell.crop());
-                    first = Math.min(first, estimate.lead(new FieldSupplyCapacity.Cell(cell.crop(), value, true)));
+                    output += FieldAgronomy.yield(state.bootstrap(), crop, cell.crop());
+                    first = Math.min(first, estimate.lead(new FieldSupplyCapacity.Cell(cell.crop(), value, true, crop)));
                 }
             }
         }

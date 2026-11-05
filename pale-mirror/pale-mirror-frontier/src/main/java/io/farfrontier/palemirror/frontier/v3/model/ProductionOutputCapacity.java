@@ -45,11 +45,33 @@ public final class ProductionOutputCapacity {
     public static java.util.Optional<ProductionRights> selectRecipeDestination(FrontierWorldState state, ProductionRights rights,
             ProductionRecipe recipe, int inputQuantity, SubjectId source, SurfaceAnchor departure,
             java.util.Optional<StationWorkState.MaintenanceTarget> maintenance) {
+        return selectRecipeDestination(state, rights, recipe, inputQuantity, source, departure, maintenance, java.util.Optional.empty());
+    }
+    /** Actual order admission backtracks over proven inaccessible destinations.
+     * Pending/unknown geometry remains a wait, never permission to skip a calculation. */
+    public static java.util.Optional<ProductionRights> selectAccessibleRecipeDestination(FrontierWorldState state, ProductionRights rights,
+            ProductionRecipe recipe, int inputQuantity, SubjectId source, SurfaceAnchor departure,
+            java.util.Optional<StationWorkState.MaintenanceTarget> maintenance,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile) {
+        return selectRecipeDestination(state, rights, recipe, inputQuantity, source, departure, maintenance, java.util.Optional.of(profile));
+    }
+    private static java.util.Optional<ProductionRights> selectRecipeDestination(FrontierWorldState state, ProductionRights rights,
+            ProductionRecipe recipe, int inputQuantity, SubjectId source, SurfaceAnchor departure,
+            java.util.Optional<StationWorkState.MaintenanceTarget> maintenance,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
         for (var endpoint : ResourceStorageSelection.candidates(state, rights.employer().settlementId(), recipe.product().itemKind(),
                 departure, java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             var candidate = new ProductionRights(rights.mode(), rights.resourceOwner(), endpoint.containerId(), rights.employer());
             if (!canAdmitRecipe(state, candidate, recipe, inputQuantity, source, maintenance)) continue;
-            return java.util.Optional.of(candidate); // Admission navigation separately proves all selected endpoints together.
+            if (profile.isPresent()) try {
+                var sourceEndpoint = ProductionInputAccess.at(state, source).endpoint();
+                ResourceStorageNavigation.forJourney(state, rights.employer().settlementId(), java.util.List.of(sourceEndpoint, endpoint))
+                        .forProfile(profile.orElseThrow()).plannedBetween(departure, endpoint.station());
+            } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+                continue;
+            }
+            return java.util.Optional.of(candidate); // The retained access receipt still proves the complete selected journey.
         }
         return java.util.Optional.empty();
     }

@@ -35,7 +35,7 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
                 .filter(site -> FieldWorkDemand.requested(state, site, atTick))
                 .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
                 .filter(site -> !site.layout().cells().isEmpty())
-                .filter(site -> ResourceStorageSelection.newStackDestination(state, settlement.id(), "minecraft:wheat", 64,
+                .filter(site -> ResourceStorageSelection.newStackDestination(state, settlement.id(), site.kind().resourceKind(), 64,
                         site.layout().cells().getFirst().workstation(), java.util.Set.of(ResourceStorageRole.WAREHOUSE),
                         endpoint -> true).isPresent())
                 .min(Comparator.comparing(ResourceSite::id));

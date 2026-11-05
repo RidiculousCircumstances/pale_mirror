@@ -79,7 +79,7 @@ public final class FrontierV3BuildingAuthoringGameTests {
                         new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:equipment-facing"),139));
         for(var home:state.bootstrap().settlements()) for(var facility:home.structures()) {
             if(!io.farfrontier.palemirror.frontier.v3.model.ProductionFacilityLayout.supports(facility.kind()))continue;
-            var spec=io.farfrontier.palemirror.frontier.v3.model.ProductionFacilityLayout.station(facility);
+            for(var spec:io.farfrontier.palemirror.frontier.v3.model.ProductionFacilityLayout.stations(facility)) {
             var record=state.inventory().containers().get(spec.containerId());
             var block=FrontierV3FixedContainerProviders.state(record);
             var property=io.farfrontier.palemirror.internal.production.ProductionBenchBlock.FACING;
@@ -91,6 +91,7 @@ public final class FrontierV3BuildingAuthoringGameTests {
                     "turning an installed machine must not erase its inventory provider or custody");
             helper.assertTrue(block.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90).getValue(property)==block.getValue(property).getClockWise(),
                     "native rotation must agree with mount rotation");
+        }
         }
         helper.succeed();
     }

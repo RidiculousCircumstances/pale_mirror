@@ -49,10 +49,10 @@
     { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
     { "type": "inspect", "view": "resource", "id": "custody:container-1-depot" },
     { "type": "wait_until_harvest_result", "siteId": "site:1-wheat-field",
-      "intentId": "intent:site-harvest-1-wheat-field-1", "itemId": "item:site-harvest-1-wheat-field-1-wheat",
+      "intentId": "intent:site-harvest-1-wheat-field-1", "itemId": "item:site-harvest-1-wheat-field-1-yield",
       "workerId": "resident:1-13", "timeoutMs": 30000 },
     { "type": "wait_until_harvest_result", "siteId": "site:1-wheat-field",
-      "intentId": "intent:site-harvest-1-wheat-field-2", "itemId": "item:site-harvest-1-wheat-field-2-wheat",
+      "intentId": "intent:site-harvest-1-wheat-field-2", "itemId": "item:site-harvest-1-wheat-field-2-yield",
       "workerId": "resident:1-1", "timeoutMs": 30000 }
   ],
   "restart": { "mode": "graceful", "afterAction": 10 },

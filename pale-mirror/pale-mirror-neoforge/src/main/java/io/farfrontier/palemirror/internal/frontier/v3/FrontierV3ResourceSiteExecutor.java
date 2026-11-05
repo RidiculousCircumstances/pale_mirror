@@ -428,7 +428,7 @@ final class FrontierV3ResourceSiteExecutor {
     }
     static boolean matches(ServerLevel level, ResourceSite site, int stage) {
         return matchesInfrastructure(level, site)
-                && site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).equals(crop(stage)));
+                && site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).equals(FrontierV3FieldBlocks.crop(site.kind(), stage)));
     }
     static boolean matchesInfrastructure(ServerLevel level, ResourceSite site) {
         return site.soilSlots().stream().allMatch(soil -> level.getBlockState(minecraft(soil)).is(Blocks.FARMLAND))
@@ -440,7 +440,7 @@ final class FrontierV3ResourceSiteExecutor {
     }
     static Optional<BlockPosition> firstMismatch(ServerLevel level, ResourceSite site, int stage) {
         return java.util.stream.Stream.concat(firstInfrastructureMismatch(level, site).stream(),
-                site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(crop(stage)))).findFirst();
+                site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(FrontierV3FieldBlocks.crop(site.kind(), stage)))).findFirst();
     }
     private static boolean projectsGrowthStage(ResourceSiteLifecycle lifecycle) {
         return lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY

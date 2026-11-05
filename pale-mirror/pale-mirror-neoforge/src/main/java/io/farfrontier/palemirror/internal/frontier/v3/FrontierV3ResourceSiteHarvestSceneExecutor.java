@@ -135,7 +135,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             var canonical = cycle.cell(cellId);
             if (canonical.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                     || canonical.crop() == ResourceFieldCycle.Crop.OBSTRUCTED) {
-                var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(cellId),
+                var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cycle.layout().requireCell(cellId),
                         "harvest-scene-blocked-cell");
                 return retained.foreign().isPresent()
                         && reading instanceof FrontierV3ResourceFieldObservation.Foreign foreign
@@ -145,7 +145,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (retained.foreign().isPresent()
                     || !retained.committed().equals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cellId))))
                 return false;
-            return FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cellId,
+            return FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(cycle.siteId()).kind(), cycle, owner.witness(), cellId,
                     "harvest-scene-admission").disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT;
         }
         return false;
@@ -714,7 +714,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!binding.isEmpty()) {
             if (pending == null) return false;
             if (binding.size() != 1
-                    || hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
+                    || hand.disposition() != FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT
                     || hand.stack().orElseThrow().quantity() != part.quantity()
                     || binding.getFirst().authorityEpoch() != pending.actorEpoch()
                     || !binding.getFirst().address().equals(hand.stack().orElseThrow().address())) {
@@ -739,7 +739,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return true;
         }
         hand = FrontierV3ActorHandObservation.observe(level, state, lease, job);
-        if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
+        if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT
                 || hand.stack().orElseThrow().quantity() != part.quantity()) {
             conflict(level, runtime, lease, "cold-carried-hand-physical-foreign"); return true;
         }
@@ -776,14 +776,14 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 if (!FrontierV3LoadedWorld.ready(level, physicalHead)
                         || level.getBlockState(physicalHead).getCollisionShape(level, physicalHead).isEmpty()) return false;
                 if (retained.foreign().isEmpty()) {
-                    var reading = FrontierV3ResourceFieldObservation.read(level, cell, "harvest-scene-work-access");
+                    var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "harvest-scene-work-access");
                     if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)
                             || !owned.condition().equals(retained.committed())) return false;
                 }
                 continue;
             }
             if (retained.foreign().isEmpty()) return false;
-            var reading = FrontierV3ResourceFieldObservation.read(level, cell, "harvest-scene-blocked-cell");
+            var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "harvest-scene-blocked-cell");
             if (!(reading instanceof FrontierV3ResourceFieldObservation.Foreign foreign)
                     || !retained.foreign().orElseThrow().observedSoil().equals(foreign.incident().observedSoil())
                     || !retained.foreign().orElseThrow().observedCrop().equals(foreign.incident().observedCrop())) return false;

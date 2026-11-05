@@ -12,7 +12,7 @@ public record HarvestRetiredHandObserved(ActorActuationId identity, SubjectId si
         if (identity.execution().activityKind() != ActorActivityKind.FIELD_HARVEST || completedCells < 1
                 || resourceEpoch < 1 || !(hand.address() instanceof PhysicalStackAddress.ActorHand address)
                 || address.hand() != ActorContainerItemOrder.Hand.OFF
-                || !identity.body().actorId().equals(address.actorId()) || !hand.itemKind().equals("minecraft:wheat"))
+                || !identity.body().actorId().equals(address.actorId()) || ResourceSiteKind.forResourceKind(hand.itemKind()).isEmpty())
             throw new IllegalArgumentException("retired hand has a foreign execution or progress");
     }
     @Override public String type() { return "frontier.harvest_retired_hand_observed"; }

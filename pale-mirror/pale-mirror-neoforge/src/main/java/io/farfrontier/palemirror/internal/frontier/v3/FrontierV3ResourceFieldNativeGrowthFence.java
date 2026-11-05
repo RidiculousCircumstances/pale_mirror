@@ -33,12 +33,12 @@ final class FrontierV3ResourceFieldNativeGrowthFence {
         if (!(field instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                 || !owner.witness().matchesLayout(site.id(), site.layout())) return true;
-        var reading = FrontierV3ResourceFieldObservation.read(level, cell, "native-growth-pre");
+        var reading = FrontierV3ResourceFieldObservation.read(level, site.kind(), cell, "native-growth-pre");
         if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)
                 || !owned.condition().equals(owner.witness().cell(cellId).committed())) return true;
         BlockPos position = new BlockPos(cell.crop().x(), cell.crop().y(), cell.crop().z());
         BlockState before = level.getBlockState(position);
-        if (!before.is(Blocks.WHEAT) || before.getValue(CropBlock.AGE) >= CropBlock.MAX_AGE) return true;
+        if (!FrontierV3FieldBlocks.isCrop(before, site.kind()) || before.getValue(CropBlock.AGE) >= CropBlock.MAX_AGE) return true;
         Window window = WINDOWS.computeIfAbsent(level, ignored -> new Window());
         if (window.tick != level.getGameTime()) {
             window.tick = level.getGameTime();
@@ -66,10 +66,10 @@ final class FrontierV3ResourceFieldNativeGrowthFence {
                         position.getX(), position.getY(), position.getZ()))
                         .map(cell -> cell.id().equals(before.cellId)).orElse(false)) return false;
         BlockState current = level.getBlockState(position);
-        if (!current.is(Blocks.WHEAT)
+        if (!FrontierV3FieldBlocks.isCrop(current, site.kind())
                 || current.getValue(CropBlock.AGE) != before.block.getValue(CropBlock.AGE) + 1) return false;
         ResourceFieldLayout.Cell geometry = site.layout().requireCell(before.cellId);
-        if (!(FrontierV3ResourceFieldObservation.read(level, geometry, "native-growth-post")
+        if (!(FrontierV3ResourceFieldObservation.read(level, site.kind(), geometry, "native-growth-post")
                 instanceof FrontierV3ResourceFieldObservation.Owned)) return false;
         if (!level.setBlock(position, before.block, 2)) return false;
         return level.getBlockState(position).equals(before.block);

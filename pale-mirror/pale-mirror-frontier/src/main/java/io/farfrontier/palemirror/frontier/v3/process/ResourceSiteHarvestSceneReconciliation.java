@@ -67,7 +67,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
         int carried = ResourceSiteHarvestCargo.quantity(state, job);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
-                || !receipt.observedHand().itemKind().equals("minecraft:wheat")
+                || !receipt.observedHand().itemKind().equals(ResourceSiteHarvestCargo.itemKind(state, job))
                 || receipt.observedHand().quantity() != Math.addExact(ResourceSiteHarvestCargo.quantity(state, job), applied ? 1 : 0)
                 || (account == null ? !applied || carried != 0 || !bindings.isEmpty()
                         : !account.custody().equals(new ResourceCustody.Actor(job.workerId())) || !account.claimQuantities().isEmpty())
@@ -78,7 +78,7 @@ public final class ResourceSiteHarvestSceneReconciliation {
                     || bindings.getFirst().quantity() != ResourceSiteHarvestCargo.quantity(state, job)))
             throw new IllegalArgumentException("harvest reconciliation cannot replace its exact bound worker batch");
         if (!bindings.isEmpty()) ActorCarriedResources.requireBinding(state.inventory().fungibleResources(),
-                job.workerId(), job.actorAccountId(), new FungiblePhysicalObservation.Stack(hand, "minecraft:wheat", carried));
+                job.workerId(), job.actorAccountId(), new FungiblePhysicalObservation.Stack(hand, ResourceSiteHarvestCargo.itemKind(state, job), carried));
         SubjectId recoveryId = ActorBodyId.recoveryBindingId(job.workerId());
         var recovery = state.fencedRecovery().current().get(recoveryId);
         if (recovery == null || recovery.asset() != FencedRecoveryAsset.BODY

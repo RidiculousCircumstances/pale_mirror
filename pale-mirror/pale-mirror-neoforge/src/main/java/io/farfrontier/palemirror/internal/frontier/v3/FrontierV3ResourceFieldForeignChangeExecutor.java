@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.CellMutationProtocol;
 import net.minecraft.core.registries.Registries;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignCellObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeAcknowledged;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld;
@@ -45,20 +46,20 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         if (inFlight != null) return true; // Keep the exact predecessor; after-write versions its observation.
         boolean alreadyForeign = foreign(before);
         boolean willBeForeign = soilSlot && FrontierV3FieldBlocks.soil(replacement) == null
-                || cropSlot && !replacement.is(Blocks.AIR) && !replacement.is(Blocks.WHEAT);
+                || cropSlot && !replacement.is(Blocks.AIR) && !FrontierV3FieldBlocks.isCrop(replacement, state.resourceSite(siteId).kind());
         boolean replacementGeneration = soilSlot && FrontierV3FieldBlocks.soil(replacement) != null
                     && before.soil() != FrontierV3FieldBlocks.soil(replacement)
-                || cropSlot && replacement.is(Blocks.WHEAT) && (before.crop() == ResourceFieldCycle.Crop.ABSENT
+                || cropSlot && FrontierV3FieldBlocks.isCrop(replacement, state.resourceSite(siteId).kind()) && (before.crop() == ResourceFieldCycle.Crop.ABSENT
                     || replacement.getValue(CropBlock.AGE) > 0 && replacement.getValue(CropBlock.AGE) < before.growthStage());
         if (!alreadyForeign && !willBeForeign && !replacementGeneration) return false;
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         if (!available(level, state, cycle, ledger, siteId, cell.id())) return false;
         var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
         var retained = owner.witness().cell(cell.id());
-        var reading = FrontierV3ResourceFieldObservation.read(level, cell, "world-foreign-prewrite");
+        var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "world-foreign-prewrite");
         if (!matchesPredecessor(before, retained, reading)
                 && !(reading instanceof FrontierV3ResourceFieldObservation.Unloaded
-                    && matchesWritablePredecessor(level, cell, position, before, retained))) return false;
+                    && matchesWritablePredecessor(level, state.resourceSite(siteId).kind(), cell, position, before, retained))) return false;
         var checkpoint = runtime.canonicalState().orElseThrow();
         String cause = "world:foreign-cell-" + siteId.value() + "-e" + cycle.epoch()
                 + "-c" + cell.id().value() + "-r" + checkpoint.revision().value() + "-prewrite";
@@ -105,7 +106,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
         var retained = owner.witness().cell(cellId);
         var cell = cycle.layout().requireCell(cellId);
-        var reading = FrontierV3ResourceFieldObservation.read(level, cell, "world-foreign-scan");
+        var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "world-foreign-scan");
         if (reading instanceof FrontierV3ResourceFieldObservation.Unloaded || retained.pending().isPresent()) return false;
         var before = cycle.cell(cellId);
         boolean drift;
@@ -181,7 +182,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
             var captured = witness.observed().orElseThrow();
             // External observation receipts describe history. Finish an accepted version before
             // retaining a later fact; unlike work/custody effects, they never replay a world write.
-            var reading = classifyCaptured(level, captured, held.causationId());
+            var reading = classifyCaptured(level, state.resourceSite(held.siteId()).kind(), captured, held.causationId());
             var target = observedState(held.before(), reading, captured);
             if (target == null) throw new IllegalStateException("unclassified cell observation: " + witness.mutationKey());
             if (!committed && !target.equals(held.before())) {
@@ -218,7 +219,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                     ? value : null;
             if (owner == null || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                     || !owner.witness().matchesCycle(cycle)) continue;
-            var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(held.cellId()),
+            var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cycle.layout().requireCell(held.cellId()),
                     held.causationId());
             if (!matchesCurrent(cycle.cell(held.cellId()), owner.witness().cell(held.cellId()), reading)) continue;
             submit(runtime, new ResourceFieldForeignChangeAcknowledged(held, cycle.cell(held.cellId())),
@@ -249,9 +250,9 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 witness.mutationKey(), held.causationId(), witness.observationVersion());
     }
 
-    private static FrontierV3ResourceFieldObservation.Reading classifyCaptured(ServerLevel level,
+    private static FrontierV3ResourceFieldObservation.Reading classifyCaptured(ServerLevel level, ResourceSiteKind kind,
             FrontierV3ResourceFieldForeignChangeWitness.Blocks captured, String cause) {
-        return FrontierV3ResourceFieldObservation.classify(
+        return FrontierV3ResourceFieldObservation.classify(kind,
                 NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), captured.soil()),
                 NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), captured.crop()), cause);
     }
@@ -285,7 +286,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
     }
 
     /** A write to one loaded half still needs its hold when the other cell half is unloaded. */
-    static boolean matchesWritablePredecessor(ServerLevel level, ResourceFieldLayout.Cell cell,
+    static boolean matchesWritablePredecessor(ServerLevel level, ResourceSiteKind kind, ResourceFieldLayout.Cell cell,
                                               BlockPos position, ResourceFieldCycle.CellState canonical,
                                               FrontierV3ResourceFieldWitness.Cell claim) {
         if (!FrontierV3LoadedWorld.ready(level, position) || claim.pending().isPresent()) return false;
@@ -304,7 +305,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         if (soilSlot) return canonical.soil() == FrontierV3FieldBlocks.soil(actual);
         return switch (canonical.crop()) {
             case ABSENT -> actual.is(Blocks.AIR);
-            case GROWING, MATURE -> actual.is(Blocks.WHEAT)
+            case GROWING, MATURE -> FrontierV3FieldBlocks.isCrop(actual, kind)
                     && actual.getValue(CropBlock.AGE) == canonical.growthStage();
             default -> false;
         };

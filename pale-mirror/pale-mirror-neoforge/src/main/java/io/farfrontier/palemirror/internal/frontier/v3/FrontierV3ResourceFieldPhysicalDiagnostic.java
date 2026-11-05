@@ -47,7 +47,7 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
             if (retained.settledFor(target)) continue;
             mismatches++;
             if (!mismatch.equals("null")) continue;
-            var reading = FrontierV3ResourceFieldObservation.read(level, cell, "diagnostic:field-mismatch");
+            var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "diagnostic:field-mismatch");
             mismatch = "{\"cell\":" + cell.id().value()
                     + ",\"committed\":\"" + FrontierV3DiagnosticJson.quote(retained.committed().toString())
                     + "\",\"canonical\":\"" + FrontierV3DiagnosticJson.quote(target.toString())

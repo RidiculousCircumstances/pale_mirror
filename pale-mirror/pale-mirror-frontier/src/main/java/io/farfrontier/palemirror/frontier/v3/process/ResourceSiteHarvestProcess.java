@@ -231,9 +231,9 @@ public final class ResourceSiteHarvestProcess {
                     retired.map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId::execution).orElseGet(() ->
                         state.actorExecutions().current(
                             io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId())),
-                    FieldHarvestExtraction.definition(state.bootstrap(), cell.crop()))
+                    FieldHarvestExtraction.definition(state.bootstrap(), state.resourceSite(job.siteId()), cell.crop()))
                     : null;
-        int extractedQuantity = extraction == null ? 0 : extraction.quantity(FieldHarvestExtraction.ITEM);
+        int extractedQuantity = extraction == null ? 0 : extraction.quantity(ResourceSiteHarvestCargo.itemKind(state, job));
         int carriedAfter = Math.addExact(ResourceSiteHarvestCargo.quantity(state, job), extractedQuantity);
         SurfaceAnchor workerStation = state.actorLocations().get(job.workerId()).supportingSurface();
         ResourceSiteLifecycle advanced = retired.isPresent()
@@ -242,7 +242,7 @@ public final class ResourceSiteHarvestProcess {
                     workerStation, lifecycle.nextHarvestTarget(job, worked), progressed.outcome(), worked, extractedQuantity);
         ResourceSiteHarvestJob advancedJob = advanced.harvestJob(job.id()).orElseThrow();
         if (retired.isEmpty() && !advancedJob.progress().complete()
-                && carriedAfter > 64 - FieldAgronomy.maximumYield(state.bootstrap())) {
+                && carriedAfter > 64 - FieldAgronomy.maximumYield(state.bootstrap(), state.resourceSite(job.siteId()).kind())) {
             advanced = advanced.returnFullHarvestBatch(advancedJob);
         }
         ExactInventory inventory = state.inventory();
@@ -257,7 +257,7 @@ public final class ResourceSiteHarvestProcess {
         // Check every completed operation, not only the operation that wore the tool.
         var nextJob = advanced.harvestJob(job.id()).orElseThrow();
         if (retired.isEmpty() && !nextJob.progress().complete()) {
-            var nextRequirement = FieldEquipment.requirement(worked,
+            var nextRequirement = FieldEquipment.requirement(state.resourceSite(job.siteId()).kind(), worked,
                     worked.layout().cells().get(nextJob.progress().nextCropSlotIndex()).id());
             var nextTool = inventory.items().get(job.equipment().itemId());
             if (nextRequirement.filter(required -> !state.bootstrap().ruleset().tools().serviceable(nextTool, required)).isPresent())
@@ -290,7 +290,7 @@ public final class ResourceSiteHarvestProcess {
                 ResourceLot carried = ResourceSiteHarvestCargo.newPart(state, job, carriedAfter);
                 inventory = inventory.withFungibleResources(resources.accrueObservedActorExtractionPart(extraction.output().getFirst(), carried,
                         actorAccount, job.workerId(), hand.authorityEpoch(),
-                        new FungiblePhysicalObservation.Stack(hand.address(), FieldHarvestExtraction.ITEM, hand.quantity())));
+                        new FungiblePhysicalObservation.Stack(hand.address(), ResourceSiteHarvestCargo.itemKind(state, job), hand.quantity())));
             } else if (hand.quantity() == 0) {
                 if (resources.accounts().containsKey(actorAccount))
                     throw new IllegalArgumentException("zero-yield HOT hand retains an unexpected actor part");
@@ -819,7 +819,7 @@ public final class ResourceSiteHarvestProcess {
         if (!admitted && (job.equipment().stage() != WorkToolAssignment.Stage.ACQUIRING
                 || job.equipment().pending().isPresent() || job.equipment().lastUse().isPresent()
                 || !WorkEquipmentSelection.available(state, settlement.id(), state.inventory().items().get(job.equipment().itemId()),
-                    FieldEquipment.requirements(), WorkEquipmentClaimComposition.reserved(state))))
+                    FieldEquipment.requirements(state), WorkEquipmentClaimComposition.reserved(state))))
             throw new IllegalArgumentException("field admission requires a current unclaimed serviceable individual tool");
         if (job.progress().totalCropSlots() != state.resourceSites().cycle(job.siteId()).layout().cells().size())
             throw new IllegalArgumentException("resource-site harvest job has a foreign admitted cell count");
@@ -862,8 +862,8 @@ public final class ResourceSiteHarvestProcess {
         var storage = ResourceStorageAccess.at(state, job.outputSlot().containerId());
         var policy = state.inventory().containers().get(storage.containerId()).storage().orElseThrow();
         if (!storage.settlementId().equals(settlement.id()) || !HarvestStoragePolicy.ROLES.contains(policy.role())
-                || !admitted && (!policy.filter().accepts("minecraft:wheat") || !state.containerSlotAvailable(job.outputSlot())
-                    || ResourceStorageSelection.receivingCandidates(state, settlement.id(), "minecraft:wheat", 64,
+                || !admitted && (!policy.filter().accepts(ResourceSiteHarvestCargo.itemKind(state, job)) || !state.containerSlotAvailable(job.outputSlot())
+                    || ResourceStorageSelection.receivingCandidates(state, settlement.id(), ResourceSiteHarvestCargo.itemKind(state, job), 64,
                             state.actorLocations().get(job.workerId()).supportingSurface(), HarvestStoragePolicy.ROLES,
                             java.util.Optional.empty()).stream().noneMatch(endpoint -> endpoint.containerId().equals(storage.containerId())))) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");
@@ -878,7 +878,7 @@ public final class ResourceSiteHarvestProcess {
         return new ResourceSiteHarvestJob(jobId, task.id(), lifecycle.siteId(), farmer.id(),
                 ResourceFieldYield.actorAccountId(jobId),
                 ReferenceContainerCustody.scopeId(outputSlot.containerId()),
-                new SubjectId("item:site-harvest-" + suffix + "-wheat"), outputSlot, new PhysicalIntentId("intent:site-harvest-" + suffix),
+                new SubjectId("item:site-harvest-" + suffix + "-yield"), outputSlot, new PhysicalIntentId("intent:site-harvest-" + suffix),
                 ResourceSiteHarvestProgress.notStarted(site.layout().cells().size()), field.target(site.layout().cells().getFirst().id()), equipment);
     }
 

@@ -165,7 +165,7 @@ final class ResourceSiteHarvestPlanning {
         // An impossible equipment admission cannot win work priority. Reject it
         // before the market-wide demand evaluation; the selected offer still
         // proves its exact tool and route below.
-        if (!WorkEquipmentSelection.hasAvailable(state, farmer.settlementId(), FieldEquipment.requirements(),
+        if (!WorkEquipmentSelection.hasAvailable(state, farmer.settlementId(), FieldEquipment.requirements(site.kind()),
                 WorkEquipmentClaimComposition.reserved(state))) return java.util.Optional.empty();
         if (!FieldWorkDemand.requested(state, site, tick))
             return java.util.Optional.empty();
@@ -173,14 +173,14 @@ final class ResourceSiteHarvestPlanning {
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
         java.util.Optional<WorkEquipmentSelection.Selection> equipment;
         try { equipment = WorkEquipmentSelection.select(state, farmer.settlementId(), worker.supportingSurface(), worker.navigationProfile(),
-                FieldEquipment.requirements(), WorkEquipmentClaimComposition.reserved(state)); }
+                FieldEquipment.requirements(site.kind()), WorkEquipmentClaimComposition.reserved(state)); }
         catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable waiting) {
             return java.util.Optional.empty();
         }
         if (equipment.isEmpty()) return java.util.Optional.empty();
         ShipmentEndpoint storage = null;
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> storageRoute = java.util.Optional.empty();
-        for (var candidate : ResourceStorageSelection.newStackCandidates(state, site.settlementId(), "minecraft:wheat", 64,
+        for (var candidate : ResourceStorageSelection.newStackCandidates(state, site.settlementId(), site.kind().resourceKind(), 64,
                 worker.supportingSurface(), HarvestStoragePolicy.ROLES)) {
             try {
                 var route = ResourceStorageNavigation.plannedPath(state, worker.supportingSurface(), worker.navigationProfile(), candidate);
@@ -203,7 +203,7 @@ final class ResourceSiteHarvestPlanning {
                 new WorkToolAssignment(equipment.orElseThrow().item().id(), equipment.orElseThrow().source(), WorkToolAssignment.Stage.ACQUIRING));
         if (!ActorCarriedResources.canAddAccount(state.inventory().fungibleResources(),
                 farmer.id(), job.actorAccountId())) return java.util.Optional.empty();
-        boolean harvestDemand = ProductionStockDemand.read(state, site.settlementId(), FieldHarvestExtraction.ITEM, tick).requested();
+        boolean harvestDemand = ProductionStockDemand.read(state, site.settlementId(), site.kind().resourceKind(), tick).requested();
         var selected = lifecycle.selectHarvestStart(job, field, worker.supportingSurface(), index ->
                 FieldWorkDemand.allowed(field, field.layout().cells().get(index).id(), harvestDemand)
                         && !state.resourceSites().hasPendingCellMutation(site.id(), field.layout().cells().get(index).id()));

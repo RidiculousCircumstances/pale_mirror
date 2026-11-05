@@ -35,7 +35,7 @@ final class FrontierV3FieldWorkOperation {
         var binding = binding(level, state, job, worker, cell, pending);
         java.util.function.Supplier<FrontierV3ActorHandObservation.Review> hand = () ->
                 FrontierV3ActorHandObservation.observeRetained(level, state, lease, job, worker, identity);
-        java.util.function.BooleanSupplier appliedImage = () -> condition(level, cell, pending)
+        java.util.function.BooleanSupplier appliedImage = () -> condition(level, state.resourceSite(job.siteId()).kind(), cell, pending)
                 .equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().after()))
                 && hand.get().matchesQuantity(afterCount)
                 && toolMatches(worker, job, true)
@@ -49,7 +49,7 @@ final class FrontierV3FieldWorkOperation {
         var retained = FrontierV3OperationAftermath.capture(level, binding.declaration(), binding.participants(),
                 new HarvestRetiredEffectObserved(identity, effect, applied), applied,
                 () -> applied ? appliedImage.getAsBoolean()
-                        : condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
+                        : condition(level, state.resourceSite(job.siteId()).kind(), cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
                             && hand.get().matchesQuantity(beforeCount)
                             && toolMatches(worker, job, false)
                             && pending.handEffect().map(hand.get()::matches).orElse(true));
@@ -70,7 +70,7 @@ final class FrontierV3FieldWorkOperation {
         var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(job.siteId());
         var witness = owner.witness(); var pending = witness.cell(id).pending().orElseThrow();
         if (pending.completedSteps() < pending.transition().steps().size())
-            witness = witness.confirm(id, FrontierV3ResourceFieldObservation.observe(level,
+            witness = witness.confirm(id, FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(job.siteId()).kind(),
                     state.resourceSites().cycle(job.siteId()), witness, id, pending.causationId()));
         if (pending.handEffect().isPresent() && !pending.handConfirmed())
             witness = witness.confirmHand(id, hand);
@@ -83,14 +83,15 @@ final class FrontierV3FieldWorkOperation {
             ResourceSiteHarvestJob job, Mob worker, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending, BlockExtractionPort extraction, Runnable resume) {
         var binding = binding(level, state, job, worker, cell, pending);
+        var kind = state.resourceSite(job.siteId()).kind();
         var writes = pending.transition().steps().stream().map(step -> new FrontierV3ManagedBlockWrites.PlannedWrite(
-                position(cell, step.part()), block(step))).toList();
+                position(cell, step.part()), block(kind, step))).toList();
         return FrontierV3MinecraftOperation.applyDeferred(level, new FrontierV3MinecraftOperation.Request(binding.declaration(), binding.participants(),
                 () -> preparationPermitted(level, worker, cell, pending)
-                        && condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
+                        && condition(level, state.resourceSite(job.siteId()).kind(), cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
                         && toolMatches(worker, job, false)
                         && pending.handEffect().map(effect -> FrontierV3ActorHandObservation.observe(level, state, lease, job).matchesBefore(effect)).orElse(true),
-                FrontierV3ManagedBlockWrites.effect(level, writes, () -> mutate(level, worker, cell, pending, extraction)
+                FrontierV3ManagedBlockWrites.effect(level, writes, () -> mutate(level, state.resourceSite(job.siteId()).kind(), worker, cell, pending, extraction)
                         && job.equipment().lastUse().map(use -> FrontierV3ToolUse.apply(worker.getMainHandItem(), use)).orElse(true), resume),
                 () -> toolMatches(worker, job, true) && after(level, state, lease, job, cell, pending)));
     }
@@ -102,7 +103,7 @@ final class FrontierV3FieldWorkOperation {
     }
     private static boolean after(ServerLevel level, FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job,
             ResourceFieldLayout.Cell cell, FrontierV3ResourceFieldWitness.Pending pending) {
-        return condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().after()))
+        return condition(level, state.resourceSite(job.siteId()).kind(), cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().after()))
                 && pending.handEffect().map(effect -> {
                     var hand = FrontierV3ActorHandObservation.observe(level, state, lease, job);
                     return hand.matches(effect) && hand.matchesQuantity(effect.afterCount());
@@ -132,9 +133,9 @@ final class FrontierV3FieldWorkOperation {
                 ? FrontierV3ToolUse.after(worker.getMainHandItem(), use)
                 : FrontierV3ToolUse.before(worker.getMainHandItem(), use)).orElse(true);
     }
-    private static FrontierV3ResourceFieldObservation.Reading condition(ServerLevel level, ResourceFieldLayout.Cell cell,
+    private static FrontierV3ResourceFieldObservation.Reading condition(ServerLevel level, ResourceSiteKind kind, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending) {
-        return FrontierV3ResourceFieldObservation.read(level, cell, pending.causationId());
+        return FrontierV3ResourceFieldObservation.read(level, kind, cell, pending.causationId());
     }
     /** Validate the configured pure block transformation through the real engine
      * ability hook before admitting its journalled mutation. No simulated tool use. */
@@ -149,23 +150,23 @@ final class FrontierV3FieldWorkOperation {
         return FrontierV3SoilPreparation.result(level, worker.getMainHandItem(),
                 position(cell, ResourceFieldCellTransition.Part.SOIL), preparation).isPresent();
     }
-    private static boolean mutate(ServerLevel level, Mob worker, ResourceFieldLayout.Cell cell,
+    private static boolean mutate(ServerLevel level, ResourceSiteKind kind, Mob worker, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending, BlockExtractionPort extraction) {
         for (var step : pending.transition().steps()) {
             if (pending.handEffect().isPresent()) {
                 var result = extraction.apply(pending.handEffect().orElseThrow().extraction());
                 if (result != BlockExtractionPort.Result.APPLIED) return false;
             } else {
-                if (!level.setBlock(position(cell, step.part()), block(step), 3)) return false;
+                if (!level.setBlock(position(cell, step.part()), block(kind, step), 3)) return false;
             }
         }
         return pending.handEffect().isEmpty() || FrontierV3VillagerHandMutation.setOffhand(worker,
-                new ItemStack(Items.WHEAT, pending.handEffect().orElseThrow().afterCount()));
+                FrontierV3FungibleItemStacks.stack(pending.handEffect().orElseThrow().itemKind(), pending.handEffect().orElseThrow().afterCount()));
     }
-    private static net.minecraft.world.level.block.state.BlockState block(ResourceFieldCellTransition.Step step) {
+    private static net.minecraft.world.level.block.state.BlockState block(ResourceSiteKind kind, ResourceFieldCellTransition.Step step) {
         return step.part() == ResourceFieldCellTransition.Part.SOIL ? FrontierV3FieldBlocks.soil(step.after().soil())
                 : step.after().crop() == ResourceFieldCycle.Crop.ABSENT ? Blocks.AIR.defaultBlockState()
-                : Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, step.after().growthStage());
+                : FrontierV3FieldBlocks.crop(kind, step.after().growthStage());
     }
     private static BlockPos position(ResourceFieldLayout.Cell cell, ResourceFieldCellTransition.Part part) {
         var value = part == ResourceFieldCellTransition.Part.SOIL ? cell.soil().support() : cell.crop();

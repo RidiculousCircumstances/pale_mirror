@@ -13,6 +13,8 @@ public record ProductionEquipment(Id id, String portableItemKind,
     public static final Id BENCH = new Id("pale_mirror:production_bench");
     public static final Id SMELTER = new Id("pale_mirror:smelter");
     public static final Id WOODWORKING = new Id("pale_mirror:woodworking_bench");
+    public static final Id SPINNING = new Id("pale_mirror:spinning_bench");
+    public static final Id WEAVING = new Id("pale_mirror:weaving_loom");
     public static final Id FORGE = new Id("pale_mirror:forge");
     public ProductionEquipment {
         Objects.requireNonNull(id); ProductionRecipe.requireItemKey(portableItemKind);
@@ -41,6 +43,12 @@ public record ProductionEquipment(Id id, String portableItemKind,
     public static ProductionEquipment woodworking() {
         return new ProductionEquipment(WOODWORKING, "pale_mirror:woodworking_bench", Set.of(ProductionStationSpec.Capability.WOODWORKING),
                 Set.of(ProductionRecipe.ProcessingMode.ATTENDED));
+    }
+    public static ProductionEquipment spinning() {
+        return new ProductionEquipment(SPINNING, SPINNING.value(), Set.of(ProductionStationSpec.Capability.SPINNING), Set.of(ProductionRecipe.ProcessingMode.ATTENDED));
+    }
+    public static ProductionEquipment weaving() {
+        return new ProductionEquipment(WEAVING, WEAVING.value(), Set.of(ProductionStationSpec.Capability.WEAVING), Set.of(ProductionRecipe.ProcessingMode.ATTENDED));
     }
     public static ProductionEquipment forge() {
         return new ProductionEquipment(FORGE, "pale_mirror:forge", Set.of(ProductionStationSpec.Capability.FABRICATION),

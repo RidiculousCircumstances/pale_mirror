@@ -97,7 +97,7 @@ class FieldEquipmentTest {
         assertEquals(tool, ExactItemReadIndex.owned(before.inventory(), tool.economicOwnerId(), tool.itemKind()).stream()
                 .filter(item -> item.id().equals(tool.id())).findFirst().orElseThrow(), "old immutable branch must retain its own custody");
         assertFalse(WorkEquipmentSelection.available(after, tool.economicOwnerId(), after.inventory().items().get(tool.id()),
-                FieldEquipment.requirements(), java.util.Set.of()), "index membership grants no work availability");
+                FieldEquipment.requirements(ResourceSiteKind.WHEAT_FIELD), java.util.Set.of()), "index membership grants no work availability");
         assertEquals(before.resourceSites().cycle(job.siteId()), after.resourceSites().cycle(job.siteId()));
         assertFalse(WorkEquipmentClaimComposition.reserved(after).contains(tool.id()));
     }
@@ -119,13 +119,13 @@ class FieldEquipmentTest {
         assertEquals(new InventoryCustody.Actor(job.workerId()), held.custody());
         assertEquals(before.inventory().items().get(held.id()).condition(), held.condition());
         assertEquals(WorkToolAssignment.Stage.EQUIPPED, after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow().equipment().stage());
-        var productive = EquipmentProductiveCapacity.items(after, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements());
+        var productive = EquipmentProductiveCapacity.items(after, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements(ResourceSiteKind.WHEAT_FIELD));
         assertTrue(productive.stream().anyMatch(tool -> tool.id().equals(held.id())));
         var demand = new FieldEquipmentDemand(); var needs = demand.read(after, held.economicOwnerId());
         assertFalse(needs.isEmpty());
         var other = after.humanPopulation().residents().keySet().stream().filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
         var moved = after.withActorBody(other, after.actorLocations().get(other).body().offset(1, 0, 0));
-        assertSame(productive, EquipmentProductiveCapacity.items(moved, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements()),
+        assertSame(productive, EquipmentProductiveCapacity.items(moved, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements(ResourceSiteKind.WHEAT_FIELD)),
                 "another person's walk cannot change actual usable equipment");
         assertSame(needs, demand.read(moved, held.economicOwnerId()),
                 "unchanged local crops, workers, equipment and storage cannot gain a new wear forecast from foreign movement");
@@ -134,7 +134,7 @@ class FieldEquipmentTest {
                 && !item.economicOwnerId().equals(held.economicOwnerId())).findFirst().orElseThrow();
         var changed = after.withInventory(after.inventory().changeCondition(foreign,
                 new ItemCondition(foreign.condition().maximumDamage(), 1)));
-        assertSame(productive, EquipmentProductiveCapacity.items(changed, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements()));
+        assertSame(productive, EquipmentProductiveCapacity.items(changed, held.economicOwnerId(), Set.of(job.workerId()), FieldEquipment.requirements(ResourceSiteKind.WHEAT_FIELD)));
         assertSame(needs, demand.read(changed, held.economicOwnerId()));
         assertSame(retained, EquipmentStockProjection.retainedItems(changed, held.economicOwnerId()),
                 "foreign tool wear cannot reconstruct the own retained productive fleet");

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "pale_mirror:block/spinning_bench"
+    },
+    "facing=east": {
+      "model": "pale_mirror:block/spinning_bench",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "pale_mirror:block/spinning_bench",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "pale_mirror:block/spinning_bench",
+      "y": 270
+    }
+  }
+}

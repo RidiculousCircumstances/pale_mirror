@@ -17,7 +17,8 @@ public final class GrayboxAgriculture {
             new io.farfrontier.palemirror.frontier.v3.model.geometry.TerrainSurfacePalette(1, 0, 0, List.of(GRASS));
     private static final TerritoryAgriculture RULES = new TerritoryAgriculture(ORDINARY,
             Map.of(FERTILE, new Environment(2000, 1), ORDINARY, new Environment(1000, 1), ROCKY, new Environment(500, 2)),
-            Map.of("minecraft:wheat", new Crop("minecraft:wheat", 2)), List.of(
+            Map.of("minecraft:wheat", new Crop("minecraft:wheat", 2),
+                    "pale_mirror:cotton", new Crop("pale_mirror:cotton", 2)), List.of(
                 new Region(-512, -512, 0, -170, ROCKY),
                 new Region(240, -512, 512, -170, ROCKY),
                 new Region(-240, -170, 0, 170, ROCKY),

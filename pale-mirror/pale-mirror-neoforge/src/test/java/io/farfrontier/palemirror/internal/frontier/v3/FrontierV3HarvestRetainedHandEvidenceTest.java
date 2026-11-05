@@ -24,18 +24,18 @@ class FrontierV3HarvestRetainedHandEvidenceTest {
                 new ScheduleId("schedule:retained-hand"), 1L,
                 Optional.of(new ResourceSiteHarvestProgressed.HandObservation(address, 17L, 1)));
         var observed = new FungiblePhysicalObservation.Stack(address, "minecraft:wheat", 1);
-        assertTrue(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, receipt, observed));
-        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(job, cycle, receipt, observed),
+        assertTrue(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, receipt, "minecraft:wheat", observed));
+        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(job, cycle, receipt, "minecraft:wheat", observed),
                 "a native receipt not yet accepted canonically cannot repair inventory");
         var wrongBody = new PhysicalStackAddress.ActorHand(job.workerId(), java.util.UUID.fromString("00000000-0000-0000-0000-000000000007"));
-        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, receipt,
+        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, receipt, "minecraft:wheat",
                 new FungiblePhysicalObservation.Stack(wrongBody, "minecraft:wheat", 1)));
-        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, receipt,
+        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, receipt, "minecraft:wheat",
                 new FungiblePhysicalObservation.Stack(address, "minecraft:wheat", 2)));
         var old = new ResourceSiteHarvestProgressed(site, cycle.epoch(), job.id(), progress.completedCropSlots() + 1,
                 cycle.layout().revision(), cell, job.target().generation(), receipt.outcome(), receipt.coldScheduleId(),
                 receipt.coldDueAt(), receipt.observedHand());
-        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, old, observed),
+        assertFalse(FrontierV3HarvestRetainedHandEvidence.matches(completed, cycle, old, "minecraft:wheat", observed),
                 "another checkpoint with the same amount cannot stand in for the retained last effect");
     }
 }

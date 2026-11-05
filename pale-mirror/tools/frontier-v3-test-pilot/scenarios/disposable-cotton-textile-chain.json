@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "id": "disposable_cotton_textile_chain",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 30832,
+    "profile": "textile-world",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-cotton-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": -3,
+        "y": 0,
+        "z": -3
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-cotton-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "process",
+          "id": "station:structure-1-textile_workshop-spinning",
+          "field": "exteriorApproach"
+        }
+      },
+      "offset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-textile_workshop-spinning-station",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "warehouseFungibleStockPresent": {
+          "pale_mirror:cloth": true
+        }
+      },
+      "timeoutMs": 300000,
+      "causalMilestone": "cotton_spun_and_woven_output_delivered"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "station:structure-1-textile_workshop-spinning"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "station:structure-1-textile_workshop-weaving"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "native-cotton-field"
+    },
+    {
+      "after": 7,
+      "name": "textile-factory-and-woven-output"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 7,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "warehouseFungibleStockPresent": {
+          "pale_mirror:cloth": true
+        },
+        "quarantine": "NORMAL"
+      }
+    },
+    {
+      "after": 10,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "warehouseFungibleStockPresent": {
+          "pale_mirror:cloth": true
+        },
+        "quarantine": "NORMAL"
+      }
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 7
+  },
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 9000,
+    "timeoutMs": 600000
+  }
+}

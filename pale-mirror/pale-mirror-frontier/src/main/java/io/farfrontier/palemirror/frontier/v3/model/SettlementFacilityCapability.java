@@ -42,7 +42,7 @@ public final class SettlementFacilityCapability {
         return new Capability(kind, condition, 0, factor < 0 ? 0 : factor == 0 ? capacity.damagedWorkCapacity() : switch (kind) {
             case HALL -> capacity.intactHallWorkCapacity();
             case FARM -> capacity.intactFarmWorkCapacity();
-            case WORKSHOP, SMELTERY, FORGE, WOODSHOP -> capacity.intactWorkshopWorkCapacity();
+            case WORKSHOP, SMELTERY, FORGE, WOODSHOP, TEXTILE_WORKSHOP -> capacity.intactWorkshopWorkCapacity();
             case DEPOT -> capacity.intactDepotWorkCapacity();
             case INFIRMARY -> capacity.intactInfirmaryWorkCapacity();
             case KITCHEN -> 0; // A dining venue has no production-worker slots.

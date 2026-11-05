@@ -7,23 +7,29 @@ import java.util.*;
 /** Explicit, persisted machine capability and physical custody port for one facility. */
 public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectId containerId,
                                     ProductionEquipment.Id equipmentType,
-                                    Capability capability, SurfaceAnchor workerStation,
+                                    Capability capability, WorkplaceId workplaceId, SurfaceAnchor workerStation,
                                     SurfaceAnchor socketSurface, FacilityFacing facing, List<Integer> inputSlots, int outputSlot, OptionalInt fuelSlot,
                                     OptionalInt maintenanceSlot) {
     public ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectId containerId,
-            ProductionEquipment.Id equipmentType, Capability capability, SurfaceAnchor workerStation,
+            ProductionEquipment.Id equipmentType, Capability capability, WorkplaceId workplaceId, SurfaceAnchor workerStation,
             SurfaceAnchor socketSurface, FacilityFacing facing, int inputSlot, int outputSlot, int fuelSlot) {
-        this(id, facilityId, containerId, equipmentType, capability, workerStation, socketSurface, facing,
+        this(id, facilityId, containerId, equipmentType, capability, workplaceId, workerStation, socketSurface, facing,
                 List.of(inputSlot), outputSlot, OptionalInt.of(fuelSlot), OptionalInt.empty());
     }
     public ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectId containerId,
-            ProductionEquipment.Id equipmentType, Capability capability, SurfaceAnchor workerStation,
+            ProductionEquipment.Id equipmentType, Capability capability, WorkplaceId workplaceId, SurfaceAnchor workerStation,
             SurfaceAnchor socketSurface, FacilityFacing facing, int inputSlot, int outputSlot, int fuelSlot, OptionalInt maintenanceSlot) {
-        this(id, facilityId, containerId, equipmentType, capability, workerStation, socketSurface, facing,
+        this(id, facilityId, containerId, equipmentType, capability, workplaceId, workerStation, socketSurface, facing,
                 List.of(inputSlot), outputSlot, OptionalInt.of(fuelSlot), maintenanceSlot);
     }
+    public record WorkplaceId(String value) {
+        public WorkplaceId {
+            if (value == null || !value.matches("[a-z][a-z0-9_]{0,63}"))
+                throw new IllegalArgumentException("invalid declared workplace identity");
+        }
+    }
     public enum Capability {
-        BAKING(1), SMELTING(2), FABRICATION(3), WOODWORKING(4);
+        BAKING(1), SMELTING(2), FABRICATION(3), WOODWORKING(4), SPINNING(5), WEAVING(6);
 
         private final int wireTag;
         Capability(int wireTag) { this.wireTag = wireTag; }
@@ -40,6 +46,7 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
         Objects.requireNonNull(containerId, "station container");
         Objects.requireNonNull(equipmentType, "declared equipment type");
         Objects.requireNonNull(capability, "station capability");
+        Objects.requireNonNull(workplaceId, "declared workplace identity");
         Objects.requireNonNull(workerStation, "station worker surface");
         Objects.requireNonNull(socketSurface, "station machine socket");
         Objects.requireNonNull(facing, "declared machine front");
@@ -117,7 +124,7 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
         if (!SettlementStructureFootprint.supportSurfaces(workshop).contains(machine))
             throw new IllegalArgumentException("bakery machine socket has no facility support");
         return new ProductionStationSpec(new SubjectId("station:" + suffix + "-bakery"), workshop.id(),
-                new SubjectId("container:" + suffix + "-bakery-station"), ProductionEquipment.BENCH, Capability.BAKING,
+                new SubjectId("container:" + suffix + "-bakery-station"), ProductionEquipment.BENCH, Capability.BAKING, new WorkplaceId(mount.id()),
                 port.workStation(), machine, workshop.placement().direction(mount.facing()), java.util.stream.IntStream.range(0, 9).boxed().toList(), 9, OptionalInt.of(10), OptionalInt.empty());
     }
 }

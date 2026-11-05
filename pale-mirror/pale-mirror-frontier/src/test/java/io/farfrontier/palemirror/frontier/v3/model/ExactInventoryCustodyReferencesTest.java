@@ -90,7 +90,7 @@ class ExactInventoryCustodyReferencesTest {
     }
     private static ContainerRecord station(int input, int output) {
         var spec = new ProductionStationSpec(id("station"), id("facility"), CHEST, ProductionEquipment.BENCH,
-                ProductionStationSpec.Capability.BAKING, SurfaceAnchor.at(0, 64, 0), SurfaceAnchor.at(1, 64, 0), FacilityFacing.WEST, input, output, 2);
+                ProductionStationSpec.Capability.BAKING, new ProductionStationSpec.WorkplaceId("work"), SurfaceAnchor.at(0, 64, 0), SurfaceAnchor.at(1, 64, 0), FacilityFacing.WEST, input, output, 2);
         return new ContainerRecord(CHEST, OWNER, 3, ContainerPurpose.PRODUCTION_STATION, Optional.of(spec));
     }
     private static SubjectId id(String suffix) { return new SubjectId("test:inventory-" + suffix); }

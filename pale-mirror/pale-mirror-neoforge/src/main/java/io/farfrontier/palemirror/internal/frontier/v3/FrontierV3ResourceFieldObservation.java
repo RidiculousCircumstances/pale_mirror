@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface;
@@ -79,7 +80,7 @@ final class FrontierV3ResourceFieldObservation {
 
     private FrontierV3ResourceFieldObservation() { }
 
-    static Reading read(ServerLevel level, ResourceFieldLayout.Cell cell, String causationId) {
+    static Reading read(ServerLevel level, ResourceSiteKind kind, ResourceFieldLayout.Cell cell, String causationId) {
         Objects.requireNonNull(level, "observed field world");
         Objects.requireNonNull(cell, "observed field cell");
         BlockPos soil = minecraft(cell.soil().support());
@@ -87,10 +88,10 @@ final class FrontierV3ResourceFieldObservation {
         var soilChunk = FrontierV3LoadedWorld.chunk(level, soil);
         var cropChunk = FrontierV3LoadedWorld.chunk(level, crop);
         if (soilChunk == null || cropChunk == null) return Unloaded.INSTANCE;
-        return classify(soilChunk.getBlockState(soil), cropChunk.getBlockState(crop), causationId);
+        return classify(kind, soilChunk.getBlockState(soil), cropChunk.getBlockState(crop), causationId);
     }
 
-    static Reading classify(BlockState soil, BlockState crop, String causationId) {
+    static Reading classify(ResourceSiteKind kind, BlockState soil, BlockState crop, String causationId) {
         Objects.requireNonNull(soil, "observed field soil");
         Objects.requireNonNull(crop, "observed field crop");
         Objects.requireNonNull(causationId, "field observation cause");
@@ -98,7 +99,7 @@ final class FrontierV3ResourceFieldObservation {
         ResourceFieldCycle.Soil ownedSoil = FrontierV3FieldBlocks.soil(soil);
         if (ownedSoil != null && crop.is(Blocks.AIR))
             return new Owned(new ResourceFieldPhysicalSurface.Condition(ownedSoil, ResourceFieldCycle.Crop.ABSENT, 0));
-        if (ownedSoil == ResourceFieldCycle.Soil.FARMLAND && crop.is(Blocks.WHEAT)) {
+        if (ownedSoil == ResourceFieldCycle.Soil.FARMLAND && FrontierV3FieldBlocks.isCrop(crop, kind)) {
             int age = crop.getValue(CropBlock.AGE);
             return new Owned(new ResourceFieldPhysicalSurface.Condition(ownedSoil,
                     age == 7 ? ResourceFieldCycle.Crop.MATURE : ResourceFieldCycle.Crop.GROWING, age));
@@ -113,7 +114,7 @@ final class FrontierV3ResourceFieldObservation {
     }
 
     /** The only confirmation-capable review reads one naturally loaded cell itself. */
-    static Review observe(ServerLevel level, ResourceFieldCycle cycle, FrontierV3ResourceFieldWitness witness,
+    static Review observe(ServerLevel level, ResourceSiteKind kind, ResourceFieldCycle cycle, FrontierV3ResourceFieldWitness witness,
                           ResourceFieldLayout.CellId id, String causationId) {
         Objects.requireNonNull(witness, "physical field claim");
         Objects.requireNonNull(cycle, "observed canonical field cycle");
@@ -121,7 +122,7 @@ final class FrontierV3ResourceFieldObservation {
             throw new IllegalArgumentException("physical field claim has a foreign site, cycle or layout");
         ResourceFieldLayout layout = cycle.layout();
         ResourceFieldLayout.Cell cell = layout.requireCell(id);
-        return compare(witness, layout, id, read(level, cell, causationId), true);
+        return compare(witness, layout, id, read(level, kind, cell, causationId), true);
     }
 
     /**
@@ -129,7 +130,7 @@ final class FrontierV3ResourceFieldObservation {
      * permission to start work in that epoch: only the exact persisted pending cell may be
      * inspected and confirmed, and the current canonical layout still owns its geometry.
      */
-    static Review observePendingPredecessor(ServerLevel level, ResourceFieldCycle current,
+    static Review observePendingPredecessor(ServerLevel level, ResourceSiteKind kind, ResourceFieldCycle current,
                                             FrontierV3ResourceFieldWitness predecessor,
                                             ResourceFieldLayout.CellId id, String causationId) {
         Objects.requireNonNull(current, "current canonical field cycle");
@@ -140,7 +141,7 @@ final class FrontierV3ResourceFieldObservation {
                 || current.pendingPlayerBreaks().containsKey(id))
             throw new IllegalArgumentException("field predecessor recovery lacks its exact pending owner or current layout");
         ResourceFieldLayout layout = current.layout();
-        return compare(predecessor, layout, id, read(level, layout.requireCell(id), causationId), true);
+        return compare(predecessor, layout, id, read(level, kind, layout.requireCell(id), causationId), true);
     }
 
     private static Review compare(FrontierV3ResourceFieldWitness witness, ResourceFieldLayout layout,

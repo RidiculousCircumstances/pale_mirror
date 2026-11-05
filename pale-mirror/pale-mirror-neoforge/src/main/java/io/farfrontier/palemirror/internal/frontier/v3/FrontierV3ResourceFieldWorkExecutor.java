@@ -62,7 +62,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
             return Result.conflict("foreign-cell-with-owned-outcome");
         Optional<ResourceFieldCellTransition> transition = cycle.physicalWorkTransition(id);
         if (transition.isEmpty()) {
-            var observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
+            var observed = FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(job.siteId()).kind(), cycle, witness, id, cause(job, cycle, id));
             if (observed.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
             if (outcome == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
                 if (!(observed.reading() instanceof FrontierV3ResourceFieldObservation.Foreign foreign)
@@ -81,7 +81,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
         if (retained.pending().filter(pending -> pending.canonicalSource().isPresent()).isPresent())
             return projectPredecessor(level, runtime, job, id);
         if (retained.pending().isEmpty()) {
-            var before = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
+            var before = FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(job.siteId()).kind(), cycle, witness, id, cause(job, cycle, id));
             if (before.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
             if (before.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
                 return observeInterruption(level, runtime, job, id, before, "cell-before-");
@@ -96,7 +96,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 var extraction = extractionPort(level, runtime, state, lease, worker, job).prepare(
                         cause(job, cycle, id), state.actorExecutions().current(
                             io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()), cell.crop(),
-                        io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.definition(state.bootstrap(), cell.crop()));
+                        io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.definition(state.bootstrap(), state.resourceSite(job.siteId()), cell.crop()));
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
                         lease.members().getFirst().entityId(), ResourceSiteHarvestCargo.handEpoch(state, job, lease),
                         ResourceSiteHarvestCargo.quantity(state, job), extraction);
@@ -125,7 +125,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 || pending.handEffect().isPresent() != (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED))
             return Result.conflict("pending-cell-cause-or-transition-mismatch;expectedCause=" + cause(job, cycle, id)
                     + ";actualCause=" + pending.causationId() + ";cell=" + id.value());
-        var review = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
+        var review = FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(job.siteId()).kind(), cycle, witness, id, cause(job, cycle, id));
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
         var operation = FrontierV3FieldWorkOperation.apply(level, state, lease, job, worker, cell, pending,
                 extractionPort(level, runtime, state, lease, worker, job), () -> {
@@ -151,7 +151,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
                                      ResourceSiteHarvestJob job, ResourceFieldCycle.WorkOutcome outcome, int count) {
         var observed = FrontierV3ActorHandObservation.observe(level, state, lease, job);
         if (count == 0 && observed.disposition() != FrontierV3ActorHandObservation.Disposition.EMPTY
-                || count > 0 && (observed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
+                || count > 0 && (observed.disposition() != FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT
                 || observed.stack().orElseThrow().quantity() != count))
             return Result.conflict("hand-result-" + observed.disposition().name().toLowerCase(java.util.Locale.ROOT));
         return Result.ready(outcome, new ResourceSiteHarvestProgressed.HandObservation(

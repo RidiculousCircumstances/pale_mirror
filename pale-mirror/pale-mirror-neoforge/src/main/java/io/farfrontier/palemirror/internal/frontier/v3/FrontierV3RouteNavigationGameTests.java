@@ -26,6 +26,35 @@ import java.util.stream.IntStream;
 public final class FrontierV3RouteNavigationGameTests {
     private FrontierV3RouteNavigationGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void supportedMinorDescentCentersWithoutSweepingThroughItsOldFloor(GameTestHelper helper) {
+        floor(helper); var level = helper.getLevel(); var target = anchor(helper, 4, 4);
+        level.setBlock(helper.absolutePos(new BlockPos(4, 0, 4)), Blocks.DIRT_PATH.defaultBlockState(), 3);
+        var actor = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.25D, 1.0D, 4.37D));
+        var feet = new BlockPos(target.x(), target.y() + 1, target.z());
+        var accepted = new net.minecraft.world.level.pathfinder.Path(
+                List.of(new net.minecraft.world.level.pathfinder.Node(feet.getX(), feet.getY(), feet.getZ())), feet, true);
+        var scope = new FrontierV3NavigationScope.ObservedWorld(bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            helper.assertTrue(!FrontierV3SemanticMovement.arrived(level, actor, target), "edge contact is not centred arrival");
+            var rejection = FrontierV3NativeStationAlignment.rejection(level, actor, target, accepted, scope);
+            helper.assertTrue(rejection.isEmpty(), "full support to a one-sixteenth lower path is a legal native bridge: " + rejection);
+            level.setBlock(feet, Blocks.STONE.defaultBlockState(), 3);
+            helper.assertTrue(!FrontierV3NativeStationAlignment.safe(level, actor, target, accepted, scope),
+                    "a real obstruction still refuses endpoint steering");
+            level.setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
+            var goal = FrontierV3GoalNavigation.Goal.routed(order(target), List.of(target), bounds(helper));
+            for (int turn = 0; turn < 180 && !FrontierV3SemanticMovement.arrived(level, actor, target); turn++) {
+                FrontierV3GoalNavigation.pursue(level, actor, goal);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(actor); actor.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, actor, target),
+                    "the ordinary navigator must physically complete the small descent: " + actor.position());
+            FrontierV3GoalNavigation.stop(actor); actor.discard(); helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "pale_mirror_visuals",
             template = "test/navigation_frontier", timeoutTicks = 110)
     public static void incompleteNativePathApproachesWithoutCompletingAnUnreachableGoal(GameTestHelper helper) {

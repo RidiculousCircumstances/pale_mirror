@@ -34,6 +34,11 @@ final class PopulationEconomicInputChanges implements EconomicInputChangePort {
             if (old != null) sink.changed(old.homeSettlementId(), COMMITMENT, Set.of());
             if (next != null) sink.changed(next.homeSettlementId(), COMMITMENT, Set.of());
         });
+        // In unified planning, staffing is a tactical OUTPUT of the plan.
+        // Long-run population/capability/schedule inputs are collected above;
+        // invalidating the plan for its own roster prevents the following
+        // admitted task from ever seeing a current production grant.
+        if (after.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().isPresent()) return;
         var previous = before.strategicPlans().decisionAuthorities().authorities();
         var current = after.strategicPlans().decisionAuthorities().authorities();
         EconomicInputChangePort.difference(previous, current, (old, next) -> {

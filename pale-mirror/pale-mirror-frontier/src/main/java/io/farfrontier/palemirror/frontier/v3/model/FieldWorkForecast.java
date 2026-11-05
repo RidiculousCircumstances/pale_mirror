@@ -11,6 +11,7 @@ final class FieldWorkForecast {
     private static final ImmutableKeyedInputView<SubjectId, List<ResidentProfile>> VALUATION_WORKERS =
             new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);
     private final FrontierBootstrap bootstrap;
+    private final ResourceSiteKind kind;
     private final SettlementDailySchedule schedule;
     private final List<BlockPosition> stores;
     private final long sowTicks, harvestTicks, distanceFactor;
@@ -25,14 +26,19 @@ final class FieldWorkForecast {
     }
     FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers, boolean equipmentBacked,
             List<BlockPosition> storagePositions) {
+        this(state, home, workers, state.bootstrap().ruleset().fields().cultivationCrop(), equipmentBacked, storagePositions);
+    }
+    FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers,
+            ResourceSiteKind kind, boolean equipmentBacked, List<BlockPosition> storagePositions) {
+        this.kind = Objects.requireNonNull(kind);
         bootstrap = state.bootstrap(); schedule = state.humanPopulation().schedule(home);
-        sowTicks = duration(state, workers, WorkOperation.SOW, equipmentBacked, null, 1000);
-        harvestTicks = duration(state, workers, WorkOperation.HARVEST, equipmentBacked, FieldHarvestExtraction.DEFINITION.toolRequirement(), 1000);
+        sowTicks = duration(state, kind, workers, WorkOperation.SOW, equipmentBacked, null, 1000);
+        harvestTicks = duration(state, kind, workers, WorkOperation.HARVEST, equipmentBacked, kind.crop().harvestTool(), 1000);
         var stages = new HashMap<PreparationCost, Long>();
         var preparations = new HashMap<ResourceFieldCycle.Soil, Long>();
         for (var soil : ResourceFieldCycle.Soil.catalog().soils()) if (soil.untilled()) {
             long total = ResourceFieldCycle.Soil.catalog().path(soil).stream().mapToLong(step -> stages.computeIfAbsent(new PreparationCost(step.operation(), step.tool(), step.effortPermille()),
-                    key -> duration(state, workers, key.operation(), equipmentBacked, key.tool(), key.effortPermille()))).reduce(0L, Math::addExact);
+                    key -> duration(state, kind, workers, key.operation(), equipmentBacked, key.tool(), key.effortPermille()))).reduce(0L, Math::addExact);
             preparations.put(soil, total);
         }
         preparationTicks = Map.copyOf(preparations);
@@ -41,14 +47,17 @@ final class FieldWorkForecast {
                 .map(rules -> rules.provisionalDistancePermille()).orElse(1000);
     }
     static List<ResidentProfile> workers(FrontierWorldState state, SubjectId home) {
-        var definition = state.bootstrap().ruleset().workCatalog().require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST);
+        return workers(state, home, state.bootstrap().ruleset().fields().cultivationCrop());
+    }
+    static List<ResidentProfile> workers(FrontierWorldState state, SubjectId home, ResourceSiteKind kind) {
+        var definition = state.bootstrap().ruleset().workCatalog().require(kind.resourceKind(), WorkOperation.HARVEST);
         var assignments = HumanAssignmentProjection.compile(state);
         var candidates = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.AGRICULTURE, definition.capability(),
                 r -> assignments.assignment(r.id()).kind() == HumanAssignmentKind.FIELD_HARVEST).stream()
                 .filter(r -> !assignments.assignment(r.id()).active()
                         || assignments.assignment(r.id()).kind() == HumanAssignmentKind.FIELD_HARVEST).toList();
         var equipment = EquipmentProductiveCapacity.items(state, home, candidates.stream().map(ResidentProfile::id)
-                .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+                .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements(kind));
         return candidates.stream().limit(equipment.size()).toList();
     }
     /** Shared read boundary for permitted-field wear and renewal timing. No
@@ -61,9 +70,10 @@ final class FieldWorkForecast {
         var workers = permissions.workers(ResidentWorkKind.AGRICULTURE).stream()
                 .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE)
                 .map(id -> state.humanPopulation().resident(id)).toList();
-        var stores = storagePositions(state, home);
+        var stores = state.bootstrap().ruleset().fields().crops().stream()
+                .flatMap(policy -> storagePositions(state, home, policy.kind()).stream()).distinct().toList();
         var equipment = workers.isEmpty() ? List.<ExactItemStack>of() : EquipmentProductiveCapacity.items(state, home,
-                workers.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+                workers.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements(state));
         var sites = state.resourceSites(); var local = sites.siteIdsIn(home);
         var keys = new ArrayList<Object>();
         Collections.addAll(keys, permissions, state.humanPopulation().schedule(home), local);
@@ -76,21 +86,29 @@ final class FieldWorkForecast {
         return new PlanningInputs(workers, stores, keys);
     }
     static List<BlockPosition> storagePositions(FrontierWorldState state, SubjectId home) {
+        return storagePositions(state, home, state.bootstrap().ruleset().fields().cultivationCrop());
+    }
+    static List<BlockPosition> storagePositions(FrontierWorldState state, SubjectId home, ResourceSiteKind kind) {
         var participant = state.companies().goodsTrade().participants().participants().get(home);
-        return GoodsParticipantStorage.positions(state, participant, FieldHarvestExtraction.ITEM);
+        return GoodsParticipantStorage.positions(state, participant, kind.resourceKind());
     }
     static List<ResidentProfile> valuationWorkers(FrontierWorldState state, SubjectId home) {
-        return VALUATION_WORKERS.get(state.bootstrap(), home, SupplyLabourCapacity.potentialInputs(state, home), () -> {
-            var definition = state.bootstrap().ruleset().workCatalog().require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST);
+        return valuationWorkers(state, home, state.bootstrap().ruleset().fields().cultivationCrop());
+    }
+    static List<ResidentProfile> valuationWorkers(FrontierWorldState state, SubjectId home, ResourceSiteKind kind) {
+        var keys = new ArrayList<>(SupplyLabourCapacity.potentialInputs(state, home)); keys.add(kind);
+        return VALUATION_WORKERS.get(state.bootstrap(), home, keys, () -> {
+            var definition = state.bootstrap().ruleset().workCatalog().require(kind.resourceKind(), WorkOperation.HARVEST);
             return SupplyLabourCapacity.potential(state, home, ResidentWorkKind.AGRICULTURE, definition.capability());
         });
     }
     RenewableWorkForecast.Source source(FieldSupplyCapacity.Cell cell) {
+        if (cell.kind() != kind) throw new IllegalArgumentException("crop forecast received a different field crop");
         var condition = cell.condition();
         boolean planted = condition.crop() == ResourceFieldCycle.Crop.MATURE || condition.crop() == ResourceFieldCycle.Crop.GROWING;
         long growthStage = Math.multiplyExact(FieldAgronomy.growthPeriods(bootstrap, cell.crop()),
                 bootstrap.ruleset().cadence().resourceGrowthStageInterval());
-        int yield = FieldAgronomy.yield(bootstrap, cell.crop());
+        int yield = FieldAgronomy.yield(bootstrap, kind, cell.crop());
         long travel = travel(cell.crop(), yield);
         long sow = Math.addExact(sowTicks, travel);
         return new RenewableWorkForecast.Source(yield,
@@ -101,7 +119,8 @@ final class FieldWorkForecast {
     }
     /** Same per-unit labour used by the dated source, without simulating growth or releases. */
     long unitLabour(FieldSupplyCapacity.Cell cell) {
-        int yield = FieldAgronomy.yield(bootstrap, cell.crop());
+        if (cell.kind() != kind) throw new IllegalArgumentException("crop valuation received a different field crop");
+        int yield = FieldAgronomy.yield(bootstrap, kind, cell.crop());
         long travel = travel(cell.crop(), yield);
         long sow = Math.addExact(sowTicks, travel);
         boolean planted = cell.condition().crop() == ResourceFieldCycle.Crop.MATURE
@@ -116,16 +135,16 @@ final class FieldWorkForecast {
         return Math.addExact(source.remainingGrowth(), SupplyPlanningWindow.completionDelay(schedule,
                 Math.addExact(source.preparation(), source.harvest())));
     }
-    private static long duration(FrontierWorldState state, List<ResidentProfile> workers, WorkOperation operation, boolean equipmentBacked,
+    private static long duration(FrontierWorldState state, ResourceSiteKind kind, List<ResidentProfile> workers, WorkOperation operation, boolean equipmentBacked,
             io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement requirement, int effortPermille) {
-        var catalog = state.bootstrap().ruleset().workCatalog(); var definition = catalog.require(FieldHarvestExtraction.ITEM, operation);
+        var catalog = state.bootstrap().ruleset().workCatalog(); var definition = catalog.require(kind.resourceKind(), operation);
         int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition, catalog))
                 .min().orElse(catalog.minSpeedPermille());
         if (requirement != null && !workers.isEmpty()) {
             final int workerSpeed = speed;
             if (equipmentBacked) {
                 var equipment = EquipmentProductiveCapacity.items(state, workers.getFirst().settlementId(), workers.stream().map(ResidentProfile::id)
-                        .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+                        .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements(kind));
                 speed = equipment.stream().mapToInt(item -> io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
                         workerSpeed, state.bootstrap().ruleset().tools(), item, requirement)).min().orElse(speed);
             } else speed = state.bootstrap().ruleset().tools().definitions().values().stream().filter(tool -> tool.supports(requirement))

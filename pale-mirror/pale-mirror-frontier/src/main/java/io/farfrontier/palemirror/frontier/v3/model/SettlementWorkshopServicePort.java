@@ -18,7 +18,11 @@ public final class SettlementWorkshopServicePort {
     public static SettlementWorkshopServicePort forWorkshop(SettlementStructure workshop) {
         Objects.requireNonNull(workshop);
         if (!ProductionFacilityLayout.supports(workshop.kind())) throw new IllegalArgumentException("facility has no production service port");
-        var layout = BuildingSpatialPlan.of(workshop); var workplace = layout.definition().primaryWorkplaceDefinition();
+        return forWorkplace(workshop, new ProductionStationSpec.WorkplaceId(workshop.definition().primaryWorkplaceDefinition().id()));
+    }
+    public static SettlementWorkshopServicePort forWorkplace(SettlementStructure workshop, ProductionStationSpec.WorkplaceId workplaceId) {
+        var layout = BuildingSpatialPlan.of(workshop);
+        var workplace = Objects.requireNonNull(layout.definition().workplaces().get(workplaceId.value()), "unknown declared workplace");
         return new SettlementWorkshopServicePort(workshop.settlementId(), layout.primaryEntrance(),
                 layout.placement().support(workplace.input()), layout.placement().support(workplace.worker()));
     }

@@ -24,7 +24,7 @@ final class FrontierV3ProductionStationAdoption {
         }
         for (var home : state.bootstrap().settlements()) for (var facility : home.structures()) {
             if (!ProductionFacilityLayout.supports(facility.kind()) || state.structureConditions().get(facility.id()) != StructureCondition.INTACT) continue;
-            var placement = ProductionFacilityLayout.station(facility);
+            for (var placement : ProductionFacilityLayout.stations(facility)) {
             var p = placement.socketSurface().support().offset(0, 1, 0); var pos = new BlockPos(p.x(), p.y(), p.z());
             if (level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null
                     || state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed)
@@ -35,7 +35,7 @@ final class FrontierV3ProductionStationAdoption {
                     || !bench.getPersistentData().getString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY).isBlank()) continue;
             var containerId = new SubjectId("container:installed-" + UUID.randomUUID());
             var spec = new ProductionStationSpec(new SubjectId("station:installed-" + UUID.randomUUID()), facility.id(), containerId,
-                    placement.equipmentType(), placement.capability(), placement.workerStation(), placement.socketSurface(), placement.facing(),
+                    placement.equipmentType(), placement.capability(), placement.workplaceId(), placement.workerStation(), placement.socketSurface(), placement.facing(),
                     java.util.stream.IntStream.range(0, ProductionBenchBlockEntity.INPUT_COUNT).boxed().toList(), ProductionBenchBlockEntity.OUTPUT,
                     placement.fuelSlot(), placement.maintenanceSlot());
             var slots = new HashMap<Integer, FungibleContainerLayout.Stack>(); var lots = new ArrayList<FixedContainerAdoption.PlacedResource>(); boolean admissible = true;
@@ -60,6 +60,7 @@ final class FrontierV3ProductionStationAdoption {
                 finish(level, runtime, runtime.decodedState().orElseThrow(), record); return;
             }
         }
+    }
     }
     private static void finish(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, ContainerRecord record) {
         var physical = FrontierV3PhysicalContainer.inspect(level, state, record.id()).orElse(null);

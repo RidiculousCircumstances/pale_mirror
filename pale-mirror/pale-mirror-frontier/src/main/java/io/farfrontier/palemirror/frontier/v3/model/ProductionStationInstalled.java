@@ -22,8 +22,10 @@ public record ProductionStationInstalled(ContainerRecord container, BlockPositio
                 () -> new IllegalArgumentException("installed machine has no declared owning facility"));
         var supported = SettlementStructureFootprint.supportSurfaces(facility);
         ProductionPlaces.require(spec.capability(), facility);
-        var declared = ProductionFacilityLayout.station(facility);
-        if (!declared.equipmentType().equals(spec.equipmentType()) || !declared.facing().equals(spec.facing())
+        var declared = ProductionFacilityLayout.station(facility, spec.workplaceId());
+        if (declared.capability() != spec.capability() || !declared.inputSlots().equals(spec.inputSlots())
+                || declared.outputSlot() != spec.outputSlot() || !declared.fuelSlot().equals(spec.fuelSlot())
+                || !declared.maintenanceSlot().equals(spec.maintenanceSlot()) || !declared.equipmentType().equals(spec.equipmentType()) || !declared.facing().equals(spec.facing())
                 || !declared.socketSurface().equals(spec.socketSurface()) || !declared.workerStation().equals(spec.workerStation()))
             throw new IllegalArgumentException("installed machine differs from the declared equipment mount");
         if (!subject.equals(spec.id()) || state.productionStations().machines().containsKey(subject)
@@ -32,7 +34,7 @@ public record ProductionStationInstalled(ContainerRecord container, BlockPositio
                 || !supported.contains(spec.socketSurface()) || !supported.contains(spec.workerStation())
                 || !state.bootstrap().ruleset().production().requireEquipment(spec.equipmentType()).capabilities().contains(spec.capability())
                 || state.inventory().containers().values().stream().flatMap(record -> record.productionStation().stream())
-                    .anyMatch(prior -> prior.id().equals(spec.id()) || prior.facilityId().equals(spec.facilityId())
+                    .anyMatch(prior -> prior.id().equals(spec.id()) || prior.facilityId().equals(spec.facilityId()) && prior.workplaceId().equals(spec.workplaceId())
                         && state.inventory().surfaces().get(prior.containerId()).status() != ContainerSurfaceStatus.RETIRED))
             throw new IllegalArgumentException("machine installation has foreign instance/facility/socket or competing equipment");
         for (var value : contents) {

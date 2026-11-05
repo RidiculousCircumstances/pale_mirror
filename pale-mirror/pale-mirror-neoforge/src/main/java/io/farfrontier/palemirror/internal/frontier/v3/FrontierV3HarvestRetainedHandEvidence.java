@@ -18,7 +18,7 @@ final class FrontierV3HarvestRetainedHandEvidence {
             var retained = owner.witness().cell(cell.id());
             if (retained.pending().isPresent()) continue;
             var seal = retained.retiredWork().orElse(null);
-            if (seal == null || !matches(job, cycle, seal.receipt(), observed)) continue;
+            if (seal == null || !matches(job, cycle, seal.receipt(), ResourceSiteHarvestCargo.itemKind(state, job), observed)) continue;
             var hand = seal.receipt().observedHand().orElseThrow();
             // The old physical scope positively closed after acknowledging this exact
             // effect. A new/current scope or another worker's history cannot supply proof.
@@ -33,12 +33,12 @@ final class FrontierV3HarvestRetainedHandEvidence {
     }
 
     static boolean matches(ResourceSiteHarvestJob job, ResourceFieldCycle cycle,
-                           ResourceSiteHarvestProgressed receipt, FungiblePhysicalObservation.Stack observed) {
+                           ResourceSiteHarvestProgressed receipt, String expectedKind, FungiblePhysicalObservation.Stack observed) {
         return !job.hasPendingPhysicalWork() && receipt.jobId().equals(job.id())
                 && receipt.siteId().equals(job.siteId()) && receipt.epoch() == cycle.epoch()
                 && receipt.layoutRevision() == cycle.layout().revision()
                 && receipt.completedCropSlots() == job.progress().completedCropSlots()
-                && observed.itemKind().equals("minecraft:wheat")
+                && observed.itemKind().equals(expectedKind)
                 && observed.quantity() == job.undeliveredYieldQuantity()
                 && receipt.observedHand().filter(hand -> hand.quantity() > 0
                     && hand.quantity() == observed.quantity() && hand.address().equals(observed.address())

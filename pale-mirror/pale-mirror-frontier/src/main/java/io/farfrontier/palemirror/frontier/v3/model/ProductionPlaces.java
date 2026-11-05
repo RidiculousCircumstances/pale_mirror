@@ -9,6 +9,8 @@ final class ProductionPlaces {
             ProductionStationSpec.Capability.BAKING, Set.of(StructureKind.WORKSHOP),
             ProductionStationSpec.Capability.SMELTING, Set.of(StructureKind.SMELTERY),
             ProductionStationSpec.Capability.FABRICATION, Set.of(StructureKind.FORGE),
+            ProductionStationSpec.Capability.SPINNING, Set.of(StructureKind.TEXTILE_WORKSHOP),
+            ProductionStationSpec.Capability.WEAVING, Set.of(StructureKind.TEXTILE_WORKSHOP),
             ProductionStationSpec.Capability.WOODWORKING, Set.of(StructureKind.WOODSHOP));
     static void require(ProductionStationSpec.Capability capability, SettlementStructure facility) {
         var allowed = PLACES.get(capability);

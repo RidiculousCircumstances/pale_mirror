@@ -16,7 +16,7 @@ public record ResourceSiteHarvestHandRelease(SubjectId siteId, SubjectId jobId, 
         Objects.requireNonNull(observedHand, "harvest hand release observation");
         Objects.requireNonNull(sceneRelease, "harvest hand release scene");
         if (actorEpoch < 1 || !(observedHand.address() instanceof PhysicalStackAddress.ActorHand)
-                || !observedHand.itemKind().equals("minecraft:wheat")) {
+                || ResourceSiteKind.forResourceKind(observedHand.itemKind()).isEmpty()) {
             throw new IllegalArgumentException("harvest hand release needs one current wheat hand");
         }
     }

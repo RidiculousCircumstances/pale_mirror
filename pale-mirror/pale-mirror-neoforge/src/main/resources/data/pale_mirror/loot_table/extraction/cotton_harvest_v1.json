@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "pale_mirror:cotton"
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "minecraft:block_state_property",
+          "block": "pale_mirror:cotton_crop",
+          "properties": {
+            "age": "7"
+          }
+        }
+      ]
+    }
+  ]
+}

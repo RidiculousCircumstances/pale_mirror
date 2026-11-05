@@ -319,5 +319,49 @@
         ]
       }
     ]
+  },
+  {
+    "name": "textile_factory",
+    "kind": "TEXTILE_WORKSHOP",
+    "source": "craftsmanship/luxury/dyer2.blueprint",
+    "sha256": "594e4984ec9d05ffab44fb26535e8c441f250e3fc692bf508524e1896a046806",
+    "floor": 2,
+    "door": [
+      2,
+      13
+    ],
+    "front": "SOUTH",
+    "works": [
+      {
+        "id": "spinning",
+        "socket": [
+          3,
+          2,
+          11
+        ],
+        "front": "SOUTH",
+        "input": [
+          2,
+          2,
+          12
+        ],
+        "type": "pale_mirror:spinning_bench"
+      },
+      {
+        "id": "weaving",
+        "socket": [
+          4,
+          2,
+          11
+        ],
+        "front": "SOUTH",
+        "input": [
+          3,
+          2,
+          12
+        ],
+        "type": "pale_mirror:weaving_loom"
+      }
+    ]
   }
 ]

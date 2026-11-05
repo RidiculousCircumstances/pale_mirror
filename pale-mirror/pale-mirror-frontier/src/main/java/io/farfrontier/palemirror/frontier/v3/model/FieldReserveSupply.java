@@ -13,24 +13,26 @@ final class FieldReserveSupply implements ReserveSupplyPort {
         return VIEWS.get(state.bootstrap(), home, inputs.keys(), () -> project(state, home, inputs));
     }
     private static Facts project(FrontierWorldState state, SubjectId home, FieldWorkForecast.PlanningInputs inputs) {
-        boolean usable = state.resourceSites().siteIdsIn(home).stream().map(state.resourceSites()::site)
-                .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)
-                .anyMatch(site -> {
-                    var cycle = state.resourceSites().cycles().get(site.siteId());
-                    return cycle.layout().cells().stream().anyMatch(cell -> {
-                        var soil = cycle.cell(cell.id()).soil();
-                        return soil.cultivable()
-                                || soil == ResourceFieldCycle.Soil.UNKNOWN && site.growthEpoch() == 0;
-                    });
-                });
-        if (!usable) return new Facts(Map.of(), List.of(), Map.of());
-        var estimate = new FieldWorkForecast(state, home, inputs.workers(), true, inputs.stores());
-        long lead = state.resourceSites().siteIdsIn(home).stream().map(state.resourceSites()::site)
-                .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)
-                .flatMap(site -> state.resourceSites().cycle(site.siteId()).layout().cells().stream())
-                .mapToLong(cell -> estimate.lead(new FieldSupplyCapacity.Cell(cell.crop(),
-                        new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.DIRT, ResourceFieldCycle.Crop.ABSENT, 0, false, false), true)))
-                .min().orElseThrow();
-        return new Facts(Map.of(), List.of(), Map.of("minecraft:wheat", new Timing(lead, TimingBasis.LOCAL_ESTIMATE)));
+        var needs = new TreeMap<String, Need>(); var timing = new TreeMap<String, Timing>();
+        for (var policy : state.bootstrap().ruleset().fields().crops()) {
+            var kind = policy.kind();
+            if (policy.minimumStock() > 0) needs.put(kind.resourceKind(), new Need(Rate.ZERO, policy.minimumStock()));
+            if (SupplyPlanningWindow.dailyWork(state.humanPopulation().schedule(home)) == 0) continue;
+            var estimate = new FieldWorkForecast(state, home, inputs.workers(), kind, true,
+                    FieldWorkForecast.storagePositions(state, home, kind));
+            var lead = state.resourceSites().siteIdsIn(home).stream()
+                    .filter(id -> state.resourceSite(id).kind() == kind).map(state.resourceSites()::site)
+                    .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)
+                    .flatMap(site -> {
+                        var cycle = state.resourceSites().cycle(site.siteId());
+                        return cycle.layout().cells().stream().filter(cell -> cycle.cell(cell.id()).soil().cultivable()
+                                || cycle.cell(cell.id()).soil() == ResourceFieldCycle.Soil.UNKNOWN && site.growthEpoch() == 0);
+                    })
+                    .mapToLong(cell -> estimate.lead(new FieldSupplyCapacity.Cell(cell.crop(),
+                            new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.DIRT, ResourceFieldCycle.Crop.ABSENT, 0, false, false), true, kind)))
+                    .min();
+            if (lead.isPresent()) timing.put(kind.resourceKind(), new Timing(lead.getAsLong(), TimingBasis.LOCAL_ESTIMATE));
+        }
+        return new Facts(needs, List.of(), timing);
     }
 }

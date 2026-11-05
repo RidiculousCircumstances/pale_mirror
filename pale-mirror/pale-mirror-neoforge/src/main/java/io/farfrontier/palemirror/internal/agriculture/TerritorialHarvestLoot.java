@@ -24,15 +24,18 @@ public final class TerritorialHarvestLoot extends LootModifier {
     @Override protected ObjectArrayList<ItemStack> doApply(ObjectArrayList<ItemStack> loot, LootContext context) {
         var block = context.getParamOrNull(LootContextParams.BLOCK_STATE);
         var origin = context.getParamOrNull(LootContextParams.ORIGIN);
-        if (block == null || origin == null || !block.is(Blocks.WHEAT) || block.getValue(CropBlock.AGE) != 7) return loot;
+        if (block == null || origin == null || !block.hasProperty(CropBlock.AGE) || block.getValue(CropBlock.AGE) != 7) return loot;
+        var crop = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.forCropBlock(
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString()).orElse(null);
+        if (crop == null) return loot;
         var position = BlockPos.containing(origin);
         var biome = context.getLevel().getNoiseBiome(Math.floorDiv(position.getX(), 4), Math.floorDiv(position.getY(), 4),
                 Math.floorDiv(position.getZ(), 4)).unwrapKey().orElseThrow().location().toString();
         var rules = GrayboxAgriculture.rules();
         var environment = rules.biomes().get(biome);
         if (environment == null) return loot;
-        int quantity = rules.yieldInBiome("minecraft:wheat", biome);
-        for (var stack : loot) if (stack.is(Items.WHEAT)) stack.setCount(Math.multiplyExact(stack.getCount(), quantity));
+        int quantity = rules.yieldInBiome(crop.resourceKind(), biome);
+        for (var stack : loot) if (net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(crop.resourceKind())) stack.setCount(Math.multiplyExact(stack.getCount(), quantity));
         return loot;
     }
 }

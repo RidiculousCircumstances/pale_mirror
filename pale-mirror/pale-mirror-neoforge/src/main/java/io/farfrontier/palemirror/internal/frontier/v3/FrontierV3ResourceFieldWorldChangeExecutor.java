@@ -69,10 +69,10 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
             if (canonical.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                     || canonical.crop() == ResourceFieldCycle.Crop.OBSTRUCTED) continue;
             boolean cropLoss = minecraft(cell.crop()).equals(position) && replacement.is(Blocks.AIR);
-            boolean cropReplant = minecraft(cell.crop()).equals(position) && replacement.is(Blocks.WHEAT)
+            boolean cropReplant = minecraft(cell.crop()).equals(position) && FrontierV3FieldBlocks.isCrop(replacement, state.resourceSite(owner.siteId()).kind())
                     && replacement.getValue(CropBlock.AGE) == 0 && canonical.growthStage() > 0;
             boolean soilLoss = minecraft(cell.soil().support()).equals(position) && replacement.is(Blocks.DIRT);
-            boolean cropGrowth = minecraft(cell.crop()).equals(position) && replacement.is(Blocks.WHEAT)
+            boolean cropGrowth = minecraft(cell.crop()).equals(position) && FrontierV3FieldBlocks.isCrop(replacement, state.resourceSite(owner.siteId()).kind())
                     && canonical.crop() == ResourceFieldCycle.Crop.GROWING
                     && replacement.getValue(CropBlock.AGE) > canonical.growthStage();
             if (!cropLoss && !soilLoss && !cropReplant && !cropGrowth) continue;
@@ -98,12 +98,12 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                     || !claim.witness().matchesCycle(cycle)) return;
             var retained = claim.witness().cell(cell.id());
             if (retained.pending().isPresent() || retained.foreign().isPresent() || !retained.committed().equals(before)) return;
-            var reading = FrontierV3ResourceFieldObservation.read(level, cell, "world-field-prewrite");
+            var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "world-field-prewrite");
             if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned observed
                     && observed.condition().equals(before))
                     && !(reading instanceof FrontierV3ResourceFieldObservation.Unloaded
                     && FrontierV3ResourceFieldForeignChangeExecutor.matchesWritablePredecessor(
-                            level, cell, position, canonical, retained))) return;
+                            level, state.resourceSite(cycle.siteId()).kind(), cell, position, canonical, retained))) return;
             var checkpoint = runtime.canonicalState().orElseThrow();
             String cause = "world:field-cell-" + owner.siteId().value() + "-e" + cycle.epoch()
                     + "-c" + cell.id().value() + "-r" + checkpoint.revision().value() + "-prewrite";
@@ -188,7 +188,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
             if (ledger.fieldWorldChange(held.siteId(), held.cellId()) != null) continue;
             var cycle = state.resourceSites().cycle(held.siteId());
             if (cycle.epoch() != held.epoch() || cycle.layout().revision() != held.layoutRevision()) continue;
-            var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(held.cellId()),
+            var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cycle.layout().requireCell(held.cellId()),
                     held.causationId());
             if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)) continue;
             var canonical = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(held.cellId()));
@@ -228,7 +228,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         var claim = owner.witness().cell(cellId);
         var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cellId));
         if (claim.pending().isPresent() || claim.foreign().isPresent()) return false;
-        var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(cellId),
+        var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cycle.layout().requireCell(cellId),
                 "world-field-change-candidate");
         if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)) return false;
         var change = classify(before, owned.condition());
@@ -306,7 +306,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         var cycle = state.resourceSites().cycle(change.siteId());
         if (!change.matches(cycle)) return false;
         var held = state.resourceSites().pendingWorldChange(change.siteId(), change.cellId());
-        var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(change.cellId()),
+        var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cycle.layout().requireCell(change.cellId()),
                 change.observation().causationId());
         if (reading instanceof FrontierV3ResourceFieldObservation.Unloaded) return false;
         var canonical = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(change.cellId()));

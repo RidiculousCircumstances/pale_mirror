@@ -324,7 +324,7 @@ public final class FrontierReadabilityPlan {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(state, site), fieldTone(lifecycle), FrontierObjectBoard.Scope.LOCAL,
-                settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(state, site, lifecycle, atTick)));
+                settlement.displayName() + "\n" + itemName(site.kind().resourceKind()) + " FIELD\n" + fieldStateText(state, site, lifecycle, atTick)));
     }
 
     private static void addRouteNetwork(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state) {
@@ -356,12 +356,12 @@ public final class FrontierReadabilityPlan {
         if(structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
             return io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).primaryEntrance().exteriorApproach().getFirst().support().offset(0,3,0);
         int depth = switch (structure.kind()) {
-            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT, KITCHEN -> 7;
+            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, TEXTILE_WORKSHOP, DEPOT, KITCHEN -> 7;
             case HOUSING, INFIRMARY -> 6;
         };
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
             case HALL -> 5;
-            case DEPOT, WORKSHOP, SMELTERY, FORGE, WOODSHOP -> 4;
+            case DEPOT, WORKSHOP, SMELTERY, FORGE, WOODSHOP, TEXTILE_WORKSHOP -> 4;
             default -> 3;
         };
         return structure.anchor().offset(0, Math.max(2, height - 1), -depth / 2 - 1);
@@ -412,6 +412,7 @@ public final class FrontierReadabilityPlan {
             case SMELTERY -> "SMELTERY";
             case FORGE -> "FORGE";
             case WOODSHOP -> "WOODSHOP";
+            case TEXTILE_WORKSHOP -> "TEXTILE FACTORY";
             case DEPOT -> "DEPOT";
             case INFIRMARY -> "INFIRMARY";
             case KITCHEN -> "KITCHEN";
@@ -484,7 +485,7 @@ public final class FrontierReadabilityPlan {
      * not be misrepresented as the absence of a farmer who is already known to be eligible.
      */
     private static String readyFieldText(FrontierWorldState state, ResourceSite site, long atTick) {
-        if (!ProductionStockDemand.read(state, site.settlementId(), "minecraft:wheat", atTick).requested())
+        if (!ProductionStockDemand.read(state, site.settlementId(), site.kind().resourceKind(), atTick).requested())
             return "READY TO HARVEST · STOCK TARGET MET";
         long livingFarmers = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(site.settlementId()))
@@ -499,7 +500,7 @@ public final class FrontierReadabilityPlan {
                 .anyMatch(lease -> lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
         if (unknownFarmer) return "READY TO HARVEST · FARMER RECOVERY IN PROGRESS";
         if (site.layout().cells().isEmpty() || ResourceStorageSelection.newStackDestination(state, site.settlementId(),
-                "minecraft:wheat", 64, site.layout().cells().getFirst().workstation(),
+                site.kind().resourceKind(), 64, site.layout().cells().getFirst().workstation(),
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE), endpoint -> true).isEmpty())
             return "READY TO HARVEST · STORAGE UNAVAILABLE";
         boolean pendingExactHarvest = state.strategicPlans().tasksOwnedBy(site.settlementId()).stream()
@@ -659,6 +660,9 @@ public final class FrontierReadabilityPlan {
     private static String itemName(String itemKind) {
         return switch (itemKind) {
             case "minecraft:bread" -> "BREAD";
+            case "pale_mirror:cotton" -> "Cotton";
+            case "minecraft:string" -> "Thread";
+            case "pale_mirror:cloth" -> "Cloth";
             case "minecraft:wheat" -> "WHEAT";
             default -> "GOODS";
         };

@@ -45,7 +45,7 @@ public final class FrontierV3IndependentPlantGrowthGameTests {
             var acceptance = new ResourceSiteHarvestWorkAcceptance(receipt, transition);
             var pending = claimed.begin(transition, acceptance.causationId());
             level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState(), 3);
-            var complete = pending.confirm(id, FrontierV3ResourceFieldObservation.observe(level, latest, pending, id, "native:sown"));
+            var complete = pending.confirm(id, FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, latest, pending, id, "native:sown"));
             var accepted = new FrontierCanonicalState<>(new WorldId("frontier:independent-plants"), new Revision(2), new SimInstant(2), latest);
             var closed = complete.retireWork(acceptance);
             helper.assertTrue(closed.cell(id).pending().isEmpty() && closed.cell(id).committed().growthStage() == 0
@@ -57,12 +57,12 @@ public final class FrontierV3IndependentPlantGrowthGameTests {
 
             var growth = ResourceFieldCellTransition.between(site, 1, 1, id,
                     closed.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(latest.cell(id)));
-            var growthBefore = FrontierV3ResourceFieldObservation.observe(level, latest, closed, id, "native:growth-before");
+            var growthBefore = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, latest, closed, id, "native:growth-before");
             var projection = closed.beginCanonicalProjection(accepted, growth, "projection:native:independent-growth", growthBefore);
             level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 1), 3);
-            projection = projection.confirm(id, FrontierV3ResourceFieldObservation.observe(level, latest, projection, id, "native:growth-written"));
+            projection = projection.confirm(id, FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, latest, projection, id, "native:growth-written"));
             var grownAgain = new FrontierCanonicalState<>(accepted.worldId(), new Revision(3), new SimInstant(3), latest.advanceGrowth(id));
-            var currentPhysical = FrontierV3ResourceFieldObservation.observe(level, grownAgain.state(), projection, id, "native:later-growth");
+            var currentPhysical = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, grownAgain.state(), projection, id, "native:later-growth");
             var retired = projection.acknowledgeCanonicalProjection(grownAgain, id, "projection:native:independent-growth", currentPhysical);
             helper.assertTrue(retired.cell(id).pending().isEmpty() && retired.cell(id).committed().growthStage() == 1
                     && grownAgain.state().cell(id).growthStage() == 2, "late projection receipt retains actual age1 before projecting current age2");
@@ -72,13 +72,13 @@ public final class FrontierV3IndependentPlantGrowthGameTests {
                     laterBare, id, "projection:native:independent-growth", currentPhysical).write());
             var removal = ResourceFieldCellTransition.between(site, 1, 1, id,
                     closedHistorical.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(laterBare.state().cell(id)));
-            var beforeRemoval = FrontierV3ResourceFieldObservation.observe(level, laterBare.state(), closedHistorical, id, "native:bare-before");
+            var beforeRemoval = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, laterBare.state(), closedHistorical, id, "native:bare-before");
             var pendingRemoval = closedHistorical.beginCanonicalProjection(laterBare, removal, "projection:native:bare", beforeRemoval);
             level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
             var bareComplete = pendingRemoval.confirm(id, FrontierV3ResourceFieldObservation.observe(
-                    level, laterBare.state(), pendingRemoval, id, "native:bare-written"));
+                    level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, laterBare.state(), pendingRemoval, id, "native:bare-written"));
             var bareClosed = bareComplete.acknowledgeCanonicalProjection(laterBare, id, "projection:native:bare",
-                    FrontierV3ResourceFieldObservation.observe(level, laterBare.state(), bareComplete, id, "native:bare-current"));
+                    FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, laterBare.state(), bareComplete, id, "native:bare-current"));
             helper.assertTrue(bareClosed.cell(id).pending().isEmpty() && level.getBlockState(soil.above()).isAir(),
                     "a historical growth receipt closes after a newer crop removal; ingress projects bare land, not a replayed plant");
             helper.succeed();

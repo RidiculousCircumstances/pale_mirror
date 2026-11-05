@@ -49,9 +49,10 @@ final class FrontierWorldInitialState {
         });
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> ProductionFacilityLayout.supports(structure.kind())).forEach(workshop -> {
-                    ProductionStationSpec station = ProductionFacilityLayout.station(workshop);
+                    for (ProductionStationSpec station : ProductionFacilityLayout.stations(workshop)) {
                     containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), station.inventorySize(), ContainerPurpose.PRODUCTION_STATION,
                             java.util.Optional.of(station)));
+                    }
                     if (workshop.kind() == StructureKind.SMELTERY) {
                         var storage = ProductionFacilityLayout.metalStorage(workshop); containers.put(storage.id(), storage);
                     }
@@ -104,7 +105,7 @@ final class FrontierWorldInitialState {
         }
         bootstrap.settlements().forEach(settlement -> {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
-            var equipment = GrayboxToolCatalog.initialFor(bootstrap.ruleset().tools(), List.of(FieldHarvestExtraction.DEFINITION.toolRequirement()));
+            var equipment = GrayboxToolCatalog.initialFor(bootstrap.ruleset().tools(), bootstrap.ruleset().fields().crops().stream().map(policy -> policy.kind().crop().harvestTool()).distinct().toList());
             int nextSlot = 0;
             for (var definition : equipment) for (int worker = 0;
                     worker < bootstrap.ruleset().labour().entries().get(ResidentWorkKind.AGRICULTURE).targetWorkers()

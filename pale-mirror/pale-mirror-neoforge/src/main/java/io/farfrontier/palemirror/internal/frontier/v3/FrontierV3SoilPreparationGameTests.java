@@ -60,11 +60,11 @@ public final class FrontierV3SoilPreparationGameTests {
                 .begin(transition, "soil:native-first-step");
         level.setBlock(pos, Blocks.COARSE_DIRT.defaultBlockState(), 3); level.setBlock(pos.above(), Blocks.AIR.defaultBlockState(), 3);
         helper.runAtTickTime(1, () -> {
-            var before = FrontierV3ResourceFieldObservation.observe(level, cycle, pending, id, "soil:before");
+            var before = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cycle, pending, id, "soil:before");
             helper.assertTrue(before.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT, "coarse dirt is a known predecessor");
             level.setBlock(pos, FrontierV3SoilPreparation.result(level, new ItemStack(Items.IRON_HOE), pos,
                     ResourceFieldCycle.Soil.catalog().step(coarse)).orElseThrow(), 3);
-            var applied = FrontierV3ResourceFieldObservation.observe(level, cycle, pending, id, "soil:applied");
+            var applied = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cycle, pending, id, "soil:applied");
             var recovered = FrontierV3ResourceFieldWitness.read(pending.confirm(id, applied).write());
             helper.assertTrue(recovered.cell(id).committed().soil() == ResourceFieldCycle.Soil.DIRT
                             && recovered.cell(id).pending().orElseThrow().transition().before().soil() == coarse,

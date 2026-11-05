@@ -54,7 +54,7 @@ final class FrontierV3EconomyProjection {
                 "phase",job.stationWork().map(w->w.phase().name()).orElse("WAITING"),"actor",job.workerId()));
         for(var site:s.resourceSites().sites().values()) for(var work:site.harvestJobs().values())
             jobs.add(row("id",work.id(),"town",s.humanPopulation().resident(work.workerId()).settlementId(),
-                    "kind","HARVEST","item","minecraft:wheat","phase",work.progress().completedCropSlots()+"/"+work.progress().totalCropSlots(),"actor",work.workerId()));
+                    "kind","HARVEST","item",s.resourceSite(work.siteId()).kind().resourceKind(),"phase",work.progress().completedCropSlots()+"/"+work.progress().totalCropSlots(),"actor",work.workerId()));
         return row("id","snapshot:"+revision,"kind","snapshot","tick",tick,"revision",revision,"status",status,
                 "map",FrontierV3EconomyMapProjection.snapshot(s,tick),"settlements",towns,"stocks",stocks,"orders",orders,"contracts",contracts,"missions",missions,"jobs",jobs);
     }

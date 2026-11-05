@@ -34,7 +34,7 @@ final class ProductionShipmentEndpointPort implements ShipmentEndpointPort {
                 new KnownPedestrianRouteKnowledge.Passage(facility(state.bootstrap(), value), KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
     }
     @Override public List<SurfaceAnchor> declaredStations(FrontierBootstrap bootstrap, ShipmentEndpoint endpoint) {
-        var value = declaration(endpoint); var port = SettlementWorkshopServicePort.forWorkshop(facility(bootstrap, value));
+        var value = declaration(endpoint); var port = SettlementWorkshopServicePort.forWorkplace(facility(bootstrap, value), value.spec().workplaceId());
         if (!port.workStation().equals(value.station()) || !port.exteriorApproach().equals(value.exteriorApproach()))
             throw new IllegalArgumentException("production endpoint lost declared facility access geometry");
         return List.of(value.station());

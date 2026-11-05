@@ -78,5 +78,11 @@
   "journeymap.pale_mirror.mine.infected": "The primary mine is infected and no longer supplies iron.",
   "journeymap.pale_mirror.alternate": "alternate source",
   "journeymap.pale_mirror.alternate.description": "Potential alternate iron source reported by the settlement.",
-  "block.pale_mirror.woodworking_bench": "Woodworking Bench"
+  "block.pale_mirror.woodworking_bench": "Woodworking Bench",
+  "item.pale_mirror.cotton": "Cotton",
+  "item.pale_mirror.cotton_seeds": "Cotton seeds",
+  "item.pale_mirror.cloth": "Cloth",
+  "block.pale_mirror.cotton_crop": "Cotton",
+  "block.pale_mirror.spinning_bench": "Spinning bench",
+  "block.pale_mirror.weaving_loom": "Weaving loom"
 }

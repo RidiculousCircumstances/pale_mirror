@@ -89,15 +89,12 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + ",\"reviewRevision\":" + participant.reviewRevision() + ",\"reviewedAtTick\":" + participant.reviewedAtTick()
                 + ",\"assessedAtTick\":" + assessment.atTick()
                 + ",\"economicPublication\":" + publication(state, participant, checkpoint.instant().ticks(), view)
-                + ",\"financialReport\":" + FrontierV3FinancialDiagnosticJson.render(
-                        FinancialAccountReport.read(state.inventory().economics(), participant.party().id()))
-                + ",\"decision\":" + string(participant.decision()) + ",\"currentPolicy\":" + string(GoodsParticipantPolicies.require(participant)
-                    .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
+                + ",\"decision\":" + string(participant.decision()) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
                 + ",\"stocks\":[" + stocks
                 + "]"
-                + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
-                + ",\"completedSales\":[" + completedSales + "]"
+
+
                 + ",\"completedSalesScope\":\"RETAINED_PRICE_HISTORY_NOT_LIFETIME\""
                 + ",\"completedCommodities\":{" + completedCommodities + "}";
         // The common byte budget preserves current stock/planning facts when retained
@@ -105,6 +102,11 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         return FrontierV3DiagnosticDetailBudget.finish(essential, java.util.List.of(
                 new FrontierV3DiagnosticDetailBudget.Section("economy", view.supplyPlan().flatMap(plan -> plan.economy())
                     .map(FrontierV3EconomicDiagnosticJson::render).orElse("null")),
+                new FrontierV3DiagnosticDetailBudget.Section("financialReport", FrontierV3FinancialDiagnosticJson.render(
+                        FinancialAccountReport.read(state.inventory().economics(), participant.party().id()))),
+                new FrontierV3DiagnosticDetailBudget.Section("currentPolicy", string(GoodsParticipantPolicies.require(participant).explain(view, state.bootstrap().ruleset().goodsTrade()))),
+                new FrontierV3DiagnosticDetailBudget.Section("acceptedCommodities", "{" + acceptedCommodities + "}"),
+                new FrontierV3DiagnosticDetailBudget.Section("completedSales", "[" + completedSales + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("conditionalAcquisitionQuotes", counterquotes(
                     ConditionalSupplyPricing.currentQuotes(state, participant, checkpoint.instant().ticks()), checkpoint.instant().ticks())),
                 new FrontierV3DiagnosticDetailBudget.Section("conditionalProductionQuotes", counterquotes(state.companies().goodsTrade().participants()

@@ -10,6 +10,9 @@ final class FrontierV3ProductionStationDiagnosticJson {
         var record = ProductionStationEnergy.record(state, machine.stationId());
         var spec = record.productionStation().orElseThrow();
         var obligation = ProductionStationProgressObligation.describe(state, machine);
+        var facility = io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport.settlement(state.bootstrap(), record.ownerId()).structures().stream()
+                .filter(value -> value.id().equals(spec.facilityId())).findFirst().orElseThrow();
+        var approach = io.farfrontier.palemirror.frontier.v3.model.SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach();
         boolean fuelReady = state.bootstrap().ruleset().production().recipes().stream()
                 .filter(recipe -> recipe.capability() == spec.capability())
                 .anyMatch(recipe -> !recipe.requiresCombustion() || machine.burnRemaining(checkpoint.instant().ticks()) > 0);
@@ -44,6 +47,7 @@ final class FrontierV3ProductionStationDiagnosticJson {
                 + string(machine.stationId().value()) + ",\"container\":" + string(record.id().value())
                 + ",\"facility\":" + string(spec.facilityId().value()) + "},\"position\":"
                 + FrontierV3DiagnosticJson.position(state.inventory().surfaces().get(record.id()).position(state))
+                + ",\"exteriorApproach\":" + FrontierV3DiagnosticJson.position(approach.support().offset(0, 1, 0))
                 + ",\"result\":{\"remainingBurnTicks\":" + machine.burnRemaining(checkpoint.instant().ticks())
                 + ",\"fuelReady\":" + fuelReady
                 + ",\"revision\":" + machine.revision() + ",\"surface\":" + string(state.inventory().surfaces().get(record.id()).status().name())

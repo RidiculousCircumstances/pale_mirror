@@ -15,7 +15,7 @@ public final class GrayboxFieldStoragePlan {
             var station=new SurfaceAnchor(new BlockPosition(x+1,bootstrap.terrain().supportYAt(x+1,z),z));
             var id=new SubjectId("container:field-buffer-"+UUID.nameUUIDFromBytes(field.id().value().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             var endpoint=new ShipmentEndpoint.Storage(field.settlementId(),id,station,Optional.empty(),station);
-            var policy=new ResourceStoragePolicy(endpoint,new ResourceStorageFilter(false,Set.of("minecraft:wheat"),Map.of()),0,ResourceStorageRole.LOCAL_BUFFER);
+            var policy=new ResourceStoragePolicy(endpoint,new ResourceStorageFilter(false,Set.of(field.kind().resourceKind()),Map.of()),0,ResourceStorageRole.LOCAL_BUFFER);
             var record=ContainerRecord.storage(id, field.settlementId(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy);
             result.add(new Buffer(record,new ContainerSurface(id,position,ContainerSurfaceStatus.UNMATERIALIZED)));
         }

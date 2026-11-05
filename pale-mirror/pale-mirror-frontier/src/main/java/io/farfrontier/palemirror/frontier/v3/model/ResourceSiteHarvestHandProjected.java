@@ -17,8 +17,8 @@ public record ResourceSiteHarvestHandProjected(SubjectId siteId, SubjectId jobId
         if (!siteId.value().startsWith("site:") || !jobId.value().startsWith("job:site-harvest-")
                 || !actorAccountId.value().startsWith("custody:field-actor-") || actorEpoch < 1
                 || !(hand.address() instanceof PhysicalStackAddress.ActorHand)
-                || !hand.itemKind().equals("minecraft:wheat")) {
-            throw new IllegalArgumentException("field hand projection lacks its declared worker account or wheat body");
+                || ResourceSiteKind.forResourceKind(hand.itemKind()).isEmpty()) {
+            throw new IllegalArgumentException("field hand projection lacks its declared worker account or crop output body");
         }
     }
     @Override public String type() { return "frontier.resource_site_harvest_hand_projected"; }

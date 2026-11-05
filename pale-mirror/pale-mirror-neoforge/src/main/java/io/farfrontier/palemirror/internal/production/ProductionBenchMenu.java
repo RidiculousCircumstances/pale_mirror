@@ -23,7 +23,7 @@ public final class ProductionBenchMenu extends AbstractContainerMenu {
         return new ProductionBenchMenu(id, player, new SimpleContainer(PaleMirrorProductionStations.Layout.MAINTENANCE.slots()), new SimpleContainerData(6), PaleMirrorProductionStations.Layout.MAINTENANCE);
     }
     public static ProductionBenchMenu woodworkingClient(int id, Inventory player) {
-        return new ProductionBenchMenu(id, player, new SimpleContainer(PaleMirrorProductionStations.Layout.WOODWORKING.slots()), new SimpleContainerData(6), PaleMirrorProductionStations.Layout.WOODWORKING);
+        return new ProductionBenchMenu(id, player, new SimpleContainer(PaleMirrorProductionStations.Layout.HANDCRAFT.slots()), new SimpleContainerData(6), PaleMirrorProductionStations.Layout.HANDCRAFT);
     }
     public ProductionBenchMenu(int id, Inventory player, Container inventory) {
         this(id, player, inventory, new SimpleContainerData(6), inventory instanceof ProductionBenchBlockEntity bench

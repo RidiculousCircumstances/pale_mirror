@@ -50,15 +50,15 @@ public final class FrontierResourceSitePlan {
         Map<SubjectId, ResourceSite> sites = new LinkedHashMap<>();
         Set<BlockPosition> occupied = immutableReservations(bootstrap);
         var extractiveHomes = java.util.Set.copyOf(GrayboxQuarryPlan.producerSettlements(bootstrap));
-        for (Settlement settlement : bootstrap.settlements()) {
+        for (Settlement settlement : bootstrap.settlements()) for (var policy : bootstrap.ruleset().fields().crops()) {
             SettlementStructure farm = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.FARM).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("settlement lacks a farm: " + settlement.id().value()));
-            String suffix = settlement.id().value().substring("settlement:".length()); SubjectId id = new SubjectId("site:" + suffix + "-wheat-field");
+            String suffix = settlement.id().value().substring("settlement:".length()); SubjectId id = new SubjectId("site:" + suffix + "-" + policy.kind().crop().id().split(":", 2)[1] + "-field");
             ResourceFieldLayout authored = bootstrap.initialFieldLayouts().get(id);
-            int side = extractiveHomes.contains(settlement) ? bootstrap.ruleset().fields().extractiveSide()
-                    : bootstrap.ruleset().fields().ordinarySide();
-            ResourceSite site = authored == null ? availableField(bootstrap, id, settlement, farm, occupied, side)
-                    : new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, authored);
+            int side = extractiveHomes.contains(settlement) ? policy.extractiveSide()
+                    : policy.ordinarySide();
+            ResourceSite site = authored == null ? availableField(bootstrap, id, settlement, farm, occupied, side, policy.kind())
+                    : new ResourceSite(id, settlement.id(), farm.id(), policy.kind(), authored);
             if (site.layout().cells().isEmpty() || site.managedSlots().stream().anyMatch(slot -> !bootstrap.bounds().contains(slot)
                     || occupied.contains(slot)) || site.layout().cells().stream().anyMatch(cell ->
                     !bootstrap.bounds().contains(cell.workstation().support())))
@@ -97,7 +97,7 @@ public final class FrontierResourceSitePlan {
     }
 
     private static ResourceSite availableField(FrontierBootstrap bootstrap, SubjectId id, Settlement settlement, SettlementStructure farm,
-                                               Set<BlockPosition> occupied, int fieldSide) {
+                                               Set<BlockPosition> occupied, int fieldSide, ResourceSiteKind kind) {
         var bounds = bootstrap.bounds();
         // Content varies distance independently of settlement worker/route authority.
         int extent=settlement.layout().plots().values().stream().mapToInt(plot->Math.max(
@@ -112,7 +112,7 @@ public final class FrontierResourceSitePlan {
                     bootstrap.terrain().supportYAt(crop.x(), crop.z()) + 1, crop.z())).toList();
             var layout = fieldSide == 8 && bootstrap.ruleset().worldLayout().productionSites() == FrontierWorldLayout.ProductionSites.ADJACENT
                     ? initialGrayboxLayout(footprint) : initialLargeGrayboxLayout(footprint);
-            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, layout);
+            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), kind, layout);
             if (candidate.managedSlots().stream().allMatch(bounds::contains) && candidate.managedSlots().stream().noneMatch(occupied::contains)) {
                 return candidate;
             }

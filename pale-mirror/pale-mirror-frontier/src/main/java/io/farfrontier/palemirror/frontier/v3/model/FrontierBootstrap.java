@@ -33,7 +33,7 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         ruleset = Objects.requireNonNull(ruleset, "ruleset");
         terrain = Objects.requireNonNull(terrain, "terrain surface plan");
         initialFieldLayouts = Map.copyOf(Objects.requireNonNull(initialFieldLayouts, "initial field layouts"));
-        if (initialFieldLayouts.size() > settlements.size())
+        if (initialFieldLayouts.size() > Math.multiplyExact(settlements.size(), ruleset.fields().crops().size()))
             throw new IllegalArgumentException("initial field layout manifest exceeds settlement count");
         for (var entry : initialFieldLayouts.entrySet()) {
             if (!entry.getKey().value().startsWith("site:") || entry.getValue().revision() != 1)

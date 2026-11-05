@@ -15,7 +15,7 @@ import java.util.Map;
 
 /** Fresh-world field geometry belongs to the immutable bootstrap header, not a recovered guess. */
 final class InitialFieldLayoutManifestCodec {
-    private static final int MAX_SITES = 12;
+    private static final int MAX_SITES = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteState.MAX_SITES;
 
     private InitialFieldLayoutManifestCodec() { }
 

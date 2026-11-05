@@ -435,7 +435,7 @@ class FrontierV3ResourceFieldWitnessTest {
                 layout, Map.of(FIRST, RIPE, SECOND, PLANTED)));
         assertThrows(IllegalArgumentException.class, () -> original.beginHarvest(transition, "farmer:paired:1", hand,
                 review(original, layout, FIRST, RIPE),
-                FrontierV3ActorHandObservation.classify(actor, body, "minecraft:wheat", 36)),
+                FrontierV3ActorHandObservation.classify(actor, body, "minecraft:wheat", "minecraft:wheat", 36)),
                 "predicted predecessor values cannot start an irreversible paired physical effect");
         var pendingTag = original.begin(transition, "farmer:paired:1").write();
         var handTag = new CompoundTag();
@@ -451,10 +451,10 @@ class FrontierV3ResourceFieldWitnessTest {
         var recovered = FrontierV3ResourceFieldWitness.read(pendingTag);
         assertEquals(hand, recovered.cell(FIRST).pending().orElseThrow().handEffect().orElseThrow());
         assertThrows(IllegalArgumentException.class, () -> recovered.confirmHand(FIRST,
-                FrontierV3ActorHandObservation.classify(actor, body, "minecraft:wheat", 37)),
+                FrontierV3ActorHandObservation.classify(actor, body, "minecraft:wheat", "minecraft:wheat", 37)),
                 "a caller-supplied wheat count cannot substitute for real world observation");
         assertThrows(IllegalArgumentException.class, () -> recovered.confirmHand(FIRST,
-                FrontierV3ActorHandObservation.classify(actor, body, "minecraft:wheat", 36)),
+                FrontierV3ActorHandObservation.classify(actor, body, "minecraft:wheat", "minecraft:wheat", 36)),
                 "a hand observation must not close before the crop removal");
         assertThrows(IllegalArgumentException.class, () -> recovered.confirm(FIRST, review(recovered, layout, FIRST, PLANTED)),
                 "the correct synthetic crop terminal is not a physical receipt either");

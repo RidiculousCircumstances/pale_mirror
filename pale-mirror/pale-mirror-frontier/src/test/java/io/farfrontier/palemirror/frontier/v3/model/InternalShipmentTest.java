@@ -188,9 +188,9 @@ class InternalShipmentTest {
             assertFalse(ShipmentStorageRetargeted.retainedAvailable(state, shipment));
             assertTrue(ShipmentStorageRetargeted.eligible(state, shipment).isEmpty(), "absence waits without discarding in-flight fuel");
             var spec = new ProductionStationSpec(new SubjectId("station:resupplied-machine"), old.spec().facilityId(),
-                    new SubjectId("container:resupplied-machine"), old.spec().equipmentType(), old.spec().capability(),
-                    old.station(), old.spec().socketSurface(), old.spec().facing(), 0, 1, 2);
-            var record = new ContainerRecord(spec.containerId(), old.settlementId(), 3, ContainerPurpose.PRODUCTION_STATION,
+                    new SubjectId("container:resupplied-machine"), old.spec().equipmentType(), old.spec().capability(), old.spec().workplaceId(),
+                    old.station(), old.spec().socketSurface(), old.spec().facing(), old.spec().inputSlots(), old.spec().outputSlot(), old.spec().fuelSlot(), old.spec().maintenanceSlot());
+            var record = new ContainerRecord(spec.containerId(), old.settlementId(), spec.inventorySize(), ContainerPurpose.PRODUCTION_STATION,
                     Optional.of(spec), Optional.empty());
             state = new ProductionStationInstalled(record, position, List.of()).apply(state, spec.id(), BakeryStationInstallation::installed);
             state = state.withInventory(state.inventory().withSurfaceStatus(spec.containerId(), ContainerSurfaceStatus.ACTIVE));

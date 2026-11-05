@@ -16,19 +16,19 @@ class FrontierV3ActorHandObservationTest {
     @Test
     void onlyBoundedWheatCanBecomeAnExactActorOffhandObservation() {
         assertEquals(FrontierV3ActorHandObservation.Disposition.EMPTY,
-                FrontierV3ActorHandObservation.classify(FARMER, BODY, "", 0).disposition());
+                FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", "", 0).disposition());
         assertEquals(FrontierV3ActorHandObservation.Disposition.FOREIGN_ITEM,
-                FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:iron_hoe", 1).disposition());
-        var wheat = FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", 37);
-        assertEquals(FrontierV3ActorHandObservation.Disposition.WHEAT, wheat.disposition());
+                FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", "minecraft:iron_hoe", 1).disposition());
+        var wheat = FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", "minecraft:wheat", 37);
+        assertEquals(FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT, wheat.disposition());
         var stack = wheat.stack().orElseThrow();
         assertEquals(new PhysicalStackAddress.ActorHand(FARMER, BODY), stack.address());
         assertEquals("minecraft:wheat", stack.itemKind());
         assertEquals(37, stack.quantity());
         assertEquals(FrontierV3ActorHandObservation.Disposition.FOREIGN_ITEM,
-                FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", 37, false).disposition(),
+                FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", "minecraft:wheat", 37, false).disposition(),
                 "wheat with foreign components is not the farmer's ordinary fungible cargo");
-        assertTrue(FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", 65)
+        assertTrue(FrontierV3ActorHandObservation.classify(FARMER, BODY, "minecraft:wheat", "minecraft:wheat", 65)
                 .stack().isEmpty(), "one physical hand cannot prove an overfull harvest part");
     }
 }

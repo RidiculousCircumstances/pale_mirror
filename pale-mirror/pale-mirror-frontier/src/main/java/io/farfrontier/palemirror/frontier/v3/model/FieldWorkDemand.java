@@ -13,7 +13,7 @@ public final class FieldWorkDemand {
             matureWork = true;
         }
         return matureWork && ProductionStockDemand.read(state, site.settlementId(),
-                FieldHarvestExtraction.ITEM, atTick).requested();
+                site.kind().resourceKind(), atTick).requested();
     }
 
     public static boolean allowed(ResourceFieldCycle cycle, ResourceFieldLayout.CellId cell, boolean harvestDemand) {

@@ -85,7 +85,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             // Player edits may displace a future output slot. Do not prepare an
             // effect against it; the field scene yields for destination selection.
             if (!ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job)) continue;
-            if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
+            if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT
                     || hand.stack().orElseThrow().quantity() != quantity || quantity > 64) continue;
             var account = state.inventory().fungibleResources().accounts().get(job.actorAccountId());
             var binding = state.inventory().fungibleResources().bindings().values().stream()
@@ -127,7 +127,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             // work never crossed RUNNING in that case, but delivery still needs a durable
             // running boundary before its first non-replayable chest/hand effect.
             if (startRunningAtReturn(runtime, job, scene, intent.status())) return;
-            String after = futureFingerprint(state, depot, job.outputSlot().slot(), quantity);
+            String after = futureFingerprint(state, depot, job.outputSlot().slot(), ResourceSiteHarvestCargo.itemKind(state, job), quantity);
             var witness = new FrontierV3ResourceSiteDeliveryWitness(job.siteId(), job.id(), job.intentId(), job.workerId(),
                     scene.members().getFirst().entityId(), scene.id(), scene.revision(), depot,
                     job.outputSlot().slot(), quantity, custody.authorityEpoch(), replica.fingerprint(), after,
@@ -256,7 +256,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         }
         var hand = FrontierV3ActorHandObservation.observe(level, state, scene, job);
         ChestState chestState = classify(state, chest.inventory(), witness.containerId(), witness.slot(), witness.quantity(), witness);
-        boolean handBefore = hand.disposition() == FrontierV3ActorHandObservation.Disposition.WHEAT
+        boolean handBefore = hand.disposition() == FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT
                 && hand.stack().orElseThrow().quantity() == witness.quantity();
         if (chestState == ChestState.FOREIGN) {
             FrontierV3ReferenceContainerCustodyExecutor.reportForeignDuringFieldDelivery(runtime, state, replica, chest);
@@ -265,7 +265,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         }
         if (hand.disposition() == FrontierV3ActorHandObservation.Disposition.FOREIGN_ITEM
                 || hand.disposition() == FrontierV3ActorHandObservation.Disposition.FOREIGN_OWNER
-                || hand.disposition() == FrontierV3ActorHandObservation.Disposition.WHEAT && !handBefore) {
+                || hand.disposition() == FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT && !handBefore) {
             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-hand-foreign");
             return true;
         }
@@ -338,6 +338,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
 
     static ChestState classify(FrontierWorldState state, Container chest, SubjectId depot,
                                        int target, int quantity, FrontierV3ResourceSiteDeliveryWitness witness) {
+        var itemKind = state.resourceSite(witness.siteId()).kind().resourceKind();
         if (target < 0 || target >= chest.getContainerSize()
                 || state.inventory().itemAt(depot, target).isPresent()
                 || ReferenceContainerCustody.expectedFungibleSlot(state, depot, target).isPresent()) return ChestState.FOREIGN;
@@ -348,8 +349,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             ItemStack stack = chest.getItem(slot);
             if (slot == target) {
                 if (stack.isEmpty()) { observed.add(ReferenceContainerCustody.ObservedSlot.empty(slot)); targetState = ChestState.BEFORE; }
-                else if (stack.is(Items.WHEAT) && stack.getCount() == quantity && plain(stack)) {
-                    observed.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, "minecraft:wheat", quantity));
+                else if (ItemStack.matches(stack, FrontierV3FungibleItemStacks.stack(itemKind, quantity))) {
+                    observed.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, itemKind, quantity));
                     targetState = ChestState.AFTER;
                 } else return ChestState.FOREIGN;
                 continue;
@@ -384,12 +385,12 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         return ItemStack.isSameItemSameComponents(stack, new ItemStack(stack.getItem(), stack.getCount()));
     }
 
-    private static String futureFingerprint(FrontierWorldState state, SubjectId depot, int target, int quantity) {
+    private static String futureFingerprint(FrontierWorldState state, SubjectId depot, int target, String itemKind, int quantity) {
         List<ReferenceContainerCustody.ObservedSlot> next = new ArrayList<>();
         int size = state.inventory().containers().get(depot).slotCount();
         var projectedSlots = ReferenceContainerCustody.expectedFungibleSlots(state, depot);
         for (int slot = 0; slot < size; slot++) {
-            if (slot == target) { next.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, "minecraft:wheat", quantity)); continue; }
+            if (slot == target) { next.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, itemKind, quantity)); continue; }
             ExactItemStack exact = state.inventory().itemAt(depot, slot).orElse(null);
             var fungible = projectedSlots.get(slot);
             next.add(exact != null ? new ReferenceContainerCustody.ObservedSlot(slot, exact.id().value(), exact.itemKind(), exact.count())

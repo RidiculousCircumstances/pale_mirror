@@ -26,7 +26,7 @@ import java.util.UUID;
 final class FrontierV3ActorHandObservation {
     private FrontierV3ActorHandObservation() { }
 
-    enum Disposition { UNAVAILABLE, FOREIGN_OWNER, EMPTY, FOREIGN_ITEM, WHEAT }
+    enum Disposition { UNAVAILABLE, FOREIGN_OWNER, EMPTY, FOREIGN_ITEM, CROP_OUTPUT }
 
     static final class Review {
         private final Disposition disposition;
@@ -47,8 +47,8 @@ final class FrontierV3ActorHandObservation {
             this.jobId = jobId;
             this.authorityEpoch = authorityEpoch;
             this.worldRead = worldRead;
-            if ((disposition == Disposition.WHEAT) != stack.isPresent())
-                throw new IllegalArgumentException("actor-hand review must retain precisely its observed wheat");
+            if ((disposition == Disposition.CROP_OUTPUT) != stack.isPresent())
+                throw new IllegalArgumentException("actor-hand review must retain precisely its observed crop output");
         }
         static Review of(Disposition disposition) {
             return new Review(disposition, Optional.empty(), null, null, null, 0, false);
@@ -70,7 +70,7 @@ final class FrontierV3ActorHandObservation {
         }
         boolean matchesQuantity(int count) {
             return worldRead && (count == 0 ? disposition == Disposition.EMPTY
-                    : disposition == Disposition.WHEAT && stack.orElseThrow().quantity() == count);
+                    : disposition == Disposition.CROP_OUTPUT && stack.orElseThrow().quantity() == count);
         }
     }
 
@@ -113,28 +113,28 @@ final class FrontierV3ActorHandObservation {
         // cargo owns OFFHAND exclusively; reading the main hand would mistake that exact
         // equipment for a conflicting fungible stack or overwrite it on a later effect.
         ItemStack held = worker.getOffhandItem();
-        return classify(job.workerId(), worker.getUUID(), held.isEmpty() ? "" : Objects.toString(BuiltInRegistries.ITEM.getKey(held.getItem()), ""),
+        return classify(job.workerId(), worker.getUUID(), ResourceSiteHarvestCargo.itemKind(state, job), held.isEmpty() ? "" : Objects.toString(BuiltInRegistries.ITEM.getKey(held.getItem()), ""),
                 held.isEmpty() ? 0 : held.getCount(), held.isEmpty() || ItemStack.isSameItemSameComponents(held,
-                        new ItemStack(Items.WHEAT, held.getCount()))).fromWorld(job.siteId(), job.id(),
+                        FrontierV3FungibleItemStacks.stack(ResourceSiteHarvestCargo.itemKind(state, job), held.getCount()))).fromWorld(job.siteId(), job.id(),
                         ResourceSiteHarvestCargo.handEpoch(state, job, lease));
     }
 
-    static Review classify(SubjectId actorId, UUID entityId, String itemKind, int count) {
-        return classify(actorId, entityId, itemKind, count, true);
+    static Review classify(SubjectId actorId, UUID entityId, String expectedKind, String itemKind, int count) {
+        return classify(actorId, entityId, expectedKind, itemKind, count, true);
     }
 
-    static Review classify(SubjectId actorId, UUID entityId, String itemKind, int count, boolean plainWheat) {
+    static Review classify(SubjectId actorId, UUID entityId, String expectedKind, String itemKind, int count, boolean plainCrop) {
         Objects.requireNonNull(actorId, "actor-hand owner");
         Objects.requireNonNull(entityId, "actor-hand body");
         Objects.requireNonNull(itemKind, "actor-hand item kind");
         var address = new PhysicalStackAddress.ActorHand(actorId, entityId);
         if (count == 0 && itemKind.isEmpty())
             return new Review(Disposition.EMPTY, Optional.empty(), address, null, null, 0, false);
-        if (!plainWheat || !"minecraft:wheat".equals(itemKind) || count < 1 || count > 64) {
+        if (!plainCrop || !expectedKind.equals(itemKind) || count < 1 || count > 64) {
             return new Review(Disposition.FOREIGN_ITEM, Optional.empty(), address, null, null, 0, false);
         }
-        return new Review(Disposition.WHEAT, Optional.of(new FungiblePhysicalObservation.Stack(
-                address, "minecraft:wheat", count)), address, null, null, 0, false);
+        return new Review(Disposition.CROP_OUTPUT, Optional.of(new FungiblePhysicalObservation.Stack(
+                address, itemKind, count)), address, null, null, 0, false);
     }
 
     /** A caller's stale lease/job pair cannot borrow the hand of a current physical body. */

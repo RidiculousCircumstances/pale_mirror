@@ -39,7 +39,7 @@
     { "type": "inspect", "view": "process", "id": "job:site-harvest-1-wheat-field-1" },
     { "type": "inspect", "view": "actor", "id": "resident:1-13" },
     { "type": "wait_until_harvest_result", "siteId": "site:1-wheat-field",
-      "intentId": "intent:site-harvest-1-wheat-field-1", "itemId": "item:site-harvest-1-wheat-field-1-wheat",
+      "intentId": "intent:site-harvest-1-wheat-field-1", "itemId": "item:site-harvest-1-wheat-field-1-yield",
       "workerId": "resident:1-13",
       "timeoutMs": 120000, "causalMilestone": "same_worker_completes_last_cell_and_depot_delivery" },
     { "type": "inspect", "view": "container", "id": "container:1-depot" }

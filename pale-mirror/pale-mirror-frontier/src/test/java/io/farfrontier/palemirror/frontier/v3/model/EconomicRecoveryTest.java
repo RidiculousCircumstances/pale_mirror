@@ -19,7 +19,7 @@ class EconomicRecoveryTest {
             if (!state.resourceSites().declarations().get(site.siteId()).settlementId().equals(home)) continue;
             var cycle = state.resourceSites().cycle(site.siteId());
             for (var cell : cycle.layout().cells()) {
-                var candidate = new FieldSupplyCapacity.Cell(cell.crop(), cycle.cell(cell.id()), cycle.sowing().cells().contains(cell.id()));
+                var candidate = new FieldSupplyCapacity.Cell(cell.crop(), cycle.cell(cell.id()), cycle.sowing().cells().contains(cell.id()), ResourceSiteKind.WHEAT_FIELD);
                 var source = estimate.source(candidate);
                 assertEquals(Math.ceilDiv(Math.addExact(source.harvest(), Math.max(source.preparation(),
                         source.renew() ? source.repeatPreparation() : 0)), source.yield()), estimate.unitLabour(candidate));

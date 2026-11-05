@@ -74,11 +74,12 @@ public final class ReferenceContainerCustody {
                 && lease.providerId().equals(PROVIDER_ID);
     }
 
-    /** A retained unresolved epoch blocks its object but never authorizes another physical write. */
+    /** Only acquired custody admits new work. CHECKPOINTED retains the old
+     * physical fence while its owner drains/renews it; it cannot grant another write. */
     public static boolean hasOperationalCustody(FrontierWorldState state, SubjectId containerId) {
         if (!hasLiveCustody(state, containerId)) return false;
         PhysicalCustodyLeaseStatus status = state.replicaCustody().custodyByScope().get(scopeId(containerId)).status();
-        return status == PhysicalCustodyLeaseStatus.ACQUIRED || status == PhysicalCustodyLeaseStatus.CHECKPOINTED;
+        return status == PhysicalCustodyLeaseStatus.ACQUIRED;
     }
 
     public static boolean hasConflict(FrontierWorldState state, SubjectId containerId) {

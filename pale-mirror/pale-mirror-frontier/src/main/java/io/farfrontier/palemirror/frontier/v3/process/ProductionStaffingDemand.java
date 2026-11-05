@@ -10,7 +10,8 @@ final class ProductionStaffingDemand {
         // recipes. A stock-only witness avoids building an unnecessary market
         // acquisition portfolio; actual work selection retains its own priority.
         boolean input = intact && BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(home), atTick).isPresent()
-                || EquipmentProductionPlanning.ready(state, home, atTick).isPresent();
+                || EquipmentProductionPlanning.ready(state, home, atTick).isPresent()
+                || AttendedStockProduction.materialBackedDemand(state, home, atTick);
         var retained = state.productionJobs().values().stream().filter(job -> job.settlementId().equals(home))
                 .map(ProductionJob::workerId).collect(java.util.stream.Collectors.toSet());
         int reserve = intact ? rules.minimumLocalStaff() : 0;

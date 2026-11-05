@@ -63,7 +63,7 @@ final class FrontierV3HarvestDeliveryOperation {
                         container.inventory(), state, witness.containerId()))) : Optional.empty());
         return FrontierV3OperationAftermath.capture(level, binding.declaration(), binding.participants(), outcome, applied,
                 () -> applied ? after(state, witness, body, container)
-                        : ItemStack.matches(body.getOffhandItem(), new ItemStack(Items.WHEAT, witness.quantity()))
+                        : ItemStack.matches(body.getOffhandItem(), FrontierV3FungibleItemStacks.stack(state.resourceSite(witness.siteId()).kind().resourceKind(), witness.quantity()))
                             && FrontierV3ResourceSiteDeliveryExecutor.classify(state, container.inventory(), witness.containerId(),
                                 witness.slot(), witness.quantity(), witness) == FrontierV3ResourceSiteDeliveryExecutor.ChestState.BEFORE);
     }

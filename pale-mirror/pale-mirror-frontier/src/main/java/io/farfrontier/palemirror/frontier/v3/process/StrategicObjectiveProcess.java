@@ -228,7 +228,7 @@ public final class StrategicObjectiveProcess {
         }
         // Storage capacity is a reversible admission condition, not a failed harvest.
         // Keep the one exact opportunity alive without creating a doomed task.
-        if (ResourceStorageSelection.newStackCandidates(state, owner, "minecraft:wheat", 64,
+        if (ResourceStorageSelection.newStackCandidates(state, owner, site.kind().resourceKind(), 64,
                 state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE)).isEmpty()) {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Rescheduled(action.id(),

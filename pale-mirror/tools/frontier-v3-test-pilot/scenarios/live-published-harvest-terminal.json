@@ -13,7 +13,7 @@
   "actions": [
     {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 436, "y": 64, "z": -10}, "settleMs": 0},
     {"type": "assert_visible_block", "position": {"x": 438, "y": 63, "z": -19}, "timeoutMs": 30000},
-    {"type": "wait_until_harvest_result", "siteId": "site:7-wheat-field", "intentId": "intent:site-harvest-7-wheat-field-1", "itemId": "item:site-harvest-7-wheat-field-1-wheat", "settlementId": "settlement:7", "workerId": "resident:7-13", "timeoutMs": 90000},
+    {"type": "wait_until_harvest_result", "siteId": "site:7-wheat-field", "intentId": "intent:site-harvest-7-wheat-field-1", "itemId": "item:site-harvest-7-wheat-field-1-yield", "settlementId": "settlement:7", "workerId": "resident:7-13", "timeoutMs": 90000},
     {"type": "inspect", "view": "field_physical", "id": "site:7-wheat-field"},
     {"type": "inspect", "view": "actor", "id": "resident:7-13"},
     {"type": "inspect", "view": "performance", "id": ""}

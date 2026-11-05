@@ -7,6 +7,8 @@ public final class StationFuelDemandComposition {
     @FunctionalInterface private interface Backing { long heat(FrontierWorldState state, ProductionStationSpec station); }
     private record Policy(Demand demand, Backing backing) { }
     private static final Map<ProductionStationSpec.Capability, Policy> OWNERS = Map.of(
+            ProductionStationSpec.Capability.SPINNING, new Policy((state, station, tick, backed) -> 0, (state, station) -> 0),
+            ProductionStationSpec.Capability.WEAVING, new Policy((state, station, tick, backed) -> 0, (state, station) -> 0),
             ProductionStationSpec.Capability.WOODWORKING, new Policy((state, station, tick, backed) -> 0, (state, station) -> 0),
             ProductionStationSpec.Capability.BAKING, new Policy(StationFuelDemandComposition::baking, StationFuelDemandComposition::workerBacking),
             ProductionStationSpec.Capability.SMELTING, new Policy(StationFuelDemandComposition::automatic, StationFuelDemandComposition::automaticBacking),

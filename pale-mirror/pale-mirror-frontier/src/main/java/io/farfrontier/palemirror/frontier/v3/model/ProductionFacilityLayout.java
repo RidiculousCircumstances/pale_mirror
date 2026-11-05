@@ -5,35 +5,57 @@ import java.util.*;
 
 /** Graybox composition of declared facility capabilities, machine sockets and optional local storage. */
 public final class ProductionFacilityLayout {
-    private static final ImmutableResultView<String, ProductionStationSpec> STATIONS =
-            new ImmutableResultView<>(SimulationCapacity.MAX_SETTLEMENTS * 4);
-    private record Definition(ProductionEquipment.Id equipment, ProductionStationSpec.Capability capability, OptionalInt maintenanceSlot) { }
-    private static final Map<StructureKind, Definition> DEFINITIONS = Map.of(
-            StructureKind.WORKSHOP, new Definition(ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING, OptionalInt.empty()),
-            StructureKind.SMELTERY, new Definition(ProductionEquipment.SMELTER, ProductionStationSpec.Capability.SMELTING, OptionalInt.empty()),
-            StructureKind.FORGE, new Definition(ProductionEquipment.FORGE, ProductionStationSpec.Capability.FABRICATION, OptionalInt.of(11)),
-            StructureKind.WOODSHOP, new Definition(ProductionEquipment.WOODWORKING, ProductionStationSpec.Capability.WOODWORKING, OptionalInt.empty()));
+    private static final ImmutableResultView<String, List<ProductionStationSpec>> STATIONS =
+            new ImmutableResultView<>(SimulationCapacity.MAX_SETTLEMENTS * 6);
+    private record Definition(ProductionStationSpec.Capability capability, OptionalInt fuelSlot, OptionalInt maintenanceSlot) { }
+    private static final Map<ProductionEquipment.Id, Definition> EQUIPMENT = Map.of(
+            ProductionEquipment.BENCH, new Definition(ProductionStationSpec.Capability.BAKING, OptionalInt.of(10), OptionalInt.empty()),
+            ProductionEquipment.SMELTER, new Definition(ProductionStationSpec.Capability.SMELTING, OptionalInt.of(10), OptionalInt.empty()),
+            ProductionEquipment.FORGE, new Definition(ProductionStationSpec.Capability.FABRICATION, OptionalInt.of(10), OptionalInt.of(11)),
+            ProductionEquipment.WOODWORKING, new Definition(ProductionStationSpec.Capability.WOODWORKING, OptionalInt.empty(), OptionalInt.empty()),
+            ProductionEquipment.SPINNING, new Definition(ProductionStationSpec.Capability.SPINNING, OptionalInt.empty(), OptionalInt.empty()),
+            ProductionEquipment.WEAVING, new Definition(ProductionStationSpec.Capability.WEAVING, OptionalInt.empty(), OptionalInt.empty()));
+    private static final Map<StructureKind, Set<ProductionEquipment.Id>> FACILITIES = Map.of(
+            StructureKind.WORKSHOP, Set.of(ProductionEquipment.BENCH), StructureKind.SMELTERY, Set.of(ProductionEquipment.SMELTER),
+            StructureKind.FORGE, Set.of(ProductionEquipment.FORGE), StructureKind.WOODSHOP, Set.of(ProductionEquipment.WOODWORKING),
+            StructureKind.TEXTILE_WORKSHOP, Set.of(ProductionEquipment.SPINNING, ProductionEquipment.WEAVING));
+    private static final Map<StructureKind, ProductionEquipment.Id> SINGLE_EQUIPMENT = Map.of(
+            StructureKind.WORKSHOP, ProductionEquipment.BENCH, StructureKind.SMELTERY, ProductionEquipment.SMELTER,
+            StructureKind.FORGE, ProductionEquipment.FORGE, StructureKind.WOODSHOP, ProductionEquipment.WOODWORKING);
     public static ProductionEquipment.Id equipmentType(StructureKind kind) {
-        return Optional.ofNullable(DEFINITIONS.get(kind)).orElseThrow(
-                () -> new IllegalArgumentException("facility has no production equipment declaration")).equipment();
+        var declared = SINGLE_EQUIPMENT.get(kind);
+        if (declared == null) throw new IllegalArgumentException("facility has no explicit single equipment declaration");
+        return declared;
     }
-    public static boolean supports(StructureKind kind) { return DEFINITIONS.containsKey(kind); }
+    public static boolean supports(StructureKind kind) { return FACILITIES.containsKey(kind); }
+    public static List<ProductionStationSpec> stations(SettlementStructure facility) {
+        return STATIONS.get(List.of(facility), "stations", () -> facility.definition().workplaces().values().stream()
+                .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Workplace::id))
+                .map(mount -> createStation(facility, mount)).toList());
+    }
     public static ProductionStationSpec station(SettlementStructure facility) {
-        return STATIONS.get(List.of(facility), "station", () -> createStation(facility));
+        var declared = stations(facility);
+        if (declared.size() != 1) throw new IllegalArgumentException("single station requested for a multi-workplace facility");
+        return declared.getFirst();
     }
-    private static ProductionStationSpec createStation(SettlementStructure facility) {
-        var definition = Optional.ofNullable(DEFINITIONS.get(facility.kind())).orElseThrow(
-                () -> new IllegalArgumentException("facility has no declared production capability"));
-        if (facility.kind() == StructureKind.WORKSHOP) return ProductionStationSpec.grayboxBakery(facility);
-        var port = SettlementWorkshopServicePort.forWorkshop(facility);
-        var mount = facility.definition().primaryWorkplaceDefinition();
-        if (!mount.equipmentType().equals(definition.equipment()))
+    public static ProductionStationSpec station(SettlementStructure facility, ProductionStationSpec.WorkplaceId workplace) {
+        var mount = facility.definition().workplaces().get(workplace.value());
+        if (mount == null) throw new IllegalArgumentException("unknown declared workplace " + workplace.value());
+        return createStation(facility, mount);
+    }
+    private static ProductionStationSpec createStation(SettlementStructure facility,
+            io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Workplace mount) {
+        if (!Objects.requireNonNull(FACILITIES.get(facility.kind()), "undeclared production facility").contains(mount.equipmentType()))
             throw new IllegalArgumentException("authored equipment differs from facility capability");
+        var definition = Objects.requireNonNull(EQUIPMENT.get(mount.equipmentType()), "undeclared equipment");
         String suffix = facility.id().value().replace(':', '-');
+        if (facility.kind() == StructureKind.WORKSHOP) suffix += "-bakery";
+        else if (facility.definition().workplaces().size() > 1) suffix += "-" + mount.id();
         return new ProductionStationSpec(new SubjectId("station:" + suffix), facility.id(),
-                new SubjectId("container:" + suffix + "-station"), definition.equipment(), definition.capability(),
-                port.workStation(), facility.placement().support(mount.socket()), facility.placement().direction(mount.facing()),
-                java.util.stream.IntStream.range(0, 9).boxed().toList(), 9, definition.capability() == ProductionStationSpec.Capability.WOODWORKING ? OptionalInt.empty() : OptionalInt.of(10), definition.maintenanceSlot());
+                new SubjectId("container:" + suffix + "-station"), mount.equipmentType(), definition.capability(),
+                new ProductionStationSpec.WorkplaceId(mount.id()), facility.placement().support(mount.worker()),
+                facility.placement().support(mount.socket()), facility.placement().direction(mount.facing()),
+                java.util.stream.IntStream.range(0, 9).boxed().toList(), 9, definition.fuelSlot(), definition.maintenanceSlot());
     }
     public static SubjectId metalStorageId(SettlementStructure facility) {
         requireSmeltery(facility); return new SubjectId("container:" + facility.id().value().replace(':', '-') + "-metals");

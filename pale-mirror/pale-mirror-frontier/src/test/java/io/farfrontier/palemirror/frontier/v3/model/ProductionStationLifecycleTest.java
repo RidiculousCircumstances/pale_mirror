@@ -53,9 +53,10 @@ class ProductionStationLifecycleTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().productionStations(state.productionStations().with(
                 new ProductionStations.Machine(original.id(), Optional.of(new FuelCombustion("minecraft:coal", 1, 1601)), Optional.empty(), 5, Optional.empty()))));
         var spec = new ProductionStationSpec(new SubjectId("station:replacement-test"), original.facilityId(), new SubjectId("container:replacement-test"),
-                original.equipmentType(), original.capability(), original.workerStation(), original.socketSurface(), original.facing(), 0, 1, 2);
+                original.equipmentType(), original.capability(), original.workplaceId(), original.workerStation(), original.socketSurface(), original.facing(), original.inputSlots(), original.outputSlot(),
+                original.fuelSlot(), original.maintenanceSlot());
         var wheat = new ResourceLot(new SubjectId("lot:replacement-input"), old.ownerId(), "minecraft:wheat", 9, "fixture:player-input", List.of());
-        var record = new ContainerRecord(spec.containerId(), old.ownerId(), 3, ContainerPurpose.PRODUCTION_STATION, Optional.of(spec), Optional.empty(),
+        var record = new ContainerRecord(spec.containerId(), old.ownerId(), spec.inventorySize(), ContainerPurpose.PRODUCTION_STATION, Optional.of(spec), Optional.empty(),
                 new FungibleContainerLayout(Map.of(0, new FungibleContainerLayout.Stack("minecraft:wheat", 9))));
         var install = new ProductionStationInstalled(record, state.inventory().surfaces().get(old.id()).position(), List.of(new FixedContainerAdoption.PlacedResource(0, wheat)));
         var active = state;

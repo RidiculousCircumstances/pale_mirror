@@ -32,7 +32,7 @@ public final class FrontierV3FieldInteractionAdmission {
             return retained.pending().isEmpty() && retained.foreign().isEmpty()
                     && retained.committed().equals(io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(
                             cycle.cell(cell.id())))
-                    && FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
+                    && FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(cycle.siteId()).kind(), cycle, owner.witness(), cell.id(),
                             "bonemeal:current-predecessor").disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT;
         }
         return true;

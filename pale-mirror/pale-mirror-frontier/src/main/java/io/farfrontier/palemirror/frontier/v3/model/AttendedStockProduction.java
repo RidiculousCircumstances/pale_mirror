@@ -6,6 +6,25 @@ import java.util.*;
 /** Institution demand/admission facts for ordinary stock recipes. Execution belongs to StationWork. */
 public final class AttendedStockProduction {
     public record Ready(ProductionRecipe recipe, SettlementStructure facility, ProductionMaterialSupply.Bundle inputs) { }
+    /** Advisory workforce potential precedes current economic permission. Staffing
+     * itself changes capacity, so it must not disappear when that plan is invalidated. */
+    public static boolean materialBackedDemand(FrontierWorldState state, SubjectId home, long tick) {
+        var catalog = state.bootstrap().ruleset().production();
+        for (var policy : catalog.stockPolicies()) {
+            var recipe = catalog.require(policy.recipeId());
+            String output = recipe.product().itemKind();
+            long acceptedTarget = state.companies().goodsTrade().participants().economicState(home).accepted()
+                    .map(plan -> plan.productionCeilings().getOrDefault(output, 0L)).orElse(0L);
+            long target = Math.max(policy.outputReserve(), acceptedTarget);
+            if (target <= ProductionStockDemand.coverage(state, home, output)) continue;
+            for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
+                var station = record.productionStation().orElseThrow();
+                if (ProductionStationSelection.usable(state, station.facilityId(), recipe.id()).isPresent()
+                        && ProductionIngredientAvailability.storedBatches(state, station, recipe) > 0) return true;
+            }
+        }
+        return false;
+    }
     public static Optional<Ready> ready(FrontierWorldState state, SubjectId home, long tick) {
         var catalog = state.bootstrap().ruleset().production();
         for (var policy : catalog.stockPolicies().stream().sorted(Comparator.comparing(value -> value.recipeId().value())).toList()) {

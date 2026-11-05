@@ -132,14 +132,14 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             var acceptedNext = new FrontierCanonicalState<>(accepted.worldId(), new Revision(6), new SimInstant(6), next);
             var witness = owner.witness();
             for (var id : ids) {
-                var before = FrontierV3ResourceFieldObservation.observe(level, next, witness, id, "batch:before-crash");
+                var before = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, next, witness, id, "batch:before-crash");
                 var transition = ResourceFieldCellTransition.between(siteId, 1, layout.revision(), id,
                         witness.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(next.cell(id)));
                 witness = witness.beginCanonicalProjection(acceptedNext, transition, "batch:prepared:" + id.value(), before);
             }
             var live = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
             ledger.replaceFieldClaim(live, live.withWitness(witness)); ledger.persist(level);
-            helper.assertTrue(FrontierV3FieldProjectionOperation.apply(level, siteId, layout.requireCell(ids.getFirst()),
+            helper.assertTrue(FrontierV3FieldProjectionOperation.apply(level, siteId, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, layout.requireCell(ids.getFirst()),
                     witness.cell(ids.getFirst()).pending().orElseThrow()).complete(), "first real operation applied before owner confirmation");
             // Restore the actual persisted pending claims: first physical effect applied, second not.
             var saved = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
@@ -182,10 +182,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                 var transition = ResourceFieldCellTransition.between(siteId, 1, layout.revision(), id,
                         prepared.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(interrupted.state().cell(id)));
                 prepared = prepared.beginCanonicalProjection(interrupted, transition, "batch:unknown:" + id.value(),
-                        FrontierV3ResourceFieldObservation.observe(level, interrupted.state(), prepared, id, "batch:unknown-before"));
+                        FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, interrupted.state(), prepared, id, "batch:unknown-before"));
             }
             ledger.replaceFieldClaim(latest, latest.withWitness(prepared)); ledger.persist(level);
-            var request = FrontierV3FieldProjectionOperation.request(level, siteId, layout.requireCell(ids.getFirst()),
+            var request = FrontierV3FieldProjectionOperation.request(level, siteId, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, layout.requireCell(ids.getFirst()),
                     prepared.cell(ids.getFirst()).pending().orElseThrow(), () -> { });
             // Inject an unknown live outcome, not a synthetic physical/canonical success.
             var unknown = FrontierV3MinecraftOperation.applyBatch(level, List.of(new FrontierV3MinecraftOperation.Request(
@@ -197,7 +197,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                     && split.advancedCells() == 1, "batch preserves conflict while its independent neighbour progresses");
             var unresolved = ((FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId)).witness();
             var check = FrontierV3ResourceFieldHandoff.inspectCells(interrupted.state(), unresolved, layout.cells(),
-                    id -> FrontierV3ResourceFieldObservation.read(level, layout.requireCell(id), "handoff:unknown-test"),
+                    id -> FrontierV3ResourceFieldObservation.read(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, layout.requireCell(id), "handoff:unknown-test"),
                     FrontierV3OperationLedger.get(level));
             var handoff = new FrontierV3HotHandoff.Review(8, List.of(check));
             helper.assertTrue(check.status() == FrontierV3HotHandoff.Status.CONFLICT && check.reason().contains(unknown.ticket().toString())
@@ -317,7 +317,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             var secondTransition = ResourceFieldCellTransition.between(siteId, 1, 1, cellId,
                     ResourceFieldPhysicalSurface.Condition.of(grown.cell(cellId)),
                     ResourceFieldPhysicalSurface.Condition.of(secondGrowth.cell(cellId)));
-            var beforeSecondGrowth = FrontierV3ResourceFieldObservation.observe(level, secondGrowth,
+            var beforeSecondGrowth = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, secondGrowth,
                     owner.witness(), cellId, "native:second-growth-before");
             ledger.replaceFieldClaim(owner, owner.withWitness(owner.witness().beginCanonicalProjection(
                     acceptedSecond, secondTransition, "projection:prepared-second", beforeSecondGrowth)));
@@ -339,14 +339,14 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             var thirdTransition = ResourceFieldCellTransition.between(siteId, 1, 1, cellId,
                     ResourceFieldPhysicalSurface.Condition.of(secondGrowth.cell(cellId)),
                     ResourceFieldPhysicalSurface.Condition.of(thirdGrowth.cell(cellId)));
-            var beforeThirdGrowth = FrontierV3ResourceFieldObservation.observe(level, thirdGrowth,
+            var beforeThirdGrowth = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, thirdGrowth,
                     owner.witness(), cellId, "native:third-growth-before");
             ledger.replaceFieldClaim(owner, owner.withWitness(owner.witness().beginCanonicalProjection(
                     acceptedThird, thirdTransition, "projection:already-written-third", beforeThirdGrowth)));
             ledger.persist(level);
             var thirdPending = ((FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId))
                     .witness().cell(cellId).pending().orElseThrow();
-            helper.assertTrue(FrontierV3FieldProjectionOperation.apply(level, siteId, layout.requireCell(cellId), thirdPending).complete(),
+            helper.assertTrue(FrontierV3FieldProjectionOperation.apply(level, siteId, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, layout.requireCell(cellId), thirdPending).complete(),
                     "third physical operation retains its native receipt before field acknowledgement");
             helper.assertTrue(FrontierV3ResourceFieldGrowthProjector.projectAccepted(level, site, acceptedThird, cellId)
                             == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED
@@ -379,7 +379,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             var acceptedMature = new FrontierCanonicalState<>(accepted.worldId(), new Revision(11), new SimInstant(11), mature);
             owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
             var harvest = mature.physicalWorkTransition(cellId).orElseThrow();
-            var lagging = FrontierV3ResourceFieldObservation.observe(level, mature, owner.witness(), cellId,
+            var lagging = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, mature, owner.witness(), cellId,
                     "native:lagging-harvest-predecessor");
             helper.assertTrue(lagging.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
                             && !lagging.matchesWorkPredecessor(owner.witness(), harvest),
@@ -388,7 +388,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED,
                     "the field owner projects the accepted maturity before any farmer effect");
             owner = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
-            var ready = FrontierV3ResourceFieldObservation.observe(level, mature, owner.witness(), cellId,
+            var ready = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, mature, owner.witness(), cellId,
                     "native:projected-harvest-predecessor");
             helper.assertTrue(ready.matchesWorkPredecessor(owner.witness(), harvest)
                             && level.getBlockState(soil.above()).getValue(CropBlock.AGE) == 7
@@ -559,7 +559,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         level.setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 5), 3);
         helper.runAtTickTime(1, () -> {
             var cell = cell(1, soil);
-            var observed = FrontierV3ResourceFieldObservation.read(level, cell, "native:loaded-cell");
+            var observed = FrontierV3ResourceFieldObservation.read(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cell, "native:loaded-cell");
             helper.assertTrue(observed instanceof FrontierV3ResourceFieldObservation.Owned owned
                             && owned.condition().soil() == ResourceFieldCycle.Soil.FARMLAND
                             && owned.condition().crop() == ResourceFieldCycle.Crop.GROWING
@@ -567,13 +567,13 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                     "loaded wheat must retain its exact growth stage without claiming yield");
 
             level.setBlock(crop, Blocks.AIR.defaultBlockState(), 3);
-            var missing = FrontierV3ResourceFieldObservation.read(level, cell, "native:crop-removed");
+            var missing = FrontierV3ResourceFieldObservation.read(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cell, "native:crop-removed");
             helper.assertTrue(missing instanceof FrontierV3ResourceFieldObservation.Owned owned
                             && owned.condition().crop() == ResourceFieldCycle.Crop.ABSENT,
                     "one missing crop is a local owned-state observation, not field destruction");
 
             level.setBlock(crop, Blocks.STONE.defaultBlockState(), 3);
-            var foreign = FrontierV3ResourceFieldObservation.read(level, cell, "native:foreign-crop");
+            var foreign = FrontierV3ResourceFieldObservation.read(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cell, "native:foreign-crop");
             helper.assertTrue(foreign instanceof FrontierV3ResourceFieldObservation.Foreign incident
                             && incident.incident().observedCrop().getString("Name").equals("minecraft:stone")
                             && incident.incident().causationId().equals("native:foreign-crop"),
@@ -582,7 +582,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
 
             BlockPos far = soil.offset(512, 0, 512);
             helper.assertFalse(level.hasChunkAt(far), "the off-fixture cell must start unloaded");
-            var unloaded = FrontierV3ResourceFieldObservation.read(level, cell(2, far), "native:unloaded-cell");
+            var unloaded = FrontierV3ResourceFieldObservation.read(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cell(2, far), "native:unloaded-cell");
             helper.assertTrue(unloaded == FrontierV3ResourceFieldObservation.Unloaded.INSTANCE
                             && !level.hasChunkAt(far),
                     "unloaded inspection must neither load nor classify the remote cell");
@@ -612,15 +612,15 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             var pending = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
                     layout, Map.of(id, dirt))).begin(ResourceFieldCellTransition.between(SITE, 1, 1, id, dirt, planted),
                     "farmer:native:till-plant");
-            helper.assertTrue(rejects(() -> FrontierV3ResourceFieldObservation.observe(level,
+            helper.assertTrue(rejects(() -> FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD,
                             ResourceFieldCycle.seeded(SITE, layout, 2), pending, id, "native:stale-epoch")),
                     "same loaded blocks in another cycle cannot authorize the old physical witness");
-            var before = FrontierV3ResourceFieldObservation.observe(level, cycle, pending, id, "native:before-till");
+            var before = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cycle, pending, id, "native:before-till");
             helper.assertTrue(before.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
                             && rejects(() -> pending.confirm(id, before)),
                     "unchanged loaded world cannot advance a durable physical cursor");
             level.setBlock(soil, Blocks.FARMLAND.defaultBlockState(), 3);
-            var observedSoil = FrontierV3ResourceFieldObservation.observe(level, cycle, pending, id, "native:tilled");
+            var observedSoil = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cycle, pending, id, "native:tilled");
             helper.assertTrue(observedSoil.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED,
                     "actual tilling must be identified as the next physical step");
             var one = FrontierV3ResourceFieldWitness.read(pending.confirm(id, observedSoil).write());
@@ -630,17 +630,17 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                     "restart retains the soil-only prefix and rejects the stale review");
             level.setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0), 3);
             var successorCycle = ResourceFieldCycle.seeded(SITE, layout, 2);
-            var oldEpochReview = FrontierV3ResourceFieldObservation.observePendingPredecessor(level,
+            var oldEpochReview = FrontierV3ResourceFieldObservation.observePendingPredecessor(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD,
                     successorCycle, one, id, "native:predecessor-effect");
             var oldEpochRecovered = FrontierV3ResourceFieldWitness.read(one.confirm(id, oldEpochReview).write());
             helper.assertTrue(oldEpochReview.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED
                             && oldEpochRecovered.cell(id).pending().orElseThrow().completedSteps() == 2
-                            && rejects(() -> FrontierV3ResourceFieldObservation.observePendingPredecessor(level,
+                            && rejects(() -> FrontierV3ResourceFieldObservation.observePendingPredecessor(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD,
                                     successorCycle, FrontierV3ResourceFieldWitness.claimed(SITE, 1,
                                             ResourceFieldPhysicalSurface.restore(layout, Map.of(id, dirt))), id,
                                     "native:no-pending")),
                     "a later COLD epoch may inspect only the real retained predecessor effect, never adopt an unowned cell");
-            var observedCrop = FrontierV3ResourceFieldObservation.observe(level, cycle, one, id, "native:planted");
+            var observedCrop = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cycle, one, id, "native:planted");
             var complete = FrontierV3ResourceFieldWitness.read(one.confirm(id, observedCrop).write());
             helper.assertTrue(complete.cell(id).committed().equals(planted)
                             && complete.cell(id).pending().orElseThrow().completedSteps() == 2
@@ -649,7 +649,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                     "the second actual block write retains its cause until canonical work is acknowledged");
             var allegedCanonical = new FrontierCanonicalState<>(new WorldId("frontier:field-test"),
                     new Revision(8), new SimInstant(8), cycle);
-            var current = FrontierV3ResourceFieldObservation.observe(level, cycle, complete, id, "native:work-not-projection");
+            var current = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cycle, complete, id, "native:work-not-projection");
             helper.assertTrue(rejects(() -> complete.acknowledgeCanonicalProjection(allegedCanonical, id,
                             "farmer:native:till-plant", current)),
                     "physical-first farmer work cannot be retired by a matching-looking canonical state");
@@ -676,7 +676,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                     ResourceFieldPhysicalSurface.Condition.of(target.cell(cell.id())));
             var predecessor = FrontierV3ResourceFieldWitness.claimed(SITE, 1,
                     ResourceFieldPhysicalSurface.fromCycle(seeded));
-            var physicalBefore = FrontierV3ResourceFieldObservation.observe(level, target, predecessor, cell.id(),
+            var physicalBefore = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, target, predecessor, cell.id(),
                     "native:growth-authorized-before");
             var fabricatedBefore = FrontierV3ResourceFieldObservation.compare(predecessor, layout, cell.id(),
                     physicalBefore.reading());
@@ -693,15 +693,15 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             helper.assertTrue(pending.cell(cell.id()).pending().equals(originalPending.cell(cell.id()).pending())
                     && pending.layoutRevision()==2 && pending.cell(cell.id()).pending().orElseThrow().transition().layoutRevision()==1,
                     "extension retains the exact old cause and cursor; it never relabels a physical attempt");
-            var unchanged = FrontierV3ResourceFieldObservation.observe(level, expanded, pending, cell.id(), "native:growth-before");
+            var unchanged = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, expanded, pending, cell.id(), "native:growth-before");
             helper.assertTrue(unchanged.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
                             && rejects(() -> pending.acknowledgeCanonicalProjection(successorAccepted, cell.id(),
                                     "projection:growth-5", unchanged)),
                     "canonical authority alone cannot confirm an unwritten physical growth step");
             level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 1), 3);
-            var afterWrite = FrontierV3ResourceFieldObservation.observe(level, expanded, pending, cell.id(), "native:growth-after");
+            var afterWrite = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, expanded, pending, cell.id(), "native:growth-after");
             var complete = FrontierV3ResourceFieldWitness.read(pending.confirm(cell.id(), afterWrite).write());
-            var current = FrontierV3ResourceFieldObservation.observe(level, expanded, complete, cell.id(), "native:growth-current");
+            var current = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, expanded, complete, cell.id(), "native:growth-current");
             var foreignWorld = new FrontierCanonicalState<>(new WorldId("frontier:other"),
                     accepted.revision(), accepted.instant(), target);
             helper.assertTrue(rejects(() -> complete.acknowledgeCanonicalProjection(foreignWorld, cell.id(),
@@ -740,7 +740,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             "farmer:native:crash-after-both-writes").write());
             level.setBlock(soil, Blocks.FARMLAND.defaultBlockState(), 3);
             level.setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0), 3);
-            var observed = FrontierV3ResourceFieldObservation.observe(level, cycle, persistedBeforeEffect, cell.id(),
+            var observed = FrontierV3ResourceFieldObservation.observe(level, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, cycle, persistedBeforeEffect, cell.id(),
                     "native:crash-recovery");
             helper.assertTrue(observed.disposition() == FrontierV3ResourceFieldObservation.Disposition.LATER_STEP_APPLIED
                             && observed.completedSteps() == 2,

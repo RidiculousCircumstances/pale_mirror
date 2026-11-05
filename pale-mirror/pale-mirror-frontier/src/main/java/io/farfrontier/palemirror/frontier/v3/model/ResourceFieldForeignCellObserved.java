@@ -25,13 +25,18 @@ public record ResourceFieldForeignCellObserved(ResourceFieldForeignChangeHeld ho
                 || after.soil() == ResourceFieldCycle.Soil.OBSTRUCTED && ResourceFieldCycle.Soil.fromBlock(soilBlockName) != null
                 || after.crop() == ResourceFieldCycle.Crop.ABSENT && !cropBlockName.equals("minecraft:air")
                 || (after.crop() == ResourceFieldCycle.Crop.GROWING || after.crop() == ResourceFieldCycle.Crop.MATURE)
-                && !cropBlockName.equals("minecraft:wheat")
+                && ResourceSiteKind.forCropBlock(cropBlockName).isEmpty()
                 || after.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
                 && after.soil() != ResourceFieldCycle.Soil.OBSTRUCTED
-                && (cropBlockName.equals("minecraft:air")
-                    || after.soil() == ResourceFieldCycle.Soil.FARMLAND
-                    && cropBlockName.equals("minecraft:wheat")))
+                && cropBlockName.equals("minecraft:air"))
             throw new IllegalArgumentException("foreign field block names disagree with the observed cell category");
+    }
+
+    public void requireCrop(ResourceSiteKind kind) {
+        boolean expected = cropBlockName.equals(kind.crop().blockKind());
+        if ((after.crop() == ResourceFieldCycle.Crop.GROWING || after.crop() == ResourceFieldCycle.Crop.MATURE) && !expected
+                || after.crop() == ResourceFieldCycle.Crop.OBSTRUCTED && after.soil() == ResourceFieldCycle.Soil.FARMLAND && expected)
+            throw new IllegalArgumentException("observed plant disagrees with the exact field crop");
     }
 
     @Override public CellMutationKey mutationKey() { return ResourceSiteState.mutationKey(hold.siteId(), hold.cellId()); }

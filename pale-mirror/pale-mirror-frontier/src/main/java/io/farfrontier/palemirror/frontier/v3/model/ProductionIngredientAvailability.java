@@ -6,6 +6,12 @@ import java.util.*;
 /** Read-only complete material backing; no claim and no admission. */
 final class ProductionIngredientAvailability {
     static int batches(FrontierWorldState state, ProductionStationSpec station, ProductionRecipe recipe) {
+        return batches(state, station, recipe, true);
+    }
+    static int storedBatches(FrontierWorldState state, ProductionStationSpec station, ProductionRecipe recipe) {
+        return batches(state, station, recipe, false);
+    }
+    private static int batches(FrontierWorldState state, ProductionStationSpec station, ProductionRecipe recipe, boolean includeIncoming) {
         var owner = ProductionStationEnergy.record(state, station.id()).ownerId();
         var ledger = state.inventory().fungibleResources(); var available = new TreeMap<String, Integer>();
         var kinds = new TreeSet<String>(); recipe.ingredients().forEach(input -> kinds.addAll(input.acceptedItems()));
@@ -17,7 +23,7 @@ final class ProductionIngredientAvailability {
                             .map(account -> ledger.unclaimedQuantity(account.id(), owner, kind)).orElse(0));
             quantity = Math.addExact(quantity, FungibleResourceCustodySupport.accountAtContainer(state, station.containerId(), ContainerSectionId.INPUT)
                     .map(account -> ledger.unclaimedQuantity(account.id(), owner, kind)).orElse(0));
-            for (var shipment : state.shipments().receiving(station.containerId(), kind))
+            if (includeIncoming) for (var shipment : state.shipments().receiving(station.containerId(), kind))
                 if (!shipment.terminal() && shipment.receiver() instanceof ShipmentEndpoint.ProductionPort port
                         && port.port() == ActorContainerItemOrder.StationPort.INPUT)
                     quantity = Math.addExact(quantity, shipment.quantity());

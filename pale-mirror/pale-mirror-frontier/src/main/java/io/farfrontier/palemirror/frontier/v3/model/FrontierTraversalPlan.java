@@ -101,7 +101,7 @@ public record FrontierTraversalPlan(
         var result=Optional.ofNullable(switch(structure.kind()) {
             case HALL -> SettlementAccessPort.forHall(structure).topologyPort();
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
-            case WORKSHOP,SMELTERY,FORGE,WOODSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
+            case WORKSHOP,SMELTERY,FORGE,WOODSHOP,TEXTILE_WORKSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
             case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
             case FARM,HOUSING,KITCHEN -> structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED
                     ? io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).primaryEntrance() : null;

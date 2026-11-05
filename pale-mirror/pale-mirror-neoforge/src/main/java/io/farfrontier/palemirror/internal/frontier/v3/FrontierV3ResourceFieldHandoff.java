@@ -35,7 +35,7 @@ final class FrontierV3ResourceFieldHandoff {
                 } else if (owner.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
                         && owner.witness().matchesCycle(cycle)) {
                     checks.add(inspectCells(cycle, owner.witness(), cells, id ->
-                            FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(id), "handoff:field"),
+                            FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cycle.layout().requireCell(id), "handoff:field"),
                             FrontierV3OperationLedger.get(level)));
                     continue;
                 } else reason = "field_epoch_reconciliation";

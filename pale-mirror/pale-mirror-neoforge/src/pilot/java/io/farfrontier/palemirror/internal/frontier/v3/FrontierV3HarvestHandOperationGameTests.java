@@ -45,7 +45,10 @@ public final class FrontierV3HarvestHandOperationGameTests {
                     new ResourceCustody.Actor(actor), Map.of(lot.id(), 7), Map.of(),
                     Optional.of(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.OFF))));
             state = state.withInventory(state.inventory().withFungibleResources(resources));
-            var witness = new FrontierV3ResourceSiteHandProjectionWitness(new SubjectId("site:hand-test"),
+            var field = state.resourceSiteDescriptors().values().stream()
+                    .filter(site -> site.settlementId().equals(lot.economicOwnerId()) && site.kind() == ResourceSiteKind.WHEAT_FIELD)
+                    .findFirst().orElseThrow();
+            var witness = new FrontierV3ResourceSiteHandProjectionWitness(field.id(),
                     new SubjectId("job:site-harvest-hand-test"), account, lot.id(), actor, body.getUUID(),
                     new SceneLeaseId("lease:hand-test"), 1, 1, 7, 7, mode);
             witness = FrontierV3ResourceSiteHandProjectionWitness.read(witness.write());

@@ -20,7 +20,7 @@ final class FrontierV3HarvestHandOperation {
         return FrontierV3MinecraftOperation.apply(level, binding.declaration(), binding.ports(),
                 () -> before(state, witness, body), FrontierV3NativeEffect.observed(() -> switch (witness.mode()) {
                     case BIND_RETAINED -> retained(state, witness, body);
-                    case MATERIALIZE_COLD -> FrontierV3VillagerHandMutation.setOffhand(body, stack(witness));
+                    case MATERIALIZE_COLD -> FrontierV3VillagerHandMutation.setOffhand(body, stack(state, witness));
                 }), () -> after(state, witness, body));
     }
 
@@ -105,11 +105,11 @@ final class FrontierV3HarvestHandOperation {
         var part = ResourceSiteHarvestCargo.part(state, job).orElse(null);
         var hand = departure.offhand().orElse(null);
         if (part == null || !part.id().equals(witness.lotId()) || part.quantity() != witness.quantity()
-                || hand == null || !hand.itemKind().equals("minecraft:wheat") || hand.quantity() != witness.quantity()
+                || hand == null || !hand.itemKind().equals(part.itemKind()) || hand.quantity() != witness.quantity()
                 || hand.exactItemId().isPresent() || !hand.components().isEmpty()) return java.util.Optional.empty();
         return java.util.Optional.of(new ResourceSiteHarvestHandProjected(witness.siteId(), witness.jobId(),
                 witness.actorAccountId(), witness.leaseId(), witness.actorEpoch(), new FungiblePhysicalObservation.Stack(
-                    new PhysicalStackAddress.ActorHand(witness.workerId(), witness.entityId()), "minecraft:wheat", witness.quantity())));
+                    new PhysicalStackAddress.ActorHand(witness.workerId(), witness.entityId()), part.itemKind(), witness.quantity())));
     }
 
     static void retireProjection(ServerLevel level, FrontierV3ResourceSiteLedger ledger,
@@ -131,7 +131,7 @@ final class FrontierV3HarvestHandOperation {
     }
 
     static boolean after(FrontierWorldState state, FrontierV3ResourceSiteHandProjectionWitness witness, Mob body) {
-        return ItemStack.matches(body.getOffhandItem(), stack(witness))
+        return ItemStack.matches(body.getOffhandItem(), stack(state, witness))
                 && (witness.mode() != FrontierV3ResourceSiteHandProjectionWitness.Mode.BIND_RETAINED || retained(state, witness, body));
     }
 
@@ -146,7 +146,7 @@ final class FrontierV3HarvestHandOperation {
         return FrontierV3ActorCarryProjection.witnessed(state, witness.workerId(), witness.actorAccountId(), body);
     }
 
-    private static ItemStack stack(FrontierV3ResourceSiteHandProjectionWitness witness) {
-        return new ItemStack(Items.WHEAT, witness.quantity());
+    private static ItemStack stack(FrontierWorldState state, FrontierV3ResourceSiteHandProjectionWitness witness) {
+        return FrontierV3FungibleItemStacks.stack(state.resourceSite(witness.siteId()).kind().resourceKind(), witness.quantity());
     }
 }

@@ -58,7 +58,7 @@ public final class FieldEquipmentProcess {
         var order = FieldEquipment.order(state, job, physical.map(WorkEquipmentStep::slot));
         var item = ((ActorContainerItemOrder.Portion.Exact) order.portion()).item();
         if (event.expected() == WorkToolAssignment.Stage.ACQUIRING
-                && !FieldEquipment.requirements().serviceable(state.bootstrap().ruleset().tools(), item))
+                && !FieldEquipment.requirements(state.resourceSite(job.siteId()).kind()).serviceable(state.bootstrap().ruleset().tools(), item))
             throw new IllegalArgumentException("selected field equipment is no longer serviceable");
         if (physical.isPresent()) {
             var step = physical.orElseThrow();
@@ -66,9 +66,11 @@ public final class FieldEquipmentProcess {
             else if (step.observation().scopeRevision() != job.storageRevision())
                 throw new IllegalArgumentException("retired equipment has a changed owner revision");
             var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(order.containerEndpoint().containerId()));
-            if (!step.item().equals(item) || lease == null || lease.authorityEpoch() != step.containerEpoch()
-                    || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)
-                throw new IllegalArgumentException("field equipment lost its exact item or container custody epoch");
+            if (!step.item().equals(item)) throw new IllegalArgumentException("field equipment changed its retained exact item");
+            if (lease == null || lease.authorityEpoch() != step.containerEpoch()
+                    || !ReferenceContainerCustody.hasOperationalCustody(state, order.containerEndpoint().containerId()))
+                throw new IllegalArgumentException("field equipment lacks acquired container custody: container="
+                        + order.containerEndpoint().containerId().value() + "; expectedEpoch=" + step.containerEpoch() + "; lease=" + lease);
         }
         if (event.action() == FieldEquipmentChanged.Action.CONFIRM || retired) {
             if (!job.equipment().pending().equals(physical)) throw new IllegalArgumentException("field equipment receipt has no retained effect");

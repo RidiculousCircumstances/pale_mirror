@@ -118,12 +118,12 @@ final class FrontierV3ResourceFieldGrowthProjector {
                 continue;
             }
             if (cell.committed().equals(target)) continue;
-            var observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, "projection:growth-batch-predecessor");
+            var observed = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, id, "projection:growth-batch-predecessor");
             if (observed.disposition() == FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT) {
                 try { witness = witness.acknowledgeObservedGrowth(accepted, id, observed); }
                 catch (IllegalArgumentException unrelatedDrift) { continue; }
                 cell = witness.cell(id);
-                observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, "projection:growth-batch-observed");
+                observed = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, id, "projection:growth-batch-observed");
                 if (cell.committed().equals(target)) continue;
             }
             if (observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT) continue;
@@ -145,11 +145,11 @@ final class FrontierV3ResourceFieldGrowthProjector {
             var requests = new java.util.LinkedHashMap<ResourceFieldLayout.CellId, FrontierV3MinecraftOperation.Request>();
             for (var id : admitted) {
                 var pending = witness.cell(id).pending().orElseThrow();
-                var reading = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, "projection:growth-batch-apply");
+                var reading = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, id, "projection:growth-batch-apply");
                 if (pending.completedSteps() < pending.transition().steps().size()
                         && (reading.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
                             || reading.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED))
-                    requests.put(id, FrontierV3FieldProjectionOperation.request(level, siteId, cycle.layout().requireCell(id), pending,
+                    requests.put(id, FrontierV3FieldProjectionOperation.request(level, siteId, site.kind(), cycle.layout().requireCell(id), pending,
                             () -> resumeCurrent(level, siteId, id)));
             }
             var results = new java.util.HashMap<ResourceFieldLayout.CellId, FrontierV3MinecraftOperation.Result>();
@@ -211,7 +211,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
                     || pending.canonicalSource().orElseThrow().revision().compareTo(accepted.revision()) > 0)
                 return Result.STALE_CANONICAL;
         } else {
-            var observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
+            var observed = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, cellId,
                     "projection:growth-predecessor");
             if (observed.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.UNLOADED;
             if (observed.disposition() == FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT) {
@@ -221,7 +221,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
                 if (!publish(level, ledger, site.id(), publication)) return Result.RETRY;
                 owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());
                 cell = witness.cell(cellId);
-                observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
+                observed = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, cellId,
                         "projection:observed-growth-predecessor");
             }
             if (observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
@@ -238,7 +238,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
             owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());
         }
         witness = owner.witness();
-        var review = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
+        var review = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, cellId,
                 "projection:growth-current");
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.UNLOADED;
         java.util.UUID operation = null;
@@ -249,15 +249,15 @@ final class FrontierV3ResourceFieldGrowthProjector {
                 if (publication == Publication.BATCH && batchResult == null) return Result.RETRY;
                 var applied = switch (publication) {
                     case BATCH -> batchResult;
-                    case SYNCHRONOUS -> FrontierV3FieldProjectionOperation.apply(level, site.id(), geometry, pending);
+                    case SYNCHRONOUS -> FrontierV3FieldProjectionOperation.apply(level, site.id(), site.kind(), geometry, pending);
                     case DEFERRED -> FrontierV3MinecraftOperation.applyBatchDeferred(level,
-                            java.util.List.of(FrontierV3FieldProjectionOperation.request(level, site.id(), geometry, pending,
+                            java.util.List.of(FrontierV3FieldProjectionOperation.request(level, site.id(), site.kind(), geometry, pending,
                                     () -> resumeCurrent(level, site.id(), cellId)))).getFirst();
                 };
                 if (applied.pending()) return Result.RETRY;
                 if (!applied.complete()) return Result.PHYSICAL_CONFLICT;
                 operation = applied.ticket();
-                var afterWrite = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
+                var afterWrite = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, cellId,
                         "projection:growth-after-write");
                 if (afterWrite.disposition() != FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED)
                     return Result.PHYSICAL_CONFLICT;
@@ -270,7 +270,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
             if (operation != null) ledger.operationCompleted(level, operation);
             return finish(level, ledger, site.id(), publication);
         }
-        var finalReview = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
+        var finalReview = FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, witness, cellId,
                 "projection:growth-final");
         witness = witness.acknowledgeCanonicalProjection(accepted, cellId, pending.causationId(), finalReview);
         ledger.replaceFieldClaim(owner, owner.withWitness(witness));

@@ -56,7 +56,7 @@ final class FrontierV3HarvestHandAftermath {
         // pending field-writer slot for a non-mutating resource binding.
         var consequence = new HarvestRetiredHandObserved(identity, job.siteId(), job.actorAccountId(),
                 identity.body().physicalEpoch(), new FungiblePhysicalObservation.Stack(
-                    new PhysicalStackAddress.ActorHand(job.workerId(), body.getUUID()), "minecraft:wheat", quantity),
+                    new PhysicalStackAddress.ActorHand(job.workerId(), body.getUUID()), ResourceSiteHarvestCargo.itemKind(state, job), quantity),
                 job.progress().completedCropSlots());
         var ports = List.of(FrontierV3OperationEntityParticipant.current(body, identity.body().physicalEpoch()));
         var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.FIELD_HAND_PROJECTION,
@@ -75,7 +75,7 @@ final class FrontierV3HarvestHandAftermath {
         var binding = FrontierV3HarvestHandOperation.binding(state, witness, body);
         var projected = new HarvestRetiredHandObserved(identity, witness.siteId(), witness.actorAccountId(), witness.actorEpoch(),
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(witness.workerId(), witness.entityId()),
-                    "minecraft:wheat", witness.quantity()), witness.accountedPrefix());
+                    state.resourceSite(witness.siteId()).kind().resourceKind(), witness.quantity()), witness.accountedPrefix());
         return FrontierV3OperationAftermath.capture(level, binding.declaration(), binding.ports(),
                 projected, true,
                 () -> FrontierV3HarvestHandOperation.after(state, witness, body));

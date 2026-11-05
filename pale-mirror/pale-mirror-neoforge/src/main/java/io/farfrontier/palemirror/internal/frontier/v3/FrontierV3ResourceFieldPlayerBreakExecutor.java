@@ -66,7 +66,7 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
         }
         if (canonical.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                 || canonical.crop() == ResourceFieldCycle.Crop.OBSTRUCTED) {
-            var reading = FrontierV3ResourceFieldObservation.read(level, cell, "player-foreign-break");
+            var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "player-foreign-break");
             if (!(reading instanceof FrontierV3ResourceFieldObservation.Foreign foreign)
                     || retained.foreign().isEmpty()
                     || !retained.foreign().orElseThrow().observedSoil().equals(foreign.incident().observedSoil())
@@ -77,7 +77,7 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
         }
         var before = ResourceFieldPhysicalSurface.Condition.of(canonical);
         if (support) {
-            var reading = FrontierV3ResourceFieldObservation.read(level, cell, "player-support-break");
+            var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, "player-support-break");
             return retained.foreign().isEmpty() && retained.committed().equals(before)
                     && reading instanceof FrontierV3ResourceFieldObservation.Owned owned
                     && owned.condition().equals(before)
@@ -99,7 +99,7 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
             retained = owner.witness().cell(cell.id());
         }
         if (!retained.committed().equals(before) || retained.pending().isPresent() || retained.foreign().isPresent()
-                || FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
+                || FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(cycle.siteId()).kind(), cycle, owner.witness(), cell.id(),
                         "player-break-precondition").disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
             return FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED;
         var checkpoint = runtime.canonicalState().orElseThrow();
@@ -154,7 +154,7 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
                 if (!FrontierV3LoadedWorld.ready(level, minecraft(cell.crop()))) continue;
                 if (!(ledger.fieldClaim(lifecycle.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                         || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) continue;
-                var reading = FrontierV3ResourceFieldObservation.read(level, cell, entry.getValue().actionId());
+                var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, entry.getValue().actionId());
                 if (reading instanceof FrontierV3ResourceFieldObservation.Owned owned
                         && owned.condition().equals(entry.getValue().before())
                         && owner.witness().cell(cell.id()).committed().equals(entry.getValue().before())) {
@@ -183,7 +183,7 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
             conflict(level, runtime, state.resourceSite(before.siteId()), cell.crop(), "player-break-foreign-cycle");
             return true;
         }
-        var reading = FrontierV3ResourceFieldObservation.read(level, cell, before.actionId());
+        var reading = FrontierV3ResourceFieldObservation.read(level, state.resourceSite(cycle.siteId()).kind(), cell, before.actionId());
         if (reading instanceof FrontierV3ResourceFieldObservation.Unloaded) return false;
         if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)) {
             conflict(level, runtime, state.resourceSite(before.siteId()), cell.crop(), "player-break-foreign-postcondition");

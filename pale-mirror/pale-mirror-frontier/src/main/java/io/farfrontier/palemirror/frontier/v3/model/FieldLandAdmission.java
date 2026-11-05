@@ -52,7 +52,7 @@ final class FieldLandAdmission {
             var cells = new LinkedHashMap<ResourceFieldLayout.CellId, ResourceFieldCycle.CellState>();
             soil.forEach((id, kind) -> cells.put(id, new ResourceFieldCycle.CellState(kind, ResourceFieldCycle.Crop.ABSENT, 0, false, false)));
             var cycle = ResourceFieldCycle.restore(siteId, layout, 1, cells);
-            sites = sites.declare(new ResourceSiteDeclaration(siteId, home, facility, ResourceSiteKind.WHEAT_FIELD,
+            sites = sites.declare(new ResourceSiteDeclaration(siteId, home, facility, state.bootstrap().ruleset().fields().cultivationCrop(),
                     new FieldLandOrigin(FieldLandOrigin.Kind.SURVEYED, soil)), cycle);
             declared.add(siteId);
         }

@@ -155,14 +155,25 @@ public final class FrontierV3BlockExtractionGameTests {
                         net.minecraft.core.registries.Registries.BIOME, net.minecraft.resources.ResourceLocation.parse(biome)));
                 section.fillBiomesFromNoise((qx, qy, qz, ignored) -> qx == x && qy == y && qz == z
                         ? holder : prior.get(qx & 3, qy & 3, qz & 3), sampler, x & ~3, y & ~3, z & ~3);
-                level.setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7), 3);
-                int expected = rules.yieldInBiome("minecraft:wheat", biome);
-                int ordinary = net.minecraft.world.level.block.Block.getDrops(level.getBlockState(crop), level, crop, null)
-                        .stream().filter(stack -> stack.is(Items.WHEAT)).mapToInt(ItemStack::getCount).sum();
-                var prepared = port.prepare("native:territorial-" + expected, execution,
-                        new BlockPosition(crop.getX(), crop.getY(), crop.getZ()), FieldHarvestExtraction.definition(expected));
-                helper.assertTrue(ordinary == expected && prepared.quantity("minecraft:wheat") == expected,
-                        "ordinary block drops and worker extraction must agree with canonical yield in " + biome);
+                for (var kind : ResourceSiteKind.values()) {
+                    level.setBlock(crop, FrontierV3FieldBlocks.crop(kind, 7), 3);
+                    int expected = rules.yieldInBiome(kind.resourceKind(), biome);
+                    int ordinary = net.minecraft.world.level.block.Block.getDrops(level.getBlockState(crop), level, crop, null)
+                            .stream().filter(stack -> net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(kind.resourceKind()))
+                            .mapToInt(ItemStack::getCount).sum();
+                    var prepared = port.prepare("native:territorial-" + kind.wireTag() + "-" + expected, execution,
+                            new BlockPosition(crop.getX(), crop.getY(), crop.getZ()), FieldHarvestExtraction.definition(kind, expected));
+                    helper.assertTrue(ordinary == expected && prepared.quantity(kind.resourceKind()) == expected,
+                            "ordinary drops and worker extraction must agree for " + kind + " in " + biome);
+                    var other = kind == ResourceSiteKind.WHEAT_FIELD ? ResourceSiteKind.COTTON_FIELD : ResourceSiteKind.WHEAT_FIELD;
+                    helper.assertTrue(FrontierV3ResourceFieldObservation.classify(other, Blocks.FARMLAND.defaultBlockState(), level.getBlockState(crop), "foreign-crop")
+                                    instanceof FrontierV3ResourceFieldObservation.Foreign,
+                            "a different crop is a foreign player plant, not permission to overwrite it");
+                    var restored = FrontierV3BlockExtractionCodec.read(FrontierV3BlockExtractionCodec.write(prepared));
+                    helper.assertTrue(port.apply(restored) == BlockExtractionPort.Result.APPLIED && level.getBlockState(crop).isAir()
+                                    && port.apply(restored) == BlockExtractionPort.Result.POSTCONDITION_PRESENT,
+                            "retained extraction must remove each crop once after recovery");
+                }
             }
         } finally {
             section.fillBiomesFromNoise((qx, qy, qz, ignored) -> prior.get(qx & 3, qy & 3, qz & 3),

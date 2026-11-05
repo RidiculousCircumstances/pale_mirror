@@ -43,6 +43,7 @@ public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
     private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(Map.entry("wood-production-r29", FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
+            Map.entry("textiles-r32", FrontierRulesets.installed("frontier-v3-textiles-terrain-r32")),
             Map.entry("simulation-baseline-r31", FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")),
             Map.entry("wood-demand-r30", FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30")),
             Map.entry("production", FrontierRulesets.production()),
@@ -78,6 +79,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
             Map.entry("expeditionProvisioning", FrontierV3FixtureCatalog::expeditionProvisioningConfiguration),
             Map.entry("residentMeal", FrontierV3FixtureCatalog::residentMealConfiguration),
+            Map.entry("textileWorld", FrontierV3FixtureCatalog::textileConfiguration),
             Map.entry("communalDining", FrontierV3FixtureCatalog::communalDiningConfiguration),
             Map.entry("residentMealClaimedSource", FrontierV3FixtureCatalog::residentMealClaimedSourceConfiguration),
             Map.entry("residentMealAfterColdTake", FrontierV3FixtureCatalog::residentMealAfterColdTakeConfiguration),
@@ -514,6 +516,34 @@ public final class FrontierV3FixtureCatalog {
         schedules.removeIf(action -> action.subject().equals(id) && action.kind().equals(ResidentNeedProcess.REVIEW));
         schedules.add(ResidentNeedProcess.review(id, due));
         return configured(worldId, state, base.initialInstant(), schedules);
+    }
+
+    /** Read-only finite crop precondition. No harvested material, station work or outcome is seeded. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> textileConfiguration(WorldId world, long seed) {
+        var original = FrontierBootstrapper.create(world, seed, RULESETS.get("textiles-r32"));
+        var id = new SubjectId("site:1-cotton-field");
+        var plot = FrontierResourceSitePlan.compile(original).get(id).layout();
+        var small = new ResourceFieldLayout(1, plot.nextCellId(), plot.cells().subList(0, 4), List.of());
+        var bootstrap = new FrontierBootstrap(world, seed, original.bounds(), original.settlements(), original.hive(), original.ruleset(),
+                original.terrain(), Map.of(id, small));
+        var base = FrontierWorldRuntimeDefinition.configuration(bootstrap); var state = base.initialState();
+        var wheat = new SubjectId("site:1-wheat-field");
+        var young = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(wheat, 0));
+        state = ResourceSiteProcess.reducePreparationStarted(state, wheat, (ResourceSitePreparationStarted) young.getFirst().payload());
+        state = ResourceSiteProcess.reducePrepared(state, wheat, (ResourceSitePrepared) young.get(1).payload());
+        var preparing = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(id, 0));
+        state = ResourceSiteProcess.reducePreparationStarted(state, id, (ResourceSitePreparationStarted) preparing.getFirst().payload());
+        state = ResourceSiteProcess.reducePrepared(state, id, (ResourceSitePrepared) preparing.get(1).payload());
+        for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
+            var current = state.resourceSites().site(id);
+            state = ResourceSiteProcess.reduceGrowth(state, id, new ResourceSiteGrowthAdvanced(id, current.growthEpoch(), current.growthStage()));
+        }
+        state = state.withHumanPopulation(state.humanPopulation().withSchedule(new SubjectId("settlement:1"),
+                new SettlementDailySchedule(24_000, List.of(new SettlementDailySchedule.Segment(0, 23_999, SettlementDailySchedule.Window.WORK),
+                        new SettlementDailySchedule.Segment(23_999, 24_000, SettlementDailySchedule.Window.FREE)))));
+        var schedules = new ArrayList<>(base.initialSchedules());
+        schedules.add(StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(id), 1, "fixture-initial-ready-crop"));
+        return configured(world, state, SimInstant.ZERO, schedules);
     }
 
     /** Native kitchen precondition only: a resident approaches hunger near the public entrance. */

@@ -103,7 +103,7 @@ final class FrontierV3ResourceFieldInitialPlan {
             } else {
                 position = cell.crop();
                 target = switch (condition.crop()) {
-                    case GROWING, MATURE -> Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, condition.growthStage());
+                    case GROWING, MATURE -> FrontierV3FieldBlocks.crop(site.kind(), condition.growthStage());
                     case ABSENT -> Blocks.AIR.defaultBlockState();
                     default -> throw new IllegalArgumentException("initial projection cannot invent an unknown plant");
                 };
@@ -189,7 +189,7 @@ final class FrontierV3ResourceFieldInitialPlan {
                 throw new IllegalStateException("initial field irrigation is unloaded or no longer present");
         }
         for (ResourceFieldLayout.Cell cell : site.layout().cells()) {
-            var observed = FrontierV3ResourceFieldObservation.read(level, cell, "field-initial-activation:" + site.id().value());
+            var observed = FrontierV3ResourceFieldObservation.read(level, site.kind(), cell, "field-initial-activation:" + site.id().value());
             if (!(observed instanceof FrontierV3ResourceFieldObservation.Owned owned)
                     || !owned.condition().equals(ResourceFieldPhysicalSurface.Condition.of(target.cell(cell.id()))))
                 throw new IllegalStateException("initial field cell is unloaded or differs from the seeded target: " + cell.id().value());

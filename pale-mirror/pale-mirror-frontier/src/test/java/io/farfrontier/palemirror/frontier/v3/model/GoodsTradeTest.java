@@ -43,13 +43,12 @@ class GoodsTradeTest {
     }
     @Test void hungryTravellingCourierEatsThroughTheActualActivityOwnerAndResumesWithItsCargo() {
         var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
-        // Settlement1's production bootstrap has wheat but no ready food. Declare finite
-        // public food as initial test setup; actual taking/consumption must use the live owners.
-        var food = id("lot:courier-meal-fixture"); var staging = id("custody:courier-meal-fixture");
-        var resources = state.inventory().fungibleResources().issue(new ResourceLot(food, SELLER, "minecraft:bread", 2,
-                "fixture:courier-meal", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(SOURCE), Map.of(food, 2), Map.of()));
-        resources = resources.transfer(staging, SOURCE_ACCOUNT, Map.of(food, 2), Map.of());
-        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        // Explicit finite kitchen supply. This fixture neither assumes food in
+        // the former depot nor forces the courier's meal/continuation outcome.
+        var basis = state;
+        var pantry = state.inventory().containers().values().stream().filter(record -> record.ownerId().equals(SELLER)
+                && ResidentDiningPlaces.pantry(basis, SELLER, record.id())).map(ContainerRecord::id).findFirst().orElseThrow();
+        state = GoodsTradeFixtureStores.seed(state, SELLER, pantry, "minecraft:bread", 2, id("lot:courier-meal-fixture"));
         state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));
         state = atStation(state, actor, shipment.sender().station());
         state = shipmentFact(state, shipment.id(), new ShipmentColdTransferred(shipment.id(), 1, Shipment.Status.AWAITING_LOAD));
@@ -204,14 +203,13 @@ class GoodsTradeTest {
         state = shipmentFact(state, shipment.id(), new ShipmentColdTransferred(shipment.id(), 1, Shipment.Status.AWAITING_LOAD));
         // A receiver became nearly full after consent. This is initial-state setup, not a physical player action.
         var resources = state.inventory().fungibleResources();
-        int existing = resources.accounts().get(RECEIVER_ACCOUNT).lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
+        int existing = java.util.Optional.ofNullable(resources.accounts().get(RECEIVER_ACCOUNT))
+                .map(account -> account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum()).orElse(0);
         var capacity = state.inventory().containerCapacity(RECEIVER, java.util.Set.of());
         int fillerQuantity = (capacity.slotCount() - capacity.exactSlots()) * 64 - existing - 17;
         var filler = id("lot:receiver-later-stock"); var staging = id("custody:receiver-stock-setup");
-        resources = resources.issue(new ResourceLot(filler, BUYER, "minecraft:wheat", fillerQuantity, "fixture:receiver-stock", List.of()),
-                new CustodyAccount(staging, new ResourceCustody.Container(RECEIVER), Map.of(filler, fillerQuantity), Map.of()));
-        resources = resources.transfer(staging, RECEIVER_ACCOUNT, Map.of(filler, fillerQuantity), Map.of());
-        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        state = GoodsTradeFixtureStores.seed(state, BUYER, RECEIVER, "minecraft:wheat", fillerQuantity, filler);
+        resources = state.inventory().fungibleResources();
         state = atStation(state, actor, shipment.receiver().station());
         var beforeBuyer = state.inventory().economics().require(BUYER).balance();
         state = shipmentFact(state, shipment.id(), new ShipmentColdTransferred(shipment.id(), 2, Shipment.Status.CARRYING));
@@ -719,8 +717,7 @@ class GoodsTradeTest {
         state = fact(state, SELLER, new GoodsTradeClaimPartitioned(CONTRACT,
                 new ResourceClaimPartition(SOURCE_ACCOUNT, CLAIM, child, Map.of(LOT, 20))));
         assertEquals(Map.of(CLAIM, 40, child, 20), state.companies().goodsTrade().contracts().get(CONTRACT).outstandingClaims());
-        var resources = state.inventory().fungibleResources().transfer(SOURCE_ACCOUNT, RECEIVER_ACCOUNT, Map.of(LOT, 20), Map.of(child, 20));
-        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        state = arrive(state, child, 20);
         FrontierDomainRelationships.validate(state);
         assertEquals(new ContainerIncomingStock(Map.of("minecraft:wheat", 40L), Map.of()), ContainerStorageAdmission.inbound(state, RECEIVER, java.util.Optional.empty()));
         var receipt = new GoodsTradeAcceptance(id("receipt:shipment-one"), CONTRACT, 0,
@@ -826,7 +823,7 @@ class GoodsTradeTest {
     }
 
     static FrontierWorldState initial() {
-        return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:goods-trade-core"), 17));
+        return GoodsTradeFixtureStores.prepare(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:goods-trade-core"), 17)), List.of(SOURCE, RECEIVER));
     }
 
     @Test void independentShipmentMovesTheOriginalClaimWithoutSellingItAndSurvivesRecovery() {
@@ -863,7 +860,8 @@ class GoodsTradeTest {
     }
 
     @Test void dispatchedAllocationRejectsForgeryCompetingCourierAndSilentCancellation() {
-        FrontierWorldState state = reserved(); Shipment shipment = shipment(state);
+        FrontierWorldState state = GoodsTradeFixtureStores.seed(reserved(), BUYER, RECEIVER, "minecraft:wheat", 1, id("lot:existing-receiver"));
+        Shipment shipment = shipment(state);
         state = atStation(state, shipment.execution().actorId(), shipment.sender().station());
         FrontierWorldState source = state;
         assertThrows(IllegalArgumentException.class, () -> ActorResourceTransferComposition.cold(source, shipment.itemOrder()));
@@ -927,7 +925,8 @@ class GoodsTradeTest {
         return fact(fact(fact(initial(), SELLER, new GoodsTradeOrderPlaced(sellOrder())), BUYER,
                 new GoodsTradeOrderPlaced(buyOrder())), SELLER, reservation());
     }
-    static FrontierWorldState arrive(FrontierWorldState state) {
+    static FrontierWorldState arrive(FrontierWorldState state) { return arrive(state, CLAIM, 60); }
+    static FrontierWorldState arrive(FrontierWorldState state, SubjectId claim, int quantity) {
         // Shared COLD handoff fixture at declared stations. Body placement is test setup,
         // not navigation, elapsed travel or native unloading acceptance.
         SubjectId actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
@@ -936,7 +935,7 @@ class GoodsTradeTest {
         state = atStation(state, actor, sourceStation);
         var taking = new ActorContainerItemOrder(CONTRACT, actor, ActorContainerItemOrder.Direction.TAKE,
                 new ActorContainerItemOrder.Portion.Fungible(SOURCE_ACCOUNT, new ResourceCustody.Container(SOURCE),
-                        carried, new ResourceCustody.Actor(actor), java.util.Optional.of(CLAIM), "minecraft:wheat", Map.of(LOT, 60)),
+                        carried, new ResourceCustody.Actor(actor), java.util.Optional.of(claim), "minecraft:wheat", Map.of(LOT, quantity)),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(SOURCE), sourceStation,
                 ActorContainerItemOrder.Hand.MAIN, 0, 1);
         FrontierWorldState loaded = state.withInventory(ActorItemCustody.transferCold(state, taking));
@@ -944,7 +943,7 @@ class GoodsTradeTest {
         loaded = atStation(loaded, actor, receiverStation);
         var placing = new ActorContainerItemOrder(CONTRACT, actor, ActorContainerItemOrder.Direction.PLACE,
                 new ActorContainerItemOrder.Portion.Fungible(carried, new ResourceCustody.Actor(actor),
-                        RECEIVER_ACCOUNT, new ResourceCustody.Container(RECEIVER), java.util.Optional.of(CLAIM), "minecraft:wheat", Map.of(LOT, 60)),
+                        RECEIVER_ACCOUNT, new ResourceCustody.Container(RECEIVER), java.util.Optional.of(claim), "minecraft:wheat", Map.of(LOT, quantity)),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(RECEIVER), receiverStation,
                 ActorContainerItemOrder.Hand.MAIN, 1, 1);
         FrontierWorldState arrived = loaded.withInventory(ActorItemCustody.transferCold(loaded, placing));

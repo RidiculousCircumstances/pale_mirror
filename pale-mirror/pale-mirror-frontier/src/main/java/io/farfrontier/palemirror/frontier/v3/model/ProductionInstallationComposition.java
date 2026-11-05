@@ -9,6 +9,8 @@ public final class ProductionInstallationComposition {
             BiFunction<FrontierWorldState, ProductionStationSpec, FrontierWorldStateUpdate>> CLIENTS = Map.of(
             ProductionStationSpec.Capability.BAKING, BakeryStationInstallation::installed,
             ProductionStationSpec.Capability.FABRICATION, (state, station) -> FrontierWorldStateUpdate.begin(),
+            ProductionStationSpec.Capability.SPINNING, (state, station) -> FrontierWorldStateUpdate.begin(),
+            ProductionStationSpec.Capability.WEAVING, (state, station) -> FrontierWorldStateUpdate.begin(),
             ProductionStationSpec.Capability.WOODWORKING, (state, station) -> FrontierWorldStateUpdate.begin(),
             ProductionStationSpec.Capability.SMELTING, (state, station) -> FrontierWorldStateUpdate.begin());
     static {

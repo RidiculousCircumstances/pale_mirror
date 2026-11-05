@@ -130,7 +130,7 @@ final class FrontierV3HarvestDiagnosticJson {
                 + ",\"totalCropSlots\":" + job.progress().totalCropSlots()
                 + ",\"harvestedYield\":" + job.harvestedYieldQuantity()
                 + ",\"fieldHarvestedCells\":" + cycle.harvestedCount()
-                + ",\"fieldPotentialYield\":" + FieldAgronomy.expectedYield(state.bootstrap(), cycle)
+                + ",\"fieldPotentialYield\":" + FieldAgronomy.expectedYield(state.bootstrap(), state.resourceSite(job.siteId()).kind(), cycle)
                 + ",\"deliveredYield\":" + job.deliveredYieldQuantity()
                 + ",\"carriedYield\":" + ResourceSiteHarvestCargo.quantity(state, job)
                 + ",\"returningForBatch\":" + job.returningForBatch() + "}"
@@ -201,7 +201,8 @@ final class FrontierV3HarvestDiagnosticJson {
 
     private static String cultivation(FrontierWorldState state, ResourceSite site) {
         var cycle = state.resourceSites().cycle(site.id());
-        var review = state.resourceSites().cultivation().get(site.settlementId());
+        var review = site.kind() == state.bootstrap().ruleset().fields().cultivationCrop()
+                ? state.resourceSites().cultivation().get(site.settlementId()) : null;
         String decision = review == null ? "null" : "{\"atTick\":" + review.atTick()
                 + ",\"targetOutput\":" + review.targetOutput() + ",\"expectedOutput\":" + review.expectedOutput()
                 + ",\"firstHarvestAfterTicks\":" + (review.firstHarvestAfterTicks() == Long.MAX_VALUE ? "null" : review.firstHarvestAfterTicks())

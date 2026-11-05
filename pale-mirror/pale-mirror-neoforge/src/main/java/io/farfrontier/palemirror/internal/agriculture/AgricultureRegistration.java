@@ -19,5 +19,5 @@ public final class AgricultureRegistration {
         LOOT.register("territorial_harvest", () -> TerritorialHarvestLoot.CODEC);
     }
     private AgricultureRegistration() { }
-    public static void register(IEventBus bus) { BIOMES.register(bus); GENERATORS.register(bus); LOOT.register(bus); }
+    public static void register(IEventBus bus) { BIOMES.register(bus); GENERATORS.register(bus); LOOT.register(bus); PaleMirrorCrops.register(bus); }
 }

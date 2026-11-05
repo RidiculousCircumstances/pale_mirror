@@ -1,5 +1,4 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
-
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
@@ -409,7 +408,8 @@ final class FrontierV3DiagnosticJson {
         var readyGuard=guards.stream().filter(duty->duty.phase()==io.farfrontier.palemirror.frontier.v3.model.GuardDuty.Phase.ON_DUTY
                 && state.actorLocations().get(duty.execution().actorId()).condition().status()==ActorLifeStatus.ALIVE
                 && io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state,duty)).findFirst();
-        return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"guardTarget\":" + io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.target(state, subject)
+        return base("settlement", id, checkpoint) + ",\"status\":\"ok\"" + FrontierV3SettlementStockDiagnosticJson.render(state, subject)
+                + ",\"guardTarget\":" + io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.target(state, subject)
                 + ",\"hasArmedGuard\":"+readyGuard.isPresent()
                 + ",\"guardsApproved\":" + SettlementWorkPolicy.permissions(state,subject).workers(ResidentWorkKind.GUARD).size()
                 + ",\"security\":" + FrontierV3SecurityDiagnostic.read(state,subject,checkpoint.instant().ticks())

@@ -8,8 +8,8 @@ import static io.farfrontier.palemirror.frontier.v3.model.SettlementEconomicPlan
 final class FieldEconomicInputChanges implements EconomicInputChangePort {
     @Override public void collect(FrontierWorldState before, FrontierWorldState after, Sink sink) {
         EconomicInputChangePort.difference(before.resourceSites().declarations(), after.resourceSites().declarations(), (old, next) -> {
-            if (old != null) sink.changed(old.settlementId(), CAPACITY, Set.of());
-            if (next != null) sink.changed(next.settlementId(), CAPACITY, Set.of());
+            if (old != null) sink.resource(old.settlementId(), CAPACITY, old.kind().resourceKind());
+            if (next != null) sink.resource(next.settlementId(), CAPACITY, next.kind().resourceKind());
         });
         EconomicInputChangePort.difference(before.resourceSites().cycles(), after.resourceSites().cycles(), (old, next) -> {
             var reason = change(old, next);
@@ -17,7 +17,7 @@ final class FieldEconomicInputChanges implements EconomicInputChangePort {
             var cycle = next == null ? old : next;
             var declaration = after.resourceSites().declarations().get(cycle.siteId());
             if (declaration == null) declaration = before.resourceSites().declarations().get(cycle.siteId());
-            if (declaration != null) sink.resource(declaration.settlementId(), reason.orElseThrow(), FieldHarvestExtraction.ITEM);
+            if (declaration != null) sink.resource(declaration.settlementId(), reason.orElseThrow(), declaration.kind().resourceKind());
         });
     }
     private static Optional<SettlementEconomicPlanningState.Change> change(ResourceFieldCycle before, ResourceFieldCycle after) {

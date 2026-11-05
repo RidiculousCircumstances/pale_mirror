@@ -24,7 +24,7 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
         if (bootstrap.ruleset().production().recipes().stream().noneMatch(recipe -> recipe.requiresCombustion()
                 || recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)) return List.of();
         return bootstrap.settlements().stream().flatMap(home -> home.structures().stream()).filter(facility -> ProductionFacilityLayout.supports(facility.kind()))
-                .map(ProductionFacilityLayout::station).map(station -> review(station.id(), 1)).toList();
+                .flatMap(facility -> ProductionFacilityLayout.stations(facility).stream()).map(station -> review(station.id(), 1)).toList();
     }
     static FrontierScheduledPlanner planner() {
         return new FrontierScheduledPlanner() {

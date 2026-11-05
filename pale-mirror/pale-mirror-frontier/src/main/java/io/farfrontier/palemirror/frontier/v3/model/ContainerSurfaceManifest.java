@@ -18,8 +18,9 @@ final class ContainerSurfaceManifest {
                 }));
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> ProductionFacilityLayout.supports(structure.kind())).forEach(workshop -> {
-                    ProductionStationSpec station = ProductionFacilityLayout.station(workshop);
+                    for (ProductionStationSpec station : ProductionFacilityLayout.stations(workshop)) {
                     surfaces.put(station.containerId(), unmaterialized(station.containerId(), station.socketSurface().support()));
+                    }
                     if (workshop.kind() == StructureKind.SMELTERY) {
                         var id = ProductionFacilityLayout.metalStorageId(workshop);
                         surfaces.put(id, new ContainerSurface(id, ProductionFacilityLayout.metalStoragePosition(workshop), ContainerSurfaceStatus.UNMATERIALIZED));

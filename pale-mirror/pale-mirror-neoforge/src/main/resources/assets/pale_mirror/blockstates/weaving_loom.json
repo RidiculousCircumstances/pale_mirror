@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "pale_mirror:block/weaving_loom"
+    },
+    "facing=east": {
+      "model": "pale_mirror:block/weaving_loom",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "pale_mirror:block/weaving_loom",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "pale_mirror:block/weaving_loom",
+      "y": 270
+    }
+  }
+}

@@ -37,8 +37,10 @@ public final class StationWorkOrders {
         StationWorkAuthorization.require(permission, recipe.capability());
         var source = ((ResourceCustody.Container) ledger.accounts().get(input.accountId()).custody()).containerId();
         var station = ProductionStationSelection.usable(state, facility.id(), recipe.id()).orElseThrow();
-        var destination = ProductionOutputCapacity.selectRecipeDestination(state, rights, recipe, bundle.quantity(), source,
-                SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach(), maintenance).orElseThrow();
+        var destination = ProductionOutputCapacity.selectAccessibleRecipeDestination(state, rights, recipe, bundle.quantity(), source,
+                SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach(), maintenance,
+                state.actorLocations().get(worker.id()).navigationProfile()).orElseThrow(() ->
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable("NO_REACHABLE_OUTPUT_STORAGE"));
         var id = ProductionProcess.jobId(task); var token = id.value().replace(':', '-');
         var hold = ProductionResourceCustody.holdForStart(state, input, new SubjectId("claim:" + token), input.quantity());
         var representation = recipe.outcome() instanceof ProductionRecipeOutcome.Fungible

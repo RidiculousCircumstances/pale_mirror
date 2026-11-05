@@ -28,7 +28,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                     || state.resourceSites().harvestMutationPending(job)) continue;
             var cycle = state.resourceSites().cycle(job.siteId());
             if (!cycle.pendingPlayerBreaks().isEmpty()
-                    || !currentField(level, lease, job, cycle)) continue;
+                    || !currentField(level, state.resourceSite(job.siteId()).kind(), lease, job, cycle)) continue;
             var member = lease.members().getFirst();
             var entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob worker) || !worker.isAlive()
@@ -39,9 +39,11 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (observed.isEmpty()) continue;
             ItemStack hand = worker.getOffhandItem();
             var reviewed = FrontierV3ActorHandObservation.classify(job.workerId(), member.entityId(),
-                    hand.is(Items.WHEAT) ? "minecraft:wheat" : "", hand.getCount(),
-                    ItemStack.isSameItemSameComponents(hand, new ItemStack(Items.WHEAT, hand.getCount())));
-            if (reviewed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT) {
+                    ResourceSiteHarvestCargo.itemKind(state, job),
+                    hand.isEmpty() ? "" : net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(hand.getItem()).toString(), hand.getCount(),
+                    hand.isEmpty() || ItemStack.isSameItemSameComponents(hand,
+                            FrontierV3FungibleItemStacks.stack(ResourceSiteHarvestCargo.itemKind(state, job), hand.getCount())));
+            if (reviewed.disposition() != FrontierV3ActorHandObservation.Disposition.CROP_OUTPUT) {
                 FrontierV3PhysicalWaitTrace.reconciliation(worker, lease, "hand:" + reviewed.disposition()); continue;
             }
             boolean unbound = state.inventory().fungibleResources().bindings().values().stream()
@@ -130,7 +132,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                     && hand.beforeCount() == job.undeliveredYieldQuantity()).orElse(true));
     }
 
-    private static boolean currentField(ServerLevel level, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
+    private static boolean currentField(ServerLevel level, ResourceSiteKind cropKind, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         var claim = ledger.fieldClaim(job.siteId());
         if (!(claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
@@ -143,7 +145,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (job.progress().hasPendingCrop()
                     && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cell.id())
                     && ownedPending(ledger, lease, job, cycle).isPresent()) {
-                var review = FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
+                var review = FrontierV3ResourceFieldObservation.observe(level, cropKind, cycle, owner.witness(), cell.id(),
                         "harvest-effect-reconciliation");
                 if (retained.foreign().isPresent() || review.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
                     return false;
@@ -151,7 +153,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             }
             if (retained.pending().isPresent() || retained.foreign().isPresent()
                     || !retained.committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id())))
-                    || FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
+                    || FrontierV3ResourceFieldObservation.observe(level, cropKind, cycle, owner.witness(), cell.id(),
                         "harvest-scene-reconciliation").disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT) {
                 FrontierV3PhysicalWaitTrace.admission(level, job.workerId(), "harvest-reconciliation:cell=" + cell.id()
                         + ";pending=" + retained.pending().isPresent() + ";foreign=" + retained.foreign().isPresent()

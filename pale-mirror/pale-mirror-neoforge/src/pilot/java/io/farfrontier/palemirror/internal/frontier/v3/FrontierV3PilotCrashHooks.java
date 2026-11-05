@@ -50,7 +50,7 @@ public final class FrontierV3PilotCrashHooks {
                 || pending.completedSteps() == 0) return;
         boolean cropWritten = pending.transition().steps().subList(0, pending.completedSteps()).stream()
                 .anyMatch(step -> step.part() == io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition.Part.CROP);
-        if (!cropWritten || FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
+        if (!cropWritten || FrontierV3ResourceFieldObservation.observe(level, state.resourceSite(job.siteId()).kind(), cycle, owner.witness(), cell.id(),
                 pending.causationId()).disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT) return;
         cropEffectBecameVisible(job, cell.crop());
         afterVisibleCropEffectBeforeObservation(runtime, job);

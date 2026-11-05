@@ -183,6 +183,7 @@ public final class ResourceSiteProcess {
     public static FrontierWorldState reduceForeignCellObserved(FrontierWorldState state, SubjectId subject,
                                                                 ResourceFieldForeignCellObserved observed) {
         ResourceFieldForeignChangeHeld held = observed.hold();
+        observed.requireCrop(state.resourceSite(held.siteId()).kind());
         if (!subject.equals(held.siteId()) || !held.equals(state.resourceSites().pendingForeignChange(subject, held.cellId())))
             throw new IllegalArgumentException("foreign field observation lacks its exact retained cause");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);

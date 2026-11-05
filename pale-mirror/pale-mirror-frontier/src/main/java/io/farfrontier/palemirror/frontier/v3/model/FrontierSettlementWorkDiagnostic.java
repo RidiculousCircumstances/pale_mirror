@@ -57,7 +57,7 @@ public record FrontierSettlementWorkDiagnostic(
         String farmStatus = sites.stream().map(site -> state.structureConditions().get(site.facilityId()).name()).distinct().sorted()
                 .reduce((left, right) -> left.equals(right) ? left : "MIXED").orElse("MISSING");
         var receiving = sites.stream().flatMap(site -> ResourceStorageSelection.newStackCandidates(state, settlementId,
-                "minecraft:wheat", 64, state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
+                site.kind().resourceKind(), 64, state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE)).stream()).findFirst();
         String storageId = receiving.map(value -> value.containerId().value()).orElse("");
         String admission = harvestAdmission(state, settlementId, readySites, facility, farmStatus, livingFarmers,
@@ -77,7 +77,8 @@ public record FrontierSettlementWorkDiagnostic(
                                            String farmStatus, int livingFarmers, String availableFarmer,
                                            boolean storageAvailable, List<String> pendingSchedules, long atTick) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
-        if (!ProductionStockDemand.read(state, settlementId, "minecraft:wheat", atTick).requested()) return "STOCK_TARGET_MET";
+        if (state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(settlementId))
+                .noneMatch(site -> ProductionStockDemand.read(state, settlementId, site.kind().resourceKind(), atTick).requested())) return "STOCK_TARGET_MET";
         String recoveringFarmer = state.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(settlementId) && SettlementWorkPolicy.permissions(state, value.settlementId()).permits(ResidentWorkKind.AGRICULTURE, value.id()) && value.capability(HumanCapability.AGRICULTURE) > 0)
                 .filter(value -> FrontierWorldStateSupport.workCapable(state, value))
@@ -88,7 +89,8 @@ public record FrontierSettlementWorkDiagnostic(
                     return lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART;
                 }).map(SubjectId::value).findFirst().orElse("");
         if (!recoveringFarmer.isEmpty()) return "AMBIENT_RECOVERY_UNKNOWN:" + recoveringFarmer;
-        if (!facility.status().equals("NONE")) return "FACILITY_LANE_BUSY:" + facility.objectiveId();
+        if (readySites.stream().allMatch(site -> state.strategicPlans().hasActiveObjective(settlementId,
+                StrategicObjectiveLane.FACILITY, java.util.Optional.of(new SubjectId(site))))) return "FIELD_TASK_ACTIVE";
         if (!farmStatus.equals(StructureCondition.INTACT.name())) return "FARM_UNAVAILABLE";
         if (livingFarmers == 0) return "NO_LIVING_FARMER";
         if (availableFarmer.isEmpty()) return "FARMER_RESERVED";

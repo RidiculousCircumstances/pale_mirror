@@ -32,7 +32,7 @@ public final class ResourceSiteHarvestLabour {
         var resident = state.humanPopulation().resident(job.workerId());
         long until = ResidentWorkIntervals.permittedUntil(state, resident.id(), tick);
         int speed = ResidentWorkStatistics.speedPermille(resident, definition, state.bootstrap().ruleset().workCatalog());
-        var required = FieldEquipment.requirement(state.resourceSites().cycle(job.siteId()), job.target().cellId());
+        var required = FieldEquipment.requirement(state.resourceSite(job.siteId()).kind(), state.resourceSites().cycle(job.siteId()), job.target().cellId());
         if (required.isPresent()) speed = io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
                 speed, state.bootstrap().ruleset().tools(), FieldEquipment.held(state, job), required.orElseThrow());
         return prior.resume(tick, speed, until);

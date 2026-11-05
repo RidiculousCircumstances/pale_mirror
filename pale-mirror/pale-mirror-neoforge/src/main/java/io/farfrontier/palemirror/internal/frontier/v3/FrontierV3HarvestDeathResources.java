@@ -84,7 +84,7 @@ final class FrontierV3HarvestDeathResources {
                     receipt(job, identity, 0, Optional.empty()));
             return;
         }
-        if (!ItemStack.matches(before, body.getOffhandItem()) || !ItemStack.matches(before, new ItemStack(Items.WHEAT, quantity))) return;
+        if (!ItemStack.matches(before, body.getOffhandItem()) || !ItemStack.matches(before, FrontierV3FungibleItemStacks.stack(ResourceSiteHarvestCargo.itemKind(state, job), quantity))) return;
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(value -> value.accountId().equals(job.actorAccountId())).toList();
         if (bindings.size() != 1 || !bindings.getFirst().address().equals(new PhysicalStackAddress.ActorHand(id.actorId(), body.getUUID()))) return;

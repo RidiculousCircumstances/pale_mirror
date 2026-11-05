@@ -61,13 +61,13 @@ def build(spec,source,out):
    p=(x,y+h,z)
    if p in cells and not cells[p][0].endswith('_door'):cells.pop(p)
  anchors={k:tuple(p) for k,p in spec.get('anchors',{}).items()}
- work=spec.get('work');clear=[]
- if work:
+ works=spec.get('works',[])+([spec['work']] if 'work' in spec else []);clear=[];mounts=[]
+ for work in works:
   socket=tuple(work['socket']);wx,wz=DIRECTIONS[work['front']];worker=(socket[0]+wx,socket[1],socket[2]+wz);inp=tuple(work['input'])
   for p in (socket,worker,inp):
    cells.setdefault(p,('minecraft:cobblestone',{}))
    for h in (1,):cells.pop((p[0],p[1]+h,p[2]),None)
-  clear.extend((worker,inp))
+  clear.extend((worker,inp));mounts.append((work,socket,worker,inp))
  for key,p in anchors.items():
   cells.setdefault(p,('minecraft:cobblestone',{}))
   if key=='pantry':cells.pop((p[0],p[1]+1,p[2]),None)
@@ -108,8 +108,9 @@ def build(spec,source,out):
   prop['passages']='front,side'
   for key in ['from.kind','from.room','to.kind','to.room','public','threshold']:prop['passage.side.'+key]=prop['passage.front.'+key]
   prop['passage.side.supports']=';'.join(','.join(map(str,point(p))) for p in extra)
- if work:
-  socket=point(socket);worker=point(worker);inp=point(inp);name='work';prop.update({'workplaces':name,'primaryWorkplace':name})
+ for work,socket,worker,inp in mounts:
+  socket=point(socket);worker=point(worker);inp=point(inp);name=work.get('id','work');prop['workplaces']+=(',' if prop['workplaces'] else '')+name
+  if not prop['primaryWorkplace']:prop['primaryWorkplace']=name
   p='workplace.'+name
   for key,value in {'room':'main','socket':socket,'worker':worker,'input':inp,'equipmentType':work['type'],'facing':work['front'],'equipment.min':(socket[0],socket[1]+1,socket[2]),'equipment.max':(socket[0]+1,socket[1]+3,socket[2]+1),'maintenance.min':(worker[0],worker[1]+1,worker[2]),'maintenance.max':(worker[0]+1,worker[1]+3,worker[2]+1)}.items():prop[p+'.'+key]=value if isinstance(value,str) else ','.join(map(str,value))
  beds=[]
@@ -129,8 +130,8 @@ def build(spec,source,out):
  for pos,(name,props) in sorted(cells.items()):
   part='FOUNDATION' if pos[1]<=floor-cut and name!='minecraft:air' else 'WALL'
   if pos in path:part='PUBLIC_ACCESS_SURFACE'
-  if work and pos==worker:part='WORKSHOP_PROCESS_STATION'
-  if work and pos==inp:part='WORKSHOP_INPUT_STATION'
+  if any(pos==point(w) for _,_,w,_ in mounts):part='WORKSHOP_PROCESS_STATION'
+  if any(pos==point(i) for _,_,_,i in mounts):part='WORKSHOP_INPUT_STATION'
   repair_name=('minecraft:flower_pot' if name.startswith('minecraft:potted_') else name).replace('_wall_hanging_sign','_hanging_sign').replace('_wall_sign','_sign').replace('_wall_banner','_banner')
   repair={'minecraft:dirt_path':'minecraft:dirt','minecraft:coarse_dirt':'minecraft:dirt','minecraft:wall_torch':'minecraft:torch','minecraft:water_cauldron':'minecraft:cauldron','minecraft:lava_cauldron':'minecraft:cauldron','minecraft:water':'minecraft:bucket','minecraft:tripwire':'minecraft:string'}.get(name,repair_name)
   material='2|'+name+'|'+repair+'|'+','.join(k+'='+v for k,v in sorted(props.items()))
@@ -149,8 +150,9 @@ def build(spec,source,out):
  print(spec['name'],len(cells),'beds',len(beds))
 
 def main():
- ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--sources',type=Path,required=True);ap.add_argument('--housing',type=Path,required=True);ap.add_argument('--output',type=Path,required=True);a=ap.parse_args()
+ ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--sources',type=Path,required=True);ap.add_argument('--housing',type=Path,required=True);ap.add_argument('--output',type=Path,required=True);ap.add_argument('--name');a=ap.parse_args()
  for spec in json.loads(Path(__file__).with_name('settlement_sources.json').read_text()):
+  if a.name and spec['name']!=a.name:continue
   source=(a.housing if spec['kind']=='HOUSING' else a.sources)/Path(spec['source']).name
   build(spec,source,a.output)
 if __name__=='__main__':main()

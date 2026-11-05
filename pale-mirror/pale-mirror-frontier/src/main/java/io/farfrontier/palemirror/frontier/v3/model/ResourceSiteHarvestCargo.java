@@ -10,13 +10,17 @@ import java.security.NoSuchAlgorithmException;
 /** Field-specific custody contract; resource quantity remains owned only by the common ledger. */
 public final class ResourceSiteHarvestCargo {
     private ResourceSiteHarvestCargo() { }
+    public static String itemKind(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return state.resourceSite(job.siteId()).kind().resourceKind();
+    }
+
 
     /** A reserved successor is a retained commitment; otherwise admit another part only on real demand. */
     public static Optional<InventoryCustody.ContainerSlot> nextBatchSlot(FrontierWorldState state, ResourceSiteHarvestJob job, long atTick) {
         if (job.progress().complete()) return Optional.empty();
         if (job.batchSuccessorSlot().isPresent()) return job.batchSuccessorSlot();
         if (!ProductionStockDemand.read(state, state.resourceSite(job.siteId()).settlementId(),
-                "minecraft:wheat", Optional.of(job.id()), atTick).requested()) return Optional.empty();
+                itemKind(state, job), Optional.of(job.id()), atTick).requested()) return Optional.empty();
         var slot = state.firstFreeContainerSlot(job.outputSlot().containerId());
         return slot.isPresent() ? Optional.of(new InventoryCustody.ContainerSlot(job.outputSlot().containerId(), slot.getAsInt()))
                 : Optional.empty();
@@ -42,7 +46,7 @@ public final class ResourceSiteHarvestCargo {
                 .noneMatch(binding -> binding.accountId().equals(job.actorAccountId()))) return lease.revision();
         return ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
                 job.actorAccountId(), new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
-                        job.workerId(), lease.members().getFirst().entityId()), "minecraft:wheat", quantity)).authorityEpoch();
+                        job.workerId(), lease.members().getFirst().entityId()), itemKind(state, job), quantity)).authorityEpoch();
     }
 
     public static Optional<ResourceLot> part(FrontierWorldState state, ResourceSiteHarvestJob job) {
@@ -52,7 +56,7 @@ public final class ResourceSiteHarvestCargo {
         if (account != null && (!account.claimQuantities().isEmpty() || account.lotQuantities().size() != 1))
             throw new IllegalArgumentException("unreserved harvest cargo has foreign resource claims");
         int quantity = ActorCarriedResources.stackQuantity(resources, job.workerId(), job.actorAccountId(),
-                owner, "minecraft:wheat");
+                owner, itemKind(state, job));
         if (quantity != job.undeliveredYieldQuantity())
             throw new IllegalArgumentException("harvest custody differs from its own confirmed output history");
         if (account == null) return Optional.empty();
@@ -72,7 +76,7 @@ public final class ResourceSiteHarvestCargo {
             String digest = java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(identity.getBytes(StandardCharsets.UTF_8)));
             return new ResourceLot(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("lot:harvest-" + digest),
-                    state.resourceSite(job.siteId()).settlementId(), "minecraft:wheat", quantity,
+                    state.resourceSite(job.siteId()).settlementId(), itemKind(state, job), quantity,
                     "harvest:sha256:" + digest, List.of());
         } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException("SHA-256 is required by the Java runtime", impossible);

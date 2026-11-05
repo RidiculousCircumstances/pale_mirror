@@ -6,8 +6,12 @@ import java.util.*;
 /** Agriculture declares the operation's tool requirement; shared equipment owns eligibility and transfers. */
 public final class FieldEquipment {
     private static final ImmutableInputView<java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId>> PENDING_CONTAINERS = new ImmutableInputView<>();
-    public static EquipmentRequirements requirements() {
-        var requirements = new HashSet<ToolRequirement>(); requirements.add(FieldHarvestExtraction.DEFINITION.toolRequirement());
+    public static EquipmentRequirements requirements(FrontierWorldState state) {
+        return new EquipmentRequirements(state.bootstrap().ruleset().fields().crops().stream()
+                .flatMap(policy -> requirements(policy.kind()).alternatives().stream()).distinct().toList());
+    }
+    public static EquipmentRequirements requirements(ResourceSiteKind kind) {
+        var requirements = new HashSet<ToolRequirement>(); requirements.add(kind.crop().harvestTool());
         ResourceFieldCycle.Soil.catalog().soils().stream().filter(ResourceFieldCycle.Soil::untilled)
                 .map(soil -> ResourceFieldCycle.Soil.catalog().step(soil).tool()).forEach(requirements::add);
         return EquipmentRequirements.allOf(requirements);
@@ -39,12 +43,12 @@ public final class FieldEquipment {
                 || ContainerPhysicalAuthorityComposition.pending(state, container.id())) return false;
         return job.equipment().stage() == WorkToolAssignment.Stage.ACQUIRING
                 ? item.custody() instanceof InventoryCustody.ContainerSlot stored && stored.containerId().equals(container.id())
-                    && requirements().serviceable(state.bootstrap().ruleset().tools(), item)
+                    && requirements(state.resourceSite(job.siteId()).kind()).serviceable(state.bootstrap().ruleset().tools(), item)
                 : ContainerStorageAdmission.first(state, container.id(), Optional.empty(), slot -> false).isPresent();
     }
-    public static Optional<ToolRequirement> requirement(ResourceFieldCycle cycle, ResourceFieldLayout.CellId cell) {
+    public static Optional<ToolRequirement> requirement(ResourceSiteKind kind, ResourceFieldCycle cycle, ResourceFieldLayout.CellId cell) {
         return switch (cycle.expectedWorkOutcome(cell)) {
-            case HARVESTED -> Optional.of(FieldHarvestExtraction.DEFINITION.toolRequirement());
+            case HARVESTED -> Optional.of(kind.crop().harvestTool());
             case TILLED -> Optional.of(ResourceFieldCycle.Soil.catalog().step(cycle.cell(cell).soil()).tool());
             default -> Optional.empty();
         };
@@ -60,13 +64,13 @@ public final class FieldEquipment {
     public static boolean needsService(FrontierWorldState state, ResourceSiteHarvestJob job) {
         if (job.progress().complete() || job.returningForBatch() || job.hasPendingPhysicalWork()
                 || job.equipment().stage() != WorkToolAssignment.Stage.EQUIPPED) return false;
-        return requirement(state.resourceSites().cycle(job.siteId()), job.target().cellId())
+        return requirement(state.resourceSite(job.siteId()).kind(), state.resourceSites().cycle(job.siteId()), job.target().cellId())
                 .filter(required -> !state.bootstrap().ruleset().tools().serviceable(held(state, job), required)).isPresent();
     }
     public static Optional<ToolUse> use(FrontierWorldState state, ResourceSiteHarvestJob job, ResourceFieldCycle.WorkOutcome outcome) {
         var cycle = state.resourceSites().cycle(job.siteId()); var cell = job.target().cellId();
         if (cycle.expectedWorkOutcome(cell) != outcome) throw new IllegalArgumentException("tool use has a foreign field operation");
-        return requirement(cycle, cell).map(required -> ToolUse.prepare(held(state, job), state.bootstrap().ruleset().tools(), required));
+        return requirement(state.resourceSite(job.siteId()).kind(), cycle, cell).map(required -> ToolUse.prepare(held(state, job), state.bootstrap().ruleset().tools(), required));
     }
     public static boolean transferring(ResourceSiteHarvestJob job) {
         return job.equipment().stage() == WorkToolAssignment.Stage.ACQUIRING

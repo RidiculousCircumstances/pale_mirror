@@ -73,5 +73,11 @@
   "journeymap.pale_mirror.mine.infected": "Основная шахта заражена и больше не поставляет железо.",
   "journeymap.pale_mirror.alternate": "альтернативный источник",
   "journeymap.pale_mirror.alternate.description": "Поселение сообщило о возможном альтернативном источнике железа.",
-  "block.pale_mirror.woodworking_bench": "Плотницкий верстак"
+  "block.pale_mirror.woodworking_bench": "Плотницкий верстак",
+  "item.pale_mirror.cotton": "Хлопок",
+  "item.pale_mirror.cotton_seeds": "Семена хлопка",
+  "item.pale_mirror.cloth": "Тканевое полотно",
+  "block.pale_mirror.cotton_crop": "Хлопок",
+  "block.pale_mirror.spinning_bench": "Прядильная станция",
+  "block.pale_mirror.weaving_loom": "Ткацкий станок"
 }

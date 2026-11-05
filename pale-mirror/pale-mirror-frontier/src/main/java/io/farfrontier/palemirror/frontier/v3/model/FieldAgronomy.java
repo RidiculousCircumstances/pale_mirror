@@ -4,8 +4,11 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public final class FieldAgronomy {
     private FieldAgronomy() { }
     public static int yield(FrontierBootstrap bootstrap, BlockPosition crop) {
+        return FieldAgronomy.yield(bootstrap, ResourceSiteKind.WHEAT_FIELD, crop);
+    }
+    public static int yield(FrontierBootstrap bootstrap, ResourceSiteKind kind, BlockPosition crop) {
         return bootstrap.ruleset().fields().agriculture()
-                .map(rules -> rules.yield(FieldHarvestExtraction.ITEM, crop.x(), crop.z())).orElse(1);
+                .map(rules -> rules.yield(kind.resourceKind(), crop.x(), crop.z())).orElse(1);
     }
     public static int growthPeriods(FrontierBootstrap bootstrap, BlockPosition crop) {
         return bootstrap.ruleset().fields().agriculture()
@@ -13,8 +16,11 @@ public final class FieldAgronomy {
     }
     /** A later route retarget may choose another biome, so leave room for any declared cell yield. */
     public static int maximumYield(FrontierBootstrap bootstrap) {
+        return maximumYield(bootstrap, ResourceSiteKind.WHEAT_FIELD);
+    }
+    public static int maximumYield(FrontierBootstrap bootstrap, ResourceSiteKind kind) {
         return bootstrap.ruleset().fields().agriculture().map(rules -> rules.biomes().keySet().stream()
-                .mapToInt(biome -> rules.yieldInBiome(FieldHarvestExtraction.ITEM, biome)).max().orElseThrow()).orElse(1);
+                .mapToInt(biome -> rules.yieldInBiome(kind.resourceKind(), biome)).max().orElseThrow()).orElse(1);
     }
     public static ResourceFieldCycle grow(FrontierWorldState state, ResourceFieldCycle cycle, long atTick) {
         long interval = state.bootstrap().ruleset().cadence().resourceGrowthStageInterval();
@@ -27,9 +33,12 @@ public final class FieldAgronomy {
                 bootstrap.ruleset().cadence().resourceGrowthStageInterval());
     }
     public static long expectedYield(FrontierBootstrap bootstrap, ResourceFieldCycle cycle) {
+        return expectedYield(bootstrap, ResourceSiteKind.WHEAT_FIELD, cycle);
+    }
+    public static long expectedYield(FrontierBootstrap bootstrap, ResourceSiteKind kind, ResourceFieldCycle cycle) {
         return cycle.layout().cells().stream().filter(cell -> {
             var soil = cycle.cell(cell.id()).soil();
             return soil.cultivable();
-        }).mapToLong(cell -> FieldAgronomy.yield(bootstrap, cell.crop())).sum();
+        }).mapToLong(cell -> FieldAgronomy.yield(bootstrap, kind, cell.crop())).sum();
     }
 }

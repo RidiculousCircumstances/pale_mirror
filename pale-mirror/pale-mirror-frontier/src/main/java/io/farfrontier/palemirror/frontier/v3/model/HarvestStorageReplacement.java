@@ -11,7 +11,7 @@ public final class HarvestStorageReplacement {
         if (!job.reservesOutputCapacity()) return true;
         var record = state.inventory().containers().get(job.outputSlot().containerId());
         return record != null && record.storage().map(policy -> HarvestStoragePolicy.ROLES.contains(policy.role())
-                && policy.filter().accepts("minecraft:wheat")).orElse(false)
+                && policy.filter().accepts(ResourceSiteHarvestCargo.itemKind(state, job))).orElse(false)
                 && !ReferenceContainerCustody.blocksCanonicalUse(state, record.id())
                 && ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job);
     }
@@ -38,7 +38,7 @@ public final class HarvestStorageReplacement {
         var origin = state.actorLocations().get(job.workerId()).supportingSurface();
         int quantity = job.undeliveredYieldQuantity() == 0 ? 64 : job.undeliveredYieldQuantity();
         var replacement = replacementId(job);
-        for (var endpoint : ResourceStorageSelection.receivingCandidates(state, site.settlementId(), "minecraft:wheat", quantity, origin,
+        for (var endpoint : ResourceStorageSelection.receivingCandidates(state, site.settlementId(), ResourceSiteHarvestCargo.itemKind(state, job), quantity, origin,
                 HarvestStoragePolicy.ROLES, Optional.empty())) {
                     var slot = state.firstFreeContainerSlot(endpoint.containerId());
                     if (slot.isEmpty()) continue;
@@ -66,7 +66,7 @@ public final class HarvestStorageReplacement {
                 || !event.replacementIntent().equals(replacementId(job))
                 || event.destination().equals(job.outputSlot())
                 || !state.containerSlotAvailable(event.destination())
-                || ResourceStorageSelection.receivingCandidates(state, state.resourceSite(job.siteId()).settlementId(), "minecraft:wheat",
+                || ResourceStorageSelection.receivingCandidates(state, state.resourceSite(job.siteId()).settlementId(), ResourceSiteHarvestCargo.itemKind(state, job),
                         job.undeliveredYieldQuantity() == 0 ? 64 : job.undeliveredYieldQuantity(),
                         state.actorLocations().get(job.workerId()).supportingSurface(), HarvestStoragePolicy.ROLES, Optional.empty())
                         .stream().noneMatch(endpoint -> endpoint.containerId().equals(event.destination().containerId())))

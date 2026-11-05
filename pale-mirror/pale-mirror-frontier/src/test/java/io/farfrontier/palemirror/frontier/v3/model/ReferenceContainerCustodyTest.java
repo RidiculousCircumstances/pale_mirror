@@ -28,6 +28,14 @@ class ReferenceContainerCustodyTest {
         FrontierWorldState held = baseline.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
         assertTrue(ReferenceContainerCustody.hasLiveCustody(held, depot));
         assertFalse(ReferenceContainerCustody.hasLiveCustody(held, store), "one depot lease cannot grant the hive store authority");
+        assertTrue(ReferenceContainerCustody.hasOperationalCustody(held, depot));
+        var draining = held.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(
+                custody.checkpoint(ReferenceContainerCustody.scopeId(depot), 1L, 7L, 2L)));
+        assertTrue(ReferenceContainerCustody.hasLiveCustody(draining, depot), "checkpoint still fences COLD access");
+        assertFalse(ReferenceContainerCustody.hasOperationalCustody(draining, depot),
+                "checkpoint cannot admit new equipment, recipe, meal or shipment effects before release/renewal");
+        assertThrows(IllegalArgumentException.class, () -> draining.replicaCustody().observeMutation(
+                ReferenceContainerCustody.scopeId(depot), 1L, 7L, 2L, 8L, record.fingerprint(), record.provenance()));
     }
 
     @Test

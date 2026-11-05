@@ -36,7 +36,8 @@ final class ResourceSiteGeometryValidation {
             throw new IllegalArgumentException("field declaration forged its authored land authority");
         Settlement settlement = FrontierWorldStateSupport.settlement(inputs.bootstrap(), declaration.settlementId());
         SettlementStructure facility = FrontierWorldStateSupport.structure(settlement, declaration.facilityId());
-        if (facility.kind() != StructureKind.FARM || declaration.kind() != ResourceSiteKind.WHEAT_FIELD)
+        if (facility.kind() != StructureKind.FARM || inputs.bootstrap().ruleset().fields().crops().stream()
+                .noneMatch(policy -> policy.kind() == declaration.kind()))
             throw new IllegalArgumentException("resource-site lifecycle must bind an owning farm");
         var layout = inputs.layouts().get(declaration.id());
         if (layout == null) throw new IllegalArgumentException("field geometry lost its declared layout");

@@ -370,7 +370,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
                 || !intent.roles().require(PhysicalIntentSubjectRole.WORKER).equals(receipt.workerId()) || !intent.roles().require(PhysicalIntentSubjectRole.OUTPUT_ITEM).equals(output.id())
-                || !output.economicOwnerId().equals(site.settlementId()) || !output.itemKind().equals("minecraft:wheat") || output.count() != 64
+                || !output.economicOwnerId().equals(site.settlementId()) || !output.itemKind().equals(site.kind().resourceKind()) || output.count() != 64
                 || !(output.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(site.settlementId()))) {
             throw new IllegalArgumentException("resource-site harvest receipt does not match its exact output claim");
         }

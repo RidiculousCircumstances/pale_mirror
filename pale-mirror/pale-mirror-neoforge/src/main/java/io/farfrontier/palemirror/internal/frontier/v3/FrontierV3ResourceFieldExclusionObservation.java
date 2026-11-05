@@ -23,7 +23,7 @@ final class FrontierV3ResourceFieldExclusionObservation {
                 || !retained.committed().equals(
                     io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id))))
             return false;
-        return FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), id,
+        return FrontierV3ResourceFieldObservation.observe(level, site.kind(), cycle, owner.witness(), id,
                 "harvest-scene-immature-exclusion").disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT;
     }
 }
