@@ -6,6 +6,25 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianGoalFieldsTest {
+    @Test void localRegionalAndSharedSearchAllPreferTheClearDetourOverFurniture() {
+        var geometry = new PedestrianRouteGeometry() {
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 16, 16); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor p) { return false; }
+            public int traversalPenalty(SurfaceAnchor p) { return p.z() == 5 && p.x() >= 5 && p.x() <= 10 ? 12 : 0; }
+        };
+        var start = SurfaceAnchor.at(1, 63, 5); var goal = SurfaceAnchor.at(12, 63, 5);
+        var cache = new PedestrianRegionCache(); var region = region(cache, geometry);
+        var direct = region.refine(start, goal); settle(direct);
+        var shared = cache.refine(geometry, region, start, goal); settle(shared);
+        var local = new PedestrianLocalSearch(geometry, start, goal, ignored -> {});
+        for (int turn = 0; turn < 1000 && !local.finished(); turn++) local.advance(64, () -> true);
+        for (var path : List.of(direct.result(), shared.result(), local.result())) {
+            assertEquals(goal, path.getLast());
+            assertTrue(path.stream().allMatch(p -> geometry.traversalPenalty(p) == 0));
+            KnownPedestrianNavigation.requireRoute(geometry, path);
+        }
+    }
     @Test void manyOriginsShareOneExactFieldAndChangedImageRepairsWithoutMutatingTheOldPath() {
         var revision = PedestrianGeometryRevision.initial(); var cache = new PedestrianRegionCache();
         var geometry = geometry(revision, false); var region = region(cache, geometry);

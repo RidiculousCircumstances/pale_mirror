@@ -10,6 +10,8 @@ final class IncrementalGoalField<N> {
         boolean contains(N node);
         List<N> successors(N node);
         List<N> predecessors(N node);
+        default int cost(N from, N to) { return 1; }
+        default boolean unitCosts() { return true; }
     }
     record Image<N>(Graph<N> graph, N goal, Map<N, Integer> distances, boolean complete) { }
     private static final int INFINITY = Integer.MAX_VALUE / 4;
@@ -48,7 +50,9 @@ final class IncrementalGoalField<N> {
         if (seed != null && !seed.goal().equals(goal)) throw new IllegalArgumentException("goal field seed addresses another goal");
         if (seed == null) {
             initialized = true;
-            if (graph.contains(goal)) { var root = label(goal); root.distance = root.rhs = 0; finite++; fresh.add(goal); }
+            if (graph.unitCosts()) {
+                if (graph.contains(goal)) { var root = label(goal); root.distance = root.rhs = 0; finite++; fresh.add(goal); }
+            } else dirty.add(goal);
         } else initialization = graph.nodes().iterator();
     }
     int advance(int budget, BooleanSupplier mayContinue) { return advance(Optional.empty(), budget, mayContinue); }
@@ -57,7 +61,7 @@ final class IncrementalGoalField<N> {
         int work = 0;
         while (work < budget && image == null && mayContinue.getAsBoolean()) {
             if (origin.isPresent() && settled(origin.orElseThrow())) break;
-            if (seed == null) {
+            if (seed == null && graph.unitCosts()) {
                 work++;
                 if (freshEdges != null) {
                     if (freshEdges.hasNext()) {
@@ -77,13 +81,17 @@ final class IncrementalGoalField<N> {
                 label.distance = seed.distances().getOrDefault(node, INFINITY); label.rhs = label.distance;
                 if (label.distance < INFINITY) finite++;
                 if (!seed.graph().contains(node) || !graph.successors(node).equals(seed.graph().successors(node))
+                        || graph.successors(node).stream().anyMatch(next -> graph.cost(node, next) != seed.graph().cost(node, next))
                         || !seed.complete() && label.distance == INFINITY) dirty.add(node);
                 else if (label.distance < INFINITY) reused++;
                 continue;
             }
             work++;
             if (updating != null) {
-                if (successors.hasNext()) rhs = Math.min(rhs, Math.min(INFINITY, label(successors.next()).distance + 1));
+                if (successors.hasNext()) {
+                    var next = successors.next();
+                    rhs = Math.min(rhs, Math.min(INFINITY, label(next).distance + graph.cost(updating.node, next)));
+                }
                 else {
                     updating.rhs = rhs;
                     if (updating.distance != rhs) {
@@ -128,13 +136,13 @@ final class IncrementalGoalField<N> {
     boolean settled(N node) {
         if (image != null) return true;
         var value = labels.get(node);
-        if (seed == null) return value != null && value.distance < INFINITY || complete();
+        if (seed == null && graph.unitCosts()) return value != null && value.distance < INFINITY || complete();
         return initialized && updating == null && propagating == null && dirty.isEmpty()
                 && value != null && value.distance == value.rhs
                 && (queue.isEmpty() || queue.getFirst().cost() >= value.distance);
     }
     boolean complete() {
-        return seed == null ? fresh.isEmpty() && freshEdges == null
+        return seed == null && graph.unitCosts() ? fresh.isEmpty() && freshEdges == null
                 : initialized && updating == null && propagating == null && dirty.isEmpty() && queue.isEmpty();
     }
     int finiteLabels() { return finite; }
@@ -152,7 +160,7 @@ final class IncrementalGoalField<N> {
         int distance = distance(node); if (distance == INFINITY || distance == 0) return null;
         for (N next : graph.successors(node)) {
             var value = labels.get(next);
-            if (value != null && value.distance == distance - 1 && settled(next)) return next;
+            if (value != null && value.distance + graph.cost(node, next) == distance && settled(next)) return next;
         }
         throw new IllegalStateException("settled goal field lost its directed successor");
     }

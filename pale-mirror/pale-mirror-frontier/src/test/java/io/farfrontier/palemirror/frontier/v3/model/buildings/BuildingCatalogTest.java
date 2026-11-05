@@ -12,6 +12,30 @@ import java.util.*;
 
 class BuildingCatalogTest {
     @Test
+    void courtyardSeatContactCanDepartWithoutMakingFurnitureAPreferredStation() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:yard-contact"), 139));
+        var home = state.bootstrap().settlements().getFirst();
+        var bakery = home.structures().stream().filter(s -> s.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        var plan = BuildingSpatialPlan.of(bakery);
+        var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home.id(), List.of()).forProfile(UnitNavigationProfile.VILLAGER);
+        var seat = plan.placement().support(new BlockPosition(5, 2, 14));
+        var floor = plan.placement().support(new BlockPosition(7, 1, 13));
+        assertFalse(knowledge.geometry().blocked(seat), "an edge-supported occupant has a real departure contact");
+        assertFalse(knowledge.clearStation(seat), "departure does not invent standing room at the seat centre");
+        assertTrue(knowledge.geometry().traversalPenalty(seat) > knowledge.geometry().traversalPenalty(floor));
+        var order = new MovementOrder(home.id(), home.id(), 0, 1, List.of(floor), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var route = knowledge.path(seat, order);
+        assertEquals(floor, route.getLast()); knowledge.requireRoute(route);
+        var removed = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(
+                state.navigationGeometry().revision(), Map.of(seat.support(),
+                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.AIR)))
+                .apply(state, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+        var changed = KnownPedestrianRouteKnowledge.forPublicJourney(removed, home.id(), List.of()).forProfile(UnitNavigationProfile.VILLAGER);
+        assertTrue(changed.geometry().blocked(seat), "edge contacts cannot resurrect a destroyed seat");
+    }
+
+    @Test
     void currentDoorObservationAndPendingWriteOverridePristineContentWithoutMovingTheWorkplace() {
         var state =
                 FrontierWorldState.initial(

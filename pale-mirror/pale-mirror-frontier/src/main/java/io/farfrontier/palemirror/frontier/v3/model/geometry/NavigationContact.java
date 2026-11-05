@@ -8,7 +8,7 @@ public record NavigationContact(SurfaceAnchor support, double x, double feetY, d
     public NavigationContact {
         Objects.requireNonNull(support);
         if (!Double.isFinite(x) || !Double.isFinite(feetY) || !Double.isFinite(z)
-                || x < support.x() || x >= support.x() + 1 || z < support.z() || z >= support.z() + 1
+                || x < support.x() || x > support.x() + 1 || z < support.z() || z > support.z() + 1
                 || feetY <= support.y() - 1 || feetY > support.y() + 2)
             throw new IllegalArgumentException("contact is outside its declared support");
     }

@@ -167,7 +167,7 @@ class FrontierV3FixtureCatalogTest {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
             assertTrue(profile.provider().length() > 0);
             assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front",
-                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22", "tool-graybox", "forestry-r28", "wood-production-r29", "wood-demand-r30", "simulation-baseline-r31").contains(profile.rulesetId()));
+                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22", "tool-graybox", "forestry-r28", "wood-production-r29", "wood-demand-r30", "simulation-baseline-r31", "simulation-terrain-r31").contains(profile.rulesetId()));
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
             String world = "frontier:catalog-" + profile.id();
@@ -176,6 +176,7 @@ class FrontierV3FixtureCatalogTest {
             var expected = switch (profile.rulesetId()) {
                 case "production" -> FrontierRulesets.production();
                 case "simulation-baseline-r31" -> FrontierRulesets.installed("frontier-v3-simulation-baseline-r31");
+                case "simulation-terrain-r31" -> FrontierRulesets.installed("frontier-v3-simulation-terrain-r31");
                 case "tool-graybox" -> FrontierRulesets.toolGraybox();
                 case "expedition-candidate" -> FrontierRulesets.installed("frontier-v3-expedition-candidate-r2");
                 case "quarry-graybox" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r4");

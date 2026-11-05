@@ -63,6 +63,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     }
 
     @Override public SurfaceAnchor supportAt(int x, int z) { return terrain.supportAt(x, z); }
+    @Override public int traversalPenalty(SurfaceAnchor surface) { return terrain.traversalPenalty(surface); }
     @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return column(x, z).surfaces(); }
     @Override public boolean supportExcluded(SurfaceAnchor surface) { return terrain.supportExcluded(surface); }
     @Override public boolean blockKnown(BlockPosition position) { return terrain.blockKnown(position); }
@@ -99,6 +100,10 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         var result = new java.util.ArrayList<NavigationContact>();
         for (double x : poseOffsets) for (double z : poseOffsets)
             result.addAll(NavigationBodyGeometry.contacts(view, surface, profile, x, z));
+        // A physically supported pedestrian need not be able to centre on its support.
+        // Only partial shapes with a blocked centre need this bounded footprint search.
+        // Native movement still starts at the real pose and independently validates its path.
+        if (result.isEmpty()) result.addAll(NavigationBodyGeometry.edgeContacts(view, surface, profile));
         if (!result.isEmpty()) {
             var reference = result.getFirst();
             // The strategic node is one support, not a sub-cell graph. Retain a

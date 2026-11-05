@@ -110,7 +110,8 @@ final class GuardPatrolProcess {
         var origin=state.actorLocations().get(duty.execution().actorId()).supportingSurface();
         var stations=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(position),
                 GuardResponse.MAX_CONTACT_STATION_DISTANCE,reserved).stream().filter(station -> GuardResponse.permitsStation(state,duty,station))
-                .sorted(Comparator.comparingLong(station -> SecurityCoverage.distance(station,origin))).toList();
+                .sorted(Comparator.comparingInt(knowledge.geometry()::traversalPenalty)
+                        .thenComparingLong(station -> SecurityCoverage.distance(station,origin))).toList();
         return reachable(knowledge,origin,stations);
     }
     private static List<ProposedEvent> selectPost(FrontierWorldState state,ScheduledAction action,GuardDuty duty,long tick,long ordinal) {
@@ -131,7 +132,8 @@ final class GuardPatrolProcess {
                             && ServiceBoundaryComposition.turnoverPoint(state, station).isEmpty()) stations.add(station);
                 }
             }
-            stations.sort(Comparator.comparingLong((SurfaceAnchor point) -> SecurityCoverage.distance(point, origin))
+            stations.sort(Comparator.comparingInt(knowledge.geometry()::traversalPenalty)
+                    .thenComparingLong((SurfaceAnchor point) -> SecurityCoverage.distance(point, origin))
                     .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y));
             var selected=reachable(knowledge,state.actorLocations().get(duty.execution().actorId()).supportingSurface(),stations.stream().limit(8).toList());
             if(selected.isEmpty())continue;

@@ -537,7 +537,9 @@ public final class HierarchicalPedestrianSearch {
         work++;
         if (publication < publishingExits.size()) {
             var entry = publishingExits.get(publication++);
-            Node node = entry.getKey(); int nextDistance = candidate.distance() + entry.getValue().span();
+            Node node = entry.getKey(); var edge = entry.getValue();
+            int nextDistance = candidate.distance() + edge.span()
+                    + geometry.traversalPenalty(edge.exit()) + geometry.traversalPenalty(edge.entrance());
             if (distance.getOrDefault(node, Integer.MAX_VALUE) <= nextDistance) return;
             if (!distance.containsKey(node) && distance.size() >= MAX_NODES) {
                 finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_NODE_SAFETY_LIMIT"); return;
@@ -557,7 +559,8 @@ public final class HierarchicalPedestrianSearch {
     }
     private long portalScore(Edge edge) {
         return Math.abs((long) edge.entrance().x() - target.x()) + Math.abs((long) edge.entrance().z() - target.z())
-                + Math.abs((long) edge.exit().x() - start.x()) + Math.abs((long) edge.exit().z() - start.z());
+                + Math.abs((long) edge.exit().x() - start.x()) + Math.abs((long) edge.exit().z() - start.z())
+                + geometry.traversalPenalty(edge.exit()) + geometry.traversalPenalty(edge.entrance());
     }
     private Candidate candidate(Node node, int distance) {
         var goal = PedestrianRegion.Tile.at(target);

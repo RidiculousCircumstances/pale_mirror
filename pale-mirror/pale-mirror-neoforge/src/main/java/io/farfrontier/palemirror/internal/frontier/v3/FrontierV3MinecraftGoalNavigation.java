@@ -179,7 +179,7 @@ final class FrontierV3MinecraftGoalNavigation {
         for (SurfaceAnchor station : legalStations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
             if (!FrontierV3LoadedWorld.ready(level, feet)) { unloaded = true; continue; }
-            var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, permission.navigationProfile());
+            var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, permission.navigationProfile(), permission.traversalPolicy());
             Path candidate = query.path();
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
             if (refused.isPresent() || !FrontierV3PathClearance.path(level, actor, candidate)) {
@@ -194,7 +194,7 @@ final class FrontierV3MinecraftGoalNavigation {
                 }
                 continue;
             }
-            if (path == null || candidate.getNodeCount() < path.getNodeCount()) {
+            if (path == null || pathCost(candidate, permission.traversalPolicy()) < pathCost(path, permission.traversalPolicy())) {
                 path = candidate;
                 target = station;
             }
@@ -233,6 +233,15 @@ final class FrontierV3MinecraftGoalNavigation {
                     level.getGameTime(), retained.lastProgressAt(),
                         actor.position(), path, remainingDistance(path, actor.position()), retained.followingWait(), brakeOnArrival));
         return new Result(Status.IN_PROGRESS, "minecraft-path-started");
+    }
+
+    private static int pathCost(Path path, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy policy) {
+        int cost = 0;
+        for (int i=1; i<path.getNodeCount(); i++) {
+            var node = path.getNode(i);
+            cost += 1 + policy.penalty(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(node.x, node.y-1, node.z));
+        }
+        return cost;
     }
 
     /** A local hint is a pass-through point, never a work-arrival receipt. The next

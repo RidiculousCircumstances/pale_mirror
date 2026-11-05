@@ -12,7 +12,7 @@ final class PedestrianRegionBuild {
     private final List<SurfaceAnchor> surfaces = new ArrayList<>();
     private final List<Integer>[] columns;
     private List<Integer>[] edges;
-    private int[] parents, components;
+    private int[] parents, components, penalties;
     private List<SurfaceAnchor> pending;
     private int column, level, node, direction, neighbour, edgeCount, componentNode;
     private boolean unknown, limited;
@@ -27,7 +27,7 @@ final class PedestrianRegionBuild {
     PedestrianRegionBuild(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, OptionalInt uniform) {
         this.geometry = geometry; this.tile = tile; this.uniform = uniform;
         int initial = uniform.isPresent() ? 0 : PedestrianRegion.CELLS;
-        parents = new int[initial]; components = new int[initial];
+        parents = new int[initial]; components = new int[initial]; penalties = new int[initial];
         columns = (List<Integer>[]) new List<?>[initial];
         edges = (List<Integer>[]) new List<?>[initial];
         for (int i = 0; i < columns.length; i++) columns[i] = new ArrayList<>();
@@ -58,7 +58,7 @@ final class PedestrianRegionBuild {
             for (int i = 0; i < columns.length; i++) columns[i] = List.copyOf(columns[i]);
             for (int i = 0; i < surfaces.size(); i++) edges[i] = List.copyOf(edges[i]);
             result = new PedestrianRegion(tile, surfaces, columns, Arrays.copyOf(edges, surfaces.size()),
-                    Arrays.copyOf(components, surfaces.size()), unknown);
+                    Arrays.copyOf(components, surfaces.size()), Arrays.copyOf(penalties, surfaces.size()), unknown);
         }
         return work;
     }
@@ -87,8 +87,10 @@ final class PedestrianRegionBuild {
         if (surfaces.size() == parents.length) {
             int capacity = Math.min(MAX_SURFACES, parents.length * 2);
             parents = Arrays.copyOf(parents, capacity); components = Arrays.copyOf(components, capacity); edges = Arrays.copyOf(edges, capacity);
+            penalties = Arrays.copyOf(penalties, capacity);
         }
         int index = surfaces.size(); surfaces.add(surface); columns[column].add(index); parents[index] = index; edges[index] = new ArrayList<>();
+        penalties[index] = geometry.traversalPenalty(surface);
     }
     private void connect() {
         if (direction == 2) { node++; direction = 0; neighbour = 0; return; }

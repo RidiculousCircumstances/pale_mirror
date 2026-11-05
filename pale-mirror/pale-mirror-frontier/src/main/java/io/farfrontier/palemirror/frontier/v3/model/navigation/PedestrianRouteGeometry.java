@@ -11,7 +11,7 @@ public interface PedestrianRouteGeometry {
     default java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return java.util.Optional.empty(); }
     WorldBounds bounds();
     /** Optional exact homogeneous region: one dry clear plane and all horizontal
-     * edges legal for this geometry's declared body. No certificate is inferred. */
+     * edges legal at unit cost for this geometry's declared body. No certificate is inferred. */
     default java.util.OptionalInt uniformSupport(WorldBounds area) { return java.util.OptionalInt.empty(); }
 
     SurfaceAnchor supportAt(int x, int z);
@@ -24,6 +24,9 @@ public interface PedestrianRouteGeometry {
         return surfacesAt(surface.x(), surface.z()).contains(surface);
     }
     boolean blocked(SurfaceAnchor surface);
+    /** Positive traversal preference only. It never opens a blocked cell or proves a route. */
+    default int traversalPenalty(SurfaceAnchor surface) { return 0; }
+    default int traversalCost(SurfaceAnchor from, SurfaceAnchor to) { return 1 + traversalPenalty(to); }
     /** Missing current block facts are a wait, not proof that a route is impossible. */
     default boolean clearanceKnown(SurfaceAnchor surface) { return true; }
     /** Missing evidence only; implementations with collision volumes report exact reads. */

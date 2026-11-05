@@ -21,11 +21,15 @@ final class FrontierV3GoalNavigation {
         private ProviderPermission() { }
         abstract boolean current(Mob actor);
         abstract Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile();
+        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy traversalPolicy() {
+            return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy.ORDINARY;
+        }
         Optional<TravelPace> pace() { return Optional.empty(); }
         double followingSpacing() { return 0; }
         boolean requiresPeriodicRefresh() { return true; }
     }
     private static final class CapturedPermission extends ProviderPermission {
+        private final io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy traversal;
         private final Mob actor;
         private final FrontierV3ActorActuation actuation;
         private final Optional<TravelPace> pace;
@@ -37,6 +41,7 @@ final class FrontierV3GoalNavigation {
         private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace, double followingSpacing,
                 Optional<MovementOrder> retainedOrder, Optional<MovementOrder> activityOrder, Optional<FrontierV3LocalGoalCorrection.Correction> correction) {
             this.actor = Objects.requireNonNull(actor); this.actuation = Objects.requireNonNull(actuation);
+            this.traversal = io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianPreferences.of(actuation.currentState().get().orElseThrow().bootstrap());
             this.pace = Objects.requireNonNull(pace);
             if (!Double.isFinite(followingSpacing) || followingSpacing < 0) throw new IllegalArgumentException("invalid following spacing");
             this.followingSpacing = followingSpacing;
@@ -55,6 +60,7 @@ final class FrontierV3GoalNavigation {
                         .filter(value->value.token()==claim.token() && value.station().equals(claim.station()) && value.expiresAt()==claim.expiresAt()).isPresent()).orElse(true);
         }
         @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return Optional.of(profile); }
+        @Override io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy traversalPolicy() { return traversal; }
         @Override Optional<TravelPace> pace() { return pace; }
         @Override double followingSpacing() { return followingSpacing; }
         @Override boolean requiresPeriodicRefresh() { return retainedOrder.isEmpty() && activityOrder.isEmpty(); }

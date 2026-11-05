@@ -71,6 +71,8 @@ final class PedestrianRegion {
     }
     private final Topology topology;
     private final boolean unknown;
+    private final int[] penalties;
+    private final boolean unitCosts;
     private volatile PedestrianRegionGraph goalGraph;
     PedestrianRegionGraph goalGraph() {
         var ready = goalGraph; if (ready != null) return ready;
@@ -79,14 +81,15 @@ final class PedestrianRegion {
     }
 
     PedestrianRegion(Tile tile, List<SurfaceAnchor> surfaces, List<Integer>[] columns,
-                     List<Integer>[] edges, int[] components, boolean unknown) {
-        this(tile, new Layered(surfaces, columns, edges, components), unknown);
+                     List<Integer>[] edges, int[] components, int[] penalties, boolean unknown) {
+        this(tile, new Layered(surfaces, columns, edges, components), penalties, unknown);
     }
-    private PedestrianRegion(Tile tile, Topology topology, boolean unknown) {
-        this.tile = tile; this.topology = topology; this.unknown = unknown;
+    private PedestrianRegion(Tile tile, Topology topology, int[] penalties, boolean unknown) {
+        this.tile = tile; this.topology = topology; this.unknown = unknown; this.penalties = penalties.clone();
+        this.unitCosts = Arrays.stream(penalties).allMatch(value -> value == 0);
     }
     static PedestrianRegion certifiedPlane(Tile tile, int y) {
-        return new PedestrianRegion(tile, new Plane(tile, y), false);
+        return new PedestrianRegion(tile, new Plane(tile, y), new int[0], false);
     }
     boolean unknown() { return unknown; }
     int size() { return topology.size(); }
@@ -94,26 +97,32 @@ final class PedestrianRegion {
     boolean certifiedPlane() { return topology instanceof Plane; }
     SurfaceAnchor surface(int index) { return topology.surface(index); }
     List<Integer> outgoing(int index) { return topology.outgoing(index); }
+    int cost(int from, int to) { return 1 + (penalties.length == 0 ? 0 : penalties[to]); }
+    boolean unitCosts() { return unitCosts; }
     int component(SurfaceAnchor surface) { int index = topology.index(surface); return index < 0 ? -1 : topology.component(index); }
     List<SurfaceAnchor> surfaces(int x, int z) { return topology.surfaces(x, z); }
     Refinement refine(SurfaceAnchor from, SurfaceAnchor to) { return new Refinement(from, to, null); }
     Refinement refine(SurfaceAnchor from, SurfaceAnchor to, PedestrianGoalFields.Entry field) { return new Refinement(from, to, field); }
     final class Refinement {
         private final int origin, target, component;
-        private final int[] previous, queue;
+        private final int[] previous, distances;
+        private record Candidate(int index, int distance) { }
+        private final Queue<Candidate> queue;
         private final List<SurfaceAnchor> reverse = new ArrayList<>();
-        private int read, write = 1, edge, rewind = -1, planeCursor;
+        private int current = -1, edge, rewind = -1, planeCursor;
         private List<SurfaceAnchor> result;
         private final PedestrianGoalFields.Cursor field;
         Refinement(SurfaceAnchor from, SurfaceAnchor to, PedestrianGoalFields.Entry field) {
             this.field = field == null ? null : field.cursor(from);
+            queue = unitCosts ? new ArrayDeque<>() : new PriorityQueue<>(Comparator.comparingInt(Candidate::distance).thenComparingInt(Candidate::index));
             component = component(from);
             if (component < 0 || component(to) != component) throw new IllegalArgumentException("regional refinement lacks connected endpoints");
             origin = topology.index(from); target = topology.index(to); planeCursor = origin;
-            if (topology instanceof Plane || field != null) { previous = new int[0]; queue = previous; }
+            if (topology instanceof Plane || field != null) { previous = new int[0]; distances = previous; }
             else {
                 previous = new int[size()]; Arrays.fill(previous, -1); previous[origin] = origin;
-                queue = new int[size()]; queue[0] = origin;
+                distances = new int[size()]; Arrays.fill(distances, Integer.MAX_VALUE); distances[origin] = 0;
+                queue.add(new Candidate(origin, 0));
             }
         }
         int advance(int budget) { return advance(budget, () -> true); }
@@ -136,12 +145,19 @@ final class PedestrianRegion {
                     if (rewind == origin) { result = List.copyOf(reverse.reversed()); break; }
                     rewind = previous[rewind]; continue;
                 }
-                if (previous[target] >= 0) { rewind = target; continue; }
-                if (read == write) throw new IllegalStateException("regional component lost its witnessed connection");
-                int current = queue[read];
-                if (edge == outgoing(current).size()) { read++; edge = 0; continue; }
+                if (current < 0) {
+                    if (queue.isEmpty()) throw new IllegalStateException("regional component lost its witnessed connection");
+                    var next = queue.remove();
+                    if (next.distance() != distances[next.index()]) continue;
+                    current = next.index(); edge = 0;
+                    if (current == target) { rewind = target; continue; }
+                }
+                if (edge == outgoing(current).size()) { current = -1; continue; }
                 int next = outgoing(current).get(edge++);
-                if (previous[next] < 0 && topology.component(next) == component) { previous[next] = current; queue[write++] = next; }
+                int distance = distances[current] + cost(current, next);
+                if (distance < distances[next] && topology.component(next) == component) {
+                    previous[next] = current; distances[next] = distance; queue.add(new Candidate(next, distance));
+                }
             }
             return work;
         }

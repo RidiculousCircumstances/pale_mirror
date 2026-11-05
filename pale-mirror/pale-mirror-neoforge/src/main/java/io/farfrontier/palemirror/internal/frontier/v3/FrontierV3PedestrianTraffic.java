@@ -13,6 +13,7 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import java.util.List;
 import java.util.Set;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy;
 
 /** Query-local living-body obstacles for native HOT pathfinding; never durable terrain. */
 final class FrontierV3PedestrianTraffic {
@@ -123,12 +124,17 @@ final class FrontierV3PedestrianTraffic {
     }
     static Query query(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope,
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
+        return query(level, actor, target, scope, profile, PedestrianTraversalPolicy.ORDINARY);
+    }
+    static Query query(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile,
+            PedestrianTraversalPolicy traversal) {
         Path unconstrained = actor.getNavigation().createPath(target, 0);
         // A rejected unconstrained shortest path does not prove no legal scoped detour.
         // Failed terrain evidence cannot, however, be attributed to other bodies.
         Path ordinary = FrontierV3PhysicalPathPolicy.reject(level, unconstrained, scope).isPresent() || !permitsProfile(unconstrained, profile)
-                || !FrontierV3PathClearance.path(level, actor, unconstrained)
-                ? search(level, actor, target, scope, List.of(), profile) : unconstrained;
+                || !FrontierV3PathClearance.path(level, actor, unconstrained) || penalized(unconstrained, traversal)
+                ? search(level, actor, target, scope, List.of(), profile, traversal) : unconstrained;
         if (FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).isPresent()
                 || !FrontierV3PathClearance.path(level, actor, ordinary))
             return new Query(ordinary, List.of(), List.of(), false,
@@ -160,12 +166,21 @@ final class FrontierV3PedestrianTraffic {
                 other -> other != actor && other.isAlive() && !other.isSpectator() && !following(actor, other, ordinary))
                 .stream().limit(MAX_BODIES + 1L).map(LivingEntity::getBoundingBox).toList();
         if (bodies.size() > MAX_BODIES) return new Query(null, List.of(), List.of(), true);
-        return new Query(search(level, actor, target, scope, bodies, profile), List.copyOf(blockers.values()), passage);
+        return new Query(search(level, actor, target, scope, bodies, profile, traversal), List.copyOf(blockers.values()), passage);
+    }
+
+    private static boolean penalized(Path path, PedestrianTraversalPolicy traversal) {
+        if (path == null) return false;
+        for (int index = 1; index < path.getNodeCount(); index++) {
+            var node = path.getNode(index);
+            if (traversal.penalty(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(node.x, node.y - 1, node.z)) > 0) return true;
+        }
+        return false;
     }
 
     /** The same native step/door semantics, with hard scope applied during expansion. */
     private static Path search(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope, List<AABB> bodies,
-            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile, PedestrianTraversalPolicy traversal) {
         int radius = MAX_QUERY_RADIUS;
         BlockPos origin = actor.blockPosition();
         if (Math.abs((long) target.getX() - origin.getX()) > radius
@@ -179,7 +194,11 @@ final class FrontierV3PedestrianTraffic {
                     var next = neighbours[index];
                     if ((profile.isEmpty() || profile.orElseThrow().permitsGrade(from.y, next.y))
                             && clearance.edge(from.asBlockPos(), next.asBlockPos()))
+                    {
+                        next.costMalus = Math.max(next.costMalus, traversal.penalty(
+                                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(next.x, next.y - 1, next.z)));
                         neighbours[retained++] = next;
+                    }
                 }
                 return retained;
             }

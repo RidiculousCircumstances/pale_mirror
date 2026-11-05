@@ -66,7 +66,7 @@ public final class MeleePositions {
         var weapon=profile.orElseThrow();var rules=state.bootstrap().ruleset().melee();
         var activePeers=peers.stream().filter(peer->peer.party().equals(order.party()) && peer.target().equals(order.target()))
                 .filter(peer->{var point=state.combat().positions().get(peer.owner());return point!=null && point.active(tick,rules);}).toList();
-        var retained=order.station().filter(station->!failed.contains(station) && available(state,order,station,tick)
+        var retained=order.station().filter(station->knowledge.geometry().traversalPenalty(station)==0 && !failed.contains(station) && available(state,order,station,tick)
                 && !state.combat().rejected(order,station,tick,rules) && permitted(state,order,weapon,station,tick)
                 && !needsReplacement(state.combat(),order,tick,rules) && knowledge.clearStation(station));
         if(retained.isPresent())try{knowledge.plannedBetween(order.actorPosition(),retained.orElseThrow());return new Choice(retained,MeleePosition.Reason.RESERVED);}
@@ -90,7 +90,9 @@ public final class MeleePositions {
                 CombatApproach.score(order,sector,station,rules.engagements())+crowding(order,station,activePeers,rules)+MeleeRearApproach.cost(order,station,facing))
                 .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList()
                 :rank(order,weapon,candidates,activePeers,sector,rules,facing);
-        try{var selected=reachable(ranked,rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
+        // Spatial preference comes from the common navigator, independently of combat style.
+        var preferred=ranked.stream().sorted(Comparator.comparingInt(knowledge.geometry()::traversalPenalty)).toList();
+        try{var selected=reachable(preferred,rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
             if(selected.isEmpty() && missing)return pendingGeometry(knowledge,order);
             return new Choice(selected,selected.isPresent()?MeleePosition.Reason.RESERVED:MeleePosition.Reason.NO_PATH);
         }catch(KnownPedestrianNavigation.RouteUnavailable pending){

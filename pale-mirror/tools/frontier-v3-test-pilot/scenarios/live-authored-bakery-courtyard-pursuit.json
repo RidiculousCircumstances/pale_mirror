@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "id": "live_authored_bakery_courtyard_pursuit",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 1000"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 120 0 true"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1500,
+        "y": 65,
+        "z": -1348
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 60000,
+      "checks": [
+        {
+          "view": "settlement",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok",
+            "hasArmedGuard": true
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": "Nora Bell",
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000,
+      "standOff": 2
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 combat_trace start @s 2 60"
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "attack_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": "Nora Bell",
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000,
+      "maxAttacks": 1,
+      "requireRemoval": false,
+      "requireDamage": true
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1500,
+        "y": 65,
+        "z": -1348
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": "Nora Bell",
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_entity_motion",
+      "entityType": "minecraft:villager",
+      "nameContains": "Nora Bell",
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000,
+      "id": "courtyard-approach-around-table",
+      "durationTicks": 100,
+      "sampleEveryTicks": 1
+    },
+    {
+      "type": "walk",
+      "position": {
+        "x": -1502,
+        "y": 65,
+        "z": -1348
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": "Nora Bell",
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_entity_motion",
+      "entityType": "minecraft:villager",
+      "nameContains": "Nora Bell",
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000,
+      "id": "courtyard-second-approach",
+      "durationTicks": 100,
+      "sampleEveryTicks": 1
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 999,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:1-16"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 9,
+      "view": "actor",
+      "id": "resident:1-16",
+      "expect": {
+        "status": "ok",
+        "life": "ALIVE"
+      }
+    },
+    {
+      "after": 10,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "guard-courtyard-first-approach"
+    },
+    {
+      "after": 7,
+      "name": "guard-courtyard-after-moving-target"
+    }
+  ]
+}

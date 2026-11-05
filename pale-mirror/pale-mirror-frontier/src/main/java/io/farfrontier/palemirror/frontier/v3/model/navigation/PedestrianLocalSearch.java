@@ -84,7 +84,8 @@ final class PedestrianLocalSearch {
             if (next.x() != x || next.z() != z) throw new IllegalArgumentException("local navigation returned a foreign column");
             if (!bounds.contains(next.support()) || !(reverseEdges
                     ? geometry.canTraverse(next, expanding) : geometry.canTraverse(expanding, next))) continue;
-            int cost = distances.get(expanding) + 1;
+            int cost = distances.get(expanding) + (reverseEdges
+                    ? geometry.traversalCost(next, expanding) : geometry.traversalCost(expanding, next));
             if (cost >= distances.getOrDefault(next, Integer.MAX_VALUE)) continue;
             if (!distances.containsKey(next) && distances.size() == MAX_NODES) { finished = true; break; }
             distances.put(next, cost); previous.put(next, expanding);

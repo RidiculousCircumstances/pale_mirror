@@ -49,6 +49,7 @@ public final class KnownPedestrianNavigation {
             BoundedPedestrianApproach.SurveyedSurface surveyed, Object version,
             java.util.Optional<PedestrianGeometryRevision> regionalRevision) {
         var hard = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(occupied);
+        var preferences = io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianPreferences.of(bootstrap);
         Objects.requireNonNull(regionalRevision);
         var collisions = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView() {
             // This geometry captures immutable survey/obstacle inputs. Repeated
@@ -81,6 +82,9 @@ public final class KnownPedestrianNavigation {
                         ? java.util.OptionalInt.empty() : surveyed.uniformSupport(area);
             }
             @Override public SurfaceAnchor supportAt(int x, int z) { return surveyed.at(x, z); }
+            @Override public int traversalPenalty(SurfaceAnchor surface) {
+                return preferences.penalty(surface.support());
+            }
             @Override public List<SurfaceAnchor> surfacesAt(int x, int z) { return surveyed.surfacesAt(x, z); }
             @Override public boolean blocked(SurfaceAnchor surface) {
                 return supportExcluded(surface) || !clearBody(surface);
@@ -271,8 +275,10 @@ public final class KnownPedestrianNavigation {
             if (candidate.size() > TimedKnownRoute.MAX_SURFACES) continue;
             // A changed surface invalidates this optimization, not the semantic order.
             if (!PedestrianPathValidation.supportsRoute(geometry, candidate)) continue;
+            // An old advisory stripe through furniture must not bypass current route preferences.
+            if (candidate.subList(1, Math.max(1, candidate.size()-1)).stream().anyMatch(p -> geometry.traversalPenalty(p) > 0)) continue;
             if (candidate.size() > 1) new PedestrianRouteReceipt(candidate);
-            if (best == null || candidate.size() < best.size()) best = List.copyOf(candidate);
+            if (best == null || routeCost(geometry, candidate) < routeCost(geometry, best)) best = List.copyOf(candidate);
         }
         return best != null ? best : segment ? plannedSegment(geometry, start, order) : plannedRoute(geometry, start, order);
     }
@@ -297,7 +303,7 @@ public final class KnownPedestrianNavigation {
         PedestrianRouteResult failure = null;
         var pendingRequests = new java.util.ArrayList<PedestrianRouteRequest>();
         boolean calculating = false;
-        for (SurfaceAnchor station : order.legalStations()) {
+        for (SurfaceAnchor station : order.legalStations().stream().sorted(java.util.Comparator.comparingInt(geometry::traversalPenalty)).toList()) {
             if (!geometry.bounds().contains(station.support()) || geometry.clearanceKnown(station) && geometry.blocked(station)) continue;
             // Explore one unresolved alternative at a time. Still inspect every
             // retained result: an already proven alternative must not wait for it.
@@ -318,7 +324,7 @@ public final class KnownPedestrianNavigation {
                         || result.status() == PedestrianRouteResult.Status.SEGMENT_READY
                             && (extent.equals(PedestrianRouteExtent.COMPLETE) || candidate.size() != extent.maximumSurfaces()))
                     throw new IllegalArgumentException("planner returned foreign route endpoints or detail horizon");
-                if (best == null || candidate.size() < best.size()) best = candidate;
+                if (best == null || routeCost(geometry, candidate) < routeCost(geometry, best)) best = candidate;
             } else {
                 failure = result;
                 if (result.status() != PedestrianRouteResult.Status.NO_PATH) deferred = result;
@@ -331,6 +337,12 @@ public final class KnownPedestrianNavigation {
         if (best == null) throw new RouteUnavailable(failure == null ? "NO_CLEAR_DECLARED_STATION"
                 : failure.reason() + "; start=" + start + "; goals=" + order.legalStations());
         return best;
+    }
+
+    private static int routeCost(PedestrianRouteGeometry geometry, List<SurfaceAnchor> path) {
+        int cost = 0;
+        for (int i=1; i<path.size(); i++) cost = Math.addExact(cost, geometry.traversalCost(path.get(i-1), path.get(i)));
+        return cost;
     }
 
     /** Validate accepted evidence, not optimality: replay never needs a planner/cache. */

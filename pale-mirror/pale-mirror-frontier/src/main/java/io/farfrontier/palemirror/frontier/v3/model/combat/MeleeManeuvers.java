@@ -46,7 +46,8 @@ public final class MeleeManeuvers {
                 .filter(point->!kind.lateral() || compatibleSector(state,order,point,tick))
                 .filter(point->kind!=MeleeManeuver.Kind.BURST
                 || MeleeTactics.readyAt(state.combat(),order,point,tick,state.bootstrap().ruleset().melee())).toList();
-        var station=MeleePositions.reachable(candidates,3,p->{
+        var preferred=candidates.stream().sorted(Comparator.comparingInt(knowledge.geometry()::traversalPenalty)).toList();
+        var station=MeleePositions.reachable(preferred,3,p->{
             var route=knowledge.plannedPath(origin,new MovementOrder(order.owner(),order.execution().actorId(),1,1,List.of(p),TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION));
             if(route.size()>radius+2)throw new KnownPedestrianNavigation.RouteUnavailable(PedestrianRouteResult.Status.NO_PATH,"maneuver detour exceeds bounded distance");});
         return new Destination(station,"geometry="+physical.size()+",access="+publicSpace.size()+",space="+space.size()+",tactical="+candidates.size()+",route="+station.isPresent());

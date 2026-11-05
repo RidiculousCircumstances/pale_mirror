@@ -7,11 +7,23 @@ import static org.junit.jupiter.api.Assertions.*;
 class IncrementalGoalFieldTest {
     private static final class Graph implements IncrementalGoalField.Graph<Integer> {
         final Map<Integer, List<Integer>> arcs;
-        Graph(Map<Integer, List<Integer>> arcs) { this.arcs = Map.copyOf(arcs); }
+        final Map<Integer, Integer> weights;
+        Graph(Map<Integer, List<Integer>> arcs) { this(arcs, Map.of()); }
+        Graph(Map<Integer, List<Integer>> arcs, Map<Integer, Integer> weights) { this.arcs = Map.copyOf(arcs); this.weights = Map.copyOf(weights); }
         public List<Integer> nodes() { return arcs.keySet().stream().sorted().toList(); }
         public boolean contains(Integer node) { return arcs.containsKey(node); }
         public List<Integer> successors(Integer node) { return arcs.getOrDefault(node, List.of()); }
         public List<Integer> predecessors(Integer node) { return nodes().stream().filter(from -> successors(from).contains(node)).toList(); }
+        public int cost(Integer from, Integer to) { return weights.getOrDefault(to, 1); }
+        public boolean unitCosts() { return weights.isEmpty(); }
+    }
+    @Test void weightedFieldPrefersAPassageAndRepairsChangedCostsWithoutChangingConnectivity() {
+        var arcs = Map.of(0, List.of(1, 2), 1, List.of(4), 2, List.of(3), 3, List.of(4), 4, List.<Integer>of());
+        var first = new IncrementalGoalField<>(new Graph(arcs, Map.of(1, 13)), 4, null); settle(first);
+        assertEquals(2, first.next(0)); assertEquals(3, first.distance(0));
+        var changed = new IncrementalGoalField<>(new Graph(arcs, Map.of(2, 20)), 4, first.image()); settle(changed);
+        assertEquals(1, changed.next(0)); assertEquals(2, changed.distance(0));
+        assertEquals(2, first.next(0), "another policy cannot mutate a retained field");
     }
     @Test void incrementalDirectedInsertionsRemovalsAndDisconnectedCyclesMatchIndependentBfs() {
         IncrementalGoalField.Image<Integer> seed = null;

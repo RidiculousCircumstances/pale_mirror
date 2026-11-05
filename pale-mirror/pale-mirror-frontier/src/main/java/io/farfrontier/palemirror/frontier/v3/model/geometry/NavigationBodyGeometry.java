@@ -28,6 +28,13 @@ public final class NavigationBodyGeometry {
                 if (result == Clearance.CLEAR) return true;
                 if (result == Clearance.UNKNOWN) unknown = true;
             }
+        if (!source.orElseThrow().shape().equals(NavigationShape.FULL))
+            for (double x : EDGE_OFFSETS) for (double z : EDGE_OFFSETS)
+                for (var box : source.orElseThrow().shape().boxes()) if (footprintOverlaps(box, x, z, profile.width()/2)) {
+                    var result = clearance(view, profile, support.x()+x, support.y()+box.maxY(), support.z()+z);
+                    if (result == Clearance.CLEAR) return true;
+                    if (result == Clearance.UNKNOWN) unknown = true;
+                }
         return !unknown;
     }
     public static double[] poseOffsets(UnitNavigationProfile profile) {
@@ -38,17 +45,41 @@ public final class NavigationBodyGeometry {
 
     public static List<NavigationContact> contacts(NavigationCollisionView view, SurfaceAnchor support,
                                                     UnitNavigationProfile profile, double offsetX, double offsetZ) {
+        return contacts(view, support, profile, offsetX, offsetZ, false);
+    }
+    private static List<NavigationContact> contacts(NavigationCollisionView view, SurfaceAnchor support,
+            UnitNavigationProfile profile, double offsetX, double offsetZ, boolean footprintSupport) {
         var cell = view.cell(support.support());
         if (cell.isEmpty() || !cell.orElseThrow().dry()) return List.of();
         var levels = new TreeSet<Double>(Comparator.reverseOrder());
         for (var box : cell.orElseThrow().shape().boxes())
-            if (box.covers(offsetX, offsetZ)) levels.add(support.y() + box.maxY());
+            if (footprintSupport ? footprintOverlaps(box, offsetX, offsetZ, profile.width() / 2) : box.covers(offsetX, offsetZ))
+                levels.add(support.y() + box.maxY());
         var result = new ArrayList<NavigationContact>();
         for (double top : levels) {
             var contact = new NavigationContact(support, support.x() + offsetX, top, support.z() + offsetZ);
             if (clearance(view, profile, contact.x(), top, contact.z()) == Clearance.CLEAR) result.add(contact);
         }
         return List.copyOf(result);
+    }
+
+    /** At most 24 extra poses, and only for a partial support whose centre failed.
+     * Boundary centres deliberately permit a partially supported footprint, just
+     * as the native contact observer does. Clearance and swept edges stay exact. */
+    public static List<NavigationContact> edgeContacts(NavigationCollisionView view, SurfaceAnchor support, UnitNavigationProfile profile) {
+        var cell = view.cell(support.support());
+        if (cell.isEmpty() || cell.orElseThrow().shape().equals(NavigationShape.FULL)) return List.of();
+        var result = new ArrayList<NavigationContact>();
+        for (double x : EDGE_OFFSETS) for (double z : EDGE_OFFSETS) {
+            if (x == .5 && z == .5) continue;
+            result.addAll(contacts(view, support, profile, x, z, true));
+        }
+        return List.copyOf(result);
+    }
+    private static final double[] EDGE_OFFSETS = {.5, 0, 1, .25, .75};
+    private static boolean footprintOverlaps(NavigationShape.Box box, double x, double z, double half) {
+        return x + half > box.minX() + 1e-7 && x - half < box.maxX() - 1e-7
+                && z + half > box.minZ() + 1e-7 && z - half < box.maxZ() - 1e-7;
     }
 
     public static Clearance clearance(NavigationCollisionView view, UnitNavigationProfile profile,
