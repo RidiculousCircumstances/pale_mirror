@@ -205,12 +205,12 @@ class KnownPedestrianGeometryScopesTest {
     }
     private static PedestrianGeometryRevision shapes(KnownPedestrianGroundVersions versions, Object bootstrap, NavigationGeometryState shapes) {
         return versions.capture(bootstrap, Set.of(), Map.of(), Set.of(), Set.of(), Set.of(),
-                RetainedNavigationGeometry.facts(shapes, Map.of()), new KnownNaturalGeometry.Composite(List.of()));
+                RetainedNavigationGeometry.facts(shapes, Map.of()), new KnownSpatialGeometry.Composite(List.of()));
     }
     private static PedestrianGeometryRevision ground(KnownPedestrianGroundVersions versions, Object bootstrap,
             Set<BlockPosition> obstacles, Map<TerrainColumn, List<SurfaceAnchor>> supports, Set<BlockPosition> unknown) {
         return versions.capture(bootstrap, obstacles, supports, Set.of(), unknown, Set.of(),
-                RegionalBlockMap.copyOf(Map.of()), new KnownNaturalGeometry.Composite(List.of()));
+                RegionalBlockMap.copyOf(Map.of()), new KnownSpatialGeometry.Composite(List.of()));
     }
     @Test void resolvedCollisionFactsInvalidateTheirRegionEvenWhenOccupiedUnionIsUnchanged() {
         var bootstrap = new Object(); var position = new BlockPosition(2, 64, 2);

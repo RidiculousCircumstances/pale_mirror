@@ -38,7 +38,7 @@ final class DeferredAftermathPayloadCodecs {
         output.writeByte(value.cells().size()); output.writeByte(value.resolutionCursor());
         for (DeferredAftermathCell cell : value.cells()) {
             output.writeInt(cell.position().x()); output.writeInt(cell.position().y()); output.writeInt(cell.position().z());
-            PhysicalDeltaPayloadCodecs.writeTarget(output, cell.semanticTarget()); FrontierWorldPayloadCodecs.writeString(output, cell.expectedMaterial().name());
+            PhysicalDeltaPayloadCodecs.writeTarget(output, cell.semanticTarget()); FrontierWorldPayloadCodecs.writeString(output, cell.expectedMaterial().wireIdentity());
                     output.writeByte(FrontierWireTags.tag(cell.expectedPart())); output.writeLong(cell.authorityRevision());
             output.writeByte(FrontierWireTags.tag(cell.status()));
         }
@@ -50,7 +50,7 @@ final class DeferredAftermathPayloadCodecs {
         int count = input.readUnsignedByte(), cursor = input.readUnsignedByte(); ArrayList<DeferredAftermathCell> cells = new ArrayList<>();
         for (int index = 0; index < count; index++) cells.add(new DeferredAftermathCell(
                 new BlockPosition(input.readInt(), input.readInt(), input.readInt()), PhysicalDeltaPayloadCodecs.readTarget(input),
-                GrayboxMaterial.valueOf(FrontierWorldPayloadCodecs.readString(input)),
+                StructureMaterial.require(FrontierWorldPayloadCodecs.readString(input)),
                 FrontierWireTags.require(GrayboxSemanticPart.class, input.readUnsignedByte()), input.readLong(),
                 FrontierWireTags.require(DeferredAftermathCellStatus.class, input.readUnsignedByte())));
         return new DeferredAftermath(id, owner, cause, eventAt, observed, provenance, knowledge, epoch, cells, cursor);

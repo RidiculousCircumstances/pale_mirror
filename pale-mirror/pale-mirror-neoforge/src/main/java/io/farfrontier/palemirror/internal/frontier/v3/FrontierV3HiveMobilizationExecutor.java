@@ -144,7 +144,7 @@ final class FrontierV3HiveMobilizationExecutor {
         if (claim == null) return CocoonProjection.PENDING;
         if (!claim.conflicted() && claim.owner().equals(bioformId.value())
                 && claim.targetTag() == io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.HIVE_COCOON.wireTag()
-                && claim.material().equals(GrayboxMaterial.HIVE_COCOON.name())
+                && claim.material().equals(GrayboxMaterial.HIVE_COCOON.wireIdentity())
                 && claim.semanticPart().equals(GrayboxSemanticPart.COCOON.name()) && expectedBlock) {
             return CocoonProjection.PRESENT;
         }

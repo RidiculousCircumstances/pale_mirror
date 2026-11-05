@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
+
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
@@ -191,7 +193,7 @@ final class FrontierV3ManagedExplosionLedger extends FrontierV3JournaledSavedDat
     private static Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic(FrontierV3GrayboxLedger.Claim claim, BlockState baseline) {
         if (claim == null || claim.conflicted()) return Optional.empty();
         try {
-            var material = io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.valueOf(claim.material());
+            var material = io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.require(claim.material());
             var part = io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart.valueOf(claim.semanticPart());
             io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(claim.targetTag());
             return baseline.equals(FrontierV3GrayboxExecutor.material(material)) ? Optional.of(new FrontierV3PhysicalObservationLedger.Semantic(claim.owner(), claim.targetTag(), part.name())) : Optional.empty();

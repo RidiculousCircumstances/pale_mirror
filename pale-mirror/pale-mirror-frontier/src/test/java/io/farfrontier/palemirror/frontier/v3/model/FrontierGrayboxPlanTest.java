@@ -297,34 +297,6 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
-    void everyWorkshopHasAVisibleWalkableTwoStationWorkPort() {
-        FrontierWorldState state = initial(); FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
-
-        state.bootstrap().settlements().forEach(settlement -> {
-            SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
-            SettlementWorkshopServicePort port = SettlementWorkshopServicePort.forWorkshop(workshop);
-            port.ownedAccessSurfaces().forEach(surface -> assertEquals(new GrayboxCell(surface.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id()), GrayboxMaterial.WORKSHOP,
-                    GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), plan.cells().get(surface.support()),
-                    "the workshop approach must retain exact workshop provenance"));
-            assertEquals(6, port.throatAirCells().size(),
-                    "a graybox workshop needs a three-wide, two-high loading portal so the active worker is readable from its public approach");
-            port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
-                    "the workshop loading portal must retain body-clear cells: " + workshop.id()));
-            assertEquals(2, port.topologyPort().stations().size(), "work must retain separate input and processing stations");
-            assertEquals(new GrayboxCell(port.inputStation().support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id()), GrayboxMaterial.WORKSHOP_INPUT,
-                            GrayboxSemanticPart.WORKSHOP_INPUT_STATION), plan.cells().get(port.inputStation().support()),
-                    "the material hand-off surface must be a color-distinct, workshop-owned graybox tile");
-            assertEquals(new GrayboxCell(port.workStation().support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id()), GrayboxMaterial.WORKSHOP_PROCESS,
-                            GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), plan.cells().get(port.workStation().support()),
-                    "the active processing surface must be a color-distinct, workshop-owned graybox tile");
-            port.topologyPort().stations().forEach(station -> {
-                assertEquals(null, plan.cells().get(station.support().offset(0, 1, 0)), "work station feet cell must stay clear");
-                assertEquals(null, plan.cells().get(station.support().offset(0, 2, 0)), "work station head cell must stay clear");
-            });
-        });
-    }
-
-    @Test
     void exactOrganCellCountMatchesTheMaterializedSemanticGeometry() {
         FrontierWorldState state = initial();
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);

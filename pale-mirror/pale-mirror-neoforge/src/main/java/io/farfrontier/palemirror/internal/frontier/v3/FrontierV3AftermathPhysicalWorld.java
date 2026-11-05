@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
+
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import net.minecraft.core.BlockPos;
@@ -10,8 +12,8 @@ import net.minecraft.world.level.block.Blocks;
 interface FrontierV3AftermathPhysicalWorld {
     boolean naturallyLoaded(BlockPosition position);
     boolean isAir(BlockPosition position);
-    boolean hasMaterial(BlockPosition position, GrayboxMaterial material);
-    boolean placeMaterial(BlockPosition position, GrayboxMaterial material);
+    boolean hasMaterial(BlockPosition position, StructureMaterial material);
+    boolean placeMaterial(BlockPosition position, StructureMaterial material);
     boolean clear(BlockPosition position);
     FrontierV3GrayboxLedger ledger();
     /** Non-native fixtures have no Minecraft knowledge fence; the native adapter always supplies it. */
@@ -39,10 +41,10 @@ interface FrontierV3AftermathPhysicalWorld {
             }
             @Override public boolean naturallyLoaded(BlockPosition position) { return FrontierV3LoadedWorld.ready(level, block(position)); }
             @Override public boolean isAir(BlockPosition position) { return level.getBlockState(block(position)).isAir(); }
-            @Override public boolean hasMaterial(BlockPosition position, GrayboxMaterial material) {
+            @Override public boolean hasMaterial(BlockPosition position, StructureMaterial material) {
                 return level.getBlockState(block(position)).equals(FrontierV3GrayboxExecutor.material(material));
             }
-            @Override public boolean placeMaterial(BlockPosition position, GrayboxMaterial material) {
+            @Override public boolean placeMaterial(BlockPosition position, StructureMaterial material) {
                 BlockPos block = block(position);
                 return level.setBlock(block, FrontierV3GrayboxExecutor.material(material), blockUpdateFlags)
                         && level.getBlockState(block).equals(FrontierV3GrayboxExecutor.material(material));

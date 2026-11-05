@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 
@@ -28,7 +29,7 @@ class TraversalPathTest {
 
     @Test void flatGrayboxInfirmaryNeverPretendsToExcavateItsNeutralFoundation() {
         SettlementStructure infirmary = new SettlementStructure(new SubjectId("structure:infirmary"), new SubjectId("settlement:test"),
-                StructureKind.INFIRMARY, new BlockPosition(20, 64, 20), FacilityFacing.WEST);
+                StructureKind.INFIRMARY, new BlockPosition(20, 64, 20), FacilityFacing.WEST, BuildingCatalog.standard().select(BuildingCatalog.MEDIEVAL_SPRUCE, StructureKind.INFIRMARY));
 
         SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
 
@@ -46,7 +47,7 @@ class TraversalPathTest {
         for (FacilityFacing facing : FacilityFacing.values()) {
             String idSuffix = facing.name().toLowerCase(java.util.Locale.ROOT);
             SettlementStructure infirmary = new SettlementStructure(new SubjectId("structure:" + idSuffix),
-                    new SubjectId("settlement:test"), StructureKind.INFIRMARY, new BlockPosition(20, 64, 20), facing);
+                    new SubjectId("settlement:test"), StructureKind.INFIRMARY, new BlockPosition(20, 64, 20), facing, BuildingCatalog.standard().select(BuildingCatalog.MEDIEVAL_SPRUCE, StructureKind.INFIRMARY));
             SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
 
             assertEquals(facing, port.facing());

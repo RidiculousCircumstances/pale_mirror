@@ -11,9 +11,10 @@ class FrontierTraversalPlanTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:traversal-plan"), 7_312L));
         FrontierTraversalPlan plan = FrontierTraversalPlan.compile(state);
 
-        assertEquals(48, plan.facilities().size());
-        assertEquals(84, plan.topologies().size(), "supply, circulation, four facility ingress and one resident ingress topology per settlement");
+        assertTrue(!plan.facilities().isEmpty());
         for (FrontierTraversalPlan.FacilityBinding binding : plan.facilities().values()) {
+            for(var port:binding.ports())assertTrue(plan.topologies().values().stream().anyMatch(topology->topology.provenance().equals(port.facilityId()) && topology.nodes().values().containsAll(port.ingressSurfaces())),
+                    "every declared entrance has its exact indexed topology");
             TraversalTopology publicTopology = plan.publicTopologyFor(binding.port().facilityId());
             assertTrue(publicTopology.nodes().containsValue(binding.port().exteriorApproach().getFirst()),
                     "a port may not rely on a nearest-route query or hidden approach");

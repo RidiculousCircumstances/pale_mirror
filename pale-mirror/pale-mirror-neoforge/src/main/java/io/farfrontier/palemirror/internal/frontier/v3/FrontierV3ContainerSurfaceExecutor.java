@@ -542,7 +542,7 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     private static boolean matchesReadySocket(ServerLevel level, FrontierV3GrayboxLedger.Claim claim, GrayboxCell support, BlockPos position) {
         return claim != null && !claim.conflicted() && claim.owner().equals(support.ownerId().value())
-                && claim.material().equals(support.material().name()) && claim.semanticPart().equals(support.semanticPart().name())
+                && claim.material().equals(support.material().wireIdentity()) && claim.semanticPart().equals(support.semanticPart().name())
                 && level.getBlockState(position).equals(FrontierV3GrayboxExecutor.material(support.material()));
     }
 

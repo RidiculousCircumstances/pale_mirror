@@ -42,8 +42,8 @@ class FrontierV3InspectionCardsTest {
         assertEquals(10, card.lines().size());
         assertEquals("Role: Unassigned · Idle", card.lines().get(2));
         assertEquals("Combat style: "+state.bootstrap().ruleset().melee().styles().require(person.combatStyle()).name(),card.lines().get(3));
-        assertTrue(card.lines().get(4).contains("Agr " + person.skill(ResidentSkill.AGRICULTURE)));
-        assertTrue(card.lines().get(5).contains("Med " + person.skill(ResidentSkill.MEDICINE)));
+        assertTrue(card.lines().get(6).contains("Agr " + person.skill(ResidentSkill.AGRICULTURE)));
+        assertTrue(card.lines().get(6).contains("Med " + person.skill(ResidentSkill.MEDICINE)));
         assertTrue(card.lines().get(8).contains("Hunger ×"));
         assertTrue(card.lines().stream().allMatch(line -> line.length() <= 112));
     }

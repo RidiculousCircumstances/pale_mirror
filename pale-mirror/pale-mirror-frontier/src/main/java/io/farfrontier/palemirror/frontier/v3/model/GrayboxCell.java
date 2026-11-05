@@ -5,7 +5,7 @@ import java.util.Objects;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 /** One immutable and attributable v3 materialization target. */
-public record GrayboxCell(BlockPosition position, PhysicalDeltaSemanticTarget semanticTarget, GrayboxMaterial material, GrayboxSemanticPart semanticPart) {
+public record GrayboxCell(BlockPosition position, PhysicalDeltaSemanticTarget semanticTarget, StructureMaterial material, GrayboxSemanticPart semanticPart) {
     public GrayboxCell {
         Objects.requireNonNull(position, "graybox position");
         Objects.requireNonNull(semanticTarget, "graybox semantic target");

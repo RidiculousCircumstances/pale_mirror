@@ -56,8 +56,8 @@ class FrontierV3HiveFoundryAuditTest {
         GrayboxCell root = new GrayboxCell(new BlockPosition(8, 65, 8), new
                 io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, new SubjectId("organ:test-ganglion")),
                 GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION);
-        FrontierV3GrayboxLedger.Claim claim = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", 2, "HIVE_GANGLION", "FOUNDATION", false);
-        FrontierV3GrayboxLedger.Claim conflicted = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", 2, "HIVE_GANGLION", "FOUNDATION", true);
+        FrontierV3GrayboxLedger.Claim claim = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", 2, GrayboxMaterial.HIVE_GANGLION.wireIdentity(), "FOUNDATION", false);
+        FrontierV3GrayboxLedger.Claim conflicted = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", 2, GrayboxMaterial.HIVE_GANGLION.wireIdentity(), "FOUNDATION", true);
 
         assertEquals(FrontierV3HiveFoundryAudit.RuntimeCellStatus.PENDING,
                 FrontierV3HiveFoundryAudit.classify(root, null, FrontierV3HiveFoundryAudit.ObservedCell.AIR));
@@ -73,8 +73,8 @@ class FrontierV3HiveFoundryAuditTest {
     @Test
     void wakingCocoonWaitsForItsFirstProjectionButNeverAdoptsAnAlteredClaim() {
         SubjectId bioform = new SubjectId("bioform:test-waking");
-        FrontierV3GrayboxLedger.Claim exact = new FrontierV3GrayboxLedger.Claim(bioform.value(), 3, "HIVE_COCOON", "COCOON", false);
-        FrontierV3GrayboxLedger.Claim changed = new FrontierV3GrayboxLedger.Claim(bioform.value(), 3, "HIVE_COCOON", "COCOON", true);
+        FrontierV3GrayboxLedger.Claim exact = new FrontierV3GrayboxLedger.Claim(bioform.value(), 3, GrayboxMaterial.HIVE_COCOON.wireIdentity(), "COCOON", false);
+        FrontierV3GrayboxLedger.Claim changed = new FrontierV3GrayboxLedger.Claim(bioform.value(), 3, GrayboxMaterial.HIVE_COCOON.wireIdentity(), "COCOON", true);
 
         assertEquals(FrontierV3HiveMobilizationExecutor.CocoonProjection.PENDING,
                 FrontierV3HiveMobilizationExecutor.cocoonProjection(null, bioform, false),

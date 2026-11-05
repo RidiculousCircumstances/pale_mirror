@@ -104,7 +104,7 @@ public final class FrontierResourceSitePlan {
                 ? 24 + Math.floorMod(Objects.hash(bootstrap.seed(), settlement.id()), 4) * 24 : 0;
         for (FacilityFacing side : candidateSides(farm.facing())) {
             var anchor = new BlockPosition(farm.anchor().x() + side.x()*distance, farm.anchor().y(), farm.anchor().z() + side.z()*distance);
-            var frame = new SettlementStructure(farm.id(), farm.settlementId(), farm.kind(), anchor, farm.facing());
+            var frame = new SettlementStructure(farm.id(), farm.settlementId(), farm.kind(), anchor, farm.facing(), farm.building());
             var footprint = cropSlots(frame, side, fieldSide).stream().map(crop -> new BlockPosition(crop.x(),
                     bootstrap.terrain().supportYAt(crop.x(), crop.z()) + 1, crop.z())).toList();
             var layout = fieldSide == 8 && bootstrap.ruleset().worldLayout().productionSites() == FrontierWorldLayout.ProductionSites.ADJACENT

@@ -35,7 +35,7 @@ public final class KnownPedestrianRouteKnowledge {
         KnownPedestrianRouteKnowledge frontierView;
         RegionalSurfaceContributions<GroundSource> groundSupports = new RegionalSurfaceContributions<>();
         final java.util.Map<SubjectId, FieldView> fields = new java.util.LinkedHashMap<>();
-        KnownNaturalGeometry.Composite viewNatural;
+        KnownSpatialGeometry.Composite viewNatural;
         final KnownPedestrianGroundVersions groundVersions = new KnownPedestrianGroundVersions();
         io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision selectedGround;
         final java.util.Map<JourneyKey, KnownPedestrianRouteKnowledge> journeys = new java.util.LinkedHashMap<>(16, .75f, true);
@@ -240,7 +240,7 @@ public final class KnownPedestrianRouteKnowledge {
     private static void refresh(FrontierWorldState state, KnownSiteGeometry.View sites) {
         var cache = cache();
         var storage = KnownStorageGeometry.forState(state);
-        var natural = KnownNaturalGeometry.forState(state);
+        var natural = KnownSpatialGeometry.forState(state);
         var departures = KnownStorageGeometry.fixedSupports(state);
         if (cache.viewBootstrap != state.bootstrap() || cache.viewOrgans != state.hiveColony().addedOrgans()
                 || cache.viewDeltas != state.physicalDeltas() || cache.viewTopology != state.routeTopology()
@@ -515,17 +515,17 @@ public final class KnownPedestrianRouteKnowledge {
                     .orElseThrow(() -> new IllegalArgumentException("pedestrian passage has no local facility"));
             if (!structure.equals(passage.facility()))
                 throw new IllegalArgumentException("pedestrian passage differs from its declared facility");
-            FacilityTraversalPort port = FrontierTraversalPlan.facilityPort(structure)
-                    .orElseThrow(() -> new IllegalArgumentException("pedestrian passage has no declared traversal port"));
-            clearance(cleared, port.exteriorApproach().getFirst());
-            if (passage.reach() == Passage.Reach.PUBLIC_ACCESS || passage.reach() == Passage.Reach.STATIONS) {
-                port.exteriorApproach().forEach(surface -> clearance(cleared, surface));
-                FrontierGrayboxPlan.publicAccessSurfaces(structure).forEach(surface -> clearance(cleared, surface));
+            var ports = FrontierTraversalPlan.facilityPorts(structure);
+            if (ports.isEmpty()) throw new IllegalArgumentException("pedestrian passage has no declared traversal port");
+            boolean authored = structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED;
+            if (authored && passage.reach() != Passage.Reach.STATIONS)
+                ports = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).publicEntrances();
+            for (var port : ports) {
+                clearance(cleared, port.exteriorApproach().getFirst());
+                if (passage.reach() != Passage.Reach.EXTERIOR) port.ingressSurfaces().forEach(surface -> clearance(cleared,surface));
+                if (passage.reach() == Passage.Reach.STATIONS) port.stations().forEach(surface -> clearance(cleared,surface));
             }
-            if (passage.reach() == Passage.Reach.STATIONS) {
-                port.ingressSurfaces().forEach(surface -> clearance(cleared, surface));
-                port.stations().forEach(surface -> clearance(cleared, surface));
-            }
+
         }
         // A witnessed physical change can close even an authored passage. Never clear it
         // together with the planned structure, and never treat another moving actor as a wall.
@@ -686,7 +686,18 @@ public final class KnownPedestrianRouteKnowledge {
     public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry() { return geometry; }
 
     static Set<BlockPosition> staticOccupancy(FrontierBootstrap bootstrap) {
-        return new HashSet<>(retainedStaticOccupancy(bootstrap));
+        var result=new HashSet<>(retainedStaticOccupancy(bootstrap));
+        // Coarse legacy/bootstrap clients cannot consume fractional shapes. Keep their
+        // conservative solid occupancy; detailed pedestrian queries use the shared provider.
+        for(var settlement:bootstrap.settlements())for(var structure:settlement.structures())
+            if(structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+                io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().forEach((p,cell)-> {
+                    var material=(StructureMaterial.Authored)cell.material();
+                    if(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCollisionCatalog.standard(material.block())
+                            .flatMap(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation::cell)
+                            .map(value->!value.shape().boxes().isEmpty()).orElse(true))result.add(p);
+                });
+        return result;
     }
     private static Set<BlockPosition> retainedStaticOccupancy(FrontierBootstrap bootstrap) {
         var cache = cache();

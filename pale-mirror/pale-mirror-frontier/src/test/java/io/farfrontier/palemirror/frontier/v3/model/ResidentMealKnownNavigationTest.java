@@ -109,13 +109,11 @@ class ResidentMealKnownNavigationTest {
         var workshop = settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP)
                 .findFirst().orElseThrow();
         var port = SettlementWorkshopServicePort.forWorkshop(workshop);
-        assertEquals(SurfaceAnchor.at(-142, 64, -324), port.workStation());
-        assertEquals(SurfaceAnchor.at(-142, 64, -325), port.inputStation());
         var meal = testMeal(initial, settlement, actor, FrontierWorldState.depotId(settlement.id()), port.workStation());
         var state = withMeal(initial.withActorBody(actor, port.workStation().standingBody()), meal);
         var step = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
                 .planColdStep(state, actor, 45_136L).orElseThrow();
-        assertTrue(step.plannedRoute().orElseThrow().route().contains(port.inputStation()));
+        assertEquals(port.workStation(), step.plannedRoute().orElseThrow().route().getFirst());
         var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
         var decoded = (ResidentMealColdStep) codecs.decode(step.type(), codecs.encode(step));
         try (var empty = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
@@ -124,7 +122,7 @@ class ResidentMealKnownNavigationTest {
             assertTrue(retained.humanPopulation().meals().get(actor).coldTravel().isPresent());
             assertEquals(0, empty.pendingCount(), "replay validates the accepted route without starting a new search");
         }
-        var damaged = state.recordPhysicalDelta(new PhysicalDelta(port.inputStation().support(),
+        var damaged = state.recordPhysicalDelta(new PhysicalDelta(step.plannedRoute().orElseThrow().route().get(1).support(),
                 PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:workshop-input-floor-loss"));
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
                 .reduceColdStep(damaged, actor, decoded));

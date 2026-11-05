@@ -46,6 +46,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("simulation-baseline-r31", FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")),
             Map.entry("wood-demand-r30", FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30")),
             Map.entry("production", FrontierRulesets.production()),
+            Map.entry("simulation-terrain-r31", FrontierRulesets.installed("frontier-v3-simulation-terrain-r31")),
             Map.entry("tool-graybox", FrontierRulesets.toolGraybox()),
             Map.entry("expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2")),
             Map.entry("quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4")),
@@ -57,6 +58,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("authoredBuildingsWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("simulation-terrain-r31"))),
             Map.entry("peacefulGuards", PeacefulGuardFixture::configuration),
             Map.entry("equipmentRepair", (world, seed) -> equipmentWorkConfiguration(world, seed, true)),
             Map.entry("equipmentManufacture", (world, seed) -> equipmentWorkConfiguration(world, seed, false)),
@@ -643,7 +645,9 @@ public final class FrontierV3FixtureCatalog {
         declared.add(origin.offset(-4, 0, -3));
         declared.add(origin.offset(-6, 2, -3));
         declared.add(origin.offset(-8, 0, -3));
-        declared.add(origin.offset(-8, 0, 36));
+        // Keep the declared test route outside actual building parcels, including the larger authored bakery.
+        declared.add(origin.offset(-40, 0, -3));
+        declared.add(origin.offset(-40, 0, 36));
         // Join at the trunk's westward continuation rather than turning back across the same
         // surveyed cells to the lane point; a traversal topology may not encode a retraced
         // centre-line under duplicate node identities.

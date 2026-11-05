@@ -109,16 +109,16 @@ public final class FrontierV3GrayboxCursorGameTests {
             BlockPos position = helper.absolutePos(new BlockPos(offset, 8, 4));
             ledger.applied(position, "structure:static-" + offset,
                     io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE.wireTag(),
-                    GrayboxMaterial.HALL.name(), GrayboxSemanticPart.FOUNDATION.name());
+                    GrayboxMaterial.HALL.wireIdentity(), GrayboxSemanticPart.FOUNDATION.name());
         }
         BlockPos first = helper.absolutePos(new BlockPos(0, 8, 8));
         BlockPos second = helper.absolutePos(new BlockPos(1, 8, 8));
         ledger.applied(first, "construction:index-a",
                 io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION.wireTag(),
-                GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+                GrayboxMaterial.WORKSITE.wireIdentity(), GrayboxSemanticPart.WORKSITE_STAGING.name());
         ledger.applied(second, "construction:index-b",
                 io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION.wireTag(),
-                GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+                GrayboxMaterial.WORKSITE.wireIdentity(), GrayboxSemanticPart.WORKSITE_STAGING.name());
         FrontierV3GrayboxLedger restored = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
         helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).stream()
                         .filter(value -> value.claim().owner().startsWith("construction:index-"))
@@ -126,7 +126,7 @@ public final class FrontierV3GrayboxCursorGameTests {
                 "only this test's exact retained temporary claims are returned in stable order after restart; concurrent worksite provenance is not this owner's work");
         restored.retire(first, "construction:index-a",
                 io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION.wireTag(),
-                GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+                GrayboxMaterial.WORKSITE.wireIdentity(), GrayboxSemanticPart.WORKSITE_STAGING.name());
         helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).stream()
                         .filter(value -> value.claim().owner().startsWith("construction:index-"))
                         .count(), 1L,

@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Stable symbolic palette; NeoForge chooses the corresponding graybox block states. */
-public enum GrayboxMaterial {
+public enum GrayboxMaterial implements StructureMaterial {
     HALL,
     HOUSING,
     FARM,
@@ -27,6 +27,8 @@ public enum GrayboxMaterial {
     ROUTE_FOUNDATION,
     WORKSITE,
     INFECTION;
+
+    @Override public String wireIdentity() { return "1|" + name(); }
 
     /** One repair unit is one ordinary Minecraft concrete item, never an aggregate resource. */
     public String repairItemKind() {

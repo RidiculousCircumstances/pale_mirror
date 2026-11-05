@@ -1,62 +1,41 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan;
+import java.util.*;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-
-/** Immutable public ingress and two-stage work surface for one settlement workshop. */
-public record SettlementWorkshopServicePort(SubjectId settlementId, SubjectId workshopId, FacilityFacing facing,
-                                           SurfaceAnchor exteriorApproach, SurfaceAnchor approachSurface,
-                                           SurfaceAnchor throatSurface, SurfaceAnchor interiorSurface,
-                                           SurfaceAnchor inputStation, SurfaceAnchor workStation) {
-    public SettlementWorkshopServicePort {
-        settlementId = Objects.requireNonNull(settlementId, "workshop port settlement");
-        workshopId = Objects.requireNonNull(workshopId, "workshop port id");
-        facing = Objects.requireNonNull(facing, "workshop port facing");
-        exteriorApproach = Objects.requireNonNull(exteriorApproach, "workshop exterior approach");
-        approachSurface = Objects.requireNonNull(approachSurface, "workshop approach");
-        throatSurface = Objects.requireNonNull(throatSurface, "workshop throat");
-        interiorSurface = Objects.requireNonNull(interiorSurface, "workshop interior");
-        inputStation = Objects.requireNonNull(inputStation, "workshop input station");
-        workStation = Objects.requireNonNull(workStation, "workshop work station");
-        if (!adjacent(exteriorApproach, approachSurface) || !adjacent(approachSurface, throatSurface)
-                || !adjacent(throatSurface, interiorSurface) || !adjacent(inputStation, interiorSurface)
-                || !adjacent(workStation, inputStation) || inputStation.equals(workStation)) {
-            throw new IllegalArgumentException("workshop service port geometry is invalid");
-        }
+/** Read-only production projection of the building's explicit entrance and workplace. */
+public final class SettlementWorkshopServicePort {
+    private final SubjectId settlementId;
+    private final FacilityTraversalPort port;
+    private final SurfaceAnchor input, work;
+    private SettlementWorkshopServicePort(SubjectId settlementId, FacilityTraversalPort port, SurfaceAnchor input, SurfaceAnchor work) {
+        this.settlementId = Objects.requireNonNull(settlementId); this.port = Objects.requireNonNull(port);
+        this.input = Objects.requireNonNull(input); this.work = Objects.requireNonNull(work);
+        if (input.equals(work) || !port.stations().containsAll(List.of(input, work)))
+            throw new IllegalArgumentException("workshop lacks declared interaction stations");
     }
-
     public static SettlementWorkshopServicePort forWorkshop(SettlementStructure workshop) {
-        Objects.requireNonNull(workshop, "settlement workshop");
+        Objects.requireNonNull(workshop);
         if (!ProductionFacilityLayout.supports(workshop.kind())) throw new IllegalArgumentException("facility has no production service port");
-        FacilityFacing facing = workshop.facing(); SurfaceAnchor center = new SurfaceAnchor(workshop.anchor());
-        SurfaceAnchor interior = facing.step(center, 2); SurfaceAnchor throat = facing.step(center, 3);
-        SurfaceAnchor approach = facing.step(center, 4); SurfaceAnchor exterior = facing.step(approach, 1);
-        SurfaceAnchor input = facing.stepLeft(interior, 1);
-        return new SettlementWorkshopServicePort(workshop.settlementId(), workshop.id(), facing, exterior, approach, throat, interior,
-                input, facing.stepLeft(input, 1));
+        var layout = BuildingSpatialPlan.of(workshop); var workplace = layout.definition().primaryWorkplaceDefinition();
+        return new SettlementWorkshopServicePort(workshop.settlementId(), layout.primaryEntrance(),
+                layout.placement().support(workplace.input()), layout.placement().support(workplace.worker()));
     }
-
-    public List<SurfaceAnchor> ownedAccessSurfaces() { return List.of(approachSurface); }
-    /**
-     * The workshop entrance is deliberately a three-wide, two-high loading portal.
-     *
-     * <p>Only its centre column is the retained traversal throat. The flanking apertures are
-     * structural presentation, not alternate pathfinding edges: they make the worker, input
-     * station and active work station readable from the public approach without giving a HOT
-     * body permission to cut through a different wall cell.</p>
-     */
+    public SubjectId settlementId() { return settlementId; }
+    public SubjectId workshopId() { return port.facilityId(); }
+    public FacilityFacing facing() { return port.facing(); }
+    public SurfaceAnchor exteriorApproach() { return port.exteriorApproach().getFirst(); }
+    public SurfaceAnchor approachSurface() { return port.exteriorApproach().getLast(); }
+    public SurfaceAnchor throatSurface() { return port.thresholdSurface(); }
+    public SurfaceAnchor interiorSurface() { return port.interiorConnector(); }
+    public SurfaceAnchor inputStation() { return input; }
+    public SurfaceAnchor workStation() { return work; }
+    public FacilityTraversalPort topologyPort() { return port; }
+    public List<SurfaceAnchor> ownedAccessSurfaces() { return port.exteriorApproach().subList(1, port.exteriorApproach().size()); }
+    /** Authoring apertures for simple box producers only. Real assets retain native collision shapes. */
     public List<BlockPosition> throatAirCells() {
-        List<SurfaceAnchor> columns = List.of(facing.stepLeft(throatSurface, 1), throatSurface, facing.stepRight(throatSurface, 1));
-        return columns.stream().flatMap(surface -> java.util.stream.Stream.of(surface.support().offset(0, 1, 0), surface.support().offset(0, 2, 0))).toList();
-    }
-    public FacilityTraversalPort topologyPort() {
-        return new FacilityTraversalPort(workshopId, facing, List.of(exteriorApproach, approachSurface), throatSurface, interiorSurface,
-                List.of(inputStation, workStation), Set.of(TraversalCapability.PEDESTRIAN));
-    }
-    private static boolean adjacent(SurfaceAnchor first, SurfaceAnchor second) {
-        return Math.abs(first.x() - second.x()) + Math.abs(first.z() - second.z()) == 1 && Math.abs(first.y() - second.y()) <= 1;
+        return List.of(facing().stepLeft(throatSurface(), 1), throatSurface(), facing().stepRight(throatSurface(), 1)).stream()
+                .flatMap(surface -> java.util.stream.Stream.of(surface.support().offset(0, 1, 0), surface.support().offset(0, 2, 0))).toList();
     }
 }

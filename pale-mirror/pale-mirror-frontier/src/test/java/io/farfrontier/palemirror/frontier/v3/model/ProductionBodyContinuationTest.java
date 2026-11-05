@@ -28,7 +28,7 @@ class ProductionBodyContinuationTest {
                 .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(job.facilityId()))
                 .findFirst().orElseThrow();
         var port = SettlementWorkshopServicePort.forWorkshop(workshop);
-        var topology = ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(job.workerId()), job.id());
+        var topology = ProductionWorkTraversalFixtures.compile(state.bootstrap(), workshop, state.actorLocations().get(job.workerId()), job.id());
         var working = job.withWorkTraversal(topology, topology.linearCorridorSurfaces().size() - 1)
                 .withWorkProgress(ProductionWorkProgress.processing(3));
         state = state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(working.id(), working)))

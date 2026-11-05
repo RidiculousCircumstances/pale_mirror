@@ -104,7 +104,7 @@ final class FrontierV3HiveFoundryAudit {
         Objects.requireNonNull(observed, "observed organ cell");
         if (claim == null && observed == ObservedCell.AIR) return RuntimeCellStatus.PENDING;
         return claim != null && !claim.conflicted() && claim.owner().equals(expected.ownerId().value())
-                && claim.material().equals(expected.material().name()) && claim.semanticPart().equals(expected.semanticPart().name())
+                && claim.material().equals(expected.material().wireIdentity()) && claim.semanticPart().equals(expected.semanticPart().name())
                 && observed == ObservedCell.EXPECTED ? RuntimeCellStatus.CURRENT : RuntimeCellStatus.MISMATCH;
     }
 

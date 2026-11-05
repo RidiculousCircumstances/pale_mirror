@@ -7,6 +7,12 @@ import net.minecraft.world.level.block.state.BlockState;
 /** Native palette shared by generation, observation and explicit runtime mutations. */
 final class FrontierV3GrayboxPalette {
     private FrontierV3GrayboxPalette() { }
+    static BlockState block(io.farfrontier.palemirror.frontier.v3.model.StructureMaterial material) {
+        return switch(material) {
+            case io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.Authored authored -> FrontierV3BlockStates.resolve(authored.block());
+            case GrayboxMaterial palette -> block(palette);
+        };
+    }
     static BlockState block(GrayboxMaterial material) {
         return (switch (material) {
             case HALL, HIVE_COCOON -> Blocks.WHITE_CONCRETE;

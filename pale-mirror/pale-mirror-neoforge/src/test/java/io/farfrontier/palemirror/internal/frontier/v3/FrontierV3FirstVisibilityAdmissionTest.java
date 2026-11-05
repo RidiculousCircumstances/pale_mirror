@@ -65,7 +65,7 @@ class FrontierV3FirstVisibilityAdmissionTest {
         cells.forEach(cell -> {
             world.materials.put(cell.position(), cell.material());
             world.ledger.applied(block(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(),
-                    cell.material().name(), cell.semanticPart().name());
+                    cell.material().wireIdentity(), cell.semanticPart().name());
         });
         var work = new FirstVisibilityWork(cells);
         var budget = new FrontierV3FirstVisibilityBudget(256, 8, 3_000_000, () -> 0L);
@@ -176,12 +176,12 @@ class FrontierV3FirstVisibilityAdmissionTest {
     }
     private static final class World implements FrontierV3AftermathPhysicalWorld {
         final FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.inMemory();
-        final Map<BlockPosition, GrayboxMaterial> materials = new HashMap<>();
+        final Map<BlockPosition, StructureMaterial> materials = new HashMap<>();
         int writes;
         public boolean naturallyLoaded(BlockPosition p) { return true; }
         public boolean isAir(BlockPosition p) { return p.y() > 63 && !materials.containsKey(p); }
-        public boolean hasMaterial(BlockPosition p, GrayboxMaterial m) { return materials.get(p) == m; }
-        public boolean placeMaterial(BlockPosition p, GrayboxMaterial m) { writes++; materials.put(p, m); return true; }
+        public boolean hasMaterial(BlockPosition p, StructureMaterial m) { return java.util.Objects.equals(materials.get(p), m); }
+        public boolean placeMaterial(BlockPosition p, StructureMaterial m) { writes++; materials.put(p, m); return true; }
         public boolean clear(BlockPosition p) { throw new AssertionError("first visibility must not erase material"); }
         public FrontierV3GrayboxLedger ledger() { return ledger; }
     }

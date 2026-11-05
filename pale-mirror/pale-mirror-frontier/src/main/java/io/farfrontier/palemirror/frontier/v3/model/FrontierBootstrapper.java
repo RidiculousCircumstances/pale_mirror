@@ -110,19 +110,22 @@ public final class FrontierBootstrapper {
                     .noneMatch(recipe -> recipe.capability() == ProductionStationSpec.Capability.WOODWORKING)) continue;
             int[] offset = switch (kind) {
                 case HALL -> new int[]{0, 0}; case HOUSING -> new int[]{-20, -12};
-                case FARM -> new int[]{20, -12}; case WORKSHOP -> new int[]{-20, 14};
+                case FARM -> new int[]{20, -12}; case WORKSHOP -> new int[]{-16, 14};
                 case DEPOT -> new int[]{20, 14}; case INFIRMARY -> new int[]{0, 22};
                 case SMELTERY -> new int[]{-8, -20};
                 case FORGE -> new int[]{-20, -26};
                 case WOODSHOP -> new int[]{-34, -26};
             };
             structures.add(new SettlementStructure(new SubjectId("structure:" + (index + 1) + "-" + kind.name().toLowerCase(Locale.ROOT)),
-                    settlementId, kind, horizontalAnchor.offset(offset[0], 0, offset[1]), FacilityFacing.WEST));
+                    settlementId, kind, horizontalAnchor.offset(offset[0], 0, offset[1]), FacilityFacing.WEST,
+                    io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.standard().select(
+                        io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.defaultStyle(), kind)));
         }
         int deckY = SettlementStructureFootprint.settlementDeckY(terrain, structures);
         BlockPosition anchor = horizontalAnchor.offset(0, deckY, 0);
         structures.replaceAll(structure -> new SettlementStructure(structure.id(), structure.settlementId(), structure.kind(),
-                structure.anchor().offset(0, deckY, 0), structure.facing()));
+                structure.anchor().offset(0, deckY, 0), structure.facing(), structure.building()));
+        io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingLayoutValidation.requireSeparateFabric(structures);
         int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
         // Compile exact future bed surfaces from the same immutable deck geometry before
         // attaching the initial residents; no temporary invalid Settlement exists.

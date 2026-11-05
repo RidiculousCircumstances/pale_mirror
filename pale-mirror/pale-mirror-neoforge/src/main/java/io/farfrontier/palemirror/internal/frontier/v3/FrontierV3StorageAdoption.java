@@ -68,7 +68,9 @@ final class FrontierV3StorageAdoption {
         Optional<SubjectId> facility = home.structures().stream().filter(structure ->
                 SettlementStructureFootprint.supportSurfaces(structure).contains(station)).map(SettlementStructure::id).findFirst();
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, facility, station);
-        var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE);
+        var zone = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingStorageZones.at(home,p);
+        var policy = new ResourceStoragePolicy(endpoint, zone.map(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingStorageZones.Selection::filter).orElse(ResourceStorageFilter.all()),
+                zone.map(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingStorageZones.Selection::priority).orElse(0), ResourceStorageRole.WAREHOUSE);
         var container = new ContainerRecord(id, home.id(), chest.getContainerSize(), ContainerPurpose.RESOURCE_STORAGE,
                 Optional.empty(), Optional.of(policy));
         if (!FrontierV3FixedContainerProviders.acceptsBlock(container, chest.getBlockState())) return false;

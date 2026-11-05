@@ -25,7 +25,7 @@ public final class ProductionFacilityLayout {
         String suffix = facility.id().value().replace(':', '-');
         return new ProductionStationSpec(new SubjectId("station:" + suffix), facility.id(),
                 new SubjectId("container:" + suffix + "-station"), definition.equipment(), definition.capability(),
-                port.workStation(), facility.facing().step(port.workStation(), -1),
+                port.workStation(), facility.placement().support(facility.definition().primaryWorkplaceDefinition().socket()),
                 java.util.stream.IntStream.range(0, 9).boxed().toList(), 9, definition.capability() == ProductionStationSpec.Capability.WOODWORKING ? OptionalInt.empty() : OptionalInt.of(10), definition.maintenanceSlot());
     }
     public static SubjectId metalStorageId(SettlementStructure facility) {

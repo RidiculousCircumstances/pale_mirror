@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
@@ -75,7 +77,7 @@ final class FrontierV3ServerPhysicalInteractions {
                 .filter(structure -> structure.id().value().equals(claim.owner())
                         && structure.kind() == io.farfrontier.palemirror.frontier.v3.model.StructureKind.HALL).findFirst();
         if (hall.isEmpty() || !level.getBlockState(position).equals(FrontierV3GrayboxExecutor.material(
-                io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.valueOf(claim.material())))) return false;
+                io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.require(claim.material())))) return false;
         PaleMirrorPlayerPresentation.inspectPages(player, "frontier-v3:board:" + claim.owner(),
                 FrontierV3TownTradeCards.pages(state, hall.orElseThrow(), runtime.executionView().orElseThrow().instant().ticks()));
         return true;

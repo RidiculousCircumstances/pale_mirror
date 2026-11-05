@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
@@ -140,7 +141,7 @@ class FrontierV3AftermathOwnerSeamTest {
     }
     private static final class TestPhysicalWorld implements FrontierV3AftermathPhysicalWorld {
         private final Set<Long> loadedChunks; private final FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.inMemory();
-        private final Map<BlockPosition, GrayboxMaterial> blocks = new HashMap<>();
+        private final Map<BlockPosition, StructureMaterial> blocks = new HashMap<>();
         private int preparedWindows;
         @Override public void prepareProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 List<io.farfrontier.palemirror.frontier.v3.model.GrayboxCell> cells) {
@@ -160,11 +161,11 @@ class FrontierV3AftermathOwnerSeamTest {
             return loadedChunks.contains(chunk(position));
         }
         @Override public boolean isAir(BlockPosition position) { return !blocks.containsKey(position); }
-        @Override public boolean hasMaterial(BlockPosition position, GrayboxMaterial material) { return blocks.get(position) == material; }
-        @Override public boolean placeMaterial(BlockPosition position, GrayboxMaterial material) { blocks.put(position, material); return true; }
+        @Override public boolean hasMaterial(BlockPosition position, StructureMaterial material) { return java.util.Objects.equals(blocks.get(position), material); }
+        @Override public boolean placeMaterial(BlockPosition position, StructureMaterial material) { blocks.put(position, material); return true; }
         @Override public boolean clear(BlockPosition position) { blocks.remove(position); return true; }
         @Override public FrontierV3GrayboxLedger ledger() { return ledger; }
-        private void foreign(BlockPosition position, GrayboxMaterial material) { blocks.put(position, material); }
+        private void foreign(BlockPosition position, StructureMaterial material) { blocks.put(position, material); }
         private FrontierV3GrayboxLedger.Claim claim(BlockPosition position) { return ledger.claim(new net.minecraft.core.BlockPos(position.x(), position.y(), position.z())); }
         private static long chunk(BlockPosition position) { return ((long) (position.x() >> 4) << 32) ^ (position.z() >> 4 & 0xffffffffL); }
     }

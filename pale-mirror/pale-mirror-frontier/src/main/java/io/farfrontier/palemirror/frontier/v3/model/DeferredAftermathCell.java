@@ -7,9 +7,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
  * One bounded, chunk-addressable physical consequence.  The expected empty cell is an
  * observation precondition, not authority to clear a later block.
  */
-public record DeferredAftermathCell(BlockPosition position, PhysicalDeltaSemanticTarget semanticTarget, GrayboxMaterial expectedMaterial,
+public record DeferredAftermathCell(BlockPosition position, PhysicalDeltaSemanticTarget semanticTarget, StructureMaterial expectedMaterial,
                                     GrayboxSemanticPart expectedPart, long authorityRevision, DeferredAftermathCellStatus status) {
-    public DeferredAftermathCell(BlockPosition position, PhysicalDeltaSemanticTarget semanticTarget, GrayboxMaterial expectedMaterial,
+    public DeferredAftermathCell(BlockPosition position, PhysicalDeltaSemanticTarget semanticTarget, StructureMaterial expectedMaterial,
                                  GrayboxSemanticPart expectedPart, DeferredAftermathCellStatus status) {
         this(position, semanticTarget, expectedMaterial, expectedPart, -1L, status);
     }

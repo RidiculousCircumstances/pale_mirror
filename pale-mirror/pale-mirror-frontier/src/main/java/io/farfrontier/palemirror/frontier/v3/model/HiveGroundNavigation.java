@@ -181,7 +181,9 @@ public final class HiveGroundNavigation {
         if (tray.isPresent()) {
             return SurfaceAnchor.at(x, tray.orElseThrow().anchor().y(), z);
         }
-        return KnownPedestrianGround.forFrontier(state).at(x, z);
+        // This retained two-dimensional provider uses the public terrain datum. A roof
+        // in the detailed multi-level survey is not a new strategic waypoint.
+        return KnownPedestrianGround.publicDatumAt(state,x,z);
     }
 
     static HiveOrgan homeHibernaculum(FrontierWorldState state, SubjectId member) {

@@ -114,7 +114,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     }
 
     @Test
-    void coldProductionCorridorAvoidsAnotherLivingActorsRetainedSupportBeforeHotAdmission() {
+    void productionGeometryDoesNotTurnAnotherMovingActorIntoAPermanentWall() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-occupancy"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResidentProfile worker = state.humanPopulation().residents().values().stream()
@@ -124,7 +124,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP)
                 .findFirst().orElseThrow();
         SubjectId jobId = new SubjectId("job:production-occupancy");
-        TraversalTopology unobstructed = ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(worker.id()), jobId);
+        TraversalTopology unobstructed = ProductionWorkTraversalFixtures.compile(state.bootstrap(), workshop, state.actorLocations().get(worker.id()), jobId);
         SurfaceAnchor occupiedSurface = unobstructed.linearCorridorSurfaces().get(1);
         SubjectId idleResident = state.humanPopulation().residents().keySet().stream().filter(id -> !id.equals(worker.id())).findFirst().orElseThrow();
 
@@ -132,8 +132,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         TraversalTopology planned = ProductionWorkTraversal.compile(occupied, workshop, worker.id(), occupied.actorLocations().get(worker.id()), jobId);
 
         assertEquals(unobstructed.linearCorridorSurfaces().getFirst(), planned.linearCorridorSurfaces().getFirst());
-        assertFalse(planned.linearCorridorSurfaces().contains(occupiedSurface),
-                "a future HOT worker must not inherit a living-body collision as a retained edge");
+        assertEquals(unobstructed.linearCorridorSurfaces(), planned.linearCorridorSurfaces(),
+                "common movement coordination handles bodies independently of immutable route geometry");
     }
 
     @Test
@@ -211,7 +211,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         SettlementStructure workshop = prepared.state().bootstrap().settlements().stream()
                 .filter(value -> value.id().equals(prepared.settlementId())).findFirst().orElseThrow().structures().stream()
                 .filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
-        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop,
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversalFixtures.compile(prepared.state().bootstrap(), workshop,
                 worker, prepared.job().id()), 0);
         FrontierWorldState state = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(job.id(), job)));
         ScheduledAction[] action = { ProductionProcess.complete(job, 1_000L) };
@@ -412,7 +412,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         SubjectId settlementId = prepared.settlementId(), workshopId = prepared.job().facilityId();
         SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(settlementId))
                 .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(workshopId)).findFirst().orElseThrow();
-        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversalFixtures.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
         prepared = new MaterializedProduction(prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob))),
                 workJob, prepared.order(), prepared.settlementId(), prepared.taskId());
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-finalize-test");
@@ -489,7 +489,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         SettlementStructure workshop = prepared.state().bootstrap().settlements().stream()
                 .filter(value -> value.id().equals(prepared.settlementId())).findFirst().orElseThrow().structures().stream()
                 .filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
-        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker,
+        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversalFixtures.compile(prepared.state().bootstrap(), workshop, worker,
                 prepared.job().id()), 0);
         FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob)));
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-finalize-order-task");
@@ -532,7 +532,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
         SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(prepared.settlementId()))
                 .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
-        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversalFixtures.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
         FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(job.id(), job)));
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-route-blocked-hot");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
@@ -633,7 +633,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         SettlementStructure workshop = prepared.state().bootstrap().settlements().stream()
                 .filter(value -> value.id().equals(prepared.settlementId())).findFirst().orElseThrow().structures().stream()
                 .filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
-        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversalFixtures.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
         FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob)));
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-conflict-reservation");
         SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(workJob.id()),
@@ -781,7 +781,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 .filter(value -> value.id().equals(prepared.settlementId())).findFirst().orElseThrow().structures().stream()
                 .filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
         ProductionJob workJob = prepared.job().withWorkTraversal(
-                ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+                ProductionWorkTraversalFixtures.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-output-ready-release");
         SceneLease lease = SceneLease.forCause(leaseId, prepared.state().bootstrap().worldId(), new ProductionWorkSceneCause(workJob.id()),
                 worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,

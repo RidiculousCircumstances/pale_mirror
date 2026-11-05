@@ -61,6 +61,7 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-ambient-restart-reclaim")
                     || batchName.equals("pm-frontier-v3-ambient-restart-absence");
             case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support");
+            case "building-authoring" -> batchName.equals("pm-frontier-v3-building-authoring");
             case "calendar" -> batchName.equals("pm-frontier-v3-calendar");
             case "ambient-restart-absence" -> batchName.equals("pm-frontier-v3-ambient-restart-absence");
             case "ambient-restart-reclaim" -> batchName.equals("pm-frontier-v3-ambient-restart-reclaim");

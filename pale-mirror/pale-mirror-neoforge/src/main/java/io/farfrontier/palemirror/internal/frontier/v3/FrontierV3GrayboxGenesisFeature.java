@@ -80,7 +80,10 @@ public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureCo
             var p = cell.position(); var position = new BlockPos(p.x(), p.y(), p.z());
             // The selected graybox provider declares empty space for its initial fabric.
             // It cannot silently bulldoze natural geology or another generator's structure.
-            if (!chunk.getBlockState(position).isAir())
+            var host = chunk.getBlockState(position);
+            if (!host.isAir() && (!(cell.material() instanceof StructureMaterial.Authored)
+                    || !host.equals(context.chunkGenerator().getBaseColumn(p.x(),p.z(),level,
+                            level.getLevel().getChunkSource().randomState()).getBlock(p.y()))))
                 throw new IllegalStateException("initial structure overlaps undeclared host at " + position);
             var expected = FrontierV3GrayboxExecutor.material(cell.material());
             if (!level.setBlock(position, expected, 2) && !chunk.getBlockState(position).equals(expected))

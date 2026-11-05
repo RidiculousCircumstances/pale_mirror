@@ -108,7 +108,7 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
             throw new IllegalArgumentException("graybox bakery requires its declared workshop facility");
         SettlementWorkshopServicePort port = SettlementWorkshopServicePort.forWorkshop(workshop);
         String suffix = workshop.id().value().replace(':', '-');
-        SurfaceAnchor machine = workshop.facing().step(port.workStation(), -1);
+        SurfaceAnchor machine = workshop.placement().support(workshop.definition().primaryWorkplaceDefinition().socket());
         if (!SettlementStructureFootprint.supportSurfaces(workshop).contains(machine))
             throw new IllegalArgumentException("bakery machine socket has no facility support");
         return new ProductionStationSpec(new SubjectId("station:" + suffix + "-bakery"), workshop.id(),

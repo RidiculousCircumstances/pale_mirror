@@ -83,7 +83,9 @@ public final class FrontierV3NavigationShapeGameTests {
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13"));
         var runtime = FrontierV3ServerRuntime.start(config, new EphemeralStore(), 10_000);
         try {
-            FrontierV3NavigationObservation.tick(helper.getLevel(), runtime);
+            var expected=KnownNavigationBlocks.palette(runtime.decodedState().orElseThrow());
+            for(int batch=0;batch<=expected.size() && !runtime.decodedState().orElseThrow().navigationGeometry().definitions().keySet().containsAll(expected);batch++)
+                FrontierV3NavigationObservation.tick(helper.getLevel(), runtime);
             var state = runtime.decodedState().orElseThrow();
             helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "native geometry command must not quarantine");
             helper.assertTrue(!state.navigationGeometry().definitions().isEmpty(), "actual physical producer must own and publish its registered event");

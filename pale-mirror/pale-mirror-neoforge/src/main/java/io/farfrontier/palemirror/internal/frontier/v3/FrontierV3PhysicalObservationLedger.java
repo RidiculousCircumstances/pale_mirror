@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -88,7 +90,7 @@ final class FrontierV3PhysicalObservationLedger extends FrontierV3JournaledSaved
     private static Optional<Semantic> semantic(FrontierV3GrayboxLedger.Claim claim, BlockState baseline) {
         if (claim == null || claim.conflicted()) return Optional.empty();
         try {
-            var material = io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.valueOf(claim.material());
+            var material = io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.require(claim.material());
             var part = io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart.valueOf(claim.semanticPart());
             io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(claim.targetTag());
             if (baseline.equals(FrontierV3GrayboxExecutor.material(material))) return Optional.of(new Semantic(claim.owner(), claim.targetTag(), part.name()));

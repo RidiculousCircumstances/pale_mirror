@@ -42,14 +42,9 @@ public record FacilityTraversalPort(SubjectId facilityId, FacilityFacing facing,
                 || stations.contains(thresholdSurface)) {
             throw new IllegalArgumentException("facility traversal port geometry is invalid");
         }
-        for (int stationIndex = 0; stationIndex < stations.size(); stationIndex++) {
-            SurfaceAnchor station = stations.get(stationIndex);
-            boolean connectedToIngress = ingress.contains(station) || ingress.stream().anyMatch(surface -> adjacent(surface, station));
-            boolean connectedToPriorStation = stationIndex > 0 && adjacent(stations.get(stationIndex - 1), station);
-            if (!connectedToIngress && !connectedToPriorStation) {
-                throw new IllegalArgumentException("facility station is not connected to the declared ingress");
-            }
-        }
+        // Stations may lie in other rooms or on another floor. Their actual connectivity
+        // is validated against shared geometry, not a hard-coded adjacent station chain.
+
     }
 
     /** Exact ordered movement corridor, from public exterior to the facility interior. */

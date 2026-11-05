@@ -329,7 +329,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 returnAction.dueAt().ticks() + base.initialState().bootstrap().ruleset().cadence().resourceGrowthStageInterval());
         var configuration = new FrontierEngineConfiguration<>(pending.state().bootstrap().worldId(), growingDuringReturn, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
-                List.of(pending.action(), plantClock), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+                List.of(pending.action(), plantClock,
+                    io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(beforeReturn.workerId(),returnAction.dueAt().ticks()+100000)), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         var engine = FrontierEngines.create(configuration);
         // Stop at the owner boundary, before the separate stock wake admits bakery
         // actors that this owner-only fixture intentionally does not drive.

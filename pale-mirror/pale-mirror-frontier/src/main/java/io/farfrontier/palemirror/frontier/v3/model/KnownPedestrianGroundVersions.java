@@ -13,7 +13,7 @@ final class KnownPedestrianGroundVersions {
     private enum Pristine { TERRAIN }
     private record Inputs(Object bootstrap, RegionalBlockSet obstacles, RegionalSurfaceMap supports,
                           RegionalBlockSet withdrawn, RegionalBlockSet unknown, RegionalBlockSet scars,
-                          RegionalBlockMap<Optional<NavigationCell>> shapes, KnownNaturalGeometry.Composite natural) { }
+                          RegionalBlockMap<Optional<NavigationCell>> shapes, KnownSpatialGeometry.Composite natural) { }
     private record Facts(Object obstacles, Object supports, Object withdrawn, Object unknown, Object scars,
                          RegionalBlockMap<Optional<NavigationCell>> shapes, List<Optional<Object>> natural) { }
     private final ImmutableResultView<String, PedestrianGeometryRevision> completed = new ImmutableResultView<>(4);
@@ -23,7 +23,7 @@ final class KnownPedestrianGroundVersions {
     synchronized PedestrianGeometryRevision capture(Object bootstrap, Set<BlockPosition> obstacles,
             Map<TerrainColumn, List<SurfaceAnchor>> supports, Set<BlockPosition> withdrawn,
             Set<BlockPosition> unknown, Set<BlockPosition> scars,
-            RegionalBlockMap<Optional<NavigationCell>> shapes, KnownNaturalGeometry.Composite natural) {
+            RegionalBlockMap<Optional<NavigationCell>> shapes, KnownSpatialGeometry.Composite natural) {
         var next = new Inputs(bootstrap, RegionalBlockSet.copyOf(obstacles), RegionalSurfaceMap.copyOf(supports),
                 RegionalBlockSet.copyOf(withdrawn), RegionalBlockSet.copyOf(unknown), RegionalBlockSet.copyOf(scars), shapes, natural);
         return completed.get(List.of(bootstrap, next.obstacles(), next.supports(), next.withdrawn(), next.unknown(),

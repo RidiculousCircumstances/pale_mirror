@@ -101,6 +101,14 @@ final class FrontierV3TraversalFoundryAudit {
                         "Compile a semantic surface/foundation or remove the impossible topology node.");
             }
         }
+        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView compiled = position -> {
+            var cell=graybox.cells().get(position);
+            if(cell==null)return Optional.of(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.AIR);
+            if(cell.material() instanceof io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.Authored authored)
+                return io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCollisionCatalog.standard(authored.block())
+                        .flatMap(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation::cell);
+            return Optional.of(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID);
+        };
         for (FrontierTraversalPlan.FacilityBinding binding : plan.facilities().values()) {
             FacilityTraversalPort port = binding.port();
             if (!plan.publicTopologyFor(port.facilityId()).nodes().containsValue(port.exteriorApproach().getFirst())) {
@@ -110,13 +118,14 @@ final class FrontierV3TraversalFoundryAudit {
                         "Facility exterior approach is not in its declared public topology.",
                         "Compile an explicit port-to-public-circulation connector; never find a nearest route at runtime.");
             }
-            for (BlockPosition air : port.thresholdHeadroomCells()) {
-                if (graybox.cells().containsKey(air)) {
-                    add(findings, "frontier.port.throat.compiled", FoundrySeverity.BLOCKER, phase, "facility_port",
-                            port.facilityId().value(), level, air, "Compiled facility throat has authored solid headroom.",
-                            "Leave two declared body cells clear above the semantic threshold.");
-                }
+            for(var entrance:binding.ports()) {
+                if(!io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.contacts(compiled,entrance.thresholdSurface(),
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER,.5,.5).isEmpty())continue;
+                add(findings,"frontier.port.throat.compiled",FoundrySeverity.BLOCKER,phase,"facility_port",port.facilityId().value(),level,
+                        entrance.thresholdSurface().support(),"Compiled facility entrance has no clear supported body contact.",
+                        "Validate the declared entrance against actual compiled collision shapes; do not carve a special-case aperture.");
             }
+
         }
         metrics.add(new FoundryMetric("frontier.traversal.topologies", plan.topologies().size(), "topologies"));
         metrics.add(new FoundryMetric("frontier.traversal.edges", topologyEdges, "edges"));
@@ -181,17 +190,22 @@ final class FrontierV3TraversalFoundryAudit {
             }
         }
         int blockedThroats = 0, openPorts = 0, blockedPorts = 0, unverifiedPorts = 0;
-        for (FrontierTraversalPlan.FacilityBinding binding : scope.facilities()) {
+        for (FrontierTraversalPlan.FacilityBinding binding : scope.facilities()) for (var port : binding.ports()) {
             List<ObservedPortHeadroom> headroom = new ArrayList<>();
-            for (BlockPosition air : binding.port().thresholdHeadroomCells()) {
+            for (BlockPosition air : port.thresholdHeadroomCells()) {
                 BlockPos position = minecraft(air);
                 if (!level.hasChunkAt(position)) {
                     unloaded++;
                     headroom.add(ObservedPortHeadroom.UNVERIFIED);
                     continue;
                 }
-                headroom.add(level.getBlockState(position).isAir() ? ObservedPortHeadroom.CLEAR : ObservedPortHeadroom.BLOCKED);
-                if (level.getBlockState(position).isAir()) continue;
+                var clearance = io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.clearance(
+                        p -> FrontierV3NavigationShapes.capture(level,p).cell(), io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER,
+                        air.x()+.5, port.thresholdSurface().standingBody().y(), air.z()+.5);
+                headroom.add(switch(clearance) {
+                    case CLEAR -> ObservedPortHeadroom.CLEAR;case BLOCKED -> ObservedPortHeadroom.BLOCKED;case UNKNOWN -> ObservedPortHeadroom.UNVERIFIED;
+                });
+                if (clearance != io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.Clearance.BLOCKED) continue;
                 blockedThroats++;
             }
             RuntimePortAvailability availability = classifyPortAvailability(headroom);
@@ -199,9 +213,9 @@ final class FrontierV3TraversalFoundryAudit {
                 case OPEN -> openPorts++;
                 case BLOCKED -> {
                     blockedPorts++;
-                    BlockPosition throat = binding.port().thresholdSurface().support();
+                    BlockPosition throat = port.thresholdSurface().support();
                     add(findings, "frontier.port.availability.blocked", FoundrySeverity.ERROR, phase, "facility_port",
-                            binding.port().facilityId().value(), level, throat,
+                            port.facilityId().value(), level, throat,
                             "Loaded facility port is BLOCKED: its declared two-body throat no longer has complete headroom.",
                             "Reconcile this exact semantic port as unavailable; Foundry will not clear the block or choose another entrance.");
                 }
@@ -259,10 +273,11 @@ final class FrontierV3TraversalFoundryAudit {
             if (topology == null) throw new IllegalArgumentException("frontier Foundry has no facility or topology scope: " + requested);
             return new RuntimeScope(new LinkedHashSet<>(topology.nodes().values()), List.of(), List.of(topology));
         }
-        Set<SurfaceAnchor> surfaces = new LinkedHashSet<>(plan.publicTopologyFor(binding.port().facilityId()).nodes().values());
-        surfaces.addAll(binding.port().ingressSurfaces());
+        var port=binding.port();
+        Set<SurfaceAnchor> surfaces = new LinkedHashSet<>(plan.publicTopologyFor(port.facilityId()).nodes().values());
+        surfaces.addAll(port.ingressSurfaces());
         List<TraversalTopology> topologies = plan.topologies().values().stream()
-                .filter(topology -> topology.id().equals(binding.publicTopologyId()) || topology.provenance().equals(binding.port().facilityId()))
+                .filter(topology -> topology.id().equals(binding.publicTopologyId()) || topology.provenance().equals(port.facilityId()))
                 .toList();
         return new RuntimeScope(surfaces, List.of(binding), topologies);
     }
@@ -271,7 +286,7 @@ final class FrontierV3TraversalFoundryAudit {
                                                 ObservedSupport observed) {
         return claim != null && expected != null && !claim.conflicted()
                 && claim.owner().equals(expected.ownerId().value())
-                && claim.material().equals(expected.material().name())
+                && claim.material().equals(expected.material().wireIdentity())
                 && claim.semanticPart().equals(expected.semanticPart().name())
                 && observed == ObservedSupport.EXPECTED;
     }

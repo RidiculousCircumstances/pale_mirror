@@ -100,7 +100,7 @@ final class FrontierV3RouteConstructionExecutor {
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         FrontierV3GrayboxLedger.Claim claim = FrontierV3GrayboxLedger.get(level).claim(target.position());
-        boolean claimed = claim != null && claim.owner().equals(target.cell().ownerId().value()) && claim.material().equals(target.cell().material().name())
+        boolean claimed = claim != null && claim.owner().equals(target.cell().ownerId().value()) && claim.material().equals(target.cell().material().wireIdentity())
                 && claim.semanticPart().equals(target.cell().semanticPart().name()) && !claim.conflicted();
         if (claimed && level.getBlockState(target.position()).equals(FrontierV3GrayboxExecutor.material(target.cell().material()))) confirm(level, runtime, intent, target);
         else unknown(runtime, intent.id(), "restart-postcondition-conflict");
@@ -125,7 +125,7 @@ final class FrontierV3RouteConstructionExecutor {
         if (!level.getBlockState(position).isAir() || ledger.claim(position) != null) return false;
         ledger.ensureCapacityFor(position);
         if (!level.setBlock(position, FrontierV3GrayboxExecutor.material(cell.material()), 3)) return false;
-        ledger.applied(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
+        ledger.applied(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().wireIdentity(), cell.semanticPart().name());
         return true;
     }
 

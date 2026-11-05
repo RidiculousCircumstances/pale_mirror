@@ -66,6 +66,8 @@ public final class FrontierContainerSocketPlan {
                     if (structure.id().equals(station.facilityId())
                             && state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED
                             && SettlementStructureFootprint.supportSurfaces(structure).contains(station.socketSurface())) {
+                        if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+                            return Optional.ofNullable(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().get(position));
                         return Optional.of(new GrayboxCell(position,
                                 new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id()),
                                 GrayboxMaterial.WORKSHOP, GrayboxSemanticPart.FOUNDATION));

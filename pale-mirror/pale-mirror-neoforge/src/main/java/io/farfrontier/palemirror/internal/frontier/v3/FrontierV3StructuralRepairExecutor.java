@@ -78,7 +78,7 @@ final class FrontierV3StructuralRepairExecutor {
         if (!level.getBlockState(target.position()).equals(FrontierV3GrayboxExecutor.material(target.cell().material()))) {
             unknown(runtime, intent.id(), "postcondition-conflict"); return;
         }
-        FrontierV3GrayboxLedger.get(level).repaired(target.position(), target.cell().ownerId().value(), target.cell().semanticTarget().kind().wireTag(), target.cell().material().name(), target.cell().semanticPart().name());
+        FrontierV3GrayboxLedger.get(level).repaired(target.position(), target.cell().ownerId().value(), target.cell().semanticTarget().kind().wireTag(), target.cell().material().wireIdentity(), target.cell().semanticPart().name());
         StructuralRepairObservation observation = new StructuralRepairObservation(
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.material().id(),
                 new BlockPosition(target.position().getX(), target.position().getY(), target.position().getZ()));
@@ -95,7 +95,7 @@ final class FrontierV3StructuralRepairExecutor {
         if (!FrontierV3ExactItemPresentation.exactMatch(stack, material) || !level.getBlockState(position).isAir()) return false;
         if (!level.setBlock(position, FrontierV3GrayboxExecutor.material(cell.material()), 3)) return false;
         stack.shrink(1); chest.setItem(slot, stack); chest.setChanged();
-        ledger.repaired(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
+        ledger.repaired(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().wireIdentity(), cell.semanticPart().name());
         return true;
     }
 

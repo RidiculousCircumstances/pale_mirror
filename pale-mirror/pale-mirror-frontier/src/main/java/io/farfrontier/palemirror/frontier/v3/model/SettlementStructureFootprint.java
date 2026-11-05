@@ -20,6 +20,8 @@ public final class SettlementStructureFootprint {
     public static Set<SurfaceAnchor> supportSurfaces(SettlementStructure structure) {
         Objects.requireNonNull(structure, "structure");
         LinkedHashSet<SurfaceAnchor> surfaces = new LinkedHashSet<>();
+        if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+            return io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).authoredFloors();
         int width = width(structure.kind()), depth = depth(structure.kind());
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
             surfaces.add(new SurfaceAnchor(structure.anchor().offset(x, 0, z)));
@@ -40,7 +42,8 @@ public final class SettlementStructureFootprint {
         LinkedHashSet<BlockPosition> fill = new LinkedHashSet<>();
         for (SurfaceAnchor surface : supportSurfaces(structure)) {
             int terrainY = terrain.supportYAt(surface.x(), surface.z());
-            if (terrainY >= surface.y()) {
+            if (terrainY > surface.y() || terrainY == surface.y()
+                    && structure.definition().representation() != io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
                 throw new IllegalArgumentException("surveyed terrain occupies or exceeds structure floor at " + surface.support());
             }
             for (int y = terrainY + 1; y < surface.y(); y++) fill.add(new BlockPosition(surface.x(), y, surface.z()));

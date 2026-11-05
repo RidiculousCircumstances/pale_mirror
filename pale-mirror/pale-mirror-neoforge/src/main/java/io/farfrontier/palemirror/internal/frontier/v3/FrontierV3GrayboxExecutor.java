@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -573,11 +575,11 @@ final class FrontierV3GrayboxExecutor {
                                                                  BlockPos position, String cause) {
         FrontierV3GrayboxLedger.Claim claim = ledger.claim(position);
         if (claim == null || claim.deferred()) return Optional.empty();
-        GrayboxMaterial material;
+        StructureMaterial material;
         GrayboxSemanticPart part;
         io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind targetKind;
         try {
-            material = GrayboxMaterial.valueOf(claim.material());
+            material = StructureMaterial.require(claim.material());
             part = GrayboxSemanticPart.valueOf(claim.semanticPart());
             targetKind = io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(claim.targetTag());
         } catch (IllegalArgumentException malformed) {
@@ -632,14 +634,14 @@ final class FrontierV3GrayboxExecutor {
         }
         if (!world.isAir(position)) {
             if (!admitMutation.getAsBoolean()) return ProjectionResult.YIELDED;
-            ledger.obstructed(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
+            ledger.obstructed(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().wireIdentity(), cell.semanticPart().name());
             return ProjectionResult.CONFLICT;
         }
         if (requiresSupport(cell.semanticPart()) && world.isAir(cell.position().offset(0, -1, 0))) return ProjectionResult.DEFERRED;
         if (!admitMutation.getAsBoolean()) return ProjectionResult.YIELDED;
         ledger.ensureCapacityFor(toMinecraft(cell));
         if (!world.placeMaterial(position, cell.material())) return ProjectionResult.DEFERRED;
-        ledger.applied(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
+        ledger.applied(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().wireIdentity(), cell.semanticPart().name());
         return ProjectionResult.APPLIED;
     }
     static void retainKnownLoss(ServerLevel level, FrontierV3GrayboxLedger ledger, GrayboxCell cell) {
@@ -647,24 +649,22 @@ final class FrontierV3GrayboxExecutor {
     }
     static void retainKnownLoss(FrontierV3AftermathPhysicalWorld world, GrayboxCell cell) {
         if (!world.naturallyLoaded(cell.position()) || !world.isAir(cell.position())) return;
-        world.ledger().damaged(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
+        world.ledger().damaged(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().wireIdentity(), cell.semanticPart().name());
     }
     static boolean matchesKnownLoss(PhysicalDelta delta, GrayboxCell cell) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
                 && delta.semanticTarget().equals(Optional.of(cell.semanticTarget()))
                 && delta.semanticPart().equals(Optional.of(cell.semanticPart()));
     }
-    static BlockState material(GrayboxMaterial material) {
-        return FrontierV3GrayboxPalette.block(material);
-    }
+    static BlockState material(StructureMaterial material) { return FrontierV3GrayboxPalette.block(material); }
     private static void retireStaleWorksiteStaging(ServerLevel level, FrontierV3GrayboxLedger ledger, Cursor cursor) {
         for (FrontierV3GrayboxLedger.ClaimAt staged : ledger.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name())) {
             BlockPos position = staged.position();
             if (cursor.retainsWorksiteStaging(position) || !FrontierV3LoadedWorld.ready(level, position)) continue;
             FrontierV3GrayboxLedger.Claim claim = staged.claim();
-            GrayboxMaterial stagedMaterial;
+            StructureMaterial stagedMaterial;
             try {
-                stagedMaterial = GrayboxMaterial.valueOf(claim.material());
+                stagedMaterial = StructureMaterial.require(claim.material());
             } catch (IllegalArgumentException malformed) {
                 ledger.defer(position); continue;
             }
@@ -681,7 +681,7 @@ final class FrontierV3GrayboxExecutor {
                 || part == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || part == GrayboxSemanticPart.WORKSITE_STAGING;
     }
     private static boolean matches(FrontierV3GrayboxLedger.Claim claim, GrayboxCell cell) {
-        return claim.owner().equals(cell.ownerId().value()) && claim.targetTag() == cell.semanticTarget().kind().wireTag() && claim.material().equals(cell.material().name())
+        return claim.owner().equals(cell.ownerId().value()) && claim.targetTag() == cell.semanticTarget().kind().wireTag() && claim.material().equals(cell.material().wireIdentity())
                 && claim.semanticPart().equals(cell.semanticPart().name());
     }
     private static BlockPos toMinecraft(GrayboxCell cell) {

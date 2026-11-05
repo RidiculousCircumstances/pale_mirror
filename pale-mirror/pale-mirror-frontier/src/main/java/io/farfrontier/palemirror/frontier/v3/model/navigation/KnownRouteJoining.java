@@ -39,7 +39,11 @@ public final class KnownRouteJoining {
                 : knowledge.plannedPath(approach.getLast(), order, itinerary);
         var path = new ArrayList<>(approach);
         path.addAll(tail.subList(1, tail.size()));
-        var bounded = List.copyOf(path.subList(0, Math.min(path.size(), TimedKnownRoute.MAX_SURFACES)));
+        // A stale hint can require a local detour through the off-itinerary departure.
+        // Erase the composed geometric loop BEFORE a formation checkpoints first contact;
+        // otherwise successive accepted prefixes can oscillate between departure and join.
+        var simple = PedestrianPathComposition.withoutLoops(path);
+        var bounded = List.copyOf(simple.subList(0, Math.min(simple.size(), TimedKnownRoute.MAX_SURFACES)));
         knowledge.requireRoute(bounded);
         return bounded;
     }

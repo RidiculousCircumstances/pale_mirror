@@ -48,6 +48,7 @@ public final class SettlementPedestrianGround {
             // A declared threshold/connector/station rests on the authored floor, not on
             // natural terrain beneath it. Knowledge of support does not grant
             // permission to enter: the passage view still owns headroom/access.
+            if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) return;
             FrontierTraversalPlan.facilityPort(structure).ifPresent(port -> {
                 port.ingressSurfaces().forEach(surface -> add(surfaces, surface));
                 port.stations().forEach(surface -> add(surfaces, surface));

@@ -18,6 +18,14 @@ public final class FacilityPedestrianContacts {
                 publicSurfaces.addAll(FrontierGrayboxPlan.publicAccessSurfaces(facility));
                 port.stations().stream().filter(surface->!publicSurfaces.contains(surface))
                         .forEach(surface->stations.add(surface.support()));
+                if(facility.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+                    var layout=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(facility);
+                    layout.circulation().forEach(surface->noParking.add(surface.support()));
+                    layout.definition().passages().values().stream().filter(entry->!entry.publicAccess()).forEach(entry->{
+                        var ingress=layout.entrances().get(entry.id());
+                        if(ingress!=null)ingress.ingressSurfaces().subList(1,ingress.ingressSurfaces().size()).forEach(surface->stations.add(surface.support()));
+                    });
+                }
                 // Facility interiors are transit/work space, not fallback idle parking.
                 SettlementStructureFootprint.supportSurfaces(facility).stream()
                         .filter(surface->!publicSurfaces.contains(surface))

@@ -36,7 +36,7 @@ public final class FrontierV3DeferredAftermathGameTests {
             level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
             DeferredAftermathCell cell = aftermath.cells().get(position.equals(first) ? 0 : 1);
             FrontierV3GrayboxLedger.get(level).applied(position, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(),
-                    GrayboxMaterial.HALL.name(), cell.expectedPart().name());
+                    GrayboxMaterial.HALL.wireIdentity(), cell.expectedPart().name());
         }
 
         FrontierV3DeferredAftermathExecutor.tick(level, runtime);
@@ -59,7 +59,7 @@ public final class FrontierV3DeferredAftermathGameTests {
         DeferredAftermath aftermath = runtime.decodedState().orElseThrow().deferredAftermath().entries().values().iterator().next();
         DeferredAftermathCell cell = aftermath.cells().getFirst();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        ledger.damaged(first, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(), cell.expectedMaterial().name(), cell.expectedPart().name());
+        ledger.damaged(first, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(), cell.expectedMaterial().wireIdentity(), cell.expectedPart().name());
 
         FrontierV3DeferredAftermathExecutor.tick(level, runtime);
         helper.assertValueEqual(runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id()).cellAt(0).status(),
@@ -101,7 +101,7 @@ public final class FrontierV3DeferredAftermathGameTests {
         DeferredAftermathCell cell = aftermath.cells().getFirst();
         level.setBlock(first, FrontierV3GrayboxExecutor.material(cell.expectedMaterial()), 3);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        ledger.applied(first, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(), cell.expectedMaterial().name(), cell.expectedPart().name());
+        ledger.applied(first, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(), cell.expectedMaterial().wireIdentity(), cell.expectedPart().name());
 
         FrontierV3DeferredAftermathExecutor.tick(level, runtime);
         DeferredAftermath realized = runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id());

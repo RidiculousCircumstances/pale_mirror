@@ -22,7 +22,7 @@ public final class FrontierGrayboxPlan {
     // World-wide immutable declared fabric, indexed by region before HOT use.
     // The distant 4096x4096 profile has longer roads, not larger loaded scenes.
     // Native per-tick/region projection budgets are deliberately independent.
-    private static final int MAX_CELLS = 262_144;
+    private static final int MAX_CELLS = SimulationCapacity.MAX_SETTLEMENTS * 8_192;
     // Exact immutable organ declarations, not current damage or cocoon occupancy.
     // Keep the few recurring seed/expanded views without recompiling their cells
     // on every colony validation or navigation query. Failed derivations never enter.
@@ -33,7 +33,7 @@ public final class FrontierGrayboxPlan {
     private final Map<InfectionCell, FixedRatio> infection;
 
     private FrontierGrayboxPlan(Map<BlockPosition, GrayboxCell> cells, Map<InfectionCell, FixedRatio> infection) {
-        this.cells = Map.copyOf(cells);
+        this.cells = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(cells);
         this.infection = Map.copyOf(infection);
         if (cells.size() > MAX_CELLS) throw new IllegalArgumentException("graybox plan cell limit exceeded");
     }
@@ -408,9 +408,8 @@ public final class FrontierGrayboxPlan {
     private static Set<InfectionCell> infectedStructureCells(FrontierWorldState state, SettlementStructure structure,
                                                               StructureCondition condition) {
         if (condition == StructureCondition.DESTROYED) return Set.of();
-        int width = SettlementStructureFootprint.width(structure.kind()), depth = SettlementStructureFootprint.depth(structure.kind());
-        int minX = structure.anchor().x() - width / 2, maxX = structure.anchor().x() + (width - 1) / 2;
-        int minZ = structure.anchor().z() - depth / 2, maxZ = structure.anchor().z() + (depth - 1) / 2;
+        var bounds = structure.placement().volume(structure.definition().fabric());
+        int minX = bounds.min().x(), maxX = bounds.max().x()-1, minZ = bounds.min().z(), maxZ = bounds.max().z()-1;
         Set<InfectionCell> candidates = new LinkedHashSet<>();
         for (int x = Math.floorDiv(minX, InfectionCell.BLOCKS); x <= Math.floorDiv(maxX, InfectionCell.BLOCKS); x++) {
             for (int z = Math.floorDiv(minZ, InfectionCell.BLOCKS); z <= Math.floorDiv(maxZ, InfectionCell.BLOCKS); z++) {
@@ -427,6 +426,9 @@ public final class FrontierGrayboxPlan {
 
     /** Every exterior semantic access floor is part of the same exact structure exposure model. */
     static List<SurfaceAnchor> publicAccessSurfaces(SettlementStructure structure) {
+        if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+            return io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).publicEntrances().stream()
+                    .flatMap(port -> port.ingressSurfaces().stream()).distinct().toList();
         return switch (structure.kind()) {
             case HALL -> SettlementAccessPort.forHall(structure).ownedSurfaces();
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).ownedAccessSurfaces();
@@ -475,6 +477,7 @@ public final class FrontierGrayboxPlan {
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         structures.forEach(structure -> addStructure(cells, terrain, structure, StructureCondition.INTACT));
         return cells.entrySet().stream()
+                .filter(entry -> !(entry.getValue().material() instanceof StructureMaterial.Authored))
                 .filter(entry -> entry.getValue().semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
                 .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
@@ -587,6 +590,18 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addStructure(Map<BlockPosition, GrayboxCell> cells, TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition) {
+        if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+            if (condition == StructureCondition.DESTROYED) return;
+            for (var footing : SettlementStructureFootprint.foundationFill(terrain, structure))
+                add(cells, footing, PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id(), GrayboxMaterial.WORKSHOP, GrayboxSemanticPart.FOUNDATION);
+            io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().forEach((position, cell) -> {
+                var prior = cells.get(position);
+                if (prior != null && !prior.equals(cell) && (!prior.semanticTarget().equals(cell.semanticTarget()) || prior.semanticPart() != GrayboxSemanticPart.FOUNDATION))
+                    throw new IllegalArgumentException("authored structure overlaps another owner at " + position);
+                cells.put(position, cell);
+            });
+            return;
+        }
         visitStructureCells(terrain, structure, condition, (position, part) -> {
             add(cells, position, PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id(), structureMaterial(structure.kind(), part), part);
             return false;
@@ -609,6 +624,13 @@ public final class FrontierGrayboxPlan {
     /** Iterates precisely the semantic cells used by materialization, stopping on visitor demand. */
     private static boolean visitStructureCells(TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition, StructureCellVisitor visitor) {
         if (condition == StructureCondition.DESTROYED) return false;
+        if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+            for (var footing : SettlementStructureFootprint.foundationFill(terrain, structure))
+                if (visitor.visit(footing, GrayboxSemanticPart.FOUNDATION)) return true;
+            for (var cell : io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().values())
+                if (visitor.visit(cell.position(), cell.semanticPart())) return true;
+            return false;
+        }
         SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
         SettlementDepotServicePort depotService = structure.kind() == StructureKind.DEPOT ? SettlementDepotServicePort.forDepot(structure) : null;
         SettlementWorkshopServicePort workshopService = ProductionFacilityLayout.supports(structure.kind()) ? SettlementWorkshopServicePort.forWorkshop(structure) : null;

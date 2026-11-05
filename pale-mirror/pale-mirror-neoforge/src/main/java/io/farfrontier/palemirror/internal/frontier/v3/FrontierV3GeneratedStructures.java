@@ -17,13 +17,13 @@ public record FrontierV3GeneratedStructures(String provider, String configuratio
             Codec.STRING.fieldOf("owner").forGetter(c -> c.ownerId().value()),
             Codec.INT.fieldOf("target").forGetter(c -> c.semanticTarget().kind().wireTag()),
             // Palette names are the existing block-provenance wire names, not enum ordinals.
-            Codec.STRING.fieldOf("material").forGetter(c -> c.material().name()),
+            Codec.STRING.fieldOf("material").forGetter(c -> c.material().wireIdentity()),
             Codec.INT.fieldOf("part").forGetter(c -> c.semanticPart().wireTag())
     ).apply(instance, (address, owner, target, material, part) -> {
         var p = BlockPos.of(address);
         return new GrayboxCell(new BlockPosition(p.getX(), p.getY(), p.getZ()),
                 new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.fromWireTag(target), new SubjectId(owner)),
-                GrayboxMaterial.valueOf(material), FrontierWireTags.require(GrayboxSemanticPart.class, part));
+                StructureMaterial.require(material), FrontierWireTags.require(GrayboxSemanticPart.class, part));
     }));
     public static final Codec<FrontierV3GeneratedStructures> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.fieldOf("provider").forGetter(FrontierV3GeneratedStructures::provider),
@@ -61,6 +61,6 @@ public record FrontierV3GeneratedStructures(String provider, String configuratio
     }
     static FrontierV3GrayboxLedger.Claim claim(GrayboxCell cell) {
         return new FrontierV3GrayboxLedger.Claim(cell.ownerId().value(), cell.semanticTarget().kind().wireTag(),
-                cell.material().name(), cell.semanticPart().name(), 0, false);
+                cell.material().wireIdentity(), cell.semanticPart().name(), 0, false);
     }
 }

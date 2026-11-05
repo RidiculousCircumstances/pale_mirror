@@ -268,7 +268,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
 
     private String canonicalText() {
-        return id + '|' + schemaVersion + '|' + cadence.canonicalText() + '|' + spatial.canonicalText() + '|' + rates.canonicalText()
+        return io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.standard().canonicalText() + '|' + id + '|' + schemaVersion + '|' + cadence.canonicalText() + '|' + spatial.canonicalText() + '|' + rates.canonicalText()
                 + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText()
                 + (schemaVersion >= 7 ? "|" + residentLife.canonicalText() : "")
                 + (schemaVersion >= 9 ? "|" + resourceHarvestColdTravelTicksPerEdge : "")

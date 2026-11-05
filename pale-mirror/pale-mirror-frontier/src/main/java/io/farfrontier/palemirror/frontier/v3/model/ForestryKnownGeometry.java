@@ -6,11 +6,11 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometry
 import java.util.*;
 
 /** Forest geometry provider only. No routes, extraction progress, resource issue or native chunk reads. */
-final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
-    private final ImmutableResultView<String, KnownNaturalGeometry.Snapshot> snapshots = new ImmutableResultView<>(4);
+final class ForestryKnownGeometry implements KnownSpatialGeometry.Provider {
+    private final ImmutableResultView<String, KnownSpatialGeometry.Snapshot> snapshots = new ImmutableResultView<>(4);
     private final ImmutableInputView<Set<NavigationBlockState>> palettes = new ImmutableInputView<>();
-    @Override public KnownNaturalGeometry.Key key() { return KnownNaturalGeometry.Key.FOREST; }
-    @Override public KnownNaturalGeometry.Snapshot snapshot(FrontierWorldState state) {
+    @Override public KnownSpatialGeometry.Key key() { return KnownSpatialGeometry.Key.FOREST; }
+    @Override public KnownSpatialGeometry.Snapshot snapshot(FrontierWorldState state) {
         return snapshots.get(List.of(state.bootstrap(), state.forest().regions()), "forest", () -> new Snapshot(state.bootstrap(), state.forest()));
     }
     @Override public Set<NavigationBlockState> palette(FrontierWorldState state) {
@@ -28,7 +28,7 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
     private record Cell(NavigationCell value, boolean aftermath) { }
     private record Image(Map<BlockPosition, Cell> cells, Map<TerrainColumn, List<BlockPosition>> columns) { }
     private static final Image EMPTY = new Image(Map.of(), Map.of());
-    private static final class Snapshot implements KnownNaturalGeometry.Snapshot {
+    private static final class Snapshot implements KnownSpatialGeometry.Snapshot {
         private final FrontierBootstrap bootstrap;
         private final ForestState forest;
         private final GrayboxForestPlan plan;
@@ -92,7 +92,7 @@ final class ForestryKnownGeometry implements KnownNaturalGeometry.Provider {
                     area -> plan.mayTouch(area) || dynamicCoverage.intersects(area));
         }
 
-        @Override public Set<Region> changesFrom(KnownNaturalGeometry.Snapshot previous) {
+        @Override public Set<Region> changesFrom(KnownSpatialGeometry.Snapshot previous) {
             if (!(previous instanceof Snapshot old) || old.bootstrap != bootstrap)
                 throw new IllegalArgumentException("natural geometry comparison requires one captured world lineage");
             if (forest.regions() == old.forest.regions()) return Set.of();

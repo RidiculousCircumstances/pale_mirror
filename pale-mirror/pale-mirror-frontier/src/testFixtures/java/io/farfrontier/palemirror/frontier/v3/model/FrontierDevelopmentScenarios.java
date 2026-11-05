@@ -522,7 +522,7 @@ final class FrontierDevelopmentScenarios {
         SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
         ProductionJob job = new ProductionJob(jobId, task.id(), settlementId, workshop.id(), worker, input.id(), new ProductionInputHold.Materialized(input.id()),
                 new SubjectId("item:development-production-input-theft-bread"), "minecraft:bread", input.count(), ProductionWorkProgress.notStarted(),
-                ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(worker), jobId), 0)
+                ProductionWorkTraversal.compile(state, workshop, worker, state.actorLocations().get(worker), jobId), 0)
                 .withRights(OptionalCompanyEmploymentFixture.publicCompanyService(state, settlementId));
         state = ProductionCommercialProcess.reserve(state.withProductionJob(job), job);
         EmploymentContract contract = ProductionCommercialProcess.contractFor(state, job).orElseThrow();
@@ -570,7 +570,7 @@ final class FrontierDevelopmentScenarios {
         SurfaceAnchor exterior = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
         FrontierWorldState isolated = base.state().withActorBody(worker, BodyPosition.above(exterior));
         var jobs = new java.util.LinkedHashMap<>(isolated.productionJobs());
-        jobs.put(jobId, job.withWorkTraversal(ProductionWorkTraversal.compile(isolated.bootstrap(), workshop, isolated.actorLocations().get(worker), jobId), 0));
+        jobs.put(jobId, job.withWorkTraversal(ProductionWorkTraversal.compile(isolated, workshop, worker, isolated.actorLocations().get(worker), jobId), 0));
         isolated = isolated.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
         // This is the normal scheduled completion boundary.  The materialized executor may
         // defer it while the exact worker is still approaching/processing, but it must not rely

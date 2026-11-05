@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.StructureMaterial;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -784,8 +785,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
         private final FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.inMemory();
         @Override public boolean naturallyLoaded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
         @Override public boolean isAir(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
-        @Override public boolean hasMaterial(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position, io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial material) { return false; }
-        @Override public boolean placeMaterial(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position, io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial material) { return true; }
+        @Override public boolean hasMaterial(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position, io.farfrontier.palemirror.frontier.v3.model.StructureMaterial material) { return false; }
+        @Override public boolean placeMaterial(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position, io.farfrontier.palemirror.frontier.v3.model.StructureMaterial material) { return true; }
         @Override public boolean clear(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
         @Override public FrontierV3GrayboxLedger ledger() { return ledger; }
     }

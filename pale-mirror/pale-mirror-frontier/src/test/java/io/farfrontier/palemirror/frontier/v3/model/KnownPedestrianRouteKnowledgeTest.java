@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -393,8 +394,8 @@ class KnownPedestrianRouteKnowledgeTest {
                                 KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
                 for (var station : port.stations()) {
                     assertTrue(cells.containsKey(station.support()), "station must have an authored physical floor");
-                    assertEquals(station, ground.at(station.x(), station.z()), structure.id().value());
-                    assertEquals(station, authorized.supportAt(station.x(), station.z()));
+                    assertTrue(ground.surfacesAt(station.x(), station.z()).contains(station), structure.id().value());
+                    assertTrue(authorized.surfacesAt(station.x(), station.z()).contains(station));
                     authorized.requireRoute(List.of(station));
                 }
                 if (structure.kind() == StructureKind.WORKSHOP) {
@@ -615,7 +616,7 @@ class KnownPedestrianRouteKnowledgeTest {
         MovementOrder order = new MovementOrder(resident, resident, 0L, 1L, List.of(body),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         SettlementStructure forged = new SettlementStructure(depot.id(), depot.settlementId(),
-                StructureKind.WORKSHOP, depot.anchor(), depot.facing());
+                StructureKind.WORKSHOP, depot.anchor(), depot.facing(), BuildingCatalog.standard().select(BuildingCatalog.MEDIEVAL_SPRUCE, StructureKind.WORKSHOP));
         assertThrows(IllegalArgumentException.class, () -> KnownPedestrianRouteKnowledge.path(state,
                 settlement.id(), body, order, List.of(new KnownPedestrianRouteKnowledge.Passage(forged,
                         KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR))));
