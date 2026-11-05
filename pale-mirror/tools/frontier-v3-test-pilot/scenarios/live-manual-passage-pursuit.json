@@ -120,16 +120,9 @@
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
-        "diagnostic": {
-          "view": "settlement",
-          "id": "settlement:1",
-          "field": "firstGuardPosition"
-        }
-      },
-      "offset": {
-        "x": 2,
-        "y": 0,
-        "z": 0
+        "x": -1468,
+        "y": 64,
+        "z": -1344
       },
       "settleMs": 0
     },
@@ -192,28 +185,6 @@
       "radius": 0.5,
       "timeoutMs": 20000,
       "jump": true
-    },
-    {
-      "type": "use_item_on",
-      "position": {
-        "x": -1498,
-        "y": 65,
-        "z": -1343
-      },
-      "item": "minecraft:stick",
-      "uses": 1,
-      "timeoutMs": 5000
-    },
-    {
-      "type": "use_item_on",
-      "position": {
-        "x": -1498,
-        "y": 65,
-        "z": -1342
-      },
-      "item": "minecraft:stick",
-      "uses": 1,
-      "timeoutMs": 5000
     },
     {
       "type": "walk",
@@ -317,7 +288,7 @@
   ],
   "assertions": [
     {
-      "after": 24,
+      "after": 22,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -329,11 +300,11 @@
   ],
   "frames": [
     {
-      "after": 20,
+      "after": 18,
       "name": "player-closed-both-entrance-doors"
     },
     {
-      "after": 22,
+      "after": 20,
       "name": "guard-after-closed-entrance"
     }
   ]
