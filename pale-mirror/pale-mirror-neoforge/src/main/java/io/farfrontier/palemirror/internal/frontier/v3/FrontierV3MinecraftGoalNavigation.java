@@ -291,6 +291,10 @@ final class FrontierV3MinecraftGoalNavigation {
         if (!FrontierV3PedestrianTraffic.permitsProfile(path, control.permission().navigationProfile())) {
             stopPath(actor); return true;
         }
+        if (!FrontierV3PassageNavigation.approach(level, actor, path, control.scope(), control.permission())) {
+            actor.setXxa(0); actor.setZza(0); actor.setJumping(false);
+            return true;
+        }
         if (FrontierV3PhysicalPathInspection.inspect(level, actor, path, control.scope()).isPresent()) {
             stopPath(actor);
             return true;

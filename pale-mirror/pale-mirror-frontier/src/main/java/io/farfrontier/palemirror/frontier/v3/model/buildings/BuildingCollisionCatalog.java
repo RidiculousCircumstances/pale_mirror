@@ -53,7 +53,7 @@ public final class BuildingCollisionCatalog {
         for (var line : new String(bytes, StandardCharsets.UTF_8).split("\\R")) {
             if (line.isBlank() || line.startsWith("#")) continue;
             var fields = line.split("\\t", -1);
-            if (fields.length != 4
+            if ((fields.length != 4 && fields.length != 5)
                     || !(StructureMaterial.require(fields[0])
                             instanceof StructureMaterial.Authored material))
                 throw new IllegalArgumentException("invalid authored collision row");
@@ -82,7 +82,7 @@ public final class BuildingCollisionCatalog {
                                 new NavigationCell(
                                         new NavigationShape(boxes),
                                         Boolean.parseBoolean(fields[2]),
-                                        Optional.of(material.block())));
+                                        Optional.of(material.block()), fields.length == 5 ? Optional.of(passageShape(fields[4])) : Optional.empty()));
             } else {
                 if (!fields[2].isEmpty() || !fields[3].isEmpty())
                     throw new IllegalArgumentException("unknown collision has fabricated facts");
@@ -116,8 +116,23 @@ public final class BuildingCollisionCatalog {
                 + '\t'
                 + observation.cell().map(cell -> Boolean.toString(cell.dry())).orElse("")
                 + '\t'
-                + boxes;
+                + boxes
+                + observation.cell().flatMap(NavigationCell::passageShape).map(shape -> "\tmanual:" + shape.boxes().stream()
+                    .map(b -> b.minX()+","+b.minY()+","+b.minZ()+","+b.maxX()+","+b.maxY()+","+b.maxZ())
+                    .collect(java.util.stream.Collectors.joining(";"))).orElse("");
     }
 
+    private static NavigationShape passageShape(String encoded) {
+        if (!encoded.startsWith("manual:")) throw new IllegalArgumentException("unknown authored passage capability");
+        var boxes = new ArrayList<NavigationShape.Box>();
+        String text = encoded.substring("manual:".length());
+        if (!text.isEmpty()) for (var box : text.split(";")) {
+            var v = box.split(",", -1);
+            if (v.length != 6) throw new IllegalArgumentException("invalid passage shape");
+            boxes.add(new NavigationShape.Box(Double.parseDouble(v[0]),Double.parseDouble(v[1]),Double.parseDouble(v[2]),
+                    Double.parseDouble(v[3]),Double.parseDouble(v[4]),Double.parseDouble(v[5])));
+        }
+        return new NavigationShape(boxes);
+    }
     private BuildingCollisionCatalog() {}
 }

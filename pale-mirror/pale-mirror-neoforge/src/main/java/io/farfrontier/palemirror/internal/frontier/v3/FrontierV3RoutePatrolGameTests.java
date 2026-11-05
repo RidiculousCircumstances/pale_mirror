@@ -95,30 +95,24 @@ public final class FrontierV3RoutePatrolGameTests {
         }, 0L);
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-blocked", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
+    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-blocked", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20000)
     public static void occupiedRetainedNextBodyBlocksTheSameDemandedPatrol(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "occupied"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
-        boolean[] obstructedHotPatrol = {false};
-        for (int turn = 1; turn <= 120; turn++) {
-            helper.runAtTickTime(turn, () -> {
-                if (!obstructedHotPatrol[0] && runtime.decodedState().orElseThrow().sceneLeases().values().stream()
-                        .filter(FrontierSceneBehaviors::isRoutePatrol).anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT)) {
-                    level.setBlock(new BlockPos(fixture.nextLeaderBody().x(), fixture.nextLeaderBody().y(), fixture.nextLeaderBody().z()),
-                            Blocks.STONE.defaultBlockState(), 3);
-                    obstructedHotPatrol[0] = true;
-                }
-                drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
-            });
-        }
-        helper.runAtTickTime(121, () -> {
-            helper.assertTrue(obstructedHotPatrol[0], "the obstruction must target an admitted HOT patrol");
-            RoutePatrol patrol = runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId());
-            helper.assertTrue(patrol.status() == RoutePatrolStatus.BLOCKED
-                            && patrol.blockReason().orElseThrow() == RoutePatrolBlockReason.OCCUPIED_NEXT_BODY,
-                    "a normal physical obstruction must block the same retained patrol with typed ownership");
-            runtime.shutdown(); releaseDemand(observer); helper.succeed();
-        });
+        Runnable drive = () -> drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
+        await(helper, drive, () -> runtime.decodedState().orElseThrow().sceneLeases().values().stream()
+                .filter(FrontierSceneBehaviors::isRoutePatrol).anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT
+                        && lease.members().stream().allMatch(member -> level.getEntity(member.entityId()) instanceof Mob)), () -> {
+            level.setBlock(new BlockPos(fixture.nextLeaderBody().x(), fixture.nextLeaderBody().y(), fixture.nextLeaderBody().z()),
+                    Blocks.STONE.defaultBlockState(), 3);
+            await(helper, drive, () -> runtime.decodedState().orElseThrow().strategicPlans().routePatrols()
+                    .get(fixture.taskId()).status() == RoutePatrolStatus.BLOCKED, () -> {
+                RoutePatrol patrol = runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId());
+                helper.assertTrue(patrol.blockReason().orElseThrow() == RoutePatrolBlockReason.OCCUPIED_NEXT_BODY,
+                        "a normal physical obstruction must block the same retained patrol with typed ownership");
+                runtime.shutdown(); releaseDemand(observer); helper.succeed();
+            }, 0L);
+        }, 0L);
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-body-loss", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20000)

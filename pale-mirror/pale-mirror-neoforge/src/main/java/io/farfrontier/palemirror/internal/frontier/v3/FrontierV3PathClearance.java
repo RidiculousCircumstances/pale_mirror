@@ -19,7 +19,7 @@ final class FrontierV3PathClearance {
     }
     static boolean path(ServerLevel level, Mob actor, Path path) {
         if (path == null || path.getNodeCount() > FrontierV3PhysicalPathPolicy.MAX_PATH_NODES) return false;
-        var query = new Query(level, actor);
+        var query = new Query(level, actor, actor.getNavigation().getNodeEvaluator().canOpenDoors());
         for (int i = path.getNextNodeIndex(); i < path.getNodeCount(); i++) {
             var next = query.point(path.getNode(i).asBlockPos());
             var from = i == path.getNextNodeIndex() ? actor.position() : query.point(path.getNode(i - 1).asBlockPos());
@@ -28,7 +28,7 @@ final class FrontierV3PathClearance {
         return true;
     }
     static boolean edge(ServerLevel level, Mob actor, BlockPos from, BlockPos to) {
-        return new Query(level, actor).edge(from, to);
+        return new Query(level, actor, actor.getNavigation().getNodeEvaluator().canOpenDoors()).edge(from, to);
     }
     static boolean move(ServerLevel level, Mob actor, Vec3 from, Vec3 to) {
         return new Query(level, actor).move(from, to);
@@ -41,12 +41,15 @@ final class FrontierV3PathClearance {
         private static final int MAX_POINTS = 32_768;
         private final ServerLevel level;
         private final Mob actor;
+        private final boolean passages;
         private final Vec3 origin;
         private final net.minecraft.world.phys.AABB body;
         private final java.util.Map<BlockPos, Vec3> floors = new java.util.HashMap<>();
         private final java.util.Map<Vec3, Boolean> clearance = new java.util.HashMap<>();
-        Query(ServerLevel level, Mob actor) {
-            this.level = level; this.actor = actor;
+        private final java.util.Map<BlockPos, java.util.List<net.minecraft.world.phys.AABB>> obstacles = new java.util.HashMap<>();
+        Query(ServerLevel level, Mob actor) { this(level, actor, false); }
+        Query(ServerLevel level, Mob actor, boolean passages) {
+            this.level = level; this.actor = actor; this.passages = passages;
             origin = actor.position(); body = actor.getBoundingBox();
         }
         Vec3 point(BlockPos node) {
@@ -81,7 +84,24 @@ final class FrontierV3PathClearance {
             for (int x = net.minecraft.util.Mth.floor(box.minX); x <= net.minecraft.util.Mth.floor(box.maxX); x++)
                 for (int z = net.minecraft.util.Mth.floor(box.minZ); z <= net.minecraft.util.Mth.floor(box.maxZ); z++)
                     if (!FrontierV3LoadedWorld.ready(level, new BlockPos(x, net.minecraft.util.Mth.floor(box.minY), z))) return false;
-            return !level.getBlockCollisions(actor, box).iterator().hasNext();
+            if (!level.getBlockCollisions(actor, box).iterator().hasNext()) return true;
+            if (!passages) return false;
+            for (int x = net.minecraft.util.Mth.floor(box.minX) - 1; x <= net.minecraft.util.Mth.floor(box.maxX) + 1; x++)
+                for (int z = net.minecraft.util.Mth.floor(box.minZ) - 1; z <= net.minecraft.util.Mth.floor(box.maxZ) + 1; z++)
+                    for (int y = net.minecraft.util.Mth.floor(box.minY) - 1; y <= net.minecraft.util.Mth.floor(box.maxY) + 1; y++) {
+                        var pos = new BlockPos(x, y, z);
+                        if (!FrontierV3LoadedWorld.ready(level, pos)) return false;
+                        var shapes = obstacles.get(pos);
+                        if (shapes == null) {
+                            var actual = level.getBlockState(pos);
+                            var traversed = FrontierV3PassageBlocks.traversalState(actual, pos, level).orElse(actual);
+                            shapes = traversed.getCollisionShape(level, pos, net.minecraft.world.phys.shapes.CollisionContext.of(actor))
+                                    .toAabbs().stream().map(shape -> shape.move(pos)).toList();
+                            if (obstacles.size() < MAX_POINTS) obstacles.put(pos, shapes);
+                        }
+                        for (var obstacle : shapes) if (obstacle.intersects(box)) return false;
+                    }
+            return true;
         }
     }
 }

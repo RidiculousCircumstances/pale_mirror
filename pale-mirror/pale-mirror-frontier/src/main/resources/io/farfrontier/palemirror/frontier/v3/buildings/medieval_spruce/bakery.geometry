@@ -48,10 +48,10 @@
 2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
 2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=left,open=true,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
 2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
-2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=east,in_wall=false,open=false,powered=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0
-2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=north,in_wall=false,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625
-2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=south,in_wall=false,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625
-2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=west,in_wall=false,open=false,powered=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=east,in_wall=false,open=false,powered=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0	manual:
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=north,in_wall=false,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625	manual:
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=south,in_wall=false,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625	manual:
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=west,in_wall=false,open=false,powered=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0	manual:
 2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,0.625
 2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0
 2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625

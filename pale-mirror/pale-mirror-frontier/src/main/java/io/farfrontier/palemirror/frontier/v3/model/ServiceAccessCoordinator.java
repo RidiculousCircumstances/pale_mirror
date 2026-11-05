@@ -87,13 +87,21 @@ public final class ServiceAccessCoordinator {
         ActorLocation actor = state.actorLocations().get(movement.order().actorId());
         return actor != null && witnessedExit(boundary(state, depotId), actor.body(), observedBody);
     }
+    public enum AccessReason { RESOURCE_WAIT, EXIT_IN_PROGRESS, CURRENT_OCCUPANT, SELF_CARE_TURN, WORK_TURN, NO_READY_WORKER }
+    public record AccessDecision(boolean allowed, AccessReason reason, Optional<SubjectId> actor) { }
+    public static List<ServiceAccessDemand> currentDemands(FrontierWorldState state, SubjectId point) {
+        return ServiceAccessCapabilities.current(state, point);
+    }
     public static boolean available(FrontierWorldState state, ServiceAccessDemand.Identity requested) {
+        return decision(state, requested).allowed();
+    }
+    public static AccessDecision decision(FrontierWorldState state, ServiceAccessDemand.Identity requested) {
         Objects.requireNonNull(state, "service access state");
         Objects.requireNonNull(requested, "complete service identity");
         var access = boundary(state, requested.pointId());
         var demands = ServiceAccessCapabilities.current(state, requested.pointId());
         // A waiting declaration retains its identity and physical footprint but cannot win entry.
-        if (demands.stream().anyMatch(demand -> demand.identity().equals(requested) && !demand.readyToEnter())) return false;
+        if (demands.stream().anyMatch(demand -> demand.identity().equals(requested) && !demand.readyToEnter())) return new AccessDecision(false, AccessReason.RESOURCE_WAIT, Optional.of(requested.actorId()));
         var selfCare = demands.stream().filter(ServiceAccessDemand::readyToEnter).filter(demand -> demand.priority() == ServiceAccessDemand.Priority.SELF_CARE).toList();
         var entering = selfCare.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.ENTERING)
                 .min(Comparator.comparingLong(ServiceAccessDemand::requestedAtTick)
@@ -101,13 +109,13 @@ public final class ServiceAccessCoordinator {
         var workers = demands.stream().filter(ServiceAccessDemand::readyToEnter).filter(demand -> demand.priority() == ServiceAccessDemand.Priority.WORK)
                 .sorted(approachOrder(state, access)).toList();
         boolean requestingSelfCare = ServiceAccessCapabilities.priority(requested) == ServiceAccessDemand.Priority.SELF_CARE;
-        boolean departing = EXIT_CANDIDATES.keys(state.bootstrap(), state.actorMovements(), movement ->
+        var departing = EXIT_CANDIDATES.keys(state.bootstrap(), state.actorMovements(), movement ->
                 movement.context().clearancePoint().map(java.util.Set::of).orElseGet(java.util.Set::of), requested.pointId())
-                .stream().map(state.actorMovements()::get).anyMatch(movement ->
+                .stream().map(state.actorMovements()::get).filter(movement ->
                 movement.context().clearancePoint().equals(Optional.of(requested.pointId()))
                         && !awaitingBody(state, movement.order().actorId())
                         && access.occupied(currentBody(state, movement.order().actorId()))
-                        && (!requestingSelfCare || !movement.order().actorId().equals(requested.actorId())));
+                        && (!requestingSelfCare || !movement.order().actorId().equals(requested.actorId()))).findFirst();
         // Priority selects the next visitor; it cannot revoke an incumbent's
         // atomic service/clearance turn while another visitor approaches.
         var incumbent = demands.stream()
@@ -119,15 +127,18 @@ public final class ServiceAccessCoordinator {
                         .thenComparing(demand -> !demand.physicallyAdmitted())
                         .thenComparingLong(ServiceAccessDemand::requestedAtTick)
                         .thenComparing(demand -> demand.identity().ownerId()));
-        if (departing) return false;
+        if (departing.isPresent()) return new AccessDecision(false, AccessReason.EXIT_IN_PROGRESS, Optional.of(departing.orElseThrow().order().actorId()));
         // Access belongs to the physical visitor. A successor activity of that same
         // actor does not compete with its own body. UAE/checkpoint admission still
         // owns permission to interrupt the old activity or begin a physical effect.
-        if (incumbent.isPresent()) return incumbent.orElseThrow().identity().actorId().equals(requested.actorId());
-        if (requestingSelfCare)
-            return entering.map(demand -> demand.identity().equals(requested)).orElse(true);
-        return entering.isEmpty() && workers.stream().findFirst()
-                .filter(demand -> demand.identity().equals(requested)).isPresent();
+        if (incumbent.isPresent()) return new AccessDecision(incumbent.orElseThrow().identity().actorId().equals(requested.actorId()),
+                AccessReason.CURRENT_OCCUPANT, Optional.of(incumbent.orElseThrow().identity().actorId()));
+        if (requestingSelfCare || entering.isPresent()) return new AccessDecision(requestingSelfCare
+                && entering.map(demand -> demand.identity().equals(requested)).orElse(true),
+                AccessReason.SELF_CARE_TURN, entering.map(demand -> demand.identity().actorId()));
+        return workers.stream().findFirst().map(demand -> new AccessDecision(demand.identity().equals(requested),
+                AccessReason.WORK_TURN, Optional.of(demand.identity().actorId())))
+                .orElseGet(() -> new AccessDecision(false, AccessReason.NO_READY_WORKER, Optional.empty()));
     }
 
     /** A future request cannot hold the door ahead of a visitor already waiting

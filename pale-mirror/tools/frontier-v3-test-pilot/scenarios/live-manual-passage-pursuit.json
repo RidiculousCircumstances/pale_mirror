@@ -1,0 +1,308 @@
+{
+  "schema": 1,
+  "id": "live_manual_passage_pursuit",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMDoorAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 1000"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.knockback_resistance base set 1"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.movement_speed base set 0.18"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 180 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:iron_sword 3"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:stick 1"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1465,
+        "y": 64,
+        "z": -1344
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "physicalSocket": {
+          "mismatch": ""
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_sword",
+      "count": 1,
+      "timeoutMs": 3000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_sword",
+      "count": 1,
+      "timeoutMs": 3000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_sword",
+      "count": 1,
+      "timeoutMs": 3000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "hasArmedGuard": true
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardPosition"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "attack_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
+      "maxDistance": 16,
+      "timeoutMs": 15000,
+      "maxAttacks": 1,
+      "requireRemoval": false,
+      "requireDamage": true
+    },
+    {
+      "type": "walk",
+      "position": {
+        "x": -1485,
+        "y": 64,
+        "z": -1358
+      },
+      "radius": 0.5,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "walk",
+      "position": {
+        "x": -1499,
+        "y": 64,
+        "z": -1358
+      },
+      "radius": 0.5,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "walk",
+      "position": {
+        "x": -1500,
+        "y": 65,
+        "z": -1348
+      },
+      "radius": 0.5,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "walk",
+      "position": {
+        "x": -1500,
+        "y": 65,
+        "z": -1343
+      },
+      "radius": 0.5,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "walk",
+      "position": {
+        "x": -1496,
+        "y": 65,
+        "z": -1343
+      },
+      "radius": 0.5,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "x": -1498,
+        "y": 65,
+        "z": -1342
+      },
+      "item": "minecraft:stick",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "x": -1498,
+        "y": 65,
+        "z": -1343
+      },
+      "item": "minecraft:stick",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -1498,
+        "y": 65,
+        "z": -1342
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 3000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -1498,
+        "y": 65,
+        "z": -1343
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 3000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -1498,
+        "y": 66,
+        "z": -1343
+      }
+    },
+    {
+      "type": "observe_entity_motion",
+      "entityType": "minecraft:villager",
+      "nameContains": "Nora Bell",
+      "workerId": "resident:1-16",
+      "maxDistance": 64,
+      "timeoutMs": 30000,
+      "id": "guard-through-player-closed-entrance",
+      "durationTicks": 160,
+      "sampleEveryTicks": 1
+    },
+    {
+      "type": "wait_until_player_health",
+      "minimum": 1,
+      "maximum": 999,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:1-depot"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 22,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "hasArmedGuard": true,
+        "quarantine": "NORMAL"
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 18,
+      "name": "player-closed-both-entrance-doors"
+    },
+    {
+      "after": 20,
+      "name": "guard-after-closed-entrance"
+    }
+  ]
+}

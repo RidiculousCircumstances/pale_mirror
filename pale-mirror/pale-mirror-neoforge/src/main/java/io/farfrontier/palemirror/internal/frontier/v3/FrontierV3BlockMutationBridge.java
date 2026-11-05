@@ -17,6 +17,7 @@ public final class FrontierV3BlockMutationBridge {
 
     /** Routes prepare/confirmed phases; each declared owner classifies its own external change. */
     public static boolean observe(ServerLevel level, BlockPos position, BlockState replacement, boolean committed) {
+        if (committed) FrontierV3PassageNavigation.observeExternalWrite(level, position);
         if (!FrontierV3PhysicalWorld.isPhysical(level)) return true;
         var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         return runtime == null || FrontierV3ManagedBlockWrites.observe(level, runtime, position, replacement, committed);

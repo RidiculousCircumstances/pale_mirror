@@ -9,6 +9,7 @@ import net.minecraft.world.entity.Mob;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.WeakHashMap;
 
 /** Physical execution of the same actor goal that remains canonical through COLD/HOT. */
@@ -47,7 +48,9 @@ final class FrontierV3ActorMovementNavigation {
             if (!identity.actorId().equals(movement.order().actorId()))
                 throw new IllegalArgumentException("movement service approach lost its exact actor/owner declaration");
         }
-        boolean waitingForService = service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow());
+        var accessDecision = service.isPresent() ? Optional.of(ServiceAccessCoordinator.decision(state, service.orElseThrow()))
+                : Optional.<ServiceAccessCoordinator.AccessDecision>empty();
+        boolean waitingForService = accessDecision.filter(decision -> !decision.allowed()).isPresent();
         if (waitingForService) {
             // The hint cache keys service admission; a grant replans from the actual waiting pocket.
             var identity = service.orElseThrow();
@@ -55,7 +58,9 @@ final class FrontierV3ActorMovementNavigation {
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, body, state,
                     point.settlementId(), point.pointId(), movement.order().ownerId(), identity.actorId(),
                     Math.toIntExact(movement.order().goalOrdinal()), movement.executionId().generation(), actuation);
-            blocked(body, movement, "service-access:" + waiting.reason());
+            var decision = accessDecision.orElseThrow();
+            blocked(body, movement, "service-access:" + decision.reason() + ":turnActor="
+                    + decision.actor().map(io.farfrontier.palemirror.frontier.v3.api.SubjectId::value).orElse("none") + ":" + waiting.reason());
             return; // Local clearance is not arrival at the retained service/work goal.
         }
         FrontierV3ServiceApproachNavigation.forget(body);

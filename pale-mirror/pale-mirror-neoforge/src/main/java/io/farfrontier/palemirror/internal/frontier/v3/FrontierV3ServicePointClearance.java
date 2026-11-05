@@ -15,13 +15,25 @@ final class FrontierV3ServicePointClearance {
     private static final Map<Mob, Target> TARGETS = new WeakHashMap<>();
     private static final Map<Mob, FrontierV3ClearanceProbe> SEARCHES = new WeakHashMap<>();
     private FrontierV3ServicePointClearance() { }
-    static boolean pursue(ServerLevel level, FrontierWorldState state, Mob body, AmbientActorLease lease,
+    static boolean pursue(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, Mob body, AmbientActorLease lease,
                            FrontierV3ActorActuation actuation) {
         if (!actuation.current(body)) return false;
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return false;
         BodyPosition observed = FrontierV3BodyObservation.position(body);
         var point = ServiceBoundaryComposition.turnoverPoint(state, observed.supportingSurface()).orElse(null);
+        if (point != null && point.boundary().occupied(observed)) {
+            // A parking search can be asynchronous or exhaust its candidate budget. Neither
+            // owns the service turn: first leave its small supported boundary through the
+            // common native navigator, then select a longer-lived waiting/parking position.
+            TARGETS.remove(body); SEARCHES.remove(body);
+            var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state,
+                    point.settlementId(), point.pointId(), lease.actorId(), lease.actorId(),
+                    0, lease.revision(), actuation);
+            if (result.status() == FrontierV3GoalNavigation.Status.ARRIVED)
+                FrontierV3ActorBodyController.inspectCurrent(level, runtime, body);
+            return true;
+        }
         Target target = TARGETS.get(body);
         if (target != null && (target.revision() != lease.revision() || !target.actuation().equals(actuation.id()))) {
             TARGETS.remove(body); SEARCHES.remove(body); target = null;

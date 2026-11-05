@@ -32,6 +32,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private record Version(Object terrain, UnitNavigationProfile profile) { }
     private final PedestrianRouteGeometry terrain;
     private final UnitNavigationProfile profile;
+    private final Optional<NavigationCollisionView> transitCollisions;
     private final NavigationObstacleView occupied;
     private final Object version;
     private final Optional<PedestrianGeometryRevision> revision;
@@ -42,6 +43,10 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
                                       NavigationObstacleView occupied) {
         this.terrain = Objects.requireNonNull(terrain); this.profile = Objects.requireNonNull(profile);
         this.poseOffsets = NavigationBodyGeometry.poseOffsets(profile);
+        this.transitCollisions = terrain.collisions().map(source -> profile.operatesPassages() ? new NavigationCollisionView() {
+            public Optional<NavigationCell> cell(BlockPosition position) { return source.cell(position).map(NavigationCell::passageTransit); }
+            public boolean detailedAt(int x, int z) { return source.detailedAt(x, z); }
+        } : source);
         this.occupied = Objects.requireNonNull(occupied); this.version = new Version(terrain.version(), profile);
         // Regional expansion/hash depends only on immutable terrain + explicit body
         // profile, not the query, actor or live collision predicate.
@@ -96,7 +101,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     }
     private java.util.List<NavigationContact> contacts(SurfaceAnchor surface) {
         synchronized (contacts) { var prior = contacts.get(surface); if (prior != null) return prior; }
-        var view = collisions().orElseThrow();
+        var view = transitCollisions.orElseThrow();
         var result = new java.util.ArrayList<NavigationContact>();
         for (double x : poseOffsets) for (double z : poseOffsets)
             result.addAll(NavigationBodyGeometry.contacts(view, surface, profile, x, z));
@@ -232,7 +237,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         if (detailed(from) || detailed(to)) {
             if (Math.abs((long) from.x() - to.x()) + Math.abs((long) from.z() - to.z()) != 1
                     || !terrain.supportAvailable(from) || !terrain.supportAvailable(to)) return false;
-            var view = collisions().orElseThrow();
+            var view = transitCollisions.orElseThrow();
             for (var origin : contacts(from)) for (var target : contacts(to))
                 if (NavigationBodyGeometry.traversable(view, profile, origin, target)) return true;
             return false;

@@ -68,11 +68,16 @@ final class FrontierV3GoalNavigation {
     /** Unmodeled physical fixtures have no canonical identity and cannot acquire one through this permission. */
     private static final class UnmodeledPermission extends ProviderPermission {
         private final Mob actor;
-        private UnmodeledPermission(Mob actor) { this.actor = Objects.requireNonNull(actor); }
+        private final Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile;
+        private UnmodeledPermission(Mob actor, Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
+            this.actor = Objects.requireNonNull(actor); this.profile = Objects.requireNonNull(profile);
+            if (profile.isPresent() && !profile.orElseThrow().matchesDimensions(actor.getBbWidth(), actor.getBbHeight()))
+                throw new IllegalArgumentException("unmodeled body does not fit its explicit profile");
+        }
         @Override boolean current(Mob candidate) {
             return candidate == actor && permitsUnmodeledNavigation(candidate.getPersistentData(), ACTUATIONS.containsKey(candidate));
         }
-        @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return Optional.empty(); }
+        @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return profile; }
     }
     enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
     enum BlockReason { PATH_UNAVAILABLE, PATH_STALLED, TRAFFIC_BLOCKED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
@@ -156,7 +161,14 @@ final class FrontierV3GoalNavigation {
 
     static Result pursue(ServerLevel level, Mob actor, Goal goal) {
         requireUnfenced(actor);
-        return pursueProvider(level, actor, goal, new UnmodeledPermission(actor));
+        return pursueProvider(level, actor, goal, new UnmodeledPermission(actor, Optional.empty()));
+    }
+
+    /** Explicit envelope for an unmodeled native body; cannot borrow canonical actor authority. */
+    static Result pursueUnmodeled(ServerLevel level, Mob actor, Goal goal,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile) {
+        requireUnfenced(actor);
+        return pursueProvider(level, actor, goal, new UnmodeledPermission(actor, Optional.of(profile)));
     }
 
     /** A successor may replace a path, but stale authority cannot refresh or cancel that path. */
@@ -254,6 +266,7 @@ final class FrontierV3GoalNavigation {
     }
 
     static boolean advanceAtEntityBoundary(Mob actor) {
+        if (actor.level() instanceof ServerLevel level) FrontierV3PassageNavigation.tick(level);
         if (!validateRetainedActuation(actor)) return false;
         return FrontierV3MinecraftGoalNavigation.advanceAtEntityBoundary(actor);
     }

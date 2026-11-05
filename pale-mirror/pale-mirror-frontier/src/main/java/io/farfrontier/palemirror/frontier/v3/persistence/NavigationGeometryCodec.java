@@ -71,6 +71,15 @@ final class NavigationGeometryCodec {
                     out.writeUTF(property.getKey()); out.writeUTF(property.getValue());
                 }
             }
+            out.writeBoolean(value.orElseThrow().passageShape().isPresent());
+            if (value.orElseThrow().passageShape().isPresent()) {
+                var passage = value.orElseThrow().passageShape().orElseThrow().boxes();
+                out.writeInt(passage.size());
+                for (var box : passage) {
+                    out.writeDouble(box.minX()); out.writeDouble(box.minY()); out.writeDouble(box.minZ());
+                    out.writeDouble(box.maxX()); out.writeDouble(box.maxY()); out.writeDouble(box.maxZ());
+                }
+            }
             out.writeInt(boxes.size());
             for (var box : boxes) {
                 out.writeDouble(box.minX()); out.writeDouble(box.minY()); out.writeDouble(box.minZ());
@@ -98,12 +107,21 @@ final class NavigationGeometryCodec {
                         throw new IllegalArgumentException("duplicate state property");
                     state = Optional.of(new NavigationBlockState(kind, values));
                 }
+                Optional<NavigationShape> passage = Optional.empty();
+                if (in.readBoolean()) {
+                    int passageSize = in.readInt();
+                    if (passageSize < 0 || passageSize > NavigationShape.MAX_BOXES) throw new IllegalArgumentException("unbounded passage shape");
+                    var passageBoxes = new ArrayList<NavigationShape.Box>();
+                    for (int j = 0; j < passageSize; j++) passageBoxes.add(new NavigationShape.Box(in.readDouble(), in.readDouble(), in.readDouble(),
+                            in.readDouble(), in.readDouble(), in.readDouble()));
+                    passage = Optional.of(new NavigationShape(passageBoxes));
+                }
                 int size = in.readInt();
                 if (size < 0 || size > NavigationShape.MAX_BOXES) throw new IllegalArgumentException("unbounded geometry shape");
                 var boxes = new ArrayList<NavigationShape.Box>();
                 for (int j = 0; j < size; j++) boxes.add(new NavigationShape.Box(in.readDouble(), in.readDouble(), in.readDouble(),
                         in.readDouble(), in.readDouble(), in.readDouble()));
-                cell = Optional.of(new NavigationCell(new NavigationShape(boxes), dry, state));
+                cell = Optional.of(new NavigationCell(new NavigationShape(boxes), dry, state, passage));
             }
             return cell;
     }

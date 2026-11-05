@@ -427,20 +427,10 @@ public final class FrontierV3TestPilotClient {
     }
     private static void waitUntilBlock(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, "position");
-        if (target == null) return;
-        String expected = action.has("block") ? action.get("block").getAsString() : "minecraft:air";
-        String actual = BuiltInRegistries.BLOCK.getKey(minecraft.level.getBlockState(target).getBlock()).toString();
-        if (actual.equals(expected)) { advance("wait_until_block"); return; }
-        long timeoutMs = action.has("timeoutMs") ? action.get("timeoutMs").getAsLong() : 30_000L;
-        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= timeoutMs) {
-            throw new IllegalStateException("timed out waiting for " + expected + " at " + target + "; client saw " + actual);
-        }
+        if (target != null && FrontierV3PilotPresentationAssertions.blockReady(minecraft, action, target, actionStartedTick))
+            advance("wait_until_block");
     }
-    /**
-     * Client-side, exhaustive facility predicate.  It reads the naturally delivered level only:
-     * 64 soil cells, 64 exact COLD crop slots and all four source-water cells.  The immutable
-     * site diagnostic supplies identity/geometry, never a server-side success answer.
-     */
+
     private static void assertCompleteResourceSite(Minecraft minecraft, JsonObject action) {
         String siteId = action.get("siteId").getAsString();
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("site", siteId));

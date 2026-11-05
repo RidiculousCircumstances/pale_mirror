@@ -129,6 +129,9 @@ final class FrontierV3PedestrianTraffic {
     static Query query(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope,
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile,
             PedestrianTraversalPolicy traversal) {
+        boolean manualPassages = profile.map(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile::operatesPassages).orElse(false);
+        actor.getNavigation().getNodeEvaluator().setCanOpenDoors(manualPassages);
+        actor.getNavigation().getNodeEvaluator().setCanPassDoors(true);
         Path unconstrained = actor.getNavigation().createPath(target, 0);
         // A rejected unconstrained shortest path does not prove no legal scoped detour.
         // Failed terrain evidence cannot, however, be attributed to other bodies.
@@ -186,7 +189,8 @@ final class FrontierV3PedestrianTraffic {
         if (Math.abs((long) target.getX() - origin.getX()) > radius
                 || Math.abs((long) target.getY() - origin.getY()) > radius
                 || Math.abs((long) target.getZ() - origin.getZ()) > radius) return null;
-        var clearance = new FrontierV3PathClearance.Query(level, actor);
+        var clearance = new FrontierV3PathClearance.Query(level, actor, profile.map(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile::operatesPassages).orElse(false));
         WalkNodeEvaluator evaluator = new WalkNodeEvaluator() {
             @Override public int getNeighbors(net.minecraft.world.level.pathfinder.Node[] neighbours, net.minecraft.world.level.pathfinder.Node from) {
                 int count = super.getNeighbors(neighbours, from), retained = 0;
@@ -208,6 +212,9 @@ final class FrontierV3PedestrianTraffic {
                     return PathType.BLOCKED;
                 if (!feet.equals(origin) && bodies.stream().anyMatch(body -> body.intersects(nativeNodeBodyAt(mob, feet))))
                     return PathType.BLOCKED;
+                if (profile.map(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile::operatesPassages).orElse(false)
+                        && FrontierV3PassageBlocks.opened(level.getBlockState(feet)).isPresent())
+                    return PathType.WALKABLE_DOOR;
                 return super.getPathTypeOfMob(context, x, y, z, mob);
             }
         };

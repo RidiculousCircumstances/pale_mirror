@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.model.ServiceBoundaryComposition;
+import io.farfrontier.palemirror.frontier.v3.model.ServiceAccessCoordinator;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
@@ -549,6 +551,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"navigationProfile\":{\"widthMicros\":" + location.navigationProfile().widthMicros()
                 + ",\"heightMicros\":" + location.navigationProfile().heightMicros()
                 + ",\"stepUpBlocks\":" + location.navigationProfile().stepUpBlocks()
+                + ",\"operatesPassages\":" + location.navigationProfile().operatesPassages()
                 + ",\"dropBlocks\":" + location.navigationProfile().dropBlocks() + ",\"capabilities\":["
                 + location.navigationProfile().capabilities().stream().sorted(java.util.Comparator.comparingInt(io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags::tag))
                     .map(value -> "\"" + value.name() + "\"").collect(java.util.stream.Collectors.joining(",")) + "]}"
@@ -745,11 +748,19 @@ final class FrontierV3DiagnosticJson {
                 + ",\"presentationObserverCount\":" + value.presentationObserverCount() + "}").orElse("");
         String replica = referenceCustody(state, subject);
         String canonicalCapacity = FrontierV3ContainerCapacityJson.render(state, subject);
+        String service = ServiceBoundaryComposition.operational(state, subject).map(point ->
+                ",\"serviceAccess\":[" + ServiceAccessCoordinator.currentDemands(state, subject).stream().limit(32).map(demand -> {
+                    var decision = ServiceAccessCoordinator.decision(state, demand.identity());
+                    return "{\"actor\":\"" + quote(demand.identity().actorId().value()) + "\",\"owner\":\"" + quote(demand.identity().ownerId().value())
+                            + "\",\"kind\":\"" + demand.identity().kind() + "\",\"presence\":\"" + demand.presence()
+                            + "\",\"allowed\":" + decision.allowed() + ",\"reason\":\"" + decision.reason() + "\",\"turnActor\":\""
+                            + quote(decision.actor().map(SubjectId::value).orElse("")) + "\"}";
+                }).collect(java.util.stream.Collectors.joining(",")) + "]").orElse("");
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position(state)) + ",\"slotCount\":" + container.slotCount()
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied
                 + ",\"fungibleOccupiedCount\":" + fungibleBindings.size() + ",\"fungibleOccupied\":" + fungibleOccupied
-                + canonicalCapacity + replica + physical + FrontierV3StorageDiagnosticJson.render(state, container) + "}";
+                + canonicalCapacity + replica + physical + service + FrontierV3StorageDiagnosticJson.render(state, container) + "}";
     }
 
     /** Reference scopes report canonical stock separately from replica evidence and temporary lease authority. */

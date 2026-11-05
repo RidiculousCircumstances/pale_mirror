@@ -3,15 +3,19 @@ package io.farfrontier.palemirror.frontier.v3.model.navigation;
 /** Producer-declared physical envelope, independent of profession, activity and movement owner.
  * Dimensions use millionths of a block; the entire value is canonical, not a derived kind lookup. */
 public record UnitNavigationProfile(int widthMicros, int heightMicros, int stepUpBlocks, int dropBlocks,
-                                    java.util.Set<io.farfrontier.palemirror.frontier.v3.model.TraversalCapability> capabilities) {
+                                    java.util.Set<io.farfrontier.palemirror.frontier.v3.model.TraversalCapability> capabilities, boolean operatesPassages) {
     public static final UnitNavigationProfile VILLAGER = new UnitNavigationProfile(600_000, 1_950_000, 1, 1,
-            java.util.Set.of(io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN));
+            java.util.Set.of(io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN), true);
     public static final UnitNavigationProfile ZOMBIE = new UnitNavigationProfile(600_000, 1_950_000, 1, 1,
             java.util.Set.of(io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN,
                     io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.GROUND_BIOFORM));
     public static final UnitNavigationProfile DONKEY = new UnitNavigationProfile(1_396_485, 1_500_000, 1, 1,
             java.util.Set.of(io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN));
 
+    public UnitNavigationProfile(int widthMicros, int heightMicros, int stepUpBlocks, int dropBlocks,
+            java.util.Set<io.farfrontier.palemirror.frontier.v3.model.TraversalCapability> capabilities) {
+        this(widthMicros, heightMicros, stepUpBlocks, dropBlocks, capabilities, false);
+    }
     public UnitNavigationProfile {
         capabilities = java.util.Set.copyOf(capabilities);
         if (widthMicros < 100_000 || widthMicros > 4_000_000 || heightMicros < 100_000 || heightMicros > 8_000_000
@@ -37,6 +41,6 @@ public record UnitNavigationProfile(int widthMicros, int heightMicros, int stepU
         return new UnitNavigationProfile(members.stream().mapToInt(UnitNavigationProfile::widthMicros).max().orElseThrow(),
                 members.stream().mapToInt(UnitNavigationProfile::heightMicros).max().orElseThrow(),
                 members.stream().mapToInt(UnitNavigationProfile::stepUpBlocks).min().orElseThrow(),
-                members.stream().mapToInt(UnitNavigationProfile::dropBlocks).min().orElseThrow(), shared);
+                members.stream().mapToInt(UnitNavigationProfile::dropBlocks).min().orElseThrow(), shared, members.stream().anyMatch(UnitNavigationProfile::operatesPassages));
     }
 }

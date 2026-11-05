@@ -10,6 +10,38 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationShapeIntegrationTest {
+    @Test void manualPassageRetainsActualCollisionAndExplicitTraversalCapabilityThroughRecovery() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:manual-passage"), 41));
+        var position = new BlockPosition(20, 64, 20);
+        var closed = new NavigationCell(NavigationShape.FULL, true,
+                Optional.of(new NavigationBlockState("fixture:manual-passage", Map.of())), Optional.of(NavigationShape.EMPTY));
+        state = new NavigationGeometryObserved(0, Map.of(position, NavigationObservation.known(closed)))
+                .apply(state, NavigationGeometryObserved.OWNER);
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(state));
+        assertEquals(closed, recovered.navigationGeometry().cells().get(position).cell().orElseThrow());
+        assertEquals(NavigationShape.FULL, closed.shape(), "planning cannot rewrite the observed physical shape");
+        assertEquals(NavigationShape.EMPTY, closed.passageTransit().shape());
+        assertTrue(recovered.actorLocations().values().stream().filter(a -> a.kind() == ActorKind.RESIDENT)
+                .allMatch(a -> a.navigationProfile().operatesPassages()));
+        assertFalse(UnitNavigationProfile.DONKEY.operatesPassages());
+        assertFalse(UnitNavigationProfile.ZOMBIE.operatesPassages());
+        PedestrianRouteGeometry raw = new PedestrianRouteGeometry() {
+            public WorldBounds bounds() { return new WorldBounds(18,18,5,5); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x,63,z); }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+            public Optional<NavigationCollisionView> collisions() { return Optional.of(p -> Optional.of(p.y()==63
+                    ? NavigationCell.SOLID : p.x()==20 && p.z()==20 && (p.y()==64 || p.y()==65) ? closed : NavigationCell.AIR)); }
+        };
+        var station = SurfaceAnchor.at(20,63,20);
+        var operatorGeometry = new ProfiledPedestrianGeometry(raw, UnitNavigationProfile.VILLAGER, ignored -> false);
+        assertTrue(operatorGeometry.clearBody(station), "a capable traveller can plan through a manual passage");
+        assertFalse(operatorGeometry.clearStation(station), "conditional transit never grants exact physical placement");
+        var nonOperator = new UnitNavigationProfile(600_000,1_950_000,1,1,Set.of(TraversalCapability.PEDESTRIAN));
+        assertFalse(new ProfiledPedestrianGeometry(raw, nonOperator, ignored -> false).clearStation(station),
+                "body size alone must not grant interaction capability");
+        byte[] unsupported = codec.encode(recovered); unsupported[4] = 1; unsupported[5] = 80; // schema336 lacks these declarations
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(unsupported));
+    }
     @Test void warmedBoundsCheckRejectsChangedGeometryAndDoesNotPoisonItsPredecessor() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:geometry-bounds"), 41));
         var bounds = initial.bootstrap().bounds(); var inside = new BlockPosition(bounds.minX(), 60, bounds.minZ());

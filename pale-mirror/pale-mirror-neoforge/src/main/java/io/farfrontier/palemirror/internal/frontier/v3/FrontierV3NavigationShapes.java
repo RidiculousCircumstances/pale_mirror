@@ -86,8 +86,13 @@ final class FrontierV3NavigationShapes extends net.minecraft.world.level.pathfin
                         POWDER_SNOW, DANGER_POWDER_SNOW, LAVA, WATER, STICKY_HONEY -> false;
                 default -> true;
             };
+            var passage = FrontierV3PassageBlocks.traversalState(state, origin, reader).filter(open -> !open.equals(state)).map(open -> {
+                var openBoxes = open.getCollisionShape(reader, origin, STATIC_CONTEXT).toAabbs().stream()
+                        .map(box -> new NavigationShape.Box(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ)).toList();
+                return new NavigationShape(openBoxes);
+            });
             return NavigationObservation.known(new NavigationCell(new NavigationShape(boxes), safe,
-                    Optional.of(FrontierV3BlockStates.describe(state))), reader.dependencies);
+                    Optional.of(FrontierV3BlockStates.describe(state)), passage), reader.dependencies);
         } catch (Unavailable missing) {
             return NavigationObservation.unavailable(missing.kind, reader.dependencies);
         }

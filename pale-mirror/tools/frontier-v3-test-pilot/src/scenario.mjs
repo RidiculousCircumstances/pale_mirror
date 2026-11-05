@@ -221,6 +221,12 @@ export function validateScenario(scenario) {
       }
       if (action.type === 'look' && !validResolvablePosition(action.at ?? action.position)) validatePosition(action.at ?? action.position);
       if (action.type === 'wait_until_block' && !validResolvablePosition(action.position)) validatePosition(action.position);
+      if (action.type === 'wait_until_block' && action.properties !== undefined && (!action.properties
+          || Array.isArray(action.properties) || typeof action.properties !== 'object' || Object.keys(action.properties).length > 16
+          || Object.entries(action.properties).some(([key, value]) => !/^[a-z_]{1,64}$/.test(key)
+              || typeof value !== 'string' || !/^[a-z0-9_]{1,64}$/.test(value)))) {
+        throw new Error('wait_until_block properties must be bounded native state names/values');
+      }
       if (action.type === 'use_item_on' && (!validResolvablePosition(action.position) || !validItemKind(action.item)
           || !Number.isInteger(action.uses) || action.uses < 1 || action.uses > 32
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120000)) {

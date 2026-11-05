@@ -201,6 +201,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().kind().wireTag()); writeBody(output, entry.getValue().body());
             output.writeByte(entry.getValue().condition().status().wireTag()); output.writeLong(entry.getValue().condition().health().raw());
             var profile = entry.getValue().navigationProfile();
+            output.writeBoolean(profile.operatesPassages());
             output.writeInt(profile.widthMicros()); output.writeInt(profile.heightMicros());
             output.writeByte(profile.stepUpBlocks()); output.writeByte(profile.dropBlocks());
             output.writeByte(profile.capabilities().size());
@@ -215,6 +216,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             ActorKind kind = FrontierWireTags.require(ActorKind.class, input.readUnsignedByte());
             BodyPosition body = readBody(input); int status = input.readUnsignedByte();
             ActorCondition condition = new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong()));
+            boolean operatesPassages = input.readBoolean();
             int width = input.readInt(), height = input.readInt(), stepUp = input.readUnsignedByte(), drop = input.readUnsignedByte();
             int size = input.readUnsignedByte();
             if (size < 1 || size > TraversalCapability.values().length) throw new IllegalArgumentException("invalid navigation capabilities");
@@ -222,7 +224,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (int capability = 0; capability < size; capability++)
                 if (!capabilities.add(FrontierWireTags.require(TraversalCapability.class, input.readUnsignedByte())))
                     throw new IllegalArgumentException("duplicate navigation capability");
-            var profile = new UnitNavigationProfile(width, height, stepUp, drop, capabilities);
+            var profile = new UnitNavigationProfile(width, height, stepUp, drop, capabilities, operatesPassages);
             if (status >= ActorLifeStatus.values().length
                     || values.put(id, new ActorLocation(body, condition, kind, profile)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate actor state id: " + id.value());

@@ -168,7 +168,10 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertFalse(ReferenceContainerCustody.hasOperationalCustody(bound, depot),
                 "a physical stack binding alone does not grant container write authority");
         var boundPlan = ProductionProcess.planCompletion(bound, ProductionProcess.complete(boundJob, 200L));
-        assertTrue(boundPlan.stream().anyMatch(event -> event.payload() instanceof ScheduleEffect.Rescheduled));
+        assertTrue(boundPlan.stream().anyMatch(event -> event.payload() instanceof
+                io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted),
+                "a reachable approach may start before container write authority is available");
+        assertEquals(64, bound.inventory().fungibleResources().accounts().get(accountId).claimQuantities().get(hold.claimId()));
         assertTrue(boundPlan.stream().noneMatch(event -> event.payload() instanceof BakeryColdStep),
                 "goal admission cannot consume physically bound source stock");
 

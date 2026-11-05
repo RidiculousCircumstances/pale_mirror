@@ -12,6 +12,23 @@ import java.util.function.Consumer;
 final class FrontierV3PilotPresentationAssertions {
     private FrontierV3PilotPresentationAssertions() { }
 
+    static boolean blockReady(Minecraft minecraft, JsonObject action, BlockPos target, long startedTick) {
+        String expected = action.has("block") ? action.get("block").getAsString() : "minecraft:air";
+        var state = minecraft.level.getBlockState(target);
+        String actual = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+        if (actual.equals(expected) && matchesProperties(state, action)) return true;
+        long limit = action.has("timeoutMs") ? action.get("timeoutMs").getAsLong() : 30_000L;
+        if ((minecraft.level.getGameTime() - startedTick) * 50L >= limit)
+            throw new IllegalStateException("timed out waiting for " + expected + " at " + target + "; client saw " + state);
+        return false;
+    }
+
+    static boolean matchesProperties(net.minecraft.world.level.block.state.BlockState state, JsonObject action) {
+        return !action.has("properties") || action.getAsJsonObject("properties").entrySet().stream().allMatch(entry ->
+                state.getValues().entrySet().stream().anyMatch(property -> property.getKey().getName().equals(entry.getKey())
+                        && property.getValue().toString().equals(entry.getValue().getAsString())));
+    }
+
     static void assertVisibleBoard(Minecraft minecraft, JsonObject action, long startedTick, BlockPos anchor,
                                    Consumer<BlockPos> look, Consumer<BlockPos> focus, Consumer<String> advance) {
         String expectedText = action.get("text").getAsString(); double radius = action.has("radius") ? action.get("radius").getAsDouble() : 3.0D;
