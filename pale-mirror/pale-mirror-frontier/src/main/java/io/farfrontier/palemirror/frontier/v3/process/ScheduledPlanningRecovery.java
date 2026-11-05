@@ -41,6 +41,7 @@ final class ScheduledPlanningRecovery {
                 return delegate.advice(state, action, instant);
             }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return delegate.held(state, action); }
+            @Override public boolean acceptsReconsideration() { return delegate.acceptsReconsideration(); }
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
                     holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }
             @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }

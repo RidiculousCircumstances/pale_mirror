@@ -8,10 +8,11 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 public final class ProductionContinuation {
     public static final String KIND = "frontier.settlement.production.task.complete";
     private ProductionContinuation() { }
+    /** A movement or suspended owner may have consumed its old review; wake its exact job address. */
     public static io.farfrontier.palemirror.frontier.v3.api.ProposedEvent wake(ProductionJob job, long tick) {
         var next = at(job, Math.addExact(tick, 1L));
-        return new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(job.settlementId(),
-                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled(next.id(), next));
+        return new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(job.id(),
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested(next));
     }
     public static ScheduledAction at(ProductionJob job, long tick) {
         return new ScheduledAction(new ScheduleId("schedule:production-task-complete-"

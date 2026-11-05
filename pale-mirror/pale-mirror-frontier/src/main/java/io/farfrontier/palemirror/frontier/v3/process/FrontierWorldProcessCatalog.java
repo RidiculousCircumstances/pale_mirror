@@ -244,6 +244,8 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
             Map.entry("frontier.settlement.production.task.start", detached(withPlanningRecovery(atExecutionTime(
                     (state, action, instant) -> ProductionProcess.planStart(state, action, instant.ticks()))))),
             Map.entry("frontier.settlement.production.task.complete", withPlanningRecovery(new FrontierScheduledPlanner() {
+                // One progress review per exact job; effects and movement retain their own receipts.
+                @Override public boolean acceptsReconsideration() { return true; }
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ProductionProcess.planCompletion(state, action);
                 }

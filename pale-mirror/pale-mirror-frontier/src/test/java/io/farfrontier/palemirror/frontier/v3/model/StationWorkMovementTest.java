@@ -10,6 +10,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Integration contracts for production goals, common travel, and durable owner continuation. */
 class StationWorkMovementTest {
+    @Test void arrivalWakesAParkedProductionOwnerAfterItsCompletionReviewWasConsumed() throws Exception {
+        var fixture = started(); var start = order(fixture); var job = fixture.job();
+        var state = ActorMovementProcess.reduceStarted(fixture.state(), job.workerId(), start);
+        var base = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
+        var movement = start.movement();
+        // While the movement owns progress, production's one-shot review may be absent.
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(
+                new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(),state,
+                        new SimInstant(301),base.commandPlanner(),base.scheduledPlanner(),base.reducer(),base.stateCodec(),base.projectionMapper(),
+                        base.limits(),List.of(ActorMovementProcess.progress(movement,301)),base.transactionCommitter(),base.stateValidator()));
+        var review = ProductionContinuation.at(job,302).id();
+        for (int step=0; step<64 && engine.checkpoint().schedules().stream().noneMatch(a->a.id().equals(review)); step++) {
+            long due=engine.checkpoint().schedules().stream().mapToLong(a->a.dueAt().ticks()).min().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(due,engine.checkpoint().instant().ticks()+1)),new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1,64));
+            assertEquals(EngineStatus.Kind.ACTIVE,result.status().kind(),result.status().toString());
+        }
+        assertEquals(1,engine.checkpoint().schedules().stream().filter(a->a.id().equals(review)).count(), "remaining="+engine.checkpoint().schedules()+"; instant="+engine.checkpoint().instant());
+        var resumed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(fixture.state().inventory(),resumed.inventory(),"arrival only wakes work; it cannot consume inputs");
+        assertEquals(job,resumed.productionJobs().get(job.id()));
+    }
     record Fixture(FrontierWorldState state, ProductionJob job) { }
     private static Fixture started() {
         var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
