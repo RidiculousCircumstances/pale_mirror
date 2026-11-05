@@ -16,7 +16,9 @@ class RoutePatrolTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-model"), 41L));
         Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId task = new SubjectId("task:patrol");
         List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
-        RoutePatrol patrol = RoutePatrol.planned(state, task, settlement, RouteUnitManifest.patrol(task, guards.getFirst().id(), List.of(guards.get(1).id())));
+        var staged = DeclaredRouteFixtures.stagedPatrol(state, settlement, task, guards.getFirst().id(), guards.get(1).id());
+        state = staged.state();
+        RoutePatrol patrol = RoutePatrol.planned(state, task, settlement, staged.unit());
         RoutePatrol active = patrol;
         while (patrol.active()) patrol = patrol.advance(patrol.safeAdvances().getFirst());
         assertEquals(RoutePatrolStatus.ROUTE_CLEAR, patrol.status());

@@ -468,7 +468,8 @@ class SettlementSecurityTest {
         assertTrue(permission.permitsManeuverInterruption(state,move,order),"role explicitly permits defensive movement to checkpoint its own reversible patrol");
         var maneuverCommand=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,new CommandId("test:patrol-maneuver"),state.bootstrap().worldId(),Revision.ZERO,
             new SimInstant(21002),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(new CommandId("test:patrol-maneuver")),
-            new CombatEvent.ManeuverRequested(r.body(),contact(r).target(),order.actorPosition(),new MeleeManeuvers.Facts(2,0)));
+            new CombatEvent.ManeuverRequested(r.body(),contact(r).target(),order.actorPosition(),new MeleeManeuvers.Facts(
+                state.bootstrap().ruleset().melee().maneuvers().duel().maximumGapMicros()/1_000_000.0+1,0)));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("combat",state,maneuverCommand),
             "an unattempted proposal with no maneuver opportunity is an ordinary policy refusal");
         var readyEvents=GuardWorkProcess.progress(state,action,21002);

@@ -41,6 +41,12 @@ public record ExtractionPriorities(Map<String, SupplyPriority> products, Map<Lon
         }
         return new ExtractionPriorities(products, priorities);
     }
+    /** A ready source closes this demand itself; access work merely inherits another source's urgency. */
+    public boolean fulfilsOwnDemand(ExtractionLayout.Cell cell) {
+        var priority = require(cell.id());
+        return cell.definition().coldOutput().stream().map(output -> products.get(output.itemKind()))
+                .filter(Objects::nonNull).anyMatch(own -> own.missing() > 0 && own.compareTo(priority) == 0);
+    }
     public SupplyPriority require(long cell) {
         return Objects.requireNonNull(cells.get(cell), "source has no current requested product or prerequisite");
     }

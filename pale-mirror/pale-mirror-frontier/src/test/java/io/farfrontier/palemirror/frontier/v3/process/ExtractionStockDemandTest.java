@@ -53,7 +53,8 @@ class ExtractionStockDemandTest {
                     ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id())), Map.of(lot, entry.getValue()), Map.of())));
         }
         var deposit = state.extractionSites().deposits().values().stream().filter(value -> value.site().settlementId().equals(home)).findFirst().orElseThrow();
-        var coal = deposit.site().layout().cells().stream().filter(cell -> cell.definition().before().kind().equals("minecraft:coal_ore")).findFirst().orElseThrow();
+        var coal = deposit.site().layout().cells().stream().filter(cell -> cell.definition().before().kind().equals("minecraft:coal_ore"))
+                .findFirst().orElseThrow();
         var opened = new ExtractionDeposit(deposit.site(), deposit.cells(), deposit.geometry(), new WorkAreaDevelopment(2, deposit.cells().keySet()));
         // Prior excavation geometry is input only; clearing access cannot mint stock.
         var access = new HashSet<>(coal.prerequisites()); var queue = new ArrayDeque<>(access);
@@ -63,7 +64,7 @@ class ExtractionStockDemandTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(opened)));
         var worker = state.humanPopulation().resident(new SubjectId("resident:1-10"));
         var event = new ExtractionWorkAdmission(deposit.site().id()).discover(state, worker, 100).orElseThrow().execution();
-        assertEquals("minecraft:coal", event.work().outputKind());
+        assertEquals("minecraft:coal", event.work().outputKind(), "a directly available deficit source precedes equivalent access work");
         var admitted = ExtractionWorkAdmission.start(state, event, 100);
         assertEquals(state.inventory(), admitted.inventory(), "assignment is neither a resource grant nor a transfer");
         var priorities = ExtractionPriorities.read(admitted, opened, Optional.empty(), 100L);

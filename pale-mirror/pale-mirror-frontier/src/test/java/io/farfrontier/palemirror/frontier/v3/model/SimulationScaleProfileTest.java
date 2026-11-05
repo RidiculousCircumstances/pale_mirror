@@ -19,7 +19,8 @@ class SimulationScaleProfileTest {
         for (var settlement : bootstrap.settlements()) {
             var route = FrontierRouteNetwork.settlementWaypoints(bootstrap, settlement.id());
             assertDoesNotThrow(() -> FrontierRouteNetwork.validateSettlementWaypoints(bootstrap, settlement.id(), route));
-            for (var position : route) assertTrue(FrontierRouteNetwork.isSurfaceCell(bootstrap, RouteTopology.initial(), position));
+            for (var position : route) assertTrue(settlement.layout().paving().contains(position)
+                    || FrontierRouteNetwork.isSurfaceCell(bootstrap, RouteTopology.initial(), position));
             assertTrue(route.stream().allMatch(p -> Math.abs(p.x() - settlement.anchor().x()) < 100
                     && Math.abs(p.z() - settlement.anchor().z()) < 100));
         }

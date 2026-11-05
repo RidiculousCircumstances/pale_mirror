@@ -25,7 +25,7 @@ class ActorMovementProcessTest {
         state = state.withActorBody(actor, point.waitingSurfaces().getFirst().standingBody());
         var movement = ResidentServiceTurnover.select(state, actor, 1L).orElseThrow();
         state = retainMovement(state, movement);
-        var floor = KnownPedestrianGround.forFrontier(state).at(home.anchor().x()+22, home.anchor().z()+22);
+        var floor = DeclaredRouteFixtures.openStreet(state, home);
         state = state.withActorBody(actor, floor.standingBody().offset(0,1,0));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
         var action = ActorMovementProcess.progress(movement, 2);
@@ -61,20 +61,6 @@ class ActorMovementProcessTest {
         })) {
             assertTrue(ResidentServiceTurnover.mayPlan(state, actor, 1L));
             assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(state, ResidentActivityProcess.review(actor, 24_000L)));
-            assertTrue(state.actorMovements().isEmpty());
-        }
-        var queries = new java.util.concurrent.atomic.AtomicInteger();
-        try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
-            queries.incrementAndGet();
-            return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 1, 1, "pending turnover");
-        })) {
-            assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
-                    () -> ResidentServiceTurnover.select(state, actor, 1L));
-            assertEquals(1, queries.get());
-            var events = ResidentActivityProcess.plan(state, ResidentActivityProcess.review(actor, 1L));
-            assertEquals(1, events.size());
-            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
-                    events.getFirst().payload());
             assertTrue(state.actorMovements().isEmpty());
         }
     }

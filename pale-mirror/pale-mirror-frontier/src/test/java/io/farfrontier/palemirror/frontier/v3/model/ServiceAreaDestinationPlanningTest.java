@@ -9,25 +9,25 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServiceAreaDestinationPlanningTest {
-    @Test void privateThresholdCanClearThroughServiceWithoutAcquiringItsTurnOrReentering() {
+    @Test void occupiedServiceCanClearWithoutAcquiringAnotherTurnOrReentering() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:private-clearance"), 421L));
         var settlement = state.bootstrap().settlements().getFirst();
         var actor = settlement.residents().getFirst().id();
         var structure = settlement.structures().stream().filter(s -> s.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         var port = SettlementDepotServicePort.forDepot(structure);
-        var start = port.thresholdSurface();
+        var start = port.serviceSurface();
         state = state.withActorBody(actor, start.standingBody());
         var beforeInventory = state.inventory();
         var depotId = FrontierWorldState.depotId(settlement.id());
         var beforeAccess = ServiceAccessCapabilities.current(state, depotId);
         var clearance = ServiceClearanceRoutes.from(state, actor, start);
         assertFalse(clearance.publicDestination(start));
-        assertFalse(port.accessBoundary().occupied(start.standingBody()));
+        assertTrue(port.accessBoundary().occupied(start.standingBody()));
         var probes = new AtomicInteger();
         var target = ServiceAreaDestinations.select(clearance, actor, start, Set.of(), p -> true,
                 p -> { probes.incrementAndGet(); return true; }).orElseThrow();
         var route = clearance.knowledge().plannedBetween(start, target);
-        assertFalse(port.accessBoundary().allowsWaitingRoute(route), "old generic entry prohibition traps the inner-threshold occupant");
+        assertTrue(port.accessBoundary().allowsWaitingRoute(route), "an incumbent may clear its held boundary without another entrance turn");
         assertTrue(clearance.allows(route));
         assertEquals(1, probes.get(), "route permission is resolved before spending a native feasibility probe");
         assertFalse(clearance.temporary(target));

@@ -29,7 +29,7 @@ class RouteMaintenanceProcessTest {
     void runningMaterialPickupRecoversOnlyFromItsExactObservedSourcePostcondition() {
         FrontierWorldState initial = FrontierV3FixtureCatalog.routeMaintenanceColdSourceFairnessConfiguration(
                 new WorldId("frontier:route-maintenance-running-material"), 41L).initialState();
-        RouteMaintenance maintenance = initial.routeMaintenances().get(new SubjectId("maintenance:route--380-64--304"));
+        RouteMaintenance maintenance = initial.routeMaintenances().values().stream().filter(work -> work.cargoId().isEmpty()).findFirst().orElseThrow();
         PhysicalIntent prepared = initial.physicalIntents().values().stream().filter(intent -> intent.causeSubjectId().equals(maintenance.id()))
                 .filter(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
                 .findFirst().orElseThrow();
@@ -68,7 +68,7 @@ class RouteMaintenanceProcessTest {
     void runningRepairRecoversOnlyFromItsExactObservedTargetPostcondition() {
         FrontierWorldState initial = FrontierV3FixtureCatalog.routeMaintenanceColdSourceFairnessConfiguration(
                 new WorldId("frontier:route-maintenance-running-repair"), 41L).initialState();
-        RouteMaintenance maintenance = initial.routeMaintenances().get(new SubjectId("maintenance:route--140-64--304"));
+        RouteMaintenance maintenance = initial.routeMaintenances().values().stream().filter(work -> work.cargoId().isPresent()).findFirst().orElseThrow();
         PhysicalIntent prepared = RouteMaintenanceProcess.workIntent(maintenance, maintenance.plannedCargoId(), maintenance.plannedCargoItemId());
         FrontierWorldState running = RouteMaintenanceProcess.reducePrepared(initial, FrontierRouteNetwork.OWNER, prepared)
                 .transitionPhysicalIntent(prepared.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
@@ -83,7 +83,8 @@ class RouteMaintenanceProcessTest {
         assertEquals(RouteMaintenanceStatus.READY, confirmed.routeMaintenances().get(maintenance.id()).status());
         assertFalse(confirmed.physicalDeltas().containsKey(maintenance.repairCell()),
                 "only the matching recovered receipt may clear its exact route loss");
-        assertTrue(confirmed.physicalDeltas().containsKey(new BlockPosition(-380, 64, -304)),
+        assertTrue(initial.physicalDeltas().keySet().stream().filter(cell -> !cell.equals(maintenance.repairCell()))
+                        .allMatch(confirmed.physicalDeltas()::containsKey),
                 "one repair receipt never clears a different retained route loss");
         assertFalse(confirmed.inventory().cargo().containsKey(maintenance.plannedCargoId()),
                 "the confirmed repair consumes its one exact cargo unit once");
@@ -123,8 +124,8 @@ class RouteMaintenanceProcessTest {
         SubjectId secondSettlement = bootstrap.settlements().get(1).id();
         List<BlockPosition> firstRoute = initial.routeTopology().settlementWaypoints(bootstrap, firstSettlement);
         List<BlockPosition> secondRoute = initial.routeTopology().settlementWaypoints(bootstrap, secondSettlement);
-        BlockPosition firstLoss = firstRoute.stream().filter(position -> !secondRoute.contains(position)).findFirst().orElseThrow();
-        BlockPosition secondLoss = secondRoute.stream().filter(position -> !firstRoute.contains(position)).findFirst().orElseThrow();
+        BlockPosition firstLoss = DeclaredRouteFixtures.networkSurface(bootstrap, initial.routeTopology(), firstSettlement);
+        BlockPosition secondLoss = DeclaredRouteFixtures.networkSurface(bootstrap, initial.routeTopology(), secondSettlement);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(firstLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:first"))
                 .recordPhysicalDelta(new PhysicalDelta(secondLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -414,7 +415,7 @@ class RouteMaintenanceProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-drained-engineer"), 41L);
         FrontierWorldState initial = equippedFixture(bootstrap);
         SubjectId settlement = bootstrap.settlements().getFirst().id();
-        BlockPosition loss = new BlockPosition(-380, 64, -304);
+        BlockPosition loss = DeclaredRouteFixtures.networkSurface(bootstrap, initial.routeTopology(), settlement);
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
         RouteMaintenanceStarted started = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()

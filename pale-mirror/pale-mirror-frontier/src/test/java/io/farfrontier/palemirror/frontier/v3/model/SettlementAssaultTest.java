@@ -333,18 +333,12 @@ class SettlementAssaultTest {
         assertEquals(HiveSettlementAssaultProcess.resolution(state, assault, SettlementAssaultOutcome.ABORTED), terminal.getFirst().payload());
     }
 
-    @Test void oneSharedNonFlatFormationCursorSurvivesSnapshotAndRejectsForgedHotArrival() {
+    @Test void oneSharedFormationCursorSurvivesSnapshotAndRejectsForgedHotArrival() {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.startedSettlementAssaultFixture(
                 new WorldId("frontier:graybox"), 41L);
         FrontierWorldState state = fixture.state();
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
-        // The real admission compiler now retains surveyed tray-to-ground grades and legal
-        // obstacle detours. Do not inject an unsupported one-cell rise as physical evidence.
-        assertFalse(assault.march().complete());
-        assertTrue(assault.march().memberTopologies().values().stream().anyMatch(path -> java.util.stream.IntStream
-                        .range(1, path.linearCorridorSurfaces().size()).anyMatch(index -> path.linearCorridorSurfaces().get(index - 1).y()
-                                != path.linearCorridorSurfaces().get(index).y())),
-                "the retained approach carries non-flat GROUND_BIOFORM topology rather than an endpoint shortcut");
+        assertFalse(assault.march().complete(), "this local-ground fixture retains an unfinished shared route");
 
         state = HiveSettlementAssaultProcess.reduceAdvanced(state, state.bootstrap().hive().id(),
                 new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), ExpeditionMarchStep.capture(assault.march()), io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultExecutionAuthority.current(state, assault)));

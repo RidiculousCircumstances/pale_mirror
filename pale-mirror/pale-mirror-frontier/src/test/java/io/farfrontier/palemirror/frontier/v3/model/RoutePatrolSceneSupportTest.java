@@ -525,8 +525,9 @@ class RoutePatrolSceneSupportTest {
                 StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(taskId, objective.id(), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
-        RoutePatrol patrol = RoutePatrol.planned(state, task, settlement,
-                RouteUnitManifest.patrol(taskId, guards.getFirst().id(), List.of(guards.get(1).id())));
+        var staged = DeclaredRouteFixtures.stagedPatrol(state, settlement, taskId, guards.getFirst().id(), guards.get(1).id());
+        state = staged.state();
+        RoutePatrol patrol = RoutePatrol.planned(state, task, settlement, staged.unit());
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         return io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceStarted(state, settlement.id(),
                 new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));

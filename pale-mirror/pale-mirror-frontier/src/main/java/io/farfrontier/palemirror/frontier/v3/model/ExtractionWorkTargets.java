@@ -22,8 +22,13 @@ public final class ExtractionWorkTargets {
                 .sorted(Comparator.comparingLong(ExtractionLayout.Cell::id)).toList();
         var best = cells.stream().filter(cell -> AreaWorkSelection.stationAvailable(cell.workstation(), peers))
                 .map(cell -> priorities.require(cell.id())).min(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority::compareTo);
+        boolean readyProduct = best.isPresent() && cells.stream()
+                .filter(cell -> AreaWorkSelection.stationAvailable(cell.workstation(), peers))
+                .anyMatch(cell -> priorities.require(cell.id()).compareTo(best.orElseThrow()) == 0
+                        && priorities.fulfilsOwnDemand(cell));
         var selected = AreaWorkSelection.spatiallySeparated(cells.size(), index -> best.isPresent()
-                    && priorities.require(cells.get(index).id()).compareTo(best.orElseThrow()) == 0,
+                    && priorities.require(cells.get(index).id()).compareTo(best.orElseThrow()) == 0
+                    && (!readyProduct || priorities.fulfilsOwnDemand(cells.get(index))),
                 state.actorLocations().get(actor).supportingSurface(), index -> cells.get(index).workstation(), peers, policy);
         return selected.isEmpty() ? Optional.empty() : Optional.of(cells.get(selected.getAsInt()));
     }

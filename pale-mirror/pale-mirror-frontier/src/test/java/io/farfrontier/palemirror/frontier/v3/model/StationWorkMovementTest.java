@@ -182,8 +182,17 @@ class StationWorkMovementTest {
                             ActorMovementProcess.progress(movement, interval.arrivalTick())), base.transactionCommitter(), base.stateValidator()));
         var held = waiting.advanceTo(new SimInstant(302), new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(8, 64));
         assertTrue(held.transactions().isEmpty());
-        assertEquals(new SimInstant(interval.arrivalTick()), waiting.nextExecutionBoundary().orElseThrow(),
-                "the waiting production owner cannot keep an unaddressed old poll before the actual travel deadline");
+        long priorBoundary = 302;
+        var nextBoundary = waiting.nextExecutionBoundary().orElseThrow();
+        while (nextBoundary.ticks() < interval.arrivalTick()) {
+            assertTrue(nextBoundary.ticks() > priorBoundary, "read-only queue audits must advance their own boundary");
+            assertTrue(waiting.advanceTo(nextBoundary, new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(8, 64))
+                    .transactions().isEmpty(), "a safety audit cannot poll the held producer or advance travel");
+            priorBoundary = nextBoundary.ticks();
+            nextBoundary = waiting.nextExecutionBoundary().orElseThrow();
+        }
+        assertEquals(new SimInstant(interval.arrivalTick()), nextBoundary,
+                "after read-only audits the retained movement is the next actual work boundary");
         assertEquals(fixture.state().actorLocations(), state.actorLocations(), "retaining an interval cannot replay all its cells");
         var codecs = FrontierWorldPayloadCodecs.create();
         assertEquals(start, codecs.decode(start.type(), codecs.encode(start)));

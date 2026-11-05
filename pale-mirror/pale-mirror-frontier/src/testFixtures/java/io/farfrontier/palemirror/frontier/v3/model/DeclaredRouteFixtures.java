@@ -104,17 +104,23 @@ public final class DeclaredRouteFixtures {
         return new PatrolIngress(staged, RouteUnitManifest.patrol(task, leader, List.of(scout)));
     }
 
-    /** A local patrol lifecycle fixture starts its chosen free crew at the declared Hall staging. */
+    /** Local patrol/repair causality, with no independent economy/guard recruitment stealing its initial crew. */
     public static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hallStaged(
             io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base) {
         var state = base.initialState();
         var home = state.bootstrap().settlements().getFirst();
-        var guards = FrontierWorldStateSupport.availableRouteResidents(state, home.id(), HumanCapability.SECURITY);
-        state = stagedPatrol(state, home, new SubjectId("task:fixture-hall-staging"), guards.getFirst().id(), guards.get(1).id()).state();
+        // One shared road loss wakes every affected settlement, not just the observed source.
+        for (var settlement : state.bootstrap().settlements()) {
+            var guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), HumanCapability.SECURITY);
+            state = stagedPatrol(state, settlement, new SubjectId("task:fixture-hall-staging"),
+                    guards.getFirst().id(), guards.get(1).id()).state();
+        }
         return new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
                 base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
-                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
-                base.stateValidator(), base.executionMetrics());
+                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules().stream()
+                        .filter(action -> action.kind().equals("frontier.route_maintenance.scan")
+                                || action.kind().equals("frontier.objective.review") && action.subject().equals(home.id()))
+                        .toList(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
     }
 
     public static SurfaceAnchor openStreet(FrontierWorldState state, Settlement home) {

@@ -162,10 +162,21 @@ class UnitGroupTransportTest {
                     .findFirst().orElseGet(() -> starts.stream().map(ProposedEvent::payload)
                             .filter(ActorMovementStarted.class::isInstance).map(ActorMovementStarted.class::cast)
                             .map(ActorMovementStarted::movement).findFirst().orElseThrow());
+            var origin = travelling.actorLocations().get(movement.order().actorId()).supportingSurface();
+            java.util.List<SurfaceAnchor> path = null;
+            for (int slice = 0; slice < 4000 && path == null; slice++) {
+                try {
+                    path = new GroupMovementProvider().route(travelling, movement, origin);
+                } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
+                    assertEquals(PedestrianRouteResult.Status.PLANNING, pending.status(), "the first local join remains a planning wait");
+                    planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+                }
+            }
+            assertNotNull(path, "the initial join must complete before checking retained-route reuse");
+            assertEquals(origin, path.getFirst(), "an executable segment starts at the exact actor, not the common route origin");
+            assertTrue(journey.journey().orElseThrow().route().size() > 16, "the common route retains the actual long journey");
             int pendingBefore = planner.pendingCount();
-            var path = new GroupMovementProvider().route(travelling, movement,
-                    journey.journey().orElseThrow().route().getFirst());
-            assertTrue(path.size() > 16, "the common route must retain the actual long journey");
+            new GroupMovementProvider().route(travelling, movement, origin);
             assertEquals(pendingBefore, planner.pendingCount(), "a retained group route cannot restart regional search per COLD slice");
             var after = engine.checkpoint(); var staleId = new CommandId("test:group-navigation-stale");
             assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION,

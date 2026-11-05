@@ -190,7 +190,15 @@ class ResidentActivityProcessTest {
 
         var departing = blockers.getFirst().id();
         var admitted = ModeledActorBodyFacts.present(blocked, departing);
-        var restored = ModeledActorBodyFacts.inspected(admitted, departing, available.actorLocations().get(departing).body());
+        // Candidates describe geometry, not isolated slots. Restore the crowded
+        // buffer's observed bodies so a full standing envelope is free again.
+        var observed = admitted;
+        for (var blocker : blockers) {
+            if (blocker.id().equals(departing)) continue;
+            observed = ModeledActorBodyFacts.present(observed, blocker.id());
+            observed = ModeledActorBodyFacts.inspected(observed, blocker.id(), available.actorLocations().get(blocker.id()).body());
+        }
+        var restored = ModeledActorBodyFacts.inspected(observed, departing, available.actorLocations().get(departing).body());
         FrontierEvent event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
                 new EventId("event:clearance-restored"), new TransactionId("transaction:clearance-restored"),
                 initial.bootstrap().worldId(), new Revision(1L), new SimInstant(25_000L),
