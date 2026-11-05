@@ -67,8 +67,12 @@ final class FrontierV3FixedContainerProviders {
                 net.minecraft.core.Direction.valueOf(facing.name()));
     }
     static boolean acceptsBlock(ContainerRecord record, net.minecraft.world.level.block.state.BlockState state) {
-        return require(record).accepts().test(state.getBlock()) && (record.productionStation().isEmpty()
-                || state.equals(state(record)));
+        // Rotation changes presentation/placement, not this exact block entity's inventory identity.
+        return require(record).accepts().test(state.getBlock());
+    }
+    static boolean matchesMount(io.farfrontier.palemirror.frontier.v3.model.ProductionStationSpec mount,
+                                net.minecraft.world.level.block.state.BlockState observed) {
+        return observed.equals(equipmentState(mount.equipmentType(), mount.facing()));
     }
     static Optional<FrontierV3PhysicalContainer> inspect(ServerLevel level, BlockPos pos, ContainerRecord record) {
         if (!FrontierV3LoadedWorld.ready(level, pos)) return Optional.empty();

@@ -74,8 +74,10 @@ public final class FrontierV3BuildingAuthoringGameTests {
             var property=io.farfrontier.palemirror.internal.production.ProductionBenchBlock.FACING;
             helper.assertTrue(block.getValue(property).name().equals(spec.facing().name()),"native machine must face its exact operator");
             helper.assertTrue(FrontierV3FixedContainerProviders.acceptsBlock(record,block),"correct installation accepted");
-            helper.assertTrue(!FrontierV3FixedContainerProviders.acceptsBlock(record,block.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90)),
+            helper.assertTrue(!FrontierV3FixedContainerProviders.matchesMount(spec,block.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90)),
                     "wrong orientation is not adopted or overwritten as the declared machine");
+            helper.assertTrue(FrontierV3FixedContainerProviders.acceptsBlock(record,block.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90)),
+                    "turning an installed machine must not erase its inventory provider or custody");
             helper.assertTrue(block.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90).getValue(property)==block.getValue(property).getClockWise(),
                     "native rotation must agree with mount rotation");
         }

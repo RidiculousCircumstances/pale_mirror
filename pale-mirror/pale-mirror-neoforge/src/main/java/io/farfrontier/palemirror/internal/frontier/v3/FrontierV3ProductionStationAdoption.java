@@ -29,7 +29,7 @@ final class FrontierV3ProductionStationAdoption {
             if (level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null
                     || state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed)
                         .anyMatch(surface -> surface.status() != ContainerSurfaceStatus.RETIRED && surface.position().equals(p))
-                    || !level.getBlockState(pos).equals(FrontierV3FixedContainerProviders.equipmentState(placement.equipmentType(), placement.facing()))
+                    || !FrontierV3FixedContainerProviders.matchesMount(placement, level.getBlockState(pos))
                     || !(level.getBlockEntity(pos) instanceof ProductionBenchBlockEntity bench)
                     || !bench.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()
                     || !bench.getPersistentData().getString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY).isBlank()) continue;
