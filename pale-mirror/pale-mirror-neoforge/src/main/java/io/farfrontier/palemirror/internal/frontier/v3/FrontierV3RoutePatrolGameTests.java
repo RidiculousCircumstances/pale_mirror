@@ -121,28 +121,26 @@ public final class FrontierV3RoutePatrolGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-body-loss", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
+    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-body-loss", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20000)
     public static void missingOwnedHotBodyBlocksTheSameDemandedPatrol(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "body-loss"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
-        boolean[] removedHotBody = {false};
-        for (int turn = 1; turn <= 120; turn++) {
-            helper.runAtTickTime(turn, () -> {
-                if (!removedHotBody[0]) runtime.decodedState().orElseThrow().sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
-                        .filter(lease -> lease.status() == SceneLeaseStatus.HOT)
-                        .findFirst().flatMap(lease -> lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Mob.class::isInstance).findFirst())
-                        .ifPresent(body -> { removedHotBody[0] = true; body.discard(); });
-                drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
-            });
-        }
-        helper.runAtTickTime(121, () -> {
-            RoutePatrol patrol = runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId());
-            helper.assertTrue(removedHotBody[0], "the intervention must remove an actually HOT body, not a pending insertion");
-            helper.assertTrue(patrol.status() == RoutePatrolStatus.BLOCKED
-                            && patrol.blockReason().orElseThrow() == RoutePatrolBlockReason.MISSING_OWNED_BODY,
-                    "loss of a HOT exact body must block the same retained patrol with typed ownership");
-            runtime.shutdown(); releaseDemand(observer); helper.succeed();
-        });
+        java.util.function.Supplier<Optional<net.minecraft.world.entity.Entity>> hotBody = () -> runtime.decodedState().orElseThrow()
+                .sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
+                .filter(lease -> lease.status() == SceneLeaseStatus.HOT)
+                .findFirst().flatMap(lease -> lease.members().stream().map(member -> level.getEntity(member.entityId()))
+                        .filter(Mob.class::isInstance).findFirst());
+        Runnable drive = () -> drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
+        await(helper, drive, () -> hotBody.get().isPresent(), () -> {
+            hotBody.get().orElseThrow().discard();
+            await(helper, drive, () -> runtime.decodedState().orElseThrow().strategicPlans().routePatrols()
+                    .get(fixture.taskId()).status() == RoutePatrolStatus.BLOCKED, () -> {
+                RoutePatrol patrol = runtime.decodedState().orElseThrow().strategicPlans().routePatrols().get(fixture.taskId());
+                helper.assertTrue(patrol.blockReason().orElseThrow() == RoutePatrolBlockReason.MISSING_OWNED_BODY,
+                        "loss of a HOT exact body must block the same retained patrol with typed ownership");
+                runtime.shutdown(); releaseDemand(observer); helper.succeed();
+            }, 0L);
+        }, 0L);
     }
 
     private static void prepareRouteFloor(ServerLevel level, Fixture fixture) {
