@@ -209,7 +209,10 @@ export function validateScenario(scenario) {
           || action.checks.some((check) => !validDiagnosticIdentity(check) || !check.expect || typeof check.expect !== 'object' || Array.isArray(check.expect)))) {
         throw new Error('assert_fixture needs 1..16 read-only diagnostic checks and timeoutMs 0..120000');
       }
-      if (action.type === 'walk') validatePosition(action.position ?? action.at);
+      if (action.type === 'walk') {
+        validatePosition(action.position ?? action.at);
+        if (action.jump !== undefined && typeof action.jump !== 'boolean') throw new Error('walk jump must be boolean');
+      }
       if (action.type === 'break' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'place' && !validPlacePosition(action.position)) validatePosition(action.position);
       if (action.type === 'open_container' && !validResolvablePosition(action.position)) validatePosition(action.position);

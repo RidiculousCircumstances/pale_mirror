@@ -82,10 +82,14 @@ public final class ServiceAccessCoordinator {
     public static boolean witnessedActorMovementExit(FrontierWorldState state,
                                                      io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement movement,
                                                      BodyPosition observedBody) {
-        if (movement.context().clearancePoint().isEmpty()) return false;
-        SubjectId depotId = movement.context().clearancePoint().orElseThrow();
         ActorLocation actor = state.actorLocations().get(movement.order().actorId());
-        return actor != null && witnessedExit(boundary(state, depotId), actor.body(), observedBody);
+        if (actor == null || actor.body().equals(observedBody)) return false;
+        // Every journey can leave an occupied service point. A declared service-exit
+        // context owns a particular clearance job, not the physical fact of departure:
+        // input-to-station, patrol and other ordinary legs must release their source too.
+        return ServiceBoundaryComposition.nearbyDeclarations(state,
+                new TerrainColumn(actor.body().x(), actor.body().z())).stream()
+                .anyMatch(point -> witnessedExit(point.boundary(), actor.body(), observedBody));
     }
     public enum AccessReason { RESOURCE_WAIT, EXIT_IN_PROGRESS, CURRENT_OCCUPANT, SELF_CARE_TURN, WORK_TURN, NO_READY_WORKER }
     public record AccessDecision(boolean allowed, AccessReason reason, Optional<SubjectId> actor) { }

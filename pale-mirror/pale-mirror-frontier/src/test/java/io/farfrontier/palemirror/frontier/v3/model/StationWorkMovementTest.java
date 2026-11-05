@@ -68,6 +68,11 @@ class StationWorkMovementTest {
         int exit = boundary.firstExit(fullRoute);
         assertTrue(exit > 0 && exit < fullRoute.size() - 1, "the source exit precedes the station approach");
         assertTrue(sourceOccupied(state, source, job.workerId()));
+        assertFalse(ServiceAccessCoordinator.witnessedActorMovementExit(state, movement,
+                state.actorLocations().get(job.workerId()).body()), "a phase change or accepted route is not physical departure");
+        assertTrue(ServiceAccessCoordinator.witnessedActorMovementExit(state, movement,
+                fullRoute.get(exit).standingBody()),
+                "HOT must publish the source exit even though ordinary station travel has no service-exit context");
         var prefix = fullRoute.subList(0, exit + 1);
         var obstructed = state.recordPhysicalDelta(new PhysicalDelta(fullRoute.get(1).support().offset(0, 1, 0),
                 PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:source-exit-obstructed"));
@@ -95,6 +100,8 @@ class StationWorkMovementTest {
         assertTrue(boundary.cleared(state.actorLocations().get(job.workerId()).body()));
         assertTrue(ServiceAccessCoordinator.wakePoints(occupied, state).contains(source));
         assertFalse(sourceOccupied(state, source, job.workerId()));
+        assertFalse(ServiceAccessCoordinator.witnessedActorMovementExit(state, movement,
+                state.actorLocations().get(job.workerId()).body()), "the already witnessed exit is not repeated");
         assertEquals(occupied.inventory(), state.inventory(), "exiting moves no goods and awards no processing");
         assertEquals(occupied.productionJobs(), state.productionJobs());
         assertEquals(movement.order(), state.actorMovements().get(job.workerId()).order());

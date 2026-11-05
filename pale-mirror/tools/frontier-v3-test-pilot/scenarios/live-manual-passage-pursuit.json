@@ -152,22 +152,24 @@
     {
       "type": "walk",
       "position": {
-        "x": -1485,
+        "x": -1468,
         "y": 64,
-        "z": -1358
+        "z": -1360
       },
-      "radius": 0.5,
-      "timeoutMs": 20000
+      "radius": 0.7,
+      "timeoutMs": 20000,
+      "jump": true
     },
     {
       "type": "walk",
       "position": {
-        "x": -1499,
+        "x": -1500,
         "y": 64,
-        "z": -1358
+        "z": -1360
       },
-      "radius": 0.5,
-      "timeoutMs": 20000
+      "radius": 0.7,
+      "timeoutMs": 20000,
+      "jump": true
     },
     {
       "type": "walk",
@@ -177,7 +179,8 @@
         "z": -1348
       },
       "radius": 0.5,
-      "timeoutMs": 20000
+      "timeoutMs": 20000,
+      "jump": true
     },
     {
       "type": "walk",
@@ -187,7 +190,30 @@
         "z": -1343
       },
       "radius": 0.5,
-      "timeoutMs": 20000
+      "timeoutMs": 20000,
+      "jump": true
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "x": -1498,
+        "y": 65,
+        "z": -1343
+      },
+      "item": "minecraft:stick",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "x": -1498,
+        "y": 65,
+        "z": -1342
+      },
+      "item": "minecraft:stick",
+      "uses": 1,
+      "timeoutMs": 5000
     },
     {
       "type": "walk",
@@ -197,7 +223,8 @@
         "z": -1343
       },
       "radius": 0.5,
-      "timeoutMs": 20000
+      "timeoutMs": 20000,
+      "jump": true
     },
     {
       "type": "use_item_on",
@@ -258,8 +285,13 @@
     {
       "type": "observe_entity_motion",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
-      "workerId": "resident:1-16",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "firstGuardName"
+        }
+      },
       "maxDistance": 64,
       "timeoutMs": 30000,
       "id": "guard-through-player-closed-entrance",
@@ -285,7 +317,7 @@
   ],
   "assertions": [
     {
-      "after": 22,
+      "after": 24,
       "view": "settlement",
       "id": "settlement:1",
       "expect": {
@@ -297,11 +329,11 @@
   ],
   "frames": [
     {
-      "after": 18,
+      "after": 20,
       "name": "player-closed-both-entrance-doors"
     },
     {
-      "after": 20,
+      "after": 22,
       "name": "guard-after-closed-entrance"
     }
   ]

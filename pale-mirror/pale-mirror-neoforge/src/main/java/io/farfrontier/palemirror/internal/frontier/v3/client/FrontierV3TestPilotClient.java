@@ -163,7 +163,7 @@ public final class FrontierV3TestPilotClient {
                     return;
                 }
             }
-            Minecraft.getInstance().options.keyUp.setDown(false);
+            Minecraft.getInstance().options.keyUp.setDown(false); Minecraft.getInstance().options.keyJump.setDown(false);
             captureBarrier = null;
             diagnostics.clear(); PLAYER_HEALTH.clear();
             if (FrontierV3PilotSessionControl.finalCloseRequested()) {
@@ -304,7 +304,7 @@ public final class FrontierV3TestPilotClient {
                 case "look_nearest_entity" -> lookNearestEntity(minecraft, action);
                 case "observe_entity_motion" -> { if (FrontierV3PilotMotionObserver.observe(minecraft, action, actionStartedTick, index + 1, currentCausalMilestone)) advance(type); }
                 case "observe_settlement_population" -> { if (FrontierV3PilotSettlementPopulationObserver.observe(minecraft, action, actionStartedTick, index + 1, currentCausalMilestone)) advance(type); }
-                case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
+                case "walk" -> walk(minecraft, action);
                 case "break" -> {
                     BlockPos target = resolvedPosition(minecraft, action, "position");
                     if (target != null) breakBlock(minecraft, target);
@@ -332,12 +332,15 @@ public final class FrontierV3TestPilotClient {
             reset();
         }
     }
-    private static void walk(Minecraft minecraft, BlockPos target, double radius) {
+    private static void walk(Minecraft minecraft, JsonObject action) {
+        BlockPos target = position(action, "position"); double radius = action.has("radius") ? action.get("radius").getAsDouble() : 1.0D;
         Vec3 current = minecraft.player.position();
         double dx = target.getX() + 0.5D - current.x, dz = target.getZ() + 0.5D - current.z;
-        if (dx * dx + dz * dz <= radius * radius) { minecraft.options.keyUp.setDown(false); advance("walk"); return; }
+        if (dx * dx + dz * dz <= radius * radius) { minecraft.options.keyUp.setDown(false); minecraft.options.keyJump.setDown(false); advance("walk"); return; }
         minecraft.player.setYRot((float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG));
         minecraft.options.keyUp.setDown(true);
+        minecraft.options.keyJump.setDown(action.has("jump") && action.get("jump").getAsBoolean() && minecraft.player.horizontalCollision);
+        if (action.has("timeoutMs")) timeout(minecraft, action, "player walk was obstructed before " + target);
     }
     private static void breakBlock(Minecraft minecraft, BlockPos target) {
         if (minecraft.level.getBlockState(target).isAir()) { breaking = false; advance("break"); return; }
@@ -963,7 +966,7 @@ public final class FrontierV3TestPilotClient {
         }
     }
     private static void reset() {
-        Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
+        Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); minecraft.options.keyJump.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
         visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L;
@@ -975,7 +978,7 @@ public final class FrontierV3TestPilotClient {
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; currentCausalMilestone = null; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
     }
     private static void clearExpectedLossTransientState() {
-        Minecraft.getInstance().options.keyUp.setDown(false);
+        Minecraft.getInstance().options.keyUp.setDown(false); Minecraft.getInstance().options.keyJump.setDown(false);
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
         placementAttempted = false; itemUse = null; visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;

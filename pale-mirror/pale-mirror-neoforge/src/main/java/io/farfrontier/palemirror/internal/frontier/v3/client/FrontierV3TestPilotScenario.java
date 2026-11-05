@@ -95,7 +95,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("split_move_from_container") && !validSplitMove(action)) ||
                     (type.equals("move_within_container") && !validContainerReorder(action)) ||
                     (type.equals("look") && !resolvablePosition(action, action.has("at") ? "at" : "position")) ||
-                    (type.equals("walk") && !position(action)) ||
+                    (type.equals("walk") && (!position(action) || action.has("jump") && (!action.get("jump").isJsonPrimitive() || !action.get("jump").getAsJsonPrimitive().isBoolean()))) ||
                     (type.equals("break") && !resolvablePosition(action, "position")) ||
                     (type.equals("wait_until_block") && !resolvablePosition(action, "position"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
