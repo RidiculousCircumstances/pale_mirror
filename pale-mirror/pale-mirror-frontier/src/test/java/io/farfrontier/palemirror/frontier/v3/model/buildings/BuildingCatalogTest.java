@@ -147,6 +147,15 @@ class BuildingCatalogTest {
 
     @Test
     void exactSelectionRejectsForeignContentAndTransformRotatesMetadataAndStateTogether() {
+        assertEquals(
+                new BlockPosition(-1496, 64, -1346),
+                BuildingDefinitionFormat.worldPoint("-1496,64,-1346"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> BuildingDefinitionFormat.point("-1496,64,-1346"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> BuildingDefinitionFormat.worldPoint("30000001,64,0"));
         var catalog = BuildingCatalog.standard();
         var ref = catalog.select(BuildingCatalog.MEDIEVAL_SPRUCE, StructureKind.WORKSHOP);
         var definition = catalog.require(ref, StructureKind.WORKSHOP);

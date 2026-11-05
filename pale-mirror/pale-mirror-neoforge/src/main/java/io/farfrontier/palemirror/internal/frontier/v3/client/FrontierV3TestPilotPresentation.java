@@ -20,7 +20,10 @@ final class FrontierV3TestPilotPresentation {
         clear(minecraft);
     }
 
-    static void preparePlayerCapture(Minecraft minecraft) { clear(minecraft); }
+    static void preparePlayerCapture(Minecraft minecraft) {
+        if (originalHideGui != null) minecraft.options.hideGui = originalHideGui;
+        clear(minecraft);
+    }
 
     static void clear(Minecraft minecraft) {
         minecraft.gui.getChat().clearMessages(false);

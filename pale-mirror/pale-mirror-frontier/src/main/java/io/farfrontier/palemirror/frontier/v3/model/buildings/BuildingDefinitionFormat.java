@@ -158,6 +158,15 @@ public final class BuildingDefinitionFormat {
     }
 
     public static BlockPosition point(String encoded) {
+        return point(encoded, 256, "local building");
+    }
+
+    /** Placement manifests carry absolute Minecraft coordinates, not local annotations. */
+    public static BlockPosition worldPoint(String encoded) {
+        return point(encoded, 30_000_000, "world building");
+    }
+
+    private static BlockPosition point(String encoded, int maximum, String kind) {
         var fields = encoded.split(",", -1);
         if (fields.length != 3)
             throw new IllegalArgumentException("building position requires x,y,z");
@@ -166,10 +175,10 @@ public final class BuildingDefinitionFormat {
                         Integer.parseInt(fields[0]),
                         Integer.parseInt(fields[1]),
                         Integer.parseInt(fields[2]));
-        if (Math.abs((long) p.x()) > 256
-                || Math.abs((long) p.y()) > 256
-                || Math.abs((long) p.z()) > 256)
-            throw new IllegalArgumentException("unbounded local building coordinate");
+        if (Math.abs((long) p.x()) > maximum
+                || Math.abs((long) p.y()) > maximum
+                || Math.abs((long) p.z()) > maximum)
+            throw new IllegalArgumentException("unbounded " + kind + " coordinate");
         return p;
     }
 

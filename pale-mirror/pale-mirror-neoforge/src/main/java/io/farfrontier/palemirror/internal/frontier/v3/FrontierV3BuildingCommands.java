@@ -234,7 +234,7 @@ public final class FrontierV3BuildingCommands {
         if (!BuildingCatalog.standard().require(ref.template()).sha256().equals(ref.sha256()))
             throw new IllegalArgumentException("draft source content changed; export again");
         return new BuildingPlacement(
-                BuildingDefinitionFormat.point(values.get("anchor")),
+                BuildingDefinitionFormat.worldPoint(values.get("anchor")),
                 BuildingDefinitionFormat.point(markup.get("origin")),
                 FacilityFacing.valueOf(markup.get("front")),
                 FacilityFacing.valueOf(values.get("facing")));
