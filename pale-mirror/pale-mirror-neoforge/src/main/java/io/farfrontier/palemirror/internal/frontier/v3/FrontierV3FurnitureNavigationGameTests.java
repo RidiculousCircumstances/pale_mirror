@@ -85,7 +85,8 @@ public final class FrontierV3FurnitureNavigationGameTests {
         var origin = helper.absolutePos(new BlockPos(3, 30, 4));
         var scope = new FrontierV3NavigationScope.ObservedWorld(new WorldBounds(origin.getX(), origin.getZ(), 9, 5));
         var policy = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy(
-                io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(furniture));
+                io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(furniture),
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalRules.initial());
         helper.runAfterDelay(1, () -> {
             FrontierV3BodyObservation.refreshGroundContact(level, actor);
             var query = FrontierV3PedestrianTraffic.query(level, actor, target, scope,

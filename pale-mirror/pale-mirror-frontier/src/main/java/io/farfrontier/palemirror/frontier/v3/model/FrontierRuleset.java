@@ -264,6 +264,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     public io.farfrontier.palemirror.frontier.v3.model.combat.EvasionRules evasion(){return io.farfrontier.palemirror.frontier.v3.model.combat.EvasionRules.initial();}
+    public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalRules pedestrianTraversal(){return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalRules.initial();}
     public io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionRules locomotion(){return io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionRules.initial();}
     public io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules melee(){return io.farfrontier.palemirror.frontier.v3.model.combat.MeleeRules.initial();}
 
@@ -284,7 +285,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (tools.definitions().isEmpty() ? "" : "|tools=" + tools.canonicalText())
                 + (worldLayout.equals(FrontierWorldLayout.compact()) ? "" : "|layout=" + worldLayout.canonicalText())
                 + (forestry.enabled() ? "|forestry=" + forestry.canonicalText() : "")
-                + "|security=" + security.canonicalText()+"|melee="+melee().canonicalText()+"|locomotion="+locomotion().canonicalText()+"|evasion="+evasion().canonicalText();
+                + "|security=" + security.canonicalText()+"|melee="+melee().canonicalText()+"|locomotion="+locomotion().canonicalText()+"|evasion="+evasion().canonicalText()+"|pedestrianTraversal="+pedestrianTraversal().canonicalText();
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

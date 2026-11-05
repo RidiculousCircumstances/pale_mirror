@@ -22,7 +22,7 @@ public final class KnownPedestrianPreferences {
                     if (!floors.contains(support) && !plan.circulation().contains(support)) obstacles.add(position);
                 }
             }
-            return new PedestrianTraversalPolicy(RegionalBlockSet.copyOf(obstacles));
+            return new PedestrianTraversalPolicy(RegionalBlockSet.copyOf(obstacles), bootstrap.ruleset().pedestrianTraversal());
         });
     }
 }
