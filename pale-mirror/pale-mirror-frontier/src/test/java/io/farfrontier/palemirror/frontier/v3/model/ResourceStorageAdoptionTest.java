@@ -49,7 +49,7 @@ class ResourceStorageAdoptionTest {
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var buy = new GoodsParticipantPolicy.Intent("minecraft:bread", GoodsTradeOrder.Side.BUY, 64, FixedScalar.whole(1));
         var scope = GoodsParticipantStorage.containers(state, participant, "minecraft:bread");
-        assertEquals(Set.of(id, FrontierWorldState.depotId(home)), scope);
+        assertEquals(Set.of(id, CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home)), scope);
         var walker = state.humanPopulation().residents().keySet().iterator().next();
         var moved = state.withActorBody(walker, state.actorLocations().get(walker).body().offset(1, 0, 0));
         assertSame(scope, GoodsParticipantStorage.containers(moved, participant, "minecraft:bread"),
@@ -132,8 +132,7 @@ class ResourceStorageAdoptionTest {
         var station = KnownPedestrianGround.forFrontier(state).at(anchor.x() + 22, anchor.z() + 22);
         var id = new SubjectId("container:adoption-test");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, Optional.empty(), station);
-        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         return new ResourceStorageAdopted(new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)), filled
                 ? List.of(new ResourceLot(new SubjectId("lot:adopted-stone"), home.id(), "minecraft:cobblestone", 17,
                     "observed-territorial-storage", List.of()), new ResourceLot(new SubjectId("lot:adopted-bread"), home.id(),
@@ -207,8 +206,8 @@ class ResourceStorageAdoptionTest {
         var replacementId = new SubjectId("container:new-incarnation");
         var oldPort = (ShipmentEndpoint.Storage) record.storage().orElseThrow().endpoint();
         var port = new ShipmentEndpoint.Storage(oldPort.settlementId(), replacementId, oldPort.station(), oldPort.facilityId(), oldPort.exteriorApproach());
-        var replacement = new ContainerRecord(replacementId, record.ownerId(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(new ResourceStoragePolicy(port, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var replacement = ContainerRecord.storage(replacementId, record.ownerId(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST,
+                 new ResourceStoragePolicy(port, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var declaration = new ResourceStorageDeclared(replacement, original.declaration().position());
         assertDoesNotThrow(() -> declaration.apply(retired, record.ownerId()));
         assertThrows(IllegalArgumentException.class, () -> declaration.apply(active, record.ownerId()));

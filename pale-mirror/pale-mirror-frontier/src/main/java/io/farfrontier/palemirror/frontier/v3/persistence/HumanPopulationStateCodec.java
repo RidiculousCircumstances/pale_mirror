@@ -292,6 +292,7 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeString(output, meal.settlementId().value());
         ResidentFoodSourceCodec.write(output, meal.source());
         FrontierWorldStateCodec.writePosition(output, meal.clearingSurface().support());
+        MealDestinationCodec.write(output, meal.destination());
         FrontierWorldStateCodec.writeString(output, meal.actorAccountId().value());
         writeFoodPortion(output, meal.portion());
         FrontierWorldStateCodec.writeString(output, meal.claimId().value());
@@ -362,6 +363,7 @@ final class HumanPopulationStateCodec {
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
         var source = ResidentFoodSourceCodec.read(input);
         SurfaceAnchor clearing = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
+        var destination = MealDestinationCodec.read(input);
         SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
         FoodPortion portion = readFoodPortion(input);
         SubjectId claim = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -377,7 +379,7 @@ final class HumanPopulationStateCodec {
         }
         java.util.Optional<ResidentMealPhysicalStep> pending = java.util.Optional.empty();
         if (input.readBoolean()) pending = java.util.Optional.of(readMealPhysicalStep(input));
-        ResidentMeal meal = new ResidentMeal(resident, settlement, source, clearing, actor, portion,
+        ResidentMeal meal = new ResidentMeal(resident, settlement, source, clearing, destination, actor, portion,
                 claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending,
                 java.util.Optional.empty(), executionId);
         if (!input.readBoolean()) return meal;

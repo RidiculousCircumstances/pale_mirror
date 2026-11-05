@@ -40,7 +40,7 @@ class ActorMovementInterruptionPlannerTest {
         assertFalse(planner.mayAttempt(state, actor, 23_899L), "an old wake cannot replace newer movement");
         assertFalse(planner.mayAttempt(fixture(true), actor, 24_000L), "mandatory service clearance remains exact");
         var resources = state.inventory().fungibleResources();
-        var account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(
+        var account = ReferenceContainerCustody.scopeId(CommunalDiningPlan.initialFoodStorage(state.bootstrap(),
                 state.humanPopulation().resident(actor).settlementId()));
         var empty = resources.destroy(account, Map.of(new SubjectId("lot:interruption-bread"), 64), Map.of());
         var noFood = state.withInventory(state.inventory().withFungibleResources(empty));
@@ -146,7 +146,7 @@ class ActorMovementInterruptionPlannerTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:interruption-bread"), settlement.id(), ResidentMeal.BREAD_KIND,
                         64, "test", List.of()));
-        return initial.withInventory(initial.inventory().withFungibleResources(resources)).withActorBody(actor, body.standingBody())
+        return KitchenFoodFixture.relocateDepotFood(initial.withInventory(initial.inventory().withFungibleResources(resources)), settlement.id()).withActorBody(actor, body.standingBody())
                 .withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actor, movement))
                         .actorExecutions(initial.actorExecutions().begin(movement.executionId(), 0L)));
     }

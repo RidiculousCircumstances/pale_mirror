@@ -356,7 +356,7 @@ public final class FrontierReadabilityPlan {
         if(structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
             return io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).primaryEntrance().exteriorApproach().getFirst().support().offset(0,3,0);
         int depth = switch (structure.kind()) {
-            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT -> 7;
+            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT, KITCHEN -> 7;
             case HOUSING, INFIRMARY -> 6;
         };
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
@@ -414,6 +414,7 @@ public final class FrontierReadabilityPlan {
             case WOODSHOP -> "WOODSHOP";
             case DEPOT -> "DEPOT";
             case INFIRMARY -> "INFIRMARY";
+            case KITCHEN -> "KITCHEN";
         };
     }
 

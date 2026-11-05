@@ -10,13 +10,14 @@ final class ShipmentFixture {
     static FrontierWorldState initial(WorldId world, long seed) {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, seed));
         var seller = state.bootstrap().settlements().getFirst(); var buyer = state.bootstrap().settlements().get(1);
-        var source = FrontierWorldState.depotId(seller.id()); var target = FrontierWorldState.depotId(buyer.id());
+        var source = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), seller.id());
+        var target = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), buyer.id());
         var sourceAccount = ReferenceContainerCustody.scopeId(source);
         var lot = new SubjectId("lot:development-shipment-bread"); var staging = new SubjectId("custody:development-goods-setup");
         int stock = 32 + SettlementFoodPolicy.reserveRequirement(state, seller.id(), 0);
         var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, seller.id(), "minecraft:bread", stock,
                 "fixture:shipment-initial-stock", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(source), Map.of(lot, stock), Map.of()));
-        resources = resources.transfer(staging, sourceAccount, Map.of(lot, stock), Map.of());
+        resources = resources.transferToNewAccount(staging, new CustodyAccount(sourceAccount, new ResourceCustody.Container(source), Map.of(lot, stock), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         var sellParty = new GoodsTradeParty(seller.id(), EconomicOwnerKind.SETTLEMENT_TREASURY);
         var buyParty = new GoodsTradeParty(buyer.id(), EconomicOwnerKind.SETTLEMENT_TREASURY);
@@ -34,16 +35,11 @@ final class ShipmentFixture {
         var actor = seller.residents().getFirst().id();
         var shipment = new Shipment(ID, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT,
                 claim, contract, ID, 0), state.actorExecutions().next(actor, ActorActivityKind.COURIER, ID),
-                endpoint(seller), endpoint(buyer), sourceAccount, new SubjectId("custody:development-goods-courier"),
+                GoodsParticipantStorage.endpoint(state, source), GoodsParticipantStorage.endpoint(state, target), sourceAccount, new SubjectId("custody:development-goods-courier"),
                 ReferenceContainerCustody.scopeId(target), "minecraft:bread", Map.of(lot, 32), Shipment.Status.AWAITING_LOAD, 1);
         state = ShipmentStateSupport.dispatch(state, seller.id(), shipment);
         FrontierDomainRelationships.validate(state);
         return state;
-    }
-    private static ShipmentEndpoint endpoint(Settlement settlement) {
-        var depot = settlement.structures().stream().filter(s -> s.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        return new ShipmentEndpoint.Depot(settlement.id(), depot.id(),
-                FrontierWorldState.depotId(settlement.id()), SettlementDepotServicePort.forDepot(depot).serviceSurface());
     }
     private ShipmentFixture() { }
 }

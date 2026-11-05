@@ -34,7 +34,7 @@ record FrontierV3ContainerMenuTarget(ContainerRecord record, FrontierV3PhysicalC
             var targets = new java.util.ArrayList<FrontierV3ContainerMenuTarget>();
             int offset = 0;
             for (var leaf : leaves) {
-                if (leaf instanceof ChestBlockEntity block) {
+                if (leaf instanceof net.minecraft.world.level.block.entity.BlockEntity block) {
                     var record = FrontierV3ContainerClickExecutor.ownedContainer(state, block.getBlockPos());
                     if (record != null) {
                         var physical = FrontierV3PhysicalContainer.loaded(player.serverLevel(), state, record.id()).orElseThrow(
@@ -73,7 +73,7 @@ record FrontierV3ContainerMenuTarget(ContainerRecord record, FrontierV3PhysicalC
                 throw new IllegalArgumentException("station menu lacks its exact registered physical provider");
             return new FrontierV3ContainerMenuTarget(record, physical, 0, 0);
         }
-        if (menu instanceof ChestMenu chestMenu && chestMenu.getContainer() instanceof ChestBlockEntity chest) {
+        if (menu instanceof ChestMenu chestMenu && chestMenu.getContainer() instanceof net.minecraft.world.level.block.entity.BlockEntity chest) {
             var record = FrontierV3ContainerClickExecutor.ownedContainer(state, chest.getBlockPos());
             if (record == null) return null;
             var physical = FrontierV3PhysicalContainer.loaded(player.serverLevel(), state, record.id()).orElse(null);

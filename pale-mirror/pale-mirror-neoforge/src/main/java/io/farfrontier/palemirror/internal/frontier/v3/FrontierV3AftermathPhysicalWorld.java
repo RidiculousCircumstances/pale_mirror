@@ -46,8 +46,10 @@ interface FrontierV3AftermathPhysicalWorld {
             }
             @Override public boolean placeMaterial(BlockPosition position, StructureMaterial material) {
                 BlockPos block = block(position);
-                return level.setBlock(block, FrontierV3GrayboxExecutor.material(material), blockUpdateFlags)
-                        && level.getBlockState(block).equals(FrontierV3GrayboxExecutor.material(material));
+                if (!level.setBlock(block, FrontierV3GrayboxExecutor.material(material), blockUpdateFlags)
+                        && !level.getBlockState(block).equals(FrontierV3GrayboxExecutor.material(material))) return false;
+                FrontierV3AuthoredBlockData.apply(level, block, material);
+                return true;
             }
             @Override public boolean clear(BlockPosition position) {
                 BlockPos block = block(position);

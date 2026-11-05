@@ -29,7 +29,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.Container;
 
 import java.util.List;
 import java.util.Optional;
@@ -65,7 +65,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         // itself as a canonical conflict.
         if (target == null) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         if (!level.hasChunkAt(target.chestPosition())) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
+        Container chest = FrontierV3PhysicalContainer.loaded(level, state, target.sourceSlot().containerId()).map(FrontierV3PhysicalContainer::inventory).orElse(null);
         if (chest == null) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         return resident(level, state, target, intent.status() == PhysicalIntentStatus.PREPARED) == null ? FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED
                 : FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
@@ -81,9 +81,9 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         if (canonical != FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE) return "CANONICAL_" + canonical;
         Target target = target(state, intent);
         if (target == null) return "TARGET_DEFERRED";
-        if (!level.hasChunkAt(target.chestPosition())) return "CHEST_UNLOADED";
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
-        if (chest == null) return "CHEST_NOT_ACTIVE";
+        if (!level.hasChunkAt(target.chestPosition())) return "CONTAINER_UNLOADED";
+        Container chest = FrontierV3PhysicalContainer.loaded(level, state, target.sourceSlot().containerId()).map(FrontierV3PhysicalContainer::inventory).orElse(null);
+        if (chest == null) return "CONTAINER_NOT_ACTIVE";
         return resident(level, state, target, intent.status() == PhysicalIntentStatus.PREPARED) == null ? "WORKER_NOT_AT_INPUT" : "RUNNABLE";
     }
 
@@ -115,7 +115,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
             return;
         }
         if (!level.hasChunkAt(target.chestPosition())) return;
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
+        Container chest = FrontierV3PhysicalContainer.loaded(level, state, target.sourceSlot().containerId()).map(FrontierV3PhysicalContainer::inventory).orElse(null);
         Villager worker = resident(level, state, target, intent.status() == PhysicalIntentStatus.PREPARED);
         if (chest == null || worker == null) return;
         if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(level, runtime, intent, target, chest, worker); return; }
@@ -182,21 +182,21 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
                 ? actuation : null;
     }
 
-    private static boolean sourceMatches(ChestBlockEntity chest, Target target) {
+    private static boolean sourceMatches(Container chest, Target target) {
         return target.sourceSlot().slot() < chest.getContainerSize()
                 && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.sourceSlot().slot()), target.item());
     }
 
-    private static boolean handOff(ChestBlockEntity chest, Villager worker, Target target) {
+    private static boolean handOff(Container chest, Villager worker, Target target) {
         return FrontierV3ActorItemTransfer.take(chest, worker, target.item(), target.order().exactSlot(), EquipmentSlot.MAINHAND);
     }
 
-    static boolean handOff(ChestBlockEntity chest, Villager worker, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot) {
+    static boolean handOff(Container chest, Villager worker, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot) {
         return FrontierV3ActorItemTransfer.take(chest, worker, item, sourceSlot, EquipmentSlot.MAINHAND);
     }
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
-                                       ChestBlockEntity chest, Villager worker) {
+                                       Container chest, Villager worker) {
         boolean source = sourceMatches(chest, target), hand = FrontierV3ExactItemPresentation.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) { confirm(runtime, intent, target); return; }
         if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
@@ -208,7 +208,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
     }
 
     private static void inspectRecovered(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
-                                         ChestBlockEntity chest, Villager worker) {
+                                         Container chest, Villager worker) {
         boolean source = sourceMatches(chest, target), hand = FrontierV3ExactItemPresentation.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
         if (!source && hand) confirm(runtime, intent, target);
         else if (source && worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
@@ -241,7 +241,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
             return () -> { };
         var target = target(state, intent);
         if (target == null || !level.hasChunkAt(target.chestPosition())) return () -> { };
-        var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
+        var chest = FrontierV3PhysicalContainer.loaded(level, state, target.sourceSlot().containerId()).map(FrontierV3PhysicalContainer::inventory).orElse(null);
         if (chest == null) return () -> { };
         boolean source = sourceMatches(chest, target);
         boolean hand = FrontierV3ExactItemPresentation.exactMatch(body.getItemBySlot(EquipmentSlot.MAINHAND), target.item());

@@ -39,7 +39,8 @@ final class GoodsTripAssembly {
         var contract = parcels.getFirst().contract();
         var source = GoodsParticipantStorage.endpoint(state, contract.sourceContainerId());
         var destination = GoodsParticipantStorage.endpoint(state, contract.receiverContainerId());
-        var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(source, destination));
+        var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(source, destination))
+                .forProfile(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER);
         var estimates = knowledge.estimateBatch(List.of(new PedestrianRouteLeg(source.station(), destination.station()),
                 new PedestrianRouteLeg(destination.station(), source.station())));
         long outward = estimates.get(0).estimatedEdges(); long returning = estimates.get(1).estimatedEdges();

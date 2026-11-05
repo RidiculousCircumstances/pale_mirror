@@ -20,7 +20,7 @@ final class FrontierV3NavigationShapes extends net.minecraft.world.level.pathfin
     };
     private FrontierV3NavigationShapes() { }
     static NavigationObservation capture(ServerLevel level, BlockPosition position) {
-        return capture(new Reader(position, level.getHeight(), level.getMinBuildHeight(), pos -> {
+        return capture(new Reader(position, false, level.getHeight(), level.getMinBuildHeight(), pos -> {
             var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
             if (chunk == null) throw unavailable(NavigationObservation.Kind.CHUNK_UNAVAILABLE);
             return chunk.getBlockState(pos);
@@ -28,8 +28,9 @@ final class FrontierV3NavigationShapes extends net.minecraft.world.level.pathfin
     }
     /** Position-independent catalogue entries cannot retain neighbour or offset-dependent facts. */
     static NavigationObservation declared(BlockState state, BlockPosition position, int height, int minimumY) {
-        if (state.hasOffsetFunction()) return NavigationObservation.unavailable(NavigationObservation.Kind.POSITION_REQUIRED);
-        var observation = capture(new Reader(position, height, minimumY, pos -> {
+        if (state.hasOffsetFunction() && ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3BlockCollisionAccessor) state.getBlock()).paleMirror$hasCollision())
+            return NavigationObservation.unavailable(NavigationObservation.Kind.POSITION_REQUIRED);
+        var observation = capture(new Reader(position, true, height, minimumY, pos -> {
             if (!pos.equals(new BlockPos(position.x(), position.y(), position.z())))
                 throw unavailable(NavigationObservation.Kind.NEIGHBOUR_UNAVAILABLE);
             return state;
@@ -39,11 +40,12 @@ final class FrontierV3NavigationShapes extends net.minecraft.world.level.pathfin
     private static final class Reader implements BlockGetter {
         final BlockPos origin;
         final int height, minimumY;
+        final boolean declarationOnly;
         final java.util.function.Function<BlockPos, BlockState> blocks;
         final Map<BlockPosition, Optional<NavigationBlockState>> dependencies = new HashMap<>();
-        Reader(BlockPosition position, int height, int minimumY, java.util.function.Function<BlockPos, BlockState> blocks) {
+        Reader(BlockPosition position, boolean declarationOnly, int height, int minimumY, java.util.function.Function<BlockPos, BlockState> blocks) {
             origin = new BlockPos(position.x(), position.y(), position.z());
-            this.height = height; this.minimumY = minimumY; this.blocks = blocks;
+            this.declarationOnly = declarationOnly; this.height = height; this.minimumY = minimumY; this.blocks = blocks;
         }
         @Override public BlockState getBlockState(BlockPos pos) {
             if (!pos.equals(origin)) {
@@ -86,7 +88,10 @@ final class FrontierV3NavigationShapes extends net.minecraft.world.level.pathfin
                         POWDER_SNOW, DANGER_POWDER_SNOW, LAVA, WATER, STICKY_HONEY -> false;
                 default -> true;
             };
-            var passage = FrontierV3PassageBlocks.traversalState(state, origin, reader).filter(open -> !open.equals(state)).map(open -> {
+            // A catalogue records conditional shape capability, not a world interaction receipt.
+            // Actual observations still validate/read the paired half; opening remains fenced.
+            var passage = (reader.declarationOnly ? FrontierV3PassageBlocks.opened(state)
+                    : FrontierV3PassageBlocks.traversalState(state, origin, reader)).filter(open -> !open.equals(state)).map(open -> {
                 var openBoxes = open.getCollisionShape(reader, origin, STATIC_CONTEXT).toAabbs().stream()
                         .map(box -> new NavigationShape.Box(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ)).toList();
                 return new NavigationShape(openBoxes);

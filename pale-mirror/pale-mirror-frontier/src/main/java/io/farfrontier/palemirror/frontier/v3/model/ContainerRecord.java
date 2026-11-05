@@ -10,6 +10,7 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
                               ContainerPurpose purpose,
                               Optional<ProductionStationSpec> productionStation,
                               Optional<ResourceStoragePolicy> storage,
+                              Optional<StorageBlockKind> storageBlock,
                               FungibleContainerLayout fungibleLayout) {
     public static final int MAX_SLOTS = 54;
     public ContainerRecord {
@@ -17,6 +18,9 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
         productionStation = Objects.requireNonNull(productionStation, "production station declaration");
         Objects.requireNonNull(purpose, "container purpose");
         storage = Objects.requireNonNull(storage, "explicit optional warehouse capability");
+        storageBlock = Objects.requireNonNull(storageBlock, "explicit ordinary storage provider");
+        if ((purpose == ContainerPurpose.RESOURCE_STORAGE) != storageBlock.isPresent())
+            throw new IllegalArgumentException("ordinary storage requires its exact declared physical provider");
         Objects.requireNonNull(fungibleLayout, "retained container placement");
         if (storage.isPresent() && productionStation.isPresent())
             throw new IllegalArgumentException("production station cannot be an ordinary warehouse");
@@ -42,7 +46,19 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
 
     public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount, ContainerPurpose purpose,
                            Optional<ProductionStationSpec> productionStation, Optional<ResourceStoragePolicy> storage) {
-        this(id, ownerId, slotCount, purpose, productionStation, storage, FungibleContainerLayout.empty());
+        this(id, ownerId, slotCount, purpose, productionStation, storage, Optional.empty(), FungibleContainerLayout.empty());
+    }
+
+    public static ContainerRecord storage(SubjectId id, SubjectId ownerId, int slots,
+            StorageBlockKind kind, ResourceStoragePolicy policy) {
+        return new ContainerRecord(id, ownerId, slots, ContainerPurpose.RESOURCE_STORAGE,
+                Optional.empty(), Optional.of(policy), Optional.of(kind), FungibleContainerLayout.empty());
+    }
+
+    public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount, ContainerPurpose purpose,
+            Optional<ProductionStationSpec> productionStation, Optional<ResourceStoragePolicy> storage,
+            FungibleContainerLayout layout) {
+        this(id, ownerId, slotCount, purpose, productionStation, storage, Optional.empty(), layout);
     }
 
     public ContainerCompartmentLayout compartmentLayout() {
@@ -51,7 +67,7 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
     }
 
     public ContainerRecord withFungibleLayout(FungibleContainerLayout layout) {
-        return new ContainerRecord(id, ownerId, slotCount, purpose, productionStation, storage, layout);
+        return new ContainerRecord(id, ownerId, slotCount, purpose, productionStation, storage, storageBlock, layout);
     }
 
     public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount, ContainerPurpose purpose,
@@ -60,7 +76,7 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
     }
 
     public ContainerRecord withStorage(ResourceStoragePolicy policy) {
-        return new ContainerRecord(id, ownerId, slotCount, purpose, productionStation, Optional.of(policy), fungibleLayout);
+        return new ContainerRecord(id, ownerId, slotCount, purpose, productionStation, Optional.of(policy), storageBlock, fungibleLayout);
     }
 
     public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount) {

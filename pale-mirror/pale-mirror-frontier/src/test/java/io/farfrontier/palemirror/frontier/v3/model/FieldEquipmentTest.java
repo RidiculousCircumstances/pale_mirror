@@ -105,6 +105,11 @@ class FieldEquipmentTest {
         var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
         var job = fixture.job(); var before = fixture.state();
         assertEquals(ResourceSiteHarvestGoal.Kind.EQUIPMENT_SERVICE, ResourceSiteHarvestGoal.current(before, job).kind());
+        var candidate = FrontierResourceSiteHarvestSceneSupport.candidate(before, job).orElseThrow();
+        assertEquals(FrontierResourceSiteHarvestSceneSupport.demandPosition(before, job), candidate.cropSlot(),
+                "tool acquisition follows the same worker-side demand at scene admission and continuation");
+        assertEquals(before.actorLocations().get(job.workerId()).body().supportingSurface().support().offset(0, 1, 0),
+                candidate.cropSlot(), "an unfinished field cannot redirect a service journey's demand back to its crop");
         var event = new FieldEquipmentChanged(job.siteId(), job.id(), WorkToolAssignment.Stage.ACQUIRING,
                 FieldEquipmentChanged.Action.COLD_TRANSFER, Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> FieldEquipmentProcess.reduce(before, job.siteId(), event, 22_100));

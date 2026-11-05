@@ -267,8 +267,7 @@ class InternalShipmentTest {
         var station = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
         var container = new SubjectId("container:test-retarget");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), container, station, Optional.empty(), station);
-        var record = new ContainerRecord(container, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(container, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         state = new ResourceStorageAdopted(new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)), List.of()).apply(state, home.id());
         state = state.withInventory(state.inventory().withSurfaceStatus(container, ContainerSurfaceStatus.ACTIVE));
         return new RetargetFixture(state, shipment);

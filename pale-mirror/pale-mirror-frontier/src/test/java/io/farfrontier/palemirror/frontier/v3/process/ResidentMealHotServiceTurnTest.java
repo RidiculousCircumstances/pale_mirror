@@ -30,6 +30,7 @@ class ResidentMealHotServiceTurnTest {
                 .inventory(initial.inventory().withFungibleResources(bread))
                 .humanPopulation(initial.humanPopulation().accrueHunger(first, 27_000L)
                         .accrueHunger(second, 27_000L)));
+        state = KitchenFoodFixture.relocateDepotFood(state, settlement.id());
         state = ResidentMealProcess.reduceStarted(state, first,
                 ResidentMealProcess.selectSourceAtYield(state, first, 27_000L).orElseThrow());
         state = ResidentMealProcess.reduceStarted(state, second,
@@ -40,8 +41,7 @@ class ResidentMealHotServiceTurnTest {
             state = ModeledActorBodyFacts.present(state, resident);
             state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
         }
-        var service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
+        var service = ResourceStorageAccess.at(state, state.humanPopulation().meals().get(first).depotId()).interactionStation(state);
         ResidentMealHotArrived firstArrival = new ResidentMealHotArrived(first,
                 state.ambientLeases().get(first).revision(), service.standingBody(), ModeledActorBodyFacts.hotObservation(
                         state, state.humanPopulation().meals().get(first).executionId(), state.ambientLeases().get(first).revision()));

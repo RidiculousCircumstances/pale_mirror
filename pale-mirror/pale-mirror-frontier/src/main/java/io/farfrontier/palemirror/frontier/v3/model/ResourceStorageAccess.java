@@ -16,6 +16,12 @@ public record ResourceStorageAccess(ShipmentEndpoint endpoint, List<SurfaceAncho
     public SurfaceAnchor interactionStation(FrontierWorldState state) { return ShipmentEndpointComposition.interactionStation(state, endpoint); }
     public List<SurfaceAnchor> ownedAccessSurfaces() { return accessBoundary.occupiedSurfaces().stream().sorted(
             Comparator.comparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::y).thenComparingInt(SurfaceAnchor::z)).toList(); }
+    /** Position classification only; it grants neither service access nor terrain clearance. */
+    public boolean insideSupportingFacility(FrontierWorldState state, SurfaceAnchor surface) {
+        return ShipmentEndpointComposition.supportingFacility(state, endpoint)
+                .filter(facility -> facility.definition().fabric().contains(
+                        facility.placement().local(surface.support().offset(0, 1, 0)))).isPresent();
+    }
     public static ResourceStorageAccess at(FrontierWorldState state, SubjectId containerId) {
         var record = Objects.requireNonNull(state.inventory().containers().get(containerId), "retained resource storage");
         var endpoint = record.storage().orElseThrow(() -> new IllegalArgumentException("container has no declared storage capability")).endpoint();

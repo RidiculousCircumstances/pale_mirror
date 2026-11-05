@@ -99,7 +99,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         // that worker's canonical station, not the now-distant last crop. No crop work is
         // reopened when a player first reaches the worker near the depot. A worker
         // already at a delivery station still needs a HOT scope for hand/chest effects.
-        boolean workerSide = FieldEquipment.transferring(job) || job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch();
+        boolean workerSide = followsWorker(job);
         int demandCropIndex = workerSide
                 ? Math.max(0, job.progress().lastCompletedCropSlotIndex()) : job.progress().nextCropSlotIndex();
         BodyPosition body = worker.body();
@@ -109,6 +109,18 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         if (!state.bootstrap().bounds().contains(workerSurface)) return Optional.empty();
         return Optional.of(new Candidate(job.id(), job.siteId(), job.workerId(), demandCropIndex, crop,
                 Map.of(job.workerId(), workerSurface)));
+    }
+
+    /** The same exact scope follows service travel at admission and throughout its HOT lifetime. */
+    public static boolean followsWorker(ResourceSiteHarvestJob job) {
+        return FieldEquipment.transferring(job) || job.navigationBlock().isPresent()
+                || job.progress().complete() || job.returningForBatch();
+    }
+
+    public static BlockPosition demandPosition(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        if (!followsWorker(job)) return state.resourceSite(job.siteId()).cropSlots().get(job.progress().nextCropSlotIndex());
+        var body = state.actorLocations().get(job.workerId()).body();
+        return new BlockPosition(body.x(), body.y(), body.z());
     }
 
     public static ResourceSiteHarvestJob require(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {

@@ -83,7 +83,7 @@ public final class ResidentMealProcess {
                     && ReferenceContainerCustody.hasLiveCustody(state, meal.depotId());
             case CONSUME -> state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()));
-            case MOVE, CLEAR_ACCESS -> {
+            case MOVE, CLEAR_ACCESS, MOVE_TO_DINING -> {
                 if (meal.coldTravel().isPresent()) {
                     // A stale earlier due must be corrected by the planner, not
                     // held forever against its own immutable due instant.
@@ -168,9 +168,10 @@ public final class ResidentMealProcess {
         SubjectId claimId = new SubjectId("claim:resident-meal-" + suffix + "-" + now);
         SubjectId actorAccount = new SubjectId("custody:resident-meal-" + suffix);
         boolean portable = source.foodSource() instanceof ResidentFoodSource.Personal;
-        ResidentMeal meal = new ResidentMeal(residentId, resident.settlementId(), source.foodSource(), source.clearingSurface(),
+        ResidentMeal meal = new ResidentMeal(residentId, resident.settlementId(), source.foodSource(), source.clearingSurface(), source.destination(),
                 portable ? selected.accountId() : actorAccount, source.portion(), claimId,
-                assignment.ownerId(), portable ? ResidentMeal.Phase.CONSUME : ResidentMeal.Phase.MOVE, now,
+                assignment.ownerId(), portable ? (source.destination() instanceof MealDestination.Here ? ResidentMeal.Phase.CONSUME
+                        : ResidentMeal.Phase.MOVE_TO_DINING) : ResidentMeal.Phase.MOVE, now,
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 state.actorExecutions().next(residentId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, claimId));
         ResidentMealStarted started = new ResidentMealStarted(meal, source.clearingAccess());
@@ -200,7 +201,7 @@ public final class ResidentMealProcess {
                     state.bootstrap().ruleset().residentLife(), ResidentWorkYield.assess(state,
                         HumanAssignmentProjection.compile(state).assignment(subject)).ready(),
                     resident.characteristics().effectiveMetabolismPermille(meal.startedAtTick())).kind() != ResidentActivityChoice.Kind.EAT
-                || meal.phase() != (meal.portable() ? ResidentMeal.Phase.CONSUME : ResidentMeal.Phase.MOVE)
+                || meal.phase() != (meal.portable() ? (meal.destination() instanceof MealDestination.Here ? ResidentMeal.Phase.CONSUME : ResidentMeal.Phase.MOVE_TO_DINING) : ResidentMeal.Phase.MOVE)
                 || meal.waitReason().isPresent()
                 || state.humanPopulation().nutrition(subject).accrueThrough(meal.startedAtTick(),
                         state.bootstrap().ruleset().residentLife(),
@@ -256,7 +257,7 @@ public final class ResidentMealProcess {
             throw new IllegalArgumentException("HOT meal arrival has no current depot service turn");
         ResidentMeal meal = state.humanPopulation().meals().get(arrived.residentId());
         return state.withChanges(FrontierWorldStateUpdate.begin()
-                .humanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.TAKE))));
+                .humanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(meal.phase() == ResidentMeal.Phase.MOVE ? ResidentMeal.Phase.TAKE : ResidentMeal.Phase.CONSUME))));
     }
 
     /** A valid HOT body may reach the station before its shared service turn is free. */
@@ -265,15 +266,16 @@ public final class ResidentMealProcess {
         ResidentMeal meal = state.humanPopulation().meals().get(arrived.residentId());
         AmbientActorLease lease = state.ambientLeases().get(arrived.residentId());
         if (!subject.equals(arrived.residentId()) || meal == null || !meal.executionId().equals(arrived.executionId())
-                || meal.phase() != ResidentMeal.Phase.MOVE
+                || meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.MOVE_TO_DINING
                 || meal.pendingPhysicalStep().isPresent() || lease == null
                 || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.MEAL
                 || lease.revision() != arrived.ambientRevision()
-                || !lease.goalBody().equals(arrived.observedBody())
-                || !serviceSurface(state, meal).standingBody().equals(arrived.observedBody()))
+                || (meal.phase() == ResidentMeal.Phase.MOVE
+                    ? !serviceSurface(state, meal).standingBody().equals(arrived.observedBody())
+                    : !atDiningDestination(state, meal, arrived.observedBody())))
             throw new IllegalArgumentException("HOT meal arrival lacks its exact retained resident and service station");
         arrived.observation().require(state, meal.executionId(), lease.revision(), arrived.observedBody());
-        return ResidentMealServiceAccess.available(state, meal.depotId(), subject);
+        return meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING || ResidentMealServiceAccess.available(state, meal.depotId(), subject);
     }
 
     public static FrontierWorldState reduceHotPrepared(FrontierWorldState state, SubjectId subject,
@@ -395,7 +397,9 @@ public final class ResidentMealProcess {
                                             AmbientActorLease lease, BodyPosition body) {
         if (body.equals(goalSurface(state, meal).standingBody())) return true;
         if (meal.phase() == ResidentMeal.Phase.CONSUME) return mayConsumeAt(state, meal, body);
-        if (!meal.movesToClearance()) return false;
+        if (!meal.carriesWhileMoving()) return false;
+        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) return body.equals(lease.handoffBody())
+                || ResidentDiningPlaces.contains(state, meal.settlementId(), meal.destination(), body.supportingSurface());
         if (body.equals(serviceSurface(state, meal).standingBody())) return true;
         // COLD may have advanced service clearance before this HOT lease was admitted.
         // The exact admitted handoff is then an authoritative checkpoint inside the
@@ -411,10 +415,12 @@ public final class ResidentMealProcess {
     }
 
     /** Eating owns the food effect, not an exact navigation station after access was cleared. */
+    public static boolean atDiningDestination(FrontierWorldState state, ResidentMeal meal, BodyPosition body) {
+        return ResidentDiningPlaces.contains(state, meal.settlementId(), meal.destination(), body.supportingSurface())
+                && (meal.portable() || port(state, meal).accessBoundary().cleared(body));
+    }
     public static boolean mayConsumeAt(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
-        return meal.phase() == ResidentMeal.Phase.CONSUME && (meal.portable()
-                ? state.actorLocations().get(meal.residentId()).body().equals(observedBody)
-                : port(state, meal).accessBoundary().cleared(observedBody));
+        return meal.phase() == ResidentMeal.Phase.CONSUME && atDiningDestination(state, meal, observedBody);
     }
 
     public static boolean requiresClearance(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
@@ -444,7 +450,7 @@ public final class ResidentMealProcess {
         if (meal.phase() != ResidentMeal.Phase.CLEAR_ACCESS || meal.pendingPhysicalStep().isPresent()
                 || !port(state, meal).accessBoundary().cleared(cleared.observedBody()))
             throw new IllegalArgumentException("HOT meal access clearance lacks a witnessed route exit");
-        return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CONSUME)));
+        return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.MOVE_TO_DINING)));
     }
 
     public static FrontierWorldState reduceHotHandMaterialized(FrontierWorldState state, SubjectId subject,
@@ -505,7 +511,10 @@ public final class ResidentMealProcess {
                 || !ActorExecutionCoordinator.coldAvailable(state, residentId))
             return Optional.empty();
         if (requiresClearance(state, meal, actor.body())) return Optional.empty();
-        if (meal.movesToClearance()) {
+        if (meal.carriesWhileMoving()) {
+            if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING
+                    && atDiningDestination(state, meal, actor.body()))
+                return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now, meal.executionId()));
             if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
                     && port(state, meal).accessBoundary().cleared(actor.body()))
                 return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now, meal.executionId()));
@@ -599,7 +608,7 @@ public final class ResidentMealProcess {
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
                 && port(state, meal).accessBoundary().cleared(state.actorLocations().get(meal.residentId()).body()))
             return Math.addExact(now, 1L);
-        if (meal.phase() != ResidentMeal.Phase.MOVE && !meal.movesToClearance())
+        if (meal.phase() != ResidentMeal.Phase.MOVE && !meal.carriesWhileMoving())
             return Math.addExact(now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
         if (meal.coldTravel().isPresent()) {
             TimedKnownRoute travel = meal.coldTravel().orElseThrow();
@@ -624,6 +633,7 @@ public final class ResidentMealProcess {
         List<SurfaceAnchor> route = meal.phase() == ResidentMeal.Phase.MOVE
                 ? ResidentMealKnownNavigation.path(state, meal)
                 : ResidentMealKnownNavigation.returnPath(state, meal);
+        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) return route;
         ServiceAccessBoundary boundary = port(state, meal).accessBoundary();
         if (meal.phase() != ResidentMeal.Phase.MOVE && boundary.occupied(route.getFirst().standingBody())) {
             for (int index = 1; index < route.size() - 1; index++)
@@ -639,8 +649,11 @@ public final class ResidentMealProcess {
 
     /** Business intent only: the shared pedestrian navigator owns geometry and locomotion. */
     public static SurfaceAnchor goalSurface(FrontierWorldState state, ResidentMeal meal) {
-        return meal.movesToClearance() || meal.phase() == ResidentMeal.Phase.CONSUME
-                ? meal.clearingSurface() : serviceSurface(state, meal);
+        return switch (meal.phase()) {
+            case MOVE, TAKE -> serviceSurface(state, meal);
+            case CLEAR_ACCESS -> meal.clearingSurface();
+            case MOVE_TO_DINING, CONSUME -> ResidentDiningPlaces.hint(state, meal.settlementId(), meal.destination());
+        };
     }
 
     public static PhysicalStackAddress inventoryAddress(FrontierWorldState state, ResidentMeal meal) {
@@ -726,7 +739,7 @@ public final class ResidentMealProcess {
                         .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people)
                         .actorExecutions(state.actorExecutions().finish(meal.executionId())));
             }
-            case CLEAR_ACCESS -> {
+            case CLEAR_ACCESS, MOVE_TO_DINING -> {
                 if (meal.coldTravel().isPresent() && !step.equals(arrivedTravelStep(state, meal, step.atTick()).orElse(null)))
                     throw new IllegalArgumentException("meal COLD clearance differs from its retained travel");
                 if (meal.coldTravel().isEmpty() && step.nextSurface().isPresent())
@@ -734,7 +747,7 @@ public final class ResidentMealProcess {
                 if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
                         && port(state, meal).accessBoundary().cleared(actor.body()))
                     yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal,
-                            meal.advance(ResidentMeal.Phase.CONSUME)));
+                            meal.advance(ResidentMeal.Phase.MOVE_TO_DINING)));
                 if (meal.coldTravel().isPresent() && step.nextSurface().isEmpty()) {
                     var actors = ImmutableLookupMap.withEntry(state.actorLocations(), subject,
                             actor.withBody(interruptionBodyAt(meal, step.atTick())));
@@ -749,9 +762,14 @@ public final class ResidentMealProcess {
                     yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                             .humanPopulation(state.humanPopulation().advanceMeal(meal, arrived)));
                 }
+                if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) {
+                    if (!atDiningDestination(state, meal, actor.body()))
+                        throw new IllegalArgumentException("meal dining arrival is outside its retained area");
+                    yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CONSUME)));
+                }
                 if (!ResidentMealServiceAccess.cleared(state, meal, actor.body()))
                     throw new IllegalArgumentException("meal cannot release an occupied service throat");
-                yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.CONSUME)));
+                yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.MOVE_TO_DINING)));
             }
         };
     }

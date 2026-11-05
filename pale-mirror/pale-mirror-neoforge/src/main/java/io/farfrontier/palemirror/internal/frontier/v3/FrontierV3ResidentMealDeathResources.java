@@ -83,15 +83,16 @@ final class FrontierV3ResidentMealDeathResources {
                 || ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId())) return Optional.empty();
         var position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
         if (!FrontierV3LoadedWorld.ready(level, position)) return Optional.empty();
-        var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, meal.depotId());
-        if (chest == null) return Optional.empty();
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, meal.depotId()).orElse(null);
+        if (physical == null) return Optional.empty();
+        var chest = physical.inventory();
         var order = ResidentMealProcess.takeOrder(state, meal);
         var slices = MaterialSourceSelection.select(state.inventory().fungibleResources(), order);
         if (slices.isEmpty() || slices.stream().anyMatch(slice -> slice.epoch() != step.sourceEpoch())
                 || !ResidentMealPhysicalStep.sourceCounts(slices).equals(step.sourceCounts())) return Optional.empty();
-        var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, worker, worker.getUUID(), slices, -1);
+        var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, worker, worker.getUUID(), slices, -1, 0);
         var source = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, meal.depotId());
-        var container = FrontierV3OperationBlockEntityParticipant.current(chest);
+        var container = physical.persistence().get();
         var declaration = FrontierV3ResidentMealNativeOperation.take(meal, step, actor, container);
         var actual = FrontierV3ActorResourceSlots.get(body, meal.inventorySlot());
         ResidentMealResourceEffectObserved receipt;

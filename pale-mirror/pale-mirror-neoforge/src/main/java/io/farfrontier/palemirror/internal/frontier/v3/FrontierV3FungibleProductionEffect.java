@@ -7,7 +7,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.Container;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
@@ -31,11 +31,12 @@ final class FrontierV3FungibleProductionEffect {
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return;
         BlockPosition p = surface.position(); BlockPos position = new BlockPos(p.x(), p.y(), p.z());
         if (!FrontierV3LoadedWorld.ready(level, position)) return;
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, layout.containerId());
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, layout.containerId()).orElse(null);
+        Container chest = physical == null ? null : physical.inventory();
         if (chest == null) {
             if (intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
                 FrontierV3ProductionTransformationExecutor.transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
-                        Optional.empty(), "lot-chest-conflict");
+                        Optional.empty(), "lot-storage-provider-conflict");
             }
             return;
         }
@@ -58,7 +59,7 @@ final class FrontierV3FungibleProductionEffect {
                         intent.id(), held.accountId(), layout.containerId(), held.itemId(), held.inputLots(), held.claimId(), job.outputItemId(), job.outputCount(),
                         held.authorityEpoch(), observed);
                 if (!transition(PhysicalIntentStatus.CONFIRMED, Optional.of(receipt), "confirmed")
-                        || !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, layout.containerId(), chest)) {
+                        || !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, layout.containerId(), physical)) {
                     throw new IllegalStateException("confirmed production lot output lacks its next replica boundary");
                 }
             }
@@ -69,7 +70,7 @@ final class FrontierV3FungibleProductionEffect {
         });
     }
 
-    static boolean matches(ChestBlockEntity chest, FrontierWorldState state, FungibleProductionLayout layout,
+    static boolean matches(Container chest, FrontierWorldState state, FungibleProductionLayout layout,
                            Map<Integer, ReferenceContainerCustody.ProjectedFungibleSlot> expected) {
         if (chest.getContainerSize() != state.inventory().containers().get(layout.containerId()).slotCount()) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
@@ -84,7 +85,7 @@ final class FrontierV3FungibleProductionEffect {
         return true;
     }
 
-    static boolean replace(ChestBlockEntity chest, FrontierWorldState state, FungibleProductionLayout layout) {
+    static boolean replace(Container chest, FrontierWorldState state, FungibleProductionLayout layout) {
         if (!matches(chest, state, layout, layout.before())) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             if (java.util.Objects.equals(layout.before().get(slot), layout.after().get(slot))) continue;

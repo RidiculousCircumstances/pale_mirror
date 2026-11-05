@@ -49,7 +49,12 @@ class CoalDepositReserveTest {
             var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, home.id(), "minecraft:cobblestone", reserve,
                     "test", List.of()), new CustodyAccount(temporary, new ResourceCustody.WorldCarrier(
                     UUID.nameUUIDFromBytes(home.id().value().getBytes(java.nio.charset.StandardCharsets.UTF_8))), Map.of(lot, reserve), Map.of()));
-            ledger = ledger.transfer(temporary, ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home.id())), Map.of(lot, reserve), Map.of());
+            var container = FrontierWorldState.depotId(home.id());
+            var destination = ReferenceContainerCustody.scopeId(container);
+            ledger = ledger.accounts().containsKey(destination)
+                    ? ledger.transfer(temporary, destination, Map.of(lot, reserve), Map.of())
+                    : ledger.transferToNewAccount(temporary, new CustodyAccount(destination,
+                            new ResourceCustody.Container(container), Map.of(lot, reserve), Map.of()));
             state = state.withInventory(state.inventory().withFungibleResources(ledger));
         }
         var prior = state.extractionSites().deposits().values().stream()

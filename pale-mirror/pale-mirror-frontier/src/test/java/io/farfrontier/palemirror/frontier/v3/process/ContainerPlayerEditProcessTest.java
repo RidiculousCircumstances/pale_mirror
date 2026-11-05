@@ -19,8 +19,7 @@ class ContainerPlayerEditProcessTest {
         int offset = 0;
         for (var id : List.of(LEFT, RIGHT)) {
             var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, Optional.empty(), station);
-            var container = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                    Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+            var container = ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
             state = new ResourceStorageDeclared(container, station.support().offset(++offset, 1, 0)).apply(state, home.id());
             state = state.withInventory(state.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.PREPARED)
                     .withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));

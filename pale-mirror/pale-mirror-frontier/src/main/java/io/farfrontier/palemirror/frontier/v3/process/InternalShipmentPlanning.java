@@ -45,7 +45,7 @@ final class InternalShipmentPlanning {
                 List.of(destination.station()), TraversalCapability.PEDESTRIAN,
                 io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
-            var knowledge = ResourceSourceComposition.knowledge(state, source, destination);
+            var knowledge = ResourceSourceComposition.knowledge(state, source, destination).forActor(state, worker.id());
             knowledge.plannedPath(source.station(), order);
             var pickup = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(id, worker.id(), 0, 1,
                     List.of(source.station()), TraversalCapability.PEDESTRIAN,

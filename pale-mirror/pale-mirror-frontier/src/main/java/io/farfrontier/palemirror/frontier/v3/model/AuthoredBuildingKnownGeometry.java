@@ -18,7 +18,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
             Map<Region, Set<SubjectId>> owners,
             Map<SubjectId, Coverage> coverage,
             Map<Region, List<SettlementStructure>> tokens,
-            TerrainSurfacePlan terrain) {
+            TerrainSurfacePlan terrain, Set<BlockPosition> paving) {
         Optional<NavigationCell> declaration(BlockPosition position) {
             NavigationCell found = null;
             boolean declaredAir = false;
@@ -27,7 +27,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
                 var block = part.plan().blocks().get(position);
                 if (block != null) {
                     var material = (StructureMaterial.Authored) block.material();
-                    var fact =
+                    var fact = material.emptySpace() && paving.contains(position) ? NavigationCell.SOLID :
                             BuildingCollisionCatalog.standard(material.block())
                                     .flatMap(NavigationObservation::cell)
                                     .orElseThrow(
@@ -139,7 +139,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
         owners.replaceAll((region, ids) -> Set.copyOf(ids));
         tokens.replaceAll((region, parts) -> List.copyOf(parts));
         return new Image(
-                Map.copyOf(owners), Map.copyOf(coverage), Map.copyOf(tokens), bootstrap.terrain());
+                Map.copyOf(owners), Map.copyOf(coverage), Map.copyOf(tokens), bootstrap.terrain(), bootstrap.settlements().stream().flatMap(home -> home.layout().paving().stream()).collect(java.util.stream.Collectors.toUnmodifiableSet()));
     }
 
     private record Snapshot(

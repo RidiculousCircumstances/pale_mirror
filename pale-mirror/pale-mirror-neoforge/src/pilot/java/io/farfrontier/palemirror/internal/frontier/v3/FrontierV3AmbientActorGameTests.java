@@ -255,12 +255,16 @@ public final class FrontierV3AmbientActorGameTests {
                 .store(new io.farfrontier.palemirror.frontier.v3.model.ExactItemStack(
                         food, settlement, io.farfrontier.palemirror.frontier.v3.process.PopulationBirthProcess.BREAD, 64,
                         new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(
-                                FrontierWorldState.depotId(settlement), initial.inventory().availableSlots(FrontierWorldState.depotId(settlement)).get(0))))
+                                io.farfrontier.palemirror.frontier.v3.model.CommunalDiningPlan.initialFoodStorage(initial.bootstrap(),
+                                        settlement), initial.inventory().availableSlots(io.farfrontier.palemirror.frontier.v3.model.CommunalDiningPlan.initialFoodStorage(initial.bootstrap(),
+                                        settlement)).get(0))))
                 .store(new io.farfrontier.palemirror.frontier.v3.model.ExactItemStack(
                         new SubjectId("item:scheduled-resident-first-body-reserve"), settlement,
                         io.farfrontier.palemirror.frontier.v3.process.PopulationBirthProcess.BREAD, 64,
                         new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(
-                                FrontierWorldState.depotId(settlement), initial.inventory().availableSlots(FrontierWorldState.depotId(settlement)).get(1)))));
+                                io.farfrontier.palemirror.frontier.v3.model.CommunalDiningPlan.initialFoodStorage(initial.bootstrap(),
+                                        settlement), initial.inventory().availableSlots(io.farfrontier.palemirror.frontier.v3.model.CommunalDiningPlan.initialFoodStorage(initial.bootstrap(),
+                                        settlement)).get(1)))));
         var config = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(world, stocked,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), List.of(

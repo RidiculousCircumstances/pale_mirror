@@ -18,7 +18,7 @@ public final class ConsolidatedTradeFixture {
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade()
                 .withParticipants(new GoodsParticipantState(participants))));
         var ledger = state.inventory().fungibleResources();
-        var target = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(buyer.settlementId())).orElseThrow();
+        var target = FungibleResourceCustodySupport.accountAtContainer(state, CommunalDiningPlan.initialFoodStorage(state.bootstrap(), buyer.settlementId())).orElseThrow();
         var bread = new TreeMap<SubjectId, Integer>();
         for (var entry : target.lotQuantities().entrySet())
             if (ledger.lots().get(entry.getKey()).itemKind().equals("minecraft:bread")) bread.put(entry.getKey(), entry.getValue());
@@ -40,6 +40,14 @@ public final class ConsolidatedTradeFixture {
                 }
             }
             state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        }
+        // This fixture deliberately exercises one mixed-goods loading port, rather
+        // than the standard settlement's separate kitchen and general warehouse.
+        for (var home : List.of(seller.settlementId(), buyer.settlementId())) {
+            var depot = FrontierWorldState.depotId(home);
+            var policy = state.inventory().containers().get(depot).storage().orElseThrow();
+            state = new ResourceStoragePolicyChanged(depot, policy, new ResourceStoragePolicy(
+                    policy.endpoint(), ResourceStorageFilter.all(), policy.priority(), policy.role())).apply(state, home);
         }
         return state;
     }

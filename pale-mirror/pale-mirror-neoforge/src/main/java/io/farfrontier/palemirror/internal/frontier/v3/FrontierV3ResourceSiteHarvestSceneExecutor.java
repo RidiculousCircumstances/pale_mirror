@@ -96,7 +96,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static void projectAdmissionCell(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, FrontierResourceSiteHarvestSceneSupport.Candidate candidate) {
         var job = state.resourceSites().site(candidate.siteId()).harvestJob(candidate.jobId()).orElseThrow();
-        if (job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch()
+        if (FrontierResourceSiteHarvestSceneSupport.followsWorker(job)
                 || state.resourceSites().harvestMutationPending(job)) return;
         var cycle = state.resourceSites().cycle(candidate.siteId());
         var claim = FrontierV3ResourceSiteLedger.get(level).fieldClaim(candidate.siteId());
@@ -118,8 +118,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // Once every crop result is canonical, this scene only follows the retained
         // worker route. It must not force the remote field to load for a depot-side
         // observer to see that exact worker at the current station.
-        if (job.navigationBlock().isPresent() || job.progress().complete()
-                || job.returningForBatch())
+        if (FrontierResourceSiteHarvestSceneSupport.followsWorker(job))
             return FrontierV3LoadedWorld.ready(level, new BlockPos(candidate.cropSlot().x(),
                 candidate.cropSlot().y(), candidate.cropSlot().z()));
         var cycle = state.resourceSites().cycle(site.id());
@@ -297,11 +296,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         var canonicalWorker = state.actorLocations().get(job.workerId());
         if (canonicalWorker == null) { conflict(level, runtime, lease, "hot-worker-canonical-location-missing"); return; }
-        var canonicalBody = canonicalWorker.body();
-        io.farfrontier.palemirror.frontier.v3.model.BlockPosition demandAnchor = job.navigationBlock().isPresent()
-                || job.progress().complete() || job.returningForBatch()
-                ? new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(canonicalBody.x(), canonicalBody.y(), canonicalBody.z())
-                : site.cropSlots().get(job.progress().nextCropSlotIndex());
+        var demandAnchor = FrontierResourceSiteHarvestSceneSupport.demandPosition(state, job);
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, demandAnchor);
         boolean playerWithinSafeRadius = FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease);
         // Before an irreversible crop has been prepared, ordinary no-demand behavior remains

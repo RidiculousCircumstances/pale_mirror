@@ -78,6 +78,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
             Map.entry("expeditionProvisioning", FrontierV3FixtureCatalog::expeditionProvisioningConfiguration),
             Map.entry("residentMeal", FrontierV3FixtureCatalog::residentMealConfiguration),
+            Map.entry("communalDining", FrontierV3FixtureCatalog::communalDiningConfiguration),
             Map.entry("residentMealClaimedSource", FrontierV3FixtureCatalog::residentMealClaimedSourceConfiguration),
             Map.entry("residentMealAfterColdTake", FrontierV3FixtureCatalog::residentMealAfterColdTakeConfiguration),
             Map.entry("residentWorkerMeal", FrontierV3FixtureCatalog::residentWorkerMealConfiguration),
@@ -493,15 +494,19 @@ public final class FrontierV3FixtureCatalog {
 
     /** One naturally stocked resident reaches hunger before the rest of the normal world. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentMealConfiguration(WorldId worldId, long seed) {
+        return residentMealConfiguration(worldId, seed, FrontierRulesets.production());
+    }
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentMealConfiguration(
+            WorldId worldId, long seed, FrontierRuleset rules) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
-                FrontierWorldRuntimeDefinition.configuration(worldId, seed);
+                FrontierWorldRuntimeDefinition.configuration(worldId, seed, rules);
         FrontierWorldState original = base.initialState();
         SubjectId id = new SubjectId("resident:6-1");
         ResidentCharacteristics previous = original.humanPopulation().resident(id).characteristics();
         ResidentCharacteristics faster = previous.withBaseMetabolism(4_000);
         FrontierWorldState state = original.withHumanPopulation(original.humanPopulation().changeMetabolism(id,
                 previous, faster, 0L, original.bootstrap().ruleset().residentLife()));
-        // The normal bootstrap now stocks this depot with one finite ledger lot.
+        // The normal bootstrap stocks this kitchen with one finite ledger lot.
         // The fixture changes only the resident's rate; custody stays on the production path.
         long due = state.humanPopulation().nutrition(id).nextThresholdTick(state.bootstrap().ruleset().residentLife(),
                 faster.effectiveMetabolismPermille(0L));
@@ -509,6 +514,25 @@ public final class FrontierV3FixtureCatalog {
         schedules.removeIf(action -> action.subject().equals(id) && action.kind().equals(ResidentNeedProcess.REVIEW));
         schedules.add(ResidentNeedProcess.review(id, due));
         return configured(worldId, state, base.initialInstant(), schedules);
+    }
+
+    /** Native kitchen precondition only: a resident approaches hunger near the public entrance. */
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> communalDiningConfiguration(WorldId world, long seed) {
+        var base = residentMealConfiguration(world, seed, RULESETS.get("simulation-terrain-r31"));
+        var state = base.initialState(); var actor = new SubjectId("resident:6-1");
+        var rules = state.bootstrap().ruleset().residentLife(); var people = state.humanPopulation();
+        var nutrition = new LinkedHashMap<>(people.nutrition());
+        nutrition.put(actor, new ResidentNutrition(ResidentNutritionStatus.NOURISHED, rules.eatBelowUnits() + 100, 0, 0));
+        people = new HumanPopulation(people.households(), people.residents(), people.birthJobs(), people.health(), people.quarantines(),
+                people.migrations(), people.provisions(), nutrition, people.medicalOperations(), people.schedules(), people.meals(), people.mealResourceObligations());
+        var home = state.bootstrap().settlements().get(5);
+        var kitchen = home.structures().stream().filter(b -> b.kind() == StructureKind.KITCHEN).findFirst().orElseThrow();
+        var entrance = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(kitchen).primaryEntrance().exteriorApproach().getFirst();
+        state = state.withHumanPopulation(people).withActorBody(actor, entrance.standingBody());
+        var schedules = new ArrayList<>(base.initialSchedules());
+        schedules.removeIf(action -> action.subject().equals(actor) && action.kind().equals(ResidentNeedProcess.REVIEW));
+        schedules.add(ResidentNeedProcess.review(actor, people.nutrition(actor).nextThresholdTick(rules, 4000)));
+        return configured(world, state, SimInstant.ZERO, schedules);
     }
 
     /** One hungry resident has a real reserved depot bread before any physical TAKE. */
@@ -543,7 +567,7 @@ public final class FrontierV3FixtureCatalog {
         Settlement settlement = initial.bootstrap().settlements().get(5);
         SettlementStructure depot = settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        SurfaceAnchor service = SettlementDepotServicePort.forDepot(depot).serviceSurface();
+        SurfaceAnchor service = ResourceStorageAccess.at(initial, CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id())).interactionStation(initial);
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
         actors.put(residentId, ActorLocation.standingOn(service, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         long hungryAt = initial.humanPopulation().nutrition(residentId).nextThresholdTick(
@@ -594,6 +618,7 @@ public final class FrontierV3FixtureCatalog {
         accounts.put(accountId, new CustodyAccount(accountId, account.custody(), quantities, account.claimQuantities()));
         state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
                 lots, current.claims(), accounts, current.bindings())));
+        state = KitchenFoodFixture.relocateDepotFood(state, settlement);
         FrontierResourceSiteHarvestFixture.Fixture fixture =
                 FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(state);
         state = fixture.state();

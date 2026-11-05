@@ -262,12 +262,12 @@ public final class BuildingCatalog {
                 switch (kind) {
                     case HALL, DEPOT -> 8;
                     case FARM -> 9;
-                    case WORKSHOP, SMELTERY, FORGE, WOODSHOP, INFIRMARY -> 7;
+                    case WORKSHOP, SMELTERY, FORGE, WOODSHOP, INFIRMARY, KITCHEN -> 7;
                     case HOUSING -> 6;
                 };
         int depth =
                 switch (kind) {
-                    case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT -> 7;
+                    case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT, KITCHEN -> 7;
                     case HOUSING, INFIRMARY -> 6;
                 };
         int height =

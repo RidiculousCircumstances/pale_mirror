@@ -55,7 +55,7 @@ public final class SettlementLayoutValidation {
         NavigationCollisionView geometry =
                 p -> {
                     var authored = cells.get(p);
-                    if (authored != null) {
+                    if (authored != null && !(streets.contains(p) && authored.material().emptySpace())) {
                         var block = ((StructureMaterial.Authored) authored.material()).block();
                         return BuildingCollisionCatalog.standard(block)
                                 .flatMap(NavigationObservation::cell);
@@ -70,8 +70,9 @@ public final class SettlementLayoutValidation {
                             UnitNavigationProfile.VILLAGER,
                             .5,
                             .5)
-                    .isEmpty())
-                throw new IllegalArgumentException("blocked/unsupported paving at " + point);
+                    .isEmpty() && NavigationBodyGeometry.edgeContacts(geometry, new SurfaceAnchor(point), UnitNavigationProfile.VILLAGER).isEmpty())
+                throw new IllegalArgumentException("blocked/unsupported paving at " + point + "; support=" + describe(cells.get(point))
+                        + "; feet=" + describe(cells.get(point.offset(0, 1, 0))) + "; head=" + describe(cells.get(point.offset(0, 2, 0))));
         var nodes = new HashMap<TerrainColumn, BlockPosition>();
         for (var p : streets)
             if (nodes.putIfAbsent(new TerrainColumn(p.x(), p.z()), p) != null)
@@ -96,5 +97,8 @@ public final class SettlementLayoutValidation {
                             "building entrance lacks a street connection: " + building.id());
     }
 
+    private static String describe(GrayboxCell cell) {
+        return cell == null ? "empty" : cell.ownerId().value() + "/" + ((StructureMaterial.Authored) cell.material()).block().kind();
+    }
     private SettlementLayoutValidation() {}
 }

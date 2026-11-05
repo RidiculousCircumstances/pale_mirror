@@ -372,8 +372,7 @@ class HumanTacticalFunctionProjectionTest {
         var settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(owner)).findFirst().orElseThrow();
         var station = KnownPedestrianGround.forFrontier(state).at(settlement.anchor().x() + offset, settlement.anchor().z() + 20);
         var endpoint = new ShipmentEndpoint.Storage(owner, id, station, Optional.empty(), station);
-        var record = new ContainerRecord(id, owner, 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, filter, priority, role)));
+        var record = ContainerRecord.storage(id, owner, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, filter, priority, role));
         state = new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)).apply(state, owner);
         return state.withInventory(state.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));
@@ -419,8 +418,7 @@ class HumanTacticalFunctionProjectionTest {
         var station = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 20, home.anchor().z() + 20);
         var warehouse = new SubjectId("container:equipment-warehouse");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), warehouse, station, Optional.empty(), station);
-        var record = new ContainerRecord(warehouse, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(warehouse, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         state = new ResourceStorageDeclared(record, station.support().offset(0, 1, 0)).apply(state, home.id());
         var weapon = new SubjectId("item:equipment-warehouse-sword");
         var slot = new InventoryCustody.ContainerSlot(warehouse, 0);

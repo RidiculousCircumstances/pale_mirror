@@ -20,12 +20,15 @@ class BakeryPartialBatchTest {
         var destination = new SubjectId("container:bakery-bread-store");
         for (var id : List.of(source, destination)) {
             var horizontal = id.equals(source) ? station : depotPort.facing().step(station, 6);
-            var point = KnownPedestrianGround.forFrontier(state).at(horizontal.x(), horizontal.z());
+            var point = id.equals(source) ? station : home.layout().paving().stream()
+                    .map(SurfaceAnchor::new).filter(candidate -> Math.abs(candidate.x() - station.x())
+                            + Math.abs(candidate.z() - station.z()) >= 6)
+                    .min(Comparator.comparingInt(candidate -> Math.abs(candidate.x() - horizontal.x())
+                            + Math.abs(candidate.z() - horizontal.z()))).orElseThrow();
             var endpoint = new ShipmentEndpoint.Storage(home.id(), id, point, Optional.empty(), point);
             var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false,
-                    Set.of(id.equals(source) ? "minecraft:wheat" : "minecraft:bread"), Map.of()), 100, ResourceStorageRole.WAREHOUSE);
-            state = new ResourceStorageDeclared(new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                    Optional.empty(), Optional.of(policy)), point.support().offset(1, 1, 0)).apply(state, home.id());
+                    Set.of(id.equals(source) ? "minecraft:wheat" : "minecraft:bread"), Map.of()), 101, ResourceStorageRole.WAREHOUSE);
+            state = new ResourceStorageDeclared(ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), point.support().offset(1, 1, 0)).apply(state, home.id());
         }
         var resources = state.inventory().fungibleResources(); var accounts = new LinkedHashMap<>(resources.accounts());
         var old = accounts.remove(ReferenceContainerCustody.scopeId(depot)); var sourceAccount = ReferenceContainerCustody.scopeId(source);
@@ -51,8 +54,7 @@ class BakeryPartialBatchTest {
                 var endpoint = new ShipmentEndpoint.Storage(home.id(), alternate, point, Optional.empty(), point);
                 var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false, Set.of("minecraft:bread"), Map.of()),
                         200, ResourceStorageRole.WAREHOUSE);
-                state = new ResourceStorageDeclared(new ContainerRecord(alternate, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                        Optional.empty(), Optional.of(policy)), point.support().offset(1, 1, 0)).apply(state, home.id());
+                state = new ResourceStorageDeclared(ContainerRecord.storage(alternate, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), point.support().offset(1, 1, 0)).apply(state, home.id());
                 var record = PhysicalReplicaRecord.expected(destination, ReferenceContainerCustody.semanticKind(state, destination), 1,
                         ReferenceContainerCustody.canonicalFingerprint(state, destination), ReferenceContainerCustody.provenance(destination));
                 var custody = state.replicaCustody().declare(record).observe(destination, 1, 1, record.fingerprint(), record.provenance(), 1);
@@ -183,22 +185,23 @@ class BakeryPartialBatchTest {
         var depot = FrontierWorldState.depotId(owner);
         var accountId = ReferenceContainerCustody.scopeId(depot);
         var resources = state.inventory().fungibleResources();
-        var account = resources.accounts().get(accountId);
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), owner);
+        var destinationAccount = ReferenceContainerCustody.scopeId(pantry);
         var bread = new SubjectId("lot:partial-capacity-bread");
         var lots = new LinkedHashMap<>(resources.lots());
         lots.put(bread, new ResourceLot(bread, owner, "minecraft:bread", 60, "test:stock", List.of()));
-        var quantities = new LinkedHashMap<>(account.lotQuantities()); quantities.put(bread, 60);
+        var quantities = Map.of(bread, 60);
         var accounts = new LinkedHashMap<>(resources.accounts());
-        accounts.put(accountId, new CustodyAccount(accountId, account.custody(), quantities, Map.of()));
+        accounts.put(destinationAccount, new CustodyAccount(destinationAccount, new ResourceCustody.Container(pantry), quantities, Map.of()));
         resources = new FungibleResourceLedger(lots, resources.claims(), accounts, resources.bindings());
         var claim = new ClaimAllocation(new SubjectId("claim:external-wheat"), new SubjectId("work:external"),
                 owner, "minecraft:wheat", 4, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION);
         resources = resources.reserve(claim, accountId);
         var inventory = state.inventory().withFungibleResources(resources);
-        while (inventory.firstFreeSlot(depot).isPresent()) {
-            int slot = inventory.firstFreeSlot(depot).orElseThrow();
+        while (inventory.firstFreeSlot(pantry).isPresent()) {
+            int slot = inventory.firstFreeSlot(pantry).orElseThrow();
             inventory = inventory.store(new ExactItemStack(new SubjectId("item:partial-capacity-" + slot), owner,
-                    "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
+                    "minecraft:stone", 1, new InventoryCustody.ContainerSlot(pantry, slot)));
         }
         state = state.withInventory(inventory);
         assertEquals(60, BakeryBatchSelection.available(state, owner).orElseThrow().quantity());

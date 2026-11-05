@@ -211,7 +211,7 @@ public final class FrontierWireTags {
             entry(ResidentMeal.Phase.class,
                     tag(0, ResidentMeal.Phase.MOVE), tag(1, ResidentMeal.Phase.TAKE),
                     tag(2, ResidentMeal.Phase.CONSUME), // tag3 (legacy post-consumption RETURN) is retired
-                    tag(4, ResidentMeal.Phase.CLEAR_ACCESS)),
+                    tag(4, ResidentMeal.Phase.CLEAR_ACCESS), tag(5, ResidentMeal.Phase.MOVE_TO_DINING)),
             entry(ResidentActivityChoice.Wait.class,
                     tag(0, ResidentActivityChoice.Wait.SAFE_CHECKPOINT),
                     tag(1, ResidentActivityChoice.Wait.SOURCE_UNAVAILABLE),

@@ -103,7 +103,7 @@ public record FrontierTraversalPlan(
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
             case WORKSHOP,SMELTERY,FORGE,WOODSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
             case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
-            case FARM,HOUSING -> structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED
+            case FARM,HOUSING,KITCHEN -> structure.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED
                     ? io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).primaryEntrance() : null;
         });
         synchronized (PORT_VIEWS) {

@@ -41,7 +41,7 @@ final class FrontierV3ResidentMealNavigation {
             return;
         }
         if (meal.phase() != ResidentMeal.Phase.MOVE
-                && !meal.movesToClearance()) {
+                && !meal.carriesWhileMoving()) {
             ROUTES.remove(body);
             FrontierV3ServiceApproachNavigation.forget(body);
             BLOCKED.remove(body);
@@ -50,6 +50,25 @@ final class FrontierV3ResidentMealNavigation {
         }
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
             pursueClearance(level, state, body, meal, actuation);
+            return;
+        }
+        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) {
+            ROUTES.remove(body);
+            FrontierV3ServiceApproachNavigation.forget(body);
+            var start = FrontierV3SurfaceObservation.observedBody(body).supportingSurface();
+            if (ResidentMealProcess.atDiningDestination(state, meal, start.standingBody())) {
+                FrontierV3GoalNavigation.stop(body, actuation);
+                return;
+            }
+            var knowledge = ResidentMealKnownNavigation.departureKnowledge(state, meal, start);
+            var stations = ResidentMealKnownNavigation.diningStations(state, meal, knowledge);
+            if (stations.isEmpty()) { blocked(body, meal, "no_available_dining_station"); return; }
+            var order = new MovementOrder(meal.claimId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
+                    meal.startedAtTick() + 1L, stations, TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+            var result = FrontierV3GoalNavigation.pursue(level, body,
+                    FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
+            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED) blocked(body, meal, "dining:" + result.reason());
+            else BLOCKED.remove(body);
             return;
         }
         Route route = ROUTES.get(body);

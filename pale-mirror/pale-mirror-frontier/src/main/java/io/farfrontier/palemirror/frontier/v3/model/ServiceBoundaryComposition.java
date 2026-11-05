@@ -97,6 +97,9 @@ public final class ServiceBoundaryComposition {
         // Actual service boundaries outrank adjacent aprons, in stable point-ID order.
         for (var declaration : candidates)
             if (declaration.boundary().occupiedSurfaces().contains(actual)) return Optional.of(declaration);
+        // Facility occupancy is a turnover policy, never part of the exclusive access boundary.
+        for (var declaration : candidates)
+            if (declaration.idleClearanceAt(actual)) return Optional.of(declaration);
         // Resolve terrain only for points whose declared search footprint contains this column.
         // Height, obstructions and current regional versions are still checked by their owner.
         for (var declaration : candidates) {
@@ -125,8 +128,12 @@ public final class ServiceBoundaryComposition {
         }
         var byColumn = new HashMap<TerrainColumn, List<ServiceBoundaryProvider.Declaration>>();
         declared.values().stream().sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId)).forEach(value -> {
-            for (var column : footprints.get(value.identity()).columns())
-                byColumn.computeIfAbsent(column, ignored -> new ArrayList<>()).add(value);
+            var columns = new HashSet<>(footprints.get(value.identity()).columns());
+            value.idleClearanceArea().ifPresent(area -> {
+                for (int x = area.min().x(); x <= area.max().x(); x++)
+                    for (int z = area.min().z(); z <= area.max().z(); z++) columns.add(new TerrainColumn(x, z));
+            });
+            for (var column : columns) byColumn.computeIfAbsent(column, ignored -> new ArrayList<>()).add(value);
         });
         byColumn.replaceAll((column, values) -> List.copyOf(values));
         // Terrain-column hashes cluster on regular grids; retain HashMap's bucket

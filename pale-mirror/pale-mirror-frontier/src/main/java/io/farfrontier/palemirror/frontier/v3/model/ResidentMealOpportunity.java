@@ -16,12 +16,13 @@ public final class ResidentMealOpportunity {
     static final java.util.Set<ResourceStorageRole> FOOD_STORAGE =
             java.util.Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER);
 
-    public record Source(ResidentFoodSource foodSource, SurfaceAnchor clearingSurface,
+    public record Source(ResidentFoodSource foodSource, SurfaceAnchor clearingSurface, MealDestination destination,
                          FungibleResourceCustodySupport.LotSelection selection, FoodPortion portion,
                          Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> clearingAccess) {
         public Source {
             Objects.requireNonNull(foodSource, "meal food source");
             Objects.requireNonNull(clearingSurface, "meal clearing surface");
+            Objects.requireNonNull(destination, "meal destination");
             Objects.requireNonNull(selection, "meal resource selection");
             Objects.requireNonNull(portion, "meal food portion");
             Objects.requireNonNull(clearingAccess, "meal clearance proof");
@@ -67,20 +68,23 @@ public final class ResidentMealOpportunity {
      * Missing/pending evidence permits the activity owner to try planning, not to claim food. */
     public static boolean mayPlan(FrontierWorldState state, SubjectId residentId, long atTick) {
         return candidates(state, residentId, atTick, Optional.empty()).stream().anyMatch(candidate ->
-                candidate.foodSource() instanceof ResidentFoodSource.Personal
-                || ServiceAccessCoordinator.mayPlanMealClearance(state, residentId,
-                    ((ResidentFoodSource.Storage) candidate.foodSource()).containerId()));
+                destination(state, residentId, candidate.foodSource()).isPresent()
+                && (candidate.foodSource() instanceof ResidentFoodSource.Personal
+                    || ServiceAccessCoordinator.mayPlanMealClearance(state, residentId,
+                        ((ResidentFoodSource.Storage) candidate.foodSource()).containerId())));
     }
 
     public static Optional<Source> find(FrontierWorldState state, SubjectId residentId, long atTick) {
         for (var candidate : candidates(state, residentId, atTick, Optional.empty())) {
+            var destination = destination(state, residentId, candidate.foodSource());
+            if (destination.isEmpty()) continue;
             if (candidate.foodSource() instanceof ResidentFoodSource.Personal)
-                return Optional.of(new Source(candidate.foodSource(), state.actorLocations().get(residentId).supportingSurface(),
+                return Optional.of(new Source(candidate.foodSource(), state.actorLocations().get(residentId).supportingSurface(), destination.orElseThrow(),
                         candidate.selection(), candidate.portion(), Optional.empty()));
             try {
                 var clearing = ServiceAccessCoordinator.mealClearingSelection(state, residentId,
                         ((ResidentFoodSource.Storage) candidate.foodSource()).containerId());
-                if (clearing.isPresent()) return Optional.of(new Source(candidate.foodSource(), clearing.orElseThrow().surface(),
+                if (clearing.isPresent()) return Optional.of(new Source(candidate.foodSource(), clearing.orElseThrow().surface(), destination.orElseThrow(),
                         candidate.selection(), candidate.portion(), Optional.of(clearing.orElseThrow().access())));
             } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
@@ -91,9 +95,30 @@ public final class ResidentMealOpportunity {
         return Optional.empty();
     }
 
+    private static Optional<MealDestination> destination(FrontierWorldState state, SubjectId actor, ResidentFoodSource source) {
+        var assignment = HumanAssignmentProjection.compile(state).assignment(actor);
+        if (!ActivityExecutionCapabilities.permitsHomeFood(state, assignment))
+            return Optional.of(new MealDestination.Here(state.actorLocations().get(actor).supportingSurface()));
+        var home = state.humanPopulation().resident(actor).settlementId();
+        var areas = ResidentDiningPlaces.in(state, home);
+        if (source instanceof ResidentFoodSource.Storage storage) {
+            var endpoint = state.inventory().containers().get(storage.containerId()).storage().orElseThrow().endpoint();
+            if (!(endpoint instanceof ShipmentEndpoint.Storage declared)) return Optional.empty();
+            return areas.stream().filter(place -> declared.facilityId().filter(place.facilityId()::equals).isPresent())
+                    .map(MealDestination.class::cast).findFirst();
+        }
+        var origin = state.actorLocations().get(actor).supportingSurface();
+        return areas.stream().sorted(java.util.Comparator.comparingLong(place -> {
+            var p = ResidentDiningPlaces.facility(state, home, place).anchor();
+            return Math.abs((long) p.x() - origin.x()) + Math.abs((long) p.z() - origin.z());
+        })).map(MealDestination.class::cast).findFirst();
+    }
+
     /** Validate the producer's exact stock/slot, not whichever source wins a new ranking. */
     public static void requireSelected(FrontierWorldState state, ResidentMeal meal) {
         var resident = state.humanPopulation().resident(meal.residentId());
+        if (!ResidentDiningPlaces.validSelection(state, meal))
+            throw new IllegalArgumentException("meal has a foreign or unavailable declared destination");
         var resources = state.inventory().fungibleResources();
         var account = resources.accounts().get(meal.sourceAccountId());
         if (resident == null || account == null)
@@ -210,6 +235,7 @@ public final class ResidentMealOpportunity {
           for (var endpoint : ResourceStorageSelection.declaredCandidates(state, resident.settlementId(), food.itemKind(),
                   assessedBody.supportingSurface(), FOOD_STORAGE)) {
             SubjectId depot = endpoint.containerId();
+            if (!ResidentDiningPlaces.pantry(state, resident.settlementId(), depot)) continue;
             var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
             if (account == null) continue;
             int available = state.inventory().fungibleResources().unclaimedQuantity(account.id(),

@@ -19,7 +19,7 @@ final class AutonomousTradeFixture {
         var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, seller.party().id(), "minecraft:bread", stock,
                 "fixture:finite-initial-bread", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(FrontierWorldState.depotId(seller.settlementId())), Map.of(lot, stock), Map.of()));
         resources = resources.transfer(staging, ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(seller.settlementId())), Map.of(lot, stock), Map.of());
-        return state.withInventory(state.inventory().withFungibleResources(resources));
+        return KitchenFoodFixture.relocateDepotFood(state.withInventory(state.inventory().withFungibleResources(resources)), seller.settlementId());
     }
     private AutonomousTradeFixture() { }
 }

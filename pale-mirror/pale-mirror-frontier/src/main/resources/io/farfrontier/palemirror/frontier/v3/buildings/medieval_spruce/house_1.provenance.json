@@ -4,12 +4,12 @@
   "sourceSha256": "4e7b29ed53c0ff9166528eb864e2f91c074aefd31db8a77a3c68581ba5154dbc",
   "license": "private test derivative; upstream ARR",
   "adaptations": [
-    "explicit vanilla dependency substitutions",
-    "cropped buried foundation and terrain placeholders; graybox environmental water replaced by coarse dirt",
+    "original native blocks, shapes and materials retained with pinned dependencies",
+    "terrain placeholders and colony controllers omitted; complete source foundation and explicit below-floor voids retained",
     "supported open entrance",
     "declared machine/operator aisle and service points",
-    "no entities or block-entity NBT"
+    "no entities, inventories or foreign controllers; typed visual data retained"
   ],
-  "blocks": 485,
+  "blocks": 535,
   "beds": 1
 }

@@ -63,12 +63,13 @@ class ResidentLifeStateCodecTest {
         Settlement settlement = base.bootstrap().settlements().getFirst();
         SubjectId resident = settlement.residents().getFirst().id();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
-                base.actorLocations().get(resident).supportingSurface(),
-                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-test"),
-                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:bread-test"), 1)), new SubjectId("claim:meal-test"),
-                Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:meal-test"), 1L));
+        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, base.actorLocations().get(resident).supportingSurface(),
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-test"), new FoodPortion(FoodCatalog.BREAD,
+                 1_000, java.util.Map.of(new SubjectId("lot:bread-test"), 1)), new SubjectId("claim:meal-test"), Optional.empty(),
+                 ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident,
+                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:meal-test"),
+                 1L));
         HumanPopulation population = base.humanPopulation().withMeal(meal);
         ResidentProfile profile = population.resident(resident);
         assertThrows(IllegalArgumentException.class, () -> population.migrate(resident,

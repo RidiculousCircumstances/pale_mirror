@@ -64,8 +64,7 @@ class KnownPedestrianRouteKnowledgeTest {
         var id = new SubjectId("container:replacement-threshold-storage");
         var endpoint = new ShipmentEndpoint.Storage(home, id, station, Optional.of(facility.id()), station);
         var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE);
-        state = new ResourceStorageDeclared(new ContainerRecord(id, home, 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(policy)), socket).apply(state, home);
+        state = new ResourceStorageDeclared(ContainerRecord.storage(id, home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), socket).apply(state, home);
         var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(endpoint));
         assertTrue(knowledge.traversable(List.of(station)), "the selected threshold is actual support, not a closed foundation");
         knowledge.requireRoute(knowledge.plannedBetween(port.exteriorApproach().getFirst(), station));
@@ -132,8 +131,7 @@ class KnownPedestrianRouteKnowledgeTest {
         var ground = DeclaredRouteFixtures.openStreet(state, home);
         var id = new SubjectId("container:raised-storage-departure");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, ground, Optional.empty(), ground);
-        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var block = ground.support().offset(0, 1, 0);
         var declared = new ResourceStorageDeclared(record, block).apply(state, home.id());
         var start = new SurfaceAnchor(block);
@@ -192,9 +190,8 @@ class KnownPedestrianRouteKnowledgeTest {
         var id = new SubjectId("container:observed-chest-departure");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, ground, Optional.empty(), ground);
         var block = ground.support().offset(0, 1, 0);
-        state = new ResourceStorageDeclared(new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0,
-                        ResourceStorageRole.WAREHOUSE))), block).apply(state, home.id());
+        state = new ResourceStorageDeclared(ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0,
+                        ResourceStorageRole.WAREHOUSE)), block).apply(state, home.id());
         var chest = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell(
                 new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape(List.of(
                         new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape.Box(
@@ -228,8 +225,7 @@ class KnownPedestrianRouteKnowledgeTest {
         var target = new SurfaceAnchor(DeclaredRouteFixtures.networkSurface(state.bootstrap(),state.routeTopology(),home.id()));
         var id = new SubjectId("container:regional-warehouse");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, target, Optional.empty(), target);
-        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var changed = new ResourceStorageDeclared(record, target.support().offset(0, 1, 0)).apply(state, home.id());
         try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
                 var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
@@ -280,8 +276,7 @@ class KnownPedestrianRouteKnowledgeTest {
         var station = DeclaredRouteFixtures.openStreet(state, home);
         var id = new SubjectId("container:geometry-warehouse");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, Optional.empty(), station);
-        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var before = KnownPedestrianRouteKnowledge.forFrontier(state);
         assertTrue(before.traversable(List.of(station)));
         var declared = new ResourceStorageDeclared(record, station.support().offset(0, 1, 0)).apply(state, home.id());

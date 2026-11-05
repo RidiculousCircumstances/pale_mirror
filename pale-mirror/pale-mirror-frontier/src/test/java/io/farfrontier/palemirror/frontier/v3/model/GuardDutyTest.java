@@ -210,8 +210,7 @@ class GuardDutyTest {
         var id = new SubjectId("container:guard-raised-contact");
         var contact = KnownPedestrianGround.forFrontier(state).at(ground.x() + 1, ground.z());
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, contact, Optional.empty(), contact);
-        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var block = ground.support().offset(0, 1, 0);
         state = new ResourceStorageDeclared(record, block).apply(state, home.id());
         var sword = state.inventory().items().get(previous.weapon());

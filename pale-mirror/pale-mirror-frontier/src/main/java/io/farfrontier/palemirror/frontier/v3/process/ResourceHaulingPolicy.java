@@ -23,7 +23,8 @@ final class ResourceHaulingPolicy {
         return !requests(state,worker.settlementId(),tick).isEmpty();
     }
     private static List<InternalHaulRequest> requests(FrontierWorldState state,SubjectId home,long tick) {
-        var result=new ArrayList<>(ProductionStationSupply.requests(state,home,tick));
+        var result=new ArrayList<>(DiningStorageSupply.requests(state,home));
+        result.addAll(ProductionStationSupply.requests(state,home,tick));
         var resources=state.inventory().fungibleResources();
         for(var source:ResourceSourceDiscovery.localHaulSources(state,home)) {
             if(source.container().filter(id->ReferenceContainerCustody.blocksCanonicalUse(state,id)).isPresent())continue;

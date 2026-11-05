@@ -35,8 +35,7 @@ class SettlementServiceWorkProcessTest {
         var port = ResourceStorageAccess.at(state, FrontierWorldState.depotId(home.id()));
         var station = ShipmentEndpointComposition.exteriorApproach(state, port.endpoint());
         var endpoint = new ShipmentEndpoint.Storage(home.id(), source, station, Optional.empty(), station);
-        var record = new ContainerRecord(source, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), -10, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(source, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), -10, ResourceStorageRole.WAREHOUSE));
         state = new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)).apply(state, home.id());
         state = state.withInventory(state.inventory().withSurfaceStatus(source, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(source, ContainerSurfaceStatus.ACTIVE)

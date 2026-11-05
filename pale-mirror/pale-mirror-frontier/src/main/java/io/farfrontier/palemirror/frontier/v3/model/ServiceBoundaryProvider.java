@@ -5,8 +5,14 @@ import java.util.*;
 
 /** A declared point owner supplies its access footprint; access arbitration owns no facility semantics. */
 public interface ServiceBoundaryProvider {
-    record Declaration(ServicePointId identity, ServiceAccessBoundary boundary) {
-        public Declaration { Objects.requireNonNull(identity); Objects.requireNonNull(boundary); }
+    record Declaration(ServicePointId identity, ServiceAccessBoundary boundary,
+                       Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.BlockVolume> idleClearanceArea) {
+        public Declaration { Objects.requireNonNull(identity); Objects.requireNonNull(boundary); Objects.requireNonNull(idleClearanceArea); }
+        public Declaration(ServicePointId identity, ServiceAccessBoundary boundary) { this(identity, boundary, Optional.empty()); }
+        /** Purposeful activities may occupy this area without holding the exclusive access turn. */
+        public boolean idleClearanceAt(SurfaceAnchor surface) {
+            return idleClearanceArea.filter(area -> area.contains(surface.support().offset(0, 1, 0))).isPresent();
+        }
         public ServicePointId.Kind kind() { return identity.kind(); }
         public SubjectId pointId() { return identity.containerId(); }
         public SubjectId settlementId() { return identity.settlementId(); }

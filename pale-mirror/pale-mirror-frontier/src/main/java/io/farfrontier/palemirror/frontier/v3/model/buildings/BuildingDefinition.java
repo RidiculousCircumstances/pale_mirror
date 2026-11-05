@@ -37,7 +37,8 @@ public record BuildingDefinition(
         EQUIPMENT,
         MAINTENANCE,
         REST,
-        QUEUE
+        QUEUE,
+        DINING
     }
 
     public enum EndpointKind {
@@ -158,8 +159,10 @@ public record BuildingDefinition(
         return value;
     }
 
-    public record Block(NavigationBlockState state, String repairItem, GrayboxSemanticPart part) {
+    public record Block(NavigationBlockState state, String repairItem, GrayboxSemanticPart part, Optional<AuthoredBlockData> data) {
+        public Block(NavigationBlockState state, String repairItem, GrayboxSemanticPart part) { this(state, repairItem, part, Optional.empty()); }
         public Block {
+            data = Objects.requireNonNull(data);
             Objects.requireNonNull(state);
             Objects.requireNonNull(part);
             if (repairItem == null || !repairItem.matches("[a-z0-9_.-]+:[a-z0-9_./-]+"))

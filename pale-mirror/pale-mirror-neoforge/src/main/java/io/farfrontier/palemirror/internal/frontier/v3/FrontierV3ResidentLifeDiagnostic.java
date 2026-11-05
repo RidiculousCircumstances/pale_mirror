@@ -52,9 +52,9 @@ final class FrontierV3ResidentLifeDiagnostic {
             activity = living ? "UNAVAILABLE" : "DEAD";
             activityError = String.valueOf(invalid.getMessage());
         }
-        SubjectId depot = FrontierWorldState.depotId(resident.settlementId());
+        SubjectId pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), resident.settlementId());
         CustodyAccount account = state.inventory().fungibleResources().accounts()
-                .get(ReferenceContainerCustody.scopeId(depot));
+                .get(ReferenceContainerCustody.scopeId(pantry));
         var resources = state.inventory().fungibleResources();
         int bread = account == null ? 0 : account.lotQuantities().entrySet().stream()
                 .filter(entry -> ResidentMeal.BREAD_KIND.equals(resources.lots().get(entry.getKey()).itemKind()))
@@ -104,6 +104,7 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"workYield\":\"" + workYield + "\",\"activityError\":\"" + quote(activityError)
                 + "\",\"activityAdmission\":\"" + activityAdmission
                 + "\",\"activityWait\":\"" + activityWait + "\",\"activityWakeKeys\":" + activityWakeKeys
+                + ",\"initialFoodStorageId\":\"" + quote(pantry.value()) + "\""
                 + ",\"mealPhase\":\"" + (meal == null ? "NONE" : meal.phase().name())
                 + "\",\"mealWait\":\"" + (meal == null ? "" : meal.waitReason().map(Enum::name).orElse(""))
                 + "\",\"mealClaim\":\"" + (meal == null ? "" : quote(meal.claimId().value()))
@@ -149,7 +150,7 @@ final class FrontierV3ResidentLifeDiagnostic {
                     + movement.order().legalStations().getFirst().y() + ",\"z\":"
                     + movement.order().legalStations().getFirst().z() + "}")
                 + ",\"movementKnownRoute\":\"" + quote(movementKnownRoute(state, movement)) + "\""
-                + ",\"bootstrapDepotBread\":" + bread + ",\"bootstrapDepotBreadClaimed\":" + claimed
+                + ",\"initialFoodStorageBread\":" + bread + ",\"initialFoodStorageBreadClaimed\":" + claimed
                 + ",\"settlementBreadStock\":" + SettlementFoodPolicy.breadStock(state, resident.settlementId())
                 + ",\"settlementBreadUsable\":" + SettlementFoodPolicy.usableBread(state, resident.settlementId()) + "}";
     }
@@ -158,7 +159,8 @@ final class FrontierV3ResidentLifeDiagnostic {
     private static String mealKnownRoute(FrontierWorldState state, ResidentMeal meal) {
         if (meal == null || meal.portable()) return "none";
         if (meal.coldTravel().isPresent()) return "retained";
-        if (meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.CLEAR_ACCESS) return "no_route_stage";
+        if (meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.CLEAR_ACCESS
+                && meal.phase() != ResidentMeal.Phase.MOVE_TO_DINING) return "no_route_stage";
         String[] result = {"unavailable"};
         io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.inspectAvailability(() -> {
             try {

@@ -51,7 +51,7 @@ public final class BuildingDefinitionFormat {
                     new BuildingDefinition.Block(
                             authored.block(),
                             authored.repairItemKind(),
-                            GrayboxSemanticPart.valueOf(fields[2]));
+                            GrayboxSemanticPart.valueOf(fields[2]), authored.data());
             if (result.putIfAbsent(point(fields[0]), value) != null || result.size() > 65_536)
                 throw new IllegalArgumentException("duplicate or unbounded authored blocks");
         }

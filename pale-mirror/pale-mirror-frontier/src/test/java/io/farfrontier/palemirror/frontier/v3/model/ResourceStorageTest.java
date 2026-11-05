@@ -62,10 +62,19 @@ class ResourceStorageTest {
         var id = new SubjectId("container:extra"); var home = new SubjectId("settlement:1");
         var endpoint = new ShipmentEndpoint.Storage(home, id, SurfaceAnchor.at(1, 64, 1), Optional.empty(), SurfaceAnchor.at(1, 64, 1));
         var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 5, ResourceStorageRole.WAREHOUSE);
-        assertDoesNotThrow(() -> new ContainerRecord(id, home, 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(), Optional.of(policy)));
+        assertDoesNotThrow(() -> ContainerRecord.storage(id, home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy));
         assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(id, home, 27, ContainerPurpose.RESOURCE_STORAGE));
-        assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(new SubjectId("container:other"), home, 27,
+        assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(id, home, 27,
                 ContainerPurpose.RESOURCE_STORAGE, Optional.empty(), Optional.of(policy)));
+        for (var kind : StorageBlockKind.values()) {
+            var declared = ContainerRecord.storage(id, home, 27, kind, policy);
+            assertEquals(Optional.of(kind), declared.withStorage(policy).withFungibleLayout(FungibleContainerLayout.empty()).storageBlock());
+            var event = new ResourceStorageDeclared(declared, new BlockPosition(1, 65, 2));
+            var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(event, codecs.decode(event.type(), codecs.encode(event)));
+        }
+        assertThrows(IllegalArgumentException.class, () -> StorageBlockKind.decode(99));
+        assertThrows(IllegalArgumentException.class, () -> ContainerRecord.storage(new SubjectId("container:other"), home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy));
         assertThrows(IllegalArgumentException.class, () -> ResourceStorageRole.decode(99));
         assertThrows(IllegalArgumentException.class, () -> ServicePointId.Kind.fromWireTag(99));
     }
@@ -109,8 +118,7 @@ class ResourceStorageTest {
         var station = site.layout().storagePort(); var id = new SubjectId("container:storage-test");
         var endpoint = new ShipmentEndpoint.Storage(site.settlementId(), id, station, Optional.empty(), station);
         var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 5, ResourceStorageRole.WAREHOUSE);
-        var declaration = new ResourceStorageDeclared(new ContainerRecord(id, site.settlementId(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(policy)), station.support().offset(1, 1, 0));
+        var declaration = new ResourceStorageDeclared(ContainerRecord.storage(id, site.settlementId(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), station.support().offset(1, 1, 0));
         var codecs = io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
         assertEquals(declaration, codecs.decode(declaration.type(), codecs.encode(declaration)));
         var declared = declaration.apply(state, site.settlementId());

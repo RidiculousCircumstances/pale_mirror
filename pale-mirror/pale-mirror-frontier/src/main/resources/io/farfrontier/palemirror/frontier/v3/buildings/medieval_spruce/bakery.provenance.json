@@ -8,29 +8,31 @@
   "foreignBlockEntitiesRetained": 0,
   "inventoryPayloadsRetained": 0,
   "adaptations": [
-    "Domum Ornamentum plain/crossed panels replaced explicitly with vanilla white terracotta",
+    "Original Domum Ornamentum blocks and exact material texture data retained",
     "Structurize terrain placeholders and MineColonies controller removed",
-    "No entities or block-entity payloads imported",
+    "No entities, inventories or colony controllers imported; typed visual payloads retained",
     "One source furnace omitted: current common production equipment owns its socket",
     "Supported operator platform, public porch and secondary staff opening authored",
-    "Future equipment space cleared of decorative props; doors initially open",
+    "Full source decoration, foundation and below-floor voids retained; source door state retained",
     "Wall torch repair input is the actual vanilla torch item"
   ],
-  "outputBlocks": 706,
+  "outputBlocks": 712,
   "paletteCounts": {
-    "minecraft:cobblestone": 61,
+    "minecraft:cobblestone": 64,
     "minecraft:spruce_log": 181,
     "minecraft:spruce_planks": 100,
-    "minecraft:white_terracotta": 44,
+    "domum_ornamentum:plain": 19,
+    "domum_ornamentum:one_crossed_lr": 12,
+    "domum_ornamentum:one_crossed_rl": 13,
     "minecraft:spruce_stairs": 199,
     "minecraft:spruce_fence": 13,
     "minecraft:torch": 1,
     "minecraft:spruce_slab": 27,
-    "minecraft:dirt": 9,
+    "minecraft:dirt": 11,
     "minecraft:dirt_path": 15,
     "minecraft:coarse_dirt": 9,
     "minecraft:gravel": 11,
-    "minecraft:wall_torch": 3,
+    "minecraft:wall_torch": 4,
     "minecraft:spruce_pressure_plate": 1,
     "minecraft:spruce_trapdoor": 2,
     "minecraft:cobblestone_stairs": 16,
@@ -41,6 +43,6 @@
     "minecraft:hay_block": 4,
     "minecraft:chain": 1
   },
-  "nbtSha256": "d2b3738bfefd15f72f80c86021cfcad77c29fa6affd274e5955e8cfcc440b918",
-  "blocksSha256": "7f1e54104cf4c1c703c8f0bcbf1cd84f5286e0dcf69828b31c202a5a03b95d1e"
+  "nbtSha256": "22fe13cc6b9df0002aa730b3279a31991c25cb683bd32a4a3c94f36d1acf3a32",
+  "blocksSha256": "ac2bcffec4ef59d94b7e99387ee2750ef9bf337015b858db1841002e2633dadb"
 }

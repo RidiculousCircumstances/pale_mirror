@@ -70,11 +70,14 @@ class EconomicRecoveryTest {
                 "manufacturing substitution value must allow a real input offer above the historical one-coin reference");
 
         var depot = FrontierWorldState.depotId(home);
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElseThrow().id();
+        var account = ReferenceContainerCustody.scopeId(depot);
         var lot = new SubjectId("lot:recovery-stone"); var staging = new SubjectId("custody:recovery-stone");
         var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, home, "minecraft:cobblestone", 1,
-                "fixture:recovery", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(depot), Map.of(lot, 1), Map.of()))
-                .transfer(staging, account, Map.of(lot, 1), Map.of());
+                "fixture:recovery", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(depot), Map.of(lot, 1), Map.of()));
+        resources = resources.accounts().containsKey(account)
+                ? resources.transfer(staging, account, Map.of(lot, 1), Map.of())
+                : resources.transferToNewAccount(staging, new CustodyAccount(account,
+                        new ResourceCustody.Container(depot), Map.of(lot, 1), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         assertTrue(EquipmentProductionPlanning.ready(state, home, 5000).orElseThrow().request().maintenance().isPresent());
     }

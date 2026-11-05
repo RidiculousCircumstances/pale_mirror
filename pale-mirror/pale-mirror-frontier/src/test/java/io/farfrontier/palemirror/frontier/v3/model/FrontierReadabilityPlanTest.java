@@ -378,8 +378,7 @@ class FrontierReadabilityPlanTest {
         var station = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
         var id = new SubjectId("container:alternative-board-storage");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, java.util.Optional.empty(), station);
-        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, java.util.Optional.empty(),
-                java.util.Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var adoption = new ResourceStorageAdopted(new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)),
                 java.util.List.of(new ResourceLot(new SubjectId("lot:alternative-board-bread"), home.id(), "minecraft:bread", 3,
                         "observed-alternative-storage", java.util.List.of())));

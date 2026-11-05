@@ -115,8 +115,7 @@ class PopulationBirthResourceTest {
         var position = settlement.anchor().offset(7, 0, 7); var station = new SurfaceAnchor(position.offset(-1, -1, 0));
         var endpoint = new ShipmentEndpoint.Storage(home, container, station, Optional.empty(), station);
         var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 5, ResourceStorageRole.WAREHOUSE);
-        state = new ResourceStorageDeclared(new ContainerRecord(container, home, 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(policy)), position).apply(state, home);
+        state = new ResourceStorageDeclared(ContainerRecord.storage(container, home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), position).apply(state, home);
         var resources = state.inventory().fungibleResources(); var lots = new LinkedHashMap<>(resources.lots());
         var first = new SubjectId("lot:birth-a-portion"); var reserve = new SubjectId("lot:birth-z-reserve");
         lots.put(first, new ResourceLot(first, home, "minecraft:bread", 1, "test:birth-food", List.of()));

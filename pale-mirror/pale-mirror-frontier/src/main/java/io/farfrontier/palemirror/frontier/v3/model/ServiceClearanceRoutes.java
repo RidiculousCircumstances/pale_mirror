@@ -25,9 +25,9 @@ public final class ServiceClearanceRoutes {
     /** Exact indexed candidates only. Distant service geometry cannot affect this contact. */
     public boolean temporary(SurfaceAnchor surface) {
         return ServiceBoundaryComposition.nearbyDeclarations(state, new TerrainColumn(surface.x(), surface.z())).stream()
-                .map(declaration -> evaluated.computeIfAbsent(declaration.pointId(),
-                        ignored -> ServiceBoundaryComposition.geometry(state, declaration.identity())))
-                .anyMatch(point -> ServiceAreaDestinations.temporary(point, surface));
+                .anyMatch(declaration -> declaration.idleClearanceAt(surface)
+                        || ServiceAreaDestinations.temporary(evaluated.computeIfAbsent(declaration.pointId(),
+                            ignored -> ServiceBoundaryComposition.geometry(state, declaration.identity())), surface));
     }
     public boolean publicDestination(SurfaceAnchor surface) {
         return !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(surface.support())

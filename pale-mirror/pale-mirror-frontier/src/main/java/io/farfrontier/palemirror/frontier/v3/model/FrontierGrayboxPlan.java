@@ -630,7 +630,7 @@ public final class FrontierGrayboxPlan {
         if (part == GrayboxSemanticPart.WORKSHOP_PROCESS_STATION) return GrayboxMaterial.WORKSHOP_PROCESS;
         return switch (kind) {
             case HALL -> GrayboxMaterial.HALL; case HOUSING -> GrayboxMaterial.HOUSING; case FARM -> GrayboxMaterial.FARM;
-            case WORKSHOP, SMELTERY, FORGE, WOODSHOP -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
+            case WORKSHOP, SMELTERY, FORGE, WOODSHOP, KITCHEN -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
         };
     }
 
@@ -791,6 +791,7 @@ public final class FrontierGrayboxPlan {
             // route topology can still require the physical support.  Any other overlap is an
             // invalid compiler layout, never an arbitrary ownership winner.
             if (existing != null && existing.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE) return;
+            if (existing != null && existing.material().emptySpace()) cells.remove(position);
             add(cells, position, PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         });
         for (Settlement settlement : bootstrap.settlements()) {
@@ -801,7 +802,9 @@ public final class FrontierGrayboxPlan {
                 // The Hall route node is deliberately already route-network owned. Every other
                 // compiled sidewalk cell belongs to the settlement's public circulation plan;
                 // an audit/materializer may observe loss but never replace it opportunistically.
-                if (cells.containsKey(position)) continue;
+                var existing = cells.get(position);
+                if (existing != null && !existing.material().emptySpace()) continue;
+                if (existing != null) cells.remove(position);
                 add(cells, position, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
             }
         }

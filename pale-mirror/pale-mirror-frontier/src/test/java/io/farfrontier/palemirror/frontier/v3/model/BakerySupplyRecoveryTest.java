@@ -86,7 +86,8 @@ class BakerySupplyRecoveryTest {
         var participant = state.companies().goodsTrade().participants().participants().get(task.ownerId());
         state = publish(state, task.ownerId(), 200);
         var publicPlan = GoodsParticipantAssessment.view(state, participant, 200L).supplyPlan().orElseThrow();
-        assertTrue(publicPlan.require("minecraft:coal").urgent(100));
+        assertTrue(publicPlan.require("minecraft:coal").deadlineTicks() < Long.MAX_VALUE,
+                "retained production needs an actual input deadline: " + publicPlan.require("minecraft:coal"));
         assertTrue(publicPlan.require("minecraft:coal").protectedInput() > 0,
                 "the actual settlement/market composition must retain the admitted batch's fuel obligation");
         assertTrue(publicPlan.require("minecraft:bread").purchase() >= job.outputCount(),

@@ -24,11 +24,11 @@ class ResidentMealAdmissionReplayTest {
         var account = started.meal().sourceAccountId();
         // A new lexicographically earlier lot would win a fresh source selection.
         // Replay must still reserve the exact portion carried by the committed event.
-        var stock = state.inventory().fungibleResources().transformCold(account,
+        var stock = state.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(started.meal().settlementId())),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
                 new ResourceLot(new SubjectId("lot:aaa-later-bread"), started.meal().settlementId(),
                         ResidentMeal.BREAD_KIND, 1, "test", List.of()));
-        var updated = state.withInventory(state.inventory().withFungibleResources(stock));
+        var updated = KitchenFoodFixture.relocateDepotFood(state.withInventory(state.inventory().withFungibleResources(stock)), started.meal().settlementId());
         try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
             throw new AssertionError("meal event reduction must not query a planner");
         })) {
@@ -112,6 +112,6 @@ class ResidentMealAdmissionReplayTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 32), Map.of(),
                 new ResourceLot(new SubjectId("lot:meal-replay-bread"), settlement.id(), ResidentMeal.BREAD_KIND,
                         32, "test", List.of()));
-        return initial.withInventory(initial.inventory().withFungibleResources(resources));
+        return KitchenFoodFixture.relocateDepotFood(initial.withInventory(initial.inventory().withFungibleResources(resources)), settlement.id());
     }
 }

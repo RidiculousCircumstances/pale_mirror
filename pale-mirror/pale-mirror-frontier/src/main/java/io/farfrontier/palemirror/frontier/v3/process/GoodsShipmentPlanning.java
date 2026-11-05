@@ -85,7 +85,7 @@ final class GoodsShipmentPlanning {
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
             ShipmentEndpointComposition.knowledge(state, List.of(sender, receiver))
-                    .plannedPath(sender.station(), order);
+                    .forProfile(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER).plannedPath(sender.station(), order);
             return PedestrianRouteResult.Status.FOUND;
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return unavailable.status(); }
     }

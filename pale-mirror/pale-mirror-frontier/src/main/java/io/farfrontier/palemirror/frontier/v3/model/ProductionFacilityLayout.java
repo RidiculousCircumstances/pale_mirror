@@ -51,11 +51,10 @@ public final class ProductionFacilityLayout {
     }
     public static ContainerRecord metalStorage(SettlementStructure facility) {
         var id = metalStorageId(facility); var access = metalStorageStation(facility);
-        return new ContainerRecord(id, facility.settlementId(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(new ShipmentEndpoint.Storage(facility.settlementId(), id, access,
+        return ContainerRecord.storage(id, facility.settlementId(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(new ShipmentEndpoint.Storage(facility.settlementId(), id, access,
                         Optional.of(facility.id()), access), new ResourceStorageFilter(false, Set.of("minecraft:coal"),
                         Map.of("pale_mirror:ores", Set.of("minecraft:raw_iron"),
-                                "pale_mirror:ingots", Set.of("minecraft:iron_ingot"))), 100, ResourceStorageRole.WAREHOUSE)));
+                                "pale_mirror:ingots", Set.of("minecraft:iron_ingot"))), 100, ResourceStorageRole.WAREHOUSE));
     }
     private static void requireSmeltery(SettlementStructure facility) {
         if (facility.kind() != StructureKind.SMELTERY) throw new IllegalArgumentException("not a declared smeltery");

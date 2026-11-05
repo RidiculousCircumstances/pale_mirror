@@ -147,13 +147,13 @@
     "front": "SOUTH",
     "work": {
       "socket": [
-        12,
+        7,
         1,
         4
       ],
       "front": "WEST",
       "input": [
-        10,
+        5,
         1,
         4
       ],
@@ -165,23 +165,23 @@
     "kind": "WOODSHOP",
     "source": "craftsmanship/carpentry/sawmill2.blueprint",
     "sha256": "c6f25b276162eb2e65ec096abe51338ef99f3d0af776d91e24b7f355d56ac10a",
-    "floor": 3,
+    "floor": 5,
     "door": [
-      10,
+      11,
       16
     ],
     "front": "SOUTH",
     "work": {
       "socket": [
-        9,
-        3,
-        13
+        13,
+        5,
+        14
       ],
-      "front": "EAST",
+      "front": "WEST",
       "input": [
         11,
-        3,
-        13
+        5,
+        14
       ],
       "type": "pale_mirror:woodworking_bench"
     }
@@ -256,6 +256,68 @@
     "secondaryDoor": [
       4,
       9
+    ]
+  },
+  {
+    "name": "kitchen",
+    "kind": "KITCHEN",
+    "source": "fundamentals/cook2.blueprint",
+    "sha256": "28e034354e402f0c841147957f7fc59ff247d1ea872675bbb340551e7751c844",
+    "floor": 1,
+    "door": [
+      11,
+      13
+    ],
+    "secondaryDoor": [
+      12,
+      13
+    ],
+    "front": "SOUTH",
+    "anchors": {
+      "pantry": [
+        8,
+        1,
+        4
+      ],
+      "serving": [
+        8,
+        1,
+        5
+      ]
+    },
+    "zones": [
+      {
+        "id": "pantry",
+        "use": "STORAGE",
+        "min": [
+          7,
+          2,
+          3
+        ],
+        "max": [
+          10,
+          4,
+          6
+        ],
+        "priority": 100,
+        "categories": [
+          "pale_mirror:food"
+        ]
+      },
+      {
+        "id": "dining",
+        "use": "DINING",
+        "min": [
+          7,
+          2,
+          9
+        ],
+        "max": [
+          9,
+          4,
+          12
+        ]
+      }
     ]
   }
 ]

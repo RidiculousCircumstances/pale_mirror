@@ -27,8 +27,6 @@ public final class FrontierV3FungibleProductionGameTests {
         // explicitly supplies A's initial input, never an expected output or completion.
         var remoteInput = new SubjectId("lot:bootstrap-2-wheat");
         var resources = local.state().inventory().fungibleResources()
-                .destroy(new SubjectId("custody:container-2-depot"),
-                        java.util.Map.of(new SubjectId("lot:bootstrap-2-bread"), 64), java.util.Map.of())
                 .issue(
                 new ResourceLot(remoteInput, new SubjectId("settlement:2"), "minecraft:wheat", 64, "test-input", List.of()),
                 new CustodyAccount(new SubjectId("custody:container-2-depot"),

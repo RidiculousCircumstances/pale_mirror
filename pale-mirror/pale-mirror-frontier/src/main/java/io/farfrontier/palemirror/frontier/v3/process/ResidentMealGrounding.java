@@ -11,8 +11,8 @@ final class ResidentMealGrounding {
     static Optional<ResidentMealGrounded> plan(FrontierWorldState state, ResidentMeal meal, long tick) {
         var actor = state.actorLocations().get(meal.residentId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || tick < meal.startedAtTick()
-                || meal.portable() || meal.pendingPhysicalStep().isPresent() || meal.coldTravel().isPresent()
-                || meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.CLEAR_ACCESS
+                || meal.pendingPhysicalStep().isPresent() || meal.coldTravel().isPresent()
+                || meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.CLEAR_ACCESS && meal.phase() != ResidentMeal.Phase.MOVE_TO_DINING
                 || !ActorExecutionCoordinator.coldAvailable(state, meal.residentId())) return Optional.empty();
         state.actorExecutions().requireCurrent(meal.executionId());
         var geometry = ResidentMealKnownNavigation.departureKnowledge(state, meal, actor.supportingSurface()).geometry();

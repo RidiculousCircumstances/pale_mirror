@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "FrontierV3NbtOutputMixin",
+    "FrontierV3BlockCollisionAccessor",
     "FrontierV3ServerTickTimingMixin",
     "FrontierV3EnvironmentalSampleMixin",
     "FrontierV3ScheduledNativeTicksMixin",
@@ -21,6 +22,7 @@
     "FrontierV3GoalNavigationMobMixin",
     "FrontierV3GoalNavigationHorseMixin",
     "FrontierV3GameTestSliceMixin",
+    "FrontierV3GameTestConnectionMixin",
     "FrontierV3ServerEntityTrackerMixin",
     "FrontierV3EntityDepartureMixin",
     "FrontierV3LivingDeathMixin",

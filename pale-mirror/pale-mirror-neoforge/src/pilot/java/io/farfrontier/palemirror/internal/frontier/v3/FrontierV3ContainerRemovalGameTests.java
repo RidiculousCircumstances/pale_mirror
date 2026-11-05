@@ -17,6 +17,14 @@ import java.util.*;
 public final class FrontierV3ContainerRemovalGameTests {
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void emptyProviderHasDurableIntentBeforePaletteWriteAndRetiresOnlyAfterNativeReceipt(GameTestHelper helper) {
+        providerRemoval(helper, StorageBlockKind.CHEST);
+    }
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void emptyBarrelUsesTheSameDurableNativeRemovalAndOwnerRecovery(GameTestHelper helper) {
+        providerRemoval(helper, StorageBlockKind.BARREL);
+    }
+    private static void providerRemoval(GameTestHelper helper, StorageBlockKind kind) {
+        var nativeBlock = kind == StorageBlockKind.CHEST ? Blocks.CHEST : Blocks.BARREL;
         var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
         var seed = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:container-removal-operation"), 94L).initialState().bootstrap();
         var base = FrontierWorldRuntimeDefinition.configuration(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(
@@ -24,8 +32,8 @@ public final class FrontierV3ContainerRemovalGameTests {
         var owner = base.initialState().bootstrap().settlements().getFirst().id();
         var id = new SubjectId("container:native-removal"); var support = SurfaceAnchor.at(point.getX() - 1, point.getY() - 1, point.getZ());
         var endpoint = new ShipmentEndpoint.Storage(owner, id, support, Optional.empty(), support);
-        var record = new ContainerRecord(id, owner, 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(), Optional.of(
-                new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, owner, 27, kind,
+                new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var initial = new ResourceStorageDeclared(record, new BlockPosition(point.getX(), point.getY(), point.getZ())).apply(base.initialState(), owner);
         for (var status : List.of(ContainerSurfaceStatus.PREPARED, ContainerSurfaceStatus.ACTIVE)) {
             var recovery = FencedRecoveryContainerSupport.transition(initial.fencedRecovery(), record, initial.inventory().surfaces().get(id), status);
@@ -38,7 +46,10 @@ public final class FrontierV3ContainerRemovalGameTests {
         var runtime = FrontierV3ServerRuntime.start(config, new FrontierV3AmbientActorGameTests.EphemeralStore(), 10_000);
         level.setBlockAndUpdate(point.below(), Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(point, Blocks.AIR.defaultBlockState());
-        var chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, point, id);
+        level.setBlockAndUpdate(point, nativeBlock.defaultBlockState());
+        var physical = FrontierV3FixedContainerProviders.inspect(level, point, record).orElseThrow();
+        physical.stampPreparedProjection();
+        var chest = physical.inventory();
         var chunk = level.getChunkSource().getChunkNow(point.getX() >> 4, point.getZ() >> 4);
         var operations = FrontierV3OperationLedger.get(level); var journal = FrontierV3ResourceHandoffLedger.get(level);
         try {
@@ -46,14 +57,14 @@ public final class FrontierV3ContainerRemovalGameTests {
             var changed = FrontierV3ContainerBlockOperation.replace(level, runtime, chunk, point, Blocks.AIR.defaultBlockState(), () -> {
                 var witness = journal.removals().stream().filter(w -> w.container().equals(id)).findFirst().orElseThrow();
                 helper.assertTrue(!journal.isDirty() && !operations.isDirty() && journal.durableReady() && operations.durableReady()
-                        && chunk.getBlockEntities().get(point) == chest && chunk.getBlockState(point).is(Blocks.CHEST),
+                        && chunk.getBlockEntities().get(point) == physical.inventory() && chunk.getBlockState(point).is(nativeBlock),
                         "exact outer intent is forced before vanilla changes the palette or calls onRemove");
                 FrontierV3ContainerRemovalExecutor.tick(level, runtime);
                 helper.assertTrue(runtime.decodedState().orElseThrow().inventory().surfaces().get(id).status() == ContainerSurfaceStatus.ACTIVE
                         && operations.require(witness.operation().ticket()).applied().isEmpty(), "prepared removal is not native completion");
                 return chunk.setBlockState(point, Blocks.AIR.defaultBlockState(), false);
             });
-            helper.assertTrue(changed != null && changed.is(Blocks.CHEST) && level.getBlockEntity(point) == null, "actual native removal ran");
+            helper.assertTrue(changed != null && changed.is(nativeBlock) && level.getBlockEntity(point) == null, "actual native removal ran");
             var witness = journal.removals().stream().filter(w -> w.container().equals(id)).findFirst().orElseThrow();
             helper.assertTrue(operations.nativeOutcomeAvailable(witness.operation().ticket()), "common native receipt confirms the actual terrain write");
             // Component fault injection: the independently persisted family index is

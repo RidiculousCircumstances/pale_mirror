@@ -16,6 +16,39 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void admittedVisitorInsideTheActualFacilityDoesNotReturnToExteriorWaiting() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:indoor-meal-approach"), 41L,
+                FrontierRulesets.installed("frontier-v3-simulation-terrain-r31")));
+        var home = state.bootstrap().settlements().get(5);
+        var actor = home.residents().getFirst().id();
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home.id());
+        var port = ResourceStorageAccess.at(state, pantry);
+        var facility = ShipmentEndpointComposition.supportingFacility(state, port.endpoint()).orElseThrow();
+        var entrance = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(facility).primaryEntrance();
+        var inside = entrance.interiorConnector();
+        var exterior = entrance.exteriorApproach().getFirst();
+        assertTrue(Math.abs(inside.x() - exterior.x()) + Math.abs(inside.z() - exterior.z()) > 3,
+                "the actual authored entrance extends beyond the old exterior proximity heuristic");
+        var meal = testMeal(state, home, actor, pantry, exterior);
+        state = withMeal(state.withActorBody(actor, inside.standingBody()), meal);
+        assertTrue(ResidentMealServiceAccess.available(state, pantry, actor));
+        assertEquals(List.of(port.interactionStation(state)),
+                ResidentMealKnownNavigation.approachStations(state, meal, inside, ignored -> true));
+        var route = ResidentMealKnownNavigation.pathFrom(state, meal, inside);
+        assertEquals(inside, route.getFirst());
+        assertEquals(port.interactionStation(state), route.getLast());
+        ResidentMealKnownNavigation.requireMovementRoute(state, meal, route);
+
+        var other = home.residents().get(1).id();
+        var occupied = withMeal(state.withActorBody(other, port.interactionStation(state).standingBody()),
+                testMeal(state, home, other, pantry, exterior));
+        assertFalse(ResidentMealServiceAccess.available(occupied, pantry, actor),
+                "being inside the facility never overrides another visitor's service turn");
+        assertFalse(ResidentMealKnownNavigation.approachStations(occupied, meal, inside, ignored -> true)
+                .contains(port.interactionStation(occupied)));
+    }
+
     @Test void capturedChestDepartureUsesTheSameBodyGeometryDuringPlanningAndReplay() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:meal-chest-departure"), 91L));
@@ -25,9 +58,8 @@ class ResidentMealKnownNavigationTest {
         var container = new SubjectId("container:meal-departure");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), container, ground, Optional.empty(), ground);
         var block = ground.support().offset(0, 1, 0);
-        var state = new ResourceStorageDeclared(new ContainerRecord(container, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0,
-                        ResourceStorageRole.WAREHOUSE))), block).apply(initial, home.id());
+        var state = new ResourceStorageDeclared(ContainerRecord.storage(container, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0,
+                        ResourceStorageRole.WAREHOUSE)), block).apply(initial, home.id());
         var chest = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell(
                 new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape(List.of(
                         new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape.Box(
@@ -287,10 +319,14 @@ class ResidentMealKnownNavigationTest {
         assertTrue(alternatives.stream().allMatch(surface -> port.accessBoundary().cleared(surface.standingBody())));
         var arbitraryParking = SurfaceAnchor.at(130, 63, 30);
         var moving = testMeal(blocked, settlement, actor, depot, arbitraryParking);
-        var clearing = new ResidentMeal(actor, settlement.id(), depot, arbitraryParking,
-                moving.sourceAccountId(), moving.actorAccountId(), moving.portion(), moving.claimId(),
-                moving.retainedWorkOwner(), ResidentMeal.Phase.CLEAR_ACCESS, moving.startedAtTick(), Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, moving.claimId(), 1L));
+        var clearing = new ResidentMeal(actor,
+                 settlement.id(),
+                 depot,
+                 arbitraryParking,
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), moving.sourceAccountId(), moving.actorAccountId(), moving.portion(), moving.claimId(), moving.retainedWorkOwner(),
+                 ResidentMeal.Phase.CLEAR_ACCESS, moving.startedAtTick(), Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
+                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, moving.claimId(), 1L));
         var path = ResidentMealKnownNavigation.clearancePathFrom(blocked, clearing, port.serviceSurface());
         assertTrue(port.accessBoundary().cleared(path.getLast().standingBody()));
         assertTrue(!path.getLast().equals(arbitraryParking));
@@ -384,12 +420,16 @@ class ResidentMealKnownNavigationTest {
 
     private static ResidentMeal testMeal(FrontierWorldState state, Settlement settlement,
                                          SubjectId resident, SubjectId depot, SurfaceAnchor clearing) {
-        return new ResidentMeal(resident, settlement.id(), depot, clearing,
-                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-" + resident.value().replace(':', '-')),
-                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:meal-waiting"), 1)),
-                new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), Optional.empty(),
-                ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,
+        return new ResidentMeal(resident,
+                 settlement.id(),
+                 depot,
+                 clearing,
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-" + resident.value().replace(':',
+                 '-')), new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:meal-waiting"), 1)),
+                 new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), Optional.empty(), ResidentMeal.Phase.MOVE,
+                 24_000L, Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident,
+                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,
                         new SubjectId("claim:meal-waiting-" + resident.value().replace(':', '-')), 1L));
     }
 
@@ -408,11 +448,16 @@ class ResidentMealKnownNavigationTest {
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
         FrontierWorldState atEntrance = initial.withActorBody(resident, port.exteriorApproach().standingBody());
-        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, port.exteriorApproach(),
-                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-changed-service"),
-                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:meal-changed-service"), 1)), new SubjectId("claim:meal-changed-service"),
-                Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:meal-changed-service"), 1L));
+        ResidentMeal meal = new ResidentMeal(resident,
+                 settlement.id(),
+                 depot,
+                 port.exteriorApproach(),
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-changed-service"),
+                 new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:meal-changed-service"), 1)),
+                 new SubjectId("claim:meal-changed-service"), Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(),
+                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,
+                 new SubjectId("claim:meal-changed-service"), 1L));
         assertEquals(port.serviceSurface(), ResidentMealKnownNavigation.path(atEntrance, meal).getLast());
         FrontierWorldState blocked = atEntrance.recordPhysicalDelta(new PhysicalDelta(
                 port.serviceSurface().support(), PhysicalDeltaKind.UNKNOWN_SCAR,
@@ -434,11 +479,16 @@ class ResidentMealKnownNavigationTest {
         var actors = new java.util.LinkedHashMap<>(initial.actorLocations());
         actors.put(resident, ActorLocation.standingOn(side, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
-        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, side,
-                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-side"),
-                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-side"), 1)), new SubjectId("claim:resident-meal-side"),
-                Optional.empty(), ResidentMeal.Phase.MOVE, 22_639L, Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:resident-meal-side"), 1L));
+        ResidentMeal meal = new ResidentMeal(resident,
+                 settlement.id(),
+                 depot,
+                 side,
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-side"), new FoodPortion(FoodCatalog.BREAD,
+                 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-side"), 1)), new SubjectId("claim:resident-meal-side"),
+                 Optional.empty(), ResidentMeal.Phase.MOVE, 22_639L, Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident,
+                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:resident-meal-side"),
+                 1L));
 
         List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
 
@@ -453,12 +503,13 @@ class ResidentMealKnownNavigationTest {
         Settlement settlement = state.bootstrap().settlements().get(5);
         SubjectId resident = settlement.residents().getFirst().id();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
-                state.actorLocations().get(resident).supportingSurface(),
-                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-six"),
-                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-six"), 1)), new SubjectId("claim:resident-meal-six"),
-                Optional.empty(), ResidentMeal.Phase.MOVE, 6_000L, Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:resident-meal-six"), 1L));
+        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, state.actorLocations().get(resident).supportingSurface(),
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-six"), new FoodPortion(FoodCatalog.BREAD,
+                 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-six"), 1)), new SubjectId("claim:resident-meal-six"),
+                 Optional.empty(), ResidentMeal.Phase.MOVE, 6_000L, Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident,
+                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:resident-meal-six"),
+                 1L));
         List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
         assertEquals(state.actorLocations().get(resident).supportingSurface(), route.getFirst());
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
@@ -484,12 +535,13 @@ class ResidentMealKnownNavigationTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SubjectId resident = settlement.residents().getFirst().id();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
-                state.actorLocations().get(resident).supportingSurface(),
-                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-route"),
-                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-route"), 1)), new SubjectId("claim:resident-meal-route"),
-                Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:resident-meal-route"), 1L));
+        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, state.actorLocations().get(resident).supportingSurface(),
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-route"), new FoodPortion(FoodCatalog.BREAD,
+                 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-route"), 1)), new SubjectId("claim:resident-meal-route"),
+                 Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident,
+                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, new SubjectId("claim:resident-meal-route"),
+                 1L));
         SettlementStructure depotStructure = settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(depotStructure).serviceSurface();
@@ -498,11 +550,11 @@ class ResidentMealKnownNavigationTest {
         assertTrue(SettlementDepotServicePort.forDepot(depotStructure).accessBoundary()
                 .cleared(fromIdle.getLast().standingBody()));
         assertTrue(fromIdle.size() > 1);
-        ResidentMeal returning = new ResidentMeal(resident, settlement.id(), depot,
-                state.actorLocations().get(resident).supportingSurface(),
-                meal.sourceAccountId(), meal.actorAccountId(), meal.portion(), meal.claimId(),
-                meal.retainedWorkOwner(), ResidentMeal.Phase.CLEAR_ACCESS, meal.startedAtTick(), Optional.empty(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, meal.claimId(), 1L));
+        ResidentMeal returning = new ResidentMeal(resident, settlement.id(), depot, state.actorLocations().get(resident).supportingSurface(),
+                 new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + settlement.id().value().substring("settlement:".length()) + "-kitchen"),
+                 "dining"), meal.sourceAccountId(), meal.actorAccountId(), meal.portion(), meal.claimId(), meal.retainedWorkOwner(),
+                 ResidentMeal.Phase.CLEAR_ACCESS, meal.startedAtTick(), Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident,
+                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, meal.claimId(), 1L));
         var serviceActors = new java.util.LinkedHashMap<>(state.actorLocations());
         serviceActors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         List<SurfaceAnchor> exit = ResidentMealKnownNavigation.returnPath(

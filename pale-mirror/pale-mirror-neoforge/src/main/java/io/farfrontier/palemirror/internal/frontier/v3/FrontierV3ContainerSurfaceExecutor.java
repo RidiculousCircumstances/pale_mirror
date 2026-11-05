@@ -215,8 +215,8 @@ final class FrontierV3ContainerSurfaceExecutor {
             reportConflict(runtime, surface.containerId());
             return;
         }
-        ChestBlockEntity chest = activeChest(level, position(surface), surface.containerId());
-        if (chest == null || !matchesCanonicalSlotsOrPendingProductionOutput(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, surface.containerId()).orElse(null);
+        if (physical == null || !matchesCanonicalSlotsOrPendingProductionOutput(physical.inventory(), state, surface.containerId())) reportConflict(runtime, surface.containerId());
     }
 
     /** Creates a fresh owned chest only after durable PREPARED state exists. */

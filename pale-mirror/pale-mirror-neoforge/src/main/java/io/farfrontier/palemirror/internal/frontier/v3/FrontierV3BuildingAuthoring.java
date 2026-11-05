@@ -96,15 +96,25 @@ final class FrontierV3BuildingAuthoring {
         var actual = new HashMap<BlockPosition, NavigationBlockState>();
         for (var value : tag.getList("blocks", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             var block = (net.minecraft.nbt.CompoundTag) value;
-            if (block.contains("nbt"))
-                throw new IllegalArgumentException(
-                        "authored template contains block inventories or controllers");
+
             var point = block.getList("pos", net.minecraft.nbt.Tag.TAG_INT);
             var state = palette.getCompound(block.getInt("state"));
             var properties = new TreeMap<String, String>();
             var declared = state.getCompound("Properties");
             for (var key : declared.getAllKeys()) properties.put(key, declared.getString(key));
             var position = new BlockPosition(point.getInt(0), point.getInt(1), point.getInt(2));
+            var declaredBlock = expected.get(position);
+            if (declaredBlock == null) throw new IllegalArgumentException("foreign native template block");
+            if (declaredBlock.data().isPresent()) {
+                var data = declaredBlock.data().orElseThrow();
+                var expectedData = FrontierV3AuthoredBlockData.payload(data);
+                if (!block.contains("nbt") || !block.getCompound("nbt").equals(rawData(data)))
+                    throw new IllegalArgumentException("native and declared visual payload differ");
+                var nativeState = FrontierV3BlockStates.resolve(declaredBlock.state());
+                if (!(nativeState.getBlock() instanceof net.minecraft.world.level.block.EntityBlock entityBlock))
+                    throw new IllegalArgumentException("visual block has no native block entity");
+                FrontierV3AuthoredBlockData.validate(entityBlock.newBlockEntity(net.minecraft.core.BlockPos.ZERO, nativeState), data);
+            } else if (block.contains("nbt")) throw new IllegalArgumentException("undeclared template block entity data");
             if (actual.putIfAbsent(
                             position, new NavigationBlockState(state.getString("Name"), properties))
                     != null)
@@ -117,5 +127,9 @@ final class FrontierV3BuildingAuthoring {
                     "native template and neutral block projection differ");
     }
 
+    private static net.minecraft.nbt.CompoundTag rawData(AuthoredBlockData data) {
+        try { return net.minecraft.nbt.TagParser.parseTag(data.snbt()); }
+        catch (com.mojang.brigadier.exceptions.CommandSyntaxException invalid) { throw new IllegalArgumentException(invalid); }
+    }
     private FrontierV3BuildingAuthoring() {}
 }

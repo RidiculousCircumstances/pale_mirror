@@ -78,6 +78,11 @@ public final class BuildingGeometryValidation {
                     }
 
                     @Override
+                    public boolean supportAvailable(SurfaceAnchor s) {
+                        return knowsSupport(s) && cells.containsKey(s.support())
+                                && !cells.get(s.support()).shape().boxes().isEmpty();
+                    }
+                    @Override
                     public boolean blocked(SurfaceAnchor s) {
                         return NavigationBodyGeometry.contacts(
                                         collisions, s, UnitNavigationProfile.VILLAGER, .5, .5)

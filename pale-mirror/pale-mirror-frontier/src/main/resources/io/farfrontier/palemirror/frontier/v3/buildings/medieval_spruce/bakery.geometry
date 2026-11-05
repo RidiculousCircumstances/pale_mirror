@@ -1,4 +1,16 @@
 # Minecraft registry collision facts; regenerate through building authoring, never hand-edit.
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:chain|minecraft:chain|axis=y,waterlogged=false	1	true	0.40625,0.0,0.40625,0.59375,1.0,0.59375
 2|minecraft:coarse_dirt|minecraft:dirt|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:cobblestone_stairs|minecraft:cobblestone_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
@@ -32,22 +44,22 @@
 2|minecraft:hay_block|minecraft:hay_block|axis=x	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:hay_block|minecraft:hay_block|axis=y	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:hay_block|minecraft:hay_block|axis=z	1	true	0.0,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=left,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
-2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=left,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
-2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=left,open=true,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=right,open=true,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=left,open=true,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=right,open=true,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=left,open=true,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=left,open=true,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=left,open=true,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
-2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=left,open=true,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=left,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=left,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
 2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=east,in_wall=false,open=false,powered=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0	manual:
 2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=north,in_wall=false,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625	manual:
 2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=south,in_wall=false,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625	manual:
@@ -104,4 +116,3 @@
 2|minecraft:wall_torch|minecraft:torch|facing=north	1	true	
 2|minecraft:wall_torch|minecraft:torch|facing=south	1	true	
 2|minecraft:wall_torch|minecraft:torch|facing=west	1	true	
-2|minecraft:white_terracotta|minecraft:white_terracotta|	1	true	0.0,0.0,0.0,1.0,1.0,1.0

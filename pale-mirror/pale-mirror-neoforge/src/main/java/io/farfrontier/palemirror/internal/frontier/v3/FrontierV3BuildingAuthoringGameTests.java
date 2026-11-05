@@ -65,7 +65,10 @@ public final class FrontierV3BuildingAuthoringGameTests {
             Files.writeString(output, facts, StandardCharsets.UTF_8);
           } catch(Exception failure) {failures.add(path+": "+failure.getClass().getSimpleName()+": "+failure.getMessage());}
         }
-        helper.assertTrue(failures.isEmpty(),String.join("; ",failures));
+        if (!failures.isEmpty()) {
+            Files.writeString(Path.of("building-authoring", "failures.txt"), String.join("\n", failures), StandardCharsets.UTF_8);
+            helper.fail(failures.size() + " authored assets failed; see building-authoring/failures.txt");
+        }
         helper.succeed();
     }
 

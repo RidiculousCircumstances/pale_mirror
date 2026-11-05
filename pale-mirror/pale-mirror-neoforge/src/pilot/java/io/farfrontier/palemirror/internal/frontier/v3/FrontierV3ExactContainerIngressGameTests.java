@@ -63,11 +63,11 @@ public final class FrontierV3ExactContainerIngressGameTests {
         var owner = new SubjectId("settlement:1");
         var station = io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(position.getX() - 1, position.getY() - 1, position.getZ());
         var endpoint = new io.farfrontier.palemirror.frontier.v3.model.ShipmentEndpoint.Storage(owner, container, station, Optional.empty(), station);
-        var record = new io.farfrontier.palemirror.frontier.v3.model.ContainerRecord(container, owner, 27,
-                io.farfrontier.palemirror.frontier.v3.model.ContainerPurpose.RESOURCE_STORAGE, Optional.empty(), Optional.of(
+        var record = io.farfrontier.palemirror.frontier.v3.model.ContainerRecord.storage(container, owner, 27,
+                io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST,
                     new io.farfrontier.palemirror.frontier.v3.model.ResourceStoragePolicy(endpoint,
                         io.farfrontier.palemirror.frontier.v3.model.ResourceStorageFilter.all(), 0,
-                        io.farfrontier.palemirror.frontier.v3.model.ResourceStorageRole.WAREHOUSE)));
+                        io.farfrontier.palemirror.frontier.v3.model.ResourceStorageRole.WAREHOUSE));
         var initial = new io.farfrontier.palemirror.frontier.v3.model.ResourceStorageDeclared(record,
                 new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(position.getX(), position.getY(), position.getZ())).apply(base.initialState(), owner);
         var tool = new ExactItemStack(new SubjectId("item:test-exact-tool-return"), owner, "minecraft:iron_pickaxe", 1,

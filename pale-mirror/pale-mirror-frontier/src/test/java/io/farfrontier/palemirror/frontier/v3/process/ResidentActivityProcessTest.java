@@ -20,6 +20,29 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentActivityProcessTest {
+    @Test void idleDinerLeavesTheSharedRoomWithoutRetainingThePantryTurnOrChangingNutrition() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:dining-turnover"), 139));
+        var home = state.bootstrap().settlements().get(1); var actor = home.residents().getFirst().id();
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home.id());
+        var place = ResidentDiningPlaces.in(state, home.id()).getFirst();
+        var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home.id(),
+                ResidentDiningPlaces.passages(state, home.id(), place)).forActor(state, actor);
+        var boundary = ServiceAccessCoordinator.boundary(state, pantry);
+        var station = ResidentDiningPlaces.stations(state, home.id(), place, knowledge).stream()
+                .filter(s -> boundary.cleared(s.standingBody())).findFirst().orElseThrow();
+        state = state.withActorBody(actor, station.standingBody());
+        assertTrue(ServiceAccessCoordinator.boundary(state, pantry).cleared(state.actorLocations().get(actor).body()),
+                "room occupancy must never retain the food acquisition turn");
+        assertTrue(ResidentServiceTurnover.mayPlan(state, actor, 100));
+        var nutrition = state.humanPopulation().nutrition(actor);
+        var movement = ResidentServiceTurnover.select(state, actor, 100).orElseThrow();
+        assertFalse(FacilityPedestrianContacts.of(state.bootstrap()).noParking()
+                .contains(movement.order().legalStations().getFirst().support()));
+        assertEquals(nutrition, state.humanPopulation().nutrition(actor));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertTrue(ResidentServiceTurnover.mayPlan(codec.decode(codec.encode(state)), actor, 100));
+    }
+
     @Test void foodRefusalSurvivesAnotherResidentsNeedButNotItsOwnOrStockChanges() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:admission-dependencies"), 421L));
@@ -50,8 +73,7 @@ class ResidentActivityProcessTest {
         var storageId = new SubjectId("container:idle-local-clearance");
         var station = state.actorLocations().get(actor).supportingSurface();
         var endpoint = new ShipmentEndpoint.Storage(home.id(), storageId, station, java.util.Optional.empty(), station);
-        var record = new ContainerRecord(storageId, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, java.util.Optional.empty(),
-                java.util.Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(storageId, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var localService = new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)).apply(state, home.id());
         assertFalse(proof.stillHeld().test(localService), "a new service point under this resident must release the idle refusal even without food");
         var personalLot = new SubjectId("lot:admission-personal-food");
@@ -65,7 +87,7 @@ class ResidentActivityProcessTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
                 new ResourceLot(new SubjectId("lot:admission-dependencies-bread"), home.id(), ResidentMeal.BREAD_KIND,
                         1, "test", List.of()));
-        var stocked = state.withInventory(state.inventory().withFungibleResources(ledger));
+        var stocked = KitchenFoodFixture.relocateDepotFood(state.withInventory(state.inventory().withFungibleResources(ledger)), new SubjectId("settlement:1"));
         assertFalse(proof.stillHeld().test(stocked));
         assertInstanceOf(ResidentActivityAdmission.Ready.class, ResidentActivityProcess.admission(stocked, action));
     }
@@ -78,7 +100,7 @@ class ResidentActivityProcessTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
                 new ResourceLot(new SubjectId("lot:eligibility-planning-bread"), home.id(),
                         ResidentMeal.BREAD_KIND, 1, "test", List.of()));
-        var state = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var state = KitchenFoodFixture.relocateDepotFood(initial.withInventory(initial.inventory().withFungibleResources(resources)), new SubjectId("settlement:1"));
         var index = new PedestrianPlanningWakeIndex();
         try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
                 var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner);
@@ -106,8 +128,22 @@ class ResidentActivityProcessTest {
                     io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             index.changed(planner.drainChanges());
             assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(state, successor));
-            var started = PedestrianPlanningContinuations.plan(successor, () -> ResidentActivityProcess.plan(state, successor));
-            assertTrue(started.stream().anyMatch(event -> event.payload() instanceof ResidentMealStarted));
+            var next = successor;
+            boolean mealStarted = false;
+            // Each owned route leg may park separately. Wake the retained action
+            // from its actual result rather than assuming one search admits a meal.
+            for (int round = 0; round < 64 && !mealStarted; round++) {
+                var current = next;
+                var events = PedestrianPlanningContinuations.plan(current, () -> ResidentActivityProcess.plan(state, current));
+                mealStarted = events.stream().anyMatch(event -> event.payload() instanceof ResidentMealStarted);
+                if (mealStarted) break;
+                next = events.stream().map(event -> event.payload()).filter(ScheduleEffect.Rescheduled.class::isInstance)
+                        .map(ScheduleEffect.Rescheduled.class::cast).findFirst().orElseThrow().replacement();
+                while (planner.pendingCount() > 0) planner.advance(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+                index.changed(planner.drainChanges());
+            }
+            assertTrue(mealStarted, "all retained route results must eventually admit the same due meal");
             assertEquals(0, index.waitingCount());
         }
     }
@@ -154,11 +190,11 @@ class ResidentActivityProcessTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
                 new ResourceLot(new SubjectId("lot:eligibility-bread"), settlement.id(),
                         ResidentMeal.BREAD_KIND, 1, "test", List.of()));
-        var available = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var available = KitchenFoodFixture.relocateDepotFood(initial.withInventory(initial.inventory().withFungibleResources(resources)), new SubjectId("settlement:1"));
         var state = available;
-        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
-                .findFirst().orElseThrow();
-        var surfaces = SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces();
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), settlement.id());
+        var surfaces = ServiceBoundaryComposition.geometry(state,
+                ServiceBoundaryComposition.declaration(state, pantry).identity()).waitingSurfaces();
         var blockers = java.util.stream.Stream.concat(settlement.residents().stream(),
                 initial.bootstrap().settlements().stream().filter(value -> !value.id().equals(settlement.id()))
                         .flatMap(value -> value.residents().stream()))
@@ -263,7 +299,7 @@ class ResidentActivityProcessTest {
         var keys = FrontierWorldRuntimeDefinition.wakeKeys(initial, restocked, event);
         assertTrue(keys.contains(depot));
         assertFalse(keys.contains(FrontierWorldState.depotId(second.id())));
-        assertEquals(java.util.Set.of(first.residents().getFirst().id(), depot, first.id()),
+        assertEquals(java.util.Set.of(first.residents().getFirst().id(), depot, first.id(), CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), first.id())),
                 FrontierWorldRuntimeDefinition.holdWakeKeys(initial,
                         ResidentActivityProcess.review(first.residents().getFirst().id(), 24_000L)));
     }
@@ -277,7 +313,7 @@ class ResidentActivityProcessTest {
         FungibleResourceLedger resources = initial.inventory().fungibleResources().transformCold(account,
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(bread, settlement.id(), "minecraft:bread", 64, "test", List.of()));
-        FrontierWorldState state = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        FrontierWorldState state = KitchenFoodFixture.relocateDepotFood(initial.withInventory(initial.inventory().withFungibleResources(resources)), new SubjectId("settlement:1"));
         var action = ResidentActivityProcess.review(resident, 24_000L);
         var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
         assertEquals(3, planned.size());
@@ -340,7 +376,7 @@ class ResidentActivityProcessTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:late-bread"), settlement.id(),
                         ResidentMeal.BREAD_KIND, 64, "test", List.of()));
-        FrontierWorldState restocked = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        FrontierWorldState restocked = KitchenFoodFixture.relocateDepotFood(initial.withInventory(initial.inventory().withFungibleResources(resources)), new SubjectId("settlement:1"));
         assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(restocked, action),
                 "stock change makes the same retained exact due action runnable");
         assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(initial, action),

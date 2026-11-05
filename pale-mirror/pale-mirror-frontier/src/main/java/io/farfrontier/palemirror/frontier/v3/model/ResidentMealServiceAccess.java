@@ -18,6 +18,8 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
         return candidates.keys(state.bootstrap(), state.humanPopulation().meals(),
                 meal -> meal.portable() ? java.util.Set.of() : java.util.Set.of(meal.depotId()), pointId).stream()
                 .map(state.humanPopulation().meals()::get).filter(meal -> !meal.portable() && meal.depotId().equals(pointId))
+                .filter(meal -> meal.phase() == ResidentMeal.Phase.MOVE || meal.phase() == ResidentMeal.Phase.TAKE
+                        || meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS)
                 .map(meal -> new ServiceAccessDemand(identity(pointId, meal.residentId()), priority(),
                         ServiceAccessCoordinator.occupies(state, boundary, meal.residentId()) ? ServiceAccessDemand.Presence.OCCUPIED
                                 : committedEntrance(meal, boundary) ? ServiceAccessDemand.Presence.ENTERING
@@ -51,7 +53,7 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
         return lease != null && (lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING);
     }
     public static boolean witnessedExit(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
-        if (!meal.movesToClearance() || meal.pendingPhysicalStep().isPresent()) return false;
+        if (meal.portable() || meal.phase() != ResidentMeal.Phase.CLEAR_ACCESS || meal.pendingPhysicalStep().isPresent()) return false;
         var actor = state.actorLocations().get(meal.residentId());
         return actor != null && ServiceAccessCoordinator.witnessedExit(
                 ServiceAccessCoordinator.boundary(state, meal.depotId()), actor.body(), observedBody);

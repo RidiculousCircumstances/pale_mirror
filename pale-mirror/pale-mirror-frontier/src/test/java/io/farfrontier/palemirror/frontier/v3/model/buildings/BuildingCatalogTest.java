@@ -11,6 +11,18 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 
 class BuildingCatalogTest {
+    @Test void authoredVisualDataRetainsItsOwnKindVersionAndExactPayloadAcrossWireEncoding() {
+        var data = new AuthoredBlockData(AuthoredBlockData.Kind.MATERIAL_TEXTURES, 3465,
+                "{textureData:{\"domum_ornamentum:plain_main\":\"minecraft:spruce_planks\"}}");
+        var material = new StructureMaterial.Authored(new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState("domum_ornamentum:plain", Map.of()),
+                "domum_ornamentum:plain", Optional.of(data));
+        assertEquals(material, StructureMaterial.require(material.wireIdentity()));
+        assertThrows(IllegalArgumentException.class, () -> AuthoredBlockData.decode(999, 3465, data.encoded()));
+        assertThrows(IllegalArgumentException.class, () -> AuthoredBlockData.decode(1, 0, data.encoded()));
+        assertThrows(IllegalArgumentException.class, () -> StructureMaterial.require(material.wireIdentity().replace("3|", "2|")));
+        assertThrows(IllegalArgumentException.class, () -> AuthoredBlockData.decode(1, 3465, data.encoded() + "="));
+    }
+
     @Test
     void courtyardSeatContactCanDepartWithoutMakingFurnitureAPreferredStation() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:yard-contact"), 139));
@@ -18,8 +30,8 @@ class BuildingCatalogTest {
         var bakery = home.structures().stream().filter(s -> s.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
         var plan = BuildingSpatialPlan.of(bakery);
         var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home.id(), List.of()).forProfile(UnitNavigationProfile.VILLAGER);
-        var seat = plan.placement().support(new BlockPosition(5, 2, 14));
-        var floor = plan.placement().support(new BlockPosition(7, 1, 13));
+        var seat = plan.placement().support(new BlockPosition(5, 3, 14));
+        var floor = plan.placement().support(new BlockPosition(7, 2, 13));
         assertFalse(knowledge.geometry().blocked(seat), "an edge-supported occupant has a real departure contact");
         assertFalse(knowledge.clearStation(seat), "departure does not invent standing room at the seat centre");
         assertTrue(knowledge.geometry().traversalPenalty(seat) > knowledge.geometry().traversalPenalty(floor));

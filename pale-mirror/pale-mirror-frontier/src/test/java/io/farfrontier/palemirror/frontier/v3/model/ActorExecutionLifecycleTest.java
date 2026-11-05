@@ -163,7 +163,7 @@ class ActorExecutionLifecycleTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:execution-meal-bread"), settlement,
                         ResidentMeal.BREAD_KIND, 64, "test", List.of()));
-        state = state.withInventory(state.inventory().withFungibleResources(food));
+        state = KitchenFoodFixture.relocateDepotFood(state.withInventory(state.inventory().withFungibleResources(food)), settlement);
         var started = ResidentMealProcess.selectSourceAtYield(state, job.workerId(), 27_000L).orElseThrow();
         state = ResidentMealProcess.reduceStarted(state, job.workerId(), started);
         var interrupted = state.actorExecutions().actors().get(job.workerId());

@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerPurpose;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionEquipment;
+import io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind;
 import io.farfrontier.palemirror.internal.production.PaleMirrorProductionStations;
 import io.farfrontier.palemirror.internal.production.ProductionBenchBlockEntity;
 import net.minecraft.core.BlockPos;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -24,14 +26,27 @@ final class FrontierV3FixedContainerProviders {
     private static final Provider CHEST = new Provider(() -> Blocks.CHEST,
             block -> block instanceof net.minecraft.world.level.block.ChestBlock,
             entity -> entity instanceof ChestBlockEntity chest ? chest : null);
+    private static final Provider BARREL = new Provider(() -> Blocks.BARREL,
+            block -> block == Blocks.BARREL,
+            entity -> entity instanceof BarrelBlockEntity barrel ? barrel : null);
+    private static final Map<StorageBlockKind, Provider> STORAGE = Map.of(
+            StorageBlockKind.CHEST, CHEST, StorageBlockKind.BARREL, BARREL);
+    /** Discovery is the admission boundary. Continuation uses the retained exact provider. */
+    record StorageCandidate(BlockEntity entity, Container inventory, StorageBlockKind kind) { }
+    static Optional<StorageCandidate> candidate(BlockEntity entity) {
+        if (entity instanceof ChestBlockEntity chest)
+            return Optional.of(new StorageCandidate(entity, chest, StorageBlockKind.CHEST));
+        if (entity instanceof BarrelBlockEntity barrel)
+            return Optional.of(new StorageCandidate(entity, barrel, StorageBlockKind.BARREL));
+        return Optional.empty();
+    }
     private static final Provider BENCH = new Provider(PaleMirrorProductionStations.BENCH,
             block -> block == PaleMirrorProductionStations.BENCH.get(),
             entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
     private static final Map<ContainerPurpose, Provider> PROVIDERS = Map.of(
             ContainerPurpose.UNSCOPED, CHEST, ContainerPurpose.SETTLEMENT_DEPOT, CHEST,
             ContainerPurpose.HIVE_STORE, CHEST,
-            ContainerPurpose.EXTRACTIVE_STORAGE, CHEST, ContainerPurpose.ROUTE_MAINTENANCE, CHEST,
-            ContainerPurpose.RESOURCE_STORAGE, CHEST);
+            ContainerPurpose.EXTRACTIVE_STORAGE, CHEST, ContainerPurpose.ROUTE_MAINTENANCE, CHEST);
     private static final Provider SMELTER = new Provider(PaleMirrorProductionStations.SMELTER,
             block -> block == PaleMirrorProductionStations.SMELTER.get(),
             entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
@@ -45,6 +60,8 @@ final class FrontierV3FixedContainerProviders {
             ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER, ProductionEquipment.FORGE, FORGE, ProductionEquipment.WOODWORKING, WOODWORKING);
     private FrontierV3FixedContainerProviders() { }
     private static Provider require(ContainerRecord record) {
+        if (record.purpose() == ContainerPurpose.RESOURCE_STORAGE)
+            return java.util.Objects.requireNonNull(STORAGE.get(record.storageBlock().orElseThrow()), "unregistered ordinary storage provider");
         var provider = record.purpose() == ContainerPurpose.PRODUCTION_STATION
                 ? EQUIPMENT.get(record.productionStation().orElseThrow().equipmentType()) : PROVIDERS.get(record.purpose());
         if (provider == null) throw new IllegalArgumentException("no registered fixed container provider " + record.purpose());

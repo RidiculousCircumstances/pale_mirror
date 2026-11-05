@@ -112,6 +112,7 @@ public final class ResidentMealReferenceClosure {
                     throw new IllegalArgumentException("meal lost its retained owned storage capability");
                 ShipmentEndpointComposition.validate(state, container.storage().orElseThrow().endpoint());
             }
+            if (meal.destination() instanceof MealDestination.DiningArea area) ResidentDiningPlaces.facility(state, meal.settlementId(), area);
             meal.portion().validate(state.bootstrap().ruleset().residentLife().foods());
             ActorLocation actor = state.actorLocations().get(meal.residentId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)

@@ -12,7 +12,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -84,8 +83,9 @@ final class FrontierV3ResidentMealPhysicalEffect {
         if (surface == null) return false;
         BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
         if (!FrontierV3LoadedWorld.ready(level, position)) return false;
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, meal.depotId());
-        if (chest == null) return false;
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, meal.depotId()).orElse(null);
+        if (physical == null) return false;
+        var chest = physical.inventory();
         if (meal.pendingPhysicalStep().isEmpty()
                 && !ReferenceContainerCustody.hasOperationalCustody(state, meal.depotId())) return false;
         if (meal.pendingPhysicalStep().isPresent()
@@ -99,8 +99,8 @@ final class FrontierV3ResidentMealPhysicalEffect {
         } catch (IllegalArgumentException changed) { return false; }
         if (slices.isEmpty() || slices.stream().anyMatch(slice -> !(slice.address() instanceof PhysicalStackAddress.ContainerSlot))) return false;
         var sourceCounts = ResidentMealPhysicalStep.sourceCounts(slices);
-        var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, worker,
-                worker.getUUID(), slices, -1);
+        var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, worker,
+                worker.getUUID(), slices, -1, 0);
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
         if (pending == null) {
             if(state.combat().evasions().containsKey(meal.residentId()))return false;
@@ -124,7 +124,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 || pending.sourceEpoch() != slices.getFirst().epoch()) return false;
         var actorParticipant = FrontierV3OperationEntityParticipant.current(worker,
                 ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
-        var containerParticipant = FrontierV3OperationBlockEntityParticipant.current(chest);
+        var containerParticipant = physical.persistence().get();
         var declaration = FrontierV3ResidentMealNativeOperation.take(meal, pending, actorParticipant, containerParticipant);
         var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, List.of(actorParticipant, containerParticipant),
                 transfer::before, FrontierV3NativeEffect.observed(transfer::apply), transfer::after);

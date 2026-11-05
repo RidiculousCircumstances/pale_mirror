@@ -90,6 +90,7 @@ public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureCo
             var expected = FrontierV3GrayboxExecutor.material(cell.material());
             if (!level.setBlock(position, expected, 2) && !chunk.getBlockState(position).equals(expected))
                 throw new IllegalStateException("initial structure placement failed at " + position);
+            FrontierV3AuthoredBlockData.apply(level, position, cell.material());
             authored.put(position, cell);
         }
         chunk.setData(GeologyRegistration.STRUCTURES, Optional.of(new FrontierV3GeneratedStructures(

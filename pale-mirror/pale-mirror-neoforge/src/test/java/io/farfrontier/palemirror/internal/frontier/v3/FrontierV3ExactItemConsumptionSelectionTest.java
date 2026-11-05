@@ -19,8 +19,7 @@ class FrontierV3ExactItemConsumptionSelectionTest {
         var station = new SurfaceAnchor(position.offset(-1, -1, 0));
         var endpoint = new ShipmentEndpoint.Storage(home.id(), container, station, java.util.Optional.empty(), station);
         var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 5, ResourceStorageRole.WAREHOUSE);
-        state = new ResourceStorageDeclared(new ContainerRecord(container, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                java.util.Optional.empty(), java.util.Optional.of(policy)), position).apply(state, home.id());
+        state = new ResourceStorageDeclared(ContainerRecord.storage(container, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), position).apply(state, home.id());
         var supply = new SubjectId("item:medical-warehouse-remedy");
         state = state.withInventory(state.inventory().withSurfaceStatus(container, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(container, ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(depot, ContainerSurfaceStatus.CONFLICT)

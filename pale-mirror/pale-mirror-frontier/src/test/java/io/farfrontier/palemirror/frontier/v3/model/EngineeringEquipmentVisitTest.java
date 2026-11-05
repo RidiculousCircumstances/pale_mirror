@@ -330,8 +330,7 @@ class EngineeringEquipmentVisitTest {
         }
         var station = DeclaredRouteFixtures.openStreet(state, settlement);
         var endpoint = new ShipmentEndpoint.Storage(settlement.id(), STORE, station, Optional.empty(), station);
-        var container = new ContainerRecord(STORE, settlement.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 100, ResourceStorageRole.WAREHOUSE)));
+        var container = ContainerRecord.storage(STORE, settlement.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 100, ResourceStorageRole.WAREHOUSE));
         state = new ResourceStorageDeclared(container, station.support().offset(1, 1, 0)).apply(state, settlement.id());
         var inventory = state.inventory().withSurfaceStatus(STORE, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(STORE, ContainerSurfaceStatus.ACTIVE);
         for (int index = 0; index < members; index++) inventory = inventory.store(new ExactItemStack(new SubjectId("item:equipment-visit-tool-" + index),

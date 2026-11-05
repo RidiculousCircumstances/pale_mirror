@@ -3,8 +3,11 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import java.util.*;
 
 /** Frozen placement policy. Named categories carry explicit membership, never item-name inference. */
-public record ResourceStorageFilter(boolean allItems, Set<String> items, Map<String, Set<String>> categories) {
+public record ResourceStorageFilter(boolean allItems, Set<String> items, Map<String, Set<String>> categories, Set<String> excludedItems) {
     public ResourceStorageFilter {
+        excludedItems = Set.copyOf(Objects.requireNonNull(excludedItems));
+        excludedItems.forEach(ResourceStorageFilter::requireKey);
+        if (excludedItems.size() > 4096) throw new IllegalArgumentException("unbounded storage exclusions");
         items = Set.copyOf(Objects.requireNonNull(items));
         var frozen = new TreeMap<String, Set<String>>();
         Objects.requireNonNull(categories).forEach((name, members) -> {
@@ -20,10 +23,17 @@ public record ResourceStorageFilter(boolean allItems, Set<String> items, Map<Str
             throw new IllegalArgumentException("invalid bounded storage filter");
         items.forEach(ResourceStorageFilter::requireKey);
     }
+    public ResourceStorageFilter(boolean allItems, Set<String> items, Map<String, Set<String>> categories) {
+        this(allItems, items, categories, Set.of());
+    }
+    public ResourceStorageFilter excluding(Set<String> kinds) {
+        var excluded = new HashSet<>(excludedItems); excluded.addAll(kinds);
+        return new ResourceStorageFilter(allItems, items, categories, excluded);
+    }
     public static ResourceStorageFilter all() { return new ResourceStorageFilter(true, Set.of(), Map.of()); }
     public boolean accepts(String itemKind) {
         requireKey(itemKind);
-        return allItems || items.contains(itemKind) || categories.values().stream().anyMatch(values -> values.contains(itemKind));
+        return !excludedItems.contains(itemKind) && (allItems || items.contains(itemKind) || categories.values().stream().anyMatch(values -> values.contains(itemKind)));
     }
     private static final java.util.regex.Pattern KEY = java.util.regex.Pattern.compile("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}");
     private static void requireKey(String key) {

@@ -17,12 +17,13 @@ public record ResourceSiteHarvestCausality(String coldScheduleId, long coldDueAt
                                            String expectedPhysical, String observedPhysical,
                                            String reconciliation, RetainedDiagnosticTrace trace) {
     private static final int MAX = 512;
+    private static final int MAX_RECENT_HOT_LEASES = 32;
 
     public ResourceSiteHarvestCausality {
         coldScheduleId = field(coldScheduleId, "harvest causality cold schedule");
         hotLeaseIds = List.copyOf(Objects.requireNonNull(hotLeaseIds, "harvest causality HOT leases").stream()
                 .sorted(Comparator.comparing(SceneLeaseId::value)).toList());
-        if (hotLeaseIds.size() > 32 || hotLeaseIds.stream().distinct().count() != hotLeaseIds.size()) {
+        if (hotLeaseIds.size() > MAX_RECENT_HOT_LEASES || hotLeaseIds.stream().distinct().count() != hotLeaseIds.size()) {
             throw new IllegalArgumentException("harvest causality HOT lease retention is invalid");
         }
         intentId = Objects.requireNonNull(intentId, "harvest causality intent");
@@ -56,7 +57,12 @@ public record ResourceSiteHarvestCausality(String coldScheduleId, long coldDueAt
                 .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
                 .filter(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
                         && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId()))
-                .map(SceneLease::id).toList();
+                // Closed scene generations are history, not a simultaneous ownership set.
+                // Keep a bounded recent diagnostic window; execution/recovery authority
+                // remains in the exact scene/body registries, never in this summary.
+                .sorted(Comparator.comparing(SceneLease::handoffInstant).reversed()
+                        .thenComparing(lease -> lease.id().value()))
+                .limit(MAX_RECENT_HOT_LEASES).map(SceneLease::id).toList();
         return new ResourceSiteHarvestCausality(action.id().value(), action.dueAt().ticks(), hotLeases, job.intentId(), expected(job),
                 receiptPending ? "not_observed" : "not_applicable_intent_composed",
                 receiptPending ? "pending_exact_physical_receipt" : "composed_cold_receipt", RetainedDiagnosticTrace.pending(job, action.kind()));

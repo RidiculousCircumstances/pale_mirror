@@ -74,7 +74,7 @@ public record BuildingSpatialPlan(
                                                             .SETTLEMENT_STRUCTURE,
                                                     structure.id()),
                                             new StructureMaterial.Authored(
-                                                    nativeState, block.repairItem()),
+                                                    nativeState, block.repairItem(), block.data()),
                                             block.part()));
                         });
         var stations = new LinkedHashSet<SurfaceAnchor>();

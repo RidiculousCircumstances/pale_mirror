@@ -332,8 +332,10 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                 if (event.instant().ticks() != grounded.atTick()) throw new IllegalArgumentException("meal grounding has a foreign instant");
                 yield ResidentMealGrounding.reduce(state, event.subject(), grounded);
             }
-            case ResidentMealColdStep step -> ResidentMealProcess.reduceColdStep(state, event.subject(), step);
-            case ResidentMealHotArrived arrived -> ResidentMealProcess.reduceHotArrived(state, event.subject(), arrived);
+            case ResidentMealColdStep step -> ResidentActivityProcess.retargetHotResident(
+                    ResidentMealProcess.reduceColdStep(state, event.subject(), step), event.subject(), event.instant().ticks());
+            case ResidentMealHotArrived arrived -> ResidentActivityProcess.retargetHotResident(
+                    ResidentMealProcess.reduceHotArrived(state, event.subject(), arrived), event.subject(), event.instant().ticks());
             case ResidentMealHotEffectCancelled cancelled -> ResidentMealProcess.reduceHotCancelled(state, event.subject(), cancelled);
             case ResidentMealHotEffectPrepared prepared -> ResidentMealProcess.reduceHotPrepared(state, event.subject(), prepared);
             case ResidentMealHotEffectObserved observed -> ResidentActivityProcess.reduceMealEffectObserved(state, event.subject(), observed, event.instant().ticks());
@@ -341,9 +343,12 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMealPortionDispositionObserved observed -> ResidentMealResourceProcess.reduceDisposition(state, event.subject(), observed);
             case ResidentMealHotHandMaterialized observed -> ResidentMealProcess.reduceHotHandMaterialized(state, event.subject(), observed);
             case ResidentMealHotHandReleased observed -> ResidentMealProcess.reduceHotHandReleased(state, event.subject(), observed);
-            case ResidentMealHotAccessCleared cleared -> ResidentMealProcess.reduceHotAccessCleared(state, event.subject(), cleared);
-            case ResidentMealClearanceRequired required -> ResidentMealProcess.reduceClearanceRequired(state, event.subject(), required);
-            case ResidentMealApproachRequired required -> ResidentMealApproach.reduce(state, event.subject(), required);
+            case ResidentMealHotAccessCleared cleared -> ResidentActivityProcess.retargetHotResident(
+                    ResidentMealProcess.reduceHotAccessCleared(state, event.subject(), cleared), event.subject(), event.instant().ticks());
+            case ResidentMealClearanceRequired required -> ResidentActivityProcess.retargetHotResident(
+                    ResidentMealProcess.reduceClearanceRequired(state, event.subject(), required), event.subject(), event.instant().ticks());
+            case ResidentMealApproachRequired required -> ResidentActivityProcess.retargetHotResident(
+                    ResidentMealApproach.reduce(state, event.subject(), required), event.subject(), event.instant().ticks());
             case ResidentHealthTransition transition -> HumanHealthProcess.reduceResidentTransition(state, event.subject(), event.instant().ticks(), transition);
             case SettlementQuarantineTransition transition -> HumanHealthProcess.reduceQuarantineTransition(state, event.subject(), event.instant().ticks(), transition);
             case MedicalTreatmentStarted started -> MedicalTreatmentProcess.reduceStarted(state, event.subject(), started);

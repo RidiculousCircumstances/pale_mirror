@@ -45,6 +45,7 @@ public final class SettlementFacilityCapability {
             case WORKSHOP, SMELTERY, FORGE, WOODSHOP -> capacity.intactWorkshopWorkCapacity();
             case DEPOT -> capacity.intactDepotWorkCapacity();
             case INFIRMARY -> capacity.intactInfirmaryWorkCapacity();
+            case KITCHEN -> 0; // A dining venue has no production-worker slots.
             case HOUSING -> throw new IllegalStateException("housing handled above");
         });
     }

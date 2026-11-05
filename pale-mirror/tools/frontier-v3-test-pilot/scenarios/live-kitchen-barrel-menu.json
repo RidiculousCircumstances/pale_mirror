@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "id": "live_kitchen_barrel_menu",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/clear PMBakeryAudit"
+    },
+    {
+      "type": "command",
+      "command": "/give PMBakeryAudit minecraft:granite 192"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb"
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb"
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 8,
+      "view": "container",
+      "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      }
+    },
+    {
+      "after": 12,
+      "view": "container",
+      "id": "container:pantry-2e0ece2a-0614-3e9c-8776-a5c14d4256eb",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      }
+    },
+    {
+      "after": 14,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "kitchen-native-interior"
+    },
+    {
+      "after": 7,
+      "name": "barrel-three-consecutive-deposits",
+      "presentation": "player"
+    },
+    {
+      "after": 11,
+      "name": "barrel-three-consecutive-withdrawals",
+      "presentation": "player"
+    }
+  ]
+}

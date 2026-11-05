@@ -48,7 +48,7 @@ class ActorBodyProcessTest {
         var food = state.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
                 java.util.Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), java.util.Map.of(),
                 new ResourceLot(new SubjectId("lot:meal-death-bread"), settlement, ResidentMeal.BREAD_KIND, 64, "test", java.util.List.of()));
-        state = state.withInventory(state.inventory().withFungibleResources(food));
+        state = KitchenFoodFixture.relocateDepotFood(state.withInventory(state.inventory().withFungibleResources(food)), settlement);
         var started = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.selectSourceAtYield(state, farmer, 27_000L).orElseThrow();
         state = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceStarted(state, farmer, started);
         var meal = state.humanPopulation().meals().get(farmer);

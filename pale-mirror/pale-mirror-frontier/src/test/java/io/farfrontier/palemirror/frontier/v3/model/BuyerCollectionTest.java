@@ -19,10 +19,10 @@ class BuyerCollectionTest {
             var state = engine.canonicalState().state();
             if (state.shipments().missions().values().stream().anyMatch(mission -> mission.preparingSupplies()
                     && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.mayReconsider(state, mission))) break;
-            var next = engine.checkpoint().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(state, a))
+            var next = engine.executionView().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(state, a))
                     .sorted().findFirst().orElseThrow();
             assertEquals(EngineStatus.Kind.ACTIVE, engine.advanceTo(new SimInstant(Math.max(
-                    engine.checkpoint().instant().ticks(), next.dueAt().ticks())), new WorkBudget(1, 1024)).status().kind());
+                    engine.executionView().instant().ticks(), next.dueAt().ticks())), new WorkBudget(1, 1024)).status().kind());
         }
         var state = engine.canonicalState().state();
         var mission = state.shipments().missions().values().iterator().next();
@@ -52,7 +52,7 @@ class BuyerCollectionTest {
                 .filter(resident -> resident.settlementId().equals(sellerId)).findFirst().orElseThrow();
         state = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
                 .withWorkPermissions(sellerId, new ResidentWorkPermissions(Map.of(ResidentWorkKind.PRODUCTION, Set.of(baker.id()))))));
-        long now = engine.checkpoint().instant().ticks();
+        long now = engine.executionView().instant().ticks();
         state = AcceptedEconomyFixture.publish(state, sellerId, now);
         assertTrue(TransportPreparationRecovery.needed(state, mission, now));
         var before = state;
@@ -115,7 +115,7 @@ class BuyerCollectionTest {
                 var mission = state.shipments().missions().get(admitted.id());
                 if (mission == null) { returned = true; break; }
                 if (mission.stage() == TransportMission.Stage.RETURNING) {
-                    long now = engine.checkpoint().instant().ticks();
+                    long now = engine.executionView().instant().ticks();
                     var progress = io.farfrontier.palemirror.frontier.v3.process.TransportMissionProcess.progress(mission.id(), now);
                     var plan = io.farfrontier.palemirror.frontier.v3.process.TransportMissionProcess.plan(state, progress, now);
                     if (plan.stream().map(ProposedEvent::payload).anyMatch(payload -> payload instanceof TransportMissionAdvanced changed
@@ -133,7 +133,7 @@ class BuyerCollectionTest {
                         var parcel = state.shipments().shipments().get(id);
                         if (parcel.status() != Shipment.Status.CARRYING
                                 || parcel.authorization().kind() != ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT) continue;
-                        long now = engine.checkpoint().instant().ticks();
+                        long now = engine.executionView().instant().ticks();
                         var action = GoodsTradeReceiptProcess.review(parcel.authorization().claimantId(), parcel.id(), now);
                         pickup = GoodsTradeReceiptProcess.plan(state, action, new SimInstant(now)).stream()
                                 .map(ProposedEvent::payload).filter(GoodsTradeCollected.class::isInstance)
@@ -183,7 +183,7 @@ class BuyerCollectionTest {
                                 parcel.receiver().containerId(), parcel.itemKind()) >= parcel.quantity());
                     }
                     var receipt = Objects.requireNonNull(pickup, "ordinary pickup boundary must have been observed");
-                    long now = engine.checkpoint().instant().ticks();
+                    long now = engine.executionView().instant().ticks();
                     assertThrows(IllegalArgumentException.class, () -> GoodsTradeCollectionSupport.accept(state, buyer.party().id(), receipt, now));
                     verifyPaidCargoLossOwner(state, state.shipments().shipments().get(mission.shipmentIds().getFirst()));
                     var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
@@ -194,12 +194,12 @@ class BuyerCollectionTest {
                 }
             }
             var current = engine.canonicalState().state();
-            var next = engine.checkpoint().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a))
+            var next = engine.executionView().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a))
                     .sorted().findFirst().orElseThrow();
-            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), next.dueAt().ticks())),
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.executionView().instant().ticks(), next.dueAt().ticks())),
                     new WorkBudget(128, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
-            if (boundary % 64 == 0) engine.compact(engine.checkpoint().revision());
+            if (boundary % 64 == 0) engine.compact(engine.executionView().revision());
         }
         var last = engine.canonicalState().state();
         assertNotNull(admitted, () -> "no collection admitted: buyer=" + GoodsParticipantView.observe(last,

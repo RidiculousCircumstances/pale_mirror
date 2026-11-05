@@ -19,8 +19,7 @@ class ResidentMealResourceLossTest {
             var station = SettlementServiceAccessPoints.depotPort(state, home.id()).exteriorApproach();
             var endpoint = new ShipmentEndpoint.Storage(home.id(), container, station, java.util.Optional.empty(), station);
             var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 100, ResourceStorageRole.WAREHOUSE);
-            state = new ResourceStorageDeclared(new ContainerRecord(container, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                    java.util.Optional.empty(), java.util.Optional.of(policy)), station.support().offset(1, 1, 0)).apply(state, home.id());
+            state = new ResourceStorageDeclared(ContainerRecord.storage(container, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), station.support().offset(1, 1, 0)).apply(state, home.id());
             var lot = new ResourceLot(new SubjectId("lot:meal-source-loss"), home.id(), "minecraft:bread", 64, "test:meal", List.of());
             var resources = state.inventory().fungibleResources().issue(lot,
                     new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot.id(), 64), Map.of()));

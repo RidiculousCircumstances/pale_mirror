@@ -98,6 +98,7 @@ class ContainerReservationTest {
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:inbound-capacity"), 41L)), StrategicTaskStatus.PENDING);
         var task = state.strategicPlans().tasks().values().iterator().next();
         var depot = FrontierWorldState.depotId(task.ownerId());
+        state = mixedWarehouse(state, depot);
         var inventory = state.inventory();
         while (inventory.firstFreeSlot(depot).isPresent()) {
             int slot = inventory.firstFreeSlot(depot).orElseThrow();
@@ -149,6 +150,7 @@ class ContainerReservationTest {
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites()
                 .site(new SubjectId("site:1-wheat-field")).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         SubjectId depot = harvest.outputSlot().containerId();
+        state = mixedWarehouse(state, depot);
         var available = state;
         assertTrue(available.canReceiveFungible(depot, "minecraft:bread", 64));
         int added = 0;
@@ -172,6 +174,7 @@ class ContainerReservationTest {
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites()
                 .site(new SubjectId("site:1-wheat-field")).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         SubjectId depot = harvest.outputSlot().containerId();
+        state = mixedWarehouse(state, depot);
         SubjectId accountId = ReferenceContainerCustody.scopeId(depot);
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         SubjectId firstBread = new SubjectId("lot:reservation-first-bread");
@@ -209,4 +212,12 @@ class ContainerReservationTest {
     private static SubjectId harvestOwner(FrontierWorldState state, SubjectId depot) {
         return state.inventory().containers().get(depot).ownerId();
     }
+    /** A deliberate mixed-output capacity case, independent of default food placement. */
+    private static FrontierWorldState mixedWarehouse(FrontierWorldState state, SubjectId container) {
+        var record = state.inventory().containers().get(container);
+        var prior = record.storage().orElseThrow();
+        return new ResourceStoragePolicyChanged(container, prior, new ResourceStoragePolicy(
+                prior.endpoint(), ResourceStorageFilter.all(), 101, prior.role())).apply(state, record.ownerId());
+    }
+
 }

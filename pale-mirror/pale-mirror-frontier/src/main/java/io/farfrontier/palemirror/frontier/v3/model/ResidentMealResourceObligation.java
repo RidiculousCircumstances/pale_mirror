@@ -85,7 +85,7 @@ public record ResidentMealResourceObligation(ActorExecutionId executionId, Actor
         if (atTick < meal.startedAtTick()) throw new IllegalArgumentException("meal retirement precedes admission");
         CustodyState state = switch (meal.phase()) {
             case TAKE -> CustodyState.SOURCE_TAKE_PENDING;
-            case CLEAR_ACCESS, CONSUME -> meal.pendingPhysicalStep().isPresent()
+            case CLEAR_ACCESS, MOVE_TO_DINING, CONSUME -> meal.pendingPhysicalStep().isPresent()
                     ? CustodyState.ACTOR_CONSUMPTION_PENDING : CustodyState.ACTOR_PORTION;
             case MOVE -> throw new IllegalArgumentException("unbegun meal has no resource obligation");
         };

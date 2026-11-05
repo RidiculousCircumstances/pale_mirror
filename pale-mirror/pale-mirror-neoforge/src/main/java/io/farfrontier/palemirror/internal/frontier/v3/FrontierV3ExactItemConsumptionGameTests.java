@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.CommunalDiningPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
@@ -43,7 +44,7 @@ public final class FrontierV3ExactItemConsumptionGameTests {
     @GameTest(batch = "pm-frontier-v3-exact-consumption", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void birthFoodCommitsOneCanonicalRationWithoutAPlayerMaterializationPermit(GameTestHelper helper) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-consumption-game-test"), 91L));
-        var settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        var settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), settlement.id());
         SubjectId food = new SubjectId("item:birth-consumption-game-test");
         state = state.withInventory(state.inventory()
                 .store(new ExactItemStack(food, settlement.id(), "minecraft:bread", 64,

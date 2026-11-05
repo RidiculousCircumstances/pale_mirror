@@ -112,6 +112,12 @@ public final class FrontierV3ContainerHandoffGameTests {
         var translated = FrontierWorldState.initial(
                 FrontierV3BootstrapGameTestFixtures.translatedBootstrap(initial.bootstrap(), pos.getX() - original.x(),
                         pos.getY() - original.y(), pos.getZ() - original.z()));
+        // This custody test requires non-empty ordinary stock, not a particular food location.
+        var stockLot = new SubjectId("lot:handoff-fixture-stock");
+        translated = translated.withInventory(translated.inventory().withFungibleResources(
+                translated.inventory().fungibleResources().issue(new ResourceLot(stockLot,
+                        translated.inventory().containers().get(depot).ownerId(), "minecraft:wheat", 64, "fixture:handoff-stock", List.of()),
+                        new CustodyAccount(ReferenceContainerCustody.scopeId(depot), new ResourceCustody.Container(depot), Map.of(stockLot, 64), Map.of()))));
         var active = activated ? FrontierV3ReferenceContainerCustodyGameTests.activated(translated, depot) : translated;
         var state = active.withInventory(active.inventory().withFungibleResources(translated.inventory().fungibleResources()));
         if (activated) {

@@ -34,6 +34,26 @@ import static io.farfrontier.palemirror.frontier.v3.model.HarvestObservationFixt
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
+    @Test void repeatedHotVisitsCannotOverflowTheTerminalDiagnosticHistory() throws Exception {
+        var fixture = awaitingEquipment(125L); var job = fixture.job(); var state = fixture.state();
+        var leases = new java.util.LinkedHashMap<>(state.sceneLeases());
+        var actor = state.actorLocations().get(job.workerId());
+        for (int generation = 0; generation < 40; generation++) {
+            var id = new SceneLeaseId("lease:field-diagnostic-history-" + generation);
+            leases.put(id, SceneLease.forCause(id, state.bootstrap().worldId(),
+                    new ResourceSiteHarvestSceneCause(job.siteId(), job.id()), actor.supportingSurface().support(),
+                    new SimInstant(generation), generation, SceneLeaseStatus.CLOSED,
+                    List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))),
+                    java.util.Set.of(), Optional.empty()));
+        }
+        var visited = state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        var diagnostic = ResourceSiteHarvestCausality.captured(visited, job, ResourceSiteHarvestProcess.coldProgress(job, 30_000L), false);
+        assertEquals(32, diagnostic.hotLeaseIds().size());
+        assertTrue(diagnostic.hotLeaseIds().contains(new SceneLeaseId("lease:field-diagnostic-history-39")));
+        assertFalse(diagnostic.hotLeaseIds().contains(new SceneLeaseId("lease:field-diagnostic-history-0")));
+        assertEquals(leases, visited.sceneLeases(), "diagnostic retention must not retire execution or recovery records");
+    }
+
     @Test void fieldRuntimeRouteAdmissionUsesCooperativePlanningWithoutSurveyingTheWorldSynchronously() throws Exception {
         var fixture = coldHarvestAfterSteps(125L, 0);
         try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
@@ -65,8 +85,7 @@ class ResourceSiteHarvestProcessTest {
         var endpoint = new ShipmentEndpoint.Storage(home, target, station, Optional.empty(), station);
         var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false, java.util.Set.of("minecraft:wheat"), Map.of()),
                 100, ResourceStorageRole.WAREHOUSE);
-        state = new ResourceStorageDeclared(new ContainerRecord(target, home, 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(policy)), station.support().offset(1, 1, 0)).apply(state, home);
+        state = new ResourceStorageDeclared(ContainerRecord.storage(target, home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), station.support().offset(1, 1, 0)).apply(state, home);
         assertTrue(HarvestStorageReplacement.select(state, job).isEmpty(), "a working retained destination must not be silently replaced");
         var replica = PhysicalReplicaRecord.expected(oldContainer, ReferenceContainerCustody.semanticKind(state, oldContainer), 1L,
                 ReferenceContainerCustody.canonicalFingerprint(state, oldContainer), ReferenceContainerCustody.provenance(oldContainer));
@@ -256,9 +275,8 @@ class ResourceSiteHarvestProcessTest {
         var socket = state.inventory().surfaces().get(depot).position();
         state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(depot, ContainerSurfaceStatus.RETIRED));
-        state = new ResourceStorageDeclared(new ContainerRecord(replacement, settlement, 27, ContainerPurpose.RESOURCE_STORAGE,
-                java.util.Optional.empty(), java.util.Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(),
-                    0, ResourceStorageRole.WAREHOUSE))), socket).apply(state, settlement);
+        state = new ResourceStorageDeclared(ContainerRecord.storage(replacement, settlement, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(),
+                    0, ResourceStorageRole.WAREHOUSE)), socket).apply(state, settlement);
         state = state.withInventory(state.inventory().withSurfaceStatus(replacement, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(replacement, ContainerSurfaceStatus.ACTIVE));
         for (var item : List.copyOf(state.inventory().items().values()))

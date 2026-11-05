@@ -59,8 +59,7 @@ public final class FrontierV3StorageCommands {
             var endpoint = new ShipmentEndpoint.Storage(home, id, station, Optional.empty(), station);
             var policy = new ResourceStoragePolicy(endpoint, filter(StringArgumentType.getString(context, "items")),
                     IntegerArgumentType.getInteger(context, "priority"), ResourceStorageRole.WAREHOUSE);
-            var event = new ResourceStorageDeclared(new ContainerRecord(id, home, 27, ContainerPurpose.RESOURCE_STORAGE,
-                    Optional.empty(), Optional.of(policy)), position(chest));
+            var event = new ResourceStorageDeclared(ContainerRecord.storage(id, home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), position(chest));
             event.apply(state, home); // Exact read-only admission before the ordinary registered command.
             FrontierV3CommandSubmission.submit(runtime, "storage-create", id.value(), event);
             source.sendSuccess(() -> Component.literal("Storage declared: " + id.value() + "; empty chest projection pending; no stock created."), true);

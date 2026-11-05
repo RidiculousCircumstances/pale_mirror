@@ -19,11 +19,11 @@ public record ResidentMealColdStep(SubjectId residentId, ResidentMeal.Phase expe
         nextSurface = Objects.requireNonNull(nextSurface, "optional next meal surface");
         plannedRoute = Objects.requireNonNull(plannedRoute, "optional accepted meal route");
         if (plannedRoute.isPresent() && (nextSurface.isPresent()
-                || expectedPhase != ResidentMeal.Phase.MOVE && expectedPhase != ResidentMeal.Phase.CLEAR_ACCESS))
+                || expectedPhase != ResidentMeal.Phase.MOVE && expectedPhase != ResidentMeal.Phase.CLEAR_ACCESS && expectedPhase != ResidentMeal.Phase.MOVE_TO_DINING))
             throw new IllegalArgumentException("accepted meal route cannot be a stage effect or arrival");
         if (atTick < 0) throw new IllegalArgumentException("meal step tick must be non-negative");
         if (expectedPhase != ResidentMeal.Phase.MOVE
-                && expectedPhase != ResidentMeal.Phase.CLEAR_ACCESS
+                && expectedPhase != ResidentMeal.Phase.CLEAR_ACCESS && expectedPhase != ResidentMeal.Phase.MOVE_TO_DINING
                 && nextSurface.isPresent())
             throw new IllegalArgumentException("only a movement-stage meal can advance its body");
     }

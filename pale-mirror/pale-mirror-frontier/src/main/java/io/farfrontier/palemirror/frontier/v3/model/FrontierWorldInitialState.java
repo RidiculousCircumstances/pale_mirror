@@ -45,7 +45,7 @@ final class FrontierWorldInitialState {
         bootstrap.settlements().forEach(settlement -> {
             SubjectId id = FrontierWorldState.depotId(settlement.id());
             containers.put(id, new ContainerRecord(id, settlement.id(), 27, ContainerPurpose.SETTLEMENT_DEPOT)
-                    .withStorage(new ResourceStoragePolicy(GoodsParticipantDeclarations.endpoint(settlement), ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+                    .withStorage(new ResourceStoragePolicy(GoodsParticipantDeclarations.endpoint(settlement), CommunalDiningPlan.generalFilter(bootstrap), 0, ResourceStorageRole.WAREHOUSE)));
         });
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> ProductionFacilityLayout.supports(structure.kind())).forEach(workshop -> {
@@ -62,7 +62,10 @@ final class FrontierWorldInitialState {
                 new ContainerRecord(asset.containerId(), asset.homeSettlementId(), asset.stackSlots(), ContainerPurpose.MOBILE_STORAGE)));
         var fieldBuffers=GrayboxFieldStoragePlan.compile(bootstrap);
         fieldBuffers.forEach(buffer->containers.put(buffer.container().id(),buffer.container()));
+        var pantries = CommunalDiningPlan.compile(bootstrap);
+        pantries.forEach(pantry -> containers.put(pantry.container().id(), pantry.container()));
         var surfaces = new LinkedHashMap<>(ContainerSurfaceManifest.initial(bootstrap));
+        pantries.forEach(pantry -> surfaces.put(pantry.surface().containerId(), pantry.surface()));
         fieldBuffers.forEach(buffer->surfaces.put(buffer.surface().containerId(),buffer.surface()));
         extraction.deposits().values().forEach(deposit -> surfaces.put(installation.initialContainers().get(deposit.site().id()),
                 new ContainerSurface(installation.initialContainers().get(deposit.site().id()), deposit.site().layout().container(), ContainerSurfaceStatus.UNMATERIALIZED)));
@@ -96,8 +99,8 @@ final class FrontierWorldInitialState {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
             resources = resources.issue(new ResourceLot(bread, settlement.id(), "minecraft:bread", 64,
                     "bootstrap-starter-food", List.of()), new CustodyAccount(
-                    new SubjectId("custody:container-" + suffix + "-depot"),
-                    new ResourceCustody.Container(depot), Map.of(bread, 64), Map.of()));
+                    ReferenceContainerCustody.scopeId(CommunalDiningPlan.initialFoodStorage(bootstrap, settlement.id())),
+                    new ResourceCustody.Container(CommunalDiningPlan.initialFoodStorage(bootstrap, settlement.id())), Map.of(bread, 64), Map.of()));
         }
         bootstrap.settlements().forEach(settlement -> {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
@@ -133,13 +136,18 @@ final class FrontierWorldInitialState {
         for (var stock : bootstrap.ruleset().initialSettlementStocks().stream()
                 .sorted(java.util.Comparator.comparing(InitialSettlementStock::canonicalText)).toList()) {
             var settlement = FrontierWorldStateSupport.settlement(bootstrap, stock.settlementId());
-            SubjectId depot = FrontierWorldState.depotId(settlement.id());
+            SubjectId depot = bootstrap.ruleset().residentLife().foods().find(stock.itemKind()).isPresent()
+                    ? CommunalDiningPlan.initialFoodStorage(bootstrap, settlement.id()) : FrontierWorldState.depotId(settlement.id());
             SubjectId lot = new SubjectId("lot:initial-public-stock-" + ++stockIndex);
             SubjectId staging = new SubjectId("custody:initial-public-stock-" + stockIndex);
             resources = resources.issue(new ResourceLot(lot, settlement.id(), stock.itemKind(), stock.quantity(),
                     "bootstrap-initial-public-stock", List.of()), new CustodyAccount(staging,
                     new ResourceCustody.Container(depot), Map.of(lot, stock.quantity()), Map.of()));
-            resources = resources.transfer(staging, ReferenceContainerCustody.scopeId(depot), Map.of(lot, stock.quantity()), Map.of());
+            var target = ReferenceContainerCustody.scopeId(depot);
+            resources = resources.accounts().containsKey(target)
+                    ? resources.transfer(staging, target, Map.of(lot, stock.quantity()), Map.of())
+                    : resources.transferToNewAccount(staging, new CustodyAccount(target,
+                            new ResourceCustody.Container(depot), Map.of(lot, stock.quantity()), Map.of()));
         }
         SubjectId biomass = new SubjectId("lot:bootstrap-hive-biomass"); SubjectId eastStore = new SubjectId("container:hive-east-store");
         resources = resources.issue(new ResourceLot(biomass, bootstrap.hive().id(), "minecraft:rotten_flesh", 64, "bootstrap", List.of()),

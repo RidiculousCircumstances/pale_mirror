@@ -1,0 +1,303 @@
+{
+  "schema": 1,
+  "id": "live_native_spruce_buildings",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 8
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode spectator"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.FARM.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.FARM.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.WORKSHOP.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.WORKSHOP.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.DEPOT.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.DEPOT.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.INFIRMARY.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.INFIRMARY.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.SMELTERY.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.SMELTERY.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.FORGE.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.FORGE.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.WOODSHOP.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.WOODSHOP.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 21,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "spruce-native-hall"
+    },
+    {
+      "after": 4,
+      "name": "spruce-native-housing"
+    },
+    {
+      "after": 6,
+      "name": "spruce-native-farm"
+    },
+    {
+      "after": 8,
+      "name": "spruce-native-workshop"
+    },
+    {
+      "after": 10,
+      "name": "spruce-native-depot"
+    },
+    {
+      "after": 12,
+      "name": "spruce-native-infirmary"
+    },
+    {
+      "after": 14,
+      "name": "spruce-native-smeltery"
+    },
+    {
+      "after": 16,
+      "name": "spruce-native-forge"
+    },
+    {
+      "after": 18,
+      "name": "spruce-native-woodshop"
+    },
+    {
+      "after": 20,
+      "name": "spruce-native-kitchen"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ class ResidentMealDisplacedPickupTest {
                 new ResourceLot(new SubjectId("lot:displaced-meal-bread"), home.id(), ResidentMeal.BREAD_KIND, 64, "test", java.util.List.of()));
         var state = initial.withChanges(FrontierWorldStateUpdate.begin().inventory(initial.inventory().withFungibleResources(resources))
                 .humanPopulation(initial.humanPopulation().accrueHunger(id, 27_000L)));
+        state = KitchenFoodFixture.relocateDepotFood(state, home.id());
         var started = ResidentMealProcess.selectSourceAtYield(state, id, 27_000L).orElseThrow();
         state = ResidentMealProcess.reduceStarted(state, id, started);
         long now = 27_001L;

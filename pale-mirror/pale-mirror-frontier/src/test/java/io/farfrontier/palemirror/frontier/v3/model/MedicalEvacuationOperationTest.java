@@ -769,8 +769,7 @@ class MedicalEvacuationOperationTest {
         var station = new SurfaceAnchor(position.offset(-1, -1, 0));
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, java.util.Optional.empty(), station);
         var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 5, ResourceStorageRole.WAREHOUSE);
-        state = new ResourceStorageDeclared(new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                java.util.Optional.empty(), java.util.Optional.of(policy)), position).apply(state, home.id());
+        state = new ResourceStorageDeclared(ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), position).apply(state, home.id());
         var depot = FrontierWorldState.depotId(home.id());
         var remedy = state.inventory().items().get(new SubjectId("item:medical-lifecycle-remedy"));
         var inventory = state.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE)

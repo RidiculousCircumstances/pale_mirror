@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "id": "disposable_communal_dining",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25591,
+    "profile": "communal-dining",
+    "viewDistance": 4
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:pantry-c728c058-2bd8-3f63-b2ec-7e6b51028ad3",
+          "field": "position"
+        }
+      },
+      "settleMs": 1000,
+      "causalMilestone": "ordinary_player_admits_kitchen_and_resident",
+      "offset": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:pantry-c728c058-2bd8-3f63-b2ec-7e6b51028ad3",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:6-1",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "mealPhase": "NONE",
+        "initialFoodStorageBread": 192,
+        "physicalBodyCustody": true,
+        "ambientStatus": "HOT"
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "exact_resident_hot_before_food_acquisition"
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:6-1"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:6-1",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "mealPhase": "NONE",
+        "initialFoodStorageBread": 191,
+        "metabolismEffectivePermille": 4000
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "one_physical_bread_eaten_by_exact_resident"
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:6-1"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:pantry-c728c058-2bd8-3f63-b2ec-7e6b51028ad3"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 5,
+      "view": "resident_life",
+      "id": "resident:6-1",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "mealPhase": "NONE",
+        "initialFoodStorageBread": 191,
+        "initialFoodStorageBreadClaimed": 0
+      }
+    },
+    {
+      "after": 7,
+      "view": "container",
+      "id": "container:pantry-c728c058-2bd8-3f63-b2ec-7e6b51028ad3",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 5,
+      "name": "resident-after-one-hot-meal",
+      "presentation": "player"
+    }
+  ]
+}

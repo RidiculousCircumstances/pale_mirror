@@ -15,10 +15,20 @@ final class MealActivityCapability implements ActorActivityCapability {
             io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
         validateReference(state, execution);
         var meal = state.humanPopulation().meals().get(execution.actorId());
-        if (meal.portable() || meal.phase() != ResidentMeal.Phase.MOVE || meal.pendingPhysicalStep().isPresent()
+        if (meal.pendingPhysicalStep().isPresent()
                 || !order.actorId().equals(meal.residentId()) || !order.ownerId().equals(meal.claimId())
                 || order.goalOrdinal() != FrontierWireTags.tag(meal.phase()) || order.goalRevision() != meal.startedAtTick() + 1L
-                || order.capability() != TraversalCapability.PEDESTRIAN
+                || order.capability() != TraversalCapability.PEDESTRIAN) return false;
+        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) {
+            if (!(meal.destination() instanceof MealDestination.DiningArea)
+                    || order.arrivalPolicy() != io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION)
+                return false;
+            return order.legalStations().stream().allMatch(station ->
+                    ResidentDiningPlaces.contains(state, meal.settlementId(), meal.destination(), station)
+                    && (meal.portable() || ResourceStorageAccess.at(state, meal.depotId())
+                            .accessBoundary().cleared(station.standingBody())));
+        }
+        if (meal.portable() || meal.phase() != ResidentMeal.Phase.MOVE
                 || order.arrivalPolicy() != io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION)
             return false;
         var storage = state.inventory().containers().get(meal.depotId());

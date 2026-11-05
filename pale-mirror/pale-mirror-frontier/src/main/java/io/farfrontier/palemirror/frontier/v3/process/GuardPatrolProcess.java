@@ -90,11 +90,19 @@ final class GuardPatrolProcess {
             var excluded=new HashSet<>(search.visited());
             GuardEquipment.in(state,duty.home()).stream().filter(g -> !g.id().equals(duty.id()))
                     .flatMap(g -> g.mission().stream()).map(GuardMission::station).forEach(excluded::add);
-            var candidates=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(contact.position()),rules.searchRadius(),excluded)
+            var entrances = FrontierWorldStateSupport.settlement(state.bootstrap(), duty.home()).structures().stream()
+                    .flatMap(facility -> io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(facility).publicEntrances().stream())
+                    .filter(port -> SecurityCoverage.distance(port.thresholdSurface(), new SurfaceAnchor(contact.position())) <= rules.searchRadius())
+                    .map(FacilityTraversalPort::interiorConnector).filter(station -> !excluded.contains(station))
+                    .filter(knowledge::clearStation)
+                    .sorted(Comparator.comparingLong(station -> SecurityCoverage.distance(station, new SurfaceAnchor(contact.position())))).toList();
+            var radial=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(contact.position()),rules.searchRadius(),excluded)
                     .stream().filter(surface -> GuardResponse.permitsStation(state,duty,surface) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(surface.support())
                             && ServiceBoundaryComposition.turnoverPoint(state,surface).isEmpty())
                     .sorted(Comparator.comparingLong((SurfaceAnchor surface) -> -SecurityCoverage.distance(surface,new SurfaceAnchor(contact.position())))
                             .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
+            var candidates = java.util.stream.Stream.concat(entrances.stream(), radial.stream()).distinct()
+                    .filter(station -> GuardResponse.permitsStation(state, duty, station)).toList();
             var selected=reachable(knowledge,mission.station(),candidates);
             if(selected.isPresent())return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),
                     mission.searching(selected.orElseThrow(),search.probe()+1,0,search.sightingRevision()))),GuardContinuation.wake(duty.id(),tick));
@@ -110,7 +118,8 @@ final class GuardPatrolProcess {
         var origin=state.actorLocations().get(duty.execution().actorId()).supportingSurface();
         var stations=PedestrianInteractionStations.within(knowledge.geometry(),new SurfaceAnchor(position),
                 GuardResponse.MAX_CONTACT_STATION_DISTANCE,reserved).stream().filter(station -> GuardResponse.permitsStation(state,duty,station))
-                .sorted(Comparator.comparingInt(knowledge.geometry()::traversalPenalty)
+                .sorted(Comparator.comparingLong((SurfaceAnchor station) -> SecurityCoverage.distance(station, new SurfaceAnchor(position)))
+                        .thenComparingInt(knowledge.geometry()::traversalPenalty)
                         .thenComparingLong(station -> SecurityCoverage.distance(station,origin))).toList();
         return reachable(knowledge,origin,stations);
     }

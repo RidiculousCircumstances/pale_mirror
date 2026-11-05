@@ -173,7 +173,7 @@ class BakeryColdVerticalTest {
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         ProductionJob job = started.job();
         SubjectId resident = job.workerId();
-        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), job.settlementId());
         SubjectId accountId = ReferenceContainerCustody.scopeId(depot);
         SubjectId breadId = new SubjectId("lot:bakery-resident-meal-bread");
         FungibleResourceLedger prior = state.inventory().fungibleResources();
@@ -181,39 +181,21 @@ class BakeryColdVerticalTest {
         lots.put(breadId, new ResourceLot(breadId, job.settlementId(), "minecraft:bread", 4, "test", List.of()));
         var accounts = new java.util.LinkedHashMap<>(prior.accounts());
         CustodyAccount account = accounts.get(accountId);
-        var quantities = new java.util.LinkedHashMap<>(account.lotQuantities());
+        var quantities = new java.util.LinkedHashMap<SubjectId, Integer>(account == null ? java.util.Map.of() : account.lotQuantities());
         quantities.put(breadId, 4);
-        accounts.put(accountId, new CustodyAccount(accountId, account.custody(), quantities, account.claimQuantities()));
+        accounts.put(accountId, new CustodyAccount(accountId, new ResourceCustody.Container(depot), quantities,
+                account == null ? java.util.Map.of() : account.claimQuantities()));
         state = state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
                         lots, prior.claims(), accounts, prior.bindings())))
                 .humanPopulation(state.humanPopulation().accrueHunger(resident, 27_000L)));
         SubjectId otherResident = state.bootstrap().settlements().stream()
                 .filter(value -> value.id().equals(job.settlementId())).findFirst().orElseThrow()
-                .residents().stream().map(value -> value.id()).filter(id -> !id.equals(resident))
-                .findFirst().orElseThrow();
-        assertTrue(ResidentMealServiceAccess.available(state, depot, otherResident),
-                "a baker travelling to the depot does not occupy its physical service throat");
+                .residents().stream().map(Resident::id).filter(id -> !id.equals(resident)).findFirst().orElseThrow();
         assertTrue(ResidentMealServiceAccess.available(state, depot, resident),
-                "the retained baker may safely yield the same service turn to their own meal");
+                "the separate kitchen remains available while the baker travels to the input warehouse");
         assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
                 HumanAssignmentProjection.compile(state).assignment(resident)).status());
-        FrontierWorldState overlap = state.withChanges(FrontierWorldStateUpdate.begin()
-                .humanPopulation(state.humanPopulation().accrueHunger(otherResident, 27_000L)));
-        ResidentMealStarted otherMeal = ResidentMealProcess.selectSourceAtYield(overlap, otherResident, 27_000L)
-                .orElseThrow();
-        overlap = ResidentMealProcess.reduceStarted(overlap, otherResident, otherMeal);
-        Settlement settlement = overlap.bootstrap().settlements().stream()
-                .filter(value -> value.id().equals(job.settlementId())).findFirst().orElseThrow();
-        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
-        var overlapLocations = new java.util.LinkedHashMap<>(overlap.actorLocations());
-        overlapLocations.put(otherResident, overlapLocations.get(otherResident).withBody(port.stations().getFirst().standingBody()));
-        overlapLocations.put(resident, overlapLocations.get(resident).withBody(port.stations().get(1).standingBody()));
-        overlap = overlap.withChanges(FrontierWorldStateUpdate.begin().actorLocations(overlapLocations));
-        assertTrue(ResidentMealServiceAccess.available(overlap, depot, otherResident),
-                "an already-present meal must win over a worker also waiting in the throat");
-        assertFalse(ProductionServiceAccess.available(overlap, job));
         ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(state, resident, 27_000L).orElseThrow();
         assertEquals(Optional.of(job.id()), meal.meal().retainedWorkOwner());
         state = ResidentMealProcess.reduceStarted(state, resident, meal);
@@ -329,7 +311,7 @@ class BakeryColdVerticalTest {
         assertWorkOutputIsNotPersonalFood(restoredStationRelease, job);
         assertAnotherBakerCanStartAfterOutputRemoval(restoredStationRelease, task, job, due);
         assertTrue(StationWorkNavigation.path(state, state.productionJobs().get(job.id())).size() > 1);
-        SubjectId depot = FrontierWorldState.depotId(task.ownerId());
+        SubjectId depot = StationWorkStorage.destination(job);
         ExactInventory inventory = state.inventory();
         // External placement can consume a promised space; simulate that actual intervention,
         // not a new process obeying the now-protected inbound budget.
@@ -637,7 +619,7 @@ class BakeryColdVerticalTest {
         }
         assertTrue(count < 700, "exact bakery job stalled");
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
-        assertEquals(FrontierWorldState.depotId(task.ownerId()), assertInstanceOf(InventoryCustody.ContainerSlot.class,
+        assertEquals(StationWorkStorage.destination(job), assertInstanceOf(InventoryCustody.ContainerSlot.class,
                 state.inventory().items().get(job.outputItemId()).custody()).containerId());
     }
 

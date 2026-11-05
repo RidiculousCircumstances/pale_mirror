@@ -20,7 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.Container;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
@@ -55,15 +55,15 @@ final class FrontierV3ProductionTransformationExecutor {
         if (!FrontierV3LoadedWorld.ready(level, position)) return;
         if (ReferenceContainerCustody.isReferenceContainer(state, target.slot().containerId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.slot().containerId())) return;
-        ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
-                new FrontierV3ExactItemPresentation.StoreTarget(position, target.slot().containerId()));
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, target.slot().containerId()).orElse(null);
+        Container chest = physical == null ? null : physical.inventory();
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         executeEffect(intent.status(), new EffectTurn() {
             @Override public boolean inputPresent() { return matchesInput(chest, target); }
             @Override public boolean outputPresent() { return matchesOutput(chest, target); }
             @Override public boolean begin() { return transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running"); }
             @Override public boolean replaceInput() { return replace(chest, target); }
-            @Override public void confirm() { FrontierV3ProductionTransformationExecutor.confirm(runtime, intent, target, chest); }
+            @Override public void confirm() { FrontierV3ProductionTransformationExecutor.confirm(runtime, intent, target, physical); }
             @Override public void unknown(String reason) { FrontierV3ProductionTransformationExecutor.unknown(runtime, intent.id(), reason); }
         });
     }
@@ -101,19 +101,19 @@ final class FrontierV3ProductionTransformationExecutor {
         void unknown(String reason);
     }
 
-    static boolean matchesInput(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
+    static boolean matchesInput(Container chest, ProductionTransformationStateSupport.Target target) {
         return FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.slot().slot()), target.input());
     }
-    static boolean matchesOutput(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
+    static boolean matchesOutput(Container chest, ProductionTransformationStateSupport.Target target) {
         return FrontierV3ExactItemPresentation.exactMatch(chest.getItem(target.slot().slot()), target.output());
     }
-    static boolean replace(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
+    static boolean replace(Container chest, ProductionTransformationStateSupport.Target target) {
         if (!matchesInput(chest, target)) return false;
         ItemStack output = FrontierV3ExactItemPresentation.materializedStack(target.output());
         chest.setItem(target.slot().slot(), output); chest.setChanged(); return matchesOutput(chest, target);
     }
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
-                                ProductionTransformationStateSupport.Target target, ChestBlockEntity chest) {
+                                ProductionTransformationStateSupport.Target target, FrontierV3PhysicalContainer physical) {
         ProductionTransformationObservation observation = new ProductionTransformationObservation(
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.input().id(), target.output().id(),
                 target.input().count(), target.output().count());
@@ -121,7 +121,7 @@ final class FrontierV3ProductionTransformationExecutor {
             throw new IllegalStateException("production transformation confirmation was rejected");
         }
         if (ReferenceContainerCustody.isReferenceContainer(runtime.decodedState().orElseThrow(), target.slot().containerId())
-                && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, target.slot().containerId(), chest)) {
+                && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, target.slot().containerId(), physical)) {
             throw new IllegalStateException("confirmed reference production output did not establish its next replica boundary");
         }
     }

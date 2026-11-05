@@ -20,7 +20,7 @@ class EvasionLifecycleTest {
         var home=new SubjectId("settlement:1");var stock=state.inventory().fungibleResources().transformCold(
                 ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home)),Map.of(new SubjectId("lot:bootstrap-1-wheat"),64),Map.of(),
                 new ResourceLot(new SubjectId("lot:safety-bread"),home,"minecraft:bread",64,"test",List.of()));
-        state=state.withInventory(state.inventory().withFungibleResources(stock));
+        state=KitchenFoodFixture.relocateDepotFood(state.withInventory(state.inventory().withFungibleResources(stock)),home);
         var workExecution=state.actorExecutions().current(ActorActivityKind.FIELD_HARVEST).get(job.workerId());
         var selected=ResidentMealProcess.selectSourceAtYield(state,job.workerId(),27000).orElseThrow();
         state=ResidentMealProcess.reduceStarted(state,job.workerId(),selected);

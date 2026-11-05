@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMeal;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentDiningPlaces;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotArrived;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
@@ -252,7 +253,9 @@ final class FrontierV3AmbientMovementExecutor {
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal == null) return false;
             if (meal.phase() == ResidentMeal.Phase.MOVE
-                    && FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) {
+                    && FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())
+                    || meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING
+                        && ResidentMealProcess.atDiningDestination(state, meal, observedBody(body))) {
                 var witness = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
                         actuation.id(), lease.revision());
                 ResidentMealHotArrived arrival = new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body), witness);

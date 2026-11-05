@@ -397,11 +397,15 @@ class GoodsTradeTest {
                     .filter(r -> r.settlementId().equals(SELLER) && !r.id().equals(actor))
                     .map(ResidentProfile::id).sorted().findFirst().orElseThrow();
             var claim = id("claim:shipment-service-incumbent");
-            var meal = new ResidentMeal(visitor, SELLER, SOURCE, shipment.sender().station(), SOURCE_ACCOUNT,
-                    id("custody:shipment-service-incumbent"), new FoodPortion(FoodCatalog.BREAD, 1_000,
-                        Map.of(id("lot:shipment-service-incumbent"), 1)), claim, java.util.Optional.empty(),
-                    ResidentMeal.Phase.CLEAR_ACCESS, 0, java.util.Optional.empty(),
-                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(visitor,
+            var meal = new ResidentMeal(visitor,
+                     SELLER,
+                     SOURCE,
+                     shipment.sender().station(),
+                     new io.farfrontier.palemirror.frontier.v3.model.MealDestination.DiningArea(new SubjectId("structure:" + SELLER.value().substring("settlement:".length()) + "-kitchen"),
+                     "dining"), SOURCE_ACCOUNT, id("custody:shipment-service-incumbent"), new FoodPortion(FoodCatalog.BREAD,
+                     1_000,
+                        Map.of(id("lot:shipment-service-incumbent"), 1)), claim, java.util.Optional.empty(), ResidentMeal.Phase.CLEAR_ACCESS,
+                                 0, java.util.Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(visitor,
                         io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, claim, 1));
             var blocked = atStation(state, visitor, shipment.sender().station());
             blocked = blocked.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(blocked.humanPopulation().withMeal(meal))

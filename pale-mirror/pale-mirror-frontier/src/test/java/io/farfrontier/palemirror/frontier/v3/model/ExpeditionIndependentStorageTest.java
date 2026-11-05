@@ -24,9 +24,8 @@ class ExpeditionIndependentStorageTest {
         var exterior = ShipmentEndpointComposition.exteriorApproach(state, port);
         var station = exterior;
         var foodEndpoint = new ShipmentEndpoint.Storage(home, foodStore, station, Optional.empty(), station);
-        state = new ResourceStorageDeclared(new ContainerRecord(foodStore, home, 27, ContainerPurpose.RESOURCE_STORAGE,
-                Optional.empty(), Optional.of(new ResourceStoragePolicy(foodEndpoint,
-                    new ResourceStorageFilter(false, Set.of("minecraft:bread"), Map.of()), 100, ResourceStorageRole.WAREHOUSE))),
+        state = new ResourceStorageDeclared(ContainerRecord.storage(foodStore, home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(foodEndpoint,
+                    new ResourceStorageFilter(false, Set.of("minecraft:bread"), Map.of()), 100, ResourceStorageRole.WAREHOUSE)),
                 station.support().offset(0, 1, 1)).apply(state, home);
         var ledger = state.inventory().fungibleResources();
         var account = FungibleResourceCustodySupport.accountAtContainer(state, cargo).orElseThrow();

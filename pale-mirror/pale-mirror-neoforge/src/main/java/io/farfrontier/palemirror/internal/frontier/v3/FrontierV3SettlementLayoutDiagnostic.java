@@ -31,8 +31,26 @@ final class FrontierV3SettlementLayoutDiagnostic {
                 + house.y()
                 + ",\"z\":"
                 + house.z()
-                + "}}";
+                + "},\"facilities\":" + facilities(home) + "}";
     }
+
+    /** Read-only authoring landmarks, never role or execution dispatch identities. */
+    private static String facilities(Settlement home) {
+        var values = new java.util.LinkedHashMap<StructureKind, SettlementStructure>();
+        home.structures().forEach(building -> values.putIfAbsent(building.kind(), building));
+        return values.entrySet().stream().map(entry -> {
+            var building = entry.getValue();
+            var port = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(building).primaryEntrance();
+            var front = port.exteriorApproach().getFirst().support();
+            var direction = building.facing();
+            var view = front.offset(direction.x() * 12, 3, direction.z() * 12);
+            return "\"" + entry.getKey().name() + "\":{\"id\":\"" + building.id().value()
+                    + "\",\"anchor\":" + point(building.anchor()) + ",\"entrance\":" + point(port.thresholdSurface().support().offset(0, 1, 0))
+                    + ",\"interior\":" + point(port.interiorConnector().support().offset(0, 1, 0))
+                    + ",\"facadeView\":" + point(view) + "}";
+        }).collect(java.util.stream.Collectors.joining(",", "{", "}"));
+    }
+    private static String point(BlockPosition p) { return "{\"x\":" + p.x() + ",\"y\":" + p.y() + ",\"z\":" + p.z() + "}"; }
 
     private FrontierV3SettlementLayoutDiagnostic() {}
 }

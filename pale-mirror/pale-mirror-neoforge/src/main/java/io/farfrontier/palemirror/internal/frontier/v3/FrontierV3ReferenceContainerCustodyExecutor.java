@@ -229,7 +229,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             // turn be mistaken for missing world evidence, so the first replica boundary is
             // admitted only against a durable active surface and its exact owned chest.
             if (surface.fixed() && initialDeclarationReady(surface.status(),
-                    FrontierV3ContainerSurfaceExecutor.activeChest(level, position(state, surface), containerId))) {
+                    physical == null || !physical.declared() ? null : physical.inventory())) {
                 declare(runtime, state, containerId);
             }
             return;
@@ -718,7 +718,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         return eligible.get((int) Math.floorMod(tick, eligible.size()));
     }
 
-    static boolean initialDeclarationReady(ContainerSurfaceStatus status, ChestBlockEntity chest) {
+    static boolean initialDeclarationReady(ContainerSurfaceStatus status, net.minecraft.world.Container chest) {
         return status == ContainerSurfaceStatus.ACTIVE && chest != null;
     }
 

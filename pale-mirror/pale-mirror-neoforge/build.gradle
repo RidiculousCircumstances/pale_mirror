@@ -598,7 +598,7 @@ tasks.register('verifyPackagedJar') {
 tasks.named('runGameTestServer') {
     dependsOn project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
-        coreGameTestDirectory.deleteDir()
+        // Exact run reset and pinned content installation are composed below.
     }
 }
 
@@ -612,7 +612,7 @@ tasks.named('runFrontierV3SceneGameTestServer') {
     // is insufficient because it does not prove ModDev will mount that namespace.
     dependsOn tasks.named('verifyFrontierV3SceneGameTestResources')
     doFirst {
-        frontierV3SceneGameTestDirectory.deleteDir()
+        // Exact run reset and pinned content installation are composed below.
     }
 }
 
@@ -683,14 +683,14 @@ tasks.register('verifyFrontierV3SceneGameTestResources') {
 tasks.named('runFrontierV3EconomyGameTestServer') {
     dependsOn project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
-        frontierV3EconomyGameTestDirectory.deleteDir()
+        // Exact run reset and pinned content installation are composed below.
     }
 }
 
 tasks.named('runFrontierV3ReferenceGameTestServer') {
     dependsOn project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
-        frontierV3ReferenceGameTestDirectory.deleteDir()
+        // Exact run reset and pinned content installation are composed below.
         if (frontierV3ReferenceGameTestPort != null) {
             frontierV3ReferenceGameTestDirectory.mkdirs()
             new File(frontierV3ReferenceGameTestDirectory, 'server.properties').text =
@@ -1471,5 +1471,68 @@ publishing {
         register('mavenJava', MavenPublication) {
             from components.java
         }
+    }
+}
+
+// Actual decorative blocks are part of the private authored-building test composition.
+// They are supplied by Packwiz in production, never shaded into Pale Mirror.
+def buildingContent = new groovy.json.JsonSlurper().parse(rootProject.file('tools/buildings/native_dependencies.json'))
+def buildingContentDirectory = layout.buildDirectory.dir('integration/authored-building-content')
+tasks.register('downloadAuthoredBuildingContent') {
+    inputs.file(rootProject.file('tools/buildings/native_dependencies.json'))
+    outputs.dir(buildingContentDirectory)
+    doLast {
+        def directory = buildingContentDirectory.get().asFile
+        directory.mkdirs()
+        buildingContent.each { dependency ->
+            def target = new File(directory, dependency.filename)
+            def digest = { file -> java.security.MessageDigest.getInstance('SHA-512').digest(file.bytes).encodeHex().toString() }
+            if (!target.isFile() || digest(target) != dependency.sha512) {
+                target.bytes = new URI(dependency.url).toURL().openStream().withCloseable { it.bytes }
+            }
+            if (digest(target) != dependency.sha512) throw new GradleException("Authored content checksum differs: ${dependency.name}")
+        }
+    }
+}
+[
+        gameTestServer: coreGameTestDirectory,
+        frontierV3SceneGameTestServer: frontierV3SceneGameTestDirectory,
+        frontierV3EconomyGameTestServer: frontierV3EconomyGameTestDirectory,
+        frontierV3ReferenceGameTestServer: frontierV3ReferenceGameTestDirectory
+].each { runName, directory ->
+    def dependencyDirectory = buildingContentDirectory.get().asFile
+    def filenames = buildingContent.collect { it.filename.toString() }
+    tasks.named("run${runName.capitalize()}") {
+        dependsOn tasks.named('downloadAuthoredBuildingContent')
+        doFirst {
+            directory.deleteDir()
+            def mods = new File(directory, 'mods')
+            mods.mkdirs()
+            filenames.each { name -> java.nio.file.Files.copy(new File(dependencyDirectory, name).toPath(),
+                    new File(mods, name).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+        }
+    }
+}
+// Disposable native clients exercise these same authored blocks, without the unrelated full server pack.
+tasks.named('prepareFrontierV3PilotServerWorld') {
+    dependsOn tasks.named('downloadAuthoredBuildingContent')
+    def directory = new File(frontierV3PilotServerRunDirectory, 'mods')
+    def dependencies = buildingContentDirectory.get().asFile
+    def filenames = buildingContent.collect { it.filename.toString() }
+    doLast {
+        directory.mkdirs()
+        filenames.each { name -> java.nio.file.Files.copy(new File(dependencies, name).toPath(),
+                new File(directory, name).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+    }
+}
+tasks.named('prepareFrontierV3PilotClientRun') {
+    dependsOn tasks.named('downloadAuthoredBuildingContent')
+    def directory = new File(frontierV3PilotClientDirectory.get().asFile, 'mods')
+    def dependencies = buildingContentDirectory.get().asFile
+    def filenames = buildingContent.collect { it.filename.toString() }
+    doLast {
+        directory.mkdirs()
+        filenames.each { name -> java.nio.file.Files.copy(new File(dependencies, name).toPath(),
+                new File(directory, name).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
     }
 }

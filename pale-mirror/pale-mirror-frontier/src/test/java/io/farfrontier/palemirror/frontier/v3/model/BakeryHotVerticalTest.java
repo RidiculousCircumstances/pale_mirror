@@ -202,8 +202,7 @@ class BakeryHotVerticalTest {
         var endpoint = new ShipmentEndpoint.Storage(task.ownerId(), warehouse, point, java.util.Optional.empty(), point);
         var policy = new ResourceStoragePolicy(endpoint, new ResourceStorageFilter(false, java.util.Set.of("minecraft:wheat"), Map.of()),
                 100, ResourceStorageRole.WAREHOUSE);
-        state = new ResourceStorageDeclared(new ContainerRecord(warehouse, task.ownerId(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                java.util.Optional.empty(), java.util.Optional.of(policy)), point.support().offset(1, 1, 0)).apply(state, task.ownerId());
+        state = new ResourceStorageDeclared(ContainerRecord.storage(warehouse, task.ownerId(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), point.support().offset(1, 1, 0)).apply(state, task.ownerId());
         FungibleResourceLedger replenished = state.inventory().fungibleResources().issue(replacementLot,
                 new CustodyAccount(replacementAccountId, new ResourceCustody.Container(warehouse),
                         Map.of(replacementLotId, 64), Map.of()));
@@ -229,6 +228,13 @@ class BakeryHotVerticalTest {
     void preparedLoadedStepsKeepOneBakerAndDeliverOnlyAfterStationRecipe() {
         FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
                 FrontierBootstrapper.create(new WorldId("frontier:bakery-hot-vertical"), 91L)), StrategicTaskStatus.PENDING);
+        // Explicit mixed warehouse: this case verifies renewed authority when
+        // input and output share an endpoint, independently of default kitchen routing.
+        var mixedHome = state.bootstrap().settlements().getFirst().id();
+        var mixedDepot = FrontierWorldState.depotId(mixedHome);
+        var mixedPolicy = state.inventory().containers().get(mixedDepot).storage().orElseThrow();
+        state = new ResourceStoragePolicyChanged(mixedDepot, mixedPolicy, new ResourceStoragePolicy(
+                mixedPolicy.endpoint(), ResourceStorageFilter.all(), 101, mixedPolicy.role())).apply(state, mixedHome);
         StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
         ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
                 .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
@@ -820,7 +826,7 @@ class BakeryHotVerticalTest {
     private static FrontierWorldState withRetainedMeal(FrontierWorldState input, SubjectId actorId, SubjectId settlementId) {
         var prior = input.inventory().fungibleResources();
         var breadId = new SubjectId("lot:station-recovery-food");
-        var depot = FrontierWorldState.depotId(settlementId);
+        var depot = CommunalDiningPlan.initialFoodStorage(input.bootstrap(), settlementId);
         var accountId = ReferenceContainerCustody.scopeId(depot);
         var lots = new java.util.LinkedHashMap<>(prior.lots());
         lots.put(breadId, new ResourceLot(breadId, settlementId, "minecraft:bread", 4, "test", List.of()));

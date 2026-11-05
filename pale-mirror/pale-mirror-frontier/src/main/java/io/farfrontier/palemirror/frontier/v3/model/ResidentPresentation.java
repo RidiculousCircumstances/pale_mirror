@@ -76,6 +76,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
         else if (meal != null) activity = switch (meal.phase()) {
             case MOVE -> "Going for food";
             case TAKE -> "Taking food";
+            case MOVE_TO_DINING -> "Going to dining area";
             case CLEAR_ACCESS -> "Leaving service point";
             case CONSUME -> "Eating";
         };

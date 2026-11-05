@@ -34,6 +34,8 @@ final class ContainerRecordStateCodec {
             }
             output.writeBoolean(value.storage().isPresent());
             if (value.storage().isPresent()) ResourceStoragePolicyCodec.write(output, value.storage().orElseThrow());
+            output.writeBoolean(value.storageBlock().isPresent());
+            if (value.storageBlock().isPresent()) output.writeByte(value.storageBlock().orElseThrow().wireTag());
             output.writeByte(value.fungibleLayout().slots().size());
             for (var entry : new java.util.TreeMap<>(value.fungibleLayout().slots()).entrySet()) {
                 output.writeByte(entry.getKey());
@@ -54,6 +56,8 @@ final class ContainerRecordStateCodec {
             if (input.readBoolean()) station = Optional.of(ProductionStationSpecCodec.read(input));
             var storage = input.readBoolean() ? Optional.of(ResourceStoragePolicyCodec.read(input))
                     : Optional.<io.farfrontier.palemirror.frontier.v3.model.ResourceStoragePolicy>empty();
+            var provider = input.readBoolean() ? Optional.of(io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.decode(input.readUnsignedByte()))
+                    : Optional.<io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind>empty();
             var placement = new LinkedHashMap<Integer, FungibleContainerLayout.Stack>();
             int placementCount = input.readUnsignedByte();
             if (placementCount > slots) throw new IllegalArgumentException("container placement exceeds capacity");
@@ -62,7 +66,7 @@ final class ContainerRecordStateCodec {
                 var stack = new FungibleContainerLayout.Stack(readString(input), input.readUnsignedByte());
                 if (placement.put(slot, stack) != null) throw new IllegalArgumentException("duplicate retained container slot");
             }
-            if (containers.put(id, new ContainerRecord(id, owner, slots, purpose, station, storage,
+            if (containers.put(id, new ContainerRecord(id, owner, slots, purpose, station, storage, provider,
                     new FungibleContainerLayout(placement))) != null)
                 throw new IllegalArgumentException("duplicate container id");
         }

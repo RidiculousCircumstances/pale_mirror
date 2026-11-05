@@ -1,4 +1,17 @@
 # Minecraft registry collision facts; regenerate through building authoring, never hand-edit.
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:air|minecraft:air|	1	true	
 2|minecraft:coarse_dirt|minecraft:dirt|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:cobblestone|minecraft:cobblestone|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:crafting_table|minecraft:crafting_table|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
@@ -59,4 +72,4 @@
 2|minecraft:wall_torch|minecraft:torch|facing=north	1	true	
 2|minecraft:wall_torch|minecraft:torch|facing=south	1	true	
 2|minecraft:wall_torch|minecraft:torch|facing=west	1	true	
-2|minecraft:white_terracotta|minecraft:white_terracotta|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:water|minecraft:bucket|level=0	1	false	0.0,0.0,0.0,1.0,1.0,1.0

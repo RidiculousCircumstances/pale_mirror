@@ -391,19 +391,19 @@ class ConsolidatedGoodsTradeTest {
                 }
             }
             var current = engine.canonicalState().state();
-            var next = engine.checkpoint().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a))
+            var next = engine.executionView().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a))
                     .sorted().findFirst().orElseThrow();
-            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), next.dueAt().ticks())),
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.executionView().instant().ticks(), next.dueAt().ticks())),
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
-            if (boundary % 64 == 0) engine.compact(engine.checkpoint().revision());
+            if (boundary % 64 == 0) engine.compact(engine.executionView().revision());
         }
         assertNotNull(admitted); assertTrue(recovered); assertTrue(delivered);
         assertTrue(estimated, "an actually routed delivery must expose logistics timing before arrival");
         var finalState = engine.canonicalState().state();
         var finalMission = finalState.shipments().missions().get(admitted.id());
         var finalGroup = finalState.unitGroups().groups().get(admitted.groupId());
-        assertTrue(returned, "mixed cargo must return, not merely be declared: tick=" + engine.checkpoint().instant().ticks()
+        assertTrue(returned, "mixed cargo must return, not merely be declared: tick=" + engine.executionView().instant().ticks()
                 + " mission=" + (finalMission == null ? "retired" : finalMission.stage())
                 + " group=" + (finalGroup == null ? "retired" : finalGroup.phase())
                 + " journey=" + (finalGroup == null ? "none" : finalGroup.journey().map(j -> j.cursor() + "/" + j.route().size()))
@@ -440,8 +440,7 @@ class ConsolidatedGoodsTradeTest {
         var endpoint = new ShipmentEndpoint.Storage(home, id, station,
                 java.util.Optional.of(((ShipmentEndpoint.Depot) original).facilityId()),
                 ShipmentEndpointComposition.exteriorApproach(state, original));
-        var record = new ContainerRecord(id, home, 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var record = ContainerRecord.storage(id, home, 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE));
         var socket = state.inventory().surfaces().get(old).position();
         var stock = FungibleResourceCustodySupport.accountAtContainer(state, old).orElseThrow();
         state = state.withInventory(state.inventory().withSurfaceStatus(old, ContainerSurfaceStatus.PREPARED)

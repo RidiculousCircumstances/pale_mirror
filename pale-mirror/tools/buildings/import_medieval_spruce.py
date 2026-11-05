@@ -5,7 +5,8 @@ Source geometry is MineColonies Medieval Spruce baker2, ARR. No public redistrib
 permission is established. This script does not fetch, run or embed MineColonies code.
 """
 from pathlib import Path
-import argparse, gzip, hashlib, io, json
+import argparse, base64, gzip, hashlib, io, json
+from import_settlement_set import visual_data
 import nbtlib
 from nbtlib import Compound, List, Int, String
 
@@ -13,7 +14,7 @@ SOURCE_SHA = '82592a9947f2c4c25731ebfaa702415e56852ac9de224dfeb2ae38e6c0349c21'
 SOURCE_REF = 'a9b03edfbbd5359b148c85284ea038066d689866'
 
 def point(x, y, z):
-    return x + 3, y - 5, z
+    return x + 3, y - 4, z
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
@@ -43,20 +44,15 @@ def main():
                 or tile_id == 'minecolonies:colonybuilding' and block == 'minecolonies:blockhutbaker'):
             raise ValueError('source tile alignment mismatch')
     cells = {}
-    for y in range(5, sy):
+    for y in range(4, sy):
         for z in range(sz):
             for x in range(sx):
                 p = palette[packed[(y * sz + z) * sx + x]]
                 name, properties = p['Name'], dict(p.get('Properties', {}))
-                if name in {'minecraft:air', 'structurize:blocksubstitution', 'structurize:blocksolidsubstitution', 'minecolonies:blockhutbaker'}:
+                if name in {'structurize:blocksubstitution', 'structurize:blocksolidsubstitution', 'minecolonies:blockhutbaker'} or name=='minecraft:air' and y>6:
                     continue
-                if name in {'domum_ornamentum:plain', 'domum_ornamentum:one_crossed_lr', 'domum_ornamentum:one_crossed_rl'}:
-                    # Explicitly authored vanilla plaster/timber substitutes; no missing-mod fallback.
-                    name, properties = 'minecraft:white_terracotta', {}
-                elif not name.startswith('minecraft:'):
+                if not name.startswith(('minecraft:', 'domum_ornamentum:')):
                     raise ValueError('undeclared source dependency: ' + name)
-                if name == 'minecraft:spruce_door':
-                    properties['open'] = 'true'
                 cells[point(x, y, z)] = (name, properties)
     # A common station owns its machine cell, never the architectural template.
     cells.pop(point(5, 8, 2))
@@ -66,11 +62,6 @@ def main():
     for x in (0, 1):
         for y in (7, 8):
             cells.pop(point(x, y, 6), None)
-    # Reserve actual clear space for replacement/future equipment, rather than marking props.
-    for x in range(9, 11):
-        for y in range(7, 10):
-            for z in range(3, 5):
-                cells.pop(point(x, y, z), None)
     for x in (-3, -2, -1):
         cells[point(x, 6, 6)] = ('minecraft:cobblestone', {})
     # A level public porch makes its named entrance supports physically explicit.
@@ -84,22 +75,29 @@ def main():
     block_tags = []
     lines = ['# x y z | explicit structural material declaration | semantic part']
     counts = {}
+    data = {}
+    for tile in src['tile_entities']:
+        pos = point(*(int(tile[k]) for k in 'xyz')); value = visual_data(tile)
+        if pos in cells and value is not None: data[pos] = (value[0], int(src['mcversion']), value[1])
     for pos, (name, props) in sorted(cells.items()):
-        part = 'FOUNDATION' if pos[1] <= 1 else 'ROOF' if pos[1] > 5 else 'WALL'
+        part = 'FOUNDATION' if pos[1] <= 2 and name!='minecraft:air' else 'ROOF' if pos[1] > 6 else 'WALL'
         if pos == point(5, 7, 3):
             part = 'WORKSHOP_PROCESS_STATION'
         if pos == point(4, 6, 3):
             part = 'WORKSHOP_INPUT_STATION'
-        if pos[0] < 3 or (pos[2] >= 11 and 11 <= pos[0] <= 14 and pos[1] == 1):
+        if pos[0] < 3 or (pos[2] >= 11 and 11 <= pos[0] <= 14 and pos[1] == 2):
             part = 'PUBLIC_ACCESS_SURFACE'
         repair = {'minecraft:dirt_path': 'minecraft:dirt', 'minecraft:coarse_dirt': 'minecraft:dirt', 'minecraft:wall_torch': 'minecraft:torch'}.get(name, name)
         encoded = '2|' + name + '|' + repair + '|' + ','.join(k + '=' + v for k, v in sorted(props.items()))
+        if pos in data:
+            kind, version, payload = data[pos]
+            encoded = '3' + encoded[1:] + '|' + str(kind) + '|' + str(version) + '|' + base64.urlsafe_b64encode(payload.snbt().encode()).decode().rstrip('=')
         lines.append(','.join(map(str, pos)) + '\t' + encoded + '\t' + part)
         counts[name] = counts.get(name, 0) + 1
-        block_tags.append(Compound({'pos': List[Int](pos), 'state': Int(state_ids[(name, tuple(sorted(props.items())))] )}))
+        block_tags.append(Compound({'pos': List[Int](pos), 'state': Int(state_ids[(name, tuple(sorted(props.items())))] ), **({'nbt': data[pos][2]} if pos in data else {})}))
     # Native NBT is an authoring/interchange artifact; the neutral, checksum-pinned block
     # projection is consumed by the pure domain and checked against this exact native palette.
-    nbt = nbtlib.File({'DataVersion': Int(3955), 'size': List[Int]([16, 17, 19]), 'palette': List[Compound](palette_out),
+    nbt = nbtlib.File({'DataVersion': Int(3955), 'size': List[Int]([16, 18, 19]), 'palette': List[Compound](palette_out),
                       'blocks': List[Compound](block_tags), 'entities': List[Compound]([])})
     raw = io.BytesIO()
     nbt.write(raw)
@@ -113,12 +111,12 @@ def main():
               'sourceSha256': SOURCE_SHA, 'license': 'All Rights Reserved; private reference derivative only',
               'inputEntitiesRetained': 0, 'foreignBlockEntitiesRetained': 0, 'inventoryPayloadsRetained': 0,
               'adaptations': [
-                  'Domum Ornamentum plain/crossed panels replaced explicitly with vanilla white terracotta',
+                  'Original Domum Ornamentum blocks and exact material texture data retained',
                   'Structurize terrain placeholders and MineColonies controller removed',
-                  'No entities or block-entity payloads imported',
+                  'No entities, inventories or colony controllers imported; typed visual payloads retained',
                   'One source furnace omitted: current common production equipment owns its socket',
                   'Supported operator platform, public porch and secondary staff opening authored',
-                  'Future equipment space cleared of decorative props; doors initially open',
+                  'Full source decoration, foundation and below-floor voids retained; source door state retained',
                   'Wall torch repair input is the actual vanilla torch item'],
               'outputBlocks': len(cells), 'paletteCounts': counts,
               'nbtSha256': hashlib.sha256((args.output / 'bakery.nbt').read_bytes()).hexdigest(),

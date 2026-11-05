@@ -64,13 +64,13 @@ public final class SettlementStructureFootprint {
 
     public static int width(StructureKind kind) {
         return switch (Objects.requireNonNull(kind, "structure kind")) {
-            case HALL, DEPOT -> 8; case FARM -> 9; case WORKSHOP, SMELTERY, FORGE, WOODSHOP, INFIRMARY -> 7; case HOUSING -> 6;
+            case HALL, DEPOT -> 8; case FARM -> 9; case WORKSHOP, SMELTERY, FORGE, WOODSHOP, INFIRMARY, KITCHEN -> 7; case HOUSING -> 6;
         };
     }
 
     public static int depth(StructureKind kind) {
         return switch (Objects.requireNonNull(kind, "structure kind")) {
-            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT -> 7; case HOUSING, INFIRMARY -> 6;
+            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, WOODSHOP, DEPOT, KITCHEN -> 7; case HOUSING, INFIRMARY -> 6;
         };
     }
 }

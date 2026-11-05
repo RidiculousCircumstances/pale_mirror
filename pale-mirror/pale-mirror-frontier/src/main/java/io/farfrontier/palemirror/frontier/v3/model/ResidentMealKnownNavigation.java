@@ -13,8 +13,9 @@ public final class ResidentMealKnownNavigation {
 
     /** Current origin and declared service permissions, shared by movement and gravity. */
     public static KnownPedestrianRouteKnowledge departureKnowledge(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
-        return PedestrianLocalDeparture.departure(state, start,
-                ShipmentEndpointComposition.passages(state, ResourceStorageAccess.at(state, meal.depotId()).endpoint()))
+        var passages = new ArrayList<>(ResidentDiningPlaces.passages(state, meal.settlementId(), meal.destination()));
+        if (!meal.portable()) passages.addAll(ShipmentEndpointComposition.passages(state, ResourceStorageAccess.at(state, meal.depotId()).endpoint()));
+        return PedestrianLocalDeparture.departure(state, start, passages)
                 .forActor(state, meal.residentId());
     }
     /** Access policy names destinations independently of the availability of a COLD route hint. */
@@ -24,7 +25,8 @@ public final class ResidentMealKnownNavigation {
         var exterior = ShipmentEndpointComposition.exteriorApproach(state, port.endpoint());
         var point = point(state, meal);
         boolean admitted = ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId());
-        boolean near = start.equals(port.interactionStation(state))
+        boolean near = port.insideSupportingFacility(state, start)
+                || start.equals(port.interactionStation(state))
                 || Math.abs((long) start.x() - exterior.x()) + Math.abs((long) start.z() - exterior.z()) <= 3
                 || point.waitingSurfaces().contains(start);
         return admitted && near ? List.of(port.interactionStation(state))
@@ -45,20 +47,31 @@ public final class ResidentMealKnownNavigation {
         return clearancePathFrom(state, meal, state.actorLocations().get(meal.residentId()).supportingSurface());
     }
 
+    public static List<SurfaceAnchor> diningStations(FrontierWorldState state, ResidentMeal meal,
+            KnownPedestrianRouteKnowledge knowledge) {
+        return ResidentDiningPlaces.stations(state, meal.settlementId(), meal.destination(), knowledge).stream()
+                .filter(station -> meal.portable() || ResourceStorageAccess.at(state, meal.depotId()).accessBoundary().cleared(station.standingBody()))
+                .filter(station -> !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(station)).toList();
+    }
+
     public static List<SurfaceAnchor> clearancePathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS)
             return KnownServiceExitNavigation.plannedClearancePathFrom(state, meal.settlementId(), meal.depotId(),
                     meal.residentId(), meal.residentId(), FrontierWireTags.tag(meal.phase()), 1L, start);
-        List<SurfaceAnchor> destinations = List.of(meal.clearingSurface());
+        var knowledge = departureKnowledge(state, meal, start);
+        List<SurfaceAnchor> destinations = diningStations(state, meal, knowledge)
+                .stream().filter(s -> !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(s))
+                .sorted(java.util.Comparator.comparingLong(s -> Math.abs((long)s.x()-start.x()) + Math.abs((long)s.z()-start.z())))
+                .toList();
         List<SurfaceAnchor> route = null;
         for (int offset = 0; offset < destinations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
             List<SurfaceAnchor> batch = destinations.subList(offset,
                     Math.min(destinations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
             MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
                     FrontierWireTags.tag(meal.phase()), 1L, batch, TraversalCapability.PEDESTRIAN,
-                    MovementOrder.ArrivalPolicy.EXACT_STATION);
+                    MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
             try {
-                route = KnownServiceExitNavigation.plannedPathFrom(state, meal.settlementId(), meal.depotId(), order, start);
+                route = knowledge.plannedPath(start, order);
                 break;
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
@@ -91,9 +104,11 @@ public final class ResidentMealKnownNavigation {
         if (admitted && start.equals(service)) return List.of(start);
         // A distant applicant is not an occupant and does not own the service
         // turn. Route it to a side pocket first, then reconsider the short
-        // entrance from there. A legitimate pocket can be farther than three
-        // blocks from the exterior station on irregular terrain.
-        boolean directService = admitted && (Math.abs(start.x() - exterior.x())
+        // entrance from there. Inside the declared supporting facility, keep
+        // approaching its station: the exterior radius does not bound its rooms.
+        // Actual service admission and collision permissions still apply.
+        boolean directService = admitted && (port.insideSupportingFacility(state, start)
+                || Math.abs(start.x() - exterior.x())
                 + Math.abs(start.z() - exterior.z()) <= 3 || point.waitingSurfaces().contains(start));
         // One semantic goal owns one calculation. Joining separately cached
         // departure/outdoor/entry legs can livelock when many consumers evict
@@ -133,8 +148,14 @@ public final class ResidentMealKnownNavigation {
 
     /** Accept a current semantic leg without repeating search during WAL replay. */
     public static void requireMovementRoute(FrontierWorldState state, ResidentMeal meal, List<SurfaceAnchor> route) {
-        var port = ResourceStorageAccess.at(state, meal.depotId());
         departureKnowledge(state, meal, route.getFirst()).requireRoute(route);
+        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) {
+            if (!ResidentDiningPlaces.contains(state, meal.settlementId(), meal.destination(), route.getLast())
+                    || !meal.portable() && !ResourceStorageAccess.at(state, meal.depotId()).accessBoundary().cleared(route.getLast().standingBody()))
+                throw new IllegalArgumentException("meal route must end in its retained dining area");
+            return;
+        }
+        var port = ResourceStorageAccess.at(state, meal.depotId());
         var end = route.getLast();
         if (meal.phase() == ResidentMeal.Phase.MOVE) {
             if (end.equals(port.interactionStation(state))) {

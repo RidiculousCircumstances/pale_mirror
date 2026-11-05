@@ -23,16 +23,34 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static io.farfrontier.palemirror.frontier.v3.process.ResidentMealRetiredResourceAssertions.assertFatalityRetainsMealResources;
 
 class ResidentMealProcessTest {
+    private static FrontierWorldState initialWithKitchenInput(FrontierBootstrap bootstrap) {
+        return kitchenInput(FrontierWorldState.initial(bootstrap));
+    }
+    /** Test recipe input at the chosen source; no native delivery or gameplay outcome is fabricated. */
+    private static FrontierWorldState kitchenInput(FrontierWorldState state) {
+        var home = state.bootstrap().settlements().getFirst().id();
+        var source = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home));
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home);
+        var target = ReferenceContainerCustody.scopeId(pantry);
+        var wheat = new SubjectId("lot:bootstrap-1-wheat");
+        var ledger = state.inventory().fungibleResources();
+        var quantity = Map.of(wheat, 64);
+        ledger = ledger.accounts().containsKey(target) ? ledger.transfer(source, target, quantity, Map.of())
+                : ledger.transferToNewAccount(source, new CustodyAccount(target, new ResourceCustody.Container(pantry), quantity, Map.of()));
+        return state.withInventory(state.inventory().withFungibleResources(ledger));
+    }
+
     @Test void mealUsesAFilteredWarehouseAndRetainsItsSourceAcrossRecoveryWithoutOriginalDepotFood() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:meal-other-warehouse"), 421L));
         var home = initial.bootstrap().settlements().getFirst(); var resident = home.residents().getFirst().id();
         var original = FrontierWorldState.depotId(home.id()); var id = new SubjectId("container:meal-warehouse");
-        var station = SettlementServiceAccessPoints.depotPort(initial, home.id()).exteriorApproach();
-        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, java.util.Optional.empty(), station);
+        var pantry = ResourceStorageAccess.at(initial, CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), home.id()));
+        var station = pantry.interactionStation(initial);
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, ((ShipmentEndpoint.Storage) pantry.endpoint()).facilityId(),
+                ((ShipmentEndpoint.Storage) pantry.endpoint()).exteriorApproach());
         var policy = new ResourceStoragePolicy(endpoint,
                 new ResourceStorageFilter(false, java.util.Set.of("minecraft:bread"), Map.of()), 100, ResourceStorageRole.WAREHOUSE);
-        var state = new ResourceStorageDeclared(new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
-                java.util.Optional.empty(), java.util.Optional.of(policy)), station.support().offset(1, 1, 0)).apply(initial, home.id());
+        var state = new ResourceStorageDeclared(ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), station.support().offset(1, 1, 0)).apply(initial, home.id());
         var account = ReferenceContainerCustody.scopeId(id);
         var lot = new ResourceLot(new SubjectId("lot:meal-warehouse-bread"), home.id(), "minecraft:bread", 64, "test:warehouse", List.of());
         var resources = state.inventory().fungibleResources().issue(lot,
@@ -71,11 +89,11 @@ class ResidentMealProcessTest {
     }
 
     @Test void timedColdMealTravelHandoffsTheAsOfBodyAndResumesAfterHotRelease() {
-        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+        FrontierWorldState initial = initialWithKitchenInput(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-timed-handoff"), 421L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         SubjectId resident = settlement.residents().getFirst().id();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id());
         var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:timed-handoff-bread"), settlement.id(),
@@ -188,10 +206,10 @@ class ResidentMealProcessTest {
     @Test void severalHungryResidentsCompleteDistinctColdMealsUnderOrdinaryDueBudget() {
         WorldId world = new WorldId("frontier:resident-meal-cohort-budget");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 421L);
-        FrontierWorldState initial = base.initialState();
+        FrontierWorldState initial = kitchenInput(base.initialState());
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         List<SubjectId> residents = settlement.residents().stream().limit(4).map(Resident::id).toList();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id());
         var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:cohort-bread"), settlement.id(),
@@ -226,12 +244,12 @@ class ResidentMealProcessTest {
     }
 
     @Test void twoHungryResidentsCanTravelTogetherButOnlyOneMayEnterDepotService() {
-        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+        FrontierWorldState initial = initialWithKitchenInput(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-depot-service-queue"), 421L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         SubjectId first = settlement.residents().get(0).id();
         SubjectId second = settlement.residents().get(1).id();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id());
         var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(new SubjectId("lot:resident-queue-bread"), settlement.id(),
@@ -248,8 +266,7 @@ class ResidentMealProcessTest {
         assertTrue(ResidentMealServiceAccess.available(state, depot, second),
                 "a travelling resident reserves bread but not the physical service turn");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        ServiceAccessBoundary boundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
+        ServiceAccessBoundary boundary = ResourceStorageAccess.at(initial, depot).accessBoundary();
         // Both residents can hold a timed journey before either consumes the
         // shared depot turn. No per-support event is required for the approach.
         state = ResidentMealProcess.reduceColdStep(state, first,
@@ -291,8 +308,7 @@ class ResidentMealProcessTest {
                             + " first phase=" + current.humanPopulation().meals().get(first).phase()
                             + " first clear=" + current.humanPopulation().meals().get(first).clearingSurface()
                             + " second clear=" + current.humanPopulation().meals().get(second).clearingSurface()
-                            + " port=" + SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow())));
+                            + " port=" + ResourceStorageAccess.at(initial, depot)));
             state = ResidentMealProcess.reduceColdStep(state, first, step);
             firstTick++;
             if (state.humanPopulation().meals().containsKey(first)
@@ -348,12 +364,11 @@ class ResidentMealProcessTest {
     @Test void longStarvationRequiresOneCurrentPortionNotRepaymentOfMissedMeals() {
         WorldId world = new WorldId("frontier:resident-meal-two-portions");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 421L);
-        FrontierWorldState initial = base.initialState();
+        FrontierWorldState initial = kitchenInput(base.initialState());
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         SubjectId resident = settlement.residents().getFirst().id();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        SurfaceAnchor service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id());
+        SurfaceAnchor service = ResourceStorageAccess.at(initial, depot).interactionStation(initial);
         var actors = new LinkedHashMap<>(initial.actorLocations());
         actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER));
         var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
@@ -442,12 +457,11 @@ class ResidentMealProcessTest {
     @Test void sparseEngineWakesOneColdResidentThroughAnEntireMealWithoutProvision() {
         WorldId world = new WorldId("frontier:resident-meal-engine");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 421L);
-        FrontierWorldState initial = base.initialState();
+        FrontierWorldState initial = kitchenInput(base.initialState());
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         SubjectId resident = settlement.residents().getFirst().id();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        SurfaceAnchor service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id());
+        SurfaceAnchor service = ResourceStorageAccess.at(initial, depot).interactionStation(initial);
         var actors = new LinkedHashMap<>(initial.actorLocations());
         actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER));
         var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
@@ -490,13 +504,12 @@ class ResidentMealProcessTest {
     }
 
     @Test void hotResidentTakesAndConsumesBoundBreadOnceAfterSnapshotRecovery() {
-        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+        FrontierWorldState initial = initialWithKitchenInput(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-meal-hot"), 421L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         SubjectId resident = settlement.residents().getFirst().id();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        SurfaceAnchor service = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface();
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id());
+        SurfaceAnchor service = ResourceStorageAccess.at(initial, depot).interactionStation(initial);
         var actors = new LinkedHashMap<>(initial.actorLocations());
         actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER));
         SubjectId account = ReferenceContainerCustody.scopeId(depot);
@@ -581,32 +594,68 @@ class ResidentMealProcessTest {
         assertEquals(ResidentMeal.Phase.CLEAR_ACCESS, state.humanPopulation().meals().get(resident).phase());
         assertFatalityRetainsMealResources(state, resident, 421L, 48_001L,
                 ResidentMealResourceObligation.CustodyState.ACTOR_PORTION);
-        var boundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
+        var boundary = ResourceStorageAccess.at(initial, depot).accessBoundary();
         SurfaceAnchor firstExit = ResidentMealKnownNavigation.returnPath(state, state.humanPopulation().meals().get(resident))
                 .stream().filter(surface -> boundary.cleared(surface.standingBody())).findFirst().orElseThrow();
         assertEquals(firstExit, ResidentMealKnownNavigation.returnPath(state,
                 state.humanPopulation().meals().get(resident)).getLast(),
                 "HOT navigation must target the first semantic exit, not the remaining parking route");
         state = ModeledActorBodyFacts.inspected(state, resident, firstExit.standingBody());
-        state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
-                new ResidentMealHotAccessCleared(resident, 1, firstExit.standingBody(),
-                        ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L)));
+        var cleared = new ResidentMealHotAccessCleared(resident, 1, firstExit.standingBody(),
+                ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L));
+        // Exercise the registered reducer, including activity-owned HOT intent
+        // refresh. Calling only the meal reducer would leave the old exit goal.
+        state = FrontierWorldRuntimeDefinition.reduce(state,
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(
+                        io.farfrontier.palemirror.frontier.v3.api.FrontierEvent.SCHEMA_VERSION,
+                        new io.farfrontier.palemirror.frontier.v3.api.EventId("event:meal-access-cleared"),
+                        new io.farfrontier.palemirror.frontier.v3.api.TransactionId("transaction:meal-access-cleared"),
+                        state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(1),
+                        new SimInstant(48_002L), resident,
+                        io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
+                                new io.farfrontier.palemirror.frontier.v3.api.CommandId("test:meal-access-cleared")), cleared));
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"),
                 "releasing the access point is not consumption");
-        assertEquals(ResidentMeal.Phase.CONSUME, state.humanPopulation().meals().get(resident).phase(),
-                "a supported exit permits eating without waiting for the exact parking point");
+        assertEquals(ResidentMeal.Phase.MOVE_TO_DINING, state.humanPopulation().meals().get(resident).phase(),
+                "clearing access releases the source but does not fabricate arrival at the dining area");
         FrontierWorldState outside = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotAccessCleared(outside, resident,
                 new ResidentMealHotAccessCleared(resident, 1, meal.clearingSurface().standingBody(),
                         ModeledActorBodyFacts.hotObservation(outside, meal.executionId(), 1L))),
                 "a duplicate clearance cannot advance an already consumable portion");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        var diningMeal = state.humanPopulation().meals().get(resident);
+        var diningKnowledge = ResidentMealKnownNavigation.departureKnowledge(state, diningMeal, firstExit);
+        var diningStations = ResidentMealKnownNavigation.diningStations(state, diningMeal, diningKnowledge);
+        var diningOrder = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
+                diningMeal.claimId(), resident, FrontierWireTags.tag(diningMeal.phase()), diningMeal.startedAtTick() + 1,
+                diningStations, TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+        var capability = ActorExecutionComposition.CAPABILITIES.require(diningMeal.executionId().activityKind());
+        assertTrue(capability.permitsAmbientMotion(state, diningMeal.executionId(), state.ambientLeases().get(resident)),
+                "the live lease purpose must match the meal owner's new dining phase: lease=" + state.ambientLeases().get(resident)
+                        + "; expected=" + ResidentMealProcess.goalSurface(state, diningMeal));
+        assertTrue(capability.permitsNavigationOrder(state, diningMeal.executionId(), diningOrder),
+                "the registered meal owner must authorize the actual native dining leg");
+        assertFalse(capability.permitsNavigationOrder(state, diningMeal.executionId(),
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
+                        diningMeal.claimId(), resident, FrontierWireTags.tag(diningMeal.phase()), diningMeal.startedAtTick() + 1,
+                        List.of(service), TraversalCapability.PEDESTRIAN,
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION)),
+                "dining cannot reopen the already released food-source boundary");
+        var dining = diningStations.getFirst();
+        state = AmbientLeaseStateProcess.retarget(state, resident, AmbientGoalKind.MEAL,
+                ResidentMealProcess.goalSurface(state, diningMeal).standingBody());
+        state = ModeledActorBodyFacts.inspected(state, resident, dining.standingBody());
+        state = ResidentMealProcess.reduceHotArrived(state, resident,
+                new ResidentMealHotArrived(resident, 1L, dining.standingBody(),
+                        ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L)));
+        assertEquals(ResidentMeal.Phase.CONSUME, state.humanPopulation().meals().get(resident).phase());
         state = ResidentMealProcess.reduceHotPrepared(state, resident,
                 new ResidentMealHotEffectPrepared(resident,
                         new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 1, 1L, 0L, 1L, meal.executionId())));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        BodyPosition displaced = firstExit.standingBody();
+        BodyPosition displaced = dining.standingBody();
         assertNotEquals(meal.clearingSurface().standingBody(), displaced);
         assertTrue(ResidentMealProcess.mayConsumeAt(state, state.humanPopulation().meals().get(resident), displaced));
         FrontierWorldState beforeConsumption = state;
@@ -617,7 +666,8 @@ class ResidentMealProcessTest {
                         service.standingBody(), List.of(), List.of(), meal.executionId()), 48_002L));
         ResidentMealHotEffectObserved consumed = new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.CONSUME, 1L, displaced, List.of(), List.of(), meal.executionId());
-        var otherClearedPose = meal.clearingSurface().standingBody();
+        var otherClearedPose = ResidentMealKnownNavigation.diningStations(state, diningMeal, diningKnowledge).stream()
+                .filter(point -> !point.equals(dining)).findFirst().orElseThrow().standingBody();
         FrontierWorldState resourceAcknowledged = ResidentMealProcess.reduceHotObserved(state, resident,
                 new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1L,
                         otherClearedPose, List.of(), List.of(), meal.executionId()), 48_002L);
@@ -679,14 +729,14 @@ class ResidentMealProcessTest {
     }
 
     @Test void coldMealMovesOneClaimThroughHandAndConsumesExactlyOneBreadAcrossRestart() {
-        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+        FrontierWorldState initial = initialWithKitchenInput(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-meal-cold"), 421L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         SubjectId resident = settlement.residents().getFirst().id();
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement.id());
         SettlementStructure depotStructure = settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        SurfaceAnchor service = SettlementDepotServicePort.forDepot(depotStructure).serviceSurface();
+        SurfaceAnchor service = ResourceStorageAccess.at(initial, depot).interactionStation(initial);
         var actors = new LinkedHashMap<>(initial.actorLocations());
         actors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER));
         SubjectId bread = new SubjectId("lot:resident-meal-cold-bread");
@@ -758,11 +808,11 @@ class ResidentMealProcessTest {
     }
 
     @Test void oneHungryIdleResidentReservesOneDepotBreadUnitAndSurvivesRestart() {
-        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+        FrontierWorldState initial = initialWithKitchenInput(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-meal-start"), 420L));
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         SubjectId resident = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
-        SubjectId depot = FrontierWorldState.depotId(settlement);
+        SubjectId depot = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), settlement);
         SubjectId account = ReferenceContainerCustody.scopeId(depot);
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         SubjectId bread = new SubjectId("lot:resident-meal-test-bread");

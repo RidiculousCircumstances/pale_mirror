@@ -33,7 +33,7 @@ public record ShipmentStorageRetargeted(SubjectId shipmentId, long expectedRevis
                 || current.sender().container().filter(destination.containerId()::equals).isPresent()
                 || !ShipmentEndpointComposition.replacementPolicy(current.receiver()).admits(state, current, destination))
             throw new IllegalArgumentException("replacement storage has stale capacity, filter or owner");
-        ResourceSourceComposition.knowledge(state, current.sender(), destination).requireRoute(
+        ResourceSourceComposition.knowledge(state, current.sender(), destination).forActor(state, execution.actorId()).requireRoute(
                 route.map(PedestrianRouteReceipt::route).orElseGet(() -> List.of(origin)));
         var account = FungibleResourceCustodySupport.accountAtContainer(state, destination.containerId(), ((ResourceCustody.Container) destination.custody()).section()).map(CustodyAccount::id)
                 .orElseGet(() -> ContainerResourceAccounts.id((ResourceCustody.Container) destination.custody()));
@@ -54,7 +54,7 @@ public record ShipmentStorageRetargeted(SubjectId shipmentId, long expectedRevis
                     var order = new MovementOrder(shipment.id(), actor, 1, shipment.revision(), List.of(endpoint.station()),
                             TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                     try {
-                        var accepted = ResourceSourceComposition.knowledge(state, shipment.sender(), endpoint).plannedPath(origin, order);
+                        var accepted = ResourceSourceComposition.knowledge(state, shipment.sender(), endpoint).forActor(state, actor).plannedPath(origin, order);
                         return Optional.of(new ShipmentStorageRetargeted(shipment.id(), shipment.revision(), shipment.execution(), origin,
                                 endpoint, accepted.size() > 1 ? Optional.of(new PedestrianRouteReceipt(accepted)) : Optional.empty()));
                     } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {

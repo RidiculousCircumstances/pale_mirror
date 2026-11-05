@@ -13,7 +13,11 @@ final class StorageServiceBoundaries implements ServiceBoundaryProvider {
                 .map(record -> {
                     var endpoint = endpoint(state, record.id());
                     return new Declaration(new ServicePointId(kind(), endpoint.settlementId(), endpoint.containerId()),
-                            StorageInteractionStations.boundary(state.inventory().surfaces().get(record.id()).position()));
+                            StorageInteractionStations.boundary(state.inventory().surfaces().get(record.id()).position()),
+                            ShipmentEndpointComposition.supportingFacility(state, endpoint).map(facility -> {
+                                var area = facility.placement().volume(facility.definition().fabric());
+                                return new io.farfrontier.palemirror.frontier.v3.model.geometry.BlockVolume(area.min(), area.max().offset(-1, -1, -1));
+                            }));
                 }).toList();
     }
     private ShipmentEndpoint.Storage endpoint(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId id) {

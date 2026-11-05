@@ -11,6 +11,42 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InternalTransportPlanningTest {
+    @Test void misplacedFoodUsesOrdinaryShipmentToTheKitchenWithoutChangingOwnershipOrDuplicatingRequests() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:pantry-supply"), 139));
+        var home = state.bootstrap().settlements().get(1);
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home.id());
+        var depot = FrontierWorldState.depotId(home.id());
+        var source = FungibleResourceCustodySupport.accountAtContainer(state, pantry).orElseThrow();
+        var ledger = state.inventory().fungibleResources().transferToNewAccount(source.id(),
+                new CustodyAccount(ReferenceContainerCustody.scopeId(depot),
+                        new ResourceCustody.Container(depot, ContainerSectionId.STOCK), source.lotQuantities(), Map.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        var requests = DiningStorageSupply.requests(state, home.id());
+        assertEquals(1, requests.size());
+        var request = requests.getFirst();
+        assertEquals(pantry, request.receiver().containerId());
+        assertEquals(64, request.quantity());
+        assertFalse(state.inventory().containers().get(depot).storage().orElseThrow().filter().accepts(request.kind()),
+                "a destination exclusion cannot prevent pickup of already misplaced food");
+        var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
+        var dispatched = request.prepare(state, worker, 10).orElseThrow();
+        state = InternalShipmentStateSupport.dispatch(state, home.id(), dispatched);
+        assertTrue(DiningStorageSupply.requests(state, home.id()).isEmpty(), "the admitted claim prevents a second promise");
+        var shipment = dispatched.shipment();
+        state = state.withActorBody(worker.id(), shipment.sender().station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(), 1, Shipment.Status.AWAITING_LOAD);
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        state = state.withActorBody(worker.id(), shipment.receiver().station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(), 2, Shipment.Status.CARRYING);
+        var delivered = state.shipments().shipments().get(shipment.id());
+        state = InternalShipmentStateSupport.receive(state, delivered.id(),
+                new InternalShipmentReceived(delivered.id(), delivered.revision(), delivered.reception().orElseThrow().id()));
+        assertEquals(64, state.inventory().fungibleResources().totalQuantity(home.id(), request.kind()));
+        assertEquals(64, state.inventory().fungibleResources().unclaimedQuantity(
+                FungibleResourceCustodySupport.accountAtContainer(state, pantry).orElseThrow().id(), home.id(), request.kind()));
+        assertTrue(DiningStorageSupply.requests(state, home.id()).isEmpty());
+    }
+
     @Test void mixedOwnedCargoUsesOneFiniteAssetAndOneGroupWithoutSaleAndFinishesTheRealQueue() {
         var bootstrap=FrontierBootstrapper.create(new WorldId("frontier:internal-manifest"),41,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31"));
@@ -19,8 +55,7 @@ class InternalTransportPlanningTest {
         var position=home.anchor().offset(120,0,80);
         var station=new SurfaceAnchor(position.offset(1,-1,0));
         var source=new ShipmentEndpoint.Storage(home.id(),id,station,Optional.empty(),station);
-        var container=new ContainerRecord(id,home.id(),27,ContainerPurpose.RESOURCE_STORAGE,Optional.empty(),
-                Optional.of(new ResourceStoragePolicy(source,ResourceStorageFilter.all(),0,ResourceStorageRole.LOCAL_BUFFER)));
+        var container=ContainerRecord.storage(id, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, new ResourceStoragePolicy(source,ResourceStorageFilter.all(),0,ResourceStorageRole.LOCAL_BUFFER));
         state=new ResourceStorageDeclared(container,position).apply(state,home.id());
         var account=new SubjectId("custody:test-remote-buffer");
         var ledger=state.inventory().fungibleResources();var lots=new HashMap<>(ledger.lots());var accounts=new HashMap<>(ledger.accounts());

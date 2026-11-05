@@ -1,4 +1,18 @@
 # Minecraft registry collision facts; regenerate through building authoring, never hand-edit.
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=up	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=east,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=east,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=north,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=north,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=south,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=south,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=west,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=west,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=north,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=south,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=west,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:air|minecraft:air|	1	true	
 2|minecraft:andesite|minecraft:andesite|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:black_bed|minecraft:black_bed|facing=east,occupied=false,part=foot	1	true	0.0,0.0,0.0,0.1875,0.5625,0.1875;0.0,0.0,0.8125,0.1875,0.5625,1.0;0.0,0.1875,0.1875,1.0,0.5625,0.8125;0.1875,0.1875,0.0,1.0,0.5625,0.1875;0.1875,0.1875,0.8125,1.0,0.5625,1.0
 2|minecraft:black_bed|minecraft:black_bed|facing=east,occupied=false,part=head	1	true	0.8125,0.0,0.0,1.0,0.5625,0.1875;0.8125,0.0,0.8125,1.0,0.5625,1.0;0.0,0.1875,0.0,0.8125,0.5625,1.0;0.8125,0.1875,0.1875,1.0,0.5625,0.8125
@@ -24,14 +38,14 @@
 2|minecraft:furnace|minecraft:furnace|facing=north,lit=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:furnace|minecraft:furnace|facing=south,lit=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:furnace|minecraft:furnace|facing=west,lit=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=right,open=true,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=right,open=true,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
-2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
-2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=right,open=true,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
 2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,0.625
 2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,0.625,1.5,0.625
 2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,1.0
@@ -69,4 +83,3 @@
 2|minecraft:wall_torch|minecraft:torch|facing=north	1	true	
 2|minecraft:wall_torch|minecraft:torch|facing=south	1	true	
 2|minecraft:wall_torch|minecraft:torch|facing=west	1	true	
-2|minecraft:white_terracotta|minecraft:white_terracotta|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
