@@ -63,7 +63,7 @@ final class FrontierV3ResourceSiteFacilityProbe {
     static JsonObject anchor(JsonObject diagnostic, String field) {
         JsonObject current = diagnostic;
         String[] segments = field.split("\\.", -1);
-        if (segments.length == 0 || segments.length > 2) return null;
+        if (segments.length == 0 || segments.length > 4) return null;
         for (String segment : segments) {
             if (segment.isEmpty() || !current.has(segment) || !current.get(segment).isJsonObject()) return null;
             current = current.getAsJsonObject(segment);

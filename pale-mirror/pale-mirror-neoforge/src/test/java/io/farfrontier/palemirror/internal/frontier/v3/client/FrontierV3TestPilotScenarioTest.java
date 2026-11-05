@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3TestPilotScenarioTest {
@@ -402,6 +403,13 @@ class FrontierV3TestPilotScenarioTest {
                 {"type":"look","at":{"diagnostic":{"view":"settlement","id":"settlement:1","field":"routeSurface"}}},
                 {"type":"look","at":{"diagnostic":{"view":"settlement","id":"settlement:1","field":"layout.facilities.KITCHEN.entrance"}}}]}""");
         assertEquals(9, parsed.actionCount());
+        var landmarks = JsonParser.parseString("""
+                {"layout":{"facilities":{"KITCHEN":{"entrance":{"x":1,"y":64,"z":2}}}}}
+                """).getAsJsonObject();
+        assertEquals(64, FrontierV3ResourceSiteFacilityProbe.anchor(landmarks,
+                "layout.facilities.KITCHEN.entrance").get("y").getAsInt());
+        assertNull(FrontierV3ResourceSiteFacilityProbe.anchor(landmarks,
+                "layout.facilities.KITCHEN.unpublished"));
         FrontierV3TestPilotScenario.Parsed intervention = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}}]}""");
         assertEquals(1, intervention.actionCount());

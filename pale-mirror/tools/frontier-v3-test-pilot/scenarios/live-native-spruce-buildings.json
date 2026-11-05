@@ -49,14 +49,15 @@
       "settleMs": 0
     },
     {
-      "type": "look",
-      "at": {
+      "type": "assert_visible_block",
+      "position": {
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
           "field": "layout.facilities.HALL.entrance"
         }
-      }
+      },
+      "timeoutMs": 30000
     },
     {
       "type": "visit",
@@ -71,14 +72,15 @@
       "settleMs": 0
     },
     {
-      "type": "look",
-      "at": {
+      "type": "assert_visible_block",
+      "position": {
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
           "field": "layout.facilities.HOUSING.entrance"
         }
-      }
+      },
+      "timeoutMs": 30000
     },
     {
       "type": "visit",
