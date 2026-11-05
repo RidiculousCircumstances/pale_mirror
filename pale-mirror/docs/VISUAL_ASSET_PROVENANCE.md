@@ -50,3 +50,27 @@ and controller modules pass through the same sanitizer.
 
 The generated Threat Heart prompt requested a square Minecraft-style infected organic texture with a burgundy/crimson,
 purple and sparse ember-orange palette, no text, logo, watermark or scene.
+
+## Active Frontier v3 — Medieval Spruce bakery (2026-11-05)
+
+This first authored v3 building is a private test derivative of MineColonies
+`medievalspruce/craftsmanship/luxury/baker2.blueprint`, pinned at
+`a9b03edfbbd5359b148c85284ea038066d689866`. Source SHA-256:
+`82592a9947f2c4c25731ebfaa702415e56852ac9de224dfeb2ae38e6c0349c21`.
+Primary source: [pinned blueprint](https://github.com/ldtteam/minecolonies/blob/a9b03edfbbd5359b148c85284ea038066d689866/src/main/resources/blueprints/minecolonies/medievalspruce/craftsmanship/luxury/baker2.blueprint).
+The [upstream asset license](https://github.com/ldtteam/minecolonies/blob/a9b03edfbbd5359b148c85284ea038066d689866/src/main/resources/assets/minecolonies/LICENSE)
+is All Rights Reserved. Public redistribution permission is not established;
+remove or relicense this derivative before any public distribution. No author
+contact or public publication is part of this implementation.
+
+The reproducible adapter is `tools/buildings/import_medieval_spruce.py` in source.
+It preserves the actual bakery architecture, explicitly replaces Domum Ornamentum
+panels with vanilla white terracotta, strips terrain placeholders and the colony
+controller, and retains no entities, block-entity NBT or inventories. It authors a
+supported porch, staff entrance, operator platform and clear future equipment space.
+One imported furnace is omitted because the common production station owns that
+cell; the second empty vanilla furnace remains architectural/user-operable equipment.
+Doors start open. Final native structure and exact neutral projection hashes,
+706 block count and adaptations are in the asset's `bakery.provenance.json`.
+A native compiler verifies their equality and records actual Minecraft collision
+shapes for all four rotations. This does not import MineColonies runtime code.
