@@ -1,110 +1,104 @@
-# Active continuity — 2026-11-06
+# Active continuity — 2026-11-07
 
-## Assignment and authority
+## Current assignment
+Main alone; no subagents or push. User goal: repair confirmed navigation, passage,
+source building/cellar/porch/terrain integration, false-moving and hunger defects,
+including adjacent discoveries, then verify, commit and deploy. Implementation and
+required checks/deployment are delivered; this ledger/receipt commit closes out.
+No more implementation or client campaign is pending. Keep final report concise
+and do not promise absence of every latency peak. Unbudgeted goal should be marked
+complete after the closeout commit succeeds.
 
-Main alone; no agents, new goal or push. User accepted authored-storage reuse,
-removing added settlement containers and inactive route-demo chest/board.
-Implementation and verified deployment complete;final report remains. Follow
-canonical AGENTS.md/execution protocol. Preserve unrelated GOV WIP/root baseline.
-Plan/receipt:docs/frontier-v3-authored-storage-reuse-20261106.md.
-Previous work and investigation archived in
-docs/archive/continuity-20261106-before-authored-storage-delivery.md. Live worlds
-are disposable;previous worlds were retained for a specific unresolved diagnosis.
+Canonical AGENTS.md and docs/engineering-agent-protocol.md apply. Test worlds are
+disposable, but source causes must be fixed rather than erased by resets. Static
+counterexamples and focused checks, not endless proof loops. Full historical
+investigation archived in docs/archive/continuity-20261107-navigation-repair-before-equipment-recovery.md.
+Durable delivery receipt: docs/frontier-v3-navigation-passage-cellar-repair-20261107.md.
 
-## Working set and live identity
+## Working set and boundaries
+IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Git root parent,
+branch feat/baker-carry-orders-20260926, CLEAN ce8722295dea2533cdbc44d2493c3dfad427f098.
+RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror`, CLEAN detached same ref;
+build/navigation-delivery-release.log guardrails/JAR/package PASS.
+PACK `/home/rd/proj/minecraft` HEAD98a6701 tracked clean, unrelated `.f0v-baseline/`
+untracked retained. GOV extensive unrelated WIP remains; only this ledger, new
+receipt/archive and three isolated architecture keys belong to current closeout.
+Never stage whole architecture.yml or unrelated GOV files. No push.
+Java21 build `/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2`.
+Live Java22 `/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`.
 
-IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
-branch feat/baker-carry-orders-20260926,clean ca2c7689d. Main implementation33c101333;
-subsequent native integration/UI/custody/clearance corrections throughca2c7689d.
-RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror,clean detachedca2c7689d;
-build/authored-storage-lifecycle-release.log guardrails/JAR/packagePASS.
-PACK /home/rd/proj/minecraft HEAD98a6701 tracked clean,unrelated.f0v-baseline/
-untracked retained. Hosted core/Visuals published with170index entries verified.
-GOV task docs committed separately;extensive unrelated WIP remains unstaged.
-Stage only our receipt/ledger/archive and isolated authored_storage_boundary key,
-never the whole architecture.yml. No repository migration or push.
+## Delivered source
+- d69f6e085: shared HOT navigation retains semantic destination across bounded
+  legs. Missing segments use existing cooperative planner through explicit
+  registered owner knowledge. WAITING differs from completed KNOWN_NO_PATH;
+  intermediate arrival/native local failure cannot complete or retarget work.
+  Proven known refusal still permits field-owned target selection. Native partial
+  prefixes continue; same-turn clearance query reused; body permission references weak.
+- Same commit: vanilla gate facing reversal included in native input declaration;
+  axis rotation remains structural. Exact enclosed source underground AIR retained
+  and surveyed/cleared through site preparation. Hall140 lost air cells restored;
+  wet/unknown cells refused, no component-box or outdoor-air excavation.
+- Earlier a609/9aff already own porch-carving, ordinary door/linked-leaf packet
+  continuation, public waiting/dining drift and damage/function separation.
+  Current delivery preserves/tests those integrations, not duplicate owners.
+-54023348f: live guard issue crashed on a player sword in a bread-only kitchen
+  barrel. Shared exact withdrawal now differs from receiving/return filters and
+  validates actual owner/custody. Selection, physical issue and field acquisition
+  agree. Foreign/missing/conflicting source remains refused.
+-4e9cec1a2: both native equipment directions settle the whole storage image through
+  existing reference custody before releasing work witness; actual foreign slots
+  stay preserved UNRESOLVED. No permissive overwrite or another storage protocol.
+-694d3c5de: decrementing fast-forward counter missed time published by WAL between
+  slices, overshooting21000 to21002 and failing correct receipt validation. One
+  immutable admitted interval ceiling now derives remaining from canonical time,
+  for relative and absolute requests. Same world recovered, then held EXACT21200.
+-ce8722295: retained meal admission/proof is local to exact actor/claim/life and
+  suspension/safety facts; it no longer collects global work/storage dependencies.
+  Meal absence/death/suspension/safety releases it. No wake or priority suppressed.
 
-LIVE /home/rd/far-frontier-server,far-frontier-v3-live.service,Java22 runner.
-World authored-storage-closure-seed139-20261106,seed139,r32,schema343/ledger7/Network7.
-Earlier authored-storage-seed139-20261106 (intermediate) and buildings-packet-dining-
-seed139-20261106 retained untouched. Fresh bootstrap,not an old schema overlay.
-Final invocationaa0dfe9fce33404e84c5f8fcdc74ce11,native754433,notBefore1793985458.
-CoreSHA5129a4b62450f858838d32581dfe3c7bda6e950a4d42e66a6cd6b8330a94c6748184be9734cdf0bf745e02398e744324937d9e2462141c0212d70c80c9293e2bc91.
+## Verification and limits
+Evidence IMPL build/navigation-delay-20261107/:34 selected JVM plus52 native
+local-navigation and8 native building-authoring PASS;23equipment JVM,5native
+reference-conflict/restart,10runtime/calendar/safety and23activity/meal/guard checks
+PASS. Relevant guardrails/JAR/package gates PASS. Native equipment unit covers
+actual take/place/common closure/serialization/foreign contents, not whole guard
+lookup. Existing exact-four-storage-address test updated to own critical addresses
+and exclusion of foreign stores. No test skipped/deleted. Independent baseline
+resource-adoption/reference-projection failures remain classified in earlier archive;
+no whole-suite-green claim.
+
+Checked-in live-authored-bakery-gates-and-cellar.json PASS34actions/5frames,
+run3c5ba587-54d1-4754-9519-052aef199a2c. Gates used from both sides, exact states,
+INTACT/0damage; real cellar room inspected. Later ignored exploratory fullpack
+run e7376520-f681-419e-8638-06f61e273171 PASS23actions/6frames, final-hot-meals/manifest.json.
+Textile/hall/smeltery/kitchen frames personally viewed. HOT OwenVale1-14 moved to
+kitchen, CONSUME23434, confirmed nutrition23462, NOURISHED/NONE23786 and cleared
+outside service by24391. All23Northwatch residents nourished by30912. Private Xvfb,
+not human/M3 or formal promotion of ignored scenario.
+
+Two45s normal HOT traces on694d3c5de:19.932TPS/debt1→9, then23.799TPS catching
+170→1. Graph/dependency links closed, no JFR loss; unexplained2.068%/1.366% means
+causal closure incomplete. A peak-free server/control speedup ratio is not proved.
+Second trace exposed1.959s activity admission; final local-proof correction has
+functional/source coverage, no fresh controlled performance ratio. Worker slice
+wall times are not whole-route or server-tick latency. COLD tick-query0.2ms does
+not establish HOT CPU health. See receipt for measured scope/method failures.
+
+## Live delivery
+Runtime `/home/rd/far-frontier-server`, transient far-frontier-v3-live.service ACTIVE.
+World navigation-closure-seed139-20261107,seed139,r32/schema343. Same world recovered
+through clock fix, not reset to hide it. Previous navigation-passages-cellars world
+retained with guard crash/conflict data; older storage worlds retained as archived.
+Final source ce8722295,core SHA512
+3bde58730492f083c63e7a75ab62959f1f60515a9b86caef0f35d4f97e53f37b6d2adb49376aef8e5ab2fb428bf32b3de2bb3ddc30911f575fd8e2d2936ece82.
 Visuals unchanged2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601.
-Clean-ref preflight,normal native save,checksum install and fresh startup verifyPASS.
-Postrestart21186/tick13850:0required/inventory/scene conflicts,0preparing replica
-scopes,native20TPS/no fastforward,0players. Native0.3ms tick is not whole-simulation
-CPU performance or a future80ms guarantee. Last save quiesced0unused/0pending ops.
-Java21build /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2.
-RCON helper IMPL build/forestry-native/query-runtime.mjs;never print property secrets.
-Task private Xvfb:1041 PID99838 was stopped after verifying its exact identity.
-No client remains running. PMStoragePilot has test-diagnostic operator permission;
-no human client/display was stopped. Private captures are not human/M3 acceptance.
-
-## Delivered boundary
-
-AuthoredStoragePlan admits actual registered inventories in marked STORAGE zones,
-connected by shared compiled collision geometry.324pristine authored stores/12towns,
-449total incl machines/remote/mobile/hive. Existing warehouse racks,kitchen barrels,
-smeltery chest used;no added authored depot/pantry/metals block or route-demo chest/
-board. Remote legitimate site buffers retained. Other empty/filled territorial
-stores remain naturally adopted. Schema343 rejects stale declarations.
-Optional MineColonies real item-handler/ordered-composition adapters join existing
-click,drop,block removal,custody and persistence owners,with weak reference identity
-binding. Native materials/models retained. Appearance callbacks require the exact
-still-installed provider;removed/stale inventories cannot recreate a rack block.
-
-Fixed unfinished births no longer starve custody discovery. Discovery batches use
-existing hostbudget/headroom. Exact UI promotes RELEASED custody and initial resource
-binding via existing owners;it progresses prior witnessed click completion before
-next admission. Physical image comparison uses retained address/kind/count/epoch and
-complete lot backing,not a fresh lot/claim repartition;click,observer and composed
-command validation share it. Old food-theft test now uses actual kitchen storage.
-
-Shared service clearance explicitly names its departing incumbent;unused neighbour
-storage envelopes permit public aisle transit without resource access. Other busy
-points,hard/unknown geometry and public/private boundaries remain enforced. Actual
-native background stack showed187.96CPU-s/193.88elapsed in old clearance. Later
-copied image comparison3.324s/no destination ->1.257s/6block exit is not that exact
-job or a whole-server ratio. No further global performance/economic claim.
-
-## Verification and material limits
-
-Evidence IMPL build/authored-storage-reuse-20261106/:
-release-closure.log29selected Java+6native/guardrails/packagePASS;clearance-complete.log
-selected pure+7nativePASS;native-matcher-closure.log14selected purePASS (composed
-click6,physical resource processes7,current-layout positive/negative1);
-provider-lifecycle-closure.log8nativePASS,including actual installed rack removal
-and stale inventory callback. Clean RELEASE guardrails/JAR/packagePASS.
-Full suite not claimed:ResourceStorageAdoptionTest alternative-materialization
-NoSuchElementException reproduces unchangede30b168f5;reference-projection slice
-7fail/8pass identically at baseline6f98f9279 and then batching WIP. No tests disabled
-or deleted. Wrong native slice plural was a method failure;correct singular
-container-socket actually executed7,then8tests. Initial missing resources/operator/
-break timeout failures were corrected test setup,not product fixes.
-
-Checked-in live-authored-storage-menu.json,PMStoragePilot,secondary actual rack
-container:authored-dc8209ef-3c0a-3c41-84d0-6145022c8dcd at(-1506,65,-1385),stationz-1:
-packet-menu-closure-world/manifest.json run3d44af09-18a4-41b6-811b-ac03c5cff1b6 PASS
-without pre-click wait. Actual canonical128granite after2x64deposits,0after2withdrawals,
-ACTIVE/ACQUIRED throughout. Actual Rack UI frame inspected. Subsequent
-live-authored-storage-break.json initially found native appearance resurrection;
-ca2c7689d fixed provider lifetime and packet-break-lifecycle/manifest.json
-run4800aa35-4105-416c-b21f-120083dc67d6 PASS:AIR,RETIRED/RELEASED,0conflicts.
-Actual removal frame inspected. Ordinary graceful save/restart retains that terminal
-state (read-only diagnostic);no formal human/M3 or universal recovery promotion.
-
-Intermediate world retains original container1-depotCONFLICT and captured rejected
-player transaction4ae477ac-2974-4fc1-81d1-082fb877c693. Initial conflict origin remains
-unclassified;do not claim reset repaired it. Copied click-stall.bin119479 and
-ClickRead.java plus old logs preserve evidence. That conflict withheld its whole
-chunk,so adjacent-rack testing there was not independent. Final delivery uses the
-fresh world above after source fixes;no old stock overwritten or witness erased.
-The new first-transition caller trace supports further diagnosis if it recurs.
-
-## Closeout
-
-Owned GOV commit closes this delivery;task client/display are stopped.
-Source and RELEASE are clean;PACK tracked clean,baseline retained;preserve all
-unrelated GOV files. Final answer in Russian:scope,commit/deployed fresh world,
-real menu/removal checks and remote buffers retained. No push or new goal.
+Before replacement all dimensions saved,quiesce unused0/pending0. Pack index170
+verified; delivery-preflight.log/delivery-verify.log PASS. Invocation
+acfdbb57670b497f86ed01741ac7e98d,wrapper1587866,notBefore1793993732.
+Postrestart34801:0required/inventory/scene conflicts,0preparing; Northwatch23nourished,
+0hungry/0active meals,120available bread. Later35500 debt2/no fastforward. Normal
+native tickrate20; initial startup samples excluded from performance claims.
+No task client/display running. PMBakeryAudit fullpack uses railway-client mods
+with EMF/ETF and20FPS; server mod folder is an invalid client pack. Human processes
+untouched. RCON helper IMPL build/forestry-native/query-runtime.mjs; never print
+server.properties credentials. Close goal and report delivered state after GOV commit.
