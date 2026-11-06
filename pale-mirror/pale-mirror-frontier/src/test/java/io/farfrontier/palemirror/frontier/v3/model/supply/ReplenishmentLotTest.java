@@ -16,6 +16,21 @@ class ReplenishmentLotTest {
         assertEquals(0, ReplenishmentLot.choose(100, 1, 2, options));
         assertEquals(64, ReplenishmentLot.choose(100, 1000, 2, new LotTransportCost(List.of(walking))));
     }
+    @Test void affordableSingleItemDoesNotBecomeAnEfficientDedicatedTrip() {
+        var transport = new LotTransportCost(List.of(new LotTransportCost.Option(256, 64, 20, 0)));
+        assertEquals(1, ReplenishmentLot.choose(109, 2786337, 1970000, transport));
+        long efficient = ReplenishmentLot.economic(109, transport);
+        assertEquals(64, efficient);
+        var ordinary = new SupplyPlanner.Demand(109, 0, 0, Long.MAX_VALUE,
+                java.util.Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT), java.util.Optional.empty());
+        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(
+                new TripDispatchPolicy.Goods(1, efficient, ordinary, false, TripDispatchPolicy.Continuity.RECURRING)), 1000, 400));
+        var urgent = new SupplyPlanner.Demand(109, 0, 0, 0,
+                java.util.Set.of(SupplyPlanner.Reason.CONSUMPTION_DEADLINE), java.util.Optional.empty());
+        assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE, TripDispatchPolicy.assess(List.of(
+                new TripDispatchPolicy.Goods(1, efficient, urgent, true, TripDispatchPolicy.Continuity.RECURRING)), 1000, 400));
+        assertEquals(1, ReplenishmentLot.economic(1, transport), "a genuinely finite need stays finite");
+    }
     @Test void ownedProvisionsDoNotBecomeAnInvoiceAndRepeatedAllocationDoesNotPayTwice() {
         var own = LotTransportCost.fixed(100, 50, 0);
         var invoiced = LotTransportCost.fixed(100, 50, 50);

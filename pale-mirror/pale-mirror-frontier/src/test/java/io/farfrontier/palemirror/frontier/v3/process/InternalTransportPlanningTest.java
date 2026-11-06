@@ -47,6 +47,72 @@ class InternalTransportPlanningTest {
         assertTrue(DiningStorageSupply.requests(state, home.id()).isEmpty());
     }
 
+    @Test void fragmentedWarehouseStockUsesTheSameClaimedRecoverableShipmentWithoutReversingIt() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:warehouse-consolidation"), 41,
+                FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
+        var home = state.bootstrap().settlements().getFirst();
+        state = stock(state, home.id(), "large", 120, 10, ResourceStorageRole.WAREHOUSE);
+        state = stock(state, home.id(), "small", 124, 1, ResourceStorageRole.WAREHOUSE);
+        state = stock(state, home.id(), "buffer", 128, 20, ResourceStorageRole.LOCAL_BUFFER);
+        var requests = StorageConsolidationSupply.requests(state, home.id());
+        assertEquals(1, requests.size());
+        var request = requests.getFirst();
+        assertEquals(new SubjectId("container:small"), request.source().container().orElseThrow());
+        assertEquals(new SubjectId("container:large"), request.receiver().containerId());
+        assertEquals(1, request.quantity());
+        var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
+        var dispatched = request.prepare(state, worker, 10).orElseThrow();
+        state = InternalShipmentStateSupport.dispatch(state, home.id(), dispatched);
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        assertTrue(StorageConsolidationSupply.requests(state, home.id()).isEmpty());
+        var shipment = dispatched.shipment();
+        state = state.withActorBody(worker.id(), shipment.sender().station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(), 1, Shipment.Status.AWAITING_LOAD);
+        assertTrue(StorageConsolidationSupply.requests(state, home.id()).isEmpty(), "in-transit stock cannot cause a reverse consolidation");
+        state = state.withActorBody(worker.id(), shipment.receiver().station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(), 2, Shipment.Status.CARRYING);
+        var delivered = state.shipments().shipments().get(shipment.id());
+        state = InternalShipmentStateSupport.receive(state, delivered.id(),
+                new InternalShipmentReceived(delivered.id(), delivered.revision(), delivered.reception().orElseThrow().id()));
+        assertEquals(31, state.inventory().fungibleResources().totalQuantity(home.id(), "minecraft:coal"));
+        assertEquals(11, state.inventory().fungibleResources().unclaimedQuantity(
+                FungibleResourceCustodySupport.accountAtContainer(state, request.receiver().containerId()).orElseThrow().id(), home.id(), "minecraft:coal"));
+        assertTrue(StorageConsolidationSupply.requests(state, home.id()).isEmpty());
+    }
+    @Test void partialRemoteBufferDoesNotStartAssetApproachSearches() throws Exception {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:partial-haul"), 41,
+                FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
+        var home = state.bootstrap().settlements().getFirst();
+        state = stock(state, home.id(), "partial", 120, 2, ResourceStorageRole.LOCAL_BUFFER);
+        var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
+        var queries = new int[1];
+        var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanner() {
+            public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult query(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target) {
+                queries[0]++; throw new AssertionError("partial manifest must be filtered before navigation");
+            }
+        };
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            assertTrue(InternalTransportPlanning.offer(state, worker, 10).isEmpty());
+        }
+        assertEquals(0, queries[0]);
+    }
+    private static FrontierWorldState stock(FrontierWorldState state, SubjectId home, String name, int offset, int count,
+            ResourceStorageRole role) {
+        var id = new SubjectId("container:" + name);
+        var anchor = state.bootstrap().settlements().stream().filter(t -> t.id().equals(home)).findFirst().orElseThrow().anchor();
+        var position = anchor.offset(offset, 1, 80); var station = new SurfaceAnchor(position.offset(1, -1, 0));
+        var endpoint = new ShipmentEndpoint.Storage(home, id, station, Optional.empty(), station);
+        state = new ResourceStorageDeclared(ContainerRecord.storage(id, home, 27, StorageBlockKind.CHEST,
+                new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, role)), position).apply(state, home);
+        var ledger = state.inventory().fungibleResources(); var lots = new HashMap<>(ledger.lots()); var accounts = new HashMap<>(ledger.accounts());
+        var lot = new SubjectId("lot:" + name); var account = new SubjectId("custody:" + name);
+        lots.put(lot, new ResourceLot(lot, home, "minecraft:coal", count, "test:stock", List.of()));
+        accounts.put(account, new CustodyAccount(account, endpoint.custody(), Map.of(lot, count), Map.of()));
+        return state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(lots, ledger.claims(), accounts, ledger.bindings())));
+    }
+
     @Test void mixedOwnedCargoUsesOneFiniteAssetAndOneGroupWithoutSaleAndFinishesTheRealQueue() {
         var bootstrap=FrontierBootstrapper.create(new WorldId("frontier:internal-manifest"),41,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31"));

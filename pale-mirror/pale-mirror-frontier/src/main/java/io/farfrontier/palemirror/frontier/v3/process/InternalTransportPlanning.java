@@ -17,8 +17,29 @@ final class InternalTransportPlanning {
             if(account.isEmpty())continue;
             var kinds=account.orElseThrow().lotQuantities().keySet().stream().map(ledger.lots()::get).filter(lot->lot.economicOwnerId().equals(worker.settlementId()))
                     .map(ResourceLot::itemKind).distinct().sorted().toList();if(kinds.isEmpty())continue;
+            // Quantity is an upper bound only; exact source/capacity/claims are
+            // still admitted below. A partial buffer cannot form this manifest,
+            // so do not search every pickup/drop approach for every worker.
+            long available = kinds.stream().mapToLong(kind -> Math.min(64,
+                    ledger.unclaimedQuantity(account.orElseThrow().id(), worker.settlementId(), kind))).sum();
+            if (available < 64) continue;
             for(var declaredReceiver:ResourceStorageSelection.candidates(state,worker.settlementId(),kinds.getFirst(),declaredSource.station(),Set.of(ResourceStorageRole.WAREHOUSE))) {
                 if(declaredSource.containerId().equals(declaredReceiver.containerId()))continue;
+                var amountsAvailable = new LinkedHashMap<String, Integer>();
+                for (var kind : kinds) {
+                    if (amountsAvailable.size() >= Math.max(1, animal.stackSlots() - 1)) break;
+                    if (!ResourceStorageSelection.permits(state.inventory(), declaredReceiver.containerId(), worker.settlementId(),
+                            kind, Set.of(ResourceStorageRole.WAREHOUSE))) continue;
+                    var request = InternalHaulRequest.select(state, worker.settlementId(), declaredSource, declaredReceiver, kind, 64);
+                    int count = request.map(InternalHaulRequest::quantity).orElse(0);
+                    while (count > 0) {
+                        amountsAvailable.put(kind, count);
+                        if (ContainerStorageAdmission.receiveManifest(state, declaredReceiver.containerId(), amountsAvailable)) break;
+                        count--;
+                    }
+                    if (count == 0) amountsAvailable.remove(kind);
+                }
+                if (amountsAvailable.values().stream().mapToInt(Integer::intValue).sum() < 64) continue;
                 var journey=ShipmentEndpointComposition.knowledge(state,List.of(declaredSource,declaredReceiver));
                 var pickup=ActorStorageApproach.select(state,declaredSource,animal.actorId(),state.actorLocations().get(animal.actorId()).supportingSurface(),journey);
                 if(pickup.isEmpty())continue;
@@ -28,10 +49,10 @@ final class InternalTransportPlanning {
                 long distance=source.station().manhattanDistance(receiver.station());
                 if(distance<48)continue;
                 var events=new ArrayList<InternalShipmentDispatched>();var amounts=new LinkedHashMap<String,Integer>();
-                for(var kind:kinds){
+                for(var kind:amountsAvailable.keySet()){
                     if(events.size()>=Math.max(1,animal.stackSlots()-1))break;
                     if(!ResourceStorageSelection.permits(state.inventory(),receiver.containerId(),worker.settlementId(),kind,Set.of(ResourceStorageRole.WAREHOUSE)))continue;
-                    var prepared=InternalShipmentPlanning.prepare(state,worker,source,receiver,kind,64,tick);
+                    var prepared=InternalShipmentPlanning.prepare(state,worker,source,receiver,kind,amountsAvailable.get(kind),tick);
                     if(prepared.isEmpty())continue;var portion=prepared.orElseThrow();
                     var next=new LinkedHashMap<>(amounts);next.merge(kind,portion.shipment().quantity(),Math::addExact);
                     if(!ContainerStorageAdmission.receiveManifest(state,receiver.containerId(),next))continue;

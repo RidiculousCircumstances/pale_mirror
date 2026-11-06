@@ -46,8 +46,7 @@ public final class GoodsDispatchAdvice {
                 .orElseGet(() -> (long) view.target(state.bootstrap().ruleset().goodsTrade().policies().get(view.participant().policy())
                         .stream().filter(c -> c.itemKind().equals(item)).findFirst().orElseThrow()));
         useful = Math.max(useful, plan.require(item).purchase());
-        long funding = GoodsParticipantFunding.purchase(view, state.bootstrap().ruleset().goodsTrade(), item).raw();
-        return ReplenishmentLot.choose(useful, funding, price,
+        return ReplenishmentLot.economic(useful,
                 GoodsTransportOptions.costCurve(state, organizer, durationTicks, item, mode, atTick));
     }
     private GoodsDispatchAdvice() { }

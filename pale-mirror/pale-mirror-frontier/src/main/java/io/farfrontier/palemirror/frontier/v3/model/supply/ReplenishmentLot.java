@@ -5,6 +5,21 @@ import java.math.BigInteger;
 /** Finite-horizon replenishment advice. Transport breakpoints, useful demand and
  * current funding determine the lot; no fixed minimum, new cash or stock promise. */
 public final class ReplenishmentLot {
+    /** Efficient useful load independent of the treasury. Affordability bounds
+     * matching; poverty alone cannot justify a separate underfilled journey. */
+    public static long economic(long usefulQuantity, LotTransportCost transport) {
+        if (usefulQuantity < 0) throw new IllegalArgumentException("negative useful load");
+        long best = 0, expense = 0;
+        for (var option : transport.options()) {
+            long quantity = Math.min(usefulQuantity, Math.min(option.capacity(), option.unitsPerCharge()));
+            if (quantity == 0) continue;
+            long cost = option.quote(quantity).economic();
+            int comparison = best == 0 ? -1 : BigInteger.valueOf(cost).multiply(BigInteger.valueOf(best))
+                    .compareTo(BigInteger.valueOf(expense).multiply(BigInteger.valueOf(quantity)));
+            if (comparison < 0 || comparison == 0 && quantity < best) { best = quantity; expense = cost; }
+        }
+        return best;
+    }
     public static long choose(long usefulQuantity, long cash, long unitPrice, LotTransportCost transport) {
         if (usefulQuantity < 0 || cash < 0 || unitPrice < 1) throw new IllegalArgumentException("invalid replenishment facts");
         long best = 0, bestExpense = 0;

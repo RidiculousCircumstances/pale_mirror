@@ -23,7 +23,7 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         return RECEIVERS.rows(ShipmentState.class, shipments, ShipmentState::receiveScopes,
                 new ReceiptScope(Objects.requireNonNull(container), Objects.requireNonNull(itemKind)));
     }
-    java.util.List<Shipment> receiving(SubjectId container) {
+    public java.util.List<Shipment> receiving(SubjectId container) {
         return RECEIVERS.rows(ShipmentState.class, shipments, ShipmentState::receiveScopes,
                 new ContainerScope(Objects.requireNonNull(container)));
     }
