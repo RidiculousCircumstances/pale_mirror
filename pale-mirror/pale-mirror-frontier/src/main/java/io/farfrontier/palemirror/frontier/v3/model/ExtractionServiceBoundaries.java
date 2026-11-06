@@ -26,7 +26,7 @@ final class ExtractionServiceBoundaries implements ServiceBoundaryProvider {
         return KnownPedestrianRouteKnowledge.forFrontier(state);
     }
     @Override public synchronized ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration) {
-        return geometry.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration));
+        return geometry.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration), knowledge(state,declaration), FacilityPedestrianContacts.of(state.bootstrap()).noParking());
     }
     @Override public SearchFootprint searchFootprint(FrontierWorldState state, Declaration declaration) {
         return request(state, declaration).searchFootprint();

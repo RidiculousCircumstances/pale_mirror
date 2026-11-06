@@ -50,7 +50,7 @@ public final class SettlementServiceAccessPoints {
         Geometry geometry = geometry(state, settlement, depot);
         int population = population(state, settlement.id());
         if (geometry.point == null || geometry.population != population) {
-            geometry.point = compile(settlement, depot, geometry, population);
+            geometry.point = compile(state, settlement, depot, geometry, population);
             geometry.population = population;
         }
         return geometry.point;
@@ -95,7 +95,7 @@ public final class SettlementServiceAccessPoints {
         }
         return POPULATION.getOrDefault(settlementId, 0);
     }
-    private static ServiceAccessPoint compile(Settlement settlement, SettlementStructure depot,
+    private static ServiceAccessPoint compile(FrontierWorldState state, Settlement settlement, SettlementStructure depot,
                                              Geometry geometry, int population) {
         var knowledge = geometry.knowledge;
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
@@ -104,7 +104,8 @@ public final class SettlementServiceAccessPoints {
         var preferred = preferred(settlement, port, apron);
         // Applicants must never park on the current user's escape perimeter.
         var egress = geometry.egress;
-        var waiting = ServiceWaitingTargets.select(boundary, knowledge, apron, preferred, egress, population);
+        var waiting = ServiceWaitingTargets.select(boundary, KnownPedestrianRouteKnowledge.forPublicJourney(state,settlement.id(),List.of()),
+                apron, preferred, egress, population, FacilityPedestrianContacts.of(state.bootstrap()).noParking());
         return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), boundary, waiting, egress);
     }
     static ServiceBoundaryProvider.SearchFootprint searchFootprint(FrontierWorldState state, Settlement settlement, SettlementStructure depot) {

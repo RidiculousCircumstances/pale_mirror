@@ -20,7 +20,7 @@ public final class FrontierV3BuildingAuthoringGameTests {
                 io.farfrontier.palemirror.frontier.v3.model.StructureKind.KITCHEN),
                 io.farfrontier.palemirror.frontier.v3.model.StructureKind.KITCHEN);
         var level=helper.getLevel();var origin=helper.absolutePos(new net.minecraft.core.BlockPos(5,31,5));
-        for(int x=-3;x<28;x++)for(int z=-3;z<28;z++)level.setBlock(origin.offset(x,1,z),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),2);
+        for(int y=-1;y<=1;y++)for(int x=-3;x<28;x++)for(int z=-3;z<28;z++)level.setBlock(origin.offset(x,y,z),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),2);
         for(var entry:definition.blocks().entrySet().stream().sorted(java.util.Comparator.comparingInt(e -> e.getKey().y())).toList()) {
             var p=entry.getKey();var block=entry.getValue();var at=origin.offset(p.x(),p.y(),p.z());
             var material=new io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.Authored(block.state(),block.repairItem(),block.data());

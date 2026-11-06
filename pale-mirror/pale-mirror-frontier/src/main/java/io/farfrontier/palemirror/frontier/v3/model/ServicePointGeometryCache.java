@@ -16,27 +16,31 @@ final class ServicePointGeometryCache {
         }
     }
     private record Entry(Request request, KnownPedestrianRouteKnowledge knowledge,
-                         Set<PedestrianGeometryRevision.Region> dependencies, ServiceAccessPoint point) { }
+                         KnownPedestrianRouteKnowledge waitingKnowledge, Set<BlockPosition> noParking, Set<PedestrianGeometryRevision.Region> dependencies, ServiceAccessPoint point) { }
     private final Map<SubjectId, Entry> entries = new LinkedHashMap<>(16, .75f, true);
-    synchronized ServiceAccessPoint get(SubjectId id, Request request, KnownPedestrianRouteKnowledge knowledge) {
+    synchronized ServiceAccessPoint get(SubjectId id, Request request, KnownPedestrianRouteKnowledge knowledge,
+            KnownPedestrianRouteKnowledge waitingKnowledge, Set<BlockPosition> noParking) {
         var previous = entries.get(id);
-        if (previous != null && previous.request().equals(request) && compatible(previous, knowledge)) {
-            if (previous.knowledge() != knowledge) entries.put(id, new Entry(request, knowledge, previous.dependencies(), previous.point()));
+        if (previous != null && previous.request().equals(request) && previous.noParking() == noParking && compatible(previous.knowledge(), knowledge, previous.dependencies())
+                && compatible(previous.waitingKnowledge(), waitingKnowledge, previous.dependencies())) {
+            if (previous.knowledge() != knowledge || previous.waitingKnowledge() != waitingKnowledge)
+                entries.put(id, new Entry(request, knowledge, waitingKnowledge, noParking, previous.dependencies(), previous.point()));
             return previous.point();
         }
         var egress = ServiceClearanceTargets.egressRegion(request.boundary(), knowledge);
-        var waiting = request.waiting() ? ServiceWaitingTargets.select(request.boundary(), knowledge, request.center(),
-                request.preferred(), egress, request.population()) : List.<SurfaceAnchor>of();
+        var waiting = request.waiting() ? ServiceWaitingTargets.select(request.boundary(), waitingKnowledge, request.center(),
+                request.preferred(), egress, request.population(), noParking) : List.<SurfaceAnchor>of();
         var point = new ServiceAccessPoint(request.facility(), request.settlement(), request.station(), request.boundary(), waiting, egress);
-        entries.put(id, new Entry(request, knowledge, dependencies(request), point));
+        entries.put(id, new Entry(request, knowledge, waitingKnowledge, noParking, dependencies(request), point));
         if (entries.size() > 64) entries.remove(entries.keySet().iterator().next());
         return point;
     }
-    private static boolean compatible(Entry previous, KnownPedestrianRouteKnowledge knowledge) {
-        if (previous.knowledge() == knowledge) return true;
-        var before = previous.knowledge().geometry().regionalRevision();
+    private static boolean compatible(KnownPedestrianRouteKnowledge previous, KnownPedestrianRouteKnowledge knowledge,
+            Set<PedestrianGeometryRevision.Region> dependencies) {
+        if (previous == knowledge) return true;
+        var before = previous.geometry().regionalRevision();
         var after = knowledge.geometry().regionalRevision();
-        return before.isPresent() && after.isPresent() && after.orElseThrow().matches(before.orElseThrow(), previous.dependencies());
+        return before.isPresent() && after.isPresent() && after.orElseThrow().matches(before.orElseThrow(), dependencies);
     }
     private static Set<PedestrianGeometryRevision.Region> dependencies(Request request) {
         var result = new HashSet<PedestrianGeometryRevision.Region>();

@@ -24,7 +24,9 @@ final class ProductionServiceBoundaries implements ServiceBoundaryProvider {
         return ShipmentEndpointComposition.knowledge(state, List.of(endpoint(state, declaration)));
     }
     @Override public synchronized ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration) {
-        return geometries.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration));
+        return geometries.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration),
+                KnownPedestrianRouteKnowledge.forPublicJourney(state,declaration.settlementId(),List.of()),
+                FacilityPedestrianContacts.of(state.bootstrap()).noParking());
     }
     @Override public SearchFootprint searchFootprint(FrontierWorldState state, Declaration declaration) {
         return request(state, declaration).searchFootprint();

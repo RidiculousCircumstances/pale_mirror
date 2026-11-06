@@ -26,7 +26,7 @@ final class ServiceWaitingTargets {
         return Set.copyOf(columns);
     }
     static List<SurfaceAnchor> select(ServiceAccessBoundary boundary, KnownPedestrianRouteKnowledge knowledge,
-            SurfaceAnchor center, List<SurfaceAnchor> preferred, Set<SurfaceAnchor> egress, int population) {
+            SurfaceAnchor center, List<SurfaceAnchor> preferred, Set<SurfaceAnchor> egress, int population, Set<BlockPosition> noParking) {
         Set<SurfaceAnchor> waiting = new LinkedHashSet<>();
         for (SurfaceAnchor surface : preferred) add(waiting, boundary, knowledge, surface.x(), surface.z());
         int radius = radius(population);
@@ -37,6 +37,7 @@ final class ServiceWaitingTargets {
                         add(waiting, boundary, knowledge, center.x() + dx, center.z() + dz);
         waiting.removeIf(surface -> Math.max(Math.abs(surface.x() - center.x()), Math.abs(surface.z() - center.z())) > radius
                 || Math.abs(surface.y() - center.y()) > radius
+                || noParking.contains(surface.support())
                 || egress.contains(surface) || !knowledge.traversable(List.of(surface)));
         // A free roof or sealed pocket is not a waiting place. Reuse the shared bounded
         // component walk from the provider-declared approach; missing facts grant no access.
