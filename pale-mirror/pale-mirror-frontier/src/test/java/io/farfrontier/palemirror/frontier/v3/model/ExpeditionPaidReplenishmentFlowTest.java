@@ -52,7 +52,11 @@ class ExpeditionPaidReplenishmentFlowTest {
         var staging = new SubjectId("custody:visited-supplier-stock");
         resources = resources.issue(stock, new CustodyAccount(staging, new ResourceCustody.Container(mission.receiver().containerId()),
                 Map.of(stock.id(), stock.quantity()), Map.of()));
-        resources = resources.transfer(staging, ReferenceContainerCustody.scopeId(mission.receiver().containerId()), Map.of(stock.id(), stock.quantity()), Map.of());
+        var supplierAccount = ReferenceContainerCustody.scopeId(mission.receiver().containerId());
+        resources = resources.accounts().containsKey(supplierAccount)
+                ? resources.transfer(staging, supplierAccount, Map.of(stock.id(), stock.quantity()), Map.of())
+                : resources.transferToNewAccount(staging, new CustodyAccount(supplierAccount,
+                        new ResourceCustody.Container(mission.receiver().containerId()), Map.of(stock.id(), stock.quantity()), Map.of()));
         var population = state.humanPopulation(); var nutrition = new LinkedHashMap<>(population.nutrition());
         nutrition.put(recipient, new ResidentNutrition(ResidentNutritionStatus.HUNGRY, state.bootstrap().ruleset().residentLife().eatBelowUnits() - 1, tick, 0));
         var precondition = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(positions).actorMovements(movements).unitGroups(groups)
