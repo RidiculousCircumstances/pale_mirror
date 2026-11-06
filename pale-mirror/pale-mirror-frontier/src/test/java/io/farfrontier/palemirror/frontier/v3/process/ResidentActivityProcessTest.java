@@ -303,9 +303,13 @@ class ResidentActivityProcessTest {
         var keys = FrontierWorldRuntimeDefinition.wakeKeys(initial, restocked, event);
         assertTrue(keys.contains(depot));
         assertFalse(keys.contains(FrontierWorldState.depotId(second.id())));
-        assertEquals(java.util.Set.of(first.residents().getFirst().id(), depot, first.id(), CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), first.id())),
-                FrontierWorldRuntimeDefinition.holdWakeKeys(initial,
-                        ResidentActivityProcess.review(first.residents().getFirst().id(), 24_000L)));
+        var dependencies = FrontierWorldRuntimeDefinition.holdWakeKeys(initial,
+                ResidentActivityProcess.review(first.residents().getFirst().id(), 24_000L));
+        assertTrue(dependencies.containsAll(java.util.Set.of(first.residents().getFirst().id(), depot, first.id(),
+                CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), first.id()))));
+        assertTrue(ResourceStorageSelection.declaredContainers(initial.inventory(), second.id(),
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER)).stream()
+                .noneMatch(dependencies::contains), "foreign warehouses must not wake this resident's activity");
     }
     @Test void exactHungryResidentStartsOneMealAndOneProgressActionAtDayBoundary() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
@@ -394,9 +398,16 @@ class ResidentActivityProcessTest {
                 "a held wake must not create a meal before the bread actually existed");
         var progress = assertInstanceOf(ScheduleEffect.Created.class, planned.get(1).payload()).action();
         assertEquals(50_001L, progress.dueAt().ticks());
-        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(
-                ResidentMealProcess.reduceStarted(restocked, resident, started), action),
+        var eating = ResidentMealProcess.reduceStarted(restocked, resident, started);
+        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(eating, action),
                 "the activity review waits for its retained meal instead of generating retry WAL");
+        var waiting = assertInstanceOf(ResidentActivityAdmission.Waiting.class, ResidentActivityProcess.admission(eating, action));
+        assertEquals(java.util.Set.of(resident, started.meal().claimId()), waiting.dependencies(),
+                "retained eating has no warehouse, market or other worker dependencies");
+        var proof = ResidentActivityProcess.holdProof(eating, action).orElseThrow();
+        var moved = eating.withActorBody(resident, eating.actorLocations().get(resident).body().offset(1, 0, 0));
+        assertTrue(proof.stillHeld().test(moved), "walking during the same meal cannot start another activity assessment");
+        assertFalse(proof.stillHeld().test(restocked), "absence of that exact meal must release the refusal");
     }
 
     @Test void staleActivityReviewDoesNotEvaluateBeforeConfirmedNeedClock() {
