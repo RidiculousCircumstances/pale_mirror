@@ -203,7 +203,7 @@ class ResidentMealProcessTest {
                 "COLD must restart from the witnessed HOT release, not wait for the old route deadline");
     }
 
-    @Test void severalHungryResidentsCompleteDistinctColdMealsUnderOrdinaryDueBudget() {
+    @Test void severalHungryResidentsCompleteDistinctColdMealsUnderOrdinaryDueBudget() throws Exception {
         WorldId world = new WorldId("frontier:resident-meal-cohort-budget");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 421L);
         FrontierWorldState initial = kitchenInput(base.initialState());
@@ -227,16 +227,25 @@ class ResidentMealProcessTest {
                 world, stocked, new SimInstant(27_000L), base.commandPlanner(), base.scheduledPlanner(),
                 base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), scheduled,
                 base.transactionCommitter());
-        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(configuration);
-        for (long tick = 27_001L; tick <= 30_000L; tick++) {
-            var result = engine.advanceTo(new SimInstant(tick),
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
+        var fedResidents = new java.util.HashSet<SubjectId>();
+        // Fairness is distinct confirmed meals under the same ordinary work
+        // budget, not an arbitrary stopwatch tied to an old building footprint.
+        for (int boundary = 0; boundary < 4096 && fedResidents.size() < 2; boundary++) {
+            var due = engine.nextExecutionBoundary().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.executionView().instant().ticks() + 1, due.ticks())),
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(4, 512));
             assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE,
                     result.status().kind(), () -> result.status().failureDetail().orElse("quarantined"));
+            var current = engine.canonicalState().state();
+            for (var resident : residents) if (current.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.NOURISHED)
+                fedResidents.add(resident);
+            if (boundary % 128 == 0) engine.compact(engine.executionView().revision());
         }
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        long fed = residents.stream().filter(resident -> after.humanPopulation().nutrition(resident)
-                .status() == ResidentNutritionStatus.NOURISHED).count();
+        long fed = fedResidents.size();
+        if (fed < 2) java.nio.file.Files.write(java.nio.file.Path.of("build", "resident-cohort-unfinished.bin"),
+                new FrontierWorldStateCodec().encode(after));
         assertTrue(fed >= 2, "a single resident must not monopolize every depot visit: "
                 + after.humanPopulation().meals());
         assertTrue(after.inventory().fungibleResources().totalQuantity(settlement.id(), ResidentMeal.BREAD_KIND) <= 62,

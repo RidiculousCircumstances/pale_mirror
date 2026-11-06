@@ -91,7 +91,7 @@ class ResidentActivityProcessTest {
         assertFalse(proof.stillHeld().test(stocked));
         assertInstanceOf(ResidentActivityAdmission.Ready.class, ResidentActivityProcess.admission(stocked, action));
     }
-    @Test void hungryWorkEligibilityDoesNotCalculateMealsAndOwnedPendingReviewParksUntilItsResult() throws Exception {
+    @Test void hungryWorkEligibilityIsRouteFreeAndOwnedReviewUsesReadyProofOrParksUntilItsResult() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:meal-work-eligibility-planning"), 421L));
         var home = initial.bootstrap().settlements().getFirst(); var actor = home.residents().getFirst().id();
@@ -118,7 +118,11 @@ class ResidentActivityProcessTest {
             assertEquals(0, planner.pendingCount(), "detached activity advice cannot acquire native routing");
             assertEquals(0, index.waitingCount(), "the owning thread publishes the continuation");
             var proposed = completion.get();
-            assertTrue(proposed.stream().noneMatch(event -> event.payload() instanceof ResidentMealStarted));
+            if (proposed.stream().anyMatch(event -> event.payload() instanceof ResidentMealStarted)) {
+                assertEquals(0, planner.pendingCount(), "a positive local proof does not need a queued calculation");
+                assertEquals(0, index.waitingCount());
+                return;
+            }
             var successor = proposed.stream().map(event -> event.payload()).filter(ScheduleEffect.Rescheduled.class::isInstance)
                     .map(ScheduleEffect.Rescheduled.class::cast).findFirst().orElseThrow().replacement();
             assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(state, successor));

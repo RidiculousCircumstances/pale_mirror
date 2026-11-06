@@ -27,19 +27,20 @@ class TraversalPathTest {
         assertThrows(IllegalArgumentException.class, () -> new TraversalPath(List.of(street, SurfaceAnchor.at(11, 63, 11))));
     }
 
-    @Test void flatGrayboxInfirmaryNeverPretendsToExcavateItsNeutralFoundation() {
+    @Test void infirmarySeparatesItsDeclaredStreetGradeFromTheRaisedEntrance() {
         SettlementStructure infirmary = new SettlementStructure(new SubjectId("structure:infirmary"), new SubjectId("settlement:test"),
                 StructureKind.INFIRMARY, new BlockPosition(20, 64, 20), FacilityFacing.WEST, BuildingCatalog.standard().select(BuildingCatalog.MEDIEVAL_SPRUCE, StructureKind.INFIRMARY));
 
         SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
 
         assertEquals(FacilityFacing.WEST, port.facing());
-        assertEquals(64, port.exteriorApproachSurface().y());
-        assertEquals(65, port.exteriorApproachSurface().standingBody().y());
-        assertEquals(64, port.ownedAccessSurfaces().getFirst().y());
-        assertEquals(65, port.ownedAccessSurfaces().getFirst().standingBody().y());
-        assertEquals(64, port.ownedAccessSurfaces().getLast().y());
-        assertEquals(65, port.ownedAccessSurfaces().getLast().standingBody().y());
+        assertEquals(64, port.throatSurface().y(), "the raised entry is independent of outdoor grade");
+        assertEquals(63, port.exteriorApproachSurface().y());
+        assertEquals(64, port.exteriorApproachSurface().standingBody().y());
+        assertEquals(63, port.ownedAccessSurfaces().getFirst().y());
+        assertEquals(64, port.ownedAccessSurfaces().getFirst().standingBody().y());
+        assertEquals(63, port.ownedAccessSurfaces().getLast().y());
+        assertEquals(64, port.ownedAccessSurfaces().getLast().standingBody().y());
         assertEquals(5, port.topologyPort().ingressSurfaces().size());
     }
 
@@ -53,8 +54,8 @@ class TraversalPathTest {
             assertEquals(facing, port.facing());
             assertEquals(1, Math.abs(port.exteriorApproachSurface().x() - port.ownedAccessSurfaces().getFirst().x())
                     + Math.abs(port.exteriorApproachSurface().z() - port.ownedAccessSurfaces().getFirst().z()));
-            assertEquals(64, port.exteriorApproachSurface().y());
-            assertEquals(64, port.ownedAccessSurfaces().getFirst().y());
+            assertEquals(63, port.exteriorApproachSurface().y());
+            assertEquals(63, port.ownedAccessSurfaces().getFirst().y());
             assertEquals(4, port.topologyPort().ingressTopology(new TraversalTopologyId("topology:" + idSuffix), 1L,
                     infirmary.id()).edges().size());
         }
