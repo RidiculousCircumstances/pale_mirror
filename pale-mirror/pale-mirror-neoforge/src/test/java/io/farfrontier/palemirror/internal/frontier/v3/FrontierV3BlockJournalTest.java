@@ -99,6 +99,25 @@ class FrontierV3BlockJournalTest {
         assertTrue(ledger.isDirty(), "a failed force receipt cannot accept the pending witness");
         assertThrows(java.io.IOException.class, journal::checkHealthy);
     }
+    @Test void structuralObservationSharesAnAddressWithoutAcquiringBlockAuthorityAcrossRecovery() throws Exception {
+        Path path = directory.resolve("structural-observation.dat");
+        var ledger = FrontierV3GrayboxLedger.inMemory();
+        ledger.attachJournal(path, WORLD, DIMENSION, ledger.openJournal(path));
+        var position = new BlockPos(3,64,7); claim(ledger, position);
+        var capture = new net.minecraft.nbt.CompoundTag(); capture.putLong("pos",position.asLong());
+        capture.putString("owner",ledger.claim(position).owner());
+        ledger.prepareStructuralChange(position,capture);
+        ledger.save(path.toFile(),null); ledger.finish();
+        var recovered = read(path);
+        assertNotNull(recovered.claim(position));
+        assertEquals(capture,recovered.structuralChange(position));
+        assertTrue(recovered.pendingStructuralChanges().contains(position));
+        recovered.finishStructuralChange(position); recovered.save(path.toFile(),null); recovered.finish();
+        var settled = read(path);
+        assertNotNull(settled.claim(position),"retiring an observation cannot remove its block authority");
+        assertNull(settled.structuralChange(position));
+        assertFalse(settled.pendingStructuralChanges().contains(position));
+    }
     @Test void orphanSectionsCannotBeMistakenForAFreshWorld() throws Exception {
         Files.createDirectory(directory.resolve("missing.dat.sections"));
         assertThrows(java.io.IOException.class, () -> FrontierV3GrayboxLedger.openBlocks(directory.resolve("missing.dat")));

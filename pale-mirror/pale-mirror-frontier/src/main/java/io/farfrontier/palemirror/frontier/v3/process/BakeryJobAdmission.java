@@ -19,7 +19,7 @@ final class BakeryJobAdmission {
     private static boolean availableOpportunity(FrontierWorldState state, ResidentProfile resident, long atTick) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
         var workshop = ProductionProcess.workshop(settlement);
-        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+        if (!FacilityFunctionAvailability.mayUse(state, workshop.id())
                 || !SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id())) return false;
         for (var task : state.strategicPlans().tasksOwnedBy(settlement.id()).stream()
                 .filter(task -> task.ownerId().equals(settlement.id()) && task.kind() == StrategicTaskKind.PRODUCE_AT_STATION

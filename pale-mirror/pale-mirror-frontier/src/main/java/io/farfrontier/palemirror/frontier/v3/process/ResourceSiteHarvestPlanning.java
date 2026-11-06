@@ -43,7 +43,7 @@ final class ResourceSiteHarvestPlanning {
         if (!action.id().equals(start(task, action.dueAt().ticks()).id())) return List.of();
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(task.resourceSiteTarget().orElseThrow());
         if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.GROWING) return blocked(task);
-        if (state.structureConditions().get(site(state, lifecycle.siteId()).facilityId()) != StructureCondition.INTACT)
+        if (!FacilityFunctionAvailability.mayUse(state, site(state, lifecycle.siteId()).facilityId()))
             return blocked(task);
         var admitted = admissions(state, task, atTick);
         if (!admitted.isEmpty()) return admitted;
@@ -68,7 +68,7 @@ final class ResourceSiteHarvestPlanning {
         if (!task.ownerId().equals(settlement.id()) || !task.resourceSiteTarget().equals(java.util.Optional.of(site.id()))) {
             throw new IllegalArgumentException("resource-site harvest task has a foreign field owner");
         }
-        if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return List.of();
+        if (!FacilityFunctionAvailability.mayUse(state, site.facilityId())) return List.of();
         var candidates = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(),
                 ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE, atTick);
         if (candidates.isEmpty()) return List.of();
@@ -78,7 +78,7 @@ final class ResourceSiteHarvestPlanning {
         ResidentWorkProvider<ResourceSiteHarvestStarted> provider = provider(task, site);
         boolean sharedFields = state.resourceSiteDescriptors().values().stream()
                 .filter(field -> field.settlementId().equals(settlement.id()))
-                .filter(field -> state.structureConditions().get(field.facilityId()) == StructureCondition.INTACT)
+                .filter(field -> FacilityFunctionAvailability.mayUse(state, field.facilityId()))
                 .filter(field -> FieldWorkDemand.requested(state, field, atTick)).limit(2).count() > 1;
         for (ResidentProfile farmer : candidates) {
             var discovered = ResidentWorkComposition.SELECTION.assess(projected, farmer, atTick, provider);
@@ -123,7 +123,7 @@ final class ResourceSiteHarvestPlanning {
 
     static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
         var fields = state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(home))
-                .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT).toList();
+                .filter(site -> FacilityFunctionAvailability.mayUse(state, site.facilityId())).toList();
         boolean workable = fields.stream().anyMatch(site -> state.resourceSites().cycle(site.id()).hasAvailableWork()
                 || state.resourceSites().site(site.id()).phase() == ResourceSitePhase.HARVESTING);
         var retained = state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
@@ -145,7 +145,7 @@ final class ResourceSiteHarvestPlanning {
             if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING
                     && lifecycle.phase() != ResourceSitePhase.GROWING) continue;
             var site = site(state, lifecycle.siteId());
-            if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) continue;
+            if (!FacilityFunctionAvailability.mayUse(state, site.facilityId())) continue;
             // Read demand against the actual shared input. A speculative task
             // activation per resident invalidates every economic view although
             // no work, stock or capacity changed. Only navigation of the selected

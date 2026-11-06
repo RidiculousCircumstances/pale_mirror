@@ -60,7 +60,7 @@ final class BakeryProcessingForecast {
         var recipe = BakeryRecipes.bread(state);
         var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
                 .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
-        if (state.structureConditions().get(facility.id()) != StructureCondition.INTACT) return java.util.Optional.empty();
+        if (!FacilityFunctionAvailability.mayUse(state, facility.id())) return java.util.Optional.empty();
         var selected = ProductionStationSelection.usable(state, facility.id(), recipe.id());
         if (selected.isEmpty()) return java.util.Optional.empty();
         var station = selected.orElseThrow(); var machine = state.productionStations().require(station.id());

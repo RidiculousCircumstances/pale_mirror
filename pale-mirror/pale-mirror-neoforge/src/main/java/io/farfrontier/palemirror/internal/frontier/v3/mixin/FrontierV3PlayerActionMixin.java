@@ -18,6 +18,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Captures the authoritative server receipt before vanilla mutates the physical block. */
 @Mixin(ServerPlayerGameMode.class)
 abstract class FrontierV3PlayerActionMixin implements FrontierV3BlockBreakProgress {
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method="destroyBlock")
+    private boolean frontierV3$prepareCompleteDestruction(BlockPos position,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Boolean> original) {
+        return io.farfrontier.palemirror.internal.frontier.v3.FrontierV3PlayerNativeInputs.destroy(player,level,position,() -> original.call(position));
+    }
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method="useItemOn")
+    private net.minecraft.world.InteractionResult frontierV3$prepareNativeUse(ServerPlayer actor,net.minecraft.world.level.Level world,
+            net.minecraft.world.item.ItemStack item,net.minecraft.world.InteractionHand hand,net.minecraft.world.phys.BlockHitResult hit,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<net.minecraft.world.InteractionResult> original) {
+        return world instanceof ServerLevel serverLevel
+                ? io.farfrontier.palemirror.internal.frontier.v3.FrontierV3PlayerNativeInputs.use(actor,serverLevel,hand,hit,() -> original.call(actor,world,item,hand,hit))
+                : original.call(actor,world,item,hand,hit);
+    }
     @Shadow protected ServerPlayer player;
     @Shadow protected ServerLevel level;
     @Shadow private boolean isDestroyingBlock;

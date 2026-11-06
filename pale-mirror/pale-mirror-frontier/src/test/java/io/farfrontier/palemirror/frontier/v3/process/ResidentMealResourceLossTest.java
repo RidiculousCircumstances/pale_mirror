@@ -16,8 +16,9 @@ class ResidentMealResourceLossTest {
             var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:meal-source-loss"), 421L));
             var home = state.bootstrap().settlements().getFirst(); var resident = home.residents().getFirst().id();
             var container = new SubjectId("container:meal-source-loss"); var account = ReferenceContainerCustody.scopeId(container);
-            var station = SettlementServiceAccessPoints.depotPort(state, home.id()).exteriorApproach();
-            var endpoint = new ShipmentEndpoint.Storage(home.id(), container, station, java.util.Optional.empty(), station);
+            var kitchen = home.structures().stream().filter(b -> b.kind() == StructureKind.KITCHEN).findFirst().orElseThrow();
+            var station = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(kitchen).entrances().values().iterator().next().interiorConnector();
+            var endpoint = new ShipmentEndpoint.Storage(home.id(), container, station, java.util.Optional.of(kitchen.id()), station);
             var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 100, ResourceStorageRole.WAREHOUSE);
             state = new ResourceStorageDeclared(ContainerRecord.storage(container, home.id(), 27, io.farfrontier.palemirror.frontier.v3.model.StorageBlockKind.CHEST, policy), station.support().offset(1, 1, 0)).apply(state, home.id());
             var lot = new ResourceLot(new SubjectId("lot:meal-source-loss"), home.id(), "minecraft:bread", 64, "test:meal", List.of());

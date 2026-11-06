@@ -52,6 +52,7 @@ final class FirstVisibilityWork {
         }
         current = null;
     }
+    GrayboxCell unresolvedCell() { return current != null ? current : pending.peekFirst(); }
     boolean complete() { return pending.isEmpty(); }
     boolean blocked() { return blocked; }
     int cells() { return cells; }

@@ -10,7 +10,7 @@ import java.util.*;
 
 /** Durable physical capture before external writes; source policy alone acknowledges their meaning. */
 final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWrites.Owner {
-    @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.EXTRACTIVE_SITE; }
+    @Override public FrontierV3ManagedBlockWrites.OwnerKind family() { return FrontierV3ManagedBlockWrites.OwnerKind.EXTRACTIVE_SITE; }
     @Override public boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             List<FrontierV3ManagedBlockWrites.PlannedWrite> writes, Runnable resume) {
         var state = runtime.decodedState().orElseThrow();

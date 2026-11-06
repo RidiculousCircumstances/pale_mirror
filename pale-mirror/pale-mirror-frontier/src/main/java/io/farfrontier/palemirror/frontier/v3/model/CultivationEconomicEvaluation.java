@@ -12,7 +12,7 @@ public final class CultivationEconomicEvaluation {
         var rules = state.bootstrap().ruleset().fields().cultivation().orElseThrow();
         var sites = state.resourceSites();
         var fields = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home) && field.kind() == state.bootstrap().ruleset().fields().cultivationCrop())
-                .filter(field -> state.structureConditions().get(field.facilityId()) == StructureCondition.INTACT)
+                .filter(field -> FacilityFunctionAvailability.mayUse(state, field.facilityId()))
                 .filter(field -> { var phase = sites.site(field.id()).phase(); return phase == ResourceSitePhase.GROWING
                         || phase == ResourceSitePhase.READY || phase == ResourceSitePhase.HARVESTING; })
                 .sorted(Comparator.comparing(ResourceSite::id)).toList();

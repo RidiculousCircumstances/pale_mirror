@@ -11,14 +11,18 @@ final class InstalledStationFacts {
             new ImmutableReferenceIndex.Source<>(s -> s.inventory().surfaces());
     private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, StructureCondition> CONDITIONS =
             new ImmutableReferenceIndex.Source<>(FrontierWorldState::structureConditions);
+    private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, StructureDamage> DAMAGE =
+            new ImmutableReferenceIndex.Source<>(FrontierWorldState::structureDamage);
+    private static final ImmutableReferenceIndex.Source<FrontierWorldState, BlockPosition, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation> GEOMETRY =
+            new ImmutableReferenceIndex.Source<>(s -> s.navigationGeometry().cells());
     private static final ImmutableReadProjection<FrontierWorldState, SubjectId, ContainerRecord, Optional<Installation>> INSTALLED =
-            new ImmutableReadProjection<>(Integer.MAX_VALUE, 2, List.of(SURFACES, CONDITIONS),
-                    (state, record) -> record.productionStation().map(spec -> List.of(SURFACES.at(record.id()), CONDITIONS.at(spec.facilityId())))
+            new ImmutableReadProjection<>(Integer.MAX_VALUE, 4, List.of(SURFACES, CONDITIONS, DAMAGE, GEOMETRY),
+                    (state, record) -> record.productionStation().map(spec -> List.of(SURFACES.at(record.id()), CONDITIONS.at(spec.facilityId()), DAMAGE.at(spec.facilityId()), GEOMETRY.at(spec.workerStation().support())))
                             .orElse(List.of()),
                     (state, record) -> record.productionStation().filter(spec -> {
                         var status = state.inventory().surfaces().get(record.id()).status();
                         return status != ContainerSurfaceStatus.RETIRED && status != ContainerSurfaceStatus.CONFLICT
-                                && state.structureConditions().get(spec.facilityId()) == StructureCondition.INTACT;
+                                && ProductionFacilityAvailability.mayUseStation(state, spec);
                     }).map(spec -> new Installation(record.id(), record.ownerId(), spec)));
     private static final ImmutableGroupView<SubjectId, Optional<Installation>, SubjectId> HOMES = new ImmutableGroupView<>();
     private static final ImmutableKeyedInputView<SubjectId, List<Installation>> LOCAL = new ImmutableKeyedInputView<>(SimulationCapacity.MAX_SETTLEMENTS);

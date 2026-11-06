@@ -217,7 +217,7 @@ class ProductionProcessTest {
     @Test
     void coldOrderCancelledBeforeAnEffectReturnsTheSameInputAndReleasesItsExactReservation() {
         ColdMarketJob prepared = coldMarketJob();
-        FrontierWorldState unavailable = prepared.state().withStructureCondition(prepared.job().facilityId(), StructureCondition.DESTROYED);
+        FrontierWorldState unavailable = withoutWorkContact(prepared.state(), prepared.job());
 
         List<ProposedEvent> planned = ProductionProcess.planCompletion(unavailable, new ScheduledAction(
                 new ScheduleId("schedule:test-cold-cancel"), new SimInstant(100L), 0, prepared.job().id(), "frontier.settlement.production.task.complete", 1));
@@ -291,7 +291,7 @@ class ProductionProcessTest {
     @Test
     void marketOrderWithAPreparedPhysicalTransformationCannotBeCancelledToFreeFunds() {
         PreparedProduction prepared = activePhysicalProduction();
-        FrontierWorldState unavailable = prepared.state().withStructureCondition(prepared.job().facilityId(), StructureCondition.DESTROYED);
+        FrontierWorldState unavailable = withoutWorkContact(prepared.state(), prepared.job());
         MarketWorkOrder order = unavailable.companies().market().workOrders().values().stream()
                 .filter(value -> value.jobId().equals(prepared.job().id())).findFirst().orElseThrow();
 
@@ -378,8 +378,7 @@ class ProductionProcessTest {
         FrontierWorldState hot = ModeledActorBodyFacts.present(withWork.prepareSceneLease(lease), job.workerId())
                 .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         BlockPosition lostStation = SettlementWorkshopServicePort.forWorkshop(workshop).workStation().support();
-        FrontierWorldState damaged = hot.recordPhysicalDelta(new PhysicalDelta(lostStation, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id())), Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-workshop-loss"));
+        FrontierWorldState damaged = StructureIntegrity.observe(hot, StructureObservationFixtures.missingCell(hot, workshop, lostStation, "player:test-work-contact-loss"));
 
         List<ProposedEvent> planned = ProductionProcess.planFacilityUnavailable(damaged, workshop.id());
 
@@ -420,12 +419,11 @@ class ProductionProcessTest {
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
         BlockPosition station = SettlementWorkshopServicePort.forWorkshop(workshop).workStation().support();
-        PhysicalDelta loss = new PhysicalDelta(station, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id())),
-                Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-observed-workshop-loss");
+        StructureCellObserved loss = StructureObservationFixtures.missingCell(hot, workshop, station, "player:test-work-contact-loss");
         var checkpoint = engine.checkpoint(); CommandId command = new CommandId("command:production-observed-workshop-loss");
 
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), new PhysicalDeltaObserved(loss))));
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), loss)));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(StructureCondition.DAMAGED, after.structureConditions().get(workshop.id()));
         assertEquals(StrategicTaskStatus.BLOCKED, after.strategicPlans().tasks().get(prepared.taskId()).status());
@@ -990,4 +988,12 @@ class ProductionProcessTest {
     record MaterializedProduction(FrontierWorldState state, ProductionJob job, MarketWorkOrder order, SubjectId settlementId, SubjectId taskId) { }
     record ColdMarketJob(FrontierWorldState state, SubjectId settlementId, ProductionJob job, ExactItemStack input, MarketWorkOrder order) { }
     record HarvestLineage(FrontierWorldState state, SubjectId farmerId, ResourceSiteHarvestJob successor) { }
+    private static FrontierWorldState withoutWorkContact(FrontierWorldState state, ProductionJob job) {
+        var building = FrontierWorldStateSupport.structureById(state.bootstrap(), job.facilityId());
+        var station = SettlementWorkshopServicePort.forWorkshop(building).workStation().support();
+        return StructureIntegrity.observe(state, StructureObservationFixtures.missingCell(state, building, station, "player:test-work-contact-loss"));
+    }
+
+
+
 }

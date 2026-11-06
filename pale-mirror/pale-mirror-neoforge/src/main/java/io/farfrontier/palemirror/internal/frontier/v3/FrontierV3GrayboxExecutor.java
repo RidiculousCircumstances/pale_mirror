@@ -73,10 +73,8 @@ final class FrontierV3GrayboxExecutor {
             };
         }
     }
-    private record FirstVisibilityRecord(FirstVisibility status, long revision, int cells) { }
-    record FirstVisibilitySnapshot(ChunkPos chunk, String status, long revision, int cells) {
-        static FirstVisibilitySnapshot unavailable() { return new FirstVisibilitySnapshot(null, "INVALID", -1L, 0); }
-        static FirstVisibilitySnapshot unobserved(ChunkPos chunk) { return new FirstVisibilitySnapshot(chunk, "UNOBSERVED", -1L, 0); }
+    private record FirstVisibilityRecord(FirstVisibility status, long revision, int cells, GrayboxCell unresolved) {
+        FirstVisibilityRecord(FirstVisibility status, long revision, int cells) { this(status, revision, cells, null); }
     }
     private FrontierV3GrayboxExecutor() { }
     static int firstVisibilityCellBudget(int operationBudget) { return operationBudget; }
@@ -87,6 +85,7 @@ final class FrontierV3GrayboxExecutor {
         if (state != null) cursor(runtime, state);
     }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierV3StructureBlockWrites.reconcile(level, runtime);
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
@@ -368,7 +367,8 @@ final class FrontierV3GrayboxExecutor {
             }
             firstVisibilityWork(runtime).remove(chunk);
             long revision = runtime.canonicalState().orElseThrow().revision().value();
-            if (records.replace(chunk, record, new FirstVisibilityRecord(result, revision, work.cells()))
+            if (records.replace(chunk, record, new FirstVisibilityRecord(result, revision, work.cells(),
+                            result == FirstVisibility.BLOCKED ? work.unresolvedCell() : null))
                     && result == FirstVisibility.STATIC_CURRENT) DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
         }
     }
@@ -510,15 +510,15 @@ final class FrontierV3GrayboxExecutor {
         if (budget.takeRead() && FrontierV3HotHandoff.inspect(level, runtime, chunk).ready())
             records.put(chunk, new FirstVisibilityRecord(FirstVisibility.READY, record.revision(), record.cells()));
     }
-    static FirstVisibilitySnapshot firstVisibility(FrontierV3ServerRuntime<?, ?> runtime, String id) {
+    static FrontierV3FirstVisibilitySnapshot firstVisibility(FrontierV3ServerRuntime<?, ?> runtime, String id) {
         String[] parts = Objects.requireNonNull(id, "first visibility id").split(",", -1);
-        if (parts.length != 2) return FirstVisibilitySnapshot.unavailable();
+        if (parts.length != 2) return FrontierV3FirstVisibilitySnapshot.unavailable();
         try {
             ChunkPos chunk = new ChunkPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
             FirstVisibilityRecord record = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
-            return record == null ? FirstVisibilitySnapshot.unobserved(chunk)
-                    : new FirstVisibilitySnapshot(chunk, record.status().name(), record.revision(), record.cells());
-        } catch (NumberFormatException invalid) { return FirstVisibilitySnapshot.unavailable(); }
+            return record == null ? FrontierV3FirstVisibilitySnapshot.unobserved(chunk)
+                    : new FrontierV3FirstVisibilitySnapshot(chunk, record.status().name(), record.revision(), record.cells(), record.unresolved());
+        } catch (NumberFormatException invalid) { return FrontierV3FirstVisibilitySnapshot.unavailable(); }
     }
     private static boolean allowsDeferredProjection(FrontierV3ServerRuntime<?, ?> runtime, GrayboxCell cell) {
         FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4));

@@ -23,7 +23,8 @@ final class KnownPedestrianObstacleIndex {
         replace(updates, Source.UNKNOWN, sites.unknown(), sites::unknown);
         replace(updates, Source.ORGANS, state.hiveColony().addedOrgans(), () -> FrontierGrayboxPlan.intactOrganOccupancy(
                 List.copyOf(state.hiveColony().addedOrgans().values())));
-        replace(updates, Source.PHYSICAL, state.physicalDeltas(), () -> state.physicalDeltas().keySet());
+        var unknown = PhysicalDeltaGeometry.unknown(state);
+        replace(updates, Source.PHYSICAL, unknown, () -> unknown);
         replace(updates, Source.STORAGE, storage, () -> storage);
         var observed = new EnumMap<Source, RegionalBlockSet>(updates);
         observed.keySet().retainAll(EnumSet.of(Source.PHYSICAL, Source.STORAGE));

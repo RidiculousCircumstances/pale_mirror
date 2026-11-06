@@ -33,7 +33,7 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
                 .filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY
                         || state.resourceSites().site(site.id()).phase() == ResourceSitePhase.GROWING)
                 .filter(site -> FieldWorkDemand.requested(state, site, atTick))
-                .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
+                .filter(site -> FacilityFunctionAvailability.mayUse(state, site.facilityId()))
                 .filter(site -> !site.layout().cells().isEmpty())
                 .filter(site -> ResourceStorageSelection.newStackDestination(state, settlement.id(), site.kind().resourceKind(), 64,
                         site.layout().cells().getFirst().workstation(), java.util.Set.of(ResourceStorageRole.WAREHOUSE),

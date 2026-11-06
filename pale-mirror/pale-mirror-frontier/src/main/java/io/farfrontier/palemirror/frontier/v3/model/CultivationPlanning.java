@@ -19,7 +19,7 @@ public final class CultivationPlanning {
         var sites = state.resourceSites();
         var crop = state.bootstrap().ruleset().fields().cultivationCrop();
         var fields = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home) && field.kind() == crop)
-                .filter(field -> state.structureConditions().get(field.facilityId()) == StructureCondition.INTACT)
+                .filter(field -> FacilityFunctionAvailability.mayUse(state, field.facilityId()))
                 .filter(field -> { var phase = sites.site(field.id()).phase(); return phase == ResourceSitePhase.GROWING
                         || phase == ResourceSitePhase.READY || phase == ResourceSitePhase.HARVESTING; })
                 .sorted(Comparator.comparing(ResourceSite::id)).toList();

@@ -169,7 +169,7 @@ final class FrontierV3DiagnosticJson {
         return bounded(kind, id, checkpoint, value);
     }
 
-    static String firstVisibility(String id, FrontierScheduleView checkpoint, FrontierV3GrayboxExecutor.FirstVisibilitySnapshot value) {
+    static String firstVisibility(String id, FrontierScheduleView checkpoint, FrontierV3FirstVisibilitySnapshot value) {
         if (value == null || value.chunk() == null || value.status().equals("INVALID")) return unavailable("first_visibility", id, checkpoint, "invalid_chunk");
         return PREFIX + base("first_visibility", id, checkpoint) + ",\"status\":\"ok\",\"chunkX\":" + value.chunk().x
                 + ",\"chunkZ\":" + value.chunk().z + ",\"visibility\":\"" + quote(value.status())

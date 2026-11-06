@@ -371,6 +371,9 @@ public final class FrontierRouteNetwork {
      * meet to form the one small square a translated convoy needs to turn without teleporting.
      */
     private static void addCarriagewaySegment(Set<BlockPosition> cells, BlockPosition from, BlockPosition to) {
+        // Concatenated operation legs can share their exact junction. It is one
+        // support cell, not a new edge with an invented grade or lateral direction.
+        if (from.equals(to)) { cells.add(from); return; }
         addSegment(cells, from, to);
         if (from.x() == to.x()) {
             addSegment(cells, from.offset(-1, 0, 0), to.offset(-1, 0, 0));

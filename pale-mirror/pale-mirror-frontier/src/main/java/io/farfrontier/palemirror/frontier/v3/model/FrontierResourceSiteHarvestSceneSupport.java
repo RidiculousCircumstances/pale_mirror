@@ -91,7 +91,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
                 && !HarvestStorageReplacement.retainedAvailable(state, job)) return Optional.empty();
         ResourceSite site = state.resourceSite(job.siteId());
         ActorLocation worker = state.actorLocations().get(job.workerId());
-        if (site == null || state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT
+        if (site == null || !FacilityFunctionAvailability.mayUse(state, site.facilityId())
                 || worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
         if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST || !assignment.ownerId().equals(Optional.of(job.id()))) return Optional.empty();

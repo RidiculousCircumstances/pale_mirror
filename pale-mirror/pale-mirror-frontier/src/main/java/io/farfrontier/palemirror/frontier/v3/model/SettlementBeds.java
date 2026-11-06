@@ -30,9 +30,7 @@ public final class SettlementBeds {
                 var head = structure.placement().world(bed.head());
                 var foot = structure.placement().world(bed.foot());
                 boolean available =
-                        state.structureConditions().get(structure.id())
-                                        != StructureCondition.DESTROYED
-                                && (damage == null
+                        (damage == null
                                         || !damage.cells().containsKey(head)
                                                 && !damage.cells().containsKey(foot));
                 result.add(

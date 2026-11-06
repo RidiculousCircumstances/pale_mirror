@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 
+import java.util.UUID;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,9 +19,11 @@ import java.util.TreeSet;
 
 /** Spatially partitioned durable provenance; it never grants overwrite authority. */
 final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
-    /* Format 6 adds explicitly declared worksite cells in the same block-provenance store. */
-    private static final int FORMAT = 6;
+    /* Format 7 retains auxiliary structural observations alongside the exclusive physical owner. */
+    private static final int FORMAT = 7;
     private final Map<Long, Claim> claims;
+    private final Map<Long, CompoundTag> structuralChanges;
+    private final java.util.Set<Long> pendingStructures = new java.util.LinkedHashSet<>();
     private java.util.function.Function<BlockPos, Claim> initialClaims = ignored -> null;
     private final Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells;
     /**
@@ -33,14 +36,21 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     private final NavigableSet<Long> externalWorksitePositions = new TreeSet<>();
     private final java.util.Set<Long> changedWorksites = new java.util.HashSet<>();
 
-    private FrontierV3GrayboxLedger() { this(new HashMap<>(), new HashMap<>()); }
-    private FrontierV3GrayboxLedger(Map<Long, Claim> claims, Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells) {
+    private FrontierV3GrayboxLedger() { this(new HashMap<>(), new HashMap<>(), new HashMap<>()); }
+    private FrontierV3GrayboxLedger(Map<Long, Claim> claims, Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells, Map<Long, CompoundTag> structuralChanges) {
         super(FrontierV3PhysicalStoreKind.BLOCKS);
         this.claims = pagedTable("claims", claims, Object::toString, Long::parseLong, FrontierV3GrayboxLedger::encodeClaim,
                 FrontierV3GrayboxLedger::decodeClaim);
         this.worksiteCells = pagedTable("worksiteCells", worksiteCells, Object::toString, Long::parseLong, (position, witness) -> {
             var encoded = witness.write(); encoded.putLong("pos", position); return encoded;
         }, FrontierV3GrayboxLedger::decodeWorksite);
+        this.structuralChanges = pagedTable("structuralChanges", structuralChanges, Object::toString, Long::parseLong,
+                (position, value) -> value.copy(), (position, value) -> {
+                    if (!value.contains("pos", Tag.TAG_LONG) || value.getLong("pos") != position)
+                        throw new IllegalStateException("structural capture has a foreign address");
+                    return value.copy();
+                });
+        pendingStructures.addAll(structuralChanges.keySet());
         this.worksiteStagingPositions = new TreeSet<>();
         claims.forEach((position, claim) -> {
             if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
@@ -68,6 +78,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             return switch (FrontierV3PhysicalStoreKind.BLOCKS.table(row.getInt("table")).wireTag()) {
                 case 1 -> decodeClaim(record.getLong("pos"), record).semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name());
                 case 2 -> external(decodeWorksite(record.getLong("pos"), record));
+                case 3 -> true;
                 default -> throw new IllegalStateException("unregistered block query codec");
             };
         });
@@ -82,6 +93,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             switch (FrontierV3PhysicalStoreKind.BLOCKS.table(row.getInt("table")).wireTag()) {
                 case 1 -> index(java.util.Objects.requireNonNull(claims.get(position)), position);
                 case 2 -> indexExternalWorksite(position, java.util.Objects.requireNonNull(worksiteCells.get(position)));
+                case 3 -> pendingStructures.add(position);
                 default -> throw new java.io.IOException("unregistered block query codec");
             }
         }
@@ -103,6 +115,34 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
                 || position != new BlockPos(actual.x(), actual.y(), actual.z()).asLong())
             throw new IllegalStateException("worksite address differs from its record");
         return witness;
+    }
+    CompoundTag structuralChange(BlockPos position) {
+        var value = structuralChanges.get(position.asLong()); return value == null ? null : value.copy();
+    }
+    boolean prepareStructuralChange(BlockPos position, CompoundTag value) {
+        long address = position.asLong(); var prior = structuralChanges.get(address);
+        if (prior == null) {
+            if (pendingStructures.size() >= 8192) return false;
+            structuralChanges.put(address, value.copy()); pendingStructures.add(address); setDirty();
+        } else if (!prior.equals(value)) return false;
+        return durable(scalarDurabilityFence("structuralChanges", Map.of(Long.toString(address), value)));
+    }
+    void bindStructuralReceipt(BlockPos position, UUID receipt) {
+        var value = structuralChanges.get(position.asLong());
+        if (value == null || value.hasUUID("receipt") && !value.getUUID("receipt").equals(receipt))
+            throw new IllegalStateException("structural receipt lost its exact capture");
+        if (!value.hasUUID("receipt")) {
+            value = value.copy(); value.putUUID("receipt", receipt);
+            structuralChanges.put(position.asLong(), value); setDirty();
+        }
+    }
+    List<BlockPos> pendingStructuralChanges() {
+        var batch = pendingStructures.stream().limit(32).toList();
+        batch.forEach(pendingStructures::remove); pendingStructures.addAll(batch);
+        return batch.stream().map(BlockPos::of).toList();
+    }
+    void finishStructuralChange(BlockPos position) {
+        structuralChanges.remove(position.asLong()); pendingStructures.remove(position.asLong()); setDirty();
     }
     Claim claim(BlockPos position) {
         var changed = claims.get(position.asLong());
@@ -286,7 +326,14 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             if (address != new BlockPos(position.x(), position.y(), position.z()).asLong() || claims.containsKey(address)
                     || worksite.put(address, witness) != null) throw new IllegalStateException("invalid/competing worksite block address");
         }
-        return new FrontierV3GrayboxLedger(claims, worksite);
+        Map<Long, CompoundTag> structural = new HashMap<>();
+        if (!tag.contains("structuralChanges", Tag.TAG_LIST)) throw new IllegalStateException("missing structural captures");
+        for (Tag value : tag.getList("structuralChanges", Tag.TAG_COMPOUND)) {
+            var entry = (CompoundTag) value;
+            if (!entry.contains("pos", Tag.TAG_LONG) || structural.put(entry.getLong("pos"), entry.copy()) != null)
+                throw new IllegalStateException("duplicate/incomplete structural capture");
+        }
+        return new FrontierV3GrayboxLedger(claims, worksite, structural);
     }
 
     private static CompoundTag encodeClaim(long position, Claim claim) {
@@ -317,7 +364,9 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         worksiteCells.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             var value = entry.getValue().write(); value.putLong("pos", entry.getKey()); cells.add(value);
         });
-        tag.put("worksiteCells", cells); return tag;
+        tag.put("worksiteCells", cells);
+        var structural = new ListTag(); structuralChanges.values().forEach(v -> structural.add(v.copy()));
+        tag.put("structuralChanges", structural); return tag;
     }
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) throw new IllegalStateException("v3 graybox claim " + field + " is blank");

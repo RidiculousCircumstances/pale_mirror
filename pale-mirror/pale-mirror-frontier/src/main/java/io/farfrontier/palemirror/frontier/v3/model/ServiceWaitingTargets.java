@@ -35,7 +35,9 @@ final class ServiceWaitingTargets {
                 for (int dz = -ring; dz <= ring; dz++)
                     if (Math.max(Math.abs(dx), Math.abs(dz)) == ring)
                         add(waiting, boundary, knowledge, center.x() + dx, center.z() + dz);
-        waiting.removeIf(surface -> egress.contains(surface) || !knowledge.traversable(List.of(surface)));
+        waiting.removeIf(surface -> Math.max(Math.abs(surface.x() - center.x()), Math.abs(surface.z() - center.z())) > radius
+                || Math.abs(surface.y() - center.y()) > radius
+                || egress.contains(surface) || !knowledge.traversable(List.of(surface)));
         return List.copyOf(waiting);
     }
     private static void add(Set<SurfaceAnchor> waiting, ServiceAccessBoundary boundary,

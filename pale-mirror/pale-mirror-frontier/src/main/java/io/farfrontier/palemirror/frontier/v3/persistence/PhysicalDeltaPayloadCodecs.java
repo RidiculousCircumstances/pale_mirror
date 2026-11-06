@@ -25,6 +25,28 @@ final class PhysicalDeltaPayloadCodecs {
 
     static PayloadCodec single() { return new SingleCodec(); }
     static PayloadCodec batch() { return new BatchCodec(); }
+    static PayloadCodec structural() { return new PayloadCodec() {
+        public String type() { return "frontier.structure_cell_observed"; }
+        public byte[] encode(FrontierPayload payload) {
+            var value = (io.farfrontier.palemirror.frontier.v3.model.StructureCellObserved) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                FrontierWorldPayloadCodecs.writeSubject(out, value.structureId());
+                FrontierWorldPayloadCodecs.writePosition(out, value.position()); out.writeByte(value.part().wireTag());
+                NavigationGeometryCodec.writeObservation(out, value.observation()); out.writeBoolean(value.originalMaterial());
+                FrontierWorldPayloadCodecs.writeString(out, value.cause());
+            });
+        }
+        public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> {
+                var owner = FrontierWorldPayloadCodecs.readSubject(in).value();
+                var pos = FrontierWorldPayloadCodecs.readPosition(in);
+                var part = FrontierWireTags.require(GrayboxSemanticPart.class, in.readUnsignedByte());
+                var observation = NavigationGeometryCodec.readObservation(in, Optional.of(pos));
+                return new io.farfrontier.palemirror.frontier.v3.model.StructureCellObserved(owner, pos, part,
+                        observation, in.readBoolean(), FrontierWorldPayloadCodecs.readString(in));
+            });
+        }
+    }; }
 
     private static final class SingleCodec implements PayloadCodec {
         @Override public String type() { return "frontier.physical_delta_observed"; }

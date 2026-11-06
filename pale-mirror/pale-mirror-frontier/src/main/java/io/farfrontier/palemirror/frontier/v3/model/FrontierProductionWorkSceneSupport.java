@@ -59,7 +59,7 @@ public final class FrontierProductionWorkSceneSupport {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SettlementStructure workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElse(null);
         ActorLocation worker = state.actorLocations().get(job.workerId());
-        if (workshop == null || job.stationWork().isEmpty() && workshop.kind() != StructureKind.WORKSHOP || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+        if (workshop == null || job.stationWork().isEmpty() && workshop.kind() != StructureKind.WORKSHOP || !FacilityFunctionAvailability.mayUse(state, workshop.id())
                 || worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
         if (job.stationWork().isPresent() && StationWorkGoal.deliveryAccessCleared(state, job, worker.body()))
             return Optional.empty();

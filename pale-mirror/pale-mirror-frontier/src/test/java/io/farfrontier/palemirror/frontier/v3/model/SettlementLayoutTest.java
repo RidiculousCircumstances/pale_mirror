@@ -42,7 +42,9 @@ class SettlementLayoutTest {
                                                     == BuildingDefinition.Representation.AUTHORED));
             assertTrue(
                     home.layout().paving().stream()
-                            .allMatch(p -> p.y() == BOOTSTRAP.terrain().supportYAt(p.x(), p.z())));
+                            .allMatch(p -> p.y() == BOOTSTRAP.terrain().supportYAt(p.x(), p.z())
+                                    || home.structures().stream().flatMap(building -> BuildingSpatialPlan.of(building).publicEntrances().stream())
+                                        .flatMap(port -> port.ingressSurfaces().stream()).anyMatch(surface -> surface.support().equals(p))));
             SettlementLayoutValidation.validate(
                     new SettlementLayoutPlanner.Result(home.structures(), home.layout()));
         }
@@ -207,12 +209,11 @@ class SettlementLayoutTest {
                     BOOTSTRAP
                             .terrain()
                             .withSurveyedSupport(
-                                    floor.x(), floor.z(), building.anchor().y() + grade);
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> SettlementLayoutValidation.validate(original, slope, BOOTSTRAP.bounds()),
-                    "a moved draft may not bury or suspend its foundation without an earthworks"
-                        + " process");
+                                    floor.x(), floor.z(), BOOTSTRAP.terrain().baselineSupportY() + grade);
+            var preparation = BuildingSitePlan.compile(slope, building);
+            assertTrue(preparation.removedBlocks() + preparation.placedBlocks() > 0,
+                    "a sloped pad must retain exact cut/fill work rather than silently burying its footprint");
+            SettlementLayoutValidation.validate(original, slope, BOOTSTRAP.bounds());
         }
         var forged =
                 new SettlementLayout(

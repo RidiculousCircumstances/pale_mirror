@@ -5,11 +5,11 @@
   "license": "private test derivative; upstream ARR",
   "adaptations": [
     "original native blocks, shapes and materials retained with pinned dependencies",
-    "terrain placeholders and colony controllers omitted; complete source foundation and explicit below-floor voids retained",
+    "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
     "supported open entrance",
     "declared machine/operator aisle and service points",
     "no entities, inventories or foreign controllers; typed visual data retained"
   ],
-  "blocks": 801,
+  "blocks": 795,
   "beds": 0
 }

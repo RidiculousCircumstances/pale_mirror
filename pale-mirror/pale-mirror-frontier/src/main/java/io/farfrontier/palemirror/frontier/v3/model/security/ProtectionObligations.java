@@ -18,7 +18,9 @@ public final class ProtectionObligations {
     private static final class Town implements Port {
         public List<ProtectedTarget> read(FrontierWorldState state, SubjectId home) {
             var town = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
-            return town.structures().stream().filter(facility -> state.structureConditions().get(facility.id()) == StructureCondition.INTACT)
+            // A damaged asset still requires protection. Retirement of its declared plot,
+            // rather than cosmetic integrity, removes this settlement obligation.
+            return town.structures().stream()
                     .map(facility -> new ProtectedTarget(ProtectedTarget.Kind.SETTLEMENT, facility.id(), home,
                             new SurfaceAnchor(facility.anchor()), 3)).toList();
         }

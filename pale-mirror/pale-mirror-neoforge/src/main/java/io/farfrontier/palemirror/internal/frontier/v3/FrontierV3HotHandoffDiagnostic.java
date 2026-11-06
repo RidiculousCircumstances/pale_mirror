@@ -21,7 +21,18 @@ final class FrontierV3HotHandoffDiagnostic {
         String checks = review.checks().stream().map(check -> "{\"owner\":\"" + quote(check.owner().value())
                 + "\",\"status\":\"" + check.status().name() + "\",\"reason\":\"" + quote(check.reason()) + "\"}")
                 .collect(Collectors.joining(","));
-        return base.substring(0, base.length() - 1) + ",\"handoffRevision\":" + review.revision()
+        String mismatch = "null";
+        if (visibility.unresolved() != null) {
+            var cell = visibility.unresolved(); var p = cell.position();
+            var nativePosition = new net.minecraft.core.BlockPos(p.x(),p.y(),p.z());
+            var claim = FrontierV3GrayboxLedger.get(level).claim(nativePosition);
+            mismatch = "{\"position\":{\"x\":"+p.x()+",\"y\":"+p.y()+",\"z\":"+p.z()+"},\"owner\":\""
+                    + quote(cell.ownerId().value()) + "\",\"part\":\""+cell.semanticPart()+"\",\"expected\":\""
+                    +quote(FrontierV3GrayboxExecutor.material(cell.material()).toString())+"\",\"actual\":\""
+                    +quote(FrontierV3LoadedWorld.ready(level,nativePosition)?level.getBlockState(nativePosition).toString():"UNLOADED")
+                    +"\",\"claim\":\""+quote(String.valueOf(claim))+"\"}";
+        }
+        return base.substring(0, base.length() - 1) + ",\"firstUnresolvedCell\":" + mismatch + ",\"handoffRevision\":" + review.revision()
                 + ",\"staticProjectionProgress\":" + FrontierV3GrayboxExecutor.visibilityProgress(runtime, visibility.chunk())
                 + ",\"chunkLoaded\":" + (level.getChunkSource().getChunkNow(visibility.chunk().x, visibility.chunk().z) != null)
                 + ",\"generatedStructureCells\":" + (structures == null ? 0 : structures.cells().size())

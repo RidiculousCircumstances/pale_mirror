@@ -133,7 +133,14 @@ class BakeryHotVerticalTest {
         assertEquals(job, deathBlocked.productionJobs().get(job.id()));
         assertEquals(StrategicTaskStatus.BLOCKED, deathBlocked.strategicPlans().tasks().get(task.id()).status());
 
-        FrontierWorldState damaged = state.withStructureCondition(job.facilityId(), StructureCondition.DAMAGED);
+        assertTrue(ProductionProcess.planFacilityUnavailable(
+                state.withStructureCondition(job.facilityId(), StructureCondition.DAMAGED), job.facilityId()).isEmpty(),
+                "unrelated material damage retains a usable bakery");
+        var station = ProductionStationDirectory.require(state.inventory(), job.stationWork().orElseThrow().stationId())
+                .productionStation().orElseThrow();
+        var building = FrontierWorldStateSupport.structureById(state.bootstrap(), job.facilityId());
+        FrontierWorldState damaged = StructureIntegrity.observe(state, StructureObservationFixtures.missingCell(
+                state, building, station.workerStation().support(), "fixture:work-contact-lost"));
         List<ProposedEvent> damageEvents = ProductionProcess.planFacilityUnavailable(damaged, job.facilityId());
         assertEquals(2, damageEvents.size());
         assertEquals(ProductionBlockReason.FACILITY_UNAVAILABLE,

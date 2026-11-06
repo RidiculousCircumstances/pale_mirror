@@ -15,7 +15,7 @@ final class SettlementFoodPlanner implements SettlementOperationPlanner {
     }
     @Override public Assessment assess(FrontierWorldState state, Settlement settlement, long atTick) {
         boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
-                && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
+                && FacilityFunctionAvailability.mayUse(state, structure.id()));
         boolean reserveShort = SettlementFoodPolicy.reserveCoverageBread(state, settlement.id()) < SettlementFoodPolicy.reserveRequirement(state, settlement.id(), atTick);
         if (!workshop || BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(settlement.id()), atTick).isEmpty()) return Assessment.empty();
         var proposal = new StrategicOperationProposal(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD,

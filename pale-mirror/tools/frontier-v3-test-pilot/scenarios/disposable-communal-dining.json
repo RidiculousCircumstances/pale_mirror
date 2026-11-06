@@ -20,18 +20,13 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "diagnostic": {
-          "view": "container",
-          "id": "container:pantry-c728c058-2bd8-3f63-b2ec-7e6b51028ad3",
-          "field": "position"
+          "view": "settlement",
+          "id": "settlement:6",
+          "field": "layout.facilities.KITCHEN.interior"
         }
       },
-      "settleMs": 1000,
-      "causalMilestone": "ordinary_player_admits_kitchen_and_resident",
-      "offset": {
-        "x": 0,
-        "y": 0,
-        "z": -1
-      }
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_admits_kitchen_and_resident"
     },
     {
       "type": "wait_until_diagnostic",
@@ -45,6 +40,21 @@
         }
       },
       "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:6-1"
+    },
+    {
+      "type": "inspect",
+      "view": "first_visibility",
+      "id": "-41,-4"
+    },
+    {
+      "type": "inspect",
+      "view": "first_visibility",
+      "id": "-40,-4"
     },
     {
       "type": "wait_until_diagnostic",
@@ -93,7 +103,7 @@
   ],
   "assertions": [
     {
-      "after": 5,
+      "after": 8,
       "view": "resident_life",
       "id": "resident:6-1",
       "expect": {
@@ -105,7 +115,7 @@
       }
     },
     {
-      "after": 7,
+      "after": 10,
       "view": "container",
       "id": "container:pantry-c728c058-2bd8-3f63-b2ec-7e6b51028ad3",
       "expect": {
@@ -120,7 +130,7 @@
   ],
   "frames": [
     {
-      "after": 5,
+      "after": 8,
       "name": "resident-after-one-hot-meal",
       "presentation": "player"
     }

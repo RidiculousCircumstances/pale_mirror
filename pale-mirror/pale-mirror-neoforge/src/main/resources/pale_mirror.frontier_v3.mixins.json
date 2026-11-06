@@ -41,6 +41,7 @@
     "FrontierV3ChunkUnloadQueueMixin",
     "FrontierV3EntitySavePassMixin",
     "FrontierV3PlayerActionMixin",
+    "FrontierV3BlockItemAccessor",
     "FrontierV3PlayerTerrainTickMixin",
     "FrontierV3PlayerPositionResetMixin",
     "FrontierV3PlayerOperationSaveMixin",

@@ -31,11 +31,11 @@ final class FrontierV3SettlementLayoutDiagnostic {
                 + house.y()
                 + ",\"z\":"
                 + house.z()
-                + "},\"facilities\":" + facilities(home) + "}";
+                + "},\"facilities\":" + facilities(state, home) + "}";
     }
 
     /** Read-only authoring landmarks, never role or execution dispatch identities. */
-    private static String facilities(Settlement home) {
+    private static String facilities(FrontierWorldState state, Settlement home) {
         var values = new java.util.LinkedHashMap<StructureKind, SettlementStructure>();
         home.structures().forEach(building -> values.putIfAbsent(building.kind(), building));
         return values.entrySet().stream().map(entry -> {
@@ -47,6 +47,9 @@ final class FrontierV3SettlementLayoutDiagnostic {
             return "\"" + entry.getKey().name() + "\":{\"id\":\"" + building.id().value()
                     + "\",\"anchor\":" + point(building.anchor()) + ",\"entrance\":" + point(port.thresholdSurface().support().offset(0, 1, 0))
                     + ",\"interior\":" + point(port.interiorConnector().support().offset(0, 1, 0))
+                    + ",\"floor\":" + point(port.interiorConnector().support())
+                    + ",\"integrity\":\"" + state.structureConditions().get(building.id()) + "\",\"damagedCells\":"
+                    + state.structureDamage().getOrDefault(building.id(), StructureDamage.empty(building.id())).cells().size()
                     + ",\"facadeView\":" + point(view) + "}";
         }).collect(java.util.stream.Collectors.joining(",", "{", "}"));
     }

@@ -24,7 +24,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
     private final Set<String> indexedKeys = new TreeSet<>();
     private boolean indexReady, indexPersisted;
     private static final FrontierV3JournalStore.Limits SECTION =
-            new FrontierV3JournalStore.Limits(4097, 8L * 1024 * 1024);
+            new FrontierV3JournalStore.Limits(8193, 8L * 1024 * 1024);
     private final Path directory;
     private final FrontierV3JournalStore.Health health = new FrontierV3JournalStore.Health();
     private final FrontierV3JournalStore root;
@@ -163,10 +163,16 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
         for (var row : rows.entrySet()) {
             if (row.getKey().equals(BINDING)) continue;
             long position = position(row.getKey(), row.getValue());
-            if (SectionPos.of(BlockPos.of(position)).asLong() != section || occupied.putIfAbsent(position, row.getKey()) != null)
+            if (SectionPos.of(BlockPos.of(position)).asLong() != section
+                    || ownsCell(row.getKey()) && occupied.putIfAbsent(position, row.getKey()) != null)
                 throw new IOException("competing or misplaced block provenance " + row.getKey());
         }
         return occupied;
+    }
+    private static boolean ownsCell(String key) {
+        int table = Integer.parseInt(key.substring(0, key.indexOf(':')));
+        return FrontierV3PhysicalStoreKind.BLOCKS.table(table).addressRole()
+                == FrontierV3PhysicalStoreKind.AddressRole.BLOCK_AUTHORITY;
     }
     /** Parse the declared physical table key, including deletions, never an owner/type prefix. */
     private static long position(String key, byte[] bytes) throws IOException {
@@ -345,7 +351,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
                 pinned.add(id);
                 var occupied = addresses.get(id); var updates = new HashMap<Long, String>();
                 for (var row : rows.entrySet()) {
-                    if (row.getValue() != null) {
+                    if (row.getValue() != null && ownsCell(row.getKey())) {
                         long cell = position(row.getKey(), null); String retained = occupied.get(cell);
                         if (retained != null && !retained.equals(row.getKey())
                                 && !(rows.containsKey(retained) && rows.get(retained) == null)

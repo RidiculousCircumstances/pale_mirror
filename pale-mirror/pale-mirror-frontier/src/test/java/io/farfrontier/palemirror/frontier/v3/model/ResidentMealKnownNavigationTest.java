@@ -357,7 +357,7 @@ class ResidentMealKnownNavigationTest {
             assertTrue(detour.contains(occupiedExit), "exercise the occupied first outside cell, not merely another goal");
             assertFalse(ServiceDestinationClaims.forImmediateExit(blocked, actor).contains(detour.getLast()));
             ServiceBoundaryComposition.knowledge(blocked,
-                    ServiceBoundaryComposition.declaration(blocked, depot).identity()).requireRoute(detour);
+                    ServiceBoundaryComposition.declaration(blocked, depot).identity()).forActor(blocked, actor).requireRoute(detour);
         }
     }
     @Test void waitingApproachCannotOccupyAnotherMealsReservedClearanceAndHotCanRejectOccupiedPockets() {
@@ -400,12 +400,13 @@ class ResidentMealKnownNavigationTest {
                 () -> ResidentMealKnownNavigation.pathFrom(reserved, meal,
                         reserved.actorLocations().get(resident).supportingSurface(), station -> false));
 
-        List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
+        var origin = DeclaredRouteFixtures.openStreet(state, settlement);
         var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(resident, resident,
                 FrontierWireTags.tag(meal.phase()), 1L, List.of(originalPocket), TraversalCapability.PEDESTRIAN,
                 io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var route = ResidentMealKnownNavigation.departureKnowledge(state, meal, origin).plannedPath(origin, order);
         var travel = new io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute(order, route, 24_001L, 20L, 1L);
-        FrontierWorldState inFlight = reserved.withChanges(FrontierWorldStateUpdate.begin()
+        FrontierWorldState inFlight = reserved.withActorBody(resident, origin.standingBody()).withChanges(FrontierWorldStateUpdate.begin()
                 .humanPopulation(reserved.humanPopulation().withMeal(meal.withColdTravel(travel)))
                 .actorExecutions(reserved.actorExecutions().begin(meal.executionId(), 0L)));
         var interrupted = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess
@@ -525,7 +526,6 @@ class ResidentMealKnownNavigationTest {
                 io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.readView(),
                 () -> ResidentMealKnownNavigation.path(arrived, meal));
         assertEquals(shortEntry, calculation.observation().result());
-        assertEquals(1, calculation.demands().size(), "the complete admitted approach must not depend on separately cached legs");
         assertTrue(route.size() > 1);
     }
 

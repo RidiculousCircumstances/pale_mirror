@@ -219,6 +219,10 @@ export function validateScenario(scenario) {
         if (action.jump !== undefined && typeof action.jump !== 'boolean') throw new Error('walk jump must be boolean');
       }
       if (action.type === 'break' && !validResolvablePosition(action.position)) validatePosition(action.position);
+      if (action.type === 'break' && action.holdTicks !== undefined
+          && (!Number.isInteger(action.holdTicks) || action.holdTicks < 1 || action.holdTicks > 5)) {
+        throw new Error('aborted break holdTicks must be 1..5 ordinary player ticks');
+      }
       if (action.type === 'place' && !validPlacePosition(action.position)) validatePosition(action.position);
       if (action.type === 'open_container' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'click_menu_button' && (!Number.isInteger(action.button) || action.button < 0 || action.button > 255)) {
@@ -607,7 +611,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
         && (['farmAnchor', 'routeSurface', 'firstGuardPosition', 'layout.firstHousingAnchor'].includes(reference.field)
-          || /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.(anchor|entrance|interior|facadeView)$/.test(reference.field)))
+          || /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.(anchor|entrance|interior|floor|facadeView)$/.test(reference.field)))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'station:') && reference.field === 'exteriorApproach')
@@ -628,7 +632,9 @@ function validPlacePosition(value) {
   const reference = value?.diagnostic;
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
-    && ((reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionFutureBody')
+    && ((reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
+          && /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.floor$/.test(reference.field))
+      || (reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionFutureBody')
       || (reference.view === 'site' && requiredId(reference.id, 'site:') && ['firstCrop', 'lastCrop'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'scene' && requiredId(reference.id, 'task:') && reference.field === 'patrolNextBody'));

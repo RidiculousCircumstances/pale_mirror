@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 final class ProductionStaffingDemand {
     static SettlementStaffingPort.Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
-        boolean intact = state.structureConditions().get(ProductionProcess.workshop(settlement).id()) == StructureCondition.INTACT;
+        boolean intact = FacilityFunctionAvailability.mayUse(state, ProductionProcess.workshop(settlement).id());
         // Staffing needs any executable station work, not a choice between
         // recipes. A stock-only witness avoids building an unnecessary market
         // acquisition portfolio; actual work selection retains its own priority.

@@ -347,7 +347,7 @@ class FrontierReadabilityPlanTest {
         HumanPopulation needs = state.humanPopulation();
         for (SubjectId resident : recipients) needs = needs.accrueHunger(resident, 27_000L);
         FrontierWorldState hungry = state.withHumanPopulation(needs);
-        SubjectId depotId = FrontierWorldState.depotId(settlement.id());
+        SubjectId depotId = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), settlement.id());
         int slot = hungry.inventory().availableSlots(depotId).getFirst();
         FrontierWorldState restocked = hungry.withInventory(hungry.inventory().store(new ExactItemStack(
                 new SubjectId("item:board-restocked-bread"), settlement.id(), "minecraft:bread", 64,
@@ -361,7 +361,7 @@ class FrontierReadabilityPlanTest {
                 "restocking must invalidate the live board projection");
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("RESIDENTS HUNGRY · " + recipients.size()
-                + " · BREAD 64 / " + (recipients.size() * 3)));
+                + " · BREAD 64 / " + SettlementFoodPolicy.reserveRequirement(restocked, settlement.id(), 0L)), board.text());
         assertFalse(board.text().contains("BREAD NEEDED"));
     }
 
@@ -417,12 +417,19 @@ class FrontierReadabilityPlanTest {
                 "test-board", java.util.List.of(wheat));
         var resources = hungry.inventory().fungibleResources().transformCold(account, java.util.Map.of(wheat, 64),
                 java.util.Map.of(), bread);
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), settlement.id());
+        var pantryAccount = ReferenceContainerCustody.scopeId(pantry);
+        var quantity = java.util.Map.of(bread.id(), 64);
+        resources = resources.accounts().containsKey(pantryAccount)
+                ? resources.transfer(account, pantryAccount, quantity, java.util.Map.of())
+                : resources.transferToNewAccount(account, new CustodyAccount(pantryAccount,
+                        new ResourceCustody.Container(pantry), quantity, java.util.Map.of()));
         FrontierWorldState stocked = hungry.withInventory(hungry.inventory().withFungibleResources(resources));
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(stocked, 0L).boards().get(depot.id());
         assertTrue(board.text().endsWith("RESIDENTS HUNGRY · " + recipients.size()
-                + " · BREAD 64 / " + (recipients.size() * 3)));
+                + " · BREAD 64 / " + SettlementFoodPolicy.reserveRequirement(stocked, settlement.id(), 0L)), board.text());
         assertFalse(board.text().contains("BREAD NEEDED"));
     }
 

@@ -1,15 +1,15 @@
 {
   "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
-  "source": "fundamentals/townhall2.blueprint",
-  "sourceSha256": "0de7053c7498f39e25611266f1a70db4b34be49eb82c73abe043c063cc469ed6",
+  "source": "fundamentals/townhall5.blueprint",
+  "sourceSha256": "2ed8ff0d8ab14fc0a45f7a50e8906244693fd34fd998e0f05294b3a39e5da672",
   "license": "private test derivative; upstream ARR",
   "adaptations": [
     "original native blocks, shapes and materials retained with pinned dependencies",
-    "terrain placeholders and colony controllers omitted; complete source foundation and explicit below-floor voids retained",
+    "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
     "supported open entrance",
     "declared machine/operator aisle and service points",
     "no entities, inventories or foreign controllers; typed visual data retained"
   ],
-  "blocks": 1103,
+  "blocks": 2548,
   "beds": 1
 }

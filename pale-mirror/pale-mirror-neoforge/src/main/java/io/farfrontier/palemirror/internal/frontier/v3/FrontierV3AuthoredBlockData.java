@@ -13,6 +13,8 @@ import java.util.*;
 /** Closed visual-data adapter. Never loads inventories, colony links, commands or controllers. */
 final class FrontierV3AuthoredBlockData {
     private static final Map<AuthoredBlockData, CompoundTag> NORMALIZED = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<AuthoredBlockData, Map<net.minecraft.world.level.block.state.BlockState, CompoundTag>> NATIVE_IMAGES =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private FrontierV3AuthoredBlockData() { }
     static CompoundTag payload(AuthoredBlockData data) {
         var cached = NORMALIZED.get(data);
@@ -53,6 +55,35 @@ final class FrontierV3AuthoredBlockData {
         };
         if (!accepts) throw new IllegalArgumentException("authored payload has incompatible native entity " + id);
         payload(data);
+    }
+    static boolean matches(LevelAccessor level, BlockPos position, AuthoredBlockData data) {
+        var entity = level.getBlockEntity(position);
+        if (entity == null) return false;
+        validate(entity, data);
+        var expected = nativeImage(level, entity, data);
+        var actual = entity.saveWithoutMetadata(level.registryAccess());
+        Set<String> fields = switch (data.kind()) {
+            case MATERIAL_TEXTURES -> Set.of("textureData");
+            case SIGN_TEXT -> Set.of("front_text", "back_text", "is_waxed");
+            case BANNER_PATTERNS -> Set.of("patterns");
+        };
+        return fields.stream().allMatch(key -> Objects.equals(expected.get(key), actual.get(key)));
+    }
+    /** Native codecs may omit redundant fields or unused material components. A detached
+     * entity supplies the same canonical image without mutating any block in the world. */
+    private static CompoundTag nativeImage(LevelAccessor level, BlockEntity entity, AuthoredBlockData data) {
+        var state = entity.getBlockState();
+        var images = NATIVE_IMAGES.computeIfAbsent(data, ignored -> new HashMap<>());
+        var cached = images.get(state);
+        if (cached != null) return cached;
+        var detached = entity.getType().create(entity.getBlockPos(), state);
+        if (detached == null) throw new IllegalStateException("authored visual adapter cannot create its declared native entity");
+        var source = payload(data);
+        detached.loadWithComponents(source, level.registryAccess());
+        var canonical = detached.saveWithoutMetadata(level.registryAccess());
+        if (images.size() >= 64) images.clear();
+        images.put(state, canonical);
+        return canonical;
     }
     static void apply(LevelAccessor level, BlockPos position, StructureMaterial material) {
         if (!(material instanceof StructureMaterial.Authored authored) || authored.data().isEmpty()) return;

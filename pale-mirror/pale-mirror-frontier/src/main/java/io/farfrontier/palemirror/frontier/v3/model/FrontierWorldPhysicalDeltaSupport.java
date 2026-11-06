@@ -62,7 +62,13 @@ public final class FrontierWorldPhysicalDeltaSupport {
         }
         Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas());
         deltas.forEach(delta -> next.put(delta.position(), delta));
-        FrontierWorldState changed = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(next));
+        var unobserved = new LinkedHashMap<BlockPosition, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation>();
+        deltas.forEach(delta -> unobserved.put(delta.position(), io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation
+                .unavailable(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.Kind.NOT_OBSERVED)));
+        // Loss-only evidence does not prove the new collision shape. Invalidate any
+        // older observation; the confirmed structural protocol supplies its shape atomically.
+        FrontierWorldState changed = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(next)
+                .navigationGeometry(state.navigationGeometry().observe(state.navigationGeometry().revision(), unobserved)));
         for (PhysicalDelta delta : deltas) {
             if (!isKnownRouteLoss(delta)) continue;
             RouteTopology topology = changed.routeTopology().blockAffectedRouteEdges(changed.bootstrap(), delta.position());
@@ -205,20 +211,7 @@ public final class FrontierWorldPhysicalDeltaSupport {
     }
 
     static FrontierWorldState recordStructureDamage(FrontierWorldState state, StructureDamaged damage) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(damage, "structure damage");
-        SettlementStructure structure = FrontierWorldStateSupport.structureById(state.bootstrap(), damage.structureId());
-        GrayboxCell expected = FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), structure, damage.position());
-        if (expected == null || expected.semanticPart() != damage.semanticPart()) throw new IllegalArgumentException("observed damage is not an exact cell of its named structure");
-        StructureDamage current = state.structureDamage().getOrDefault(damage.structureId(), StructureDamage.empty(damage.structureId()));
-        StructureDamage nextDamage = current.record(damage.position(), damage.semanticPart(), damage.cause());
-        Map<SubjectId, StructureDamage> nextDamageIndex = new LinkedHashMap<>(state.structureDamage()); nextDamageIndex.put(damage.structureId(), nextDamage);
-        int destructiveThreshold = (FrontierGrayboxPlan.intactStructureCellCount(state.bootstrap().terrain(), structure) + 2) / 3;
-        StructureCondition currentCondition = state.structureConditions().get(damage.structureId());
-        StructureCondition nextCondition = currentCondition == StructureCondition.DESTROYED || nextDamage.cells().size() >= destructiveThreshold
-                ? StructureCondition.DESTROYED : StructureCondition.DAMAGED;
-        Map<SubjectId, StructureCondition> nextConditions = new LinkedHashMap<>(state.structureConditions()); nextConditions.put(damage.structureId(), nextCondition);
-        return state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(nextConditions).structureDamage(nextDamageIndex)
-                .resourceSites(state.resourceSitesForCondition(damage.structureId(), nextCondition)));
+        return StructureIntegrity.recordDamage(state, damage);
     }
 
     static boolean organOperational(FrontierBootstrap bootstrap, HiveColony colony, Map<BlockPosition, PhysicalDelta> deltas, SubjectId organId) {

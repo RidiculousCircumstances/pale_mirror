@@ -36,7 +36,7 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> PHYSICAL = types(
             "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
             "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
-            "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
+            "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
             "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed",
             "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed",
             "frontier.fungible_stock_contribution_observed", "frontier.fungible_stack_bindings_released",
@@ -771,7 +771,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     // A witnessed block change checkpoints only a resident whose retained COLD route crosses it.
                     "frontier.resident_meal_cold_step",
                     "frontier.actor_movement_cold_advanced",
-                    "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed", "frontier.fungible_stock_contribution_observed",
                     "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
                     "frontier.inventory_conflict_observed",
@@ -805,7 +805,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     // scene.  A blocked production scene therefore finalizes through this
                     // scene-owned release command, while Economy remains the only reducer.
                     "frontier.production_work_scene_finalized",
-                    "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
+                    "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
                     "frontier.structure_damaged", "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
                     "frontier.inventory_conflict_observed", "frontier.container_surface_transition", "frontier.settlement_infection_observed",
                     "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.company_registered",
@@ -839,7 +839,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.resident_meal_approach_required",
                     "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
                     "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
-                    "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",
+                    "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition"));
             case "actor-movement" -> types("frontier.actor_movement_grounded", "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
@@ -861,7 +861,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized", "frontier.production_blocked", "frontier.production_interrupted",
                     "frontier.scene_lease_transition",
-                    "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition");
@@ -889,7 +889,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.resource_field_foreign_change_held", "frontier.resource_field_foreign_cell_observed",
                     "frontier.resource_field_foreign_change_acknowledged",
                     "frontier.resource_field_player_break_prepared",
-                    "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition");
@@ -907,7 +907,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
                     "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_return_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted",
                     "frontier.production_interrupted",
-                    "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition");
@@ -923,7 +923,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.route_patrol_formation_observed", "frontier.route_patrol_obstruction_confirmed",
                     "frontier.route_patrol_failed", "frontier.route_patrol_blocked",
                     "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff",
-                    "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.resident_born", "frontier.resident_migrated",
                     "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_migration_rejoin_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",

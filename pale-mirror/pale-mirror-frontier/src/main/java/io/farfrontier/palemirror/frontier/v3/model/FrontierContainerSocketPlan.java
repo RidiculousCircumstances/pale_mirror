@@ -64,7 +64,7 @@ public final class FrontierContainerSocketPlan {
                 if (!settlement.id().equals(container.ownerId())) continue;
                 for (SettlementStructure structure : settlement.structures()) {
                     if (structure.id().equals(station.facilityId())
-                            && state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED
+                            && FacilityFunctionAvailability.mayUse(state, structure.id())
                             && SettlementStructureFootprint.supportSurfaces(structure).contains(station.socketSurface())) {
                         if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
                             return Optional.ofNullable(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().get(position));
@@ -80,7 +80,7 @@ public final class FrontierContainerSocketPlan {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
             if (!surface.containerId().equals(depot)) continue;
             return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)
-                    .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED)
+                    .filter(structure -> FacilityFunctionAvailability.mayUse(state, structure.id()))
                     .filter(structure -> SettlementDepotServicePort.forDepot(structure).socketSurface().support().equals(position))
                     .flatMap(structure -> Optional.ofNullable(FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), structure, position)).stream()).findFirst();
         }

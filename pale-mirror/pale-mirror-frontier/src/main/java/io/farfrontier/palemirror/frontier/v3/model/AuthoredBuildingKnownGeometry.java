@@ -12,7 +12,19 @@ import java.util.*;
  * private navigator, resource, placement executor or repair permission lives here.
  */
 final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provider {
-    private record Coverage(BuildingVolume volume, int airFromY, BuildingSpatialPlan plan) {}
+    private record Coverage(BuildingVolume volume, int airFromY, BuildingSpatialPlan plan, BuildingSitePlan site,
+                            Map<TerrainColumn, List<BlockPosition>> workColumns) {
+        Coverage(BuildingVolume volume, int airFromY, BuildingSpatialPlan plan, BuildingSitePlan site) {
+            this(volume, airFromY, plan, site, columns(site));
+        }
+        private static Map<TerrainColumn, List<BlockPosition>> columns(BuildingSitePlan site) {
+            var result = new HashMap<TerrainColumn, List<BlockPosition>>();
+            for (var p : site.preparation().keySet())
+                result.computeIfAbsent(new TerrainColumn(p.x(), p.z()), ignored -> new ArrayList<>()).add(p);
+            result.replaceAll((column, points) -> List.copyOf(points));
+            return Map.copyOf(result);
+        }
+    }
 
     private record Image(
             Map<Region, Set<SubjectId>> owners,
@@ -25,6 +37,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
             for (var owner : owners.getOrDefault(Region.at(position), Set.of())) {
                 var part = coverage.get(owner);
                 var block = part.plan().blocks().get(position);
+                if (block == null) block = part.site().preparation().get(position);
                 if (block != null) {
                     var material = (StructureMaterial.Authored) block.material();
                     var fact = material.emptySpace() && paving.contains(position) ? NavigationCell.SOLID :
@@ -58,7 +71,11 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
                             new Region(
                                     Math.floorDiv(column.x(), 16), Math.floorDiv(column.z(), 16)),
                             Set.of()))
-                result.addAll(coverage.get(owner).plan().columns().getOrDefault(column, List.of()));
+                {
+                    var part = coverage.get(owner);
+                    result.addAll(part.plan().columns().getOrDefault(column, List.of()));
+                    result.addAll(part.workColumns().getOrDefault(column, List.of()));
+                }
             return List.copyOf(result);
         }
     }
@@ -128,7 +145,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
         for (var structure : buildings(bootstrap)) {
             var plan = BuildingSpatialPlan.of(structure);
             var bounds = plan.placement().volume(plan.definition().fabric());
-            coverage.put(structure.id(), new Coverage(bounds, structure.anchor().y(), plan));
+            coverage.put(structure.id(), new Coverage(bounds, structure.anchor().y(), plan, BuildingSitePlan.compile(bootstrap.terrain(), structure)));
             for (int x = bounds.min().x() >> 4; x <= (bounds.max().x() - 1) >> 4; x++)
                 for (int z = bounds.min().z() >> 4; z <= (bounds.max().z() - 1) >> 4; z++) {
                     var region = new Region(x, z);
@@ -204,12 +221,7 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
                             return base.collisionAt(p).isPresent();
                         if (deltas.contains(p)) return false;
                         if (image.declaration(p).isEmpty()) return base.blockKnown(p);
-                        return image.owners().get(Region.at(p)).stream()
-                                .noneMatch(
-                                        id ->
-                                                image.coverage().get(id).volume().contains(p)
-                                                        && conditions.get(id)
-                                                                == StructureCondition.DESTROYED);
+                        return true; // Exact cells and retained observations own geometry; aggregate damage is not disappearance.
                     });
         }
     }

@@ -57,6 +57,6 @@ public record SettlementAccessPort(SubjectId settlementId, SubjectId hallId, Fac
     public BlockPosition routeFloor() { return routeSurface.support(); }
 
     private static boolean adjacent(SurfaceAnchor first, SurfaceAnchor second) {
-        return first.y() == second.y() && Math.abs(first.x() - second.x()) + Math.abs(first.z() - second.z()) == 1;
+        return FacilityTraversalPort.adjacent(first, second);
     }
 }

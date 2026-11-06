@@ -98,7 +98,7 @@ public record FacilityTraversalPort(
         return true;
     }
 
-    private static boolean adjacent(SurfaceAnchor first, SurfaceAnchor second) {
+    public static boolean adjacent(SurfaceAnchor first, SurfaceAnchor second) {
         return Math.abs(first.x() - second.x()) + Math.abs(first.z() - second.z()) == 1
                 && Math.abs(first.y() - second.y()) <= 1;
     }

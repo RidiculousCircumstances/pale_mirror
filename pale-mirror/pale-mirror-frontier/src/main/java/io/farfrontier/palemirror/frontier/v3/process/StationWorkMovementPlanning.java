@@ -11,7 +11,7 @@ final class StationWorkMovementPlanning {
     private StationWorkMovementPlanning() { }
     static boolean needsReview(FrontierWorldState state, ProductionJob job) {
         var work = job.stationWork().orElseThrow();
-        return state.structureConditions().get(job.facilityId()) != StructureCondition.INTACT
+        return !ProductionFacilityAvailability.mayUseJob(state, job)
                 || state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
                 || work.block().filter(block -> block.reason() == BakeryWorkBlock.Reason.SOURCE_CHANGED).isPresent()
                 || work.phase() == StationWorkState.Phase.DEPOT_DELIVERY && StationWorkStorageReplacement.unavailable(state, job);

@@ -5,7 +5,11 @@ public final class DeclaredSettlementFixtures {
     public static FrontierWorldState displaceResidents(FrontierWorldState state, Settlement home) {
         for (var house : home.structures()) {
             if (house.kind() != StructureKind.HOUSING) continue;
-            state = state.withStructureCondition(house.id(), StructureCondition.DESTROYED);
+            for (var bed : house.definition().beds().values()) {
+                var head = house.placement().world(bed.head());
+                state = StructureIntegrity.observe(state,
+                        StructureObservationFixtures.missingCell(state, house, head, "fixture:bed-lost"));
+            }
             if (SettlementFacilityCapability.housingCapacity(state, home.id())
                     < SettlementFacilityCapability.livingResidents(state, home.id())) return state;
         }

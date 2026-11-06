@@ -307,7 +307,7 @@ public final class FrontierV3TestPilotClient {
                 case "walk" -> walk(minecraft, action);
                 case "break" -> {
                     BlockPos target = resolvedPosition(minecraft, action, "position");
-                    if (target != null) breakBlock(minecraft, target);
+                    if (target != null) breakBlock(minecraft, target, action);
                 }
                 case "place" -> placeBlock(minecraft, action);
                 case "use_item_on" -> {
@@ -342,11 +342,15 @@ public final class FrontierV3TestPilotClient {
         minecraft.options.keyJump.setDown(action.has("jump") && action.get("jump").getAsBoolean() && minecraft.player.horizontalCollision);
         if (action.has("timeoutMs")) timeout(minecraft, action, "player walk was obstructed before " + target);
     }
-    private static void breakBlock(Minecraft minecraft, BlockPos target) {
+    private static void breakBlock(Minecraft minecraft, BlockPos target, JsonObject action) {
+        if (action.has("holdTicks") && minecraft.level.getGameTime() - actionStartedTick >= action.get("holdTicks").getAsInt()) {
+            minecraft.gameMode.stopDestroyBlock(); breaking = false; advance("break_aborted"); return;
+        }
         if (minecraft.level.getBlockState(target).isAir()) { breaking = false; advance("break"); return; }
         Direction face = Direction.getNearest(minecraft.player.getEyePosition().subtract(Vec3.atCenterOf(target)));
         if (!breaking) { minecraft.gameMode.startDestroyBlock(target, face); breaking = true; }
         else minecraft.gameMode.continueDestroyBlock(target, face);
+        timeout(minecraft, action, "ordinary block breaking did not complete at " + target);
     }
     /** Places one declared ordinary block through the normal client use-item-on-block packet. */
     private static void placeBlock(Minecraft minecraft, JsonObject action) {

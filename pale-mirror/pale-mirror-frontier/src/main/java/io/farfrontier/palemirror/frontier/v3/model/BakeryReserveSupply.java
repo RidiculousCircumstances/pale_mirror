@@ -13,7 +13,7 @@ final class BakeryReserveSupply implements ReserveSupplyPort {
                 .filter(c -> state.inventory().surfaces().get(c.id()).status() != ContainerSurfaceStatus.RETIRED
                         && state.inventory().surfaces().get(c.id()).status() != ContainerSurfaceStatus.CONFLICT)
                 .flatMap(c -> c.productionStation().stream()).anyMatch(station -> station.capability() == recipe.capability()
-                        && state.structureConditions().get(station.facilityId()) == StructureCondition.INTACT);
+                        && FacilityFunctionAvailability.mayUse(state, station.facilityId()));
         if (!installed) return new Facts(Map.of(), List.of(), Map.of());
         var inputs = new TreeMap<String, Rate>();
         // One explicitly selected alternative. The processing owner can replace this selection policy.

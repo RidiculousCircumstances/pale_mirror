@@ -297,6 +297,7 @@ public final class FrontierGrayboxPlan {
         addOccupiedCocoons(cells, state.bootstrap(), state.hiveColony());
         state.physicalDeltas().keySet().forEach(cells::remove);
         return cells.values().stream()
+                .filter(cell -> !cell.material().emptySpace())
                 .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
                 .map(GrayboxCell::position)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -449,9 +450,11 @@ public final class FrontierGrayboxPlan {
         if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
             var authored = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().get(position);
             if (authored != null) return authored;
+            var siteCell = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSitePlan.compile(terrain, structure).preparation().get(position);
+            if (siteCell != null) return siteCell;
             return SettlementStructureFootprint.foundationFill(terrain, structure).contains(position)
                     ? new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id()),
-                            GrayboxMaterial.WORKSHOP, GrayboxSemanticPart.FOUNDATION) : null;
+                            SettlementStructureFootprint.foundationMaterial(), GrayboxSemanticPart.FOUNDATION) : null;
         }
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         addStructure(cells, terrain, structure, StructureCondition.INTACT);
@@ -604,9 +607,9 @@ public final class FrontierGrayboxPlan {
 
     private static void addStructure(Map<BlockPosition, GrayboxCell> cells, TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition) {
         if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
-            if (condition == StructureCondition.DESTROYED) return;
+            cells.putAll(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSitePlan.compile(terrain, structure).preparation());
             for (var footing : SettlementStructureFootprint.foundationFill(terrain, structure))
-                add(cells, footing, PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id(), GrayboxMaterial.WORKSHOP, GrayboxSemanticPart.FOUNDATION);
+                add(cells, footing, PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id(), SettlementStructureFootprint.foundationMaterial(), GrayboxSemanticPart.FOUNDATION);
             io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().forEach((position, cell) -> {
                 var prior = cells.get(position);
                 if (prior != null && !prior.equals(cell) && (!prior.semanticTarget().equals(cell.semanticTarget()) || prior.semanticPart() != GrayboxSemanticPart.FOUNDATION))
@@ -636,8 +639,11 @@ public final class FrontierGrayboxPlan {
 
     /** Iterates precisely the semantic cells used by materialization, stopping on visitor demand. */
     private static boolean visitStructureCells(TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition, StructureCellVisitor visitor) {
-        if (condition == StructureCondition.DESTROYED) return false;
+        if (condition == StructureCondition.DESTROYED && structure.definition().representation()
+                != io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) return false;
         if (structure.definition().representation() == io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) {
+            for (var cell : io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSitePlan.compile(terrain, structure).preparation().values())
+                if (visitor.visit(cell.position(), cell.semanticPart())) return true;
             for (var footing : SettlementStructureFootprint.foundationFill(terrain, structure))
                 if (visitor.visit(footing, GrayboxSemanticPart.FOUNDATION)) return true;
             for (var cell : io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().values())
@@ -824,7 +830,7 @@ public final class FrontierGrayboxPlan {
         return Map.copyOf(staging);
     }
 
-    private static void add(Map<BlockPosition, GrayboxCell> cells, BlockPosition position, PhysicalDeltaSemanticTargetKind targetKind, SubjectId owner, GrayboxMaterial material,
+    private static void add(Map<BlockPosition, GrayboxCell> cells, BlockPosition position, PhysicalDeltaSemanticTargetKind targetKind, SubjectId owner, StructureMaterial material,
                             GrayboxSemanticPart part) {
         GrayboxCell cell = new GrayboxCell(position, target(targetKind, owner), material, part);
         GrayboxCell prior = cells.putIfAbsent(position, cell);

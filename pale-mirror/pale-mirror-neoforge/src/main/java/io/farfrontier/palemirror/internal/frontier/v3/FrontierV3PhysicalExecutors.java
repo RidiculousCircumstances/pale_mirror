@@ -87,7 +87,8 @@ final class FrontierV3PhysicalExecutors {
             executor("combat-melee", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("security-perception"), "combat-melee", FrontierV3CombatExecutor::tick),
             executor("defender-equipment-return", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("settlement-service-decontamination"), "defender-equipment-return-effect", FrontierV3EquipmentReturnExecutor::tick),
             executor("exact-item-consumption", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation", "hive-nutrient-endpoints"), "exact-item-consumption-effect", FrontierV3ExactItemConsumptionExecutor::tick),
-            executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
+            executor("player-native-inputs", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("navigation-geometry", "exact-item-consumption"), "player-native-inputs", FrontierV3PlayerNativeInputs::tick),
+            executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("player-native-inputs"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
             executor("route-construction", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("structural-repair"), "route-construction-effect", FrontierV3RouteConstructionExecutor::tick),
             executor("route-maintenance", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-construction"), "route-maintenance-effect", FrontierV3RouteMaintenanceExecutor::tick),
             executor("deferred-aftermath", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-maintenance"), "deferred-aftermath-effect", FrontierV3AftermathOwnerComposition::aftermath)

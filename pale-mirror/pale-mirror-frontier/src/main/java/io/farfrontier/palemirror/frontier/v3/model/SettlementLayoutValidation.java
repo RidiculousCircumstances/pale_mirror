@@ -29,14 +29,15 @@ public final class SettlementLayoutValidation {
             var box = building.placement().volume(building.definition().parcel());
             if (!SettlementLayoutPlanner.levelFootprint(terrain, building)
                     || !world.contains(box.min())
-                    || !world.contains(box.max().offset(-1, 0, -1))
-                    || building.anchor().y()
-                            != terrain.supportYAt(building.anchor().x(), building.anchor().z()))
+                    || !world.contains(box.max().offset(-1, 0, -1)))
                 throw new IllegalArgumentException(
                         "building pad disagrees with declared terrain/world: " + building.id());
         }
+        var entranceSupports = plan.buildings().stream().flatMap(building ->
+                BuildingSpatialPlan.of(building).publicEntrances().stream()).flatMap(port -> port.ingressSurfaces().stream())
+                .map(SurfaceAnchor::support).collect(java.util.stream.Collectors.toSet());
         for (var p : plan.layout().paving())
-            if (!world.contains(p) || p.y() != terrain.supportYAt(p.x(), p.z()))
+            if (!world.contains(p) || p.y() != terrain.supportYAt(p.x(), p.z()) && !entranceSupports.contains(p))
                 throw new IllegalArgumentException(
                         "paving must replace a surveyed ground surface: " + p);
         validate(plan);

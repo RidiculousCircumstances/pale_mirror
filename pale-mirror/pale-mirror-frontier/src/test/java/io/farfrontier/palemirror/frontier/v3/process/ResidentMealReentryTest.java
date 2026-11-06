@@ -58,6 +58,9 @@ class ResidentMealReentryTest {
             state = ResidentMealProcess.reduceClearanceRequired(state, resident, required);
             assertEquals(before.inventory(), state.inventory());
         }
+        // Retarget the exact active lease after clearance changes its movement goal.
+        state = AmbientLeaseStateProcess.retarget(state, resident, AmbientGoalKind.MEAL,
+                ResidentMealProcess.goalSurface(state, state.humanPopulation().meals().get(resident)).standingBody());
         // Resource release is independent of the eating-position predicate.
         state = ResidentMealProcess.reduceHotHandReleased(state, resident,
                 new ResidentMealHotHandReleased(resident, lease.revision(), hand, meal.executionId()));

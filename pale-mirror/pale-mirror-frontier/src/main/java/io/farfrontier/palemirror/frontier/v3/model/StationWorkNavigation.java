@@ -75,7 +75,16 @@ public final class StationWorkNavigation {
         }
         if (!route.getLast().equals(StationWorkGoal.current(state, job).station()))
             throw new IllegalArgumentException("bakery route has a foreign phase goal");
-        journeyKnowledge(state, job).requireRoute(route);
+        var knowledge = journeyKnowledge(state, job);
+        var station = ProductionStationDirectory.require(state.inventory(), work.stationId()).productionStation().orElseThrow();
+        if (route.getLast().equals(station.workerStation())) {
+            var requirements = new FacilityFunctionAvailability.Requirements(job.facilityId(), java.util.Set.of(),
+                    java.util.Set.of(station.workerStation()));
+            if (FacilityFunctionAvailability.assess(state, requirements, knowledge).status()
+                    != FacilityFunctionAvailability.Status.ELIGIBLE)
+                throw new IllegalArgumentException("production function lacks its current work contact");
+            FacilityFunctionAvailability.requireAccess(requirements, knowledge, receipt);
+        } else knowledge.requireRoute(route);
     }
 
     /** Bakery declares its destinations and access rights, never a private chain of traversable cells. */

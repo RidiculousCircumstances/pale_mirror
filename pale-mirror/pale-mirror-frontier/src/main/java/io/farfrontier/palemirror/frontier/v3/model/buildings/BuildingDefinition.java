@@ -13,6 +13,7 @@ public record BuildingDefinition(
         Set<StructureKind> functions,
         Representation representation,
         BlockPosition origin,
+        BuildingSiteDefinition site,
         FacilityFacing front,
         BuildingVolume parcel,
         BuildingVolume fabric,
@@ -174,6 +175,7 @@ public record BuildingDefinition(
         Objects.requireNonNull(id);
         Objects.requireNonNull(representation);
         Objects.requireNonNull(origin);
+        Objects.requireNonNull(site);
         Objects.requireNonNull(front);
         Objects.requireNonNull(parcel);
         Objects.requireNonNull(fabric);

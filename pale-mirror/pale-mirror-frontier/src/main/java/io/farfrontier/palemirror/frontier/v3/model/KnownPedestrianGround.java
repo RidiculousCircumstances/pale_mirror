@@ -115,12 +115,7 @@ public final class KnownPedestrianGround {
 
     private static BoundedPedestrianApproach.SurveyedSurface restricted(
             FrontierWorldState state, BoundedPedestrianApproach.SurveyedSurface source) {
-        var unknown =
-                UNKNOWN.get(
-                        java.util.List.of(state.physicalDeltas()),
-                        () ->
-                                io.farfrontier.palemirror.frontier.v3.model.geometry
-                                        .RegionalBlockSet.copyOf(state.physicalDeltas().keySet()));
+        var unknown = PhysicalDeltaGeometry.unknown(state);
         return new BoundedPedestrianApproach.SurveyedSurface() {
             @Override
             public java.util.OptionalInt uniformSupport(WorldBounds area) {

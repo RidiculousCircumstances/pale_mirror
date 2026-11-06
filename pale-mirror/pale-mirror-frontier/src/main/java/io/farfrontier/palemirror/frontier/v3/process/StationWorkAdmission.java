@@ -26,7 +26,7 @@ final class StationWorkAdmission {
             throw new IllegalArgumentException("production start has no capacity for its retained output");
         SettlementStructure workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId()))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("production lost declared facility"));
-        if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");
+        if (!workshop.id().equals(job.facilityId()) || !ProductionFacilityAvailability.mayUseJob(state, job)) throw new IllegalArgumentException("production start facility is unavailable");
         ResidentProfile worker = state.humanPopulation().resident(job.workerId());
         if (worker == null || !worker.settlementId().equals(settlement.id())
                 || !SettlementWorkPolicy.permissions(state, settlement.id()).permits(work.permission(), worker.id()))

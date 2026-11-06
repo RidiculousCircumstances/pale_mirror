@@ -11,7 +11,6 @@
 2|domum_ornamentum:plain|domum_ornamentum:plain|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|domum_ornamentum:plain|domum_ornamentum:plain|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|domum_ornamentum:plain|domum_ornamentum:plain|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
-2|minecraft:air|minecraft:air|	1	true	
 2|minecraft:chest|minecraft:chest|facing=east,type=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.9375,0.875,0.9375
 2|minecraft:chest|minecraft:chest|facing=north,type=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.9375,0.875,0.9375
 2|minecraft:chest|minecraft:chest|facing=south,type=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.9375,0.875,0.9375

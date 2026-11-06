@@ -11,7 +11,7 @@ import java.util.*;
 /** Forest external-edit adapter. The common block journal retains attempted/applied evidence;
  * this family withdraws only its source entitlement, never credits player-produced wood. */
 final class FrontierV3ForestryBlockWrites implements FrontierV3ManagedBlockWrites.Owner {
-    @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.FOREST_TREE; }
+    @Override public FrontierV3ManagedBlockWrites.OwnerKind family() { return FrontierV3ManagedBlockWrites.OwnerKind.FOREST_TREE; }
     @Override public boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             List<FrontierV3ManagedBlockWrites.PlannedWrite> writes, Runnable resume) {
         return true; // Per-block ingress below fences the exact source before native mutation.

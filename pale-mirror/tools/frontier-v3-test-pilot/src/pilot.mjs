@@ -46,7 +46,11 @@ export async function perform(bot, action) {
       await bot.lookAt(center(position), true);
       const block = bot.blockAt(position);
       if (!block || block.name === 'air') throw new Error(`break target is missing at ${position.x},${position.y},${position.z}`);
-      await withTimeout(bot.dig(block, true), action.timeoutMs ?? 15_000, 'break');
+      if (action.holdTicks !== undefined) {
+        const digging = bot.dig(block, true).catch(() => {});
+        await bot.waitForTicks(action.holdTicks);
+        bot.stopDigging(); await digging;
+      } else await withTimeout(bot.dig(block, true), action.timeoutMs ?? 15_000, 'break');
       return { type: action.type, position, block: block.name };
     }
     case 'place': {

@@ -38,7 +38,7 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
         SettlementStructure workshop = ProductionProcess.workshop(settlement);
         var company = requestingCompany(state, settlement.id(), atTick);
-        if (company.isEmpty() || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT)
+        if (company.isEmpty() || !FacilityFunctionAvailability.mayUse(state, workshop.id()))
             return List.of(new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED)));
         var rights = rights(company.orElseThrow());
         var selectedBatch = BakeryBatchSelection.admissible(state, rights, atTick);

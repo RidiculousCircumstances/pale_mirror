@@ -177,7 +177,7 @@ public final class MarketClearingProcess {
             throw new IllegalArgumentException("market cancellation may only release work before any physical production intent");
         }
         boolean allowed = switch (cancelled.reason()) {
-            case FACILITY_UNAVAILABLE -> state.structureConditions().get(job.facilityId()) != StructureCondition.INTACT;
+            case FACILITY_UNAVAILABLE -> !ProductionFacilityAvailability.mayUseJob(state, job);
             case INPUT_UNAVAILABLE -> job.inputHold() instanceof ProductionInputHold.Materialized
                     && !materializedInputMatches(state, job);
             case WORKER_UNAVAILABLE -> state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE

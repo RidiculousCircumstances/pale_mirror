@@ -55,8 +55,8 @@ class AutomaticStationProductionTest {
         var conditions = new HashMap<>(state.structureConditions());
         conditions.put(spec.facilityId(), StructureCondition.DAMAGED);
         var damaged = state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(conditions));
-        assertFalse(AutomaticStationProduction.stations(damaged, record.ownerId(), recipe).contains(record),
-                "changed facility condition must invalidate the installed-station index");
+        assertTrue(AutomaticStationProduction.stations(damaged, record.ownerId(), recipe).contains(record),
+                "aggregate material damage cannot disable a physically usable installed station");
         assertTrue(AutomaticStationProduction.stations(state, record.ownerId(), recipe).contains(record));
     }
     @Test void unlitFuelAndActiveCombustionHaveDistinctLifetimesAcrossRecovery() {

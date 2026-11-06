@@ -68,6 +68,11 @@ final class FrontierV3ServerPhysicalInteractions {
                 || player.level() != level || !player.getMainHandItem().isEmpty()
                 || player.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(position)) > 64.0
                 || !FrontierV3LoadedWorld.ready(level, position)) return false;
+        // An interactive native block owns an ordinary click; the hall card is available on its board/fabric.
+        if (level.getBlockState(position).getBlock() instanceof net.minecraft.world.level.block.DoorBlock
+                || level.getBlockState(position).getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock
+                || level.getBlockState(position).getBlock() instanceof net.minecraft.world.level.block.TrapDoorBlock
+                || level.getBlockEntity(position) instanceof net.minecraft.world.Container) return false;
         var state = runtime.decodedState().orElse(null);
         if (state == null) return false;
         var claim = FrontierV3GrayboxLedger.get(level).claim(position);
@@ -173,6 +178,12 @@ final class FrontierV3ServerPhysicalInteractions {
         if (resource == FrontierV3ResourceSiteExecutor.BlockBreakObservation.ACCEPTED) {
             FrontierV3PlayerBreakDisposition.accept(level.getServer(), player.getUUID(), position); return PlayerBreakDisposition.ACCEPTED;
         }
+        // Structural admission is passive. The common actual block-write boundary captures its durable intent and outcome.
+        var structural = FrontierV3GrayboxLedger.get(level).claim(position);
+        if (structural != null && structural.targetTag() == io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE.wireTag()) {
+            FrontierV3PlayerBreakDisposition.accept(level.getServer(), player.getUUID(), position);
+            return PlayerBreakDisposition.ACCEPTED;
+        }
         FrontierV3GrayboxExecutor.BlockBreakObservation graybox = FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, cause);
         if (graybox == FrontierV3GrayboxExecutor.BlockBreakObservation.REJECTED) return PlayerBreakDisposition.REJECTED;
         if (graybox == FrontierV3GrayboxExecutor.BlockBreakObservation.ACCEPTED) {
@@ -198,6 +209,7 @@ final class FrontierV3ServerPhysicalInteractions {
     }
     public static void clearPlayerBreakDispositions(net.minecraft.server.MinecraftServer server) {
         FrontierV3PlayerBreakDisposition.clear(server);
+        FrontierV3PlayerNativeInputs.forget(server);
     }
     public static boolean observeExplosion(ServerLevel level, net.minecraft.world.level.Explosion explosion,
                                            java.util.List<BlockPos> affected, java.util.List<Entity> entities) {

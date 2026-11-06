@@ -267,7 +267,7 @@ public final class KnownPedestrianRouteKnowledge {
             cache.groundSupports.replace(GroundSource.ROADS, RegionalSurfaceMap.copyOf(roads));
             var supports = cache.groundSupports.replace(GroundSource.SITES, RegionalSurfaceMap.copyOf(sites.supports()));
             cache.selectedGround = cache.groundVersions.capture(state.bootstrap(), cache.obstacleIndex.groundChanges(), supports,
-                    sites.withdrawnSupports(), sites.unknown(), state.physicalDeltas().keySet(),
+                    sites.withdrawnSupports(), sites.unknown(), PhysicalDeltaGeometry.unknown(state),
                     RetainedNavigationGeometry.facts(state.navigationGeometry(), sites.retainedBlocks()), natural);
             cache.viewNatural = natural;
             cache.viewNavigation = state.navigationGeometry();

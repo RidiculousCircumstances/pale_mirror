@@ -85,7 +85,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         ChunkPos loaded = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
         FrontierV3GrayboxExecutor.observePlayerIngress(runtime, loaded);
         FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, loaded);
-        FrontierV3GrayboxExecutor.FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
+        FrontierV3FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
                 loaded.x + "," + loaded.z);
         helper.assertValueEqual(queued.status(), "PENDING",
                 "the ingress-fenced ChunkEvent.Load only queues first visibility; it must not mutate blocks or re-enter ChunkMap from vanilla's load callback");
@@ -138,7 +138,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
             helper.assertTrue(!level.hasChunk(destination.x, destination.z),
                     "the destination has no installed holder at the transfer event boundary");
             FrontierV3GrayboxExecutor.observePlayerIngress(runtime, destination);
-            FrontierV3GrayboxExecutor.FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
+            FrontierV3FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
                     destination.x + "," + destination.z);
             helper.assertValueEqual(queued.status(), "PENDING",
                     "player ingress retains the exposure fence without asking ChunkMap to create a holder");

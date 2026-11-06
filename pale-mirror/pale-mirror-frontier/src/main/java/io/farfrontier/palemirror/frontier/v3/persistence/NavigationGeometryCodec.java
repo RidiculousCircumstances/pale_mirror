@@ -24,7 +24,7 @@ final class NavigationGeometryCodec {
             writeObservation(out, cells.get(position));
         }
     }
-    private static void writeObservation(DataOutputStream out, NavigationObservation value) throws IOException {
+    static void writeObservation(DataOutputStream out, NavigationObservation value) throws IOException {
         out.writeInt(value.kind().wireTag()); writeCell(out, value.cell());
         out.writeInt(value.dependencies().size());
         for (var position : value.dependencies().keySet().stream().sorted(Comparator.comparingInt(BlockPosition::x)
@@ -34,7 +34,7 @@ final class NavigationGeometryCodec {
             if (block.isPresent()) writeBlock(out, block.orElseThrow());
         }
     }
-    private static NavigationObservation readObservation(DataInputStream in, Optional<BlockPosition> origin) throws IOException {
+    static NavigationObservation readObservation(DataInputStream in, Optional<BlockPosition> origin) throws IOException {
         var kind = NavigationObservation.Kind.requireWireTag(in.readInt()); var cell = readCell(in);
         int count = in.readInt();
         if (count < 0 || count > NavigationObservation.MAX_DEPENDENCIES || origin.isEmpty() && count != 0)

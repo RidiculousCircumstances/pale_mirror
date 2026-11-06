@@ -29,7 +29,7 @@ final class FrontierStateSchema {
     // Fresh native facing is explicit optional observation for personal rear-approach preference.
     // Exact authored building content and explicit structural material wire identities.
     // Explicit manual-passage capability and alternate transit collision shape.
-    static final int VERSION = 341;
+    static final int VERSION = 342;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

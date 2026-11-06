@@ -59,6 +59,15 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             if (intent == null) return FrontierWorldCommandPlanner.rejected("physical intent is unknown");
             return FrontierWorldProcessCatalog.physicalLifecycles().planTransition(state, command, intent, transition);
         }
+        if (command.payload() instanceof StructureCellObserved fact) {
+            FrontierWorldState after;
+            try { after = StructureIntegrity.observe(state, fact); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            var events = new java.util.ArrayList<ProposedEvent>();
+            events.add(new ProposedEvent(fact.structureId(), fact));
+            events.addAll(ProductionProcess.planFacilityUnavailable(after, fact.structureId()));
+            return new CommandPlan.Accepted(List.copyOf(events));
+        }
         if (command.payload() instanceof StructureDamaged damage) {
             try { state.recordStructureDamage(damage); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -134,6 +143,10 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             case PhysicalIntentPrepared prepared -> FrontierWorldProcessCatalog.physicalLifecycles()
                     .reducePrepared(state, event.subject(), prepared.intent());
             case PhysicalIntentTransition transition -> reduceTransitionByOwner(state, event.subject(), transition);
+            case StructureCellObserved fact -> {
+                if (!event.subject().equals(fact.structureId())) throw new IllegalArgumentException("foreign structural observer subject");
+                yield StructureIntegrity.observe(state, fact);
+            }
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case PhysicalDeltasObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);

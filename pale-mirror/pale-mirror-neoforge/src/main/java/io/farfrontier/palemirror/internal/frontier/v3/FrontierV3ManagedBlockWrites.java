@@ -15,15 +15,20 @@ final class FrontierV3ManagedBlockWrites {
             Objects.requireNonNull(replacement);
         }
     }
+    enum OwnerKind { RESOURCE_SITE, EXTRACTIVE_SITE, FOREST_TREE, STRUCTURE }
     interface Owner {
-        CellMutationKey.OwnerFamily family();
+        OwnerKind family();
+        default boolean defersPlayerInput(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                List<PlannedWrite> writes) { return false; }
+        default void finishPlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                List<PlannedWrite> writes) { }
         boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 List<PlannedWrite> writes, Runnable resume);
         boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 BlockPos position, BlockState replacement, boolean committed);
     }
     private static final List<Owner> OWNERS = List.of(new Owner() {
-        public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.RESOURCE_SITE; }
+        public OwnerKind family() { return OwnerKind.RESOURCE_SITE; }
         public boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 List<PlannedWrite> writes, Runnable resume) {
             // Field effects retain their individual world-change/custody witnesses in observe.
@@ -35,10 +40,11 @@ final class FrontierV3ManagedBlockWrites {
             FrontierV3ResourceFieldWorldChangeExecutor.observeBlockWrite(level, runtime, position, replacement, committed);
             return true;
         }
-    }, new FrontierV3ExtractionBlockWrites(), new FrontierV3ForestryBlockWrites());
+    }, new FrontierV3ExtractionBlockWrites(), new FrontierV3ForestryBlockWrites(), new FrontierV3StructureBlockWrites());
     static {
-        var keys = new HashSet<CellMutationKey.OwnerFamily>();
+        var keys = new HashSet<OwnerKind>();
         for (var owner : OWNERS) if (!keys.add(owner.family())) throw new IllegalStateException("duplicate native mutation owner");
+        if (!keys.equals(EnumSet.allOf(OwnerKind.class))) throw new IllegalStateException("missing native mutation owner");
     }
     private FrontierV3ManagedBlockWrites() { }
     /** Declare all planned block writes before the common executor consumes its attempt. */
@@ -64,7 +70,7 @@ final class FrontierV3ManagedBlockWrites {
             finally {
                 if (!unmanaged.getAsBoolean()) {
                     var runtime = runtimeSource.get();
-                    if (runtime != null) FrontierV3NavigationObservation.finishNativeWrites(level, runtime, retained);
+                    if (runtime != null) finishPlannedWrites(level, runtime, retained);
                 }
             }
         }).preparedBy(() -> {
@@ -94,6 +100,13 @@ final class FrontierV3ManagedBlockWrites {
         for (var owner : OWNERS) if (!owner.preparePlannedWrites(level, runtime, writes, resume))
             return FrontierV3NativeEffect.Admission.waiting("block-owner:" + owner.family());
         return FrontierV3NativeEffect.Admission.READY;
+    }
+    static boolean defersPlayerInput(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, List<PlannedWrite> writes) {
+        return OWNERS.stream().anyMatch(owner -> owner.defersPlayerInput(level,runtime,writes));
+    }
+    static void finishPlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, List<PlannedWrite> writes) {
+        FrontierV3NavigationObservation.finishNativeWrites(level,runtime,writes);
+        for (var owner:OWNERS) owner.finishPlannedWrites(level,runtime,writes);
     }
     static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {

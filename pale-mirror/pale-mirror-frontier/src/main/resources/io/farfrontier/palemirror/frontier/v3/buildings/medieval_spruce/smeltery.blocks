@@ -54,8 +54,6 @@
 7,1,5	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 7,1,6	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
 7,1,8	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
-7,2,1	2|minecraft:air|minecraft:air|	WALL
-7,2,2	2|minecraft:air|minecraft:air|	WALL
 7,2,3	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 7,2,4	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 7,2,5	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
@@ -128,7 +126,6 @@
 7,12,7	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=bottom,shape=straight,waterlogged=false	WALL
 8,1,2	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 8,1,9	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
-8,2,1	2|minecraft:air|minecraft:air|	WALL
 8,2,2	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 8,2,3	2|minecraft:coarse_dirt|minecraft:dirt|	FOUNDATION
 8,2,4	2|minecraft:coarse_dirt|minecraft:dirt|	FOUNDATION
@@ -182,7 +179,6 @@
 9,1,2	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 9,1,4	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
 9,1,5	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
-9,2,1	2|minecraft:air|minecraft:air|	WALL
 9,2,2	2|minecraft:spruce_planks|minecraft:spruce_planks|	FOUNDATION
 9,2,3	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 9,2,4	2|minecraft:gravel|minecraft:gravel|	FOUNDATION
@@ -231,7 +227,6 @@
 10,1,7	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
 10,1,8	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
 10,1,9	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
-10,2,1	2|minecraft:air|minecraft:air|	WALL
 10,2,2	2|minecraft:spruce_planks|minecraft:spruce_planks|	FOUNDATION
 10,2,3	2|minecraft:gravel|minecraft:gravel|	FOUNDATION
 10,2,4	2|minecraft:gravel|minecraft:gravel|	FOUNDATION
@@ -278,7 +273,6 @@
 10,11,7	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	WALL
 11,1,2	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 11,1,6	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
-11,2,1	2|minecraft:air|minecraft:air|	WALL
 11,2,2	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 11,2,3	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 11,2,4	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION

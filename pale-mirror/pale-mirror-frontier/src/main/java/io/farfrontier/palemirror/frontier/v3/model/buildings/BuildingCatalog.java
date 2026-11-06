@@ -341,6 +341,7 @@ public final class BuildingCatalog {
                 Set.of(kind),
                 BuildingDefinition.Representation.GRAYBOX,
                 new BlockPosition(0, 0, 0),
+                new BuildingSiteDefinition(-1, List.of()),
                 FacilityFacing.SOUTH,
                 parcel,
                 box,

@@ -60,7 +60,7 @@ public record FrontierSettlementWorkDiagnostic(
                 site.kind().resourceKind(), 64, state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE)).stream()).findFirst();
         String storageId = receiving.map(value -> value.containerId().value()).orElse("");
-        String admission = harvestAdmission(state, settlementId, readySites, facility, farmStatus, livingFarmers,
+        String admission = harvestAdmission(state, settlementId, readySites, facility, livingFarmers,
                 availableFarmer, receiving.isPresent(), pendingSchedules, checkpoint.instant().ticks());
         return Optional.of(new FrontierSettlementWorkDiagnostic(settlementId.value(), strategic, facility, readySites, pendingSchedules, admission,
                 livingFarmers, availableFarmer, farmStatus, storageId, receiving.isPresent()));
@@ -74,7 +74,7 @@ public record FrontierSettlementWorkDiagnostic(
     }
 
     private static String harvestAdmission(FrontierWorldState state, SubjectId settlementId, List<String> readySites, Lane facility,
-                                           String farmStatus, int livingFarmers, String availableFarmer,
+                                           int livingFarmers, String availableFarmer,
                                            boolean storageAvailable, List<String> pendingSchedules, long atTick) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
         if (state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(settlementId))
@@ -91,7 +91,8 @@ public record FrontierSettlementWorkDiagnostic(
         if (!recoveringFarmer.isEmpty()) return "AMBIENT_RECOVERY_UNKNOWN:" + recoveringFarmer;
         if (readySites.stream().allMatch(site -> state.strategicPlans().hasActiveObjective(settlementId,
                 StrategicObjectiveLane.FACILITY, java.util.Optional.of(new SubjectId(site))))) return "FIELD_TASK_ACTIVE";
-        if (!farmStatus.equals(StructureCondition.INTACT.name())) return "FARM_UNAVAILABLE";
+        if (state.resourceSiteDescriptors().values().stream().filter(site -> readySites.contains(site.id().value()))
+                .noneMatch(site -> FacilityFunctionAvailability.mayUse(state, site.facilityId()))) return "FARM_UNAVAILABLE";
         if (livingFarmers == 0) return "NO_LIVING_FARMER";
         if (availableFarmer.isEmpty()) return "FARMER_RESERVED";
         if (!storageAvailable) return "NO_AVAILABLE_HARVEST_STORAGE";

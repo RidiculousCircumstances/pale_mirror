@@ -28,7 +28,7 @@ public final class FrontierSettlementServiceWorkSceneSupport {
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) {
             return Optional.empty();
         }
-        if (state.structureConditions().get(work.facilityId()) != StructureCondition.INTACT) return Optional.empty();
+        if (!FacilityFunctionAvailability.mayUse(state, work.facilityId())) return Optional.empty();
         SettlementServiceExecutionAuthority.current(state, work);
         return Optional.of(new Candidate(work.id(), work.settlementId(), work.workerId(), work.facilityId(),
                 worker.supportingSurface().support()));

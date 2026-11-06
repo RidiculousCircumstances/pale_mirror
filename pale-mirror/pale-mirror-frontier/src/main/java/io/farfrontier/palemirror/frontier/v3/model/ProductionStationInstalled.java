@@ -30,7 +30,7 @@ public record ProductionStationInstalled(ContainerRecord container, BlockPositio
             throw new IllegalArgumentException("installed machine differs from the declared equipment mount");
         if (!subject.equals(spec.id()) || state.productionStations().machines().containsKey(subject)
                 || !state.bootstrap().bounds().contains(position) || !position.equals(spec.socketSurface().support().offset(0, 1, 0))
-                || state.structureConditions().get(facility.id()) != StructureCondition.INTACT
+                || !FacilityFunctionAvailability.mayUse(state, facility.id())
                 || !supported.contains(spec.socketSurface()) || !supported.contains(spec.workerStation())
                 || !state.bootstrap().ruleset().production().requireEquipment(spec.equipmentType()).capabilities().contains(spec.capability())
                 || state.inventory().containers().values().stream().flatMap(record -> record.productionStation().stream())

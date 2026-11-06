@@ -435,9 +435,9 @@ public final class FrontierReadabilityPlan {
 
     private static String conditionText(StructureCondition condition) {
         return switch (condition) {
-            case INTACT -> "OPERATIONAL";
+            case INTACT -> "FABRIC INTACT";
             case DAMAGED -> "DAMAGED · REPAIR NEEDED";
-            case DESTROYED -> "DESTROYED · SITE LOST";
+            case DESTROYED -> "SEVERE DAMAGE · REPAIR NEEDED";
         };
     }
 
@@ -550,7 +550,7 @@ public final class FrontierReadabilityPlan {
         }
         if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id(), atTick);
         if (structure.kind() == StructureKind.WORKSHOP) return workshopText(state, settlement, condition);
-        if (ProductionFacilityLayout.supports(structure.kind())) return condition != StructureCondition.INTACT
+        if (ProductionFacilityLayout.supports(structure.kind())) return !FacilityFunctionAvailability.mayUse(state, structure.id())
                 ? conditionText(condition) : AutomaticStationReadability.text(state, structure, atTick);
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
         int beds = SettlementFacilityCapability.forStructure(state, structure).residentCapacity();
@@ -586,7 +586,7 @@ public final class FrontierReadabilityPlan {
      * demand, price and buyer all remain canonical elsewhere; this is their compact local view.
      */
     private static String workshopText(FrontierWorldState state, Settlement settlement, StructureCondition condition) {
-        if (condition != StructureCondition.INTACT) return conditionText(condition);
+        if (!FacilityFunctionAvailability.mayUse(state, workshopId(settlement))) return "WORK CONTACT UNAVAILABLE";
         var jobs = state.productionJobs().values().stream()
                 .filter(candidate -> candidate.facilityId().equals(workshopId(settlement)))
                 .sorted(Comparator.comparing(ProductionJob::id)).toList();

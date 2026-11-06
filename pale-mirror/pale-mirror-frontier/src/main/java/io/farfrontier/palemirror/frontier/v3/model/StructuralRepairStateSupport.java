@@ -48,21 +48,11 @@ public final class StructuralRepairStateSupport {
         }
         if (target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_ORGAN) return completeHiveOrgan(state, current, repair, nextIntents);
         if (target.kind() != PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE) throw new IllegalArgumentException("repair target is not structurally repairable");
-        StructureDamage damage = state.structureDamage().get(current.causeSubjectId());
-        StructureDamage repairedDamage = damage == null ? null : damage.repair(repair.position(), delta.semanticPart().orElseThrow());
-        Map<BlockPosition, PhysicalDelta> nextDeltas = new LinkedHashMap<>(state.physicalDeltas()); nextDeltas.remove(repair.position());
-        Map<SubjectId, StructureDamage> nextDamage = new LinkedHashMap<>(state.structureDamage());
-        if (repairedDamage == null || repairedDamage.cells().isEmpty()) nextDamage.remove(current.causeSubjectId());
-        else nextDamage.put(current.causeSubjectId(), repairedDamage);
-        SettlementStructure structure = FrontierWorldStateSupport.structureById(state.bootstrap(), current.causeSubjectId());
-        int threshold = (FrontierGrayboxPlan.intactStructureCellCount(state.bootstrap().terrain(), structure) + 2) / 3;
-        StructureCondition condition = repairedDamage != null && repairedDamage.cells().size() >= threshold ? StructureCondition.DESTROYED
-                : repairedDamage != null && !repairedDamage.cells().isEmpty() ? StructureCondition.DAMAGED : StructureCondition.INTACT;
-        Map<SubjectId, StructureCondition> nextConditions = new LinkedHashMap<>(state.structureConditions()); nextConditions.put(structure.id(), condition);
+        var restored=StructureIntegrity.restore(state,current.causeSubjectId(),repair.position(),delta.semanticPart().orElseThrow());
         nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> nextObservations = new LinkedHashMap<>(state.physicalObservations()); nextObservations.put(repair.id(), repair);
-        return state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(nextConditions).inventory(state.inventory().consumeOne(repair.itemId()))
-                .physicalIntents(nextIntents).physicalObservations(nextObservations).structureDamage(nextDamage).physicalDeltas(nextDeltas));
+        return restored.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeOne(repair.itemId()))
+                .physicalIntents(nextIntents).physicalObservations(nextObservations));
     }
 
     private static SubjectId repairOwner(FrontierWorldState state, PhysicalDeltaSemanticTarget target) {

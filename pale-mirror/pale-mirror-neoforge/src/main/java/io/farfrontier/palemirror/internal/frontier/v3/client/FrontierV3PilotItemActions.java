@@ -44,7 +44,8 @@ final class FrontierV3PilotItemActions {
     private static void select(Minecraft minecraft, ResourceLocation item) {
         for (int index = 0; index < 9; index++) {
             var stack = minecraft.player.getInventory().getItem(index);
-            if (!stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).equals(item)) {
+            if (stack.isEmpty() && item.equals(ResourceLocation.withDefaultNamespace("air"))
+                    || !stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).equals(item)) {
                 minecraft.player.getInventory().selected = index; return;
             }
         }

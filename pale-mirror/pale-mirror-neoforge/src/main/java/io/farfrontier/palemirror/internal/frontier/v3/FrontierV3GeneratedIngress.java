@@ -36,7 +36,7 @@ final class FrontierV3GeneratedIngress {
         FrontierV3GenerationConfiguration.require(state.bootstrap(), baseline.seed(), baseline.configuration());
         var claim = FrontierV3GrayboxLedger.get(level).claim(position);
         return FrontierV3GeneratedStructures.claim(cell).equals(claim)
-                && level.getBlockState(position).equals(FrontierV3GrayboxExecutor.material(cell.material()));
+                && FrontierV3GrayboxPalette.matches(level, position, cell.material());
     }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { TURNS.remove(runtime); }
 }

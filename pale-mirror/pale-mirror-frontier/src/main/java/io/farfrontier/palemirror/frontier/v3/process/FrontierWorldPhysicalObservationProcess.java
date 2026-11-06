@@ -132,7 +132,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         deltas.stream().filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
                 .map(PhysicalDelta::semanticTarget).flatMap(java.util.Optional::stream)
                 .filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE).map(PhysicalDeltaSemanticTarget::subjectId)
-                .distinct().sorted().filter(structure -> after.structureConditions().get(structure) != StructureCondition.INTACT)
+                .distinct().sorted()
                 .forEach(structure -> events.addAll(ProductionProcess.planFacilityUnavailable(after, structure)));
     }
 

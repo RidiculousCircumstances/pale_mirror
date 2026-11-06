@@ -9,7 +9,6 @@ public final class ResidentDiningPlaces {
     private ResidentDiningPlaces() { }
     public static List<MealDestination.DiningArea> in(FrontierWorldState state, SubjectId home) {
         return FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
-                .filter(s -> state.structureConditions().get(s.id()) != StructureCondition.DESTROYED)
                 .sorted(Comparator.comparing(SettlementStructure::id))
                 .flatMap(s -> s.definition().zones().values().stream().filter(z -> z.use() == BuildingDefinition.ZoneUse.DINING)
                         .sorted(Comparator.comparing(BuildingDefinition.Zone::id)).map(z -> new MealDestination.DiningArea(s.id(), z.id())))
@@ -32,17 +31,17 @@ public final class ResidentDiningPlaces {
     public static boolean contains(FrontierWorldState state, SubjectId home, MealDestination place, SurfaceAnchor station) {
         if (place instanceof MealDestination.Here) return true; // Portable food follows its independently inspected eater, not its historical origin.
         var area = (MealDestination.DiningArea) place; var building = facility(state, home, area);
-        return state.structureConditions().get(building.id()) != StructureCondition.DESTROYED
-                && BuildingSpatialPlan.of(building).inZone(building.definition().zones().get(area.zoneId()), station.support().offset(0, 1, 0));
+        return BuildingSpatialPlan.of(building).inZone(building.definition().zones().get(area.zoneId()), station.support().offset(0, 1, 0));
     }
     public static List<SurfaceAnchor> stations(FrontierWorldState state, SubjectId home, MealDestination place,
             KnownPedestrianRouteKnowledge knowledge) {
         if (place instanceof MealDestination.Here here) return knowledge.clearStation(here.station()) ? List.of(here.station()) : List.of();
         var area = (MealDestination.DiningArea) place; var building = facility(state, home, area);
-        if (state.structureConditions().get(building.id()) == StructureCondition.DESTROYED) return List.of();
         var plan = BuildingSpatialPlan.of(building);
         return plan.authoredFloors().stream().filter(s -> contains(state, home, place, s))
-                .filter(knowledge::clearStation).filter(s -> !plan.circulation().contains(s))
+                .filter(s -> FacilityFunctionAvailability.assess(state, new FacilityFunctionAvailability.Requirements(
+                        building.id(), Set.of(), Set.of(s)), knowledge).status() == FacilityFunctionAvailability.Status.ELIGIBLE)
+                .filter(s -> !plan.circulation().contains(s))
                 .sorted(Comparator.comparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::y).thenComparingInt(SurfaceAnchor::z))
                 .limit(io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.MAX_LEGAL_STATIONS).toList();
     }
@@ -54,7 +53,7 @@ public final class ResidentDiningPlaces {
             return !homeFood && meal.portable() && here.station().equals(meal.clearingSurface());
         var area = (MealDestination.DiningArea) meal.destination();
         var building = facility(state, meal.settlementId(), area);
-        if (!homeFood || state.structureConditions().get(building.id()) == StructureCondition.DESTROYED) return false;
+        if (!homeFood) return false;
         if (meal.source() instanceof ResidentFoodSource.Storage source) {
             var record = state.inventory().containers().get(source.containerId());
             return record != null && record.storage().isPresent()

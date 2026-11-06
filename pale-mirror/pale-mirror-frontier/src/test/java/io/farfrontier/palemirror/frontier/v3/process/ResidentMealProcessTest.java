@@ -656,7 +656,7 @@ class ResidentMealProcessTest {
                         new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 1, 1L, 0L, 1L, meal.executionId())));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         BodyPosition displaced = dining.standingBody();
-        assertNotEquals(meal.clearingSurface().standingBody(), displaced);
+        assertTrue(ResidentMealProcess.atDiningDestination(state, diningMeal, displaced));
         assertTrue(ResidentMealProcess.mayConsumeAt(state, state.humanPopulation().meals().get(resident), displaced));
         FrontierWorldState beforeConsumption = state;
         assertFatalityRetainsMealResources(state, resident, 421L, 48_002L,

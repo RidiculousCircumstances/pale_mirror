@@ -55,32 +55,24 @@ class ResidentMealAdmissionReplayTest {
                 java.util.Arrays.copyOf(bytes, bytes.length - 1)));
     }
 
-    @Test void queueEligibilityDoesNotSearchAndPendingOwnerRestoresItsExactCalculationWait() throws Exception {
+    @Test void queueEligibilityAndLocallyProvedMealAdmissionDoNotInitializeGlobalSearch() throws Exception {
         var state = fixture();
         var resident = state.bootstrap().settlements().getFirst().residents().getFirst().id();
         var action = ResidentActivityProcess.review(resident, 24_000L);
         var queries = new AtomicInteger();
-        var waits = new PedestrianPlanningWakeIndex();
         try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
             queries.incrementAndGet();
             return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 1, 1, "pending");
-        }); var continuation = PedestrianPlanningContinuations.bind(waits)) {
+        })) {
             assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(state, action));
             assertEquals(0, queries.get(), "queue eligibility cannot initialize a route search");
             var events = FrontierWorldRuntimeDefinition.planScheduled(state, action);
-            assertEquals(1, events.size());
-            var retry = assertInstanceOf(ScheduleEffect.Rescheduled.class, events.getFirst().payload());
-            assertEquals(action.id(), retry.scheduleId());
-            assertEquals(1, queries.get(), "one blocked owner cannot fan out through every waiting point");
-            assertEquals(1, waits.waitingCount());
-            assertTrue(state.humanPopulation().meals().isEmpty());
-            waits.remove(action.id());
-            var snapshots = new FrontierWorldStateCodec();
-            var recovered = snapshots.decode(snapshots.encode(state));
-            FrontierWorldProcessCatalog.restorePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(), recovered,
-                    new FrontierExecutionView(state.bootstrap().worldId(), new Revision(0), new SimInstant(24_000L),
-                            List.of(retry.replacement())));
-            assertEquals(1, waits.waitingCount(), "restart must restore the calculation dependency, not absence");
+            var started = events.stream().map(event -> event.payload()).filter(ResidentMealStarted.class::isInstance)
+                    .map(ResidentMealStarted.class::cast).findFirst().orElseThrow();
+            assertEquals(0, queries.get(), "an independently proved local exit needs no unrelated global calculation");
+            var admitted = ResidentMealProcess.reduceStarted(state, resident, started);
+            assertEquals(started.meal(), admitted.humanPopulation().meals().get(resident));
+            assertTrue(state.humanPopulation().meals().isEmpty(), "planning itself remains read-only");
         }
     }
 

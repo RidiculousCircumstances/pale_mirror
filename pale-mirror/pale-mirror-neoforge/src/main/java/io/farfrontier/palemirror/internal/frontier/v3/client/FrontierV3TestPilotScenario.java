@@ -96,7 +96,8 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("move_within_container") && !validContainerReorder(action)) ||
                     (type.equals("look") && !resolvablePosition(action, action.has("at") ? "at" : "position")) ||
                     (type.equals("walk") && (!position(action) || action.has("jump") && (!action.get("jump").isJsonPrimitive() || !action.get("jump").getAsJsonPrimitive().isBoolean()))) ||
-                    (type.equals("break") && !resolvablePosition(action, "position")) ||
+                    (type.equals("break") && (!resolvablePosition(action, "position")
+                            || action.has("holdTicks") && !wholeWithin(action, "holdTicks", 1, 5))) ||
                     (type.equals("wait_until_block") && !resolvablePosition(action, "position"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }
@@ -474,7 +475,7 @@ final class FrontierV3TestPilotScenario {
                     && diagnosticField.equals("position"))
                 || (view.equals("settlement") && requiredId(reference, "id", "settlement:")
                 && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface") || diagnosticField.equals("firstGuardPosition") || diagnosticField.equals("layout.firstHousingAnchor")
-                    || diagnosticField.matches("layout\\.facilities\\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\\.(anchor|entrance|interior|facadeView)")))
+                    || diagnosticField.matches("layout\\.facilities\\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\\.(anchor|entrance|interior|floor|facadeView)")))
                 || (view.equals("process") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("cursor.retainedBody") || diagnosticField.equals("goal.station")))
                 || (view.equals("process") && requiredId(reference, "id", "station:") && diagnosticField.equals("exteriorApproach"))
@@ -499,7 +500,9 @@ final class FrontierV3TestPilotScenario {
         JsonObject reference = value == null ? null : value.getAsJsonObject("diagnostic");
         return reference != null && reference.entrySet().size() == 3 && reference.has("view") && reference.has("id") && reference.has("field")
                 && reference.get("view").isJsonPrimitive() && reference.get("id").isJsonPrimitive() && reference.get("field").isJsonPrimitive()
-                && ((reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "job:")
+                && ((reference.get("view").getAsString().equals("settlement") && requiredId(reference,"id","settlement:")
+                    && reference.get("field").getAsString().matches("layout\\.facilities\\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\\.floor"))
+                    || (reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "job:")
                     && reference.get("field").getAsString().equals("productionFutureBody"))
                     || (reference.get("view").getAsString().equals("site") && requiredId(reference, "id", "site:")
                     && Set.of("firstCrop", "lastCrop").contains(reference.get("field").getAsString()))

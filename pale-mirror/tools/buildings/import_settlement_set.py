@@ -47,14 +47,15 @@ def build(spec,source,out):
  # Explicit adaptation: a narrow supported entrance and named stations. No
  # runtime inference/paste, inventories or foreign block-entity data are imported.
  door=tuple(spec['door']);dx,dz=DIRECTIONS[spec['front']]
- path=[(door[0]+dx*i,floor,door[1]+dz*i) for i in (3,2,1,0,-1)]
+ rise=floor-spec['groundY']
+ path=[(door[0]+dx*i,floor-min(max(i,0),rise),door[1]+dz*i) for i in (3,2,1,0,-1)]
  extra=[]
  if 'secondaryDoor' in spec:
-  ex,ez=spec['secondaryDoor'];extra=[(ex+dx*i,floor,ez+dz*i) for i in (3,2,1,0,-1)]
+  ex,ez=spec['secondaryDoor'];extra=[(ex+dx*i,floor-min(max(i,0),rise),ez+dz*i) for i in (3,2,1,0,-1)]
  easement=list(path)+extra
  for at in [path[0]]+([extra[0]] if extra else []):
   while -1<=at[0]<=sx and -1<=at[2]<=sz:
-   at=(at[0]+dx,floor,at[2]+dz);easement.append(at)
+   at=(at[0]+dx,spec['groundY'],at[2]+dz);easement.append(at)
  for x,y,z in easement:
   cells.setdefault((x,y,z),('minecraft:cobblestone',{}))
   for h in (1,2):
@@ -95,14 +96,17 @@ def build(spec,source,out):
  maxx0,maxz0=max(p[0] for p in cells),max(p[2] for p in cells)
  for i,v in enumerate(ids[:sx*sy*sz]):
   x=i%sx;z=i//sx%sz;y=i//(sx*sz)
-  if y<=floor and minx0<=x<=maxx0 and minz0<=z<=maxz0 and pal[v]['Name']=='minecraft:air':
+  excavate=any(all(area['min'][j]<=p<area['max'][j] for j,p in enumerate((x,y,z))) for area in spec['excavations'])
+  if y<=floor and (y>spec['groundY'] or excavate) and minx0<=x<=maxx0 and minz0<=z<=maxz0 and pal[v]['Name']=='minecraft:air':
    cells.setdefault((x,y,z),('minecraft:air',{}))
  # Translate to positive native coordinates, preserving a one-block foundation.
  minx=min(p[0] for p in cells);minz=min(p[2] for p in cells)
  def point(p):return p[0]-minx,p[1]-cut,p[2]-minz
  data={point(p):v for p,v in data.items() if p in cells and cells[p][0]==v[0]};cells={point(p):v for p,v in cells.items()};path=[point(p) for p in path]
  maxp=tuple(max(p[i] for p in cells)+1 for i in range(3));origin=point((door[0],floor,door[1]))
- prop={'format':'3','id':'pale_mirror:medieval_spruce/'+spec['name'],'version':'1','functions':spec['kind'],'representation':'AUTHORED','origin':','.join(map(str,origin)),'front':spec['front'],'fabric.min':'0,0,0','fabric.max':','.join(map(str,maxp)),'parcel.min':'-2,-1,-2','parcel.max':','.join(map(str,(maxp[0]+2,maxp[1]+2,maxp[2]+2))), 'rooms':'main','room.main.min':'-1,1,-1','room.main.max':','.join(map(str,maxp)),'zones':'','passages':'front','primaryEntrance':'front','primaryWorkplace':'','passage.front.from.kind':'EXTERIOR','passage.front.from.room':'','passage.front.to.kind':'ROOM','passage.front.to.room':'main','passage.front.public':'true','passage.front.threshold':'3','passage.front.supports':';'.join(','.join(map(str,p)) for p in path),'workplaces':'','anchors':','.join(anchors),'beds':''}
+ prop={'format':'4','site.groundY':str(spec['groundY']),'site.excavations':','.join('void_'+str(i) for i in range(len(spec['excavations']))),'id':'pale_mirror:medieval_spruce/'+spec['name'],'version':'1','functions':spec['kind'],'representation':'AUTHORED','origin':','.join(map(str,origin)),'front':spec['front'],'fabric.min':'0,0,0','fabric.max':','.join(map(str,maxp)),'parcel.min':'-2,-1,-2','parcel.max':','.join(map(str,(maxp[0]+2,maxp[1]+2,maxp[2]+2))), 'rooms':'main','room.main.min':'-1,1,-1','room.main.max':','.join(map(str,maxp)),'zones':'','passages':'front','primaryEntrance':'front','primaryWorkplace':'','passage.front.from.kind':'EXTERIOR','passage.front.from.room':'','passage.front.to.kind':'ROOM','passage.front.to.room':'main','passage.front.public':'true','passage.front.threshold':'3','passage.front.supports':';'.join(','.join(map(str,p)) for p in path),'workplaces':'','anchors':','.join(anchors),'beds':''}
+ for i,area in enumerate(spec['excavations']):
+  for bound in ('min','max'):prop['site.excavation.void_'+str(i)+'.'+bound]=','.join(map(str,point(area[bound])))
  for key,p in anchors.items():prop['anchor.'+key]=','.join(map(str,point(p)))
  if extra:
   prop['passages']='front,side'
@@ -146,7 +150,7 @@ def build(spec,source,out):
  # Certificates are produced by the registered Minecraft shape compiler, never fabricated.
  geometry=base.with_suffix('.geometry')
  if not geometry.exists():geometry.write_text('# Native collision certificate pending authoring compilation.\n')
- base.with_suffix('.provenance.json').write_text(json.dumps({'sourceRef':'a9b03edfbbd5359b148c85284ea038066d689866','source':spec['source'],'sourceSha256':spec['sha256'],'license':'private test derivative; upstream ARR','adaptations':['original native blocks, shapes and materials retained with pinned dependencies','terrain placeholders and colony controllers omitted; complete source foundation and explicit below-floor voids retained','supported open entrance','declared machine/operator aisle and service points','no entities, inventories or foreign controllers; typed visual data retained'],'blocks':len(cells),'beds':len(beds)},indent=2)+'\n')
+ base.with_suffix('.provenance.json').write_text(json.dumps({'sourceRef':'a9b03edfbbd5359b148c85284ea038066d689866','source':spec['source'],'sourceSha256':spec['sha256'],'license':'private test derivative; upstream ARR','adaptations':['original native blocks, shapes and materials retained with pinned dependencies','terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air','supported open entrance','declared machine/operator aisle and service points','no entities, inventories or foreign controllers; typed visual data retained'],'blocks':len(cells),'beds':len(beds)},indent=2)+'\n')
  print(spec['name'],len(cells),'beds',len(beds))
 
 def main():

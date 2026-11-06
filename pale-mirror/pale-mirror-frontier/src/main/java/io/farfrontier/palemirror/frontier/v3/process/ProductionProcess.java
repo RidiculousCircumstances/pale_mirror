@@ -132,7 +132,7 @@ public final class ProductionProcess {
                     state, job.workerId(), Math.max(currentTick, action.dueAt().ticks())))));
         if (job.stationWork().isPresent()) return StationWorkCompletionPlanning.plan(state, job, action, currentTick);
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job); SettlementStructure workshop = workshop(settlement);
-        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
+        if (!FacilityFunctionAvailability.mayUse(state, workshop.id())) return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))) {
             return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
         }
@@ -316,7 +316,7 @@ public final class ProductionProcess {
         if (job == null) throw new IllegalArgumentException("production completion has no active job");
         job.requireColdCompletion(state);
         requireOwner(subject, job.settlementId()); Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
-        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production completion facility is unavailable");
+        if (!FacilityFunctionAvailability.mayUse(state, workshop.id())) throw new IllegalArgumentException("production completion facility is unavailable");
         if (!(completed.output().custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) {
             throw new IllegalArgumentException("production output is not stored in its settlement depot");
         }
@@ -346,7 +346,7 @@ public final class ProductionProcess {
         }
         job.requireColdCompletion(state);
         Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
-        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+        if (!FacilityFunctionAvailability.mayUse(state, workshop.id())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))
                 || ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()))) {
             throw new IllegalArgumentException("fungible production completion cannot bypass current physical custody");
@@ -370,7 +370,7 @@ public final class ProductionProcess {
         ProductionJob job = state.productionJobs().get(progressed.jobId());
         if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("production work progress has no owned active job");
         Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
-        if (!job.facilityId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+        if (!job.facilityId().equals(workshop.id()) || !FacilityFunctionAvailability.mayUse(state, workshop.id())
                 || state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("production work progress has unavailable worker or facility");
         }
@@ -566,9 +566,12 @@ public final class ProductionProcess {
     }
 
     public static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, ProductionBlocked blocked) {
-        requireOwner(subject, blocked.settlementId()); Settlement settlement = settlement(state, blocked.settlementId()); SettlementStructure workshop = workshop(settlement);
-        if (!workshop.id().equals(blocked.facilityId())) throw new IllegalArgumentException("production block refers to a foreign facility");
+        requireOwner(subject, blocked.settlementId()); Settlement settlement = settlement(state, blocked.settlementId());
         ProductionJob retainedJob = state.productionJobs().get(blocked.workId());
+        SettlementStructure workshop = retainedJob == null ? workshop(settlement)
+                : settlement.structures().stream().filter(facility -> facility.id().equals(retainedJob.facilityId())).findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException("production job lost its declared facility"));
+        if (!workshop.id().equals(blocked.facilityId())) throw new IllegalArgumentException("production block refers to a foreign facility");
         StrategicTask declaredTask = task(state, blocked.taskId(), retainedJob == null ? StrategicTaskStatus.PENDING : StrategicTaskStatus.ACTIVE);
         if (!declaredTask.ownerId().equals(settlement.id()) || retainedJob != null && !retainedJob.taskId().equals(declaredTask.id())) {
             throw new IllegalArgumentException("production block must name the exact owner task of its job or pending work");
@@ -593,7 +596,7 @@ public final class ProductionProcess {
                 boolean conflictedDepot = BakeryBatchSelection.storedInputContainers(state, settlement.id()).contains(blocked.workId())
                         && ReferenceContainerCustody.blocksCanonicalUse(state, blocked.workId());
                 if (!conflictedDepot && (!blocked.workId().equals(workshop.id()) || wheatPresent
-                        || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT)) {
+                        || !FacilityFunctionAvailability.mayUse(state, workshop.id()))) {
                     throw new IllegalArgumentException("production input block precondition does not hold");
                 }
             }
@@ -602,7 +605,9 @@ public final class ProductionProcess {
                 if ((!pending && !state.productionJobs().containsKey(blocked.workId())) || state.firstFreeContainerSlot(depot).isPresent()) throw new IllegalArgumentException("production storage block precondition does not hold");
             }
             case FACILITY_UNAVAILABLE -> {
-                if (state.structureConditions().get(workshop.id()) == StructureCondition.INTACT) throw new IllegalArgumentException("production facility block precondition does not hold");
+                if (retainedJob == null ? FacilityFunctionAvailability.mayUse(state, workshop.id())
+                        : ProductionFacilityAvailability.mayUseJob(state, retainedJob))
+                    throw new IllegalArgumentException("production facility block precondition does not hold");
             }
             case WORKER_UNAVAILABLE -> {
                 ProductionJob job = state.productionJobs().get(blocked.workId());
@@ -613,7 +618,7 @@ public final class ProductionProcess {
                     }
                     break;
                 }
-                if (!blocked.workId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+                if (!blocked.workId().equals(workshop.id()) || !FacilityFunctionAvailability.mayUse(state, workshop.id())
                         || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY).isPresent()) {
                     throw new IllegalArgumentException("production worker block precondition does not hold");
                 }
@@ -790,6 +795,7 @@ public final class ProductionProcess {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(facilityId, "facility id");
         List<ProposedEvent> events = new java.util.ArrayList<>();
         for (ProductionJob job : state.productionJobs().values().stream().filter(candidate -> candidate.facilityId().equals(facilityId))
+                .filter(candidate -> !ProductionFacilityAvailability.mayUseJob(state, candidate))
                 .sorted(Comparator.comparing(ProductionJob::id)).toList()) {
             if (state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))) continue;
             Settlement settlement = settlement(state, job.settlementId());

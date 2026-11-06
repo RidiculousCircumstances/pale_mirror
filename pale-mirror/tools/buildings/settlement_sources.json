@@ -2,14 +2,16 @@
   {
     "name": "hall",
     "kind": "HALL",
-    "source": "fundamentals/townhall2.blueprint",
-    "sha256": "0de7053c7498f39e25611266f1a70db4b34be49eb82c73abe043c063cc469ed6",
+    "source": "fundamentals/townhall5.blueprint",
+    "sha256": "2ed8ff0d8ab14fc0a45f7a50e8906244693fd34fd998e0f05294b3a39e5da672",
     "floor": 4,
     "door": [
       3,
       7
     ],
-    "front": "WEST"
+    "front": "WEST",
+    "groundY": 3,
+    "excavations": []
   },
   {
     "name": "infirmary",
@@ -38,7 +40,9 @@
         7,
         11
       ]
-    }
+    },
+    "groundY": 6,
+    "excavations": []
   },
   {
     "name": "depot",
@@ -94,7 +98,9 @@
         ],
         "priority": 80
       }
-    ]
+    ],
+    "groundY": 2,
+    "excavations": []
   },
   {
     "name": "smeltery",
@@ -132,7 +138,9 @@
         2,
         11
       ]
-    }
+    },
+    "groundY": 2,
+    "excavations": []
   },
   {
     "name": "forge",
@@ -158,7 +166,9 @@
         4
       ],
       "type": "pale_mirror:forge"
-    }
+    },
+    "groundY": 1,
+    "excavations": []
   },
   {
     "name": "woodshop",
@@ -184,7 +194,9 @@
         14
       ],
       "type": "pale_mirror:woodworking_bench"
-    }
+    },
+    "groundY": 2,
+    "excavations": []
   },
   {
     "name": "farm",
@@ -196,7 +208,9 @@
       14,
       7
     ],
-    "front": "SOUTH"
+    "front": "SOUTH",
+    "groundY": 1,
+    "excavations": []
   },
   {
     "name": "house_1",
@@ -208,7 +222,9 @@
       10,
       10
     ],
-    "front": "SOUTH"
+    "front": "SOUTH",
+    "groundY": 1,
+    "excavations": []
   },
   {
     "name": "house_2",
@@ -224,7 +240,9 @@
     "secondaryDoor": [
       4,
       9
-    ]
+    ],
+    "groundY": 1,
+    "excavations": []
   },
   {
     "name": "house_3",
@@ -240,7 +258,9 @@
     "secondaryDoor": [
       4,
       9
-    ]
+    ],
+    "groundY": 1,
+    "excavations": []
   },
   {
     "name": "house_5",
@@ -256,7 +276,9 @@
     "secondaryDoor": [
       4,
       9
-    ]
+    ],
+    "groundY": 1,
+    "excavations": []
   },
   {
     "name": "kitchen",
@@ -318,7 +340,9 @@
           12
         ]
       }
-    ]
+    ],
+    "groundY": 1,
+    "excavations": []
   },
   {
     "name": "textile_factory",
@@ -362,6 +386,8 @@
         ],
         "type": "pale_mirror:weaving_loom"
       }
-    ]
+    ],
+    "groundY": 1,
+    "excavations": []
   }
 ]

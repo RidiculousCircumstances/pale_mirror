@@ -121,15 +121,19 @@ public final class ResidentMealKnownNavigation {
         List<SurfaceAnchor> destinations = directService ? List.of(service)
                 : waitingSurfaces(state, meal, point).stream()
                     .filter(availableWaitingStation).toList();
+        if (destinations.contains(start) && (directService || PedestrianLocalDeparture.publicContinuation(state,
+                List.of(start)).filter(port.accessBoundary()::allowsWaitingRoute).isPresent())) return List.of(start);
+        var local = io.farfrontier.palemirror.frontier.v3.model.navigation.KnownLocalAccess.nearest(
+                routeKnowledge.geometry(), start, java.util.Set.copyOf(destinations), 16);
+        if (local.isPresent() && (directService || PedestrianLocalDeparture.publicContinuation(state,
+                local.orElseThrow().route()).filter(port.accessBoundary()::allowsWaitingRoute).isPresent()))
+            return local.orElseThrow().route();
         KnownPedestrianNavigation.RouteUnavailable lastUnavailable = null;
-        for (SurfaceAnchor destination : destinations) {
-            if (start.equals(destination)) {
-                if(directService || PedestrianLocalDeparture.publicContinuation(state,List.of(start)).filter(port.accessBoundary()::allowsWaitingRoute).isPresent())return List.of(start);
-                continue;
-            }
+        for (int offset = 0; offset < destinations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
+            var batch = destinations.subList(offset, Math.min(destinations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
             MovementOrder outdoor = new MovementOrder(meal.residentId(), meal.residentId(),
-                    FrontierWireTags.tag(meal.phase()), 1L, List.of(destination),
-                    TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+                    FrontierWireTags.tag(meal.phase()), 1L, batch,
+                    TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
             try {
                 List<SurfaceAnchor> route = routeKnowledge.plannedPath(start, outdoor);
                 if (!directService && PedestrianLocalDeparture.publicContinuation(state, route).filter(port.accessBoundary()::allowsWaitingRoute).isEmpty()) continue;
@@ -178,22 +182,12 @@ public final class ResidentMealKnownNavigation {
     }
 
     private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal, ServiceAccessPoint point) {
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
-        int ordinal = 0;
-        for (int index = 0; index < settlement.residents().size(); index++) {
-            if (settlement.residents().get(index).id().equals(meal.residentId())) {
-                ordinal = index;
-                break;
-            }
-        }
         var excluded = ServiceDestinationClaims.excludedFor(state, meal.residentId());
-        List<SurfaceAnchor> candidates = point.waitingSurfaces()
-                .stream().filter(surface -> !excluded.contains(surface)).toList();
-        if (candidates.isEmpty()) return List.of();
-        List<SurfaceAnchor> preferred = new ArrayList<>(candidates.size());
-        for (int index = 0; index < candidates.size(); index++)
-            preferred.add(candidates.get((ordinal + index) % candidates.size()));
-        return List.copyOf(preferred);
+        var start = state.actorLocations().get(meal.residentId()).supportingSurface();
+        return point.waitingSurfaces().stream().filter(surface -> !excluded.contains(surface))
+                .sorted(java.util.Comparator.comparingInt((SurfaceAnchor surface) -> Math.abs(surface.y() - point.station().y()))
+                        .thenComparingLong(surface -> surface.manhattanDistance(start))
+                        .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
     }
 
     /** A retained approach cannot park on another owner's current or reserved exit. */

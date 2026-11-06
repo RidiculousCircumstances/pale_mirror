@@ -262,6 +262,28 @@
       "type": "inspect",
       "view": "summary",
       "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_FACTORY.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_FACTORY.entrance"
+        }
+      }
     }
   ],
   "assertions": [
@@ -316,6 +338,10 @@
     {
       "after": 20,
       "name": "spruce-native-kitchen"
+    },
+    {
+      "after": 23,
+      "name": "textile-factory-site"
     }
   ]
 }

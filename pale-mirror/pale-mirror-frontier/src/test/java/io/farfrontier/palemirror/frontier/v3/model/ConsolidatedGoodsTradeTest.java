@@ -316,7 +316,7 @@ class ConsolidatedGoodsTradeTest {
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
-    void mixedTripActuallyLoadsSettlesAndReturnsThroughKernelAfterInFlightRecovery(boolean animal) {
+    void mixedTripActuallyLoadsSettlesAndReturnsThroughKernelAfterInFlightRecovery(boolean animal) throws java.io.IOException {
         var initial = ConsolidatedTradeFixture.initial(new WorldId("frontier:consolidated-test"), 20260918065L, animal);
         var world = initial.bootstrap().worldId();
         var home = new SubjectId("settlement:1");
@@ -398,9 +398,14 @@ class ConsolidatedGoodsTradeTest {
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
             if (boundary % 64 == 0) engine.compact(engine.executionView().revision());
         }
-        assertNotNull(admitted); assertTrue(recovered); assertTrue(delivered);
-        assertTrue(estimated, "an actually routed delivery must expose logistics timing before arrival");
         var finalState = engine.canonicalState().state();
+        if (!returned) java.nio.file.Files.write(java.nio.file.Path.of("build", "consolidated-unfinished-" + animal + ".bin"),
+                new FrontierWorldStateCodec().encode(finalState));
+        assertNotNull(admitted, "no mission admitted at tick " + engine.executionView().instant().ticks());
+        assertTrue(recovered, "mission never entered outbound: " + finalState.shipments().missions().get(admitted.id()));
+        assertTrue(delivered, "mission never delivered: " + finalState.shipments().missions().get(admitted.id())
+                + " group=" + finalState.unitGroups().groups().get(admitted.groupId()));
+        assertTrue(estimated, "an actually routed delivery must expose logistics timing before arrival");
         var finalMission = finalState.shipments().missions().get(admitted.id());
         var finalGroup = finalState.unitGroups().groups().get(admitted.groupId());
         assertTrue(returned, "mixed cargo must return, not merely be declared: tick=" + engine.executionView().instant().ticks()
@@ -433,6 +438,13 @@ class ConsolidatedGoodsTradeTest {
         return state;
     }
     private static FrontierWorldState replaceWarehouse(FrontierWorldState state, SubjectId home) {
+        // This history declares one mixed loading site. Close the independent
+        // kitchen offer so bread and stone address that same replacement receiver.
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home);
+        var pantryPolicy = state.inventory().containers().get(pantry).storage().orElseThrow();
+        state = new ResourceStoragePolicyChanged(pantry, pantryPolicy, new ResourceStoragePolicy(
+                pantryPolicy.endpoint(), pantryPolicy.filter().excluding(state.bootstrap().ruleset().residentLife().foods().foods().keySet()),
+                pantryPolicy.priority(), pantryPolicy.role())).apply(state, home);
         var old = FrontierWorldState.depotId(home);
         var original = GoodsParticipantStorage.endpoint(state, old);
         var id = new SubjectId("container:trade-replacement-" + home.value().replace(':', '-'));

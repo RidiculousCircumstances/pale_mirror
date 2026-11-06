@@ -8,8 +8,9 @@ in the provenance files, `import_medieval_spruce.py` and `import_settlement_set.
 Native decorative blocks require the pinned Domum Ornamentum, MineColonies rack
 and support-mod dependencies. Colony controllers and their gameplay state are not imported.
 
-The current service templates explicitly select upstream **level 2** variants
-(`townhall2`, `hospital2`, `warehouse2`, etc.; bakery also uses `baker2`). Housing
+The town hall selects upstream **level 5** (`townhall5`), matching the gallery tower.
+Other service templates explicitly select **level 2** variants (`hospital2`,
+`warehouse2`, etc.; bakery uses `baker2`). Housing
 selects explicit level/bed variants. The Style Explorer gallery shows maximum-level
 buildings. The current lower-level selections therefore do not match that visual
 reference; equality to a level-2 source must not be used to accept the gallery's
@@ -24,7 +25,11 @@ fallback. All settlement functions select Medieval Spruce templates; housing has
 A selected structure retains style/template/content hash. Content changes require a
 fresh world under the current schema policy.
 
-Markup format3 explicitly declares each workplace's `equipmentType` and local
+Markup format4 explicitly declares `site.groundY` independently from the entry
+floor and names deliberate `site.excavations`; empty source cells below outdoor
+grade do not authorize excavation. A common bounded site survey/plan supplies
+cut, fill, native foundation and graded access without flattening the settlement.
+Unknown or unsafe terrain is not a successful fit. It also declares each workplace's `equipmentType` and local
 `facing`. The front points from the machine support towards its adjacent operator
 support. Missing/backwards declarations are errors; no direction is guessed.
 

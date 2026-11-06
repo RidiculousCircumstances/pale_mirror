@@ -11,7 +11,7 @@ final class BakeryProductionPlanning {
     static List<ProposedEvent> planStart(FrontierWorldState state, StrategicTask task, ScheduledAction action, long now) {
         Settlement settlement = settlement(state, task.ownerId());
         SettlementStructure workshop = workshop(settlement);
-        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
+        if (!FacilityFunctionAvailability.mayUse(state, workshop.id())) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
         if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id()))
             return List.of(reschedule(action, start(task, Math.addExact(now,
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));

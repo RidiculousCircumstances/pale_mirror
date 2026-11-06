@@ -19,9 +19,13 @@ public final class SettlementFacilityCapability {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(structure, "structure");
         StructureCondition condition = state.structureConditions().get(structure.id());
         if (condition == null) throw new IllegalArgumentException("unknown canonical structure: " + structure.id().value());
-        if(structure.kind()!=StructureKind.HOUSING)return forCondition(state.bootstrap().ruleset(),structure.kind(),condition);
+        if(structure.kind()!=StructureKind.HOUSING) {
+            var declared = forCondition(state.bootstrap().ruleset(), structure.kind(), StructureCondition.INTACT);
+            return new Capability(structure.kind(), condition, 0,
+                    FacilityFunctionAvailability.mayUse(state, structure.id()) ? declared.workCapacity() : 0);
+        }
         var damage=state.structureDamage().get(structure.id());
-        int beds=condition==StructureCondition.DESTROYED ? 0 : Math.toIntExact(structure.definition().beds().values().stream().filter(bed->{
+        int beds=Math.toIntExact(structure.definition().beds().values().stream().filter(bed->{
             if(damage==null)return true;
             return !damage.cells().containsKey(structure.placement().world(bed.head())) && !damage.cells().containsKey(structure.placement().world(bed.foot()));
         }).count());
@@ -72,6 +76,6 @@ public final class SettlementFacilityCapability {
             if (kind != StructureKind.HOUSING && residentCapacity != 0) throw new IllegalArgumentException("only housing has resident capacity");
         }
 
-        public boolean operational() { return condition != StructureCondition.DESTROYED && (residentCapacity > 0 || workCapacity > 0); }
+        public boolean operational() { return residentCapacity > 0 || workCapacity > 0; }
     }
 }

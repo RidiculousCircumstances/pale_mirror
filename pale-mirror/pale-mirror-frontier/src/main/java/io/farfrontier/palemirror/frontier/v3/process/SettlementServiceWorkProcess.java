@@ -82,7 +82,7 @@ public final class SettlementServiceWorkProcess {
         ResidentProfile worker = state.humanPopulation().resident(work.workerId());
         ExactItemStack material = state.inventory().items().get(work.inputItemId());
         SettlementWorkforce.requireAvailable(state, work.settlementId(), List.of(work.workerId()));
-        if (facility.kind() != StructureKind.INFIRMARY || state.structureConditions().get(facility.id()) != StructureCondition.INTACT
+        if (facility.kind() != StructureKind.INFIRMARY || !FacilityFunctionAvailability.mayUse(state, facility.id())
                 || worker.capability(HumanCapability.MEDICINE) <= 0 || !state.infection().containsKey(infection.cell())
                 || !nearby(state.bootstrap().ruleset(), facility, infection.cell()) || material == null
                 || !material.itemKind().equals(DecontaminationPolicy.REAGENT) || !material.custody().equals(work.inputSource())
@@ -206,7 +206,7 @@ public final class SettlementServiceWorkProcess {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
         InfectionCell cell = task.infectionTarget().orElseThrow();
         Optional<SettlementStructure> facility = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
-                .filter(structure -> state.structureConditions().get(structure.id()) == StructureCondition.INTACT).min(Comparator.comparing(SettlementStructure::id));
+                .filter(structure -> FacilityFunctionAvailability.mayUse(state, structure.id())).min(Comparator.comparing(SettlementStructure::id));
         Optional<ResidentProfile> worker = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), HumanCapability.MEDICINE);
         if (facility.isEmpty() || worker.isEmpty() || !state.infection().containsKey(cell)
                 || !nearby(state.bootstrap().ruleset(), facility.orElseThrow(), cell)) return Optional.empty();

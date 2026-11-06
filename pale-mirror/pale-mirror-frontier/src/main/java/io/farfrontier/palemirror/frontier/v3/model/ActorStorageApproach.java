@@ -16,8 +16,20 @@ public final class ActorStorageApproach {
             SubjectId actorId, SurfaceAnchor origin, KnownPedestrianRouteKnowledge declaredJourney) {
         ShipmentEndpointComposition.validate(state, endpoint);
         var knowledge = declaredJourney.forActor(state, actorId);
+        var exterior = ShipmentEndpointComposition.exteriorApproach(state, endpoint);
         var candidates = java.util.stream.Stream.concat(java.util.stream.Stream.of(endpoint.station()),
-                ShipmentEndpointComposition.approachStations(state,endpoint,knowledge).stream()).distinct().toList();
+                ShipmentEndpointComposition.approachStations(state,endpoint,knowledge).stream()).distinct()
+                .sorted(java.util.Comparator.comparingLong((SurfaceAnchor station) -> station.manhattanDistance(exterior))
+                        .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::y).thenComparingInt(SurfaceAnchor::z)).toList();
+        // Prefer a positive nearby proof. Distant visitors approach the producer's
+        // exterior contact before attempting an interior niche they may not fit through.
+        var local = io.farfrontier.palemirror.frontier.v3.model.navigation.KnownLocalAccess.nearest(
+                knowledge.geometry(), origin, java.util.Set.copyOf(candidates), 16);
+        if (local.isPresent()) {
+            var selected = endpoint.withStation(local.orElseThrow().route().getLast());
+            ShipmentEndpointComposition.validate(state, selected);
+            return Optional.of(selected);
+        }
         for (var station : candidates) {
             if (!knowledge.clearStation(station)) continue;
             var selected = endpoint.withStation(station);

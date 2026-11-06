@@ -1,0 +1,361 @@
+{
+  "schema": 1,
+  "id": "disposable_structural_outcomes_and_site",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 30833,
+    "viewDistance": 6,
+    "profile": "textile-world"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:spruce_planks 8"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 600 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.interior"
+        }
+      },
+      "settleMs": 500
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "true"
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "layout": {
+          "facilities": {
+            "HALL": {
+              "integrity": "INTACT",
+              "damagedCells": 0
+            }
+          }
+        },
+        "quarantine": "NORMAL"
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.interior"
+        }
+      },
+      "settleMs": 500,
+      "offset": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      }
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      },
+      "block": "minecraft:spruce_planks",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      }
+    },
+    {
+      "type": "break",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      },
+      "holdTicks": 2,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait",
+      "ms": 750
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      },
+      "block": "minecraft:spruce_planks",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "layout": {
+          "facilities": {
+            "KITCHEN": {
+              "integrity": "INTACT",
+              "damagedCells": 0
+            }
+          }
+        },
+        "quarantine": "NORMAL"
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "break",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "layout": {
+          "facilities": {
+            "KITCHEN": {
+              "integrity": "DAMAGED",
+              "damagedCells": 1
+            }
+          }
+        },
+        "quarantine": "NORMAL"
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "layout": {
+          "facilities": {
+            "KITCHEN": {
+              "integrity": "DAMAGED",
+              "damagedCells": 1
+            }
+          }
+        },
+        "quarantine": "NORMAL"
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "place",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      },
+      "item": "minecraft:spruce_planks",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "layout": {
+          "facilities": {
+            "KITCHEN": {
+              "integrity": "INTACT",
+              "damagedCells": 0
+            }
+          }
+        },
+        "quarantine": "NORMAL"
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.floor"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 18
+  },
+  "assertions": [
+    {
+      "after": 23,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "layout": {
+          "facilities": {
+            "KITCHEN": {
+              "integrity": "INTACT",
+              "damagedCells": 0
+            }
+          }
+        },
+        "quarantine": "NORMAL"
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 22,
+      "name": "restored-kitchen-floor"
+    }
+  ]
+}

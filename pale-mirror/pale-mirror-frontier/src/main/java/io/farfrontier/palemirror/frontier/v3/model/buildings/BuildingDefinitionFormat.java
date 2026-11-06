@@ -63,7 +63,7 @@ public final class BuildingDefinitionFormat {
             Map<BlockPosition, BuildingDefinition.Block> blocks,
             String sha256) {
         var r = new Reader(source);
-        if (r.integer("format") != 3)
+        if (r.integer("format") != 4)
             throw new IllegalArgumentException("unsupported building markup format");
         var id = new BuildingTemplateId(r.take("id"));
         int version = r.integer("version");
@@ -71,6 +71,9 @@ public final class BuildingDefinitionFormat {
         r.names("functions").forEach(s -> functions.add(StructureKind.valueOf(s)));
         var representation = BuildingDefinition.Representation.valueOf(r.take("representation"));
         var origin = point(r.take("origin"));
+        var excavations = new ArrayList<BuildingVolume>();
+        for (var name : r.names("site.excavations")) excavations.add(r.volume("site.excavation." + name));
+        var site = new BuildingSiteDefinition(r.integer("site.groundY"), excavations);
         var facing = FacilityFacing.valueOf(r.take("front"));
         var parcel = r.volume("parcel");
         var fabric = r.volume("fabric");
@@ -142,6 +145,7 @@ public final class BuildingDefinitionFormat {
                 functions,
                 representation,
                 origin,
+                site,
                 facing,
                 parcel,
                 fabric,

@@ -42,7 +42,7 @@ interface FrontierV3AftermathPhysicalWorld {
             @Override public boolean naturallyLoaded(BlockPosition position) { return FrontierV3LoadedWorld.ready(level, block(position)); }
             @Override public boolean isAir(BlockPosition position) { return level.getBlockState(block(position)).isAir(); }
             @Override public boolean hasMaterial(BlockPosition position, StructureMaterial material) {
-                return level.getBlockState(block(position)).equals(FrontierV3GrayboxExecutor.material(material));
+                return FrontierV3GrayboxPalette.matches(level, block(position), material);
             }
             @Override public boolean placeMaterial(BlockPosition position, StructureMaterial material) {
                 BlockPos block = block(position);

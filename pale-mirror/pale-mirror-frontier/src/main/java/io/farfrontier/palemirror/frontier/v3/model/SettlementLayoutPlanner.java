@@ -139,7 +139,7 @@ public final class SettlementLayoutPlanner {
                     int distance = projection + half + policy.plotGap() + 1;
                     int x = center.x() + point.x() - facing.x() * distance,
                             z = center.z() + point.z() - facing.z() * distance;
-                    var anchor = new BlockPosition(x, terrain.supportYAt(x, z), z);
+                    var anchor = BuildingSitePlanner.anchor(terrain, def, x, z, facing);
                     var candidate =
                             new SettlementStructure(
                                     request.buildingId(),
@@ -257,16 +257,9 @@ public final class SettlementLayoutPlanner {
 
     static boolean levelFootprint(
             TerrainSurfacePlan terrain, SettlementStructure building) {
-        for (var entry : building.definition().blocks().entrySet()) {
-            if (entry.getValue().part() != GrayboxSemanticPart.FOUNDATION
-                    && entry.getValue().part() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
-                continue;
-            var floor = building.placement().world(entry.getKey());
-            if (floor.y() <= building.anchor().y()
-                    && terrain.supportYAt(floor.x(), floor.z()) != building.anchor().y())
-                return false;
-        }
-        return true;
+        try { BuildingSitePlan.compile(terrain, building); return true; }
+        catch (BuildingSitePlan.GeometryPending pending) { throw pending; }
+        catch (IllegalArgumentException unsuitable) { return false; }
     }
 
     private static void addConnector(
@@ -282,7 +275,7 @@ public final class SettlementLayoutPlanner {
             var blocks = BuildingSpatialPlan.of(building).blocks();
             for (int h = 1; h <= 2; h++) {
                 var cell = blocks.get(p.offset(0, h, 0));
-                if (cell != null
+                if (cell != null && !cell.material().emptySpace()
                         && !cell.position()
                                 .equals(
                                         BuildingSpatialPlan.of(owner)

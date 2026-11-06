@@ -830,7 +830,7 @@ public final class ResourceSiteHarvestProcess {
         if (!task.ownerId().equals(settlement.id()) || !task.resourceSiteTarget().equals(java.util.Optional.of(job.siteId()))) {
             throw new IllegalArgumentException("resource-site harvest job has a foreign strategic task");
         }
-        if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) throw new IllegalArgumentException("resource-site harvest farm is unavailable");
+        if (!FacilityFunctionAvailability.mayUse(state, site.facilityId())) throw new IllegalArgumentException("resource-site harvest farm is unavailable");
         ResidentProfile worker = state.humanPopulation().resident(job.workerId());
         if (worker == null || !worker.settlementId().equals(settlement.id())
                 || !admitted && !SettlementWorkPolicy.permissions(state, settlement.id()).permits(ResidentWorkKind.AGRICULTURE, worker.id())) {

@@ -99,9 +99,16 @@ public final class ServiceClearanceTargets {
         if (knownBlockedStation(point, knowledge)) return Optional.empty();
         List<SurfaceAnchor> candidates = point.waitingSurfaces();
         if (candidates.isEmpty()) return Optional.empty();
-        int first = Math.floorMod(actorId.value().hashCode(), candidates.size());
+        var local = io.farfrontier.palemirror.frontier.v3.model.navigation.KnownLocalAccess.nearest(
+                knowledge.geometry(), point.station(), candidates.stream().filter(candidate -> admissible(point,candidate,excluded))
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet()), 16);
+        if (local.isPresent()) return Optional.of(new Selection(local.orElseThrow().route().getLast(),local.orElseThrow()));
+        candidates = candidates.stream().sorted(java.util.Comparator
+                .comparingInt((SurfaceAnchor candidate) -> Math.abs(candidate.y() - point.station().y()))
+                .thenComparingLong(candidate -> candidate.manhattanDistance(point.station()))
+                .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
         for (int offset = 0; offset < candidates.size(); offset++) {
-            SurfaceAnchor candidate = candidates.get((first + offset) % candidates.size());
+            SurfaceAnchor candidate = candidates.get(offset);
             if (!admissible(point, candidate, excluded)) continue;
             MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);

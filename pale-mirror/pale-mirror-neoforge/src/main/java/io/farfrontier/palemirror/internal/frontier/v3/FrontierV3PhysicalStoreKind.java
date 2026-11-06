@@ -6,7 +6,7 @@ import java.util.List;
 enum FrontierV3PhysicalStoreKind {
     FIELDS(1, "pale_mirror_frontier_v3_resource_sites", List.of(new Table(1,"fieldClaims"), new Table(2,"fieldDeliveries"), new Table(3,"fieldHandProjections"), new Table(4,"fieldPlayerBreaks"),
             new Table(5,"fieldWorldChanges"), new Table(6,"fieldForeignChanges"), new Table(7,"operationReceipts"))),
-    BLOCKS(2, "pale_mirror_frontier_v3_graybox", List.of(new Table(1,"claims"), new Table(2,"worksiteCells"))),
+    BLOCKS(2, "pale_mirror_frontier_v3_graybox", List.of(new Table(1,"claims", AddressRole.BLOCK_AUTHORITY), new Table(2,"worksiteCells", AddressRole.BLOCK_AUTHORITY), new Table(3,"structuralChanges"))),
     PLAYER_CLICKS(3, "pale_mirror_frontier_v3_depot_clicks", List.of(new Table(1,"pending"), new Table(2,"completed"))),
     BOARDS(4, "pale_mirror_frontier_v3_object_boards", List.of(new Table(1,"claims"))),
     HOPPERS(5, "pale_mirror_frontier_v3_hopper_carriers", List.of(new Table(1,"carriers"))),
@@ -19,9 +19,12 @@ enum FrontierV3PhysicalStoreKind {
     OPERATIONS(12, "pale_mirror_frontier_v3_operations", List.of(new Table(1,"operations"), new Table(4,"retired"),
             new Table(3,"ownerCommands"), new Table(5,"cancellationParents"), new Table(6,"unusedOnStop")));
 
-    record Table(int wireTag, String name) {
+    /** Physical observations share an address with an authority, but never acquire it. */
+    enum AddressRole { STATE, BLOCK_AUTHORITY }
+    record Table(int wireTag, String name, AddressRole addressRole) {
+        Table(int wireTag, String name) { this(wireTag, name, AddressRole.STATE); }
         Table {
-            if (wireTag <= 0 || name == null || name.isBlank()) throw new IllegalArgumentException("invalid physical table declaration");
+            if (wireTag <= 0 || name == null || name.isBlank() || addressRole == null) throw new IllegalArgumentException("invalid physical table declaration");
         }
     }
     static {

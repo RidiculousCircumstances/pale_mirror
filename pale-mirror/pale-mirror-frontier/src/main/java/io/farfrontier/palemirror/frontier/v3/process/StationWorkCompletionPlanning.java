@@ -27,7 +27,7 @@ final class StationWorkCompletionPlanning {
         var step = StationWorkProcess.planColdStep(state, job, now);
         if (step.isPresent() && step.orElseThrow().action() == BakeryColdStep.Action.FINALIZE)
             return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()));
-        if (state.structureConditions().get(job.facilityId()) != StructureCondition.INTACT)
+        if (!ProductionFacilityAvailability.mayUseJob(state, job))
             return failActiveJob(state, activeTask(state, job), settlement(state, job.settlementId()),
                     settlement(state, job.settlementId()).structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElseThrow(), job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
         var actor = state.actorLocations().get(job.workerId());

@@ -16,6 +16,10 @@ import java.util.Set;
 public final class SettlementStructureFootprint {
     private SettlementStructureFootprint() { }
 
+    public static StructureMaterial foundationMaterial() {
+        return new StructureMaterial.Authored(new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(
+                "minecraft:cobblestone", java.util.Map.of()), "minecraft:cobblestone");
+    }
     /** All plan-owned support columns: the structural floor plus its declared exterior sills. */
     public static Set<SurfaceAnchor> supportSurfaces(SettlementStructure structure) {
         Objects.requireNonNull(structure, "structure");

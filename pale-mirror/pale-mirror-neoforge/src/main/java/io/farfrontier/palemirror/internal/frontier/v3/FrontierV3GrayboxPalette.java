@@ -7,6 +7,17 @@ import net.minecraft.world.level.block.state.BlockState;
 /** Native palette shared by generation, observation and explicit runtime mutations. */
 final class FrontierV3GrayboxPalette {
     private FrontierV3GrayboxPalette() { }
+    /** Operating and neighbour-derived properties do not replace a structural material. */
+    static boolean sameStructure(BlockState original, BlockState actual) {
+        return io.farfrontier.palemirror.frontier.v3.model.StructuralMaterialIdentity.matches(
+                FrontierV3BlockStates.describe(original), FrontierV3BlockStates.describe(actual));
+    }
+    static boolean matches(net.minecraft.server.level.ServerLevel level, net.minecraft.core.BlockPos position,
+            io.farfrontier.palemirror.frontier.v3.model.StructureMaterial material) {
+        return sameStructure(block(material), level.getBlockState(position))
+                && (!(material instanceof io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.Authored authored)
+                    || authored.data().isEmpty() || FrontierV3AuthoredBlockData.matches(level, position, authored.data().orElseThrow()));
+    }
     static BlockState block(io.farfrontier.palemirror.frontier.v3.model.StructureMaterial material) {
         return switch(material) {
             case io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.Authored authored -> FrontierV3BlockStates.resolve(authored.block());
