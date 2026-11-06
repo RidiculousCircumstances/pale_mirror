@@ -622,6 +622,9 @@ invariants:
   - id: "agent-assist-advisory-boundary"
     statement: "Agent-assist tooling is a development-only advisory layer. Its runtime index consumes already-produced bounded evidence and reports stale, partial and incomplete coverage explicitly; its changed-path selector emits but never executes the smallest verification plan and leaves native scenario selection explicit; Serena supplies on-demand symbol/reference operations without automatic project memory; ArchUnit enforces only declared stable bytecode boundaries; and async-profiler requires one explicit same-user task-owned JVM, bounded duration and named hypothesis after cheaper JFR evidence is insufficient. None of these tools owns canonical state, OBS-001 facts, test methodology, acceptance or repair."
 
+  - id: "frontier-v3-ranged-combat-custody"
+    statement: "Guard duties declare MELEE or CROSSBOW at admission; combat orders carry the same explicit method and skill. Closed positioning strategies reuse UAE navigation and exact spatial/body permission. Physical intent completion and an observed whole-storage disposition share one proof-bound command; provider/epoch/preimage mismatches are refused, and unrelated physical contents retain an isolated storage conflict. Personal ammunition uses ordinary resource custody and exact container transfer; a durable prepared shot retains actor/weapon/profile/ammunition binding and target incarnation. Its confirmed actor-side native emission consumes one real arrow and one weapon durability exactly once. Vanilla projectile flight/collision is a transient effect: an absent projectile after restart is never recreated or refunded. Role adapters supply permissions; shared ranged mechanics never infer employment or create COLD combat."
+
 critical_flows:
   - id: "frontier-v3-execution-performance"
     lifecycle: "active-development"

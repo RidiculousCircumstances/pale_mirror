@@ -550,3 +550,42 @@ and does not mark a meal, equipment pickup or job complete.
 
 See `frontier-v3-manual-passages-and-access-20261105.md` for build, real-client
 evidence, deployment identity and limits. No new M3 or whole-life promotion.
+
+## Schema344 crossbow supply and HOT ranged combat — 2026-11-07
+
+The r33 content cut adds forge crossbows and arrowheads, cloth-fletched arrows,
+and explicit mixed guard appointments. Common station executors own all recipe
+work; it introduces no instantaneous parallel manufacturing executor. Personal
+ammunition is an existing actor resource account, never an independent ammo count.
+The guard-owned supply process uses the common container transfer operation and
+whole-container confirmation. Its selected/prepared/completed/cancelled/aborted
+states retain exact role, owner, source and actor declarations across hydration.
+
+The shared ranged family retains a complete CROSSBOW order, observed firing lane,
+prepared shot, profile and weapon/ammunition preimage. Existing UAE owns every
+approach or retreat. Native reload and aiming occupy the exact permitted actor;
+vanilla Arrow owns subsequent collision and damage. The actor emission receipt,
+arrow debit and weapon wear use the common native operation journal. Projectile
+flight is calibrated vanilla persistence, not a new canonical process: a crash
+can lose an unsaved transient projectile; absence never authorizes replay,
+refund or a fabricated hit. COLD performs production and logistics, no combat.
+
+Canonical evidence covers real COLD supply, interrupted acquisition, exact owner/body
+permissions, prepared-shot recovery, and all three real station transforms with
+input consumption and duplicate-receipt rejection. Native boundary checks cover
+vanilla arrow collision/damage, one arrow/one wear, ally/cover refusal and actual
+registry durability. The common physical journal now tests durable ammunition
+load/abort and emitted/cancelled shot outcomes through file recovery.
+
+Whole-settlement full-pack carriers were executed on the retained r33 world.
+`live-crossbow-equipment-recovery` confirmed 32 actual arrows on the same guard
+after recovering an interrupted native transfer. `live-crossbow-support-fire`
+confirmed retreat and emission. `live-crossbow-reload-and-exact-shot` confirmed
+31 retained arrows after restart, a prepared shot, then30 arrows. Its complete
+combat trace records that guard's vanilla arrow dealing 4.5 damage to the player;
+weapon wear changes 1 → 2. The linked frames were reviewed; the preparation frame
+has a sword guard partly occluding the shooter, so this is targeted native/M2
+mechanism evidence, not full player-comprehension/M3 acceptance. No whole native
+manufacturing, balance or long-duration mixed-force claim follows from those
+checks. Exact identities, failures repaired and remaining gates are in
+[the delivery receipt](frontier-v3-crossbow-delivery-20261107.md).
