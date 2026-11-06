@@ -53,6 +53,22 @@ public final class FrontierV3ItemHandlerStorageGameTests {
         helper.succeed();
     }
     @GameTest(batch="pm-frontier-v3-container-socket",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
+    public static void removedRackCannotRewriteItsBlockWhenItsOldInventoryChanges(GameTestHelper helper) {
+        var at=helper.absolutePos(new BlockPos(1,1,1));var level=helper.getLevel();
+        var block=net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse("minecolonies:blockminecoloniesrack"));
+        helper.assertTrue(block!=Blocks.AIR,"the installed provider is required");
+        level.setBlock(at,block.defaultBlockState(),3);
+        var entity=level.getBlockEntity(at);
+        var inventory=FrontierV3ItemHandlerStorage.inventory(entity);
+        inventory.setItem(0,new ItemStack(Items.COAL,17));
+        helper.assertTrue(FrontierV3ItemHandlerStorage.providerStillPresent(entity),"live provider may update appearance");
+        level.setBlock(at,Blocks.AIR.defaultBlockState(),3);
+        inventory.setItem(0,ItemStack.EMPTY);
+        helper.assertTrue(!FrontierV3ItemHandlerStorage.providerStillPresent(entity),"departed provider loses appearance authority");
+        helper.assertTrue(level.getBlockState(at).isAir() && level.getBlockEntity(at)==null,"old inventory callbacks cannot recreate the removed rack");
+        helper.succeed();
+    }
+    @GameTest(batch="pm-frontier-v3-container-socket",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
     public static void nativeCompositionAndInventoryBridgeRetainExactOwners(GameTestHelper helper) {
         var first=new ItemStackHandler(27);var second=new ItemStackHandler(27);
         var owner=new Owner(helper.absolutePos(new BlockPos(1,1,1)),first);

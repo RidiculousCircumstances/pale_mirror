@@ -51,6 +51,7 @@
     "FrontierV3HorseMenuAccessor",
     "FrontierV3CompoundContainerAccessor",
     "FrontierV3RackInventoryMixin",
+    "FrontierV3RackLifecycleMixin",
     "FrontierV3RackDropsMixin",
     "FrontierV3CombinedItemHandlerMixin",
     "FrontierV3CombinedInvWrapperMixin",

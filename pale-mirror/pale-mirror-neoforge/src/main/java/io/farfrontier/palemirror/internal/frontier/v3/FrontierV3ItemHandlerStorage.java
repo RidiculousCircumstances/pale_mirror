@@ -42,6 +42,13 @@ public final class FrontierV3ItemHandlerStorage {
             throw new IllegalArgumentException("native inventory binding is stale");
         return owner;
     }
+    /** Presentation callbacks may write only while their exact native provider is still installed.
+     * An inventory being drained by onRemove must not recreate its departed block. */
+    public static boolean providerStillPresent(BlockEntity owner) {
+        var level = owner.getLevel();
+        return level != null && !owner.isRemoved() && level.getBlockEntity(owner.getBlockPos()) == owner
+                && level.getBlockState(owner.getBlockPos()).is(owner.getBlockState().getBlock());
+    }
     static Container inventory(BlockEntity owner) {
         if (!(owner instanceof FrontierV3ItemHandlerOwner declared)) return null;
         var inventory = declared.frontierV3$inventory();
