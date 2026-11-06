@@ -94,23 +94,6 @@
       "requireDamage": true
     },
     {
-      "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
-      "position": {
-        "diagnostic": {
-          "view": "settlement_security",
-          "id": "settlement:1",
-          "field": "crossbowPosition"
-        }
-      },
-      "offset": {
-        "x": 12,
-        "y": 0,
-        "z": 0
-      },
-      "settleMs": 0
-    },
-    {
       "type": "wait_until_diagnostic",
       "view": "settlement_security",
       "id": "settlement:1",
@@ -146,7 +129,7 @@
   ],
   "assertions": [
     {
-      "after": 6,
+      "after": 5,
       "view": "settlement_security",
       "id": "settlement:1",
       "expect": {
@@ -157,7 +140,7 @@
   ],
   "frames": [
     {
-      "after": 5,
+      "after": 4,
       "name": "crossbow-support-fire"
     }
   ]
