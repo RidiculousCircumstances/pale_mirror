@@ -6,7 +6,7 @@
     "port": 25565
   },
   "pilot": {
-    "username": "PMTestPilot"
+    "username": "PMStoragePilot"
   },
   "setup": [
     {
@@ -29,11 +29,11 @@
     },
     {
       "type": "command",
-      "command": "/clear PMTestPilot"
+      "command": "/clear PMStoragePilot"
     },
     {
       "type": "command",
-      "command": "/give PMTestPilot minecraft:granite 17"
+      "command": "/give PMStoragePilot minecraft:granite 17"
     }
   ],
   "actions": [
