@@ -7,6 +7,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationObservationAvailabilityTest {
+    @Test void directAndDependentWritesRetainOneIdempotentKnowledgeFence() {
+        var peer=new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(1,64,2);
+        var prior=io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID,
+                java.util.Map.of(peer,java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState("minecraft:stone",java.util.Map.of()))));
+        var pending=FrontierV3NavigationObservation.writePending(prior);
+        org.junit.jupiter.api.Assertions.assertEquals(prior.dependencies(),pending.dependencies());
+        org.junit.jupiter.api.Assertions.assertEquals(pending,FrontierV3NavigationObservation.writePending(pending));
+        org.junit.jupiter.api.Assertions.assertTrue(pending.cell().isEmpty());
+    }
     @Test void unloadedNeighbourDoesNotEraseKnownColdGeometryButUnsupportedLoadedShapeDoes() {
         var missing = new BlockPosition(-97, 63, 0);
         var unsupported = new BlockPosition(-96, 63, 0);

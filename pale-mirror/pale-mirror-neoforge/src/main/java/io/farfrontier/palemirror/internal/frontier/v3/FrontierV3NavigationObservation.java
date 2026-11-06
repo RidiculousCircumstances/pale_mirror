@@ -284,7 +284,7 @@ final class FrontierV3NavigationObservation {
             var dependent = position.offset(dx, dy, dz);
             var evidence = state.navigationGeometry().cells().get(dependent);
             if (evidence != null && evidence.dependencies().containsKey(position)) {
-                changes.put(dependent, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING, evidence.dependencies()));
+                changes.put(dependent, writePending(evidence));
                 dependentChanged = true;
             }
         }
@@ -295,7 +295,14 @@ final class FrontierV3NavigationObservation {
             if (planned.isPresent() && planned.orElseThrow().shape().equals(after.orElseThrow().shape())
                     && planned.orElseThrow().dry() == after.orElseThrow().dry()) return;
         }
-        changes.put(position, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING));
+        changes.put(position, writePending(state.navigationGeometry().cells().get(position)));
+    }
+    /** A directly written cell can also depend on another cell in the same batch.
+     * Preserve the same predecessor dependencies in both roles: dropping them for
+     * the direct write made preparation and the actual write alternate fence values. */
+    static NavigationObservation writePending(NavigationObservation prior) {
+        return NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING,
+                prior==null?Map.of():prior.dependencies());
     }
     private static boolean publish(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                    Map<BlockPosition, NavigationObservation> observations) {
