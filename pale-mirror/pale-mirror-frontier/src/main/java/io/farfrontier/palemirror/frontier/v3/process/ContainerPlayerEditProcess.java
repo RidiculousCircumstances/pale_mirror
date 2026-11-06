@@ -148,9 +148,7 @@ final class ContainerPlayerEditProcess {
                     throw new IllegalArgumentException("composed edit has a forged empty predecessor");
             } else {
                 if (!account.custody().equals(holder)
-                        || !resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id()))
-                            .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList()
-                            .equals(FungiblePhysicalObservation.bind(resources, account.id(), member.epoch(), before)))
+                        || !FungiblePhysicalObservation.matchesCurrentLayout(resources, account.id(), member.epoch(), before))
                     throw new IllegalArgumentException("composed edit predecessor differs from canonical compartment layout");
             }
         }

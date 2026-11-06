@@ -424,10 +424,15 @@ final class FrontierV3ContainerSurfaceExecutor {
     }
 
     static boolean reportConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId) {
-        return transition(runtime, containerId, ContainerSurfaceStatus.CONFLICT);
+        return reportConflictResult(runtime, containerId) instanceof CommandResult.Accepted;
     }
 
     static CommandResult reportConflictResult(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId) {
+        var state = runtime.decodedState().orElse(null);
+        var surface = state == null ? null : state.inventory().surfaces().get(containerId);
+        if (surface != null && surface.status() != ContainerSurfaceStatus.CONFLICT)
+            org.slf4j.LoggerFactory.getLogger(FrontierV3ContainerSurfaceExecutor.class).warn("PMV3_CONTAINER_CONFLICT container={} prior={}; retaining caller evidence", containerId,
+                    surface.status(), new IllegalStateException("physical container conflict observation"));
         return transitionResult(runtime, containerId, ContainerSurfaceStatus.CONFLICT);
     }
 
