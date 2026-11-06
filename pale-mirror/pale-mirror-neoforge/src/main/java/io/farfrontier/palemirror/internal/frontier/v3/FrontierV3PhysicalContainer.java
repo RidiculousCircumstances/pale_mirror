@@ -69,7 +69,8 @@ record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, C
 
     /** Vanilla reports its actual destroyed inventory; validate the producer's declared provider. */
     static Optional<FrontierV3PhysicalContainer> observedFixed(ServerLevel level, FrontierWorldState state, Container inventory) {
-        if (!(inventory instanceof net.minecraft.world.level.block.entity.BlockEntity entity)) return Optional.empty();
+        var entity = FrontierV3ItemHandlerStorage.entity(inventory);
+        if (entity == null) return Optional.empty();
         String declared = entity.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
         if (declared.isBlank()) return Optional.empty();
         SubjectId id = new SubjectId(declared);
@@ -83,7 +84,7 @@ record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, C
         var physical = FrontierV3FixedContainerProviders.observed(entity, record)
                 .filter(FrontierV3PhysicalContainer::declared)
                 .orElseThrow(() -> new IllegalStateException("physical inventory contradicts its registered provider"));
-        if (physical.inventory() != inventory) throw new IllegalStateException("physical inventory is not its declared provider");
+        if (!FrontierV3ItemHandlerStorage.same(physical.inventory(), inventory)) throw new IllegalStateException("physical inventory is not its declared provider");
         return Optional.of(physical);
     }
 

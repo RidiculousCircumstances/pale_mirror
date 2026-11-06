@@ -16,7 +16,8 @@ record FrontierV3ContainerMenuTarget(ContainerRecord record, FrontierV3PhysicalC
                                      int firstCargoMenuSlot, int equipmentSlotCount) {
     static boolean supported(AbstractContainerMenu menu) {
         return menu instanceof ChestMenu || menu instanceof HorseInventoryMenu
-                || menu instanceof io.farfrontier.palemirror.internal.production.ProductionBenchMenu;
+                || menu instanceof io.farfrontier.palemirror.internal.production.ProductionBenchMenu
+                || menu.slots.stream().anyMatch(slot -> slot instanceof net.neoforged.neoforge.items.SlotItemHandler);
     }
 
     int cargoSlot(int menuSlot) {
@@ -51,9 +52,35 @@ record FrontierV3ContainerMenuTarget(ContainerRecord record, FrontierV3PhysicalC
                 throw new IllegalArgumentException("composed menu contains an unadmitted or duplicate member");
             return java.util.List.copyOf(targets);
         }
+        if (menu.slots.stream().anyMatch(slot -> slot instanceof net.neoforged.neoforge.items.SlotItemHandler))
+            return itemHandlers(player, menu, state);
         var target = resolve(player, menu, state);
         return target == null ? java.util.List.of() : java.util.List.of(target);
     }
+    private static java.util.List<FrontierV3ContainerMenuTarget> itemHandlers(ServerPlayer player, AbstractContainerMenu menu, FrontierWorldState state) {
+        var targets = new java.util.LinkedHashMap<io.farfrontier.palemirror.frontier.v3.api.SubjectId, FrontierV3ContainerMenuTarget>();
+        var counts = new java.util.HashMap<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Integer>();
+        int unknown = 0;
+        for (int i=0;i<menu.slots.size();i++) {
+            if (!(menu.getSlot(i) instanceof net.neoforged.neoforge.items.SlotItemHandler slot)) continue;
+            var leaf = FrontierV3ItemHandlerStorage.leaf(slot.getItemHandler(), slot.getSlotIndex());
+            var owner = FrontierV3ItemHandlerStorage.owner(leaf.handler());
+            var record = owner == null ? null : FrontierV3ContainerClickExecutor.ownedContainer(state, owner.getBlockPos());
+            if (record == null) { unknown++; continue; }
+            var physical = FrontierV3PhysicalContainer.inspect(player.serverLevel(), state, record.id()).orElseThrow(
+                    () -> new IllegalArgumentException("native menu member lacks its declared provider"));
+            var target = targets.get(record.id());
+            if (target == null) {
+                target = new FrontierV3ContainerMenuTarget(record, physical, i, 0); targets.put(record.id(), target);
+            }
+            if (target.cargoSlot(i) != leaf.index()) throw new IllegalArgumentException("native menu slot disagrees with ordered member");
+            counts.merge(record.id(), 1, Integer::sum);
+        }
+        if (!targets.isEmpty() && (unknown > 0 || targets.values().stream().anyMatch(t -> counts.get(t.record().id()) != t.record().slotCount())))
+            throw new IllegalArgumentException("native menu has incomplete or unadmitted members");
+        return java.util.List.copyOf(targets.values());
+    }
+
     private static void flatten(net.minecraft.world.Container container, java.util.List<net.minecraft.world.Container> leaves) {
         if (leaves.size() >= 54) throw new IllegalArgumentException("unbounded menu composition");
         if (container instanceof CompoundContainer && container instanceof FrontierV3CompoundContainerAccessor access) {

@@ -10,8 +10,12 @@ public final class CommunalDiningPlan {
     private CommunalDiningPlan() { }
     public static List<Pantry> compile(FrontierBootstrap bootstrap) {
         var result = new ArrayList<Pantry>();
+        AuthoredStoragePlan.compile(bootstrap).stream().filter(entry -> entry.container().storage().orElseThrow().endpoint() instanceof ShipmentEndpoint.Storage endpoint
+                && endpoint.facilityId().filter(id -> bootstrap.settlements().stream().flatMap(s -> s.structures().stream())
+                    .anyMatch(b -> b.id().equals(id) && b.kind() == StructureKind.KITCHEN)).isPresent())
+                .forEach(entry -> result.add(new Pantry(entry.container(), entry.surface())));
         for (var home : bootstrap.settlements()) for (var building : home.structures()) {
-            if (building.kind() != StructureKind.KITCHEN) continue;
+            if (building.kind() != StructureKind.KITCHEN || AuthoredStoragePlan.authored(building)) continue;
             var definition = building.definition();
             var pantry = definition.anchors().get("pantry");
             var serving = definition.anchors().get("serving");

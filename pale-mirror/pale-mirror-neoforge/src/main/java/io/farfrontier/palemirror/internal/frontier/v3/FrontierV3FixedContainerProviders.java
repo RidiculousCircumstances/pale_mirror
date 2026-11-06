@@ -29,8 +29,14 @@ final class FrontierV3FixedContainerProviders {
     private static final Provider BARREL = new Provider(() -> Blocks.BARREL,
             block -> block == Blocks.BARREL,
             entity -> entity instanceof BarrelBlockEntity barrel ? barrel : null);
+    private static final Provider RACK = new Provider(() -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOptional(
+            net.minecraft.resources.ResourceLocation.parse("minecolonies:blockminecoloniesrack"))
+                    .orElseThrow(() -> new IllegalStateException("declared rack provider dependency is unavailable")),
+            block -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block).toString().equals("minecolonies:blockminecoloniesrack"),
+            entity -> entity instanceof FrontierV3ItemHandlerOwner owner && owner.frontierV3$storageKind() == StorageBlockKind.RACK
+                    ? FrontierV3ItemHandlerStorage.inventory(entity) : null);
     private static final Map<StorageBlockKind, Provider> STORAGE = Map.of(
-            StorageBlockKind.CHEST, CHEST, StorageBlockKind.BARREL, BARREL);
+            StorageBlockKind.CHEST, CHEST, StorageBlockKind.BARREL, BARREL, StorageBlockKind.RACK, RACK);
     /** Discovery is the admission boundary. Continuation uses the retained exact provider. */
     record StorageCandidate(BlockEntity entity, Container inventory, StorageBlockKind kind) { }
     static Optional<StorageCandidate> candidate(BlockEntity entity) {
@@ -38,6 +44,12 @@ final class FrontierV3FixedContainerProviders {
             return Optional.of(new StorageCandidate(entity, chest, StorageBlockKind.CHEST));
         if (entity instanceof BarrelBlockEntity barrel)
             return Optional.of(new StorageCandidate(entity, barrel, StorageBlockKind.BARREL));
+        if (entity instanceof FrontierV3ItemHandlerOwner owner) {
+            var provider = STORAGE.get(owner.frontierV3$storageKind());
+            if (provider == null || !provider.accepts().test(entity.getBlockState().getBlock()))
+                throw new IllegalArgumentException("unregistered native inventory provider");
+            return Optional.of(new StorageCandidate(entity, provider.inventory().apply(entity), owner.frontierV3$storageKind()));
+        }
         return Optional.empty();
     }
     private static final Provider BENCH = new Provider(PaleMirrorProductionStations.BENCH,

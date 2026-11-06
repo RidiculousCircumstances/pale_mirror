@@ -94,8 +94,8 @@ final class FrontierV3ContainerSurfaceExecutor {
             var support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null);
             var ledger = FrontierV3GrayboxLedger.get(level);
             var readiness = surface.status() == ContainerSurfaceStatus.UNMATERIALIZED
-                    ? socketReadiness(level, ledger, position(surface), support)
-                    : supportReadiness(level, ledger, position(surface), support);
+                    ? initialReadiness(level, state, surface, support)
+                    : lifecycleSupportReadiness(level, state, surface, support);
             if (readiness == SocketReadiness.DEFERRED) continue;
             executeLifecycle(level, runtime, state, surface);
             break;
@@ -111,7 +111,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, surface.containerId())) return;
         BlockPos target = position(surface);
         if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
-            SocketReadiness readiness = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target,
+            SocketReadiness readiness = initialReadiness(level, state, surface,
                     FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null));
             if (readiness == SocketReadiness.DEFERRED) return;
             if (readiness == SocketReadiness.CONFLICT) {
@@ -130,7 +130,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         // PREPARED can survive a restart both before and after the physical chest write.  Its
         // support may still be one materializer turn behind, so wait for an absent owned
         // foundation; then either claim an empty socket or inspect the already-owned chest.
-        SocketReadiness readiness = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target,
+        SocketReadiness readiness = lifecycleSupportReadiness(level, state, surface,
                 FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null));
         if (readiness == SocketReadiness.DEFERRED) return;
         if (readiness == SocketReadiness.CONFLICT) {
@@ -187,8 +187,15 @@ final class FrontierV3ContainerSurfaceExecutor {
     /** Initial installation uses the exact declared provider and existing durable projection. */
     private static FrontierV3PhysicalContainer claimFreshFixed(ServerLevel level, BlockPos target,
                                                               FrontierWorldState state, ContainerSurface surface) {
-        if (!level.getBlockState(target).isAir() || level.getBlockState(target.below()).isAir()) return null;
         var record = state.inventory().containers().get(surface.containerId());
+        if (FrontierContainerSocketPlan.authoredInventoryCell(state, record, surface).isPresent()) {
+            if (initialReadiness(level, state, surface, FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null)) != SocketReadiness.READY) return null;
+            var existing = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);
+            if (existing == null || !existing.inventory().isEmpty() || !existing.declaration().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()) return null;
+            existing.stampPreparedProjection();
+            return existing;
+        }
+        if (!level.getBlockState(target).isAir() || level.getBlockState(target.below()).isAir()) return null;
         var block = FrontierV3FixedContainerProviders.state(record);
         var support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow();
         if (!FrontierV3ContainerSocketProvenance.openingWrite(support, () -> level.setBlock(target, block, 3))) return null;
@@ -492,6 +499,30 @@ final class FrontierV3ContainerSurfaceExecutor {
      * latter is terminal conflict evidence; the former must wait without changing canonical
      * container state.
      */
+    private static SocketReadiness lifecycleSupportReadiness(ServerLevel level, FrontierWorldState state, ContainerSurface surface, ContainerSocketSupport support) {
+        return FrontierContainerSocketPlan.authoredInventoryCell(state, state.inventory().containers().get(surface.containerId()), surface).isPresent()
+                ? initialReadiness(level, state, surface, support)
+                : supportReadiness(level, FrontierV3GrayboxLedger.get(level), position(surface), support);
+    }
+    private static SocketReadiness initialReadiness(ServerLevel level, FrontierWorldState state, ContainerSurface surface, ContainerSocketSupport support) {
+        var record = state.inventory().containers().get(surface.containerId());
+        var cell = FrontierContainerSocketPlan.authoredInventoryCell(state, record, surface);
+        if (cell.isEmpty()) return socketReadiness(level, FrontierV3GrayboxLedger.get(level), position(surface), support);
+        var target = position(surface);
+        var claim = FrontierV3GrayboxLedger.get(level).claim(target);
+        if (claim == null) return SocketReadiness.DEFERRED; // Fabric owns creation; storage never places a replacement.
+        var expected = cell.orElseThrow();
+        if (claim.conflicted() || !claim.owner().equals(expected.ownerId().value())
+                || !claim.material().equals(expected.material().wireIdentity())
+                || !claim.semanticPart().equals(expected.semanticPart().name())
+                || state.physicalDeltas().containsKey(surface.position())) return SocketReadiness.CONFLICT;
+        var physical = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);
+        if (physical == null) return SocketReadiness.CONFLICT;
+        var declared = physical.declaration().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
+        return declared.isBlank() && physical.inventory().isEmpty() || physical.declared()
+                ? SocketReadiness.READY : SocketReadiness.CONFLICT;
+    }
+
     static SocketReadiness socketReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target, GrayboxCell support) {
         // A destroyed/temporarily unavailable canonical facility has no socket to materialize;
         // it is capacity loss, not evidence that the player obstructed a future chest.

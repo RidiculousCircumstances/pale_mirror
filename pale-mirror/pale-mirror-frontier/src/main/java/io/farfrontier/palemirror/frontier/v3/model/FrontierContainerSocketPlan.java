@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.buildings.AuthoredStoragePlan;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
@@ -30,6 +32,14 @@ public final class FrontierContainerSocketPlan {
                             ? FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), facility.orElseThrow(), key.position())
                             : FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), record.ownerId(), key.position()));
                 });
+    }
+
+    /** Exact authored inventory cell, supplied by the retained storage-to-facility relationship. */
+    public static Optional<GrayboxCell> authoredInventoryCell(FrontierWorldState state, ContainerRecord record, ContainerSurface surface) {
+        if (record.purpose() != ContainerPurpose.RESOURCE_STORAGE) return Optional.empty();
+        var facility = ShipmentEndpointComposition.supportingFacility(state, record.storage().orElseThrow().endpoint());
+        if (facility.isEmpty() || !AuthoredStoragePlan.authored(facility.orElseThrow())) return Optional.empty();
+        return Optional.ofNullable(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(facility.orElseThrow()).blocks().get(surface.position()));
     }
 
     public static Optional<ContainerSocketSupport> declaredSupport(FrontierWorldState state, ContainerSurface surface) {

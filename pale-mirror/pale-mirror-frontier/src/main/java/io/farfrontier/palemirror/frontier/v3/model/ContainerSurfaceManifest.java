@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.buildings.AuthoredStoragePlan;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
@@ -12,7 +14,7 @@ final class ContainerSurfaceManifest {
     static Map<SubjectId, ContainerSurface> initial(FrontierBootstrap bootstrap) {
         Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().ifPresent(depot -> {
+                .filter(structure -> structure.kind() == StructureKind.DEPOT && !AuthoredStoragePlan.authored(structure)).findFirst().ifPresent(depot -> {
                     SubjectId container = depotId(settlement.id());
                     surfaces.put(container, unmaterialized(container, SettlementDepotServicePort.forDepot(depot).containerPosition().offset(0, -1, 0)));
                 }));
@@ -21,14 +23,14 @@ final class ContainerSurfaceManifest {
                     for (ProductionStationSpec station : ProductionFacilityLayout.stations(workshop)) {
                     surfaces.put(station.containerId(), unmaterialized(station.containerId(), station.socketSurface().support()));
                     }
-                    if (workshop.kind() == StructureKind.SMELTERY) {
+                    if (workshop.kind() == StructureKind.SMELTERY && !AuthoredStoragePlan.authored(workshop)) {
                         var id = ProductionFacilityLayout.metalStorageId(workshop);
                         surfaces.put(id, new ContainerSurface(id, ProductionFacilityLayout.metalStoragePosition(workshop), ContainerSurfaceStatus.UNMATERIALIZED));
                     }
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container ->
                 surfaces.put(container, unmaterialized(container, organ.anchor()))));
-        surfaces.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER,
+        if (bootstrap.settlements().stream().flatMap(home -> home.structures().stream()).noneMatch(AuthoredStoragePlan::authored)) surfaces.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER,
                 new ContainerSurface(FrontierRouteNetwork.MAINTENANCE_CONTAINER,
                         FrontierRouteNetwork.maintenanceContainerPosition(bootstrap), ContainerSurfaceStatus.UNMATERIALIZED));
         return Map.copyOf(surfaces);

@@ -266,7 +266,27 @@
         6
       ]
     ],
-    "entranceThreshold": 2
+    "entranceThreshold": 2,
+    "zones": [
+      {
+        "id": "metals",
+        "use": "STORAGE",
+        "min": [
+          10,
+          7,
+          8
+        ],
+        "max": [
+          11,
+          8,
+          9
+        ],
+        "priority": 100,
+        "categories": [
+          "pale_mirror:metals"
+        ]
+      }
+    ]
   },
   {
     "name": "forge",
@@ -722,14 +742,14 @@
         "id": "pantry",
         "use": "STORAGE",
         "min": [
-          7,
+          16,
           2,
-          3
+          19
         ],
         "max": [
-          10,
+          19,
           4,
-          6
+          22
         ],
         "priority": 100,
         "categories": [

@@ -4,12 +4,18 @@ import java.util.List;
 
 final class DepotServiceBoundaries implements ServiceBoundaryProvider {
     @Override public ServicePointId.Kind kind() { return ServicePointId.Kind.SETTLEMENT_DEPOT; }
-    @Override public Object version(FrontierWorldState state) { return state.bootstrap(); }
+    @Override public Object version(FrontierWorldState state) { return state.inventory().containers(); }
     @Override public List<Declaration> declarations(FrontierWorldState state) {
-        return state.bootstrap().settlements().stream().flatMap(home -> home.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.DEPOT)
-                .map(structure -> new Declaration(new ServicePointId(kind(), home.id(), FrontierWorldState.depotId(home.id())),
-                        SettlementDepotServicePort.forDepot(structure).accessBoundary()))).toList();
+        return state.inventory().containers().values().stream()
+                .filter(record -> record.purpose() == ContainerPurpose.SETTLEMENT_DEPOT)
+                .map(record -> {
+                    if (!(record.storage().orElseThrow().endpoint() instanceof ShipmentEndpoint.Depot endpoint))
+                        throw new IllegalArgumentException("depot service lacks its exact endpoint declaration");
+                    var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), endpoint.settlementId()).structures().stream()
+                            .filter(structure -> structure.id().equals(endpoint.facilityId())).findFirst().orElseThrow();
+                    return new Declaration(new ServicePointId(kind(), record.ownerId(), record.id()),
+                            SettlementDepotServicePort.forDepot(facility).accessBoundary());
+                }).toList();
     }
     private SettlementStructure depot(FrontierWorldState state, Declaration declaration) {
         declaration.identity().validate(state.inventory());

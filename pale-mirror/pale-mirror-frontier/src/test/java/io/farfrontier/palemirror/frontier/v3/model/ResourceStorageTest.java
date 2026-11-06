@@ -85,8 +85,9 @@ class ResourceStorageTest {
         var conflicted = state.withInventory(state.inventory().withSurfaceStatus(destination.containerId(), ContainerSurfaceStatus.CONFLICT));
         assertTrue(ReferenceContainerCustody.blocksCanonicalUse(conflicted, destination.containerId()));
         assertFalse(ContainerStorageAdmission.receive(conflicted, destination.containerId(), "minecraft:cobblestone", 1, Optional.empty()));
-        assertTrue(ResourceStorageSelection.destination(conflicted, site.settlementId(), "minecraft:cobblestone", 1,
-                site.layout().storagePort(), Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty(), endpoint -> true).isEmpty());
+        assertFalse(ResourceStorageSelection.candidates(conflicted, site.settlementId(), "minecraft:cobblestone",
+                site.layout().storagePort(), Set.of(ResourceStorageRole.WAREHOUSE)).stream()
+                .anyMatch(endpoint -> endpoint.containerId().equals(destination.containerId())), "conflicted store is excluded while other authored stores remain usable");
     }
     @Test void storageRouteAdmissionUsesKnownPhysicalObstaclesWithoutAcquiringAnExecution() {
         var state = initial(); var site = state.extractionSites().deposits().values().iterator().next().site();

@@ -27,9 +27,8 @@ public final class FrontierV3BuildingAuthoringGameTests {
             level.setBlock(at,FrontierV3GrayboxPalette.block(material),2);
             FrontierV3AuthoredBlockData.apply(level,at,material);
         }
-        var pantry=definition.anchors().get("pantry");
-        level.setBlock(origin.offset(pantry.x(),pantry.y()+1,pantry.z()),net.minecraft.world.level.block.Blocks.BARREL.defaultBlockState(),2);
-        var contact=definition.anchors().get("serving");var target=origin.offset(contact.x(),contact.y()+1,contact.z());
+        var port=AuthoredStoragePlan.connectedInventoryPorts(definition).getFirst();
+        var contact=port.station().support();var target=origin.offset(contact.x(),contact.y()+1,contact.z());
         var actor=net.minecraft.world.entity.EntityType.VILLAGER.create(level);actor.setNoAi(true);level.addFreshEntity(actor);
         helper.runAfterDelay(3,() -> {
             var front=definition.primaryEntranceDefinition().supports().getFirst();
@@ -40,7 +39,7 @@ public final class FrontierV3BuildingAuthoringGameTests {
                     java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER));
             helper.assertTrue(query.path()!=null && query.path().canReach()
                     && FrontierV3PathClearance.path(level,actor,query.path()),
-                    "the original kitchen pantry is reachable from its declared entrance with native door capability");
+                    "the existing kitchen inventory is reachable from its declared entrance with native door capability");
             actor.discard();helper.succeed();
         });
     }

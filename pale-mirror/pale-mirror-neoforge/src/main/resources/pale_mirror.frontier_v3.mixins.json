@@ -50,6 +50,10 @@
     "FrontierV3DepotMenuClickMixin",
     "FrontierV3HorseMenuAccessor",
     "FrontierV3CompoundContainerAccessor",
+    "FrontierV3RackInventoryMixin",
+    "FrontierV3RackDropsMixin",
+    "FrontierV3CombinedItemHandlerMixin",
+    "FrontierV3CombinedInvWrapperMixin",
     "FrontierV3NativeAutosaveMixin"
   ]
 }

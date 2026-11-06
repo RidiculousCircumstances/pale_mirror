@@ -49,10 +49,11 @@ class ResourceStorageAdoptionTest {
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var buy = new GoodsParticipantPolicy.Intent("minecraft:bread", GoodsTradeOrder.Side.BUY, 64, FixedScalar.whole(1));
         var scope = GoodsParticipantStorage.containers(state, participant, "minecraft:bread");
-        assertEquals(Set.of(id, CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home)), scope);
+        var expected = new HashSet<>(GoodsParticipantStorage.containers(initial, participant, "minecraft:bread"));
+        expected.add(id); assertEquals(expected, scope);
         var walker = state.humanPopulation().residents().keySet().iterator().next();
         var moved = state.withActorBody(walker, state.actorLocations().get(walker).body().offset(1, 0, 0));
-        assertSame(scope, GoodsParticipantStorage.containers(moved, participant, "minecraft:bread"),
+        assertEquals(scope, GoodsParticipantStorage.containers(moved, participant, "minecraft:bread"),
                 "walking does not change warehouse ownership, filters or physical availability");
         var allocations = GoodsParticipantStorage.quoteEndpoints(state, participant, buy);
         assertEquals(64, allocations.stream().mapToInt(GoodsParticipantStorage.QuoteEndpoint::quantity).sum(),

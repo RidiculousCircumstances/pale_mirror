@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.buildings.AuthoredStoragePlan;
+
 import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
@@ -43,6 +45,8 @@ final class FrontierWorldInitialState {
                                         Map.of("pale_mirror:extracted_materials", bootstrap.ruleset().extraction().definitions().stream().flatMap(definition -> definition.coldOutput().stream())
                                                 .map(output -> output.itemKind()).collect(java.util.stream.Collectors.toSet()))), 0, ResourceStorageRole.LOCAL_BUFFER))));
         bootstrap.settlements().forEach(settlement -> {
+            if (settlement.structures().stream().filter(b -> b.kind() == StructureKind.DEPOT)
+                    .anyMatch(AuthoredStoragePlan::authored)) return;
             SubjectId id = FrontierWorldState.depotId(settlement.id());
             containers.put(id, new ContainerRecord(id, settlement.id(), 27, ContainerPurpose.SETTLEMENT_DEPOT)
                     .withStorage(new ResourceStoragePolicy(GoodsParticipantDeclarations.endpoint(settlement), CommunalDiningPlan.generalFilter(bootstrap), 0, ResourceStorageRole.WAREHOUSE)));
@@ -53,19 +57,23 @@ final class FrontierWorldInitialState {
                     containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), station.inventorySize(), ContainerPurpose.PRODUCTION_STATION,
                             java.util.Optional.of(station)));
                     }
-                    if (workshop.kind() == StructureKind.SMELTERY) {
+                    if (workshop.kind() == StructureKind.SMELTERY && !AuthoredStoragePlan.authored(workshop)) {
                         var storage = ProductionFacilityLayout.metalStorage(workshop); containers.put(storage.id(), storage);
                     }
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27, ContainerPurpose.HIVE_STORE))));
-        containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27, ContainerPurpose.ROUTE_MAINTENANCE));
+        if (bootstrap.settlements().stream().flatMap(home -> home.structures().stream()).noneMatch(AuthoredStoragePlan::authored))
+            containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27, ContainerPurpose.ROUTE_MAINTENANCE));
         fleet.assets().values().forEach(asset -> containers.put(asset.containerId(),
                 new ContainerRecord(asset.containerId(), asset.homeSettlementId(), asset.stackSlots(), ContainerPurpose.MOBILE_STORAGE)));
         var fieldBuffers=GrayboxFieldStoragePlan.compile(bootstrap);
         fieldBuffers.forEach(buffer->containers.put(buffer.container().id(),buffer.container()));
+        var authored = AuthoredStoragePlan.compile(bootstrap);
+        authored.forEach(entry -> containers.put(entry.container().id(), entry.container()));
         var pantries = CommunalDiningPlan.compile(bootstrap);
         pantries.forEach(pantry -> containers.put(pantry.container().id(), pantry.container()));
         var surfaces = new LinkedHashMap<>(ContainerSurfaceManifest.initial(bootstrap));
+        authored.forEach(entry -> surfaces.put(entry.surface().containerId(), entry.surface()));
         pantries.forEach(pantry -> surfaces.put(pantry.surface().containerId(), pantry.surface()));
         fieldBuffers.forEach(buffer->surfaces.put(buffer.surface().containerId(),buffer.surface()));
         extraction.deposits().values().forEach(deposit -> surfaces.put(installation.initialContainers().get(deposit.site().id()),

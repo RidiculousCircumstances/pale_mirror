@@ -12,6 +12,16 @@ public final class StructuralMaterialIdentity {
     public static boolean matches(NavigationBlockState original, NavigationBlockState actual) {
         return original.kind().equals(actual.kind()) && original.properties().entrySet().stream()
                 .filter(entry -> !OPERATING.contains(entry.getKey()))
-                .allMatch(entry -> entry.getValue().equals(actual.properties().get(entry.getKey())));
+                .allMatch(entry -> normalized(original.kind(), entry.getKey(), entry.getValue())
+                        .equals(normalized(actual.kind(), entry.getKey(), actual.properties().get(entry.getKey()))));
+    }
+    private static String normalized(String kind, String property, String value) {
+        if (kind.equals("minecolonies:blockminecoloniesrack") && property.equals("variant") && value != null)
+            return switch (value) {
+                case "blockrackemptysingle", "blockrackfullsingle" -> "single";
+                case "blockrackempty", "blockrackfull" -> "double";
+                default -> value;
+            };
+        return value;
     }
 }

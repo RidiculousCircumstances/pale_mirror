@@ -26,7 +26,8 @@ public final class FrontierV3ContainerBlockOperation {
         // Same-block property updates (including double-chest shape) keep the native provider.
         if (before.is(replacement.getBlock())) return mutation.get();
         var entity = chunk.getBlockEntities().get(position);
-        if (!(entity instanceof Container inventory)) return mutation.get();
+        var inventory = entity instanceof Container container ? container : entity == null ? null : FrontierV3ItemHandlerStorage.inventory(entity);
+        if (inventory == null) return mutation.get();
         var state = runtime.decodedState().orElseThrow();
         var physical = FrontierV3PhysicalContainer.observedFixed(level, state, inventory).orElse(null);
         if (physical == null || !ReferenceContainerCustody.isReferenceContainer(state, physical.containerId())) return mutation.get();

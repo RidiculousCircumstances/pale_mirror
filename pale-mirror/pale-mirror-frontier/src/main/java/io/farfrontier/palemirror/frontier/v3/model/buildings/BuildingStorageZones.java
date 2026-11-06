@@ -14,11 +14,18 @@ public final class BuildingStorageZones {
     public static Optional<Selection> at(Settlement settlement, BlockPosition container) {
         var matches = new ArrayList<BuildingDefinition.Zone>();
         for (var structure : settlement.structures()) {
-            var plan = BuildingSpatialPlan.of(structure);
-            for (var zone : plan.definition().zones().values())
-                if (zone.use() == BuildingDefinition.ZoneUse.STORAGE
-                        && plan.inZone(zone, container)) matches.add(zone);
+            var local = structure.placement().local(container);
+            for (var zone : structure.definition().zones().values())
+                if (zone.use() == BuildingDefinition.ZoneUse.STORAGE && zone.volume().contains(local)) matches.add(zone);
         }
+        return select(matches);
+    }
+    public static Optional<Selection> at(BuildingDefinition definition, BlockPosition local) {
+        return select(definition.zones().values().stream().filter(zone -> zone.use() == BuildingDefinition.ZoneUse.STORAGE
+                && zone.volume().contains(local)).toList());
+    }
+    private static Optional<Selection> select(Collection<BuildingDefinition.Zone> candidates) {
+        var matches = new ArrayList<>(candidates);
         if (matches.isEmpty()) return Optional.empty();
         matches.sort(Comparator.comparingInt(BuildingDefinition.Zone::storagePriority).reversed());
         var selected = matches.getFirst();

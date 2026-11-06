@@ -107,7 +107,7 @@ public final class FrontierReadabilityPlan {
                     positions.put(structure.id(), structureBoardPosition(structure, state.structureConditions().get(structure.id())))));
             state.bootstrap().hive().organs().forEach(organ -> positions.put(organ.id(), organ.anchor().offset(0, 2, -3)));
             state.resourceSiteDescriptors().values().forEach(site -> positions.put(site.id(), fieldBoardPosition(state, site)));
-            positions.put(FrontierRouteNetwork.OWNER, FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3));
+            if (state.inventory().containers().containsKey(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) positions.put(FrontierRouteNetwork.OWNER, FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3));
             placements = positions.entrySet().stream().sorted(Map.Entry.comparingByKey())
                     .map(entry -> new FrontierObjectBoard.Placement(entry.getKey(), entry.getValue())).toList();
             var rows = new LinkedHashMap<SubjectId, FrontierObjectBoard.Placement>();
@@ -126,7 +126,7 @@ public final class FrontierReadabilityPlan {
                 addResourceSite(value, current, current.resourceSite(owner), atTick);
                 return value.get(owner);
             }));
-            renderers.put(FrontierRouteNetwork.OWNER, (current, atTick) -> {
+            if (state.inventory().containers().containsKey(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) renderers.put(FrontierRouteNetwork.OWNER, (current, atTick) -> {
                 var value = new LinkedHashMap<SubjectId, FrontierObjectBoard>(); addRouteNetwork(value, current);
                 return value.get(FrontierRouteNetwork.OWNER);
             });
@@ -328,6 +328,7 @@ public final class FrontierReadabilityPlan {
     }
 
     private static void addRouteNetwork(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state) {
+        if (!state.inventory().containers().containsKey(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) return;
         boolean damaged = state.physicalDeltas().values().stream().anyMatch(delta ->
                 delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
                         && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent());

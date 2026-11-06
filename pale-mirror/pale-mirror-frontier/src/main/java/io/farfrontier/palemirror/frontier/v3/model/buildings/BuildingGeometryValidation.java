@@ -16,6 +16,53 @@ public final class BuildingGeometryValidation {
             BuildingDefinition definition,
             Function<NavigationBlockState, Optional<NavigationCell>> shapes,
             Function<BuildingDefinition.Workplace, NavigationCell> equipmentShapes) {
+        var view = geometry(definition, shapes, equipmentShapes);
+        var geometry = view.walking();
+        var fabricCollision = view.fabric();
+        var identity = new SubjectId("authoring:geometry-validation");
+        for (var passage : definition.passages().values()) {
+            for (int i = 0; i < passage.supports().size(); i++) {
+                var contact = new SurfaceAnchor(passage.supports().get(i));
+                if (geometry.blocked(contact))
+                    throw new IllegalArgumentException(
+                            "blocked passage " + passage.id() + " at " + contact);
+                if (i > 0
+                        && !geometry.canTraverse(
+                                new SurfaceAnchor(passage.supports().get(i - 1)), contact))
+                    throw new IllegalArgumentException(
+                            "non-traversable passage edge " + passage.id() + " at " + contact);
+            }
+        }
+        for (var zone : definition.zones().values())
+            if (zone.use() == BuildingDefinition.ZoneUse.EQUIPMENT)
+                requireClearVolume(fabricCollision, zone.volume(), "equipment zone:" + zone.id());
+        var start = new SurfaceAnchor(definition.primaryEntranceDefinition().supports().getFirst());
+        for (var work : definition.workplaces().values())
+            for (var point : List.of(work.input(), work.worker())) {
+                var goal = new SurfaceAnchor(point);
+                if (!geometry.clearStation(goal))
+                    throw new IllegalArgumentException(
+                            "blocked workplace " + work.id() + " at " + point);
+                KnownPedestrianNavigation.route(
+                        geometry,
+                        start,
+                        new MovementOrder(
+                                identity,
+                                identity,
+                                0,
+                                1,
+                                List.of(goal),
+                                TraversalCapability.PEDESTRIAN,
+                                MovementOrder.ArrivalPolicy.EXACT_STATION));
+            }
+    }
+
+    public record View(PedestrianRouteGeometry walking, NavigationCollisionView fabric) { }
+
+    /** Shared content geometry for validation and connected interaction-port discovery. */
+    public static View geometry(BuildingDefinition definition,
+            Function<NavigationBlockState, Optional<NavigationCell>> shapes,
+            Function<BuildingDefinition.Workplace, NavigationCell> equipmentShapes) {
         var blocks = definition.blocks();
         var columns = new HashMap<TerrainColumn, List<SurfaceAnchor>>();
         var cells = new HashMap<BlockPosition, NavigationCell>();
@@ -105,42 +152,7 @@ public final class BuildingGeometryValidation {
                         terrain,
                         UnitNavigationProfile.VILLAGER,
                         NavigationObstacleView.indexed(Set.of()));
-        var identity = new SubjectId("authoring:geometry-validation");
-        for (var passage : definition.passages().values()) {
-            for (int i = 0; i < passage.supports().size(); i++) {
-                var contact = new SurfaceAnchor(passage.supports().get(i));
-                if (geometry.blocked(contact))
-                    throw new IllegalArgumentException(
-                            "blocked passage " + passage.id() + " at " + contact);
-                if (i > 0
-                        && !geometry.canTraverse(
-                                new SurfaceAnchor(passage.supports().get(i - 1)), contact))
-                    throw new IllegalArgumentException(
-                            "non-traversable passage edge " + passage.id() + " at " + contact);
-            }
-        }
-        for (var zone : definition.zones().values())
-            if (zone.use() == BuildingDefinition.ZoneUse.EQUIPMENT)
-                requireClearVolume(fabricCollision, zone.volume(), "equipment zone:" + zone.id());
-        var start = new SurfaceAnchor(definition.primaryEntranceDefinition().supports().getFirst());
-        for (var work : definition.workplaces().values())
-            for (var point : List.of(work.input(), work.worker())) {
-                var goal = new SurfaceAnchor(point);
-                if (!geometry.clearStation(goal))
-                    throw new IllegalArgumentException(
-                            "blocked workplace " + work.id() + " at " + point);
-                KnownPedestrianNavigation.route(
-                        geometry,
-                        start,
-                        new MovementOrder(
-                                identity,
-                                identity,
-                                0,
-                                1,
-                                List.of(goal),
-                                TraversalCapability.PEDESTRIAN,
-                                MovementOrder.ArrivalPolicy.EXACT_STATION));
-            }
+        return new View(geometry, fabricCollision);
     }
 
     private static void requireClearVolume(
