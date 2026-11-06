@@ -20,7 +20,7 @@ final class FrontierV3EquipmentServicePort {
         var lease=state.replicaCustody().custodyByScope().get(io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.scopeId(physical.containerId()));
         var image=FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state,physical.containerId(),physical);
         var receipt=new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentStorageConfirmed(intent,observation,java.util.Objects.requireNonNull(lease),image.fingerprint(),image.provenance());
-        return FrontierV3CommandSubmission.submitResult(runtime,"equipment-storage-confirm-"+intent.id().value(),intent.causeSubjectId().value(),receipt);
+        return FrontierV3CommandSubmission.submitResult(runtime,"equipment-storage-confirm",intent.causeSubjectId().value(),receipt);
     }
     static boolean ready(FrontierWorldState state, PhysicalIntent intent, Villager resident) {
         return EquipmentServiceBoundary.serviceAvailable(state, intent) && EquipmentServiceBoundary.serviceStation(state, intent)

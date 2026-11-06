@@ -11,6 +11,30 @@ import net.minecraft.world.inventory.Slot;
 final class FrontierV3PilotInventoryActions {
     private FrontierV3PilotInventoryActions() { }
 
+    record QuickMoveAttempt(int menuId,int stateId,int sourceSlot,net.minecraft.world.item.ItemStack source,int beforeQuantity){}
+    record QuickMoveResult(boolean complete,QuickMoveAttempt attempt,String detail){}
+    /** A new click is permitted only after a server state update restored the exact unchanged preimage. */
+    static QuickMoveResult quickMove(Minecraft minecraft,ResourceLocation item,int count,boolean intoContainer,QuickMoveAttempt previous){
+        var menu=minecraft.player.containerMenu;
+        int quantity=intoContainer?containerQuantity(minecraft,item):playerQuantity(minecraft,item);
+        if(previous!=null){
+            if(previous.menuId()!=menu.containerId)throw new IllegalStateException("quick move lost its exact open menu");
+            var actual=menu.getSlot(previous.sourceSlot()).getItem();
+            // Vanilla suppresses echoes of a correct prediction. The carrier's terminal domain assertion confirms causality.
+            if(quantity==previous.beforeQuantity()+count && actual.isEmpty())return new QuickMoveResult(true,null,"destination reached");
+            if(menu.getStateId()==previous.stateId())return new QuickMoveResult(false,previous,"await server menu acknowledgement");
+            if(quantity!=previous.beforeQuantity() || actual.getCount()!=previous.source().getCount()
+                    || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(actual,previous.source()))
+                return new QuickMoveResult(false,previous,"changed postimage is not permission to retry");
+        }
+        var source=menu.slots.stream().filter(slot->(slot.container==minecraft.player.getInventory())==intoContainer).filter(slot->sameStack(slot,item,count)).findFirst().orElse(null);
+        if(source==null)return new QuickMoveResult(false,null,"declared source stack is unavailable");
+        int index=menu.slots.indexOf(source);
+        var next=new QuickMoveAttempt(menu.containerId,menu.getStateId(),index,source.getItem().copy(),quantity);
+        minecraft.gameMode.handleInventoryMouseClick(menu.containerId,index,0,ClickType.QUICK_MOVE,minecraft.player);
+        return new QuickMoveResult(false,next,"click submitted");
+    }
+
     static void clickMenuButton(Minecraft minecraft, JsonObject action) {
         if (minecraft.player.containerMenu == minecraft.player.inventoryMenu)
             throw new IllegalStateException("ordinary menu button requires an open container");

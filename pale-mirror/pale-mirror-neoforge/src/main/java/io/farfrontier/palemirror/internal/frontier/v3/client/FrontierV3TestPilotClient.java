@@ -63,7 +63,7 @@ public final class FrontierV3TestPilotClient {
     private static boolean visitHandshakeArmed; private static ObservedDiagnostic visitHandshakeBaseline;
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
-    private static int quickMoveBeforeQuantity, quickMoveSourceMenuSlot;
+    private static FrontierV3PilotInventoryActions.QuickMoveAttempt quickMoveState;
     private static boolean inspectSent;
     static boolean fastForwardSent;
     private static ObservedDiagnostic inspectBaseline;
@@ -107,7 +107,7 @@ public final class FrontierV3TestPilotClient {
             breaking = false; placementAttempted = false; itemUse = null; visitSent = false; FrontierV3PilotEntityVisit.reset();
                     visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false;
                     visitHandshakeBaseline = null;
-            containerOpenAttempted = false; quickMoveAttempted = false;
+            containerOpenAttempted = false; quickMoveAttempted = false; quickMoveState=null;
             inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
             diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L; currentCausalMilestone = null;
             boardInteractionAttempted = false;
@@ -369,52 +369,14 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out opening ordinary container at " + target);
         }
     }
-    /** Shift-clicks one exact player stack through the ordinary open-menu protocol. */
-    private static void quickMoveFromInventory(Minecraft minecraft, JsonObject action) {
-        if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) {
-            timeout(minecraft, action, "container menu was not open for quick move"); return;
-        }
-        ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString()); int count = action.get("count").getAsInt();
-        if (quickMoveAttempted) {
-            // Vanilla may split/merge one source across several destination stacks or physical members.
-            int present = FrontierV3PilotInventoryActions.containerQuantity(minecraft, item);
-            boolean moved = present == quickMoveBeforeQuantity + count
-                    && minecraft.player.containerMenu.getSlot(quickMoveSourceMenuSlot).getItem().isEmpty();
-            if (moved) { advance("quick_move_from_inventory"); return; }
-            timeout(minecraft, action, "quick move did not reach the container"); return;
-        }
-        Slot source = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container == minecraft.player.getInventory())
-                .filter(slot -> FrontierV3PilotInventoryActions.sameStack(slot, item, count)).findFirst().orElse(null);
-        if (source == null) { timeout(minecraft, action, "player lacks exact stack " + item + " x" + count); return; }
-        int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
-        if (menuSlot < 0) throw new IllegalStateException("player inventory slot is absent from the open container menu");
-        quickMoveSourceMenuSlot = menuSlot;
-        quickMoveBeforeQuantity = FrontierV3PilotInventoryActions.containerQuantity(minecraft, item);
-        minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
-        quickMoveAttempted = true;
-    }
-    /** Shift-clicks one exact existing container stack through the ordinary open-menu protocol. */
-    private static void quickMoveFromContainer(Minecraft minecraft, JsonObject action) {
-        if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) {
-            timeout(minecraft, action, "container menu was not open for quick move"); return;
-        }
-        ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString()); int count = action.get("count").getAsInt();
-        if (quickMoveAttempted) {
-            int present = FrontierV3PilotInventoryActions.playerQuantity(minecraft, item);
-            boolean moved = present == quickMoveBeforeQuantity + count
-                    && minecraft.player.containerMenu.getSlot(quickMoveSourceMenuSlot).getItem().isEmpty();
-            if (moved) { advance("quick_move_from_container"); return; }
-            timeout(minecraft, action, "quick move did not reach the player inventory"); return;
-        }
-        Slot source = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
-                .filter(slot -> FrontierV3PilotInventoryActions.sameStack(slot, item, count)).findFirst().orElse(null);
-        if (source == null) { timeout(minecraft, action, "container lacks exact stack " + item + " x" + count); return; }
-        int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
-        if (menuSlot < 0) throw new IllegalStateException("container slot is absent from the open container menu");
-        quickMoveSourceMenuSlot = menuSlot;
-        quickMoveBeforeQuantity = FrontierV3PilotInventoryActions.playerQuantity(minecraft, item);
-        minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
-        quickMoveAttempted = true;
+    private static void quickMoveFromInventory(Minecraft minecraft,JsonObject action){quickMove(minecraft,action,true);}
+    private static void quickMoveFromContainer(Minecraft minecraft,JsonObject action){quickMove(minecraft,action,false);}
+    private static void quickMove(Minecraft minecraft,JsonObject action,boolean intoContainer){
+        if(minecraft.player.containerMenu==minecraft.player.inventoryMenu){timeout(minecraft,action,"container menu is not open");return;}
+        var result=FrontierV3PilotInventoryActions.quickMove(minecraft,ResourceLocation.parse(action.get("item").getAsString()),action.get("count").getAsInt(),intoContainer,quickMoveState);
+        quickMoveState=result.attempt();
+        if(result.complete()){advance(intoContainer?"quick_move_from_inventory":"quick_move_from_container");return;}
+        timeout(minecraft,action,"quick move: "+result.detail());
     }
     /**
      * Uses the same two ordinary menu clicks as a player splitting a chest stack: right-click
@@ -905,6 +867,7 @@ public final class FrontierV3TestPilotClient {
     }
     private static String withoutSlash(String value) { return value.startsWith("/") ? value.substring(1) : value; }
     static void advance(String type) {
+        quickMoveState=null;
         String phase = runningSetup ? "setup" : "action";
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
         int completedAction = runningSetup ? 0 : index + 1;
@@ -987,7 +950,7 @@ public final class FrontierV3TestPilotClient {
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
         placementAttempted = false; itemUse = null; visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;
         visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
-        quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
+        quickMoveAttempted = false; quickMoveState=null; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
         diagnostics.clear(); PLAYER_HEALTH.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); inspectBaseline = null;
