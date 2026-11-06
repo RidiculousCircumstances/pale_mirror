@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "id": "live_authored_storage_menu",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "container",
+          "id": "container:1-depot",
+          "expect": {
+            "status": "ok",
+            "slotCount": 27
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/clear PMTestPilot"
+    },
+    {
+      "type": "command",
+      "command": "/give PMTestPilot minecraft:granite 128"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 0.5,
+        "y": 0,
+        "z": 1.5
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:1-depot"
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_container",
+      "item": "minecraft:granite",
+      "count": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:1-depot"
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 7,
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      }
+    },
+    {
+      "after": 10,
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      }
+    },
+    {
+      "after": 12,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 7,
+      "name": "authored-rack-two-stack-deposits",
+      "presentation": "player"
+    },
+    {
+      "after": 10,
+      "name": "authored-rack-two-stack-withdrawals",
+      "presentation": "player"
+    }
+  ]
+}
