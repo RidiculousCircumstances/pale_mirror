@@ -491,6 +491,7 @@
 4,2,7	2|minecraft:brown_terracotta|minecraft:brown_terracotta|	FOUNDATION
 4,2,8	2|minecraft:black_terracotta|minecraft:black_terracotta|	FOUNDATION
 4,2,9	2|minecraft:stone_bricks|minecraft:stone_bricks|	FOUNDATION
+4,2,10	2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	FOUNDATION
 4,2,11	2|minecraft:air|minecraft:air|	WALL
 4,3,0	2|minecraft:bricks|minecraft:bricks|	WALL
 4,3,1	2|minecraft:bricks|minecraft:bricks|	WALL
@@ -1210,10 +1211,8 @@
 10,1,0	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 10,1,1	2|minecraft:stone_bricks|minecraft:stone_bricks|	FOUNDATION
 10,1,10	2|minecraft:cracked_stone_bricks|minecraft:cracked_stone_bricks|	FOUNDATION
-10,1,11	2|minecraft:cobblestone|minecraft:cobblestone|	PUBLIC_ACCESS_SURFACE
-10,1,12	2|minecraft:cobblestone|minecraft:cobblestone|	PUBLIC_ACCESS_SURFACE
-10,1,13	2|minecraft:stone_bricks|minecraft:stone_bricks|	PUBLIC_ACCESS_SURFACE
-10,1,14	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
+10,1,13	2|minecraft:stone_bricks|minecraft:stone_bricks|	FOUNDATION
+10,1,14	2|minecraft:cobblestone|minecraft:cobblestone|	PUBLIC_ACCESS_SURFACE
 10,1,15	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 10,1,16	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 10,2,0	2|minecraft:spruce_slab|minecraft:spruce_slab|type=top,waterlogged=false	FOUNDATION
@@ -1227,6 +1226,9 @@
 10,2,8	2|minecraft:terracotta|minecraft:terracotta|	FOUNDATION
 10,2,9	2|minecraft:light_gray_terracotta|minecraft:light_gray_terracotta|	PUBLIC_ACCESS_SURFACE
 10,2,10	2|minecraft:stone_bricks|minecraft:stone_bricks|	PUBLIC_ACCESS_SURFACE
+10,2,11	2|minecraft:stone_bricks|minecraft:stone_bricks|	PUBLIC_ACCESS_SURFACE
+10,2,12	2|minecraft:stone_bricks|minecraft:stone_bricks|	PUBLIC_ACCESS_SURFACE
+10,2,13	2|minecraft:cobblestone_stairs|minecraft:cobblestone_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	PUBLIC_ACCESS_SURFACE
 10,2,14	2|minecraft:air|minecraft:air|	WALL
 10,3,0	2|minecraft:potted_red_mushroom|minecraft:flower_pot|	WALL
 10,3,1	2|minecraft:stone_bricks|minecraft:stone_bricks|	WALL

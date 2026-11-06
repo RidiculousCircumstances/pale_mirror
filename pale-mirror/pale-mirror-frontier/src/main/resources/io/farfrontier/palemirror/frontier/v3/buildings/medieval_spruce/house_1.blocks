@@ -356,7 +356,6 @@
 9,7,8	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	WALL
 9,7,9	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	WALL
 9,7,10	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	WALL
-10,1,11	2|minecraft:cobblestone|minecraft:cobblestone|	PUBLIC_ACCESS_SURFACE
 10,1,12	2|minecraft:dirt_path|minecraft:dirt|	PUBLIC_ACCESS_SURFACE
 10,1,13	2|minecraft:dirt_path|minecraft:dirt|	PUBLIC_ACCESS_SURFACE
 10,1,14	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
@@ -373,6 +372,7 @@
 10,2,8	2|minecraft:spruce_planks|minecraft:spruce_planks|	FOUNDATION
 10,2,9	2|minecraft:spruce_log|minecraft:spruce_log|axis=x	PUBLIC_ACCESS_SURFACE
 10,2,10	2|minecraft:spruce_log|minecraft:spruce_log|axis=x	PUBLIC_ACCESS_SURFACE
+10,2,11	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	PUBLIC_ACCESS_SURFACE
 10,2,12	2|minecraft:air|minecraft:air|	WALL
 10,2,13	2|minecraft:air|minecraft:air|	WALL
 10,3,1	2|minecraft:spruce_log|minecraft:spruce_log|axis=x	WALL

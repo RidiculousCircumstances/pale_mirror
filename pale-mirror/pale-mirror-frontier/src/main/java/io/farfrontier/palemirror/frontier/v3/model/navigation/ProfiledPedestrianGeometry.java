@@ -125,6 +125,23 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         }
         return immutable;
     }
+    private final java.util.Map<SurfaceAnchor, java.util.List<NavigationContact>> transitionContacts = new java.util.LinkedHashMap<>();
+    private java.util.List<NavigationContact> transitionContacts(SurfaceAnchor surface) {
+        synchronized (transitionContacts) { var prior=transitionContacts.get(surface);if(prior!=null)return prior; }
+        var regular=contacts(surface);
+        if(regular.isEmpty()) return regular;
+        var view=transitCollisions.orElseThrow();var reference=regular.getFirst();
+        var expanded=new java.util.ArrayList<>(regular);
+        for(var contact:NavigationBodyGeometry.edgeContacts(view,surface,profile))
+            if(!expanded.contains(contact) && NavigationBodyGeometry.traversable(view,profile,reference,contact)
+                    && NavigationBodyGeometry.traversable(view,profile,contact,reference)) expanded.add(contact);
+        var result=java.util.List.copyOf(expanded);
+        synchronized (transitionContacts) {
+            if(transitionContacts.size()>=MAX_VOLUME_RESULTS)transitionContacts.remove(transitionContacts.keySet().iterator().next());
+            transitionContacts.put(surface,result);
+        }
+        return result;
+    }
     @Override public boolean clearanceKnown(SurfaceAnchor surface) {
         return remembered(knownClearance, surface, () -> readClearanceKnown(surface));
     }
@@ -239,6 +256,15 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
                     || !terrain.supportAvailable(from) || !terrain.supportAvailable(to)) return false;
             var view = transitCollisions.orElseThrow();
             for (var origin : contacts(from)) for (var target : contacts(to))
+                if (NavigationBodyGeometry.traversable(view, profile, origin, target)) return true;
+            for (var origin : contacts(from)) for (var target : contacts(to)) {
+                double rise=target.feetY()-origin.feetY();
+                if(rise<=profile.stepUpBlocks()+1e-7 && -rise<=profile.dropBlocks()+1e-7) return false;
+            }
+            // A clear stair centre can still be too high to enter from a recessed
+            // path. Try connected edge contacts only after the cheap centre edge fails.
+            // The connected-component check preserves one coherent strategic support.
+            for (var origin : transitionContacts(from)) for (var target : transitionContacts(to))
                 if (NavigationBodyGeometry.traversable(view, profile, origin, target)) return true;
             return false;
         }

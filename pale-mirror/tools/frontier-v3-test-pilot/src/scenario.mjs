@@ -611,7 +611,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
         && (['farmAnchor', 'routeSurface', 'firstGuardPosition', 'layout.firstHousingAnchor'].includes(reference.field)
-          || /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.(anchor|entrance|interior|floor|facadeView)$/.test(reference.field)))
+          || /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.(anchor|entrance|secondaryEntrance|exterior|interior|floor|facadeView)$/.test(reference.field)))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'station:') && reference.field === 'exteriorApproach')

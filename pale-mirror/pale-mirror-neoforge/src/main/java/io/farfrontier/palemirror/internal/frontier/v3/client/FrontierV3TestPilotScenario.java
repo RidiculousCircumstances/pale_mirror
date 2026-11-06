@@ -475,7 +475,7 @@ final class FrontierV3TestPilotScenario {
                     && diagnosticField.equals("position"))
                 || (view.equals("settlement") && requiredId(reference, "id", "settlement:")
                 && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface") || diagnosticField.equals("firstGuardPosition") || diagnosticField.equals("layout.firstHousingAnchor")
-                    || diagnosticField.matches("layout\\.facilities\\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\\.(anchor|entrance|interior|floor|facadeView)")))
+                    || diagnosticField.matches("layout\\.facilities\\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\\.(anchor|entrance|secondaryEntrance|exterior|interior|floor|facadeView)")))
                 || (view.equals("process") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("cursor.retainedBody") || diagnosticField.equals("goal.station")))
                 || (view.equals("process") && requiredId(reference, "id", "station:") && diagnosticField.equals("exteriorApproach"))

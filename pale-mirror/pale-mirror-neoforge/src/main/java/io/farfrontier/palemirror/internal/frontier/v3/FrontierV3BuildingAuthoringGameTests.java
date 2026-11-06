@@ -13,6 +13,30 @@ import java.nio.file.*;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3BuildingAuthoringGameTests {
+    @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
+    public static void linkedDoorsRetainBothVerticalHalvesAndRejectUnrelatedNeighbours(GameTestHelper helper) {
+        var level=helper.getLevel();var base=helper.absolutePos(new net.minecraft.core.BlockPos(1,1,1));
+        var door=net.minecraft.world.level.block.Blocks.SPRUCE_DOOR;
+        var left=door.defaultBlockState().setValue(net.minecraft.world.level.block.DoorBlock.FACING,net.minecraft.core.Direction.NORTH);
+        var right=left.setValue(net.minecraft.world.level.block.DoorBlock.HINGE,net.minecraft.world.level.block.state.properties.DoorHingeSide.RIGHT);
+        var other=base.east();
+        for(var p:java.util.List.of(base,other))level.setBlock(p.below(),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),3);
+        for(var e:java.util.Map.of(base,left,other,right).entrySet()) {
+            level.setBlock(e.getKey(),e.getValue(),3);
+            level.setBlock(e.getKey().above(),e.getValue().setValue(net.minecraft.world.level.block.DoorBlock.HALF,
+                    net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER),3);
+        }
+        for(boolean open:java.util.List.of(true,false)) {
+            var states=FrontierV3PassageBlocks.linkedDoorStates(level,base.above(),open);
+            helper.assertTrue(states.size()==4,"both leaves and vertical halves share the native plan");
+            FrontierV3PassageBlocks.completeLinkedDoors(level,null,states);
+            helper.assertTrue(states.entrySet().stream().allMatch(e -> level.getBlockState(e.getKey()).equals(e.getValue())),"paired native outcome");
+        }
+        level.setBlock(other,left,3);level.setBlock(other.above(),left.setValue(net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER),3);
+        helper.assertTrue(FrontierV3PassageBlocks.linkedDoorStates(level,base,true).size()==2,"same-hinge doors are independent");
+        helper.succeed();
+    }
     @GameTest(
             batch = "pm-frontier-v3-building-authoring",
             templateNamespace = "minecraft",

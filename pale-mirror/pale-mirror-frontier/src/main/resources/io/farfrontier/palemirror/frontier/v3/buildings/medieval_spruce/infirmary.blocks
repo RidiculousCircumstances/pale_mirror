@@ -34,12 +34,13 @@
 5,7,9	2|minecraft:air|minecraft:air|	WALL
 5,7,10	2|minecraft:air|minecraft:air|	WALL
 5,7,11	2|minecraft:air|minecraft:air|	WALL
-6,6,7	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=straight,waterlogged=false	PUBLIC_ACCESS_SURFACE
+6,6,7	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=straight,waterlogged=false	FOUNDATION
 6,6,8	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=straight,waterlogged=false	FOUNDATION
 6,7,3	2|minecraft:air|minecraft:air|	WALL
 6,7,4	2|minecraft:air|minecraft:air|	WALL
 6,7,5	2|minecraft:air|minecraft:air|	WALL
 6,7,6	2|minecraft:air|minecraft:air|	WALL
+6,7,7	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	PUBLIC_ACCESS_SURFACE
 6,7,8	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	FOUNDATION
 6,7,9	2|minecraft:air|minecraft:air|	WALL
 6,7,10	2|minecraft:air|minecraft:air|	WALL

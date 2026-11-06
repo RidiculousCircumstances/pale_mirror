@@ -52,6 +52,37 @@ final class FrontierV3PassageBlocks {
         }
         return Map.of(base, state.setValue(FenceGateBlock.OPEN, open));
     }
+    /** A horizontal pair is a native passage relationship, independent of building ownership. */
+    static Map<BlockPos, BlockState> linkedDoorStates(ServerLevel level, BlockPos position, boolean open) {
+        var clicked=level.getBlockState(position);
+        if (!(clicked.getBlock() instanceof DoorBlock) || opened(clicked).isEmpty()) return Map.of();
+        var base=base(position,clicked);var result=new LinkedHashMap<>(states(level,base,open));
+        if(result.isEmpty()) return Map.of();
+        var facing=clicked.getValue(DoorBlock.FACING);var hinge=clicked.getValue(DoorBlock.HINGE);
+        var other=base.relative(hinge==net.minecraft.world.level.block.state.properties.DoorHingeSide.RIGHT
+                ? facing.getCounterClockWise() : facing.getClockWise());
+        if (!FrontierV3LoadedWorld.ready(level,other)) return Map.copyOf(result);
+        var candidate=level.getBlockState(other);
+        if(candidate.is(clicked.getBlock()) && candidate.getValue(DoorBlock.HALF)==DoubleBlockHalf.LOWER
+                && candidate.getValue(DoorBlock.FACING)==facing && candidate.getValue(DoorBlock.HINGE)!=hinge)
+            result.putAll(states(level,other,open));
+        return Map.copyOf(result);
+    }
+    static void completeLinkedDoors(ServerLevel level, net.minecraft.world.entity.player.Player player,
+            Map<BlockPos, BlockState> states) {
+        // A native event may have replaced a leaf. Never let a linked follow-up
+        // overwrite a new block or change a different hinge/facing/powered state.
+        if(states.entrySet().stream().anyMatch(e -> {
+            var actual=level.getBlockState(e.getKey());
+            return !actual.is(e.getValue().getBlock())
+                    || !actual.setValue(DoorBlock.OPEN,e.getValue().getValue(DoorBlock.OPEN)).equals(e.getValue());
+        })) return;
+        for(var entry:states.entrySet()) if(entry.getValue().getValue(DoorBlock.HALF)==DoubleBlockHalf.LOWER) {
+            var actual=level.getBlockState(entry.getKey());
+            if(actual.getBlock() instanceof DoorBlock door && !actual.equals(entry.getValue()))
+                door.setOpen(player,level,actual,entry.getKey(),entry.getValue().getValue(DoorBlock.OPEN));
+        }
+    }
     static void set(ServerLevel level, Mob actor, BlockPos base, boolean open) {
         var state = level.getBlockState(base);
         if (state.getBlock() instanceof DoorBlock door) door.setOpen(actor, level, state, base, open);

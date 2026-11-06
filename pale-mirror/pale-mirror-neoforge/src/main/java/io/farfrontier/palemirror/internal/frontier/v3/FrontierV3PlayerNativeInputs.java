@@ -67,6 +67,21 @@ public final class FrontierV3PlayerNativeInputs {
             }
             return action.get();
         }
+        if (block.getBlock() instanceof DoorBlock && !player.isSecondaryUseActive()) {
+            boolean open=!block.getValue(DoorBlock.OPEN);
+            var states=FrontierV3PassageBlocks.linkedDoorStates(level,position,open);
+            if (!states.isEmpty()) {
+                var writes=states.entrySet().stream().map(e -> new FrontierV3ManagedBlockWrites.PlannedWrite(e.getKey(),e.getValue())).toList();
+                return execute(player,level,hand,writes,() -> {
+                    var result=action.get();
+                    // Native use/events still decide whether the click succeeded. A matching
+                    // paired leaf follows that confirmed operation under the same geometry fence.
+                    if (result.consumesAction() && level.getBlockState(position).equals(states.get(position)))
+                        FrontierV3PassageBlocks.completeLinkedDoors(level,player,states);
+                    return result;
+                },InteractionResult.FAIL);
+            }
+        }
         var writes=new ArrayList<FrontierV3ManagedBlockWrites.PlannedWrite>();
         writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(position,block.cycle(BlockStateProperties.OPEN)));
         if (block.getBlock() instanceof DoorBlock) {
@@ -104,7 +119,7 @@ public final class FrontierV3PlayerNativeInputs {
         T attempt() {
             if (finished || PENDING.get(player)!=this) return waiting;
             if (!valid()) { finish();return waiting; }
-            if (!FrontierV3ManagedBlockWrites.preparePlannedWrites(level,runtime,writes,() -> { })) return waiting;
+            if (!FrontierV3ManagedBlockWrites.preparePlannedWrites(level,runtime,writes,this::attempt)) return waiting;
             // Remove BEFORE entering Minecraft: nested native interactions are distinct inputs,
             // never permission to invoke this action twice.
             finished=true;PENDING.remove(player,this);

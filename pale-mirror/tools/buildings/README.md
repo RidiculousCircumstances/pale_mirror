@@ -155,3 +155,10 @@ payloads are preserved; decorative blocks, roofs, free plants and water are not
 replaced with vanilla substitutes. Explicit functional mounts and entrance easements
 remain declared adaptations and must be included in source-difference review.
 No upstream inventories, entities or colony controllers are imported.
+
+Entrance support paths annotate the original architecture. They must not clear
+headroom, replace steps or cut through railings. `entranceSupports` and optional
+`secondaryEntranceSupports` declare the surveyed 3D route; threshold index names
+the entrance independently of the outdoor ground datum. Native collision
+validation rejects inaccessible paths. Choose a real opening or a winding porch
+route instead of carving a straight connector through source blocks.

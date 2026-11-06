@@ -10,6 +10,26 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationShapeIntegrationTest {
+    @Test void recessedPathEntersTheLowEdgeOfAStairWithoutCrossingAHeadObstacle() {
+        var stair=new NavigationCell(new NavigationShape(List.of(
+                new NavigationShape.Box(0,0,0,1,.5,1),new NavigationShape.Box(.5,.5,0,1,1,1))),true);
+        var path=new NavigationCell(new NavigationShape(List.of(new NavigationShape.Box(0,0,0,1,.9375,1))),true);
+        var from=SurfaceAnchor.at(20,63,20);var to=SurfaceAnchor.at(21,64,20);
+        for(boolean blocked:List.of(false,true)) {
+            PedestrianRouteGeometry raw=new PedestrianRouteGeometry() {
+                public WorldBounds bounds(){return new WorldBounds(18,18,8,8);}
+                public SurfaceAnchor supportAt(int x,int z){return x==21&&z==20?to:SurfaceAnchor.at(x,63,z);}
+                public boolean blocked(SurfaceAnchor surface){return false;}
+                public Optional<NavigationCollisionView> collisions(){return Optional.of(p -> Optional.of(
+                        p.equals(to.support())?stair:p.equals(from.support())?path:
+                        blocked&&p.equals(to.support().offset(0,1,0))?NavigationCell.SOLID:
+                        p.y()<=63?NavigationCell.SOLID:NavigationCell.AIR));}
+            };
+            var geometry=new ProfiledPedestrianGeometry(raw,UnitNavigationProfile.VILLAGER,ignored -> false);
+            assertEquals(!blocked,geometry.canTraverse(from,to));
+            assertEquals(!blocked,geometry.canTraverse(to,from));
+        }
+    }
     @Test void manualPassageRetainsActualCollisionAndExplicitTraversalCapabilityThroughRecovery() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:manual-passage"), 41));
         var position = new BlockPosition(20, 64, 20);

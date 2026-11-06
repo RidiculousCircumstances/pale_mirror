@@ -40,12 +40,17 @@ final class FrontierV3SettlementLayoutDiagnostic {
         home.structures().forEach(building -> values.putIfAbsent(building.kind(), building));
         return values.entrySet().stream().map(entry -> {
             var building = entry.getValue();
-            var port = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(building).primaryEntrance();
+            var spatial = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(building);
+            var port = spatial.primaryEntrance();
+            var secondary = spatial.entrances().values().stream().filter(other -> !other.equals(port)).findFirst()
+                    .map(other -> point(other.thresholdSurface().support().offset(0,1,0))).orElse("null");
             var front = port.exteriorApproach().getFirst().support();
             var direction = building.facing();
             var view = front.offset(direction.x() * 12, 3, direction.z() * 12);
             return "\"" + entry.getKey().name() + "\":{\"id\":\"" + building.id().value()
                     + "\",\"anchor\":" + point(building.anchor()) + ",\"entrance\":" + point(port.thresholdSurface().support().offset(0, 1, 0))
+                    + ",\"exterior\":" + point(front.offset(0,1,0))
+                    + ",\"secondaryEntrance\":" + secondary
                     + ",\"interior\":" + point(port.interiorConnector().support().offset(0, 1, 0))
                     + ",\"floor\":" + point(port.interiorConnector().support())
                     + ",\"integrity\":\"" + state.structureConditions().get(building.id()) + "\",\"damagedCells\":"

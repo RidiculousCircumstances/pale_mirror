@@ -1,0 +1,740 @@
+{
+  "schema": 1,
+  "id": "live_authored_single_and_double_doors",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 600 0 true"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.interior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "true"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      }
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.interior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "true"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.secondaryEntrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "true"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      }
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.secondaryEntrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.secondaryEntrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.interior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "true"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      }
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HALL.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.interior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "true"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      }
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      },
+      "block": "minecraft:spruce_door",
+      "properties": {
+        "open": "false"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.HOUSING.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.INFIRMARY.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.INFIRMARY.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.INFIRMARY.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.WOODSHOP.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.WOODSHOP.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.WOODSHOP.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.FARM.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.FARM.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.FARM.entrance"
+        }
+      }
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.SMELTERY.exterior"
+        }
+      },
+      "settleMs": 300
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.SMELTERY.entrance"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.SMELTERY.entrance"
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 6,
+      "name": "textile_workshop-open"
+    },
+    {
+      "after": 10,
+      "name": "textile_workshop-porch"
+    },
+    {
+      "after": 17,
+      "name": "kitchen-open"
+    },
+    {
+      "after": 22,
+      "name": "kitchen-porch"
+    },
+    {
+      "after": 28,
+      "name": "hall-open"
+    },
+    {
+      "after": 32,
+      "name": "hall-porch"
+    },
+    {
+      "after": 38,
+      "name": "housing-open"
+    },
+    {
+      "after": 42,
+      "name": "housing-porch"
+    },
+    {
+      "after": 45,
+      "name": "infirmary-porch"
+    },
+    {
+      "after": 48,
+      "name": "woodshop-porch"
+    },
+    {
+      "after": 51,
+      "name": "farm-porch"
+    },
+    {
+      "after": 54,
+      "name": "smeltery-porch"
+    }
+  ]
+}

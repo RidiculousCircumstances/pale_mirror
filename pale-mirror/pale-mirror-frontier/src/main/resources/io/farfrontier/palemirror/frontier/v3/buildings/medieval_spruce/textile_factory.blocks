@@ -188,7 +188,6 @@
 2,1,10	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=north|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OnNwcnVjZV9wbGFua3MifX0	FOUNDATION
 2,1,11	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=north|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OnNwcnVjZV9wbGFua3MifX0	FOUNDATION
 2,1,12	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=north|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OnNwcnVjZV9wbGFua3MifX0	FOUNDATION
-2,1,14	2|minecraft:cobblestone|minecraft:cobblestone|	PUBLIC_ACCESS_SURFACE
 2,1,15	2|minecraft:dirt_path|minecraft:dirt|	PUBLIC_ACCESS_SURFACE
 2,1,16	2|minecraft:dirt_path|minecraft:dirt|	PUBLIC_ACCESS_SURFACE
 2,1,17	2|minecraft:dirt_path|minecraft:dirt|	FOUNDATION
@@ -209,6 +208,7 @@
 2,2,11	2|minecraft:spruce_planks|minecraft:spruce_planks|	FOUNDATION
 2,2,12	2|minecraft:spruce_planks|minecraft:spruce_planks|	WORKSHOP_INPUT_STATION
 2,2,13	2|minecraft:spruce_log|minecraft:spruce_log|axis=x	PUBLIC_ACCESS_SURFACE
+2,2,14	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	PUBLIC_ACCESS_SURFACE
 2,2,15	2|minecraft:air|minecraft:air|	WALL
 2,2,16	2|minecraft:air|minecraft:air|	WALL
 2,2,17	2|minecraft:air|minecraft:air|	WALL
