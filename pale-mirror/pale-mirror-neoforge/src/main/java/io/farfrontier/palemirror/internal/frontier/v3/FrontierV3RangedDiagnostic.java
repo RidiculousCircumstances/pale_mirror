@@ -23,5 +23,14 @@ final class FrontierV3RangedDiagnostic {
                 + ",\"crossbowHasFired\":"+crossbow.filter(g->state.inventory().items().get(g.weapon()).condition().damage()>0).isPresent()
                 + ",\"crossbowPosition\":"+crossbow.map(g->position(state.actorLocations().get(g.execution().actorId()).body())).orElse("null");
     }
+    static String render(String id,io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView checkpoint,FrontierWorldState state){
+        var home=subject(id).orElse(null);
+        if(home==null || state.bootstrap().settlements().stream().noneMatch(h->h.id().equals(home)))return unavailable("settlement_security",id,checkpoint,"not_found");
+        var guards=GuardEquipment.in(state,home);
+        return base("settlement_security",id,checkpoint)+",\"status\":\"ok\",\"guardsAssigned\":"+guards.size()+settlement(state,home)
+                +",\"guards\":"+guards.stream().map(g->"{\"actor\":\""+quote(g.execution().actorId().value())+"\",\"name\":\""+quote(state.humanPopulation().resident(g.execution().actorId()).name())
+                    +"\",\"method\":\""+g.method()+"\",\"phase\":\""+g.phase()+"\",\"arrows\":"+Ammunition.available(state,g.execution().actorId(),home,"minecraft:arrow")+"}")
+                    .collect(java.util.stream.Collectors.joining(",","[","]"))+"}";
+    }
     private FrontierV3RangedDiagnostic(){}
 }

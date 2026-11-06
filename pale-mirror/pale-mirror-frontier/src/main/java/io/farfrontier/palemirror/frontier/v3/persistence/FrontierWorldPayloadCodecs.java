@@ -8,7 +8,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() { return FrontierWorldProcessCodecs.create(); }
     static PayloadCodecs kernelDiagnosticCodecs() { return new PayloadCodecs(List.of(new KernelQuarantineCodec())); }
     static PayloadCodecs physicalCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
-            new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
+            new PhysicalIntentStorageConfirmedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.structural(), PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
             new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), SettlementEconomyPayloadCodecs.resourceDeposited())),
             new PayloadCodecs(ResourceStoragePayloadCodecs.codecs()), FungibleResourcePayloadCodecs.observationCodecs()); }
@@ -410,7 +410,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
                 FrontierWireTags.require(SceneLeaseStatus.class, status), members, ambient, java.util.Optional.empty());
     }
-    private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException { output.writeByte(values.size()); for (SceneMemberPosition member : values) writeMemberPosition(output, member); }
+    private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException { output.writeByte(values.size()); for (SceneMemberPosition member :
+            values) writeMemberPosition(output, member); }
     private static void writeMemberPosition(DataOutputStream output, SceneMemberPosition member) throws IOException { writeSubject(output, member.actorId()); output.writeInt(member.body().x()); output.writeInt(member.body().y());
         output.writeInt(member.body().z()); output.writeLong(member.health().raw()); }
     private static java.util.List<SceneMemberPosition> readMemberPositions(DataInputStream input) throws IOException {

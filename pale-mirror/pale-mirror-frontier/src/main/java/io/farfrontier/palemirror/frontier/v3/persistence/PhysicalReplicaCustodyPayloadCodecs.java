@@ -188,7 +188,8 @@ final class PhysicalReplicaCustodyPayloadCodecs {
     }
     private static PhysicalReplicaRecord readReplica(DataInputStream input) throws IOException {
         var object = FrontierWorldPayloadCodecs.readSubject(input).value(); String kind = FrontierWorldPayloadCodecs.readString(input);
-        long emitted = input.readLong(); long observed = input.readLong(); long replicaRevision = input.readLong(); String fingerprint = FrontierWorldPayloadCodecs.readString(input); String provenance = FrontierWorldPayloadCodecs.readString(input);
+        long emitted = input.readLong(); long observed = input.readLong(); long replicaRevision = input.readLong(); String fingerprint = FrontierWorldPayloadCodecs.readString(input); String provenance =
+                FrontierWorldPayloadCodecs.readString(input);
         PhysicalReplicaState state = readReplicaState(input.readUnsignedByte());
         java.util.Optional<String> observedFingerprint = java.util.Optional.empty(), observedProvenance = java.util.Optional.empty();
         java.util.Optional<PhysicalReplicaConflictReason> reason = java.util.Optional.empty();
@@ -202,13 +203,13 @@ final class PhysicalReplicaCustodyPayloadCodecs {
                 : java.util.Optional.<ProjectionPreimage>empty();
         return new PhysicalReplicaRecord(object, kind, emitted, observed, replicaRevision, fingerprint, provenance, state, observedFingerprint, observedProvenance, reason, preimage);
     }
-    private static void writeLease(DataOutputStream output, PhysicalCustodyLease lease) throws IOException {
+    static void writeLease(DataOutputStream output, PhysicalCustodyLease lease) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, lease.scopeId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.objectId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.providerId());
         output.writeLong(lease.authorityEpoch()); output.writeLong(lease.expectedCanonicalRevision()); output.writeLong(lease.expectedReplicaRevision());
         output.writeByte(lease.status().wireTag()); output.writeBoolean(lease.unresolvedReason() != null);
         if (lease.unresolvedReason() != null) output.writeByte(lease.unresolvedReason().wireTag());
     }
-    private static PhysicalCustodyLease readLease(DataInputStream input) throws IOException {
+    static PhysicalCustodyLease readLease(DataInputStream input) throws IOException {
         var scope = FrontierWorldPayloadCodecs.readSubject(input).value(); var object = FrontierWorldPayloadCodecs.readSubject(input).value();
         var provider = FrontierWorldPayloadCodecs.readSubject(input).value();
         long epoch = input.readLong(); long canonical = input.readLong(); long replica = input.readLong(); PhysicalCustodyLeaseStatus status = readStatus(input.readUnsignedByte());

@@ -115,7 +115,7 @@
     },
     {
       "type": "wait_until_diagnostic",
-      "view": "settlement",
+      "view": "settlement_security",
       "id": "settlement:1",
       "expect": {
         "hasArmedCrossbow": true,
@@ -128,7 +128,7 @@
       "entityType": "minecraft:villager",
       "nameContains": {
         "diagnostic": {
-          "view": "settlement",
+          "view": "settlement_security",
           "id": "settlement:1",
           "field": "crossbowName"
         }
@@ -138,14 +138,14 @@
     },
     {
       "type": "inspect",
-      "view": "settlement",
+      "view": "settlement_security",
       "id": "settlement:1"
     }
   ],
   "assertions": [
     {
       "after": 10,
-      "view": "settlement",
+      "view": "settlement_security",
       "id": "settlement:1",
       "expect": {
         "hasArmedCrossbow": true,

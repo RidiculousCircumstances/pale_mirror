@@ -37,8 +37,10 @@ public final class FrontierV3RangedCombatGameTests {
         var account=new SubjectId("custody:crossbow-native");var lot=new SubjectId("lot:crossbow-native");
         var binding=new PhysicalStackBinding(new SubjectId("binding:crossbow-native"),account,new PhysicalStackAddress.ActorPocket(actor,a.shooter().getUUID(),2),1,"minecraft:arrow",Map.of(lot,2),Map.of());
         var target=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,a.target().getUUID(),h.getLevel().dimension().location().toString());
-        var shot=new RangedShot(permission,CombatMethod.CROSSBOW,1,new SubjectId("item:crossbow-native"),new ItemCondition(326,0),target,1,account,lot,"minecraft:arrow",binding,1,0,new CombatProfile(new CombatAttributes(50,50,50,
+        var shot=new RangedShot(permission,CombatMethod.CROSSBOW,1,new SubjectId("item:crossbow-native"),new ItemCondition(465,0),target,1,account,lot,"minecraft:arrow",binding,1,0,new CombatProfile(new CombatAttributes(50,50,50,
                 50,50),Map.of(CombatSkillId.CROSSBOW,50,CombatSkillId.EVASION,0,CombatSkillId.WEAPON_DEFENCE,0)));
+        h.assertTrue(a.shooter().getMainHandItem().getMaxDamage()==FrontierRulesets.installed("frontier-v3-ranged-guards-r33").tools().definitions().get("minecraft:crossbow").durability(),
+                "manufactured crossbow profile matches actual native registry durability");
         float health=a.target().getHealth();
         h.assertTrue(FrontierV3RangedCombatExecutor.emit(h.getLevel(),a.shooter(),a.target(),shot,new RangedRules(32,64,5,11,22,25,8,12,5,450000,3150000,0,500),pocket)==FrontierV3NativeEffect.Outcome.APPLIED,
                 "launch applies one declared native emission");

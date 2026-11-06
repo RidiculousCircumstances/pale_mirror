@@ -27,7 +27,7 @@
       "timeoutMs": 10000,
       "checks": [
         {
-          "view": "settlement",
+          "view": "settlement_security",
           "id": "settlement:1",
           "expect": {
             "hasArmedCrossbow": true,
@@ -41,7 +41,7 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "diagnostic": {
-          "view": "settlement",
+          "view": "settlement_security",
           "id": "settlement:1",
           "field": "crossbowPosition"
         }
@@ -58,7 +58,7 @@
       "entityType": "minecraft:villager",
       "nameContains": {
         "diagnostic": {
-          "view": "settlement",
+          "view": "settlement_security",
           "id": "settlement:1",
           "field": "crossbowName"
         }
@@ -82,7 +82,7 @@
       "entityType": "minecraft:villager",
       "nameContains": {
         "diagnostic": {
-          "view": "settlement",
+          "view": "settlement_security",
           "id": "settlement:1",
           "field": "crossbowName"
         }
@@ -98,7 +98,7 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "diagnostic": {
-          "view": "settlement",
+          "view": "settlement_security",
           "id": "settlement:1",
           "field": "crossbowPosition"
         }
@@ -112,7 +112,7 @@
     },
     {
       "type": "wait_until_diagnostic",
-      "view": "settlement",
+      "view": "settlement_security",
       "id": "settlement:1",
       "expect": {
         "crossbowHasFired": true
@@ -130,7 +130,7 @@
       "entityType": "minecraft:villager",
       "nameContains": {
         "diagnostic": {
-          "view": "settlement",
+          "view": "settlement_security",
           "id": "settlement:1",
           "field": "crossbowName"
         }
@@ -140,14 +140,14 @@
     },
     {
       "type": "inspect",
-      "view": "settlement",
+      "view": "settlement_security",
       "id": "settlement:1"
     }
   ],
   "assertions": [
     {
       "after": 6,
-      "view": "settlement",
+      "view": "settlement_security",
       "id": "settlement:1",
       "expect": {
         "hasArmedCrossbow": true,

@@ -179,7 +179,8 @@ class GuardDutyTest {
         int expected=SettlementWorkPolicy.permissions(state,duty.home()).workers(ResidentWorkKind.GUARD).size()-1;
         assertTrue(EquipmentStockProjection.deficits(state, duty.home()).stream().anyMatch(d -> d.demand().pool().equals("guard-melee") && d.missingUnits() == expected));
     }
-    @Test void preparedTransferRecoversAndPreventsMealOrBodyReleaseBeforeItsExactReceipt() {
+    @org.junit.jupiter.params.ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+    void preparedTransferRecoversAndPreventsMealOrBodyReleaseBeforeItsExactReceipt(boolean foreignStorageImage) {
         var state = armed(); var previous = state.strategicPlans().guards().values().iterator().next(); var actor = previous.execution().actorId();
         var item = state.inventory().items().get(previous.weapon());
         var slot = new InventoryCustody.ContainerSlot(previous.source().containerId(), state.inventory().firstFreeSlot(previous.source().containerId()).orElseThrow());
@@ -198,6 +199,7 @@ class GuardDutyTest {
         state = state.withStrategicPlans(state.strategicPlans().withGuard(duty));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(ImmutableLookupMap.withEntry(state.actorLocations(), actor,
                 state.actorLocations().get(actor).withBody(duty.source().station().standingBody()))));
+        state=ReferenceContainerCustodyFixtures.observedAndHeld(state,slot.containerId());
         var intent = GuardEquipmentStateSupport.issue(state, duty, 6000);
         state = apply(state, List.of(new ProposedEvent(duty.home(), new PhysicalIntentPrepared(intent))), 6000);
         assertTrue(GuardAuthority.pending(state, duty));
@@ -211,9 +213,26 @@ class GuardDutyTest {
         state = apply(state, FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("physical-observation", plan.events()), 6001);
         intent = state.physicalIntents().get(intent.id());
         var receipt = new EquipmentIssueObservation(new PhysicalObservationId("observation:guard-issued"), intent.id(), duty.id(), actor, item.id(), slot);
-        requested = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
-        plan = accepted(FrontierWorldProcessCatalog.planCommand("physical-observation", state, command(state, requested, 6002)));
+        var lease=state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(slot.containerId()));
+        var nativeExpected=state.withInventory(state.inventory().moveObservedItem(item.id(),slot,new InventoryCustody.Actor(actor)));
+        var physical=new PhysicalIntentStorageConfirmed(intent,receipt,lease,foreignStorageImage?"foreign-whole-image":ReferenceContainerCustody.canonicalFingerprint(nativeExpected,slot.containerId()),
+                state.replicaCustody().replicas().get(slot.containerId()).provenance());
+        var codecs=io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
+        assertEquals(physical,codecs.decode(physical.type(),codecs.encode(physical)));
+        var wrongProvider=new PhysicalCustodyLease(lease.scopeId(),lease.objectId(),new SubjectId("provider:foreign"),lease.authorityEpoch(),lease.expectedCanonicalRevision(),lease.expectedReplicaRevision(),lease.status(),
+                lease.unresolvedReason());
+        var capturedIntent=intent;
+        assertThrows(IllegalArgumentException.class,()->new PhysicalIntentStorageConfirmed(capturedIntent,receipt,wrongProvider,physical.fingerprint(),physical.provenance()));
+        assertThrows(NullPointerException.class,()->new PhysicalIntentStorageConfirmed(null,receipt,lease,physical.fingerprint(),physical.provenance()));
+        var staleLease=new PhysicalCustodyLease(lease.scopeId(),lease.objectId(),lease.providerId(),lease.authorityEpoch()+1,lease.expectedCanonicalRevision(),lease.expectedReplicaRevision(),lease.status(),lease.unresolvedReason());
+        var stale=new PhysicalIntentStorageConfirmed(intent,receipt,staleLease,physical.fingerprint(),physical.provenance());
+        assertInstanceOf(CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("physical-observation",state,command(state,stale,6002,new Revision(2))));
+        plan = accepted(FrontierWorldProcessCatalog.planCommand("physical-observation", state, command(state, physical, 6002,new Revision(2))));
         state = apply(state, FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("physical-observation", plan.events()), 6002);
+        assertEquals(foreignStorageImage?PhysicalCustodyLeaseStatus.UNRESOLVED:PhysicalCustodyLeaseStatus.RELEASED,
+                state.replicaCustody().custodyByScope().get(lease.scopeId()).status(),"effect and exact storage disposition commit in one command");
+        assertInstanceOf(CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("physical-observation",state,command(state,physical,6003,new Revision(3))));
+        assertEquals(state,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
         assertFalse(GuardAuthority.pending(state, duty)); assertTrue(GuardEquipment.held(state, duty));
         state = apply(state, GuardWorkProcess.progress(state, GuardContinuation.progress(duty.id(), 6003), 6003), 6003);
         assertEquals(GuardDuty.Phase.ON_DUTY, state.strategicPlans().guards().get(duty.id()).phase());
@@ -306,9 +325,10 @@ class GuardDutyTest {
     private static CommandPlan.Accepted accepted(CommandPlan plan) {
         assertInstanceOf(CommandPlan.Accepted.class, plan, plan.toString()); return (CommandPlan.Accepted) plan;
     }
-    private static FrontierCommand command(FrontierWorldState state, FrontierPayload payload, long tick) {
+    private static FrontierCommand command(FrontierWorldState state, FrontierPayload payload, long tick) {return command(state,payload,tick,Revision.ZERO);}
+    private static FrontierCommand command(FrontierWorldState state, FrontierPayload payload, long tick,Revision revision) {
         var id = new CommandId("command:guard-test");
-        return new FrontierCommand(FrontierCommand.SCHEMA_VERSION, id, state.bootstrap().worldId(), Revision.ZERO, new SimInstant(tick),
+        return new FrontierCommand(FrontierCommand.SCHEMA_VERSION, id, state.bootstrap().worldId(), revision, new SimInstant(tick),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload);
     }
     private static FrontierWorldState move(FrontierWorldState state, SubjectId actor, long tick) {

@@ -50,7 +50,7 @@ public final class DiagnosticProducerContract {
             diagnostic("frontier.physical_intent_transition", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.OWNER_STAMPS_TRANSITION));
 
     private static final Set<String> ORDINARY = Set.of(
-        "frontier.ranged_stance_observed", "frontier.ranged_shot_prepared", "frontier.ranged_shot_completed",
+        "frontier.physical_intent_storage_confirmed", "frontier.ranged_stance_observed", "frontier.ranged_shot_prepared", "frontier.ranged_shot_completed",
         "frontier.guard_ammunition_selected", "frontier.guard_ammunition_prepared", "frontier.guard_ammunition_loaded", "frontier.guard_ammunition_cancelled", "frontier.guard_ammunition_aborted",
         "frontier.combat.maneuver_requested", "frontier.combat.maneuver_selected", "frontier.combat.maneuver_launched", "frontier.combat.maneuver_closed",
         "frontier.guard.appointed", "frontier.guard.changed", "frontier.guard.mission_selected",

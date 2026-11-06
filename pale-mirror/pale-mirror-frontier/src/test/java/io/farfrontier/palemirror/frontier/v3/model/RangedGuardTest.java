@@ -19,7 +19,7 @@ class RangedGuardTest {
         var endpoint=ResourceStorageAccess.at(s,FrontierWorldState.depotId(home)).endpoint();
         var id=new SubjectId("guard-duty:ranged-test");var execution=s.actorExecutions().next(actor,ActorActivityKind.GUARD,id);
         var sourceSlot=new InventoryCustody.ContainerSlot(endpoint.containerId(),s.inventory().firstFreeSlot(endpoint.containerId()).orElseThrow());
-        var weapon=new ExactItemStack(new SubjectId("item:test-crossbow"),home,"minecraft:crossbow",1,new InventoryCustody.Actor(actor),new ItemCondition(326,0));
+        var weapon=new ExactItemStack(new SubjectId("item:test-crossbow"),home,"minecraft:crossbow",1,new InventoryCustody.Actor(actor),new ItemCondition(465,0));
         var duty=new GuardDuty(id,home,execution,weapon.id(),endpoint,GuardDuty.Phase.ON_DUTY,1,CombatMethod.CROSSBOW);
         s=ActorExecutionComposition.LIFECYCLE.prepareVacant(s,execution).commit(s,FrontierWorldStateUpdate.begin()
                 .inventory(s.inventory().store(weapon.withCustody(sourceSlot)).moveObservedItem(weapon.id(),sourceSlot,weapon.custody())).strategicPlans(s.strategicPlans().withGuard(duty)));

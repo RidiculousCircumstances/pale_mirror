@@ -46,7 +46,7 @@ class RangedManufactureTest {
         assertTrue(s.productionStations().require(station.id()).operation().isEmpty());
         for(var input:materials.keySet())assertEquals(0,s.inventory().fungibleResources().totalQuantity(record.ownerId(),input),"declared station input consumed");
         if(recipe.outcome() instanceof ProductionRecipeOutcome.Individual){
-            var output=s.inventory().items().get(boundary.exactAfter().orElseThrow().id());assertEquals("minecraft:crossbow",output.itemKind());assertEquals(new ItemCondition(326,0),output.condition());
+            var output=s.inventory().items().get(boundary.exactAfter().orElseThrow().id());assertEquals("minecraft:crossbow",output.itemKind());assertEquals(new ItemCondition(465,0),output.condition());
         }else assertEquals(recipe.product().quantity(),s.inventory().fungibleResources().totalQuantity(record.ownerId(),recipe.product().itemKind()));
         var after=s;assertThrows(RuntimeException.class,()->ProductionStationTransformation.apply(after,station.id(),completed,ProductionOperationCompletionComposition::completed));
         assertEquals(s,codec.decode(codec.encode(s)));

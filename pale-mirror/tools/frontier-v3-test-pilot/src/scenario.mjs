@@ -544,7 +544,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'players', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'forest', 'settlement', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'incident', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
+  return ['summary', 'performance', 'players', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'forest', 'settlement', 'settlement_security', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'incident', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance', 'players', 'projection_work', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 
@@ -601,7 +601,7 @@ function validEntityName(value) {
   return value && Object.keys(value).length === 1 && reference && Object.keys(reference).length === 3
     && validDiagnosticIdentity(reference)
     && ((reference.view === 'actor' && reference.field === 'name' && requiredId(reference.id, 'resident:'))
-      || (reference.view === 'settlement' && ['firstGuardName', 'secondGuardName', 'crossbowName'].includes(reference.field) && requiredId(reference.id, 'settlement:'))
+      || (['settlement','settlement_security'].includes(reference.view) && ['firstGuardName', 'secondGuardName', 'crossbowName'].includes(reference.field) && requiredId(reference.id, 'settlement:'))
       || (reference.view === 'scene' && reference.field === 'primaryActorName')
       || (reference.view === 'site' && reference.field === 'workerPresentation'));
 }
@@ -616,7 +616,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'forest' && requiredId(reference.id, 'settlement:') && ['firstTree', 'workSource'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
-      || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
+      || (['settlement','settlement_security'].includes(reference.view) && requiredId(reference.id, 'settlement:')
         && (['farmAnchor', 'routeSurface', 'firstGuardPosition', 'crossbowPosition', 'layout.firstHousingAnchor'].includes(reference.field)
           || /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.(anchor|entrance|secondaryEntrance|exterior|interior|floor|facadeView)$/.test(reference.field)))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
@@ -639,7 +639,7 @@ function validPlacePosition(value) {
   const reference = value?.diagnostic;
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
-    && ((reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
+    && ((['settlement','settlement_security'].includes(reference.view) && requiredId(reference.id, 'settlement:')
           && /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.floor$/.test(reference.field))
       || (reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionFutureBody')
       || (reference.view === 'site' && requiredId(reference.id, 'site:') && ['firstCrop', 'lastCrop'].includes(reference.field))

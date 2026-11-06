@@ -684,7 +684,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
         return new DeterministicProcessDescriptor(id, commands, schedules, events, emissions, codecs);
     }
 
-    private static Set<String> physicalCommands() { return union(PHYSICAL, types("frontier.physical_inventory_transfers_observed")); }
+    private static Set<String> physicalCommands() { return union(PHYSICAL, types("frontier.physical_inventory_transfers_observed", PhysicalIntentStorageConfirmed.TYPE)); }
     private static Set<String> replicaCustodyCommands() { return REPLICA_CUSTODY; }
     private static Set<String> ambientCommands() { return types(
             "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
@@ -764,7 +764,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
             case "physical-observation" -> union(DefenderEquipmentReturnVisitProcessModule.TYPES, types(
-                    "frontier.reference_mutation_closed", "frontier.reference_mutation_observed",
+                    "frontier.physical_custody_unresolved", "frontier.reference_mutation_closed", "frontier.reference_mutation_observed",
                     "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
                     "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
                     "kernel.reconsideration_requested",

@@ -139,6 +139,7 @@ final class FrontierV3DiagnosticJson {
             case "process_inventory" -> FrontierV3ProcessInventoryDiagnostic.render(id, checkpoint, state);
             case "site" -> site(id, checkpoint, state);
             case "settlement" -> settlement(id, checkpoint, state);
+            case "settlement_security" -> FrontierV3RangedDiagnostic.render(id,checkpoint,state);
             case "forest" -> FrontierV3ForestryDiagnostic.render(id, checkpoint, state);
             case "settlement_management" -> FrontierV3SettlementManagementDiagnostic.render(id, checkpoint, state);
             case "settlement_population" -> settlementPopulation(checkpoint, state, id, java.util.Map.of());
@@ -239,7 +240,6 @@ final class FrontierV3DiagnosticJson {
         json.add("trace", trace);
         return bounded(kind, id, checkpoint, base(kind, id, checkpoint) + "," + json.toString().substring(1));
     }
-
     /** Applies the one operator-response limit to every read-only v3 diagnostic view. */
     static String bounded(String kind, String id, FrontierScheduleView checkpoint, String value) {
         if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {

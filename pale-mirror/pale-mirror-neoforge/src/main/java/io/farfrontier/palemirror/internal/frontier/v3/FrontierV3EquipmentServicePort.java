@@ -13,10 +13,14 @@ import net.minecraft.world.entity.npc.Villager;
 final class FrontierV3EquipmentServicePort {
     private static final double STATION_BODY_RADIUS_SQUARED = 0.5625D;
     private FrontierV3EquipmentServicePort() { }
-    /** Retain the observed whole-storage successor or its isolated conflict before equipment work releases its witness. */
-    static void settleContainerMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3PhysicalContainer physical) {
-        if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, physical.containerId(), physical))
-            throw new IllegalStateException("confirmed equipment transfer could not retain its storage disposition");
+    /** Domain consequence and observed whole-storage disposition share one durable canonical command. */
+    static io.farfrontier.palemirror.frontier.v3.api.CommandResult confirmStorage(FrontierV3ServerRuntime<FrontierWorldState,?> runtime,
+            PhysicalIntent intent,io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation observation,FrontierV3PhysicalContainer physical){
+        var state=runtime.decodedState().orElseThrow();
+        var lease=state.replicaCustody().custodyByScope().get(io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.scopeId(physical.containerId()));
+        var image=FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state,physical.containerId(),physical);
+        var receipt=new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentStorageConfirmed(intent,observation,java.util.Objects.requireNonNull(lease),image.fingerprint(),image.provenance());
+        return FrontierV3CommandSubmission.submitResult(runtime,"equipment-storage-confirm-"+intent.id().value(),intent.causeSubjectId().value(),receipt);
     }
     static boolean ready(FrontierWorldState state, PhysicalIntent intent, Villager resident) {
         return EquipmentServiceBoundary.serviceAvailable(state, intent) && EquipmentServiceBoundary.serviceStation(state, intent)

@@ -19,6 +19,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         return ExactItemDepartureReactions.retiredSchedules(previous, next, pending);
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if(command.payload() instanceof PhysicalIntentStorageConfirmed receipt)return PhysicalIntentStorageConfirmation.plan(state,command,receipt);
         if (command.payload() instanceof PhysicalInventoryTransfersObserved batch)
             return PhysicalInventoryTransfersProcess.plan(state, batch, command);
         if (command.payload() instanceof ContainerPlayerEditObserved edit)

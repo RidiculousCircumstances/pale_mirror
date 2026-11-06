@@ -602,7 +602,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
             state = state.withInventory(state.inventory().moveObservedItem(item.id(), item.custody(),
                     returning ? slot : new InventoryCustody.Actor(actor)));
             var runtime = runtime(world, state);
-            FrontierV3EquipmentServicePort.settleContainerMutation(runtime, physical);
+            helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime,store,physical),"shared storage closure retains its whole-image disposition");
             var closed = runtime.decodedState().orElseThrow();
             var replica = closed.replicaCustody().replicas().get(store);
             helper.assertTrue(replica.state() == PhysicalReplicaState.EXPECTED && !ReferenceContainerCustody.hasLiveCustody(closed, store)
@@ -613,7 +613,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
             // An unrelated real stack is not evidence of the expected equipment result.
             chest.setItem(26, new ItemStack(Items.DIAMOND, 1));
             var mismatched = runtime(world, state);
-            FrontierV3EquipmentServicePort.settleContainerMutation(mismatched, physical);
+            helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(mismatched,store,physical),"foreign slots retain an isolated storage conflict");
             helper.assertTrue(mismatched.decodedState().orElseThrow().replicaCustody().custodyByScope()
                     .get(ReferenceContainerCustody.scopeId(store)).status() == PhysicalCustodyLeaseStatus.UNRESOLVED
                     && chest.getItem(26).is(Items.DIAMOND), "foreign physical contents stay isolated and cannot be adopted or overwritten");

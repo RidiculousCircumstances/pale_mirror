@@ -433,7 +433,7 @@ final class FrontierV3TestPilotScenario {
                 || !reference.get("field").isJsonPrimitive() || !reference.get("field").getAsJsonPrimitive().isString()) return false;
         String view = reference.get("view").getAsString(), field = reference.get("field").getAsString();
         return (view.equals("actor") && field.equals("name") && requiredId(reference, "id", "resident:"))
-                || (view.equals("settlement") && Set.of("firstGuardName","secondGuardName","crossbowName").contains(field) && requiredId(reference, "id", "settlement:"))
+                || ((view.equals("settlement") || view.equals("settlement_security")) && Set.of("firstGuardName","secondGuardName","crossbowName").contains(field) && requiredId(reference, "id", "settlement:"))
                 || (view.equals("scene") && field.equals("primaryActorName"))
                 || (view.equals("site") && field.equals("workerPresentation"));
     }
@@ -483,7 +483,7 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
                 || (view.equals("actor") && (requiredId(reference, "id", "actor:") || requiredId(reference, "id", "resident:"))
                     && diagnosticField.equals("position"))
-                || (view.equals("settlement") && requiredId(reference, "id", "settlement:")
+                || ((view.equals("settlement") || view.equals("settlement_security")) && requiredId(reference, "id", "settlement:")
                 && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface") || diagnosticField.equals("firstGuardPosition") || diagnosticField.equals("crossbowPosition") ||
                         diagnosticField.equals("layout.firstHousingAnchor")
                     || diagnosticField.matches("layout\\.facilities\\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\\.(anchor|entrance|secondaryEntrance|exterior|interior|floor|facadeView)")))

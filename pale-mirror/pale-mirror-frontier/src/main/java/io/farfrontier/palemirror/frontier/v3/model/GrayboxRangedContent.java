@@ -18,7 +18,7 @@ final class GrayboxRangedContent {
                 new ProductionRecipeOutcome.Individual()).withNativeCraftingRecipe(new ProductionRecipe.Id(crossbow)));
         recipes.add(new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:repair_crossbow"), ProductionStationSpec.Capability.FABRICATION,
                 input("mechanism", "minecraft:iron_ingot", 1), new ProductionRecipe.Product(crossbow, 1), true,
-                ProductionRecipe.ProcessingMode.ATTENDED, new ProductionRecipeOutcome.Repair(163)));
+                ProductionRecipe.ProcessingMode.ATTENDED, new ProductionRecipeOutcome.Repair(232)));
         recipes.add(new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:iron_arrowheads"), ProductionStationSpec.Capability.FABRICATION,
                 input("metal", "minecraft:iron_ingot", 1), new ProductionRecipe.Product(head, 8), true, ProductionRecipe.ProcessingMode.ATTENDED));
         recipes.add(new ProductionRecipe(new ProductionRecipe.Id("pale_mirror:cloth_arrows"), ProductionStationSpec.Capability.FABRICATION,
@@ -30,7 +30,7 @@ final class GrayboxRangedContent {
         stock.add(new ProductionCatalog.StockPolicy(new ProductionRecipe.Id("pale_mirror:cloth_arrows"), 0, 32));
         var production = new ProductionCatalog(recipes,base.production().fuels(),base.production().equipment(),base.production().automaticPolicies(),stock);
         var tools = new TreeMap<>(base.tools().definitions());
-        tools.put(crossbow, new ToolDefinition(crossbow,Map.of(GuardEquipment.RANGED_WEAPON,1),326,1000,1));
+        tools.put(crossbow, new ToolDefinition(crossbow,Map.of(GuardEquipment.RANGED_WEAPON,1),465,1000,1));
         var policies = new EnumMap<GoodsPolicyKind,List<GoodsTradeRules.Commodity>>(GoodsPolicyKind.class);
         policies.putAll(base.goodsTrade().policies());
         var goods = new ArrayList<>(policies.get(GoodsPolicyKind.PUBLIC_SETTLEMENT));
