@@ -316,12 +316,16 @@ class FrontierV3ServerRuntimeTest {
         var budget = new WorkBudget(4, 64);
         advanceLogicalTicks(ordinary, 120, budget);
         while (interval.canonicalState().orElseThrow().instant().ticks() < 120) {
-            int remaining = Math.toIntExact(120 - interval.canonicalState().orElseThrow().instant().ticks());
+            int remaining = new FrontierV3FastForwardInterval(120).remainingAt(interval.canonicalState().orElseThrow().instant().ticks());
             interval.advanceColdInterval(remaining, budget).orElseThrow();
             awaitPreparationTurn(interval);
         }
         assertEquals(ordinary.checkpointImage().orElseThrow(), interval.checkpointImage().orElseThrow(),
                 "skipping only empty intervals must preserve exact events, due/backlog order and current state");
+        assertEquals(0, new FrontierV3FastForwardInterval(120).remainingAt(interval.canonicalState().orElseThrow().instant().ticks()));
+        assertDoesNotThrow(() -> new FrontierV3ServerLifecycle.FastForwardTargetOutcome(1, 120, 0L,
+                interval.canonicalState().orElseThrow().instant().ticks(), "HELD", null));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3FastForwardInterval(119).remainingAt(120));
         var expected = interval.checkpointImage().orElseThrow();
         ordinary.shutdown(); interval.shutdown();
         var recovered = FrontierV3ServerRuntime.start(definition,

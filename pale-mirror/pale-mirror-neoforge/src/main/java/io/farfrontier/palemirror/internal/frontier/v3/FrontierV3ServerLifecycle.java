@@ -32,7 +32,7 @@ public final class FrontierV3ServerLifecycle {
     private static final String PILOT_INITIAL_CANONICAL_HOLD_PROPERTY = "pale_mirror.frontier_v3.pilot.initial_canonical_hold";
     private static final Map<MinecraftServer, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection>> RUNTIMES = new IdentityHashMap<>();
     private static final Map<MinecraftServer, Boolean> STOPPING = new IdentityHashMap<>();
-    private static final Map<MinecraftServer, Integer> FAST_FORWARD_REMAINING = new IdentityHashMap<>();
+    private static final Map<MinecraftServer, FrontierV3FastForwardInterval> FAST_FORWARD_QUEUED_TARGETS = new IdentityHashMap<>();
     private static final Map<MinecraftServer, Long> FAST_FORWARD_TARGETS = new IdentityHashMap<>();
     private static final Map<MinecraftServer, String> FAST_FORWARD_FAILURES = new IdentityHashMap<>();
     private static final Map<MinecraftServer, FastForwardTargetOutcome> FAST_FORWARD_OUTCOMES = new IdentityHashMap<>();
@@ -50,7 +50,7 @@ public final class FrontierV3ServerLifecycle {
     private FrontierV3ServerLifecycle() { }
     private static void clearFastForwardState(MinecraftServer server) {
         STOPPING.remove(server);
-        FAST_FORWARD_REMAINING.remove(server);
+        FAST_FORWARD_QUEUED_TARGETS.remove(server);
         FAST_FORWARD_TARGETS.remove(server);
         FAST_FORWARD_FAILURES.remove(server);
         FAST_FORWARD_OUTCOMES.remove(server);
@@ -130,7 +130,7 @@ public final class FrontierV3ServerLifecycle {
                                         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
                                         FrontierScheduleView checkpoint, FrontierWorldState state) {
         return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
-                FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
+                FAST_FORWARD_QUEUED_TARGETS.containsKey(server) ? FAST_FORWARD_QUEUED_TARGETS.get(server).remainingAt(checkpoint.instant().ticks()) : 0, FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
                 FrontierV3PedestrianPlanning.diagnostic(runtime),
                 FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()),
@@ -281,7 +281,7 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(server, "server");
         if (ticks < 1 || ticks > MAX_FAST_FORWARD_TICKS || !ownsPhysicalWorld(server) || stopping(server)) return false;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) {
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || FAST_FORWARD_QUEUED_TARGETS.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) {
             recordFastForwardRequest(server, "RELATIVE", ticks, null, null, null, "REJECTED", "another request is active or runtime is unavailable");
             return false;
         }
@@ -298,15 +298,15 @@ public final class FrontierV3ServerLifecycle {
         // make the next admitted request look rejected in the live performance/status surface.
         FAST_FORWARD_FAILURES.remove(server);
         INITIAL_CANONICAL_HOLDS.remove(server);
-        FAST_FORWARD_REMAINING.put(server, ticks);
         long admitted = runtime.canonicalState().orElseThrow().instant().ticks();
+        FAST_FORWARD_QUEUED_TARGETS.put(server, new FrontierV3FastForwardInterval(Math.addExact(admitted, ticks)));
         recordFastForwardRequest(server, "RELATIVE", ticks, admitted + ticks, admitted, null, "QUEUED", null);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward ticks={}", ticks);
         return true;
     }
     public static boolean requestFastForwardTo(MinecraftServer server, long targetInstant) {
         Objects.requireNonNull(server, "server");
-        if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) {
+        if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_QUEUED_TARGETS.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) {
             rejectFastForwardTarget(server, targetInstant, "another request is active or runtime is unavailable");
             recordFastForwardRequest(server, "ABSOLUTE", 0, targetInstant, null, null, "REJECTED", "another request is active or runtime is unavailable");
             return false;
@@ -332,7 +332,7 @@ public final class FrontierV3ServerLifecycle {
         }
         FAST_FORWARD_FAILURES.remove(server);
         INITIAL_CANONICAL_HOLDS.remove(server);
-        FAST_FORWARD_REMAINING.put(server, delta.getAsInt()); FAST_FORWARD_TARGETS.put(server, targetInstant);
+        FAST_FORWARD_QUEUED_TARGETS.put(server, new FrontierV3FastForwardInterval(targetInstant)); FAST_FORWARD_TARGETS.put(server, targetInstant);
         recordFastForwardTarget(server, targetInstant, admittedCheckpoint, null, "ADVANCING", null);
         recordFastForwardRequest(server, "ABSOLUTE", delta.getAsInt(), targetInstant, admittedCheckpoint, null, "QUEUED", null);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward target={}", targetInstant);
@@ -340,7 +340,7 @@ public final class FrontierV3ServerLifecycle {
     }
     public static boolean releaseFastForwardHold(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
-        if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server)) return false;
+        if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_QUEUED_TARGETS.containsKey(server)) return false;
         Long target = FAST_FORWARD_TARGETS.remove(server);
         FastForwardTargetOutcome prior = FAST_FORWARD_OUTCOMES.get(server);
         Long checkpoint = RUNTIMES.containsKey(server) ? RUNTIMES.get(server).canonicalState().map(image -> image.instant().ticks()).orElse(null) : null;
@@ -364,11 +364,7 @@ public final class FrontierV3ServerLifecycle {
         return true;
     }
     static OptionalInt absoluteFastForwardDelta(long checkpointInstant, long targetInstant) {
-        if (checkpointInstant < 0L || targetInstant <= checkpointInstant) return OptionalInt.empty();
-        long delta;
-        try { delta = Math.subtractExact(targetInstant, checkpointInstant); }
-        catch (ArithmeticException ignored) { return OptionalInt.empty(); }
-        return delta > MAX_FAST_FORWARD_TICKS ? OptionalInt.empty() : OptionalInt.of((int) delta);
+        return FrontierV3FastForwardInterval.admittedDelta(checkpointInstant, targetInstant, MAX_FAST_FORWARD_TICKS);
     }
     static boolean runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(boolean initialHold,
                                                                           boolean absoluteTargetPresent,
@@ -378,7 +374,7 @@ public final class FrontierV3ServerLifecycle {
     static boolean advancesOnlyQueuedCanonicalTime(boolean fastForwardRemaining) { return fastForwardRemaining; }
     private static boolean ordinaryTime(MinecraftServer server) {
         return !INITIAL_CANONICAL_HOLDS.containsKey(server) && !FAST_FORWARD_TARGETS.containsKey(server)
-                && !FAST_FORWARD_REMAINING.containsKey(server);
+                && !FAST_FORWARD_QUEUED_TARGETS.containsKey(server);
     }
     public static void tick(MinecraftServer server) {
         if (stopping(server)) return;
@@ -399,7 +395,7 @@ public final class FrontierV3ServerLifecycle {
                 if (active && !FrontierV3PedestrianPlanning.recovered(runtime)) return null;
                 boolean initialHold = INITIAL_CANONICAL_HOLDS.containsKey(server);
                 boolean absoluteTargetPresent = FAST_FORWARD_TARGETS.containsKey(server);
-                boolean fastForwardRemaining = FAST_FORWARD_REMAINING.containsKey(server);
+                boolean fastForwardRemaining = FAST_FORWARD_QUEUED_TARGETS.containsKey(server);
                 if (active && runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(initialHold, absoluteTargetPresent, fastForwardRemaining)) {
                     FrontierV3PhysicalTurn.observeAndRun(FrontierV3PhysicalWorld.require(server), runtime);
                 } else if (active && advancesOnlyQueuedCanonicalTime(fastForwardRemaining)) {
@@ -498,7 +494,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3NativeActorOwnership.retain(server, runtime);
         RUNTIMES.remove(server, runtime);
         releaseRuntime(runtime);
-        FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
+        FAST_FORWARD_QUEUED_TARGETS.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
         FAST_FORWARD_OUTCOMES.remove(server); FAST_FORWARD_SLICE_TELEMETRY.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
     }
     static void releaseRuntime(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -520,9 +516,10 @@ public final class FrontierV3ServerLifecycle {
         long sliceStarted = System.nanoTime();
         long safetyNanos = 0L;
         long advanceNanos = 0L;
-        Integer remaining = FAST_FORWARD_REMAINING.get(server);
+        var intervalTarget = FAST_FORWARD_QUEUED_TARGETS.get(server);
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
-        if (remaining == null) return;
+        if (intervalTarget == null) return;
+        int remaining = intervalTarget.remainingAt(runtime.canonicalState().orElseThrow().instant().ticks());
         long safetyStarted = System.nanoTime();
         boolean physicalStepRequired = requiresPhysicalStep(physicalWorld, runtime);
         safetyNanos += elapsedNanos(safetyStarted);
@@ -532,13 +529,13 @@ public final class FrontierV3ServerLifecycle {
             safetyNanos += elapsedNanos(safetyStarted);
             Long target = FAST_FORWARD_TARGETS.remove(server);
             if (target != null) {
-                FAST_FORWARD_REMAINING.remove(server);
+                FAST_FORWARD_QUEUED_TARGETS.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending before the absolute target: " + physicalBlocker);
                 recordFastForwardTarget(server, target, null, null, "REJECTED", FAST_FORWARD_FAILURES.get(server));
                 updateFastForwardRequest(server, "ABSOLUTE", runtime.canonicalState().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected absolute fast-forward target because physical work became pending: {}", physicalBlocker);
             } else {
-                FAST_FORWARD_REMAINING.remove(server);
+                FAST_FORWARD_QUEUED_TARGETS.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending during the relative interval: " + physicalBlocker);
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected relative fast-forward because physical work became pending: {}", physicalBlocker);
                 updateFastForwardRequest(server, "RELATIVE", runtime.canonicalState().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
@@ -554,22 +551,25 @@ public final class FrontierV3ServerLifecycle {
             if (physicalStepRequired) break;
             long advanceStarted = System.nanoTime();
             long before = runtime.canonicalState().orElseThrow().instant().ticks();
-            var result = runtime.advanceColdInterval(allowed - advanced, FrontierV3RuntimeBudgets.fastForwardTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
+            int untilTarget = intervalTarget.remainingAt(before);
+            if (untilTarget == 0) break;
+            var result = runtime.advanceColdInterval(Math.min(allowed - advanced, untilTarget),
+                    FrontierV3RuntimeBudgets.fastForwardTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
             advanceNanos += elapsedNanos(advanceStarted);
             if (result.isEmpty()) break;
             advanced += Math.toIntExact(result.orElseThrow().instant().ticks() - before); steps++;
             if (!fastForwardSliceTimeRemaining(elapsedNanos(sliceStarted))) break;
         }
-        int next = remaining - advanced;
+        int next = intervalTarget.remainingAt(runtime.canonicalState().orElseThrow().instant().ticks());
         if (next <= 0) {
-            FAST_FORWARD_REMAINING.remove(server);
+            FAST_FORWARD_QUEUED_TARGETS.remove(server);
             Long target = FAST_FORWARD_TARGETS.get(server);
             if (target != null) recordFastForwardTarget(server, target, null, runtime.canonicalState().orElseThrow().instant().ticks(), "HELD", null);
             long reached = runtime.canonicalState().orElseThrow().instant().ticks();
             updateFastForwardRequest(server, target == null ? "RELATIVE" : "ABSOLUTE", reached,
                     target == null ? "COMPLETED" : "HELD", null);
             PaleMirrorMod.LOGGER.info("Frontier v3 completed operator fast-forward{}", FAST_FORWARD_TARGETS.containsKey(server) ? " at held absolute target" : "");
-        } else FAST_FORWARD_REMAINING.put(server, next);
+        }
         recordFastForwardSlice(server, sliceStarted, safetyNanos, advanceNanos, advanced);
     }
     private static boolean requiresPhysicalStep(ServerLevel physicalWorld,
