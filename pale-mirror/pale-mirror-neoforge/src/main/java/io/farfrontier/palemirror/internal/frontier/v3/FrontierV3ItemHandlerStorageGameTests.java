@@ -21,6 +21,20 @@ public final class FrontierV3ItemHandlerStorageGameTests {
         public StorageBlockKind frontierV3$storageKind() { return StorageBlockKind.BARREL; }
     }
     @GameTest(batch="pm-frontier-v3-container-socket",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
+    public static void referenceDiscoveryCannotSelectAFixedProvidersUnfinishedBirth(GameTestHelper helper) {
+        var id=new io.farfrontier.palemirror.frontier.v3.api.SubjectId("container:discovery-birth");
+        var p=new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(1,1,1);
+        for(var status:java.util.List.of(io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.UNMATERIALIZED,
+                io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.PREPARED,
+                io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ADOPTING))
+            helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.readyForReferenceDiscovery(
+                    new io.farfrontier.palemirror.frontier.v3.model.ContainerSurface(id,p,status)),"unfinished fixed birth cannot monopolize observation priority");
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.readyForReferenceDiscovery(
+                new io.farfrontier.palemirror.frontier.v3.model.ContainerSurface(id,p,
+                        io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ACTIVE)),"active inventory can reconcile");
+        helper.succeed();
+    }
+    @GameTest(batch="pm-frontier-v3-container-socket",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
     public static void installedRackExposesItsRealInventoryAndNativeMenu(GameTestHelper helper) {
         var at=helper.absolutePos(new BlockPos(1,1,1));var level=helper.getLevel();
         var block=net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse("minecolonies:blockminecoloniesrack"));

@@ -746,9 +746,16 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (absent.isEmpty()) ABSENT_SINCE_TICK.remove(level);
     }
 
+    /** Fixed birth/adoption belongs to its lifecycle owner, not an inventory-observation turn. */
+    static boolean readyForReferenceDiscovery(ContainerSurface surface) {
+        if (surface.status() == ContainerSurfaceStatus.RETIRED) return false;
+        return !surface.fixed() || surface.status() == ContainerSurfaceStatus.ACTIVE
+                || surface.status() == ContainerSurfaceStatus.CONFLICT;
+    }
+
     static List<ContainerSurface> eligibleReferenceSurfaces(FrontierWorldState state, List<ContainerSurface> loaded) {
         return loaded.stream().filter(surface -> ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
-                .filter(surface -> surface.status() != ContainerSurfaceStatus.RETIRED)
+                .filter(FrontierV3ReferenceContainerCustodyExecutor::readyForReferenceDiscovery)
                 // Preserve the discovery window's cyclic order. Sorting here would
                 // repeatedly put low IDs before the tail when that window wraps.
                 // Ordinary released conflicts remain isolated. A retained pending-write
