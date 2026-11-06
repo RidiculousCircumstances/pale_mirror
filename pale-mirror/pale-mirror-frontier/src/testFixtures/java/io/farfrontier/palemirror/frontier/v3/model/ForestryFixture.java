@@ -16,14 +16,19 @@ final class ForestryFixture {
         var container = state.inventory().containers().values().stream().filter(record -> record.ownerId().equals(home)
                 && record.storage().filter(policy -> policy.filter().allItems()).isPresent())
                 .sorted(Comparator.comparing(ContainerRecord::id)).findFirst().orElseThrow();
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, container.id()).orElseThrow().id();
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, container.id()).map(CustodyAccount::id)
+                .orElseGet(() -> ReferenceContainerCustody.scopeId(container.id()));
         var resources = state.inventory().fungibleResources();
         for (var entry : new TreeMap<>(Map.of("minecraft:oak_log", 190, "minecraft:bread", 128)).entrySet()) {
             String key = entry.getKey().substring("minecraft:".length());
             var lot = new SubjectId("lot:forestry-initial-" + key); var staging = new SubjectId("custody:forestry-initial-" + key);
             resources = resources.issue(new ResourceLot(lot, home, entry.getKey(), entry.getValue(), "fixture:forestry-initial-inputs", List.of()),
                     new CustodyAccount(staging, new ResourceCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000264")),
-                            Map.of(lot, entry.getValue()), Map.of())).transfer(staging, account, Map.of(lot, entry.getValue()), Map.of());
+                            Map.of(lot, entry.getValue()), Map.of()));
+            resources = resources.accounts().containsKey(account)
+                    ? resources.transfer(staging, account, Map.of(lot, entry.getValue()), Map.of())
+                    : resources.transferToNewAccount(staging, new CustodyAccount(account,
+                            new ResourceCustody.Container(container.id()), Map.of(lot, entry.getValue()), Map.of()));
         }
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         return copy(base, state);
