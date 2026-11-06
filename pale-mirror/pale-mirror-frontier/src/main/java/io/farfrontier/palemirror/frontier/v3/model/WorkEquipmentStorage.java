@@ -5,6 +5,15 @@ import java.util.*;
 
 /** Exact equipment shares storage policy and navigation, but requires a whole free item slot. */
 public final class WorkEquipmentStorage {
+    /** Exact source custody and storage ownership are shared by selection and HOT/COLD issue. */
+    public static boolean sourceAvailable(FrontierWorldState state, ExactItemStack item,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId container) {
+        return item != null && item.equals(state.inventory().items().get(item.id()))
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(container)
+                && ResourceStorageSelection.permitsWithdrawal(state.inventory(), container, item.economicOwnerId(),
+                    Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER))
+                && !ReferenceContainerCustody.blocksCanonicalUse(state, container);
+    }
     public static boolean available(FrontierWorldState state, ExactItemStack item, ShipmentEndpoint endpoint) {
         var record = state.inventory().containers().get(endpoint.containerId());
         return record != null && record.storage().filter(policy -> policy.endpoint().equals(endpoint)).isPresent()

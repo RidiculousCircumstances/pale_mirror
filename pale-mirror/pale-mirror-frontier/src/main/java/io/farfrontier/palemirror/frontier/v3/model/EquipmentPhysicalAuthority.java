@@ -32,10 +32,12 @@ public final class EquipmentPhysicalAuthority {
                 .anyMatch(intent -> container(intent).equals(container) && (intent.status() == PhysicalIntentStatus.RUNNING
                         || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART));
     }
-    public static void requireWarehouse(FrontierWorldState state, PhysicalIntent intent, ExactItemStack item) {
+    public static void requireStorage(FrontierWorldState state, PhysicalIntent intent, ExactItemStack item) {
         var source = container(intent);
-        if (!ResourceStorageSelection.permits(state.inventory(), source, item.economicOwnerId(), item.itemKind(), Set.of(ResourceStorageRole.WAREHOUSE)))
-            throw new IllegalArgumentException("equipment container lacks its owned warehouse/filter declaration");
+        boolean permitted = intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
+                ? WorkEquipmentStorage.sourceAvailable(state, item, source)
+                : ResourceStorageSelection.permits(state.inventory(), source, item.economicOwnerId(), item.itemKind(), Set.of(ResourceStorageRole.WAREHOUSE));
+        if (!permitted) throw new IllegalArgumentException("equipment lacks its exact owned source or admitted return storage");
         if (!ReferenceContainerCustody.isReferenceContainer(state, source) || ReferenceContainerCustody.blocksCanonicalUse(state, source))
             throw new IllegalArgumentException("equipment container has unavailable declared custody");
         ResourceStorageAccess.at(state, source);

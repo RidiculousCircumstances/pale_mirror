@@ -43,8 +43,7 @@ public final class WorkEquipmentSelection {
             EquipmentRequirements requirements, Set<SubjectId> unavailable) {
         if (item == null || !item.equals(state.inventory().items().get(item.id())) || !item.economicOwnerId().equals(owner)
                 || unavailable.contains(item.id()) || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
-                || ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())
-                || state.inventory().containers().get(slot.containerId()).storage().isEmpty()) return false;
+                || !WorkEquipmentStorage.sourceAvailable(state, item, slot.containerId())) return false;
         return requirements.serviceable(state.bootstrap().ruleset().tools(), item);
     }
     private static ShipmentEndpoint endpoint(FrontierWorldState state, ExactItemStack item) {

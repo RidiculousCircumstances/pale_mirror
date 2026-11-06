@@ -185,6 +185,16 @@ class GuardDutyTest {
         var slot = new InventoryCustody.ContainerSlot(previous.source().containerId(), state.inventory().firstFreeSlot(previous.source().containerId()).orElseThrow());
         state = state.withInventory(state.inventory().moveObservedItem(item.id(), item.custody(), slot));
         var duty = previous.acquiring(item.id(), previous.source());
+        // A player's sword in a bread-only store is existing stock, not a new deposit admission.
+        var inventory = state.inventory(); var container = inventory.containers().get(slot.containerId());
+        var policy = container.storage().orElseThrow();
+        var breadOnly = new ResourceStoragePolicy(policy.endpoint(), new ResourceStorageFilter(false,
+                Set.of(FoodCatalog.BREAD), Map.of()), policy.priority(), policy.role());
+        state = state.withInventory(new ExactInventory(ImmutableLookupMap.withEntry(inventory.containers(), container.id(),
+                container.withStorage(breadOnly)), inventory.items(), inventory.cargo(), inventory.playerItems(),
+                inventory.worldCarrierItems(), inventory.conflicts(), inventory.surfaces(), inventory.economics(), inventory.fungibleResources()));
+        assertTrue(WorkEquipmentStorage.sourceAvailable(state, state.inventory().items().get(item.id()), slot.containerId()));
+        assertFalse(WorkEquipmentStorage.available(state, item, duty.source()), "the return must still respect receiving filters");
         state = state.withStrategicPlans(state.strategicPlans().withGuard(duty));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(ImmutableLookupMap.withEntry(state.actorLocations(), actor,
                 state.actorLocations().get(actor).withBody(duty.source().station().standingBody()))));

@@ -62,6 +62,16 @@ public final class ResourceStorageSelection {
         ResourceStoragePolicy policy = record.storage().orElse(null);
         return policy != null && roles.contains(policy.role()) && policy.filter().accepts(itemKind);
     }
+    /** Withdrawal uses actual owned stock; a receiving filter cannot invalidate stock already stored by a player. */
+    public static boolean permitsWithdrawal(ExactInventory inventory, SubjectId containerId, SubjectId owner,
+            Set<ResourceStorageRole> roles) {
+        Objects.requireNonNull(inventory); Objects.requireNonNull(containerId); Objects.requireNonNull(owner);
+        roles = Set.copyOf(Objects.requireNonNull(roles));
+        if (roles.isEmpty()) throw new IllegalArgumentException("storage withdrawal must declare its permitted tiers");
+        var record = inventory.containers().get(containerId);
+        return record != null && record.ownerId().equals(owner)
+                && record.storage().map(ResourceStoragePolicy::role).filter(roles::contains).isPresent();
+    }
     /** Exact resources share warehouse policy/custody; slot numbering is not source selection. */
     public static List<ExactItemStack> exactSources(FrontierWorldState state, SubjectId owner, String itemKind,
             int minimum, SurfaceAnchor origin, Set<ResourceStorageRole> roles) {

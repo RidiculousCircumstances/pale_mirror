@@ -39,12 +39,11 @@ public final class FieldEquipment {
         var item = state.inventory().items().get(job.equipment().itemId());
         var container = state.inventory().containers().get(endpoint.containerId());
         if (item == null || container == null || ReferenceContainerCustody.blocksCanonicalUse(state, container.id())
-                || container.storage().filter(policy -> !policy.filter().accepts(item.itemKind())).isPresent()
                 || ContainerPhysicalAuthorityComposition.pending(state, container.id())) return false;
         return job.equipment().stage() == WorkToolAssignment.Stage.ACQUIRING
-                ? item.custody() instanceof InventoryCustody.ContainerSlot stored && stored.containerId().equals(container.id())
+                ? WorkEquipmentStorage.sourceAvailable(state, item, container.id())
                     && requirements(state.resourceSite(job.siteId()).kind()).serviceable(state.bootstrap().ruleset().tools(), item)
-                : ContainerStorageAdmission.first(state, container.id(), Optional.empty(), slot -> false).isPresent();
+                : WorkEquipmentStorage.available(state, item, endpoint);
     }
     public static Optional<ToolRequirement> requirement(ResourceSiteKind kind, ResourceFieldCycle cycle, ResourceFieldLayout.CellId cell) {
         return switch (cycle.expectedWorkOutcome(cell)) {

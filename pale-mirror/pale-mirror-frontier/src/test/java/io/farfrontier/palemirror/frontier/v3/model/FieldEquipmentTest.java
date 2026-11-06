@@ -9,6 +9,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FieldEquipmentTest {
+    @Test void acquisitionUsesExistingStockDespiteReceivingFilterButRejectsForeignOrMissingCustody() {
+        var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
+        var job = fixture.job(); var before = fixture.state();
+        var item = before.inventory().items().get(job.equipment().itemId());
+        var container = before.inventory().containers().get(job.equipment().source().containerId());
+        var policy = container.storage().orElseThrow();
+        var filtered = new ResourceStoragePolicy(policy.endpoint(), ResourceStorageFilter.all().excluding(Set.of(item.itemKind())),
+                policy.priority(), policy.role());
+        var inventory = before.inventory();
+        var state = before.withInventory(new ExactInventory(ImmutableLookupMap.withEntry(inventory.containers(), container.id(),
+                container.withStorage(filtered)), inventory.items(), inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(),
+                inventory.conflicts(), inventory.surfaces(), inventory.economics(), inventory.fungibleResources()));
+        assertTrue(WorkEquipmentSelection.available(state, item.economicOwnerId(), item,
+                FieldEquipment.requirements(ResourceSiteKind.WHEAT_FIELD), Set.of()));
+        assertTrue(FieldEquipment.transferAvailable(state, job));
+        assertFalse(WorkEquipmentStorage.available(state, item, policy.endpoint()));
+        var other = state.bootstrap().settlements().stream().filter(home -> !home.id().equals(item.economicOwnerId())).findFirst().orElseThrow().id();
+        var foreign = state.withInventory(state.inventory().transferItemTitle(item, other));
+        assertFalse(WorkEquipmentStorage.sourceAvailable(foreign, foreign.inventory().items().get(item.id()), container.id()));
+        var moved = state.withInventory(state.inventory().moveObservedItem(item.id(), item.custody(), new InventoryCustody.Player(new java.util.UUID(29, 4))));
+        assertFalse(WorkEquipmentStorage.sourceAvailable(moved, moved.inventory().items().get(item.id()), container.id()));
+        var conflict = state.withInventory(state.inventory().withSurfaceStatus(container.id(), ContainerSurfaceStatus.CONFLICT));
+        assertFalse(WorkEquipmentStorage.sourceAvailable(conflict, item, container.id()));
+    }
+
     @Test void ownerItemReadsFollowWearTitleRemovalAndIndependentInventoryBranches() {
         var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
         var inventory = fixture.state().inventory();

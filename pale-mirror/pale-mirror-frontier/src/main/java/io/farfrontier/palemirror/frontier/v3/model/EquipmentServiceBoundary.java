@@ -15,7 +15,7 @@ public final class EquipmentServiceBoundary {
         var actor = state.actorLocations().get(capability(intent).actorId(intent));
         if (actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("new equipment effect requires a living actor");
-        EquipmentPhysicalAuthority.requireWarehouse(state, intent,
+        EquipmentPhysicalAuthority.requireStorage(state, intent,
                 state.inventory().items().get(intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT)));
         capability(intent).validate().accept(state, intent);
     }
