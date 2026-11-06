@@ -99,3 +99,74 @@ remains narrowly reusable. Actual hostile infirmary-door guard pursuit is still 
 checked. Older broad long24k/mixed-trip/expedition simulations were interrupted,
 not green; no full-suite success claim or need to rerun unrelated long campaigns.
 The task plan retains receipt details and intentionally deferred scope.
+
+## Latest diagnosis — kitchen damage after aborted hit
+
+User requested inspection/explanation, no code repair performed. Live still1af1feca7.
+At07:22:05 revision916406 kitchen1 floor(-1458,63,-1315) and07:22:06 revision916577
+wall(-1459,64,-1313) became PLAYER/KNOWN_SEMANTIC_LOSS. Read-only live execute-if-block
+confirmed original spruce_planks floor and domum_ornamentum:double_crossed wall both
+still present; native wall textureData also intact. Exact source contradiction:
+FrontierV3PlayerActionMixin HEAD(START_DESTROY_BLOCK) calls observePlayerBreakPacket;
+GrayboxExecutor.observeBlockBreak immediately commits PhysicalDeltaObserved while
+preparePhysicalDelta requires the original block STILL present. Domain reduction
+marks structure DAMAGED on first cell. Post-Vanilla/ABORT/STOP outcome callback only
+reconciles ResourceFieldPlayerBreakExecutor, not structural loss. Thus an aborted
+survival hit permanently records a false loss. Same generic graybox path includes
+other authored structures/routes; not a kitchen-only bug. Admission intent and
+confirmed physical aftermath must be separate, with abort/no-change closing intent
+without damage and real break admitted durably then confirmed exactly once.
+Current kitchen has1589 authored cells; destroy thresholdceil(n/3)=530; any first
+cell marksDAMAGED. Dining permits DAMAGED (excludesDESTROYED), station installation
+eligibility elsewhere requiresINTACT. Damage persists; ordinary hit abort does not
+repair/reconcile the structural record. Existing structural repair is a separate
+material-backed path, not an automatic status reset. Logs/read facts in ignored
+IMPL build/kitchen-damage and live latest.log; source/PACK unchanged, no new deploy.
+
+
+## Current request — accepted integrity design and hall fidelity diagnosis
+
+User agreed and requested documentation of admission/result separation, exact cell
+integrity plus independent functional availability, physical alternate access even
+when a marked passage is damaged, and future resident repair using resources/shared
+execution. Saved in docs/frontier-v3-structural-integrity-and-repair-20261106.md;
+architecture target explicitly AGREED_NOT_IMPLEMENTED. No product repair requested
+in this turn; do not silently claim the START_DESTROY defect fixed.
+
+Import audit sourceclean1af1feca7/live samebuild: hall spec explicitly selects
+fundamentals/townhall2.blueprint, SHA2560de7053c7498f39e25611266f1a70db4b34be49eb82c73abe043c063cc469ed6,
+pinned MineColonies a9b03edfbbd5359b148c85284ea038066d689866. Regeneration into ignored
+build/hall-import-audit matched all4 tracked imported outputs byte-for-byte. Exact
+original comparison:978architecturalblocks retained unchanged;1sprucefence removed
+at source(1,5,7) for entrance; no material replacements. Sourcelevel2 has979realblocks
+and topY15. Pinned sourcelevel5 downloaded readonly:2481realblocks/topY28, stone-brick
+walls/tower. Gallery publisher FAQ explicitly shows maximumlevel; its regular
+TownHall bounds15x29x22 match thislevel5 family. Main disparity is chosen level2,
+not current palette conversion. Historical dae577e04 did substitute Domum decorative
+blocks/roof/racks with vanilla; removed d09b40034, but level2 asset choice remained.
+Other services also select level2, so gallery mismatch is broader than the hall.
+Native audit completed via checked-in live-hall-import-fidelity.json, run
+1f765951-8938-4eee-95cb-cb7eae8f169c,5actions/statusok, fullpack20FPS privateclient.
+Both current street/overview frames were opened: low wooden level2 hall, original
+Domum white timber panels present, substantial stone lowerwork below street datum.
+Gallery front JPG was also opened and shows the developed stone/timber tower.
+Actual placement export hall_import_audit:anchor(-1468,63,-1360),WEST,
+sha baaf1ee15b7f5e4642b111ca578f8c6d50aa94d9f8f8e04950b467b8ceb02f74.
+Local entrance supportY4 becomes worldY63; source outdoor dirt_pathY3 becomesY62,
+below normal streetY63. Ground datum and entry datum must be reviewed independently;
+source block equality alone is not visual placement acceptance. Scoped settled hall
+ingress audit98checks/0pending/0unverified/0mismatch passed; not a whole-building scan.
+
+Initial server-as-client-source failed correctly because EMF/ETFclientmods absent;
+actual railway-client updated through ordinary root installer. Old all-buildings
+fixture failed because settlement:1 now returns response_limit, NOT an established
+layoutrevision mismatch. Separate scoped visual carrier uses exported exact hall
+placement and summary diagnostics, no world mutation or weakened product outcome.
+Response-limit is a newly observed diagnostic defect, not investigated/fixed here.
+Nativeclient/Xvfb closed, no humanaccount edit or serverreset. IMPL docs/test-only
+commit e4ec16b87 adds the exact hall carrier and corrects stale importer README
+claims (old substitutes/no dependencies/no typedvisualNBT). Source otherwiseclean;
+RELEASE/live remain1af1feca7, productblocks/code unchanged. PACK98a6701 unchanged,
+baselineuntrackedpreserved. Guardrails+56Nodeparsercases passed. Finish scoped GOV
+commit for ledger/design/new AGREED_NOT_IMPLEMENTED architecturetarget; preserve
+unrelated WIP. No push/newgoal/subagents or redeploy for docs-only changes.
