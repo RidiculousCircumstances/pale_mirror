@@ -1,135 +1,129 @@
 # Active continuity — 2026-11-06
 
-## Assignment and outcome
+## Assignment and authority
 
-Main alone; no subagents, new goal or push. User authorized the connected repair:
-confirmed block damage vs attempted hits; reusable integrity/function separation;
-Northwatch feeding/access; town-hall doors; terrain-aware placement; faithful native
-imports and actual client review. Implementation and disposable deployment are now
-complete. Autonomous resident repair/construction remains deferred; repair-ready
-contracts are implemented. No human M3 or whole-repository green claim.
+Main alone; no subagents, new goal or push. User authorized completing the connected
+repair of door flicker/paired leaves, missing original porches, hunger with available
+bread and stationary MOVING reports. Code was committed and deployed. Native
+verification is complete for the bounded cases below; no human M3 or whole-repository
+green claim. Wait for further user steering; do not start a new feature unrequested.
 
-Canonical task plans and evidence:
+Current canonical plans:
 - docs/frontier-v3-structural-integrity-and-repair-20261106.md
 - docs/frontier-v3-placement-and-northwatch-food-20261106.md
-- docs/archive/continuity-20261106-structural-wip-start.md (initial state)
+Historical diagnosis/receipts preserved in docs/archive/continuity-20261106-doors-meals-before-final-report.md.
+Canonical AGENTS/protocol remain authority; retain source/pack/GOV histories and WIP.
 
-## Repositories / delivery identity
+## Repositories and delivery
 
-IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror; Git root parent;
-branch feat/baker-carry-orders-20260926. HEAD6a343e01146f2db19ecd8a70c10618000537ad4a,
-clean. Main implementation d2369cdf2, later semantic/test closure and final site fix
-included in HEAD. RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror clean,
-detached at that same exact commit. Only verified detached artifacts were published.
-PACK /home/rd/proj/minecraft HEAD98a6701: tracked unchanged,170index files valid;
-unrelated untracked .f0v-baseline/ preserved. GOV /home/rd/proj/pm-governance has
-extensive unrelated WIP: stage/commit only owned task plans, ledger, initial archive
-and the two owned architecture boundary lines. Do not absorb other changes.
+IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
+branch feat/baker-carry-orders-20260926, clean HEAD
+a609bb030b09c84ab029358c87487ec12b7a7e32. Connected fixes include4b07a61c8,
+prior d2d0699f9 and9aff7b582. RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror,
+clean detached at the exact same a609 commit; only that verified JAR is installed.
+PACK /home/rd/proj/minecraft HEAD98a6701: tracked clean,170indexed files valid,
+unrelated untracked .f0v-baseline/ retained. GOV /home/rd/proj/pm-governance has extensive
+unrelated WIP. Commit only the two owned task plans, compact ledger and exact owned
+archive as appropriate; no wholesale staging or unrelated architecture edits.
 
-LIVE /home/rd/far-frontier-server; far-frontier-v3-live.service. Final world
-buildings-schema342-site2-seed139-20261106, seed139, frontier-v3-textiles-terrain-r32,
-schema342/graybox ledger7/Network7. Wrapper2559129, native Java2559153, TCP25565;
-start notBefore1793956640, invocation61b2050bc0254c44b8adb526b7546a38.
+LIVE /home/rd/far-frontier-server; far-frontier-v3-live.service; wrapper3316541,
+port25565; invocation16b704e1f5704fc290b9c8fd180470e1; notBefore1793965270.
+World buildings-packet-dining-seed139-20261106,seed139,frontier-v3-textiles-terrain-r32,
+schema342/graybox ledger7/Network7. A fresh world was selected when4b07 added a typed
+meal event and changed descriptor inventory. A609 resumed that SAME world. All
+prior native servers saved every dimension and exited before installs. Diagnostic
+older d2/6a worlds retained for identified evidence, not overwritten or migrated.
 Core SHA512:
-b3e8e8df57b20df8042fc9cbaf62718642ed36774968df6b83a0a2293723f9b3b1d66f7d83758100ecf827fb43d57150d9510c6130577f5b0c13648e01f00ec7
+f4bace11724477940e48a8c5f5efa045cc26f18d57ea884fa36eac66adf311df1f86b352cb85e593c8f6f2fa4bc41222c31169241c8c295668ddb498ae823f50
 Visuals unchanged, SHA512:
 2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601
 
-Both prior worlds were stopped through authenticated native RCON; all dimensions
-saved and native JVM/port exited before install. Final preflight and deploy verification
-passed. No previous world was silently recovered under new content. Latest after-client
-summary at tick4912/revision5684: ok/green retained-conflict scope,12settlements,
-319residents,0inventory/scene/required/replica conflicts. This is a bounded check,
-not proof of continuous economic solvency or every actor's progress.
+Native tick rate RESTORED20, no sprint, no queued fast-forward. All task pilot/native
+test clients and isolated server JVMs CLOSED; none left idle. Live server remains up.
+Final snapshot52748: NORMAL,21nourished,2hungry/2active new meals,92bread/90available;
+0starving. This is a progressing next demand cycle, not a claim of perpetual zero
+hunger. Summary52744: ok,0required/inventory/scene conflicts. Final deploy verifyPASS
+in IMPL build/doors-porches-followup/public-waiting-deploy-verify.log. Native query
+reports normal20TPS; its post-client0.2ms average is COLD, not a HOT performance claim.
 
-Build Java21: /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2.
-Live Java22: /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
-RCON helper: IMPL build/forestry-native/query-runtime.mjs; do not print secrets.
-All task native test/pilot clients are closed; full-pack client was limited to20FPS.
-The live service remains running. Do not leave a graphical client idle between checks.
+## Root causes and ownership
 
-## Root causes and implemented ownership
+Door flicker: actual Minecraft ServerGamePacketListenerImpl.handleUseItemOn
+acknowledges prediction and sends block corrections outside the game-mode call.
+Deferring only ServerPlayerGameMode.useItemOn exposed old closed state between
+predicted open and admitted open. The isolated PlayerUsePacket adapter now defers
+the WHOLE native packet before ack/correction; cancellation reconciles exact planned
+writes and cumulative ack once. Native events, validation and WAL durability remain
+owners. Client pilot observes actual property transitions through acknowledgement.
+Paired native plans retain matching leaves/vertical halves, reject unrelated doors.
+Prior d2 fixed dependent geometry WRITE_PENDING fence oscillation (same dependencies
+for direct and dependent cells);9aff stopped importer headroom carving that deleted
+original porch stairs and added connected stair-edge geometry fallback.
 
-Old Northwatch had23residents/15hungry despite77unclaimed usable pantry bread.
-START_DESTROY incorrectly recorded losses for two unchanged kitchen cells; these
-semantic losses also masked collision as UNKNOWN. Removing only those two false
-facts in an offline discriminator recovered the exact10-anchor pantry exit.
-Roof-heavy actor-hash candidate ordering amplified waits; some guard holds were
-independent. The old full diagnostic is in the placement plan, not a universal
-claim that every hungry actor had one cause.
+Hunger: storage buffers were centred on interior pantry and hashed across roofs;
+shared waiting ignored existing FacilityPedestrianContacts.noParking and used service
+permissions for applicants. Providers now supply declared exterior, public waiting
+knowledge and no-parking policy to ONE common cache/selector. Existing bounded
+ReachableSurfaceArea proves connected candidates; cache checks both knowledge
+versions. Egress retains service geometry. No pantry-specific routing or whole-building
+box exclusion (authentic courtyards are inside source fabric boxes).
 
-StructureIntegrity alone projects exact lost/restored cells and repair evidence
-(ABSENT/REPLACED/UNKNOWN). StructureCellObserved carries the precise owner/part,
-actual collision and original-material result atomically. Native-equivalent visual
-serialization and operating properties are not material damage. FacilityFunctionAvailability
-consumes owner-declared requirements; ProductionFacilityAvailability owns exact
-job/station/workplace relationships. Navigation owns physical access; UNKNOWN stays
-a wait. Exact bed head/foot facts determine capacity; farmhouse damage does not own
-crop biology. Surviving authored fabric remains real despite aggregate DESTROYED,
-including the shared infection-contact geometry index.
+Eater1-10 drifted outside dining after HOT arrival; subsequent COLD CONSUME caused d2
+quarantine at33420/revision74094 and normal server stop. Meal owner now emits typed
+DiningRequired, retains portion/claim, resumes dining navigation. Pending HOT consume
+keeps its fence, may regain only its declared dining area, and rechecks actual supported
+pose before spending food. No suppressed invariant, fabricated consumption or retake.
+Resident1-1 PREPARED birth was physically obstructed by a chest outside service zones,
+proven using exact old snapshot/d2 decoder. Eligible service-purpose births now reuse
+existing bounded local placement proofs outside service zones; indexed bodies never
+teleport. Owner permissions/pending effects remain enforced.
 
-STRUCTURE uses existing ManagedBlockWrites, paged graybox journal and confirmed
-operation ledger. START admits a hit; abort/no-op creates no loss. A bounded ordinary
-player-input continuation revalidates player/hand/world/reach/predecessors and invokes
-the whole native game-mode call once. Unattempted work expires/cancels; it is never
-replayed after restart. Hall cards no longer intercept interactive door/container clicks.
-
-KnownLocalAccess supplies a bounded positive nearest proof (2048visits,radius16,
-cache64); miss falls back to ordinary cooperative navigation, never global NO_PATH.
-Meal approaches use shared proofs/batched goals and service-grade ordering. Geometry
-retains exact observed collision after semantic damage; loss-only facts invalidate
-stale observations until actual shape arrives. No alternate mover or body shrink.
-
-BuildingSiteSurvey/Planner/Plan own bounded survey, grade and explicit cut/fill;
-markup4 separates outdoor ground, entrance supports and intended excavation. Source
-AIR below grade is not excavation authority. Hall uses pinned original townhall5;
-other explicit selections and native materials/NBT remain faithful.
-
-First full-pack review rejected the initially deployed depot datum2: it buried the
-original courtyard furniture. Final importer accepts explicit bounded 3D entrance
-supports/threshold independently of yard grade. Depot now retains original loading
-platform/path at sourceY2 and original outdoor gradeY1. No extra apron, architectural
-substitution, carved aisle or relaxed donkey profile was required. Kernel personal
-and donkey mixed trips still load/deliver/return/recover through the ordinary owners.
+MOVING analysis: raw ActorLocation.body is last persisted position; compare retained
+COLD ActorMovementProjection as-of. Old MOVING records were not overdue. Many stationary
+PRESENCE actors were already at goal; pendingAdoption is entity-save synchronization,
+not by itself a gameplay handoff deadlock. Actual meal stalls were repaired above;
+no claim that every possible movement case has been exhausted.
 
 ## Verification and limits
 
-Receipts under IMPL build/northwatch-dining-placement:
-- native-v9/manifest.json PASS: real hall open/close, aborted hit/no damage, actual
-  destruction, SAMEworld graceful restart, one ordinary restoration. Floor frame opened.
-- dining-native8/manifest.json PASS: physically HOT resident, actual192->191pantry
-  bread, NOURISHED/NONE,0claim. Frame is doorway, not visible eating-animation proof.
-- Native core448/448 and NeoForge unit921/921 passed before final content-only changes;
-  reuse only for their unchanged protocols. All native test JVMs closed.
-- depot-site-native-authoring.log: final original native/NBT/collision checks5/5 PASS.
-- depot-grade-animal-closure.log: personal and donkey kernel histories PASS1m6sec.
-- semantic-cohort-closure.log: distinct residents actually fed under SAME WorkBudget4,
-  driven by retained due boundaries rather than the obsolete3000tick stopwatch.
-- Final RELEASE build/structural-release342/site2-release-gates.log: affected catalog,
-  layout and graybox42/42, guardrails, jar and verifyPackagedJar PASS48sec. Prior
-  scoped-closure-gates2.log and final-delivery-gates.log cover unchanged integrity,
-  meals, production, readability, guard/bed/reserve/restoration and codec boundaries.
-- live-fullpack342-site2/manifest.json PASS23actions/11frames, loaded-mod inventoryPASS,
-  run e37c0ce2-32e5-44df-a888-820e70e593e6. Opened final depot original frame and full
-  11-facade contact sheet: courtyard/furniture at street grade, raised loading intact,
-  original hall stonework/materials visible. This is street-level automated review.
-- live-site2-delivery.json binds exact source/artifact/world/process and review limits.
+All receipts under IMPL build/doors-porches-followup unless stated:
+- placement-dining-closure3.log:36Frontier+50NeoForge scoped checks PASS;
+  Node packet-scenario-schema.log PASS. Final public-waiting-closure3.log:
+ 34affected Frontier checks+guardrails PASS. RELEASE structural-release342/
+ public-waiting-release.log:guardrails+affected checks+jar/verifyPackagedJar PASS.
+- Native building-authoring7/7PASS, original registry/NBT/materials and actual pantry
+ path from declared kitchen entrance. Rear-side exploratory probe was not a global
+ connectivity proof; fixture now has terrain below original gravel.
+-4b07 full-pack packet-fullpack2/manifest.json PASS77actions/12frames,
+ run69483220-27fc-41e4-aa0b-1da2b2d56afe;16clicks recorded only false->true / true->false
+ with ack, both paired leaves verified, loaded-mod inventoryPASS. Opened actual textile
+ porch and kitchen frames. Door protocol/assets unchanged by a609.
+-4b07 isolated checked-in disposable-communal-dining PASS, run97e62a24-7c7d-440f-
+ bf2d-923214332d5d:actual HOT resident6-1,pantry192->191,NOURISHED/NONE/claim0,
+ replica current. Opened endpoint resident frame; not an eating-animation/M3 claim.
+- a609 full-pack public-waiting-kitchen-cohort/manifest.json PASS7actions,
+ rund68e9a01-c408-4653-a357-4fcbbd6f49fc,loaded-mod inventoryPASS,continuous normal20TPS
+ HOT kitchen46513..51319. Retained read-only cohort samples prove actual progress:
+46891:1hungry,47607:2new hungry,48916/49037:23nourished/0meals/0claims;
+ later needs recur (not failure). Nora1-20 had one rejected decorative waiting target,
+ then consumed at50680 BEFORE client exit51319, with no repeat/refreeze. A transient
+ rejected candidate is not a global route failure. Final kitchen bread100,4new active
+ meals at51319; source and food effects continued after exit, no quarantine.
+- public-waiting-cohort-watch.json/log contain9bounded snapshots with native positions,
+ authority and nutrition. Some far actors remain COLD outside the loaded area; do not
+ claim all23 bodies stayed HOT. Observed loaded eaters consumed under physical custody.
+- First build-only HOT fast_forward was correctly REJECTED for physical work, not a
+ product crash. Ordinary COLD24000 interval stopped safely on presentation demand;
+ no forced HOT advancement. A609 door replay fixture failed because an NPC had left
+ the kitchen door open, violating its initial-closed precondition; door end-state was
+ not patched or forced. Successful unchanged door receipt reused appropriately.
 
-Whole historical Frontier suite is NOT green. Attempt33b43 reported2287tests and
-84assertion failures plus2harness errors;71exact failures reproduced on clean OLD1af.
-Its13new differences were closed by scoped checks (actual cells vs aggregate labels,
-positive geometry after restoration, real journey time, explicit loading fixtures).
-No test was silently disabled/deleted. The broad runner also exhausted a4GiB worker
-and a legacy construction CPU loop was explicitly stopped after9minutes. Keep this
-separate from the scoped delivery; do not claim all historical tests or all unsupported
-families were repaired. Retained controls: IMPL build/northwatch-dining-placement/
-baseline-control/comparison.json and logs. Read-only baseline checkout remains
-/home/rd/proj/pm-structural342-baseline at1af1feca7, no JVM running.
+Expanded unit selection exposed2obsolete ServiceApproachProgressTest depot-food
+fixtures and ResidentPortableMealTest's old home-eats-in-place premise. They were not
+silently deleted/disabled; no all-historical-tests-green claim. Affected body-confirmation
+fixture was migrated to actual retained pantry and passes. Whole old suite failures
+and unsupported families remain separately documented; do not reopen indiscriminately.
 
-## Remaining handoff
-
-Implementation, deployment and native review are complete. This record and the
-owned plans form the task's governance closure; only the concise user delivery
-report remains. No further implementation or test campaign is needed absent new evidence. Preserve
-all unrelated GOV/pack WIP. Autonomous resident repair, arbitrary-world terrain adapter,
-indoor animal transshipment and human M3 are not delivered in this cut.
+Build Java21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; live Java22
+/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java. RCON helper IMPL
+build/forestry-native/query-runtime.mjs; never print server.properties secrets.

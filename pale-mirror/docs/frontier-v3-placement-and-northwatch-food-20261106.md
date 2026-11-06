@@ -177,3 +177,84 @@ checks. The broad runner also hit a test-heap limit and an explicitly terminated
 legacy construction loop. `baseline-control/comparison.json` and retained logs
 record these limits. No historical failure was silently disabled or called passed.
 The delivery claims only the affected mechanisms and native flows above.
+
+## Follow-up: packet prediction, service buffers and displaced eaters
+
+User rejected the previous end-state door check: a single click visibly opened twice.
+Actual Minecraft `ServerGamePacketListenerImpl.handleUseItemOn` acknowledges the
+sequence and sends clicked/adjacent block updates outside the game-mode call.
+Deferring only `ServerPlayerGameMode.useItemOn` therefore exposed the old closed
+state between local prediction and the admitted native effect. Commit4b07a61c8
+defers the complete native packet handler before that acknowledgement. Cancellation
+acknowledges and reconciles its exact planned writes once; original native validation,
+events and item semantics remain authoritative. The ordinary client pilot now observes
+property transitions until native prediction acknowledgement, not just final state.
+
+Northwatch d2 diagnosis separates three concrete causes: ordinary storage buffers
+were centred on an interior pantry station and actor hashing promoted roof targets;
+resident1-10 physically left the declared dining area after HOT arrival, and its
+subsequent COLD CONSUME caused invariant quarantine at33420/revision74094;
+resident1-1's PREPARED body was blocked by an observed chest at(-1566,64,-1398),
+outside any declared service turnover zone. The old snapshot was inspected using
+matching d2 compiled rules/descriptors; it is not silently decoded under new rules.
+
+Ordinary storage providers now declare the exterior buffer centre; the existing
+ReachableSurfaceArea proves connected candidates in one bounded cached walk.
+The common waiting navigator respects the resulting ordering. The meal owner
+retains the acquired portion/claim and emits a separately typed dining-return fact
+when displaced; only consumption confirms nutrition. Prepared HOT effects retain
+their fence and may regain a legal dining position, and the native effect rechecks
+that position immediately before spending food. Eligible ambient births outside
+service zones reuse existing bounded local placement proofs. Native indexed bodies
+are not teleported and observed obstructions are not overwritten.
+
+Focused Frontier36 and NeoForge50 checks pass in
+`build/doors-porches-followup/placement-dining-closure3.log`; Node scenario schema
+checks pass. Actual original-kitchen native entrance/pantry access passes with the
+other six building-authoring checks. The rear-side exploratory native probe did
+not prove global connectivity and is not an acceptance claim. An expanded test
+selection also exposed obsolete depot-food shared-service fixtures and a portable
+meal test expecting in-place home eating; these were not silently disabled/deleted.
+The affected body-confirmation fixture now names the actual retained pantry and
+passes. The new typed event deliberately changes the descriptor inventory; the
+verified release uses a fresh disposable world. Runtime completion receipts follow.
+
+### Service waiting scope closure
+
+A609bb030 closes the remaining waiting-owner mismatch exposed by the live cohort.
+Existing `FacilityPedestrianContacts.noParking` already declares circulation and
+private work floors unsuitable for parking, but ServiceWaitingTargets did not
+consume it. Its cache also reused service-access knowledge for waiting applicants.
+The shared selector now consumes public waiting knowledge and the existing
+no-parking declaration, while egress keeps the actual service knowledge. Cache
+validity checks both immutable geometry inputs plus the parking policy identity.
+Storage, production and the bootstrap depot use this common boundary; extraction
+keeps its explicitly absent waiting buffer. No duplicated pantry/depot search.
+
+A whole-building bounding-box exclusion was tested and rejected before commit:
+the authentic asset includes usable courtyards and exterior approach cells inside
+that box. Its test failure was not papered over. The accepted implementation uses
+existing semantic contact policy and actual connected geometry. Focused34Frontier
+checks, guardrails and the exact detached packaged JAR passed; native authoring7
+checks passed with supported test terrain under the original authored gravel.
+The same world was saved/stopped and resumed with the new artifact.
+
+### Delivered native result
+
+Source a609bb030 is installed in the same buildings-packet-dining-seed139-20261106
+world, exact artifact f4bace1172447794…823f50, deploy-verifyPASS. The source and detached
+release trees are clean; pack170file index is valid and tracked pack state unchanged.
+The final full-pack kitchen observation passed (run d68e9a01-c408-4653-a357-4fcbbd6f49fc),
+with continuous20TPS HOT46513..51319. At48916/49037 all23residents were nourished,
+no active meals/claims; subsequent ordinary hunger recurred and progressed. Nora1-20
+rejected one decorative target and then actually consumed at50680 before client exit.
+No invariant quarantine followed HOT->COLD. Bounded cohort snapshots retain positions
+and authority; this does not claim all far-away actors were physically loaded or every
+possible navigation case is solved. Final52748 has2new active hungry residents,
+92bread/90available,0starving,NORMAL. All task clients are closed; live20TPS restored.
+
+Door transition protocol and assets are unchanged from passing full-pack run
+69483220-27fc-41e4-aa0b-1da2b2d56afe (16acknowledged clicks,12reviewed frames).
+A later replay's initial-closed predicate correctly failed on an NPC-open kitchen door;
+no physical state was forced to conceal that fixture mismatch. See the compact ledger
+and retained manifests for exact verification limits.
