@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "id": "live_hall_import_fidelity",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 8
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "setup": [
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok"
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/gamemode spectator"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1483,
+        "y": 66,
+        "z": -1360
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -1468,
+        "y": 64,
+        "z": -1360
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1483,
+        "y": 74,
+        "z": -1352
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -1468,
+        "y": 64,
+        "z": -1360
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "hall-level2-native-street"
+    },
+    {
+      "after": 4,
+      "name": "hall-level2-native-overview"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 5,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ]
+}

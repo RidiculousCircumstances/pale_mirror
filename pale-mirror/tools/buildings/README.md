@@ -3,8 +3,20 @@
 One content definition owns geometry and local annotations. Existing world generation,
 structural custody, storage, production and navigation remain the gameplay owners.
 The checked-in Medieval Spruce set is a **private test derivative**, not a grant of
-redistribution rights. Exact upstream source and substitutions are in its provenance
-files, `import_medieval_spruce.py` and `import_settlement_set.py`. No MineColonies runtime is required.
+redistribution rights. Exact upstream sources and declared functional adaptations are
+in the provenance files, `import_medieval_spruce.py` and `import_settlement_set.py`.
+Native decorative blocks require the pinned Domum Ornamentum, MineColonies rack
+and support-mod dependencies. Colony controllers and their gameplay state are not imported.
+
+The current service templates explicitly select upstream **level 2** variants
+(`townhall2`, `hospital2`, `warehouse2`, etc.; bakery also uses `baker2`). Housing
+selects explicit level/bed variants. The Style Explorer gallery shows maximum-level
+buildings. The current lower-level selections therefore do not match that visual
+reference; equality to a level-2 source must not be used to accept the gallery's
+complete towers, materials or size. Choosing a different source level is a content/layout change,
+not permission to approximate its palette. Compare the same source revision,
+variant and level before asserting import fidelity. Architectural visual acceptance
+also needs the actual placed view: source equality alone cannot prove terrain fit.
 
 `catalog.properties` declares the styles, every style's functional selections,
 asset paths and storage-category membership. A missing selection never chooses a
@@ -16,7 +28,8 @@ Markup format3 explicitly declares each workplace's `equipmentType` and local
 `facing`. The front points from the machine support towards its adjacent operator
 support. Missing/backwards declarations are errors; no direction is guessed.
 
-Each asset consists of `.nbt` (native interchange, no entities or block NBT),
+Each asset consists of `.nbt` (native interchange, no entities, inventories or controllers;
+only explicitly typed visual block payloads),
 `.blocks` (the exact neutral projection), `.properties` (rooms/zones/passages/workplaces)
 and `.geometry` (Minecraft-compiled collision certificate for every rotation).
 The authoring validator checks the native/neutral equality, actual registry block
@@ -127,6 +140,8 @@ python tools/buildings/import_settlement_set.py --sources <facility-blueprints> 
 ```
 
 The importer verifies every source checksum from `settlement_sources.json` and
-writes provenance for each adaptation. Potted plants replace free decorative
-plants, environmental water basins become dry ground, and stations/containers use
-explicit semantic anchors. No upstream inventories, entities or runtime are imported.
+writes provenance for each adaptation. Native materials, shapes and typed visual
+payloads are preserved; decorative blocks, roofs, free plants and water are not
+replaced with vanilla substitutes. Explicit functional mounts and entrance easements
+remain declared adaptations and must be included in source-difference review.
+No upstream inventories, entities or colony controllers are imported.
