@@ -44,6 +44,9 @@ public final class ResourceSiteHarvestKnownNavigation {
                     + job.id().value() + ": " + unavailable.getMessage(), unavailable);
         }
     }
+    public static KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return context(state, job).knowledge();
+    }
 
     /** Check the accepted producer result, not the route a second search happens to prefer. */
     public static void requireAcceptedDestination(FrontierWorldState state, ResourceSiteHarvestJob job,

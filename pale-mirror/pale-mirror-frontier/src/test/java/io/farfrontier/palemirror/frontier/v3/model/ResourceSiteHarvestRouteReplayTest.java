@@ -83,29 +83,37 @@ class ResourceSiteHarvestRouteReplayTest {
     @Test void acceptedAlternativeColdRouteReplaysWithoutRediscoveringThePreferredNextSupport() throws Exception {
         var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
         var state = fixture.state(); var job = fixture.job();
+        var initialRoute = ResourceSiteHarvestKnownNavigation.plannedPath(state, job);
+        // This replay fixture needs a branching outdoor departure, not a one-way
+        // private storage aisle whose only legal successor is the public exit.
+        var departure = initialRoute.get(Math.max(0, initialRoute.size()-4));
+        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(job.workerId(),actors.get(job.workerId()).withBody(departure.standingBody()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         var usual = ResourceSiteHarvestKnownNavigation.plannedPath(state, job);
         var start = usual.getFirst();
         var knowledge = KnownPedestrianRouteKnowledge.forField(state, state.resourceSite(job.siteId()),
                 state.resourceSites().cycle(job.siteId()), ResourceSiteHarvestGoal.depotPort(state, job), start);
-        SurfaceAnchor alternative = null;
-        for (int[] delta : List.of(new int[]{1, 0}, new int[]{-1, 0}, new int[]{0, 1}, new int[]{0, -1})) {
-            var candidate = KnownPedestrianGround.forFrontier(state).at(start.x() + delta[0], start.z() + delta[1]);
-            if (candidate == null || candidate.equals(usual.get(1))) continue;
+        List<SurfaceAnchor> acceptedPath = null;
+        candidates: for (int[] delta : List.of(new int[]{1, 0}, new int[]{-1, 0}, new int[]{0, 1}, new int[]{0, -1})) {
+          for (var candidate : knowledge.geometry().surfacesAt(start.x() + delta[0], start.z() + delta[1])) {
+            if (candidate.equals(usual.get(1))) continue;
             try {
                 new PedestrianRouteReceipt(List.of(start, candidate));
                 knowledge.requireRoute(List.of(start, candidate));
-                alternative = candidate; break;
+                var detour = new java.util.ArrayList<SurfaceAnchor>();
+                detour.add(start); detour.addAll(knowledge.plannedBetween(candidate,usual.getLast()));
+                knowledge.requireRoute(detour);
+                acceptedPath = List.copyOf(detour); break candidates;
             } catch (IllegalArgumentException unavailable) { /* Try another actual supported neighbour. */ }
+          }
         }
-        assertNotNull(alternative, "fixture needs two legal first edges to the same work goal");
-        var route = new java.util.ArrayList<SurfaceAnchor>();
-        route.add(start); route.add(alternative); route.addAll(usual);
-        knowledge.requireRoute(route);
-        var acceptedPath = List.copyOf(route);
+        assertNotNull(acceptedPath, "fixture needs an alternate supported forward route to the work goal");
+        var witnessedPath = acceptedPath;
         var action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
         ResourceSiteHarvestColdGoalAdvanced accepted;
         try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) ->
-                new PedestrianRouteResult(PedestrianRouteResult.Status.FOUND, acceptedPath, 0, 0, "isolated legal alternative"))) {
+                new PedestrianRouteResult(PedestrianRouteResult.Status.FOUND, witnessedPath, 0, 0, "isolated legal alternative"))) {
             accepted = ResourceSiteHarvestProcess.planColdProgress(state, action).stream().map(ProposedEvent::payload)
                     .filter(ResourceSiteHarvestColdGoalAdvanced.class::isInstance)
                     .map(ResourceSiteHarvestColdGoalAdvanced.class::cast).findFirst().orElseThrow();

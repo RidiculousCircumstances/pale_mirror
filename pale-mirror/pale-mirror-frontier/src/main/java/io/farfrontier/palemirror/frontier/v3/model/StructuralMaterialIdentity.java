@@ -16,6 +16,14 @@ public final class StructuralMaterialIdentity {
                         .equals(normalized(actual.kind(), entry.getKey(), actual.properties().get(entry.getKey()))));
     }
     private static String normalized(String kind, String property, String value) {
+        // Vanilla fence-gate use can reverse facing along its existing axis.
+        // A ninety-degree rotation still changes the installed passage.
+        if (kind.startsWith("minecraft:") && kind.endsWith("_fence_gate") && property.equals("facing") && value != null)
+            return switch (value) {
+                case "north", "south" -> "z";
+                case "east", "west" -> "x";
+                default -> value;
+            };
         if (kind.equals("minecolonies:blockminecoloniesrack") && property.equals("variant") && value != null)
             return switch (value) {
                 case "blockrackemptysingle", "blockrackfullsingle" -> "single";

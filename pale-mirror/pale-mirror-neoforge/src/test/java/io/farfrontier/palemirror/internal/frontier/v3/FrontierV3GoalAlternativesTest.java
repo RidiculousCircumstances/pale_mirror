@@ -29,6 +29,10 @@ class FrontierV3GoalAlternativesTest {
         assertEquals(List.of(alternative), pass.batch());
         assertTrue(FrontierV3GoalAlternatives.reconsider(blocked(FrontierV3GoalNavigation.BlockReason.PATH_STALLED)));
         assertTrue(FrontierV3GoalAlternatives.reconsider(blocked(FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE)));
+        assertTrue(FrontierV3GoalAlternatives.reconsider(blocked(FrontierV3GoalNavigation.BlockReason.KNOWN_NO_PATH)));
+        assertFalse(FrontierV3GoalAlternatives.reconsider(new FrontierV3GoalNavigation.Result(
+                FrontierV3GoalNavigation.Status.WAITING,"route-PLANNING",Optional.empty(),Optional.empty())),
+                "pending route work cannot reject an otherwise eligible destination");
         assertFalse(FrontierV3GoalAlternatives.reconsider(blocked(FrontierV3GoalNavigation.BlockReason.TRAFFIC_BLOCKED)),
                 "a pedestrian must still reach the courtesy protocol");
         assertFalse(FrontierV3GoalAlternatives.reconsider(blocked(FrontierV3GoalNavigation.BlockReason.SEARCH_BUDGET_EXHAUSTED)),

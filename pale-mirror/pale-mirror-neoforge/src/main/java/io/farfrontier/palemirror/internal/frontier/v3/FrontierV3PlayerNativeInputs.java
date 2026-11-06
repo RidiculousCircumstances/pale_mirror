@@ -82,7 +82,8 @@ public final class FrontierV3PlayerNativeInputs {
             }
         }
         var writes=new ArrayList<FrontierV3ManagedBlockWrites.PlannedWrite>();
-        writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(position,block.cycle(BlockStateProperties.OPEN)));
+        writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(position,
+                FrontierV3PassageBlocks.playerTransition(block,player.getDirection())));
         if (block.getBlock() instanceof DoorBlock) {
             var other=position.relative(block.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF)==DoubleBlockHalf.LOWER
                     ? net.minecraft.core.Direction.UP : net.minecraft.core.Direction.DOWN);

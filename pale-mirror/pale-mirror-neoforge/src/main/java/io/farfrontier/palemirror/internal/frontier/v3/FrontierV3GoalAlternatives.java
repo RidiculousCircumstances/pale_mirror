@@ -34,7 +34,7 @@ record FrontierV3GoalAlternatives(List<SurfaceAnchor> candidates, Set<SurfaceAnc
     /** A pedestrian obstruction needs courtesy; a yielded search budget needs continuation. */
     static boolean reconsider(FrontierV3GoalNavigation.Result result) {
         return result.status() == FrontierV3GoalNavigation.Status.BLOCKED && result.blockReason().filter(reason -> switch (reason) {
-            case PATH_UNAVAILABLE, PATH_STALLED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT, UNSUPPORTED_MEDIUM -> true;
+            case PATH_UNAVAILABLE, KNOWN_NO_PATH, PATH_STALLED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT, UNSUPPORTED_MEDIUM -> true;
             case TRAFFIC_BLOCKED, SEARCH_BUDGET_EXHAUSTED, UNSUPPORTED_CAPABILITY -> false;
         }).isPresent();
     }

@@ -36,6 +36,14 @@ public interface ActorActivityCapability {
         validateReference(state, execution);
         return java.util.Optional.empty();
     }
+    /** Optional explicit route knowledge for an activity-owned order without an
+     * ActorMovement. The owner declares access; the shared navigator selects legs. */
+    default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianRouteKnowledge> navigationKnowledge(
+            FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        validateReference(state, execution);
+        return java.util.Optional.empty();
+    }
     /** The owner may authorize one of its current semantic destinations without
      * choosing a native route or refreshing a timer. Unsupported local gestures
      * retain their bounded periodic permission. */

@@ -20,19 +20,17 @@ class FrontierV3RouteNavigationTest {
                 new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(List.of(start,target),List.of(target))),Optional.empty(),List.of());
         assertSame(restricted,FrontierV3RouteNavigation.continuedGoal(restricted,retained),"hard scope changes cannot reuse old permission");
     }
-    @Test void distantFallbackRetriesHintsWithoutCancellingAProgressingPath() {
+    @Test void boundedPrefixKeepsTheDistantSemanticGoal() {
         var start = SurfaceAnchor.at(288, 63, 10);
-        var local = SurfaceAnchor.at(299, 63, 10);
-        var target = SurfaceAnchor.at(375, 64, 14);
+        var target = SurfaceAnchor.at(450, 63, 10);
         var goal = new FrontierV3GoalNavigation.Goal(List.of(target), TraversalCapability.PEDESTRIAN,
-                new FrontierV3NavigationScope.ObservedWorld(new WorldBounds(-512, -512, 1024, 1024)), Optional.empty(),
-                List.of(start, local, target));
-        var fallback = new FrontierV3RouteNavigation.Leg(goal, 0, goal.legalStations(), 40L);
-        assertFalse(fallback.retryHints(39L, FrontierV3MinecraftGoalNavigation.Status.BLOCKED));
-        assertTrue(fallback.retryHints(40L, FrontierV3MinecraftGoalNavigation.Status.BLOCKED));
-        assertFalse(fallback.retryHints(100L, FrontierV3MinecraftGoalNavigation.Status.IN_PROGRESS));
-        assertFalse(fallback.retryHints(100L, FrontierV3MinecraftGoalNavigation.Status.ARRIVED));
-        assertFalse(new FrontierV3RouteNavigation.Leg(goal, 0, List.of(local), -1L)
-                .retryHints(100L, FrontierV3MinecraftGoalNavigation.Status.BLOCKED));
+                new FrontierV3NavigationScope.ObservedWorld(new WorldBounds(-512,-512,1024,1024)), Optional.empty(), List.of());
+        var prefix = java.util.stream.IntStream.rangeClosed(0,24).mapToObj(i->start.offset(i,0,0)).toList();
+        var leg = FrontierV3RouteNavigation.leg(goal, prefix, 0);
+        assertEquals(goal,leg.goal());
+        assertEquals(List.of(start.offset(12,0,0),start.offset(8,0,0),start.offset(4,0,0)),leg.stations());
+        var last = FrontierV3RouteNavigation.leg(goal,prefix,20);
+        assertEquals(List.of(prefix.getLast()),last.stations());
+        assertFalse(last.stations().contains(target),"prefix exhaustion cannot submit the distant terminal goal to a local provider");
     }
 }

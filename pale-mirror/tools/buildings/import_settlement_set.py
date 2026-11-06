@@ -10,6 +10,31 @@ import nbtlib
 from nbtlib import Compound, List, Int, String
 
 DIRECTIONS={'NORTH':(0,-1),'SOUTH':(0,1),'WEST':(-1,0),'EAST':(1,0)}
+def underground_voids(palette, ids, size, ground_y):
+ """Compile enclosed source AIR into bounded site declarations.
+
+ Terrain substitutions are not air. Exterior components reaching the source's
+ side/bottom boundary retain terrain unless the author explicitly excavates them.
+ Connectivity above grade does not turn a staircase into exterior terrain.
+ """
+ sx,sy,sz=size
+ remaining={(i%sx,i//(sx*sz),i//sx%sz) for i,v in enumerate(ids[:sx*sy*sz])
+            if i//(sx*sz)<=ground_y and palette[v]['Name']=='minecraft:air'}
+ result=[];required=set()
+ while remaining:
+  first=min(remaining);remaining.remove(first);component={first};pending=[first];exterior=False
+  while pending:
+   x,y,z=pending.pop()
+   exterior |= x in (0,sx-1) or z in (0,sz-1) or y==0
+   for dx,dy,dz in ((1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)):
+    p=(x+dx,y+dy,z+dz)
+    if p in remaining:remaining.remove(p);component.add(p);pending.append(p)
+  if not exterior:
+   required.update(component)
+   result.append({'min':[min(p[j] for p in component) for j in range(3)],
+                  'max':[max(p[j] for p in component)+1 for j in range(3)]})
+ return result,required
+
 def adapt(state):
  name=state['Name']; props=dict(state.get('Properties',{}))
  if name in {'minecraft:air','structurize:blocksubstitution','structurize:blocksolidsubstitution'} or name.startswith('minecolonies:blockhut'):return None
@@ -32,6 +57,9 @@ def build(spec,source,out):
  n=nbtlib.load(source);sx,sy,sz=[int(n[k]) for k in ('size_x','size_y','size_z')];pal=[v.unpack() for v in n['palette']];ids=[]
  for w in n['blocks']:w=int(w)&0xffffffff;ids.extend((w>>16,w&65535))
  if len(ids)<sx*sy*sz or len(ids)>sx*sy*sz+1:raise ValueError('invalid source dimensions')
+ inferred,required_voids=underground_voids(pal,ids,(sx,sy,sz),spec['groundY'])
+ excavations=spec['excavations']+inferred
+ if len(excavations)>32:raise ValueError('source needs too many underground excavation declarations')
  floor=spec['floor'];cut=0;cells={};data={}
  for i,v in enumerate(ids[:sx*sy*sz]):
   x=i%sx;z=i//sx%sz;y=i//(sx*sz)
@@ -102,7 +130,7 @@ def build(spec,source,out):
  maxx0,maxz0=max(p[0] for p in cells),max(p[2] for p in cells)
  for i,v in enumerate(ids[:sx*sy*sz]):
   x=i%sx;z=i//sx%sz;y=i//(sx*sz)
-  excavate=any(all(area['min'][j]<=p<area['max'][j] for j,p in enumerate((x,y,z))) for area in spec['excavations'])
+  excavate=any(all(area['min'][j]<=p<area['max'][j] for j,p in enumerate((x,y,z))) for area in spec['excavations']) or (x,y,z) in required_voids
   if y<=floor and (y>spec['groundY'] or excavate) and minx0<=x<=maxx0 and minz0<=z<=maxz0 and pal[v]['Name']=='minecraft:air':
    cells.setdefault((x,y,z),('minecraft:air',{}))
  # Translate to positive native coordinates, preserving a one-block foundation.
@@ -111,7 +139,8 @@ def build(spec,source,out):
  data={point(p):v for p,v in data.items() if p in cells and cells[p][0]==v[0]};cells={point(p):v for p,v in cells.items()};path=[point(p) for p in path]
  maxp=tuple(max(p[i] for p in cells)+1 for i in range(3));origin=path[threshold]
  prop={'format':'4','site.groundY':str(spec['groundY']),'site.excavations':','.join('void_'+str(i) for i in range(len(spec['excavations']))),'id':'pale_mirror:medieval_spruce/'+spec['name'],'version':'1','functions':spec['kind'],'representation':'AUTHORED','origin':','.join(map(str,origin)),'front':spec['front'],'fabric.min':'0,0,0','fabric.max':','.join(map(str,maxp)),'parcel.min':'-2,-1,-2','parcel.max':','.join(map(str,(maxp[0]+2,maxp[1]+2,maxp[2]+2))), 'rooms':'main','room.main.min':'-1,1,-1','room.main.max':','.join(map(str,maxp)),'zones':'','passages':'front','primaryEntrance':'front','primaryWorkplace':'','passage.front.from.kind':'EXTERIOR','passage.front.from.room':'','passage.front.to.kind':'ROOM','passage.front.to.room':'main','passage.front.public':'true','passage.front.threshold':str(threshold),'passage.front.supports':';'.join(','.join(map(str,p)) for p in path),'workplaces':'','anchors':','.join(anchors),'beds':''}
- for i,area in enumerate(spec['excavations']):
+ prop['site.excavations']=','.join('void_'+str(i) for i in range(len(excavations)))
+ for i,area in enumerate(excavations):
   for bound in ('min','max'):prop['site.excavation.void_'+str(i)+'.'+bound]=','.join(map(str,point(area[bound])))
  for key,p in anchors.items():prop['anchor.'+key]=','.join(map(str,point(p)))
  if extra:

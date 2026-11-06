@@ -97,7 +97,9 @@ final class FrontierV3ActorMovementNavigation {
         try {
             FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
                     FrontierV3GoalNavigation.Goal.routed(movement.order(), hint, state.bootstrap().bounds()), actuation, permission);
-            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+            if (result.status() == FrontierV3GoalNavigation.Status.WAITING)
+                BLOCKED.put(body, new Wait(movement.executionId(), movement.order(), result.reason()));
+            else if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 blocked(body, movement, "minecraft_path:" + result.reason());
             else BLOCKED.remove(body);
         } catch (IllegalArgumentException invalidContract) {

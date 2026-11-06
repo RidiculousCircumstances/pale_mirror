@@ -37,7 +37,10 @@ class FrontierV3InspectionCardsTest {
     void residentCardShowsNamedPersonAllSkillsAndActualCharacteristicWithoutGrantingRole() {
         var state = initial();
         var person = state.humanPopulation().residents().values().iterator().next();
-        var card = FrontierV3ResidentCard.from(state, person.id(), 0L);
+        var card = FrontierV3ResidentCard.from(state, person.id(), 0L, FrontierV3MinecraftGoalNavigation.Observation.idle());
+        var waiting = FrontierV3ResidentCard.from(state,person.id(),0L,
+                new FrontierV3MinecraftGoalNavigation.Observation("WAITING","route-PLANNING",java.util.List.of(),java.util.List.of()));
+        assertEquals("Role: Unassigned · Waiting for route",waiting.lines().get(2));
         assertEquals(person.name(), card.title());
         assertEquals(10, card.lines().size());
         assertEquals("Role: Unassigned · Idle", card.lines().get(2));

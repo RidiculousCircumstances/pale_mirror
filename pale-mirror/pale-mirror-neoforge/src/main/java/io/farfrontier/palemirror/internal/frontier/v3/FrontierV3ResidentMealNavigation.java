@@ -57,7 +57,7 @@ final class FrontierV3ResidentMealNavigation {
                     meal.startedAtTick() + 1L, stations, TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
             var result = FrontierV3GoalNavigation.pursue(level, body,
                     FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
-            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED) blocked(body, meal, "dining:" + result.reason());
+            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING) blocked(body, meal, "dining:" + result.reason());
             else BLOCKED.remove(body);
             return;
         }
@@ -109,7 +109,7 @@ final class FrontierV3ResidentMealNavigation {
                     .contains(ResidentMealProcess.serviceSurface(state, meal))) {
             var result = FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, meal.depotId(),
                     meal.residentId(), FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, actuation);
-            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING)
                 blocked(body, meal, "native_approach:" + result.reason());
             else BLOCKED.remove(body);
             return;
@@ -125,7 +125,7 @@ final class FrontierV3ResidentMealNavigation {
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
                 FrontierV3GoalNavigation.Goal.routed(order, route.physicalOnly() ? List.of() : route.waypoints(), state.bootstrap().bounds()), actuation);
-        if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+        if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING)
             blocked(body, meal, "minecraft_path:" + result.reason());
         else if (result.status() == FrontierV3GoalNavigation.Status.AMBIGUOUS)
             FrontierV3PhysicalWaitTrace.actor(body, state, meal.residentId(), "meal-navigation:" + result.reason());
@@ -139,7 +139,7 @@ final class FrontierV3ResidentMealNavigation {
         var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, meal.settlementId(),
                 meal.depotId(), meal.claimId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
                 meal.startedAtTick() + 1L, actuation);
-        if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+        if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING)
             blocked(body, meal, "service_exit:" + result.reason());
         else BLOCKED.remove(body);
     }

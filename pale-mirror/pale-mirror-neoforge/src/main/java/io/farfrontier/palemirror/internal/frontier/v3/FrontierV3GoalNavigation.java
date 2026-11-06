@@ -20,6 +20,7 @@ final class FrontierV3GoalNavigation {
     abstract static sealed class ProviderPermission permits CapturedPermission, UnmodeledPermission {
         private ProviderPermission() { }
         abstract boolean current(Mob actor);
+        abstract boolean nativePlanningOnly();
         abstract Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile();
         io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy traversalPolicy() {
             return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy.ORDINARY;
@@ -27,10 +28,14 @@ final class FrontierV3GoalNavigation {
         Optional<TravelPace> pace() { return Optional.empty(); }
         double followingSpacing() { return 0; }
         boolean requiresPeriodicRefresh() { return true; }
+        Optional<io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianRouteKnowledge> routeKnowledge(Goal goal) {
+            return Optional.empty();
+        }
     }
     private static final class CapturedPermission extends ProviderPermission {
+        @Override boolean nativePlanningOnly() { return false; }
         private final io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianTraversalPolicy traversal;
-        private final Mob actor;
+        private final java.lang.ref.WeakReference<Mob> actor;
         private final FrontierV3ActorActuation actuation;
         private final Optional<TravelPace> pace;
         private final double followingSpacing;
@@ -40,7 +45,7 @@ final class FrontierV3GoalNavigation {
         private final io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile;
         private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace, double followingSpacing,
                 Optional<MovementOrder> retainedOrder, Optional<MovementOrder> activityOrder, Optional<FrontierV3LocalGoalCorrection.Correction> correction) {
-            this.actor = Objects.requireNonNull(actor); this.actuation = Objects.requireNonNull(actuation);
+            this.actor = new java.lang.ref.WeakReference<>(Objects.requireNonNull(actor)); this.actuation = Objects.requireNonNull(actuation);
             this.traversal = io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianPreferences.of(actuation.currentState().get().orElseThrow().bootstrap());
             this.pace = Objects.requireNonNull(pace);
             if (!Double.isFinite(followingSpacing) || followingSpacing < 0) throw new IllegalArgumentException("invalid following spacing");
@@ -53,7 +58,7 @@ final class FrontierV3GoalNavigation {
             this.profile = actuation.navigationProfile().orElseThrow(() -> new IllegalArgumentException("navigation lost its declared profile"));
         }
         @Override boolean current(Mob candidate) {
-            return candidate == actor && actuation.current(candidate) && actuation.navigationProfile().equals(Optional.of(profile))
+            return candidate == actor.get() && actuation.current(candidate) && actuation.navigationProfile().equals(Optional.of(profile))
                     && retainedOrder.map(actuation::currentMovement).orElse(true)
                     && activityOrder.map(actuation::currentActivityGoal).orElse(true)
                     && correction.map(claim->FrontierV3LocalGoalCorrection.current(candidate,actuation,claim.parent())
@@ -64,23 +69,39 @@ final class FrontierV3GoalNavigation {
         @Override Optional<TravelPace> pace() { return pace; }
         @Override double followingSpacing() { return followingSpacing; }
         @Override boolean requiresPeriodicRefresh() { return retainedOrder.isEmpty() && activityOrder.isEmpty(); }
+        @Override Optional<io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianRouteKnowledge> routeKnowledge(Goal goal) {
+            var body = actor.get();
+            if (body == null || goal.order().isEmpty() || correction.isPresent() || !current(body)) return Optional.empty();
+            var state = actuation.currentState().get().orElseThrow();
+            if (retainedOrder.filter(goal.order().orElseThrow()::equals).isPresent()) {
+                var movement = state.actorMovements().get(actuation.id().body().actorId());
+                return Optional.of(io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement)
+                        .placementKnowledge(state, movement).forProfile(profile));
+            }
+            if (activityOrder.filter(goal.order().orElseThrow()::equals).isPresent())
+                return io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.CAPABILITIES
+                        .require(actuation.id().execution().activityKind())
+                        .navigationKnowledge(state, actuation.id().execution(), goal.order().orElseThrow());
+            return Optional.empty();
+        }
     }
     /** Unmodeled physical fixtures have no canonical identity and cannot acquire one through this permission. */
     private static final class UnmodeledPermission extends ProviderPermission {
-        private final Mob actor;
+        @Override boolean nativePlanningOnly() { return true; }
+        private final java.lang.ref.WeakReference<Mob> actor;
         private final Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile;
         private UnmodeledPermission(Mob actor, Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
-            this.actor = Objects.requireNonNull(actor); this.profile = Objects.requireNonNull(profile);
+            this.actor = new java.lang.ref.WeakReference<>(Objects.requireNonNull(actor)); this.profile = Objects.requireNonNull(profile);
             if (profile.isPresent() && !profile.orElseThrow().matchesDimensions(actor.getBbWidth(), actor.getBbHeight()))
                 throw new IllegalArgumentException("unmodeled body does not fit its explicit profile");
         }
         @Override boolean current(Mob candidate) {
-            return candidate == actor && permitsUnmodeledNavigation(candidate.getPersistentData(), ACTUATIONS.containsKey(candidate));
+            return candidate == actor.get() && permitsUnmodeledNavigation(candidate.getPersistentData(), ACTUATIONS.containsKey(candidate));
         }
         @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return profile; }
     }
-    enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
-    enum BlockReason { PATH_UNAVAILABLE, PATH_STALLED, TRAFFIC_BLOCKED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
+    enum Status { IN_PROGRESS, WAITING, ARRIVED, BLOCKED, AMBIGUOUS }
+    enum BlockReason { PATH_UNAVAILABLE, KNOWN_NO_PATH, PATH_STALLED, TRAFFIC_BLOCKED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
         UNSUPPORTED_CAPABILITY, UNSUPPORTED_MEDIUM, SEARCH_BUDGET_EXHAUSTED }
     record Goal(List<SurfaceAnchor> legalStations, TraversalCapability capability, FrontierV3NavigationScope scope,
                 Optional<MovementOrder> order, List<SurfaceAnchor> routeHint) {
@@ -259,6 +280,7 @@ final class FrontierV3GoalNavigation {
         var physical = FrontierV3RouteNavigation.pursue(level, actor, goal, permission);
         return new Result(switch (physical.status()) {
             case IN_PROGRESS -> Status.IN_PROGRESS;
+            case WAITING -> Status.WAITING;
             case ARRIVED -> Status.ARRIVED;
             case BLOCKED -> Status.BLOCKED;
             case AMBIGUOUS -> Status.AMBIGUOUS;

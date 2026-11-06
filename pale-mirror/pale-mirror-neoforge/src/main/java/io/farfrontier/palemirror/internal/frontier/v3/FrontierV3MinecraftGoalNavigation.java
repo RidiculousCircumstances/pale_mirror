@@ -26,7 +26,7 @@ import java.util.WeakHashMap;
  * entity boundary, never Villager Brain, goal selector or target selector.</p>
  */
 final class FrontierV3MinecraftGoalNavigation {
-    enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
+    enum Status { IN_PROGRESS, WAITING, ARRIVED, BLOCKED, AMBIGUOUS }
     record Result(Status status, String reason, Optional<FrontierV3GoalNavigation.BlockReason> blockReason,
                   Optional<SurfaceAnchor> arrivedStation, List<SurfaceAnchor> transitHint) {
         Result {
@@ -182,7 +182,7 @@ final class FrontierV3MinecraftGoalNavigation {
             var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, permission.navigationProfile(), permission.traversalPolicy());
             Path candidate = query.path();
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
-            if (refused.isPresent() || !FrontierV3PathClearance.path(level, actor, candidate)) {
+            if (refused.isPresent() || !query.clearanceVerified()) {
                 if (transitHint.isEmpty()) transitHint = FrontierV3NativePathFrontier.hint(level, actor,
                         query.advisoryPath(), feet, scope, permission.navigationProfile());
                 if (traffic == null && query.trafficBlocked(level, scope)) traffic = query;
@@ -403,6 +403,8 @@ final class FrontierV3MinecraftGoalNavigation {
     static Observation observation(Mob actor) {
         var courtesy = FrontierV3PedestrianCourtesy.observation(actor);
         if (courtesy.isPresent()) return courtesy.orElseThrow();
+        var pendingRoute = FrontierV3RouteNavigation.waitingObservation(actor);
+        if (pendingRoute.isPresent()) return pendingRoute.orElseThrow();
         var control = ACTIVE.get(actor);
         var crossing = CROSSINGS.get(actor);
         if (control != null && control.permission().current(actor) && crossing != null

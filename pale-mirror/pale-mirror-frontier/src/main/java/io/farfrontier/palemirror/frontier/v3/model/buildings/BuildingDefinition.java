@@ -289,6 +289,10 @@ public record BuildingDefinition(
             throw new IllegalArgumentException("authored building lacks fabric or entrance");
         if (blocks.keySet().stream().anyMatch(point -> !fabric.contains(point)))
             throw new IllegalArgumentException("authored block escaped fabric");
+        if (representation == Representation.AUTHORED) for (var entry : blocks.entrySet())
+            if (entry.getKey().y() <= site.groundY() && entry.getValue().state().kind().equals("minecraft:air")
+                    && site.excavations().stream().noneMatch(volume -> volume.contains(entry.getKey())))
+                throw new IllegalArgumentException("underground authored void lacks a site excavation declaration");
         for (var zone : zones.values())
             if (zone.use() == ZoneUse.TRANSIT)
                 for (var workplace : workplaces.values())

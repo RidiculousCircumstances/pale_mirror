@@ -11,13 +11,21 @@ import java.util.Locale;
 /** Compact immutable player view; no scheduling, repairs or world mutation. */
 final class FrontierV3ResidentCard {
     private FrontierV3ResidentCard() { }
-    static PlayerContextCard from(FrontierWorldState state, SubjectId actor, long tick) {
+    static PlayerContextCard from(FrontierWorldState state, SubjectId actor, long tick,
+                                 FrontierV3MinecraftGoalNavigation.Observation navigation) {
         var person = java.util.Objects.requireNonNull(state.humanPopulation().resident(actor), "inspected resident");
         var view = ResidentPresentation.from(state, actor);
         var lines = new ArrayList<String>();
         lines.add("Settlement: " + view.settlement());
         lines.add("Task: " + view.task());
-        lines.add("Role: " + view.role() + " · " + view.activity());
+        String activity = switch (navigation.status()) {
+            case "WAITING" -> "Waiting for route";
+            case "WAITING_FOR_CROSSING" -> "Waiting for passage";
+            case "BLOCKED", "PATH_UNAVAILABLE", "KNOWN_NO_PATH", "PATH_STALLED", "TRAFFIC_BLOCKED" -> "Route blocked";
+            case "IDLE" -> state.actorMovements().containsKey(actor) ? "Awaiting movement" : view.activity();
+            default -> view.activity();
+        };
+        lines.add("Role: " + view.role() + " · " + activity);
         lines.add("Combat style: " + state.bootstrap().ruleset().melee().styles().require(person.combatStyle()).name());
         var combat=person.combatProfile();var attributes=combat.attributes();
         lines.add("Combat: Sword "+combat.skill(CombatSkillId.SWORD)

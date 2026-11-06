@@ -20,9 +20,13 @@ final class FrontierV3PathClearance {
     static boolean path(ServerLevel level, Mob actor, Path path) {
         if (path == null || path.getNodeCount() > FrontierV3PhysicalPathPolicy.MAX_PATH_NODES) return false;
         var query = new Query(level, actor, actor.getNavigation().getNodeEvaluator().canOpenDoors());
+        return query.path(path);
+    }
+    private static boolean path(Query query, Path path, Vec3 origin) {
+        if (path == null || path.getNodeCount() > FrontierV3PhysicalPathPolicy.MAX_PATH_NODES) return false;
         for (int i = path.getNextNodeIndex(); i < path.getNodeCount(); i++) {
             var next = query.point(path.getNode(i).asBlockPos());
-            var from = i == path.getNextNodeIndex() ? actor.position() : query.point(path.getNode(i - 1).asBlockPos());
+            var from = i == path.getNextNodeIndex() ? origin : query.point(path.getNode(i - 1).asBlockPos());
             if (!query.move(from, next)) return false;
         }
         return true;
@@ -60,6 +64,7 @@ final class FrontierV3PathClearance {
             return value;
         }
         boolean edge(BlockPos from, BlockPos to) { return move(point(from), point(to)); }
+        boolean path(Path path) { return FrontierV3PathClearance.path(this, path, origin); }
         boolean move(Vec3 from, Vec3 to) {
             // Stepping up needs headroom above the lower body before crossing the riser.
             // Stepping down crosses at the higher height before landing below it.

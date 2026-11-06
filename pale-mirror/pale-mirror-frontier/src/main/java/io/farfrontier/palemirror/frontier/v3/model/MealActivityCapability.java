@@ -11,6 +11,14 @@ final class MealActivityCapability implements ActorActivityCapability {
     }
 
     @Override public ActorActivityKind kind() { return ActorActivityKind.MEAL; }
+    @Override public Optional<KnownPedestrianRouteKnowledge> navigationKnowledge(FrontierWorldState state,
+            ActorExecutionId execution, io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        if (!permitsNavigationOrder(state, execution, order))
+            throw new IllegalArgumentException("meal route knowledge requested for a stale order");
+        return Optional.of(ResidentMealKnownNavigation.departureKnowledge(state,
+                state.humanPopulation().meals().get(execution.actorId()),
+                state.actorLocations().get(execution.actorId()).supportingSurface()));
+    }
     @Override public boolean permitsNavigationOrder(FrontierWorldState state, ActorExecutionId execution,
             io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
         validateReference(state, execution);

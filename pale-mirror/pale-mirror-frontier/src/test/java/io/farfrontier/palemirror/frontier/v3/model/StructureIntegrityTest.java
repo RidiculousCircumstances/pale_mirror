@@ -82,10 +82,31 @@ class StructureIntegrityTest {
         var ground=INITIAL.bootstrap().terrain();var box=building.placement().volume(building.definition().fabric());
         var slope=ground.withSurveyedSupport(box.min().x(),box.min().z(),ground.baselineSupportY()+2);
         var plan=BuildingSitePlan.compile(slope,building);
-        assertEquals(2,plan.removedBlocks());
+        assertEquals(BuildingSitePlan.compile(ground,building).removedBlocks()+2,plan.removedBlocks());
         assertEquals(0,plan.placedBlocks());
         assertTrue(plan.preparation().values().stream().allMatch(c->c.material().emptySpace()));
         var excessive=ground.withSurveyedSupport(box.min().x(),box.min().z(),ground.baselineSupportY()+32);
         assertThrows(IllegalArgumentException.class,()->BuildingSitePlan.compile(excessive,building));
+    }
+    @Test void aFlatOutdoorCertificateCannotAuthorizeUnknownOrWetCellarExcavation() {
+        var building=INITIAL.bootstrap().settlements().getFirst().structures().stream()
+                .filter(b->b.kind()==StructureKind.HALL).findFirst().orElseThrow();
+        var original=BuildingSiteSurvey.terrain(INITIAL.bootstrap().terrain());
+        var local=building.definition().blocks().entrySet().stream()
+                .filter(e->e.getKey().y()<building.definition().site().groundY() && e.getValue().state().kind().equals("minecraft:air"))
+                .findFirst().orElseThrow().getKey();
+        var voidCell=building.placement().world(local);
+        for(boolean wet:List.of(false,true)) {
+            var survey=new BuildingSiteSurvey() {
+                public Optional<SurfaceAnchor> groundAt(int x,int z) { return original.groundAt(x,z); }
+                public OptionalInt uniformClearSite(BuildingVolume volume) { return original.uniformClearSite(volume); }
+                public Optional<NavigationCell> cellAt(BlockPosition p) {
+                    return !p.equals(voidCell) ? original.cellAt(p)
+                            : wet ? Optional.of(new NavigationCell(NavigationShape.FULL,false)) : Optional.empty();
+                }
+            };
+            if(wet) assertThrows(IllegalArgumentException.class,()->BuildingSitePlan.compile(survey,building));
+            else assertThrows(BuildingSitePlan.GeometryPending.class,()->BuildingSitePlan.compile(survey,building));
+        }
     }
 }

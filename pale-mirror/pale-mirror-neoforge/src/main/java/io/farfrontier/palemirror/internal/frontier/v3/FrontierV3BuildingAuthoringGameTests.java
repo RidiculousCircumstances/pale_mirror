@@ -68,6 +68,24 @@ public final class FrontierV3BuildingAuthoringGameTests {
         helper.assertTrue(FrontierV3PassageBlocks.linkedDoorStates(level,base,true).size()==2,"same-hinge doors are independent");
         helper.succeed();
     }
+    @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
+    public static void plannedGateUseMatchesVanillaFromEverySide(GameTestHelper helper) {
+        var level=helper.getLevel();var position=helper.absolutePos(new net.minecraft.core.BlockPos(1,1,1));
+        var player=helper.makeMockServerPlayerInLevel();
+        for(var facing:net.minecraft.core.Direction.Plane.HORIZONTAL) for(var direction:net.minecraft.core.Direction.Plane.HORIZONTAL)
+            for(boolean open:java.util.List.of(false,true)) {
+                var before=net.minecraft.world.level.block.Blocks.SPRUCE_FENCE_GATE.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.FenceGateBlock.FACING,facing)
+                        .setValue(net.minecraft.world.level.block.FenceGateBlock.OPEN,open);
+                level.setBlock(position,before,2);player.setYRot(direction.toYRot());
+                var planned=FrontierV3PassageBlocks.playerTransition(before,player.getDirection());
+                before.useWithoutItem(level,player,new net.minecraft.world.phys.BlockHitResult(
+                        net.minecraft.world.phys.Vec3.atCenterOf(position),net.minecraft.core.Direction.UP,position,false));
+                helper.assertTrue(level.getBlockState(position).equals(planned),"planned gate transition must equal the actual native action");
+                helper.assertTrue(FrontierV3GrayboxPalette.sameStructure(before,planned),"native gate swing cannot damage architecture");
+            }
+        helper.succeed();
+    }
     @GameTest(
             batch = "pm-frontier-v3-building-authoring",
             templateNamespace = "minecraft",

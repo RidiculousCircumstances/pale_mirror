@@ -9,6 +9,7 @@
 2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=up	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:air|minecraft:air|	1	true	
 2|minecraft:barrel|minecraft:barrel|facing=up,open=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:coal_block|minecraft:coal_block|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
 2|minecraft:coarse_dirt|minecraft:dirt|	1	true	0.0,0.0,0.0,1.0,1.0,1.0

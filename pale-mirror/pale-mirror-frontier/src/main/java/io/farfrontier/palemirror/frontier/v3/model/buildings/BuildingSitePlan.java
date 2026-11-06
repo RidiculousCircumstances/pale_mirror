@@ -25,11 +25,10 @@ public record BuildingSitePlan(BuildingPlacement placement, int groundY, Map<Blo
         if (columns > MAX_COLUMNS) throw new IllegalArgumentException("building site exceeds bounded survey");
         int grade = structure.anchor().y() + definition.site().groundY() - definition.origin().y();
         var uniform = survey.uniformClearSite(box);
-        if (uniform.isPresent() && uniform.getAsInt() == grade)
-            return new BuildingSitePlan(placement, grade, Map.of(), 0, 0);
         var cells = new LinkedHashMap<BlockPosition, GrayboxCell>(); int cut = 0, fill = 0;
         var target = new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id());
-        for (int x = box.min().x(); x < box.max().x(); x++) for (int z = box.min().z(); z < box.max().z(); z++) {
+        if (uniform.isEmpty() || uniform.getAsInt() != grade)
+          for (int x = box.min().x(); x < box.max().x(); x++) for (int z = box.min().z(); z < box.max().z(); z++) {
             int natural = survey.groundAt(x,z).orElseThrow(() -> new GeometryPending("site ground is not observed")).y();
             for (int y = Math.min(natural,grade); y < Math.max(box.max().y(), natural+1); y++) {
                 var actual = survey.cellAt(new BlockPosition(x,y,z)).orElseThrow(() -> new GeometryPending("site volume is not observed"));
@@ -43,6 +42,21 @@ public record BuildingSitePlan(BuildingPlacement placement, int groundY, Map<Blo
             }
             for (int y = grade + 1; y <= natural; y++) {
                 var p = new BlockPosition(x,y,z); cells.put(p,new GrayboxCell(p,target,AIR,GrayboxSemanticPart.FOUNDATION)); cut++;
+            }
+        }
+        // A clear outdoor plane says nothing about the required underground void.
+        // Inspect exact source AIR only: an excavation's bounding box cannot erase
+        // its retained walls, stairs or a neighbouring exterior terrain pocket.
+        if (!definition.site().excavations().isEmpty()) for (var entry : definition.blocks().entrySet()) {
+            var local = entry.getKey();
+            if (local.y() > definition.site().groundY() || !entry.getValue().state().kind().equals("minecraft:air")) continue;
+            if (definition.site().excavations().stream().noneMatch(volume -> volume.contains(local)))
+                throw new IllegalArgumentException("below-grade void lacks an explicit site declaration");
+            var position = placement.world(local);
+            var actual = survey.cellAt(position).orElseThrow(() -> new GeometryPending("underground site volume is not observed"));
+            if (!actual.dry()) throw new IllegalArgumentException("underground site preparation enters an unsafe medium");
+            if (!actual.shape().equals(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape.EMPTY)) {
+                if (cells.put(position,new GrayboxCell(position,target,AIR,GrayboxSemanticPart.FOUNDATION)) == null) cut++;
             }
         }
         if (cells.size() > MAX_WORK_CELLS) throw new IllegalArgumentException("building site work exceeds bounded plan");

@@ -11,6 +11,22 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 
 class BuildingCatalogTest {
+    @Test void undergroundSourceRoomsSurviveTheCompleteSettlementFabricPlan() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:cellar"),139));
+        var fabric = FrontierGrayboxPlan.compileInitialSettlementFabric(state.bootstrap());
+        for (var home : state.bootstrap().settlements()) {
+            var hall = home.structures().stream().filter(b->b.kind()==StructureKind.HALL).findFirst().orElseThrow();
+            var cellar = hall.definition().blocks().entrySet().stream()
+                    .filter(e->e.getKey().y()<=hall.definition().site().groundY() && e.getValue().state().kind().equals("minecraft:air")).toList();
+            assertEquals(140,cellar.size(),"pinned townhall5 retains its actual underground voids");
+            for(var cell:cellar) {
+                var placed = fabric.cells().get(hall.placement().world(cell.getKey()));
+                assertNotNull(placed);
+                assertEquals(hall.id(),placed.ownerId());
+                assertTrue(placed.material().emptySpace(),"grading, foundation and circulation cannot fill a declared cellar");
+            }
+        }
+    }
     @Test void authoredVisualDataRetainsItsOwnKindVersionAndExactPayloadAcrossWireEncoding() {
         var data = new AuthoredBlockData(AuthoredBlockData.Kind.MATERIAL_TEXTURES, 3465,
                 "{textureData:{\"domum_ornamentum:plain_main\":\"minecraft:spruce_planks\"}}");

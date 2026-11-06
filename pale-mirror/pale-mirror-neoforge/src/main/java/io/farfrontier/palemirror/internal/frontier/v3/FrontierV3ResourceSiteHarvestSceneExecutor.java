@@ -409,12 +409,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             }
         }
         if (job.navigationBlock().isPresent()) {
-            var blocked = job.navigationBlock().orElseThrow();
             if (state.resourceSites().harvestMutationPending(job)) return;
-            if (blocked.reroutable() && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
             ResourceSiteHarvestGoal currentGoal = ResourceSiteHarvestGoal.current(state, job);
             var outcome = FrontierV3GoalNavigation.pursue(level, worker,
                     hotGoal(state, job, currentGoal), actuation);
+            if (outcome.blockReason().filter(r -> r == FrontierV3GoalNavigation.BlockReason.KNOWN_NO_PATH).isPresent())
+                tryRetargetWorkTarget(level, runtime, state, lease, job, worker);
             if (outcome.status() == FrontierV3GoalNavigation.Status.ARRIVED)
                 acceptObservedSemanticGoal(level, runtime, state, lease, job, worker);
             return;
@@ -586,14 +586,15 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(), "navigation:traffic-blocked");
             return;
         }
-        if ((reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
-                || reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED)
+        // Only a completed known-route refusal may ask this owner for another
+        // eligible work item. A local native miss/stall is not that proof.
+        if (reason == FrontierV3GoalNavigation.BlockReason.KNOWN_NO_PATH
                 && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
         var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) return;
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         ResourceSiteHarvestNavigationBlock.Reason cause = switch (reason) {
-            case PATH_UNAVAILABLE -> ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE;
+            case PATH_UNAVAILABLE, KNOWN_NO_PATH -> ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE;
             case PATH_STALLED -> ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED;
             case TRAFFIC_BLOCKED -> throw new IllegalArgumentException("traffic must use the shared courtesy protocol");
             case TARGET_CHUNK_UNLOADED -> ResourceSiteHarvestNavigationBlock.Reason.TARGET_CHUNK_UNLOADED;
@@ -643,8 +644,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
 
     static FrontierV3GoalNavigation.Goal hotGoal(
             FrontierWorldState state, ResourceSiteHarvestJob job, ResourceSiteHarvestGoal goal) {
-        // Retained geometry is optional advice. HOT must not create background
-        // route demand while its physical navigator owns this unchanged goal.
+        // The work owner supplies optional advice, never acquires route work.
+        // Shared navigation alone requests missing detail for this unchanged goal.
         try {
             return FrontierV3GoalNavigation.Goal.routed(goal.movementOrder(),
                     io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.retainedPath(state, job),

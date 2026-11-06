@@ -33,6 +33,12 @@ final class HarvestActivityCapability implements ActorActivityCapability {
         return Optional.of(ResourceSiteHarvestGoal.current(state, job).movementOrder());
     }
     @Override public ActorActivityKind kind() { return ActorActivityKind.FIELD_HARVEST; }
+    @Override public Optional<KnownPedestrianRouteKnowledge> navigationKnowledge(FrontierWorldState state,
+            ActorExecutionId execution, io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        if (!permitsNavigationOrder(state, execution, order))
+            throw new IllegalArgumentException("field route knowledge requested for a stale order");
+        return Optional.of(ResourceSiteHarvestKnownNavigation.knowledge(state, job(state, execution)));
+    }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }
     @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return ActorActivityBodyCheckpoint.usesActorLocation(); }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }

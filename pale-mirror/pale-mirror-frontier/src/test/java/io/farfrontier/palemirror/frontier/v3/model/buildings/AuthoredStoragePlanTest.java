@@ -12,6 +12,14 @@ class AuthoredStoragePlanTest {
         assertTrue(StructuralMaterialIdentity.matches(original,new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(original.kind(),java.util.Map.of("variant","blockrackfullsingle","facing","west"))));
         assertFalse(StructuralMaterialIdentity.matches(original,new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(original.kind(),java.util.Map.of("variant","blockrackfull","facing","west"))));
     }
+    @Test void gateSwingIsOperatingStateButAxisRotationAndOtherBlockFacingAreStructural() {
+        var north = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState("minecraft:spruce_fence_gate", java.util.Map.of("facing","north","open","false"));
+        assertTrue(StructuralMaterialIdentity.matches(north,new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(north.kind(),java.util.Map.of("facing","south","open","true"))));
+        assertFalse(StructuralMaterialIdentity.matches(north,new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(north.kind(),java.util.Map.of("facing","east","open","true"))));
+        assertFalse(StructuralMaterialIdentity.matches(
+                new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState("minecraft:furnace",java.util.Map.of("facing","north")),
+                new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState("minecraft:furnace",java.util.Map.of("facing","south"))));
+    }
     @Test void coldGenesisUsesActualInventoryBlocksAndKeepsFoodInKitchens() {
         var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:authored-storage"),139, FrontierRulesets.installed("frontier-v3-textiles-terrain-r32"));
         var state = FrontierWorldState.initial(bootstrap);

@@ -13,6 +13,15 @@ import java.util.*;
 /** Native manual-passage capability. No item names, actor roles or hardcoded building coordinates. */
 final class FrontierV3PassageBlocks {
     private FrontierV3PassageBlocks() { }
+    /** Vanilla gate use reverses its swing when opened from the opposite side.
+     * Planning must witness that complete native transition before the packet runs. */
+    static BlockState playerTransition(BlockState state, net.minecraft.core.Direction playerDirection) {
+        boolean open = !state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN);
+        if (state.getBlock() instanceof FenceGateBlock && open
+                && state.getValue(FenceGateBlock.FACING) == playerDirection.getOpposite())
+            state = state.setValue(FenceGateBlock.FACING, playerDirection);
+        return state.setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN, open);
+    }
     static Optional<BlockState> opened(BlockState state) {
         if (state.getBlock() instanceof DoorBlock door && door.type().canOpenByHand())
             return Optional.of(state.setValue(DoorBlock.OPEN, true));

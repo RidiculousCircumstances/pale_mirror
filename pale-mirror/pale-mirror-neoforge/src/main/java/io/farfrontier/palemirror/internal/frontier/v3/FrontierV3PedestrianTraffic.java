@@ -28,13 +28,13 @@ final class FrontierV3PedestrianTraffic {
     record Body(java.util.UUID id, AABB bounds) { }
     /** A clear native route rejected only by live occupants, not a guessed terrain failure. */
     record Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage,
-                 boolean budgetExhausted, Path advisoryPath) {
+                 boolean budgetExhausted, Path advisoryPath, boolean clearanceVerified) {
         Query { blockers = List.copyOf(blockers); passage = List.copyOf(passage); }
         Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage) {
-            this(path, blockers, passage, false, null);
+            this(path, blockers, passage, false, null, false);
         }
         Query(Path path, List<Body> blockers, List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage, boolean budgetExhausted) {
-            this(path, blockers, passage, budgetExhausted, null);
+            this(path, blockers, passage, budgetExhausted, null, false);
         }
         boolean trafficBlocked(ServerLevel level, FrontierV3NavigationScope scope) {
             return !blockers.isEmpty() && !budgetExhausted && FrontierV3PhysicalPathPolicy.reject(level, path, scope)
@@ -132,16 +132,17 @@ final class FrontierV3PedestrianTraffic {
         boolean manualPassages = profile.map(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile::operatesPassages).orElse(false);
         actor.getNavigation().getNodeEvaluator().setCanOpenDoors(manualPassages);
         actor.getNavigation().getNodeEvaluator().setCanPassDoors(true);
+        var clearance = new FrontierV3PathClearance.Query(level, actor, manualPassages);
         Path unconstrained = actor.getNavigation().createPath(target, 0);
         // A rejected unconstrained shortest path does not prove no legal scoped detour.
         // Failed terrain evidence cannot, however, be attributed to other bodies.
         Path ordinary = FrontierV3PhysicalPathPolicy.reject(level, unconstrained, scope).isPresent() || !permitsProfile(unconstrained, profile)
-                || !FrontierV3PathClearance.path(level, actor, unconstrained) || penalized(unconstrained, traversal)
-                ? search(level, actor, target, scope, List.of(), profile, traversal) : unconstrained;
+                || !clearance.path(unconstrained) || penalized(unconstrained, traversal)
+                ? search(level, actor, target, scope, List.of(), profile, traversal, clearance) : unconstrained;
         if (FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).isPresent()
-                || !FrontierV3PathClearance.path(level, actor, ordinary))
+                || !clearance.path(ordinary))
             return new Query(ordinary, List.of(), List.of(), false,
-                    ordinary == null ? unconstrained : ordinary);
+                    ordinary == null ? unconstrained : ordinary, false);
         java.util.Map<java.util.UUID, Body> blockers = new java.util.LinkedHashMap<>();
         java.util.List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage = new java.util.ArrayList<>();
         AABB routeArea = actor.getBoundingBox();
@@ -158,7 +159,7 @@ final class FrontierV3PedestrianTraffic {
                 blockers.putIfAbsent(other.getUUID(), new Body(other.getUUID(), other.getBoundingBox()));
             }
         }
-        if (blockers.isEmpty()) return new Query(ordinary, List.of(), passage);
+        if (blockers.isEmpty()) return new Query(ordinary, List.of(), passage, false, null, true);
         // Use the same native graph and block/step semantics, adding only ephemeral body
         // clearance. The native region uses getChunkNow: no tickets or unloaded reads.
         int radius = MAX_QUERY_RADIUS;
@@ -169,7 +170,8 @@ final class FrontierV3PedestrianTraffic {
                 other -> other != actor && other.isAlive() && !other.isSpectator() && !following(actor, other, ordinary))
                 .stream().limit(MAX_BODIES + 1L).map(LivingEntity::getBoundingBox).toList();
         if (bodies.size() > MAX_BODIES) return new Query(null, List.of(), List.of(), true);
-        return new Query(search(level, actor, target, scope, bodies, profile, traversal), List.copyOf(blockers.values()), passage);
+        var detour = search(level, actor, target, scope, bodies, profile, traversal, clearance);
+        return new Query(detour, List.copyOf(blockers.values()), passage, false, null, clearance.path(detour));
     }
 
     private static boolean penalized(Path path, PedestrianTraversalPolicy traversal) {
@@ -183,14 +185,13 @@ final class FrontierV3PedestrianTraffic {
 
     /** The same native step/door semantics, with hard scope applied during expansion. */
     private static Path search(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope, List<AABB> bodies,
-            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile, PedestrianTraversalPolicy traversal) {
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile, PedestrianTraversalPolicy traversal,
+            FrontierV3PathClearance.Query clearance) {
         int radius = MAX_QUERY_RADIUS;
         BlockPos origin = actor.blockPosition();
         if (Math.abs((long) target.getX() - origin.getX()) > radius
                 || Math.abs((long) target.getY() - origin.getY()) > radius
                 || Math.abs((long) target.getZ() - origin.getZ()) > radius) return null;
-        var clearance = new FrontierV3PathClearance.Query(level, actor, profile.map(
-                io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile::operatesPassages).orElse(false));
         WalkNodeEvaluator evaluator = new WalkNodeEvaluator() {
             @Override public int getNeighbors(net.minecraft.world.level.pathfinder.Node[] neighbours, net.minecraft.world.level.pathfinder.Node from) {
                 int count = super.getNeighbors(neighbours, from), retained = 0;
