@@ -13,6 +13,7 @@ public final class ContainerPhysicalAuthorityComposition {
             FieldEquipment::pendingForContainer,
             MedicalPhysicalAuthority::pendingForContainer,
             EquipmentPhysicalAuthority::pendingForContainer,
+            io.farfrontier.palemirror.frontier.v3.model.combat.Ammunition::pendingForContainer,
             io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority::pendingForContainer);
     private ContainerPhysicalAuthorityComposition() { }
     public static boolean pending(FrontierWorldState state, SubjectId container) {

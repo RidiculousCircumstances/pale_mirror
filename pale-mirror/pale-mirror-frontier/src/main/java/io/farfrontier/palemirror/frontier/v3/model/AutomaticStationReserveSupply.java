@@ -14,14 +14,7 @@ final class AutomaticStationReserveSupply implements ReserveSupplyPort {
             var recipe = catalog.require(policy.recipeId());
             if (AutomaticStationProduction.stations(state, home, recipe).isEmpty()) continue;
             needs.put(recipe.product().itemKind(), new Need(Rate.ZERO, policy.outputReserve()));
-            var inputs = new TreeMap<String, Rate>();
-            ProductionRecipeInputs.select(recipe, kind -> 0L).forEach((kind, count) ->
-                    inputs.merge(kind, Rate.of(count, recipe.product().quantity()), Rate::plus));
-            if (recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()) > 0) {
-                var fuel = catalog.fuels().stream().sorted(Comparator.comparingLong(ProductionCatalog.Fuel::burnTicks).reversed()
-                        .thenComparing(ProductionCatalog.Fuel::itemKind)).findFirst().orElseThrow();
-                inputs.merge(fuel.itemKind(), Rate.of(recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), Math.multiplyExact(fuel.burnTicks(), recipe.product().quantity())), Rate::plus);
-            }
+            var inputs = ProductionRecipeSupplyFlow.read(state.bootstrap().ruleset(), recipe);
             flows.add(new Flow(recipe.product().itemKind(), inputs));
             long duration = Math.multiplyExact(state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE).workUnits(), policy.maximumBatches());
             timing.put(recipe.product().itemKind(), new Timing(duration, TimingBasis.LOCAL_ESTIMATE));

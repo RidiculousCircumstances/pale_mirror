@@ -8,7 +8,12 @@ import java.util.Objects;
 public final class GuardPresentation {
     public static String task(FrontierWorldState state,SubjectId owner) {
         var duty=Objects.requireNonNull(state.strategicPlans().guards().get(owner),"declared guard appointment");
+        if(duty.method()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.CROSSBOW && duty.phase()==GuardDuty.Phase.ON_DUTY){
+            if(state.combat().ranged().pending().containsKey(duty.id()))return "Prepare crossbow shot";
+            if(io.farfrontier.palemirror.frontier.v3.model.combat.Ammunition.available(state,duty.execution().actorId(),duty.home(),GuardAmmunition.ARROW)==0)return "Guard; await arrows";
+        }
         return switch(duty.phase()) {
+            case RESUPPLYING -> "Collect arrows";
             case EQUIPPING -> "Collect guard equipment";
             case RETURNING -> "Return guard equipment";
             case ON_DUTY -> duty.mission().map(mission -> switch(mission.stage()) {

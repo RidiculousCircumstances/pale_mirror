@@ -56,6 +56,8 @@ public final class FrontierWorldProcessCodecs {
         result.put("guard", GuardPayloadCodecs.create());
         result.put("security", SecurityPayloadCodecs.create());
         result.put("combat", CombatPayloadCodecs.create());
+        result.put("ranged-combat",RangedPayloadCodecs.combat());
+        result.put("guard-ammunition",RangedPayloadCodecs.ammunition());
         result.put("evasion",EvasionPayloadCodecs.create());
         result.put("unit-groups", UnitGroupPayloadCodecs.groups());
         result.put("pedestrian-planning", PedestrianPlanningPayloadCodecs.create());

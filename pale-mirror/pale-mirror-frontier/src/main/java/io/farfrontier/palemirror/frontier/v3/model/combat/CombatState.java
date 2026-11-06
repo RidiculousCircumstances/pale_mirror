@@ -7,7 +7,15 @@ import java.util.*;
 public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long> nextAttack,
         Map<SubjectId,Armament> armaments,Map<SubjectId,Obstruction> obstructions,
         Map<SubjectId,MeleeStance> stances,Map<SubjectId,MeleePosition> positions,Map<SubjectId,Evasion> evasions,Map<SubjectId,MeleeManeuver> maneuvers,
-        Map<CombatEngagement.Key,CombatEngagement> engagements,Map<SubjectId,MeleeFollowup> followups,Map<SubjectId,CombatReadiness> readiness,Map<SubjectId,MeleeExchange> exchanges) {
+        Map<CombatEngagement.Key,CombatEngagement> engagements,Map<SubjectId,MeleeFollowup> followups,Map<SubjectId,CombatReadiness> readiness,Map<SubjectId,MeleeExchange> exchanges,RangedState ranged) {
+    public CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long> nextAttack,Map<SubjectId,Armament> armaments,
+            Map<SubjectId,Obstruction> obstructions,Map<SubjectId,MeleeStance> stances,Map<SubjectId,MeleePosition> positions,
+            Map<SubjectId,Evasion> evasions,Map<SubjectId,MeleeManeuver> maneuvers,Map<CombatEngagement.Key,CombatEngagement> engagements,
+            Map<SubjectId,MeleeFollowup> followups,Map<SubjectId,CombatReadiness> readiness,Map<SubjectId,MeleeExchange> exchanges) {
+        this(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,engagements,followups,readiness,exchanges,RangedState.empty());
+    }
+    public CombatState withRanged(RangedState value) { return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,
+            maneuvers,engagements,followups,readiness,exchanges,value); }
     public record Armament(ActorExecutionId execution,SubjectId weapon,WeaponProfile profile) {
         public Armament {Objects.requireNonNull(execution);Objects.requireNonNull(weapon);Objects.requireNonNull(profile);}
         public boolean matches(CombatOrder order){return execution.equals(order.execution()) && weapon.equals(order.weapon());}
@@ -54,6 +62,7 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
         this(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,engagements,followups,readiness,Map.of());
     }
     public CombatState {
+        Objects.requireNonNull(ranged);
         exchanges=ImmutableLookupMap.copyOf(exchanges);
         if(exchanges.size()>SimulationCapacity.MAX_RESIDENTS || !armaments.keySet().containsAll(exchanges.keySet()))
             throw new IllegalArgumentException("exchange lost bounded armed owner");
@@ -99,26 +108,26 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
     }
     public CombatState withExchange(SubjectId owner,MeleeExchange exchange){
         return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,engagements,followups,readiness,
-                ImmutableLookupMap.withEntry(exchanges,owner,exchange));
+                ImmutableLookupMap.withEntry(exchanges,owner,exchange),ranged);
     }
     public boolean affords(SubjectId owner,long tick,int cost,MeleeRules rules){
         return CombatReadiness.available(readiness.get(owner),tick,rules.readiness())>=cost;
     }
     public CombatState spent(SubjectId owner,long tick,int cost,MeleeRules rules){
         return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,engagements,followups,
-                ImmutableLookupMap.withEntry(readiness,owner,CombatReadiness.spend(readiness.get(owner),tick,cost,rules.readiness())),exchanges);
+                ImmutableLookupMap.withEntry(readiness,owner,CombatReadiness.spend(readiness.get(owner),tick,cost,rules.readiness())),exchanges,ranged);
     }
     public boolean recovering(SubjectId owner,long tick){
         return !pending.containsKey(owner) && tick<nextAttack.getOrDefault(owner,0L);
     }
     public CombatState observed(Armament value){
-        return new CombatState(pending,nextAttack,ImmutableLookupMap.withEntry(armaments,value.execution().activityOwnerId(),value),obstructions,stances,positions,evasions,maneuvers,engagements,followups,readiness,exchanges);}
+        return new CombatState(pending,nextAttack,ImmutableLookupMap.withEntry(armaments,value.execution().activityOwnerId(),value),obstructions,stances,positions,evasions,maneuvers,engagements,followups,readiness,exchanges,ranged);}
     public CombatState prepared(MeleeStrike value){
         if(pending.containsKey(value.owner()))throw new IllegalArgumentException("combat owner already retains a native attempt");
         var armed=observed(new Armament(value.attacker().execution(),value.weapon(),value.profile()));
         return new CombatState(ImmutableLookupMap.withEntry(pending,value.owner(),value),nextAttack,armed.armaments,obstructions,stances,positions,
                 evasions,maneuvers,engagements,
-                ImmutableLookupMap.withoutEntry(followups,value.owner()),readiness,exchanges);
+                ImmutableLookupMap.withoutEntry(followups,value.owner()),readiness,exchanges,ranged);
     }
     public CombatState completed(MeleeStrike value,long tick,MeleeRules rules){return completed(value,tick,rules,false);}
     public CombatState completed(MeleeStrike value,long tick,MeleeRules rules,boolean missed){
@@ -138,14 +147,15 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
                 .completed(outcome,tick,rules.maneuvers().duel());
         return new CombatState(ImmutableLookupMap.withoutEntry(pending,value.owner()),
                 ImmutableLookupMap.withEntry(nextAttack,value.owner(),Math.max(Math.addExact(tick,continueMiss?rules.followup().recoveryTicks():value.timing(rules).recoveryTicks()),
-                        Math.addExact(value.preparedAt(),value.profile().attackIntervalTicks()))),armaments,obstructions,stances,positions,evasions,maneuvers,engagements,next,readiness,ImmutableLookupMap.withEntry(exchanges,value.owner(),exchange));
+                        Math.addExact(value.preparedAt(),value.profile().attackIntervalTicks()))),armaments,obstructions,stances,positions,evasions,maneuvers,engagements,next,readiness,ImmutableLookupMap.withEntry(exchanges,
+                                value.owner(),exchange),ranged);
     }
     public CombatState blocked(CombatOrder order,SurfaceAnchor station,long tick,MeleeRules rules){
         var prior=obstructions.get(order.owner());var points=new ArrayList<SurfaceAnchor>();
         if(prior!=null && prior.matches(order,tick,rules))points.addAll(prior.stations());
         if(!points.contains(station)){if(points.size()==8)points.removeFirst();points.add(station);}
         return new CombatState(pending,nextAttack,armaments,ImmutableLookupMap.withEntry(obstructions,order.owner(),
-                new Obstruction(order.execution(),order.target(),order.targetPosition(),points,tick)),stances,positions,evasions,maneuvers,engagements,followups,readiness,exchanges);
+                new Obstruction(order.execution(),order.target(),order.targetPosition(),points,tick)),stances,positions,evasions,maneuvers,engagements,followups,readiness,exchanges,ranged);
     }
     public boolean rejected(CombatOrder order,SurfaceAnchor station,long tick,MeleeRules rules){
         var prior=obstructions.get(order.owner());return prior!=null && prior.matches(order,tick,rules) && prior.stations().contains(station);
@@ -156,38 +166,42 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
             if(point.reason()!=MeleePosition.Reason.RESERVED)points=ImmutableLookupMap.withoutEntry(points,owner);
             else if(point.execution().equals(value.observer().execution()) && point.target().equals(value.target()))points=ImmutableLookupMap.withEntry(points,owner,point.renewed(value.atTick()));
         }
-        return new CombatState(pending,nextAttack,armaments,obstructions,ImmutableLookupMap.withEntry(stances,owner,value),points,evasions,maneuvers,engagements,followups,readiness,exchanges);
+        return new CombatState(pending,nextAttack,armaments,obstructions,ImmutableLookupMap.withEntry(stances,owner,value),points,evasions,maneuvers,engagements,followups,readiness,exchanges,ranged);
     }
     public boolean holding(CombatOrder order,long tick,MeleeRules rules){var stance=stances.get(order.owner());return stance!=null && stance.holding() && stance.current(order,tick,rules);}
     public boolean deferred(CombatOrder order,long tick){var point=positions.get(order.owner());return point!=null && point.deferred(order,tick);}
     public CombatState positioned(CombatOrder order,Optional<SurfaceAnchor> station,MeleePosition.Reason reason,long tick,MeleeRules rules){
-        var joined=enlisted(order,tick,rules);
+        var joined=CombatPositioning.enlisted(this,order,tick,rules);
         var prior=positions.get(order.owner());long since=prior!=null && prior.matches(order) && (prior.reason()==reason || prior.reason().unavailable() && reason.unavailable())?prior.sinceTick():tick;
         if(reason.unavailable() && tick-since>=rules.unreachableTicks())reason=MeleePosition.Reason.UNREACHABLE;
         var value=new MeleePosition(order.execution(),order.target(),order.targetPosition(),station,order.navigation().widthMicros(),order.navigation().heightMicros(),
                 reason,since,tick,reason==MeleePosition.Reason.UNREACHABLE?Math.addExact(tick,rules.retryTicks()):0);
-        return new CombatState(pending,nextAttack,armaments,obstructions,stances,ImmutableLookupMap.withEntry(positions,order.owner(),value),evasions,maneuvers,joined.engagements,followups,readiness,exchanges);
+        return new CombatState(pending,nextAttack,armaments,obstructions,stances,ImmutableLookupMap.withEntry(positions,order.owner(),value),evasions,maneuvers,joined.engagements,followups,readiness,exchanges,ranged);
     }
     public CombatState releasePosition(SubjectId owner){
         var point=positions.get(owner);if(point==null || point.station().isEmpty())return this;
-        return new CombatState(pending,nextAttack,armaments,obstructions,stances,ImmutableLookupMap.withoutEntry(positions,owner),evasions,maneuvers,engagements,followups,readiness,exchanges);
+        return new CombatState(pending,nextAttack,armaments,obstructions,stances,ImmutableLookupMap.withoutEntry(positions,owner),evasions,maneuvers,engagements,followups,readiness,exchanges,ranged);
     }
     /** A new owned tactical assignment cannot inherit the previous approach's failure clock or station claim. */
     public CombatState reassigned(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution){
         var owner=execution.activityOwnerId();var point=positions.get(owner);var obstruction=obstructions.get(owner);
         var nextPoints=point!=null && point.execution().equals(execution)?ImmutableLookupMap.withoutEntry(positions,owner):positions;
         var nextBlocks=obstruction!=null && obstruction.execution().equals(execution)?ImmutableLookupMap.withoutEntry(obstructions,owner):obstructions;
-        return new CombatState(pending,nextAttack,armaments,nextBlocks,stances,nextPoints,evasions,maneuvers,engagements,followups,readiness,exchanges);
+        return new CombatState(pending,nextAttack,armaments,nextBlocks,stances,nextPoints,evasions,maneuvers,engagements,followups,readiness,exchanges,ranged);
     }
-    public CombatState withEvasion(Evasion value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,ImmutableLookupMap.withEntry(evasions,value.actor(),value),maneuvers,engagements,followups,readiness,exchanges);}
-    public CombatState withoutEvasion(SubjectId actor){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,ImmutableLookupMap.withoutEntry(evasions,actor),maneuvers,engagements,followups,readiness,exchanges);}
-    public CombatState maneuver(MeleeManeuver value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,ImmutableLookupMap.withEntry(maneuvers,value.owner(),value),engagements,followups,readiness,exchanges);}
+    public CombatState withEvasion(Evasion value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,ImmutableLookupMap.withEntry(evasions,value.actor(),value),maneuvers,engagements,followups,
+            readiness,exchanges,ranged);}
+    public CombatState withoutEvasion(SubjectId actor){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,ImmutableLookupMap.withoutEntry(evasions,actor),maneuvers,engagements,followups,readiness,
+            exchanges,ranged);}
+    public CombatState maneuver(MeleeManeuver value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,ImmutableLookupMap.withEntry(maneuvers,value.owner(),value),engagements,followups,
+            readiness,exchanges,ranged);}
     public boolean maneuverOpen(SubjectId owner){var value=maneuvers.get(owner);return value!=null && value.open();}
     public boolean maneuverBusy(SubjectId owner,long tick,ManeuverRules rules){var value=maneuvers.get(owner);return value!=null && value.busy(tick,rules);}
     public boolean maneuverBlocksStrike(SubjectId owner,long tick,ManeuverRules rules){var value=maneuvers.get(owner);return value!=null && value.blocksStrike(tick,rules);}
     public CombatState withEngagement(CombatEngagement value){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,
-            ImmutableLookupMap.withEntry(engagements,value.key(),value),followups,readiness,exchanges);}
-    public CombatState withoutEngagement(CombatEngagement.Key key){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,ImmutableLookupMap.withoutEntry(engagements,key),followups,readiness,exchanges);}
+            ImmutableLookupMap.withEntry(engagements,value.key(),value),followups,readiness,exchanges,ranged);}
+    public CombatState withoutEngagement(CombatEngagement.Key key){return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,ImmutableLookupMap.withoutEntry(engagements,key),followups,
+            readiness,exchanges,ranged);}
     public CombatState enlisted(CombatOrder order,long tick,MeleeRules rules){
         var key=CombatEngagement.Key.of(order);var group=engagements.get(key);
         var next=this;
@@ -206,7 +220,7 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
         return followup!=null && followup.actor().execution().equals(execution)?next.withoutFollowup(execution.activityOwnerId()):next;
     }
     public CombatState withoutFollowup(SubjectId owner){
-        return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,engagements,ImmutableLookupMap.withoutEntry(followups,owner),readiness,exchanges);
+        return new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,engagements,ImmutableLookupMap.withoutEntry(followups,owner),readiness,exchanges,ranged);
     }
     private CombatState withoutParticipant(SubjectId owner){
         var groups=new LinkedHashMap<>(engagements);boolean changed=false;
@@ -215,12 +229,12 @@ public record CombatState(Map<SubjectId,MeleeStrike> pending,Map<SubjectId,Long>
             if(members.isEmpty())groups.remove(group.key());
             else{CombatEngagementPlanner.promote(members);groups.put(group.key(),new CombatEngagement(group.key(),group.revision()+1,group.anchor(),group.axisX(),group.axisZ(),group.frameSince(),members,0,Optional.empty()));}
         }
-        return changed?new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,groups,followups,readiness,exchanges):this;
+        return changed?new CombatState(pending,nextAttack,armaments,obstructions,stances,positions,evasions,maneuvers,groups,followups,readiness,exchanges,ranged):this;
     }
     public CombatState retired(SubjectId owner){
         if(pending.containsKey(owner) || maneuvers.containsKey(owner) && maneuvers.get(owner).open())throw new IllegalArgumentException("cannot retire unsettled melee effects");
         return new CombatState(pending,ImmutableLookupMap.withoutEntry(nextAttack,owner),ImmutableLookupMap.withoutEntry(armaments,owner),ImmutableLookupMap.withoutEntry(obstructions,owner),ImmutableLookupMap.withoutEntry(stances,
         owner),ImmutableLookupMap.withoutEntry(positions,owner),evasions,ImmutableLookupMap.withoutEntry(maneuvers,owner),withoutParticipant(owner).engagements,
-                ImmutableLookupMap.withoutEntry(followups,owner),ImmutableLookupMap.withoutEntry(readiness,owner),ImmutableLookupMap.withoutEntry(exchanges,owner));
+                ImmutableLookupMap.withoutEntry(followups,owner),ImmutableLookupMap.withoutEntry(readiness,owner),ImmutableLookupMap.withoutEntry(exchanges,owner),ranged.retired(owner));
     }
 }

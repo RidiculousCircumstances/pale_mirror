@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model.combat;
 import java.util.Objects;
 /** Explicit training identity; another weapon or actor may declare its own catalogued skill. */
 public record CombatSkillId(String value) implements Comparable<CombatSkillId> {
+    public static final CombatSkillId CROSSBOW=new CombatSkillId("frontier:crossbow");
     public static final CombatSkillId SWORD=new CombatSkillId("frontier:sword");
     public static final CombatSkillId EVASION=new CombatSkillId("frontier:evasion");
     public static final CombatSkillId WEAPON_DEFENCE=new CombatSkillId("frontier:weapon_defence");

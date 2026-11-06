@@ -15,8 +15,6 @@ public final class FrontierV3CombatExecutor {
     private static final Map<ServerLevel,Long> NEXT=new WeakHashMap<>();
     private static final Map<ServerLevel,Integer> CURSOR=new WeakHashMap<>();
     /** Disposable sighting pairs; no future input, hidden tracking or recovered motion is invented. */
-    private record Sighting(ActorActuationId observer,UUID target,int runtimeId,long at,net.minecraft.world.phys.Vec3 position){}
-    private static final Map<Mob,Sighting> SIGHTINGS=new WeakHashMap<>();
     static void tick(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime){
         FrontierV3CombatManeuvers.tick(level,runtime);
         var state=runtime.decodedState().orElseThrow();
@@ -31,14 +29,14 @@ public final class FrontierV3CombatExecutor {
             var nominated=orders.get(cursor);cursor=(cursor+1)%orders.size();CURSOR.put(level,cursor);
             state=runtime.decodedState().orElseThrow();long tick=runtime.executionView().orElseThrow().instant().ticks();
             var order=capabilities.current(state,nominated.execution(),tick).orElse(null);
-            if(order==null)continue;
+            if(order==null || order.method()!=CombatMethod.MELEE)continue;
             var declared=state.combat().armaments().get(order.owner());
             if(declared==null || !declared.matches(order)){
                 var item=state.inventory().items().get(order.weapon());if(item==null)continue;
                 var nativeItem=net.minecraft.core.registries.BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(item.itemKind()));
                 var definition=FrontierV3WeaponProfiles.read(new net.minecraft.world.item.ItemStack(nativeItem),order.weaponSkill());
                 FrontierV3CommandSubmission.submit(runtime,"combat-weapon-definition",order.owner().value(),new CombatEvent.WeaponDefined(order.execution(),order.weapon(),definition));
-                state=runtime.decodedState().orElseThrow();order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
+                state=runtime.decodedState().orElseThrow();order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null || order.method()!=CombatMethod.MELEE)continue;
             }
             if(!ActorBodyAuthority.retainsPhysicalCustody(state,order.execution().actorId())){FrontierV3CombatTrace.unavailable(level,order,"NO_BODY");trace(order,"NO_BODY","");continue;}
             var body=ActorBodyAuthority.current(state,order.execution().actorId());
@@ -56,7 +54,7 @@ public final class FrontierV3CombatExecutor {
             if(known==null || !known.matches(order) || !known.profile().equals(profile)){
                 FrontierV3CommandSubmission.submit(runtime,"combat-weapon",order.owner().value(),new CombatEvent.WeaponObserved(actuation,order.weapon(),profile));
                 state=runtime.decodedState().orElseThrow();
-                order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
+                order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null || order.method()!=CombatMethod.MELEE)continue;
             }
             var actual=level.getEntity(order.target().entity());
             if(!(actual instanceof LivingEntity target) || !target.isAlive())continue;
@@ -88,7 +86,7 @@ public final class FrontierV3CombatExecutor {
                     || tick-previous.atTick()>=2L*rules.sensingInterval()){
                 FrontierV3CommandSubmission.submit(runtime,"combat-stance",order.owner().value(),new CombatEvent.StanceObserved(new MeleeStance(actuation,order.target(),holding,attackReady,tick,targetFacing,threat)));
                 state=runtime.decodedState().orElseThrow();
-                order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
+                order=capabilities.current(state,order.execution(),tick).orElse(null);if(order==null || order.method()!=CombatMethod.MELEE)continue;
             }
             boolean contactHandoff=CombatEngagementPlanner.contactHandoff(state.combat(),order,actuation,attack,tick,rules);
             if(state.combat().maneuverBlocksStrike(order.owner(),tick,rules.maneuvers()) && !contactHandoff){
@@ -334,15 +332,10 @@ public final class FrontierV3CombatExecutor {
     }
     record ObservedMotion(double x,double z,double separating,double lateral) { }
     static ObservedMotion observedMotion(Mob fighter,LivingEntity target,ActorActuationId observer,boolean visible,int interval){
-        if(!visible){SIGHTINGS.remove(fighter);return new ObservedMotion(0,0,0,0);}
-        long now=fighter.level().getGameTime();
-        var prior=SIGHTINGS.put(fighter,new Sighting(observer,target.getUUID(),target.getId(),now,target.position()));
-        if(prior==null || !prior.observer().equals(observer) || !prior.target().equals(target.getUUID()) || prior.runtimeId()!=target.getId()
-                || now<=prior.at() || now-prior.at()>2L*interval)return new ObservedMotion(0,0,0,0);
-        var velocity=CombatMotion.between(prior.position().x,prior.position().z,target.getX(),target.getZ(),now-prior.at());
-        var radial=target.position().subtract(fighter.position()).multiply(1,0,1).normalize();
-        return new ObservedMotion(velocity.x(),velocity.z(),velocity.separating(radial.x,radial.z),velocity.lateral(radial.x,radial.z));
+        var motion=FrontierV3CombatTargetMotion.observe(fighter,target,observer,visible,interval);
+        return new ObservedMotion(motion.x(),motion.z(),motion.separating(),motion.lateral());
     }
+
     /** Only an already visible native swing aimed toward this body can invite a dodge. */
     static boolean threateningSwing(Mob fighter,LivingEntity target,MeleeRules rules){
         return target.swinging && target.swingTime>=0

@@ -11,6 +11,11 @@ final class GuardCombatCapability implements CombatCapability {
     public ActorActivityKind kind(){return ActorActivityKind.GUARD;}
     public void requireReference(FrontierWorldState state,ActorExecutionId execution){GuardAuthority.require(state,execution);}
     public void requirePending(FrontierWorldState state,MeleeStrike strike){GuardAuthority.requirePendingCombat(state.strategicPlans(),strike);}
+    public void requirePendingRanged(FrontierWorldState state,RangedShot shot) {
+        var duty=GuardAuthority.require(state,shot.attacker().execution());
+        if(duty.method()!=shot.method() || duty.revision()!=shot.ownerRevision() || !duty.weapon().equals(shot.weapon()))
+            throw new IllegalArgumentException("ranged shot lost exact guard appointment");
+    }
     public List<CombatOrder> orders(FrontierWorldState state,long tick){
         return state.strategicPlans().guards().values().stream().flatMap(duty->current(state,duty.execution(),tick).stream()).toList();
     }
@@ -23,9 +28,14 @@ final class GuardCombatCapability implements CombatCapability {
             return new CombatOrder(execution,duty.revision(),duty.weapon(),new CombatPartyId(duty.home()),response.engagement(),new SurfaceAnchor(contact.position()),
                     contact.atTick(),state.bootstrap().ruleset().security().contactLifetime(),observer,state.actorLocations().get(execution.actorId()).navigationProfile(),
                     duty.mission().filter(m->m.response().equals(Optional.of(contact.target()))).map(GuardMission::station),
-            state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()),state.humanPopulation().resident(execution.actorId()).combatProfile(),
-            CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
+            state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()),state.humanPopulation().resident(execution.actorId()).combatProfile(),weaponUse(duty));
         });
+    }
+    private static CombatUse weaponUse(GuardDuty duty) {
+        return switch(duty.method()) {
+            case MELEE -> new CombatUse.Melee(duty.method(),CombatSkillId.SWORD,EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
+            case CROSSBOW -> new CombatUse.Crossbow(duty.method(),CombatSkillId.CROSSBOW,"minecraft:arrow");
+        };
     }
     public boolean permitsApproach(FrontierWorldState state,ActorMovement movement){
         var duty=GuardAuthority.require(state,movement.executionId());

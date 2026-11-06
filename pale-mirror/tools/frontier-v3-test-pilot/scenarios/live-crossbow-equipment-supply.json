@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "id": "live_crossbow_equipment_supply",
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/clear @s"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:crossbow 1"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:iron_sword 2"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:arrow 64"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 10000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok",
+            "requiredConflicts": 0
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:crossbow",
+      "count": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_sword",
+      "count": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_sword",
+      "count": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:arrow",
+      "count": 64,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "hasArmedCrossbow": true,
+        "crossbowHasAmmunition": true
+      },
+      "timeoutMs": 120000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "crossbowName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:1"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 10,
+      "view": "settlement",
+      "id": "settlement:1",
+      "expect": {
+        "hasArmedCrossbow": true,
+        "crossbowHasAmmunition": true
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 9,
+      "name": "armed-crossbow-guard"
+    }
+  ]
+}

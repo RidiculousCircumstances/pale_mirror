@@ -17,7 +17,7 @@ public final class GuardAuthority {
             HumanPopulation people, Map<SubjectId, ActorLocation> actors, ActorExecutionState executions,
             io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat) {
         REFERENCES.validate(() -> {validate(bootstrap, plans, people, actors, executions);validateCombat(plans,combat);}, bootstrap, plans.guards(), people.residents(),
-                executions, ActorIdentityDeclarations.lifeStatuses(bootstrap, actors),combat.pending(),combat.maneuvers());
+                executions, ActorIdentityDeclarations.lifeStatuses(bootstrap, actors),combat.pending(),combat.maneuvers(),combat.ranged().supplies(),combat.ranged().pending());
     }
     private static void validate(FrontierBootstrap bootstrap, StrategicPlanState plans, HumanPopulation people,
             Map<SubjectId, ActorLocation> actors, ActorExecutionState executions) {
@@ -43,6 +43,17 @@ public final class GuardAuthority {
     }
 
     private static void validateCombat(StrategicPlanState plans,io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat){
+        for(var supply:combat.ranged().supplies().values()) if(supply.execution().activityKind()==ActorActivityKind.GUARD) {
+            var duty=plans.guards().get(supply.owner());
+            if(duty==null || duty.phase()!=GuardDuty.Phase.RESUPPLYING || duty.method()!=supply.method() || !duty.execution().equals(supply.execution())
+                    || !duty.order().equals(supply.order().movementOrder()))throw new IllegalArgumentException("ammunition lost its exact appointment");
+        }
+        for(var shot:combat.ranged().pending().values()) if(shot.attacker().execution().activityKind()==ActorActivityKind.GUARD) {
+            var duty=plans.guards().get(shot.owner());
+            if(duty==null || duty.method()!=shot.method() || !duty.execution().equals(shot.attacker().execution()) || !duty.weapon().equals(shot.weapon())
+                    || duty.revision()!=shot.ownerRevision())throw new IllegalArgumentException("ranged effect lost exact appointment");
+        }
+
         for(var m:combat.maneuvers().values())if(m.actor().execution().activityKind()==ActorActivityKind.GUARD){
             var duty=plans.guards().get(m.owner());
             if(duty==null || !m.retainedBy(duty.execution(),duty.weapon()))throw new IllegalArgumentException("maneuver lost exact guard permission owner");
@@ -60,7 +71,7 @@ public final class GuardAuthority {
     public static boolean pending(FrontierWorldState state, GuardDuty duty) {
         return pendingEffect(state,duty) || state.combat().maneuverOpen(duty.id());
     }
-    public static boolean pendingEffect(FrontierWorldState state,GuardDuty duty){return state.combat().pending().containsKey(duty.id()) || equipmentPending(state,duty);}
+    public static boolean pendingEffect(FrontierWorldState state,GuardDuty duty){return state.combat().pending().containsKey(duty.id()) || state.combat().ranged().unsettled(duty.id()) || equipmentPending(state,duty);}
     public static boolean equipmentPending(FrontierWorldState state,GuardDuty duty) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.GUARD_DUTY
                 && intent.roles().require(PhysicalIntentSubjectRole.GUARD_DUTY).equals(duty.id())
@@ -72,6 +83,7 @@ public final class GuardAuthority {
                 duty.phase() == GuardDuty.Phase.RETURNING ? ActorContainerItemOrder.Direction.PLACE : ActorContainerItemOrder.Direction.TAKE, Optional.empty(), duty.phase().wireTag(), duty.revision());
     }
     public static boolean goalAvailable(FrontierWorldState state, GuardDuty duty) {
+        if(duty.phase()==GuardDuty.Phase.RESUPPLYING)return GuardAmmunition.sourceAvailable(state,duty);
         if (duty.phase() == GuardDuty.Phase.EQUIPPING) return sourceAvailable(state, duty);
         var item = state.inventory().items().get(duty.weapon());
         return duty.phase() == GuardDuty.Phase.RETURNING && item != null && WorkEquipmentStorage.available(state, item, duty.source());
@@ -79,7 +91,7 @@ public final class GuardAuthority {
     public static boolean sourceAvailable(FrontierWorldState state, GuardDuty duty) {
         var unavailable = new HashSet<>(WorkEquipmentClaimComposition.reserved(state)); unavailable.remove(duty.weapon());
         var item = state.inventory().items().get(duty.weapon());
-        return WorkEquipmentSelection.available(state, duty.home(), item, GuardEquipment.REQUIREMENTS, unavailable)
+        return WorkEquipmentSelection.available(state, duty.home(), item, GuardEquipment.requirements(duty.method()), unavailable)
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(duty.source().containerId())
                 && state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint().withStation(duty.source().station()).equals(duty.source())
                 && ResourceStorageAccess.at(state, slot.containerId()).stations().contains(duty.source().station());

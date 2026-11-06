@@ -87,7 +87,7 @@ final class ShipmentStateCodec {
         if (portions.isEmpty()) throw new IllegalArgumentException("empty transferred portion");
         return portions;
     }
-    private static Map<SubjectId, Integer> cargoPortions(DataInputStream in) throws IOException {
+    static Map<SubjectId, Integer> cargoPortions(DataInputStream in) throws IOException {
         int n = in.readInt(); if (n < 0 || n > 64) throw new IllegalArgumentException("invalid transported portion lot count");
         var lots = new LinkedHashMap<SubjectId, Integer>();
         for (int i = 0; i < n; i++) if (lots.putIfAbsent(id(in), in.readInt()) != null) throw new IllegalArgumentException("duplicate transported portion lot");

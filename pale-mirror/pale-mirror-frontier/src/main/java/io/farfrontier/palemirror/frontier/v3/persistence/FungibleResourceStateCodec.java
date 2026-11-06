@@ -83,7 +83,8 @@ final class FungibleResourceStateCodec {
 
     private static Map<SubjectId, Integer> readQuantities(DataInputStream input) throws IOException {
         Map<SubjectId, Integer> quantities = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) { SubjectId id = new SubjectId(readString(input)); if (quantities.put(id, readCount(input)) != null) throw new IllegalArgumentException("duplicate custody quantity"); }
+        for (int index = 0, count = readCount(input); index < count; index++) { SubjectId id = new SubjectId(readString(input)); if (quantities.put(id, readCount(input)) !=
+                null) throw new IllegalArgumentException("duplicate custody quantity"); }
         return quantities;
     }
 
@@ -115,7 +116,7 @@ final class FungibleResourceStateCodec {
         };
     }
 
-    private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
+    static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
         switch (custody) {
             case ResourceCustody.Container container -> { output.writeByte(0); writeString(output, container.containerId().value()); writeString(output, container.section().value()); }
             case ResourceCustody.Player player -> { output.writeByte(1); writeString(output, player.playerId().toString()); }
@@ -129,7 +130,7 @@ final class FungibleResourceStateCodec {
         }
     }
 
-    private static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
+    static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new ResourceCustody.Container(new SubjectId(readString(input)), new ContainerSectionId(readString(input)));
             case 1 -> new ResourceCustody.Player(UUID.fromString(readString(input)));

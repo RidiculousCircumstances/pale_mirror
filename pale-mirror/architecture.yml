@@ -436,6 +436,9 @@ invariants:
   - id: "operator-debug-safety"
     statement: "Operator debug reads projections or invokes normal validated state transitions; navigation teleports only by explicit command to a persisted physical anchor; maintenance reset is two-phase, bounded to wholly unmaterialized PM state, rechecks every precondition at commit time, and fails closed without touching Minecraft blocks, entities, chunks or foreign state."
 
+  - id: "frontier-v3-ranged-combat-custody"
+    statement: "Guard duties declare MELEE or CROSSBOW at admission; combat orders carry the same explicit method and skill. Closed positioning strategies reuse UAE navigation and exact spatial/body permission. Personal ammunition uses ordinary resource custody and exact container transfer; a durable prepared shot retains actor/weapon/profile/ammunition binding and target incarnation. Its confirmed actor-side native emission consumes one real arrow and one weapon durability exactly once. Vanilla projectile flight/collision is a transient effect: an absent projectile after restart is never recreated or refunded. Role adapters supply permissions; shared ranged mechanics never infer employment or create COLD combat."
+
 critical_flows:
   - id: "frontier-v3-adjacent-work-area-development"
     lifecycle: "active-development"

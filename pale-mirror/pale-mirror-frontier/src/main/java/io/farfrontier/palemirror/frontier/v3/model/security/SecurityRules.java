@@ -5,8 +5,18 @@ import io.farfrontier.palemirror.frontier.v3.model.combat.*;
 public record SecurityRules(int observationRadius, int pursuitMargin, int homePursuitLimit,
                             long watchTicks, long contactLifetime, long coverageCycleTicks,
                             int observationInterval, long contactRefreshTicks, long investigationTicks,
-                            int responsePercent, int respondersPerThreat, int searchProbes, int searchRadius, long searchPauseTicks, long harmMemoryTicks, int reassignmentAdvantage) {
+                            int responsePercent, int respondersPerThreat, int searchProbes, int searchRadius, long searchPauseTicks, long harmMemoryTicks, int reassignmentAdvantage, int rangedGuardPercent) {
+    public SecurityRules(int observationRadius, int pursuitMargin, int homePursuitLimit, long watchTicks, long contactLifetime, long coverageCycleTicks,
+            int observationInterval, long contactRefreshTicks, long investigationTicks, int responsePercent, int respondersPerThreat,
+            int searchProbes, int searchRadius, long searchPauseTicks, long harmMemoryTicks, int reassignmentAdvantage) {
+        this(observationRadius,pursuitMargin,homePursuitLimit,watchTicks,contactLifetime,coverageCycleTicks,observationInterval,contactRefreshTicks,
+            investigationTicks,responsePercent,respondersPerThreat,searchProbes,searchRadius,searchPauseTicks,harmMemoryTicks,reassignmentAdvantage,0);
+    }
+    public SecurityRules withRangedGuards(int percent) { return new SecurityRules(observationRadius,pursuitMargin,homePursuitLimit,watchTicks,contactLifetime,
+        coverageCycleTicks,observationInterval,contactRefreshTicks,investigationTicks,responsePercent,respondersPerThreat,searchProbes,searchRadius,
+        searchPauseTicks,harmMemoryTicks,reassignmentAdvantage,percent); }
     public SecurityRules {
+        if(rangedGuardPercent<0 || rangedGuardPercent>75)throw new IllegalArgumentException("invalid ranged guard mix");
         if (harmMemoryTicks<1 || harmMemoryTicks>1200 || reassignmentAdvantage<1 || reassignmentAdvantage>128
                 || responsePercent<1 || responsePercent>100 || respondersPerThreat<1 || respondersPerThreat>8
                 || searchProbes<1 || searchProbes>8 || searchRadius<1 || searchRadius>8 || searchPauseTicks<1
@@ -22,6 +32,6 @@ public record SecurityRules(int observationRadius, int pursuitMargin, int homePu
     public String canonicalText() {
         return observationRadius+":"+pursuitMargin+":"+homePursuitLimit+":"+watchTicks+":"+contactLifetime
                 +":"+coverageCycleTicks+":"+observationInterval+":"+contactRefreshTicks+":"+investigationTicks
-                +":"+responsePercent+":"+respondersPerThreat+":"+searchProbes+":"+searchRadius+":"+searchPauseTicks+":"+harmMemoryTicks+":"+reassignmentAdvantage;
+                +":"+responsePercent+":"+respondersPerThreat+":"+searchProbes+":"+searchRadius+":"+searchPauseTicks+":"+harmMemoryTicks+":"+reassignmentAdvantage+"|rangedGuardPercent="+rangedGuardPercent;
     }
 }

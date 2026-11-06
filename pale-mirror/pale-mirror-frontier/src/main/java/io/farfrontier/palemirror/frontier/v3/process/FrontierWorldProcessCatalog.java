@@ -154,12 +154,14 @@ public final class FrontierWorldProcessCatalog {
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
 DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES, GuardProcessModule.TYPES, SecurityProcessModule.TYPES,
-                CombatProcessModule.TYPES, EvasionProcessModule.TYPES);
+                CombatProcessModule.TYPES, RangedProcessModule.TYPES, GuardAmmunitionProcessModule.TYPES, EvasionProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("forestry", new ForestryProcessModule()),
             Map.entry("guard", new GuardProcessModule()),
             Map.entry("security", new SecurityProcessModule()),
             Map.entry("combat", new CombatProcessModule()),
+            Map.entry("ranged-combat", new RangedProcessModule()),
+            Map.entry("guard-ammunition", new GuardAmmunitionProcessModule()),
             Map.entry("evasion",new EvasionProcessModule()),
             Map.entry("cultivation", new CultivationProcessModule()),
             Map.entry("defender-equipment-return-visit", new DefenderEquipmentReturnVisitProcessModule()),
@@ -449,7 +451,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
                 PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR,
                     CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR, GuardProcessModule.DESCRIPTOR,
-                    SecurityProcessModule.DESCRIPTOR, CombatProcessModule.DESCRIPTOR, EvasionProcessModule.DESCRIPTOR);
+                    SecurityProcessModule.DESCRIPTOR, CombatProcessModule.DESCRIPTOR,RangedProcessModule.DESCRIPTOR,GuardAmmunitionProcessModule.DESCRIPTOR, EvasionProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }

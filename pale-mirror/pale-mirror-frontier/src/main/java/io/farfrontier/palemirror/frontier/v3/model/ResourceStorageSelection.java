@@ -40,6 +40,21 @@ public final class ResourceStorageSelection {
             if (quantity < 1) throw new IllegalArgumentException("source must contain real available stock");
         }
     }
+    /** Withdraw actual owned stock independently of receiving filters; no route searches or reservations. */
+    public static List<Source> withdrawalSources(FrontierWorldState state, FungibleResourceLedger resources,
+            SubjectId owner,String itemKind,SurfaceAnchor origin,Set<ResourceStorageRole> roles) {
+        var result=new ArrayList<Source>();
+        for(var id:declaredContainers(state.inventory(),owner,roles)) {
+            if(ReferenceContainerCustody.blocksCanonicalUse(state,id) || ServiceBoundaryComposition.operational(state,id).isEmpty())continue;
+            var account=FungibleResourceCustodySupport.accountAtContainer(state,id).orElse(null);if(account==null)continue;
+            int quantity=resources.unclaimedQuantity(account.id(),owner,itemKind);if(quantity<1)continue;
+            var access=ResourceStorageAccess.at(state,id);
+            result.add(new Source(access.endpoint(),account.id(),quantity));
+        }
+        result.sort(Comparator.<Source>comparingInt(source->-state.inventory().containers().get(source.endpoint().containerId()).storage().orElseThrow().priority())
+                .thenComparingLong(source->source.endpoint().station().manhattanDistance(origin)).thenComparing(source->source.endpoint().containerId()));
+        return List.copyOf(result);
+    }
     public static List<Source> sources(FrontierWorldState state, FungibleResourceLedger resources,
             SubjectId owner, String itemKind, SurfaceAnchor origin, Set<ResourceStorageRole> roles) {
         var result = new ArrayList<Source>();

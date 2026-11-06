@@ -16,7 +16,8 @@ public final class GuardDutyTransitions {
                     || !io.farfrontier.palemirror.frontier.v3.process.ResidentWorkComposition.SELECTION.admissible(
                             state, resident, ResidentWorkKind.GUARD, HumanCapability.SECURITY, tick)
                     || !WorkEquipmentSelection.available(state, duty.home(), state.inventory().items().get(duty.weapon()),
-                            GuardEquipment.REQUIREMENTS, WorkEquipmentClaimComposition.reserved(state))
+                            GuardEquipment.requirements(duty.method()), WorkEquipmentClaimComposition.reserved(state))
+                    || !GuardEquipment.vacancies(state, duty.home()).contains(duty.method())
                     || !GuardAuthority.sourceAvailable(state, duty))
                 throw new IllegalArgumentException("stale, unarmed, foreign or over-capacity guard appointment");
             return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, duty.execution()).commit(state,

@@ -22,6 +22,14 @@ public final class ResidentVisuals {
                 frame.payload().facingPitch()*Mth.DEG_TO_RAD);
             PaleMirrorCombatClient.rendered(actor,frame,pose.shoulder(),pose.elbow());return true;
         }
+        if(actor.getMainHandItem().getItem() instanceof net.minecraft.world.item.CrossbowItem
+                && (actor.isUsingItem() || net.minecraft.world.item.CrossbowItem.isCharged(actor.getMainHandItem()))) {
+            var main=actor.getMainArm();float mirror=main==HumanoidArm.RIGHT?1:-1;
+            float reload=actor.isUsingItem()?Mth.clamp(actor.getTicksUsingItem()/25f,0,1):1;
+            rig.arm(main,-1.45f,-0.15f,-mirror*0.2f,0);
+            rig.arm(main.getOpposite(),-1.0f-0.3f*reload,-0.8f+0.5f*reload,mirror*(0.6f-0.3f*reload),0);
+            return true;
+        }
         boolean held=false;
         for(var hand:HumanoidArm.values())if(!actor.getItemInHand(hand==actor.getMainArm()?net.minecraft.world.InteractionHand.MAIN_HAND:net.minecraft.world.InteractionHand.OFF_HAND).isEmpty()){
             rig.arm(hand,-0.8f,-0.35f,0,hand==HumanoidArm.RIGHT?0.08f:-0.08f);held=true;

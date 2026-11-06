@@ -43,7 +43,8 @@ public record ResidentPresentation(String name, String settlement, String task, 
                     }).orElse("Production worker");
             case COURIER -> "Carrier";
             case GROUP_MEMBER -> "Companion";
-            case GUARD, ROUTE_PATROL -> "Guard";
+            case GUARD -> state.strategicPlans().guards().get(assignment.ownerId().orElseThrow()).method()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.CROSSBOW?"Crossbow guard":"Sword guard";
+            case ROUTE_PATROL -> "Guard";
             case SETTLEMENT_DEFENCE -> words(HumanTacticalFunctionProjection.derive(state, actor).name());
             case ENGINEERING_RECOVERY -> "Engineer";
             case SETTLEMENT_SERVICE -> "Service worker";

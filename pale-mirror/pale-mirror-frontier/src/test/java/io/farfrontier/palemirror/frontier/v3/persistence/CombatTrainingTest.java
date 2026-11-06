@@ -23,7 +23,9 @@ class CombatTrainingTest {
         var target=new CombatTarget(CombatTarget.Kind.PLAYER,new UUID(1,2),"minecraft:overworld");var at=SurfaceAnchor.at(0,63,0);
         return new CombatOrder(new ActorExecutionId(actor,ActorActivityKind.COURIER,owner,1),1,new SubjectId("item:test-sword"),
             new CombatPartyId(new SubjectId("party:training-test")),new CombatEnvelope(target,CombatEnvelope.Kind.SELF_DEFENCE,at,24),
-            at,100,1000,at.offset(2,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:mobile")),profile,CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
+            at,100,1000,at.offset(2,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),RULES.styles().require(new CombatStyleId("frontier:mobile")),profile,
+                    new io.farfrontier.palemirror.frontier.v3.model.combat.CombatUse.Melee(io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.MELEE,CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),
+                    MeleeAttack.BASIC_CUT));
     }
     @Test void independentTrainingUnlocksButAgilityChangesExecutionRatherThanGrantingMoves(){
         var novice=profile(0,9,0,100);var skilledSlow=profile(60,55,50,0);var skilledFast=profile(60,55,50,100);
@@ -104,8 +106,9 @@ class CombatTrainingTest {
     @Test void anotherMobDeclaresItsSupportedRepertoireWithoutInheritingHumanKicks(){
         var original=order(profile(100,100,100,50));
         var restricted=new CombatOrder(original.execution(),original.revision(),original.weapon(),original.party(),original.engagement(),original.targetPosition(),
-            original.observedAt(),original.lifetime(),original.actorPosition(),original.navigation(),original.station(),original.style(),original.profile(),original.weaponSkill(),
-            Set.of(MeleeAttack.BASIC_CUT),MeleeAttack.BASIC_CUT);
+            original.observedAt(),original.lifetime(),original.actorPosition(),original.navigation(),original.station(),original.style(),original.profile(),
+                    new io.farfrontier.palemirror.frontier.v3.model.combat.CombatUse.Melee(io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.MELEE,original.weaponSkill(),
+            Set.of(MeleeAttack.BASIC_CUT),MeleeAttack.BASIC_CUT));
         var actor=new ActorActuationId(new ActorBodyId(restricted.execution().actorId(),1),restricted.execution());
         var state=CombatState.empty().observed(new CombatState.Armament(restricted.execution(),restricted.weapon(),SWORD)).enlisted(restricted,100,RULES);
         assertEquals(MeleeAttack.BASIC_CUT,CombatTechniqueSelection.choose(state,restricted,actor,1,100,SWORD,1,0,0,RULES));

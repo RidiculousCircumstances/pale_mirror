@@ -11,7 +11,13 @@ final class GuardActivityCapability implements ActorActivityCapability {
         var mode=io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.WALK;
         var mission=duty.mission().filter(m->m.stage()==io.farfrontier.palemirror.frontier.v3.model.security.GuardMission.Stage.INTERCEPT);
         var pace=ResidentWalkingPace.read(state,execution.actorId(),mode);
-        if(mission.isPresent()){var intent=io.farfrontier.palemirror.frontier.v3.model.combat.CombatLocomotion.plan(state.combat(),execution,
+        if(mission.isPresent() && duty.method()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.CROSSBOW){
+            var point=state.combat().positions().get(duty.id());
+            if(point!=null && mission.orElseThrow().response().equals(Optional.of(point.target()))
+                    && io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.distance(
+                        state.actorLocations().get(execution.actorId()).supportingSurface(),point.targetPosition())<state.bootstrap().ruleset().ranged().minimumRange())
+                pace=ResidentWalkingPace.read(state,execution.actorId(),io.farfrontier.palemirror.frontier.v3.model.navigation.LocomotionMode.RUN);
+        } else if(mission.isPresent()){var intent=io.farfrontier.palemirror.frontier.v3.model.combat.CombatLocomotion.plan(state.combat(),execution,
                 new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEngagement.Key(
                     new io.farfrontier.palemirror.frontier.v3.model.combat.CombatPartyId(duty.home()),mission.orElseThrow().response().orElseThrow()),
                 state.actorLocations().get(execution.actorId()).supportingSurface(),state.bootstrap().ruleset().melee(),state.bootstrap().ruleset().melee().styles().require(state.humanPopulation().resident(execution.actorId()).combatStyle()));
@@ -70,8 +76,11 @@ final class GuardActivityCapability implements ActorActivityCapability {
     public ActorActivityResumption resumptionReference() {
         return request -> {
             var state = request.expectedState(); var duty = GuardAuthority.require(state, request.suspended());
+            var resumed=duty.resumed(request.successor());var combat=state.combat();
+            var supply=combat.ranged().supplies().get(duty.id());
+            if(supply!=null)combat=combat.withRanged(combat.ranged().supply(supply.resumed(request.successor(),resumed.revision())));
             return new ActorActivityResumption.Acknowledgement(request, FrontierWorldStateUpdate.begin().strategicPlans(
-                    state.strategicPlans().withGuard(duty.resumed(request.successor()))));
+                    state.strategicPlans().withGuard(resumed)).combat(combat));
         };
     }
     public Optional<ActorActivityDeath> deathAcknowledgement() {

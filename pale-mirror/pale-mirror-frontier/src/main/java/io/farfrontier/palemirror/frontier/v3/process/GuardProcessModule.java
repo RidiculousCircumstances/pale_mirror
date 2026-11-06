@@ -11,6 +11,7 @@ final class GuardProcessModule implements FrontierWorldProcessModule {
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("guard", Set.of(),
             Set.of(GuardContinuation.REVIEW, GuardContinuation.PROGRESS), TYPES,
             Set.of(io.farfrontier.palemirror.frontier.v3.model.combat.CombatEvent.ManeuverClosed.TYPE,io.farfrontier.palemirror.frontier.v3.model.combat.CombatEvent.PositionPlanned.TYPE,
+                    GuardAmmunitionEvent.Selected.TYPE,GuardAmmunitionEvent.Loaded.TYPE,GuardAmmunitionEvent.Cancelled.TYPE,
                     GuardMissionSelected.TYPE, GuardDutyEvent.Appointed.TYPE, GuardDutyEvent.Changed.TYPE, "frontier.actor_movement_started", "frontier.actor_movement_interrupted", "frontier.physical_intent_prepared",
                     "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled", "kernel.reconsideration_requested"), TYPES);
     public List<ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {

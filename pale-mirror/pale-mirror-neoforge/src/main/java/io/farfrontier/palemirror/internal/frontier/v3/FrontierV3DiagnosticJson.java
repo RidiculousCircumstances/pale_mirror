@@ -408,7 +408,7 @@ final class FrontierV3DiagnosticJson {
         var readyGuard=guards.stream().filter(duty->duty.phase()==io.farfrontier.palemirror.frontier.v3.model.GuardDuty.Phase.ON_DUTY
                 && state.actorLocations().get(duty.execution().actorId()).condition().status()==ActorLifeStatus.ALIVE
                 && io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.held(state,duty)).findFirst();
-        return base("settlement", id, checkpoint) + ",\"status\":\"ok\"" + FrontierV3SettlementStockDiagnosticJson.render(state, subject)
+        return base("settlement", id, checkpoint) + FrontierV3RangedDiagnostic.settlement(state,subject) + ",\"status\":\"ok\"" + FrontierV3SettlementStockDiagnosticJson.render(state, subject)
                 + ",\"guardTarget\":" + io.farfrontier.palemirror.frontier.v3.model.GuardEquipment.target(state, subject)
                 + ",\"hasArmedGuard\":"+readyGuard.isPresent()
                 + ",\"guardsApproved\":" + SettlementWorkPolicy.permissions(state,subject).workers(ResidentWorkKind.GUARD).size()
@@ -555,7 +555,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"dropBlocks\":" + location.navigationProfile().dropBlocks() + ",\"capabilities\":["
                 + location.navigationProfile().capabilities().stream().sorted(java.util.Comparator.comparingInt(io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags::tag))
                     .map(value -> "\"" + value.name() + "\"").collect(java.util.stream.Collectors.joining(",")) + "]}"
-                + (resident==null?"":FrontierV3EvasionDiagnostic.fields(state,subject))
+                + FrontierV3RangedDiagnostic.actor(state,subject) + (resident==null?"":FrontierV3EvasionDiagnostic.fields(state,subject))
                 + (resident==null?"":",\"combatStyle\":\""+quote(resident.combatStyle().value())+"\",\"combatProfile\":"+FrontierV3CombatProfileView.json(resident.combatProfile()))
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)

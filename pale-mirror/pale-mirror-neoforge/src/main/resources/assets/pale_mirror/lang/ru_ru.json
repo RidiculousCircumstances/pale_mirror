@@ -79,5 +79,6 @@
   "item.pale_mirror.cloth": "Тканевое полотно",
   "block.pale_mirror.cotton_crop": "Хлопок",
   "block.pale_mirror.spinning_bench": "Прядильная станция",
-  "block.pale_mirror.weaving_loom": "Ткацкий станок"
+  "block.pale_mirror.weaving_loom": "Ткацкий станок",
+  "item.pale_mirror.iron_arrowhead": "Железный наконечник"
 }

@@ -9,12 +9,13 @@ final class GuardDutyCodec {
     static void write(DataOutputStream out, GuardDuty value) throws IOException {
         out.writeUTF(value.id().value()); out.writeUTF(value.home().value()); ActorExecutionStateCodec.writeId(out, value.execution());
         out.writeUTF(value.weapon().value()); ShipmentStateCodec.endpoint(out, value.source());
-        out.writeByte(value.phase().wireTag()); out.writeLong(value.revision());
+        out.writeByte(value.phase().wireTag()); out.writeLong(value.revision()); out.writeByte(value.method().wireTag());
         out.writeBoolean(value.mission().isPresent()); if (value.mission().isPresent()) mission(out, value.mission().orElseThrow());
     }
     static GuardDuty read(DataInputStream in) throws IOException {
         return new GuardDuty(new SubjectId(in.readUTF()), new SubjectId(in.readUTF()), ActorExecutionStateCodec.readId(in),
-                new SubjectId(in.readUTF()), ShipmentStateCodec.endpoint(in), GuardDuty.Phase.require(in.readUnsignedByte()), in.readLong(), in.readBoolean() ? Optional.of(mission(in)) : Optional.empty());
+                new SubjectId(in.readUTF()), ShipmentStateCodec.endpoint(in), GuardDuty.Phase.require(in.readUnsignedByte()), in.readLong(),
+                        io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.require(in.readUnsignedByte()), in.readBoolean() ? Optional.of(mission(in)) : Optional.empty());
     }
     static void writeAll(DataOutputStream out, Map<SubjectId, GuardDuty> guards) throws IOException {
         out.writeInt(guards.size());

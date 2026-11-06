@@ -9,6 +9,7 @@ public interface CombatCapability {
     CombatProfile profile(FrontierWorldState state,ActorExecutionId execution);
     void requireReference(FrontierWorldState state,ActorExecutionId execution);
     void requirePending(FrontierWorldState state,MeleeStrike strike);
+    void requirePendingRanged(FrontierWorldState state,RangedShot shot);
     List<CombatOrder> orders(FrontierWorldState state,long tick);
     Optional<CombatOrder> current(FrontierWorldState state,ActorExecutionId execution,long tick);
     boolean permitsApproach(FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement movement);

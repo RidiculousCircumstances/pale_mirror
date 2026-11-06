@@ -54,6 +54,8 @@ public final class CombatTransitions {
             combat=combat.maneuver(m.closed(tick));
         }else if(event instanceof CombatEvent.ManeuverRequested){throw new IllegalArgumentException("maneuver request is ingress, not a retained outcome");
         }else if(event instanceof CombatEvent.Prepared prepared){
+            if(prepared.strike().actorProfile()==null || capabilities.current(state,prepared.strike().attacker().execution(),
+                    tick).filter(o->o.method()==CombatMethod.MELEE).isEmpty())throw new IllegalArgumentException("melee effect requires explicit melee permission");
             var strike=prepared.strike();var order=requireOrder(state,capabilities,strike.attacker(),tick);var item=state.inventory().items().get(strike.weapon());
             var followup=combat.followups().get(strike.owner());
             if(state.bootstrap().ruleset().melee().training().require(strike.attack()).use()==CombatTrainingCatalog.Use.CONTINUATION && (followup==null
@@ -95,7 +97,7 @@ public final class CombatTransitions {
             var order=capabilities.current(state,position.execution(),tick).filter(value->value.current(tick)).orElseThrow(()->new IllegalArgumentException("expired melee position consumer"));
             if(!subject.equals(order.owner()) || !position.target().equals(order.target()) || !position.targetPosition().equals(order.targetPosition()))
                 throw new IllegalArgumentException("foreign melee position target");
-            if(position.station().isPresent())MeleePositions.requireClaim(state,order,position.station().orElseThrow(),tick);
+            if(position.station().isPresent())CombatPositioning.requireClaim(state,order,position.station().orElseThrow(),tick);
             combat=combat.positioned(order,position.station(),position.reason(),tick,state.bootstrap().ruleset().melee());
         }else if(event instanceof CombatEvent.StanceObserved observed){
             var stance=observed.stance();var order=requireOrder(state,capabilities,stance.observer(),tick);
@@ -134,8 +136,7 @@ public final class CombatTransitions {
                 var current=order.orElseThrow();
                 if(combat.armaments().containsKey(current.owner()))combat=combat.recalled(current,capabilities.require(execution).harmedAt(state,current),tick,
                         state.bootstrap().ruleset().melee().maneuvers().duel());
-                combat=combat.enlisted(current,tick,state.bootstrap().ruleset().melee());
-                combat=CombatEngagementPlanner.reconcile(state,combat,inventory,CombatEngagement.Key.of(current),tick,capabilities);
+                combat=CombatPositioning.require(current).reconcile(state,combat,inventory,current,tick,capabilities);
             }else combat=combat.withdrawn(execution);
         }else combat=combat.withdrawn(execution);
         return state.withChanges(update.combat(combat));

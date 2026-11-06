@@ -56,13 +56,13 @@ public final class GuardResponse {
         if(mission.response().isEmpty())return contact.isPresent();
         if(contact.isPresent()){
             var order=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick).orElseThrow();
-            if(MeleePositions.holding(state,order,tick))return false;
+            if(CombatPositioning.holding(state,order,tick))return false;
             var claim=state.combat().positions().get(duty.id());
             if(claim==null || !claim.sameOpponent(order) || !claim.active(tick,state.bootstrap().ruleset().melee())
-                    || !MeleePositions.available(state,order,mission.station(),tick))return true;
+                    || !CombatPositioning.available(state,order,mission.station(),tick))return true;
         }
         if(contact.isPresent() && io.farfrontier.palemirror.frontier.v3.model.CombatComposition.CAPABILITIES.current(state,duty.execution(),tick)
-                .filter(order->MeleePositions.needsReplacement(state.combat(),order,tick,state.bootstrap().ruleset().melee())).isPresent())return true;
+                .filter(order->CombatPositioning.needsReplacement(state,order,tick)).isPresent())return true;
         if(contact.isEmpty()) {
             if(!investigating(state,duty,tick))return true;
             var last=state.security().contact(duty.home(),mission.response().orElseThrow());

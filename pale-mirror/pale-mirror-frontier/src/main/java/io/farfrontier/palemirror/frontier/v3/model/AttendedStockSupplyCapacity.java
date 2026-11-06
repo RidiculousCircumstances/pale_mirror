@@ -30,7 +30,7 @@ final class AttendedStockSupplyCapacity implements SupplyCapacityPort {
             for (var record : InstalledStationFacts.forRecipe(state, home, recipe))
                 result.add(new ProductionCost(recipe.id().value() + "/" + record.station().id().value(),
                         recipe.product().itemKind(), recipe.product().quantity(), inputs,
-                        recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), Map.of(), duration, 1));
+                        recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()), fuels(state), duration, 1));
         }
         return List.copyOf(result);
     }
@@ -54,10 +54,13 @@ final class AttendedStockSupplyCapacity implements SupplyCapacityPort {
                 int maximum = (int) Math.min(4096, Math.max(1, window.ticks() / duration));
                 result.add(new SupplyPlanner.Process(recipe.id().value() + "/" + station.id().value(), recipe.product().itemKind(),
                         recipe.product().quantity(), inputs, recipe.nominalBurnTicksPerBatch(state.bootstrap().ruleset().workCatalog()),
-                        Map.of(), 0, duration, duration, maximum, duration, budget, 1));
+                        fuels(state), ProductionStationEnergy.unlitFuelTicks(state,station.id()), duration, duration, maximum, duration, budget, 1));
             }
         }
         return List.copyOf(result);
+    }
+    private static Map<String,Long> fuels(FrontierWorldState state) {
+        var result=new TreeMap<String,Long>();state.bootstrap().ruleset().production().fuels().forEach(f->result.put(f.itemKind(),f.burnTicks()));return Map.copyOf(result);
     }
     public List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) { return List.of(); }
 }

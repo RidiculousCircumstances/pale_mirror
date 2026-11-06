@@ -45,9 +45,6 @@ public final class MeleePositions {
                 && ActorBodyAuthority.retainsPhysicalCustody(state,order.execution().actorId())
                 && ActorBodyAuthority.current(state,order.execution().actorId()).equals(stance.observer().body());
     }
-    public record Choice(Optional<SurfaceAnchor> station,MeleePosition.Reason reason){
-        public CombatEvent.PositionPlanned event(CombatOrder order){return new CombatEvent.PositionPlanned(order.execution(),order.target(),order.targetPosition(),station,reason);}
-    }
     public static void requireClaim(FrontierWorldState state,CombatOrder order,SurfaceAnchor station,long tick){
         if(weapon(state.combat(),order).filter(profile->permitted(state,order,profile,station,tick)).isEmpty() || !available(state,order,station,tick))
             throw new IllegalArgumentException("melee position has foreign reach or a competing spatial claim");
@@ -60,18 +57,18 @@ public final class MeleePositions {
     }
     public static Optional<SurfaceAnchor> select(FrontierWorldState state,CombatOrder order,KnownPedestrianRouteKnowledge knowledge,
             List<CombatOrder> peers,long tick,Set<SurfaceAnchor> failed){return plan(state,order,knowledge,peers,tick,failed).station();}
-    public static Choice plan(FrontierWorldState state,CombatOrder order,KnownPedestrianRouteKnowledge knowledge,
+    public static CombatPositionChoice plan(FrontierWorldState state,CombatOrder order,KnownPedestrianRouteKnowledge knowledge,
             List<CombatOrder> peers,long tick,Set<SurfaceAnchor> failed){
-        var profile=weapon(state.combat(),order);if(profile.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
+        var profile=weapon(state.combat(),order);if(profile.isEmpty())return new CombatPositionChoice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
         var weapon=profile.orElseThrow();var rules=state.bootstrap().ruleset().melee();
-        var activePeers=peers.stream().filter(peer->peer.party().equals(order.party()) && peer.target().equals(order.target()))
+        var activePeers=peers.stream().filter(peer->peer.method()==CombatMethod.MELEE).filter(peer->peer.party().equals(order.party()) && peer.target().equals(order.target()))
                 .filter(peer->{var point=state.combat().positions().get(peer.owner());return point!=null && point.active(tick,rules);}).toList();
         var retained=order.station().filter(station->knowledge.geometry().traversalPenalty(station)==0 && !failed.contains(station) && available(state,order,station,tick)
                 && !state.combat().rejected(order,station,tick,rules) && permitted(state,order,weapon,station,tick)
                 && !needsReplacement(state.combat(),order,tick,rules) && knowledge.clearStation(station));
-        if(retained.isPresent())try{knowledge.plannedBetween(order.actorPosition(),retained.orElseThrow());return new Choice(retained,MeleePosition.Reason.RESERVED);}
+        if(retained.isPresent())try{knowledge.plannedBetween(order.actorPosition(),retained.orElseThrow());return new CombatPositionChoice(retained,MeleePosition.Reason.RESERVED);}
         catch(KnownPedestrianNavigation.RouteUnavailable waiting){
-            if(waiting.status()!=PedestrianRouteResult.Status.NO_PATH)return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
+            if(waiting.status()!=PedestrianRouteResult.Status.NO_PATH)return new CombatPositionChoice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
         }
         var sector=MeleeTactics.sector(state.combat(),order,tick,rules);
         boolean arc=CombatApproach.arc(order,sector,rules.engagements());
@@ -82,9 +79,9 @@ public final class MeleePositions {
                         && knowledge.clearStation(station) && !FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(station.support())
                         && ServiceBoundaryComposition.turnoverPoint(state,station).isEmpty()).toList();
         boolean missing=knowledgeMissing(knowledge.geometry(),order,weapon,radius,arc,rules.engagements());
-        if(physical.isEmpty())return missing?pendingGeometry(knowledge,order):new Choice(Optional.empty(),MeleePosition.Reason.NO_POSITION);
+        if(physical.isEmpty())return missing?pendingGeometry(knowledge,order):new CombatPositionChoice(Optional.empty(),MeleePosition.Reason.NO_POSITION);
         var candidates=physical.stream().filter(station->available(state,order,station,tick)).toList();
-        if(candidates.isEmpty())return new Choice(Optional.empty(),MeleePosition.Reason.SPACE_OCCUPIED);
+        if(candidates.isEmpty())return new CombatPositionChoice(Optional.empty(),MeleePosition.Reason.SPACE_OCCUPIED);
         var facing=MeleeRearApproach.facing(state.combat(),order,tick,rules);
         var ranked=arc?candidates.stream().sorted(Comparator.comparingDouble((SurfaceAnchor station)->
                 CombatApproach.score(order,sector,station,rules.engagements())+crowding(order,station,activePeers,rules)+MeleeRearApproach.cost(order,station,facing))
@@ -94,10 +91,10 @@ public final class MeleePositions {
         var preferred=ranked.stream().sorted(Comparator.comparingInt(knowledge.geometry()::traversalPenalty)).toList();
         try{var selected=reachable(preferred,rules.routeRequestLimit(),station->knowledge.plannedBetween(order.actorPosition(),station));
             if(selected.isEmpty() && missing)return pendingGeometry(knowledge,order);
-            return new Choice(selected,selected.isPresent()?MeleePosition.Reason.RESERVED:MeleePosition.Reason.NO_PATH);
+            return new CombatPositionChoice(selected,selected.isPresent()?MeleePosition.Reason.RESERVED:MeleePosition.Reason.NO_PATH);
         }catch(KnownPedestrianNavigation.RouteUnavailable pending){
             if(pending.status()==PedestrianRouteResult.Status.NO_PATH)throw pending;
-            return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
+            return new CombatPositionChoice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
         }
     }
     /** Missing columns/clearance cannot establish that every attack station is impossible. */
@@ -110,11 +107,11 @@ public final class MeleePositions {
         }
         return false;
     }
-    private static Choice pendingGeometry(KnownPedestrianRouteKnowledge knowledge,CombatOrder order){
+    private static CombatPositionChoice pendingGeometry(KnownPedestrianRouteKnowledge knowledge,CombatOrder order){
         // Request ordinary knowledge along the actual observed target, never invent a floor for a missing column.
         try{knowledge.plannedBetween(order.actorPosition(),order.targetPosition());}
         catch(KnownPedestrianNavigation.RouteUnavailable pending){ /* Shared planner retains the dependency. */ }
-        return new Choice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
+        return new CombatPositionChoice(Optional.empty(),MeleePosition.Reason.ROUTE_PENDING);
     }
     /** Completed negative answers do not consume the outstanding-query budget or hide later candidates. */
     public static Optional<SurfaceAnchor> reachable(List<SurfaceAnchor> ranked,int requestLimit,java.util.function.Consumer<SurfaceAnchor> requireRoute){

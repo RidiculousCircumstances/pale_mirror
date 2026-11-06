@@ -1,0 +1,37 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    {
+      "item": "pale_mirror:iron_arrowhead"
+    },
+    {
+      "item": "pale_mirror:iron_arrowhead"
+    },
+    {
+      "item": "pale_mirror:iron_arrowhead"
+    },
+    {
+      "item": "pale_mirror:iron_arrowhead"
+    },
+    {
+      "item": "minecraft:stick"
+    },
+    {
+      "item": "minecraft:stick"
+    },
+    {
+      "item": "minecraft:stick"
+    },
+    {
+      "item": "minecraft:stick"
+    },
+    {
+      "item": "pale_mirror:cloth"
+    }
+  ],
+  "result": {
+    "id": "minecraft:arrow",
+    "count": 4
+  }
+}

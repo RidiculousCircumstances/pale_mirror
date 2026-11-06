@@ -22,7 +22,9 @@ class CombatStylesTest {
         var enemy=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,new UUID(1,2),"minecraft:overworld");
         return new CombatOrder(new ActorExecutionId(actor,ActorActivityKind.COURIER,owner,1),1,new SubjectId("item:style-"+i),
                 new CombatPartyId(new SubjectId("party:styles")),new CombatEnvelope(enemy,CombatEnvelope.Kind.SELF_DEFENCE,TARGET,32),
-                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),style,combatProfile(),CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
+                TARGET,100,1000,TARGET.offset(4,0,0),UnitNavigationProfile.VILLAGER,Optional.empty(),style,combatProfile(),
+                        new io.farfrontier.palemirror.frontier.v3.model.combat.CombatUse.Melee(io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.MELEE,CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),
+                        MeleeAttack.BASIC_CUT));
     }
     private static CombatState armed(CombatOrder order){return CombatState.empty().observed(new CombatState.Armament(order.execution(),order.weapon(),SWORD));}
     private static MeleeDuelPolicy.Choice choose(CombatState state,CombatOrder order,MeleeManeuvers.Facts facts,long tick,boolean attack){

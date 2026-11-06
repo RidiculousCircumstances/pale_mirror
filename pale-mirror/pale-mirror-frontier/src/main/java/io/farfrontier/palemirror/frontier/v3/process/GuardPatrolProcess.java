@@ -30,7 +30,7 @@ final class GuardPatrolProcess {
         var threat = GuardResponse.contact(state,duty,tick);
         var combatOrder=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick);
         if(combatOrder.filter(order->state.combat().deferred(order,tick)).isPresent())threat=Optional.empty();
-        if(threat.isPresent() && combatOrder.filter(order->MeleePositions.holding(state,order,tick)).isPresent())
+        if(threat.isPresent() && combatOrder.filter(order->CombatPositioning.holding(state,order,tick)).isPresent())
             return List.of(scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));
         if(threat.isPresent() && mission.isPresent()) {
             var contact=threat.orElseThrow();
@@ -179,7 +179,7 @@ final class GuardPatrolProcess {
         var knowledge=new GuardMissionMovementProvider().placementKnowledge(state,movement);
         var body=ActorMovementProcess.bodyAt(state,duty.execution().actorId(),tick);var goal=duty.mission().orElseThrow().station();
         var combat=CombatComposition.CAPABILITIES.current(state,duty.execution(),tick);
-        boolean hold=combat.filter(order->MeleePositions.holding(state,order,tick)).isPresent();
+        boolean hold=combat.filter(order->CombatPositioning.holding(state,order,tick)).isPresent();
         boolean blocked=hold || combat.filter(order->state.combat().deferred(order,tick) && duty.mission().orElseThrow().response().isPresent() || GuardResponse.redirect(state,duty,tick)).isPresent()
         ||knowledge.geometry().clearanceKnown(goal) && !knowledge.clearStation(goal)
                 || PedestrianRoutePlanning.peek(knowledge.geometry(),body.supportingSurface(),goal)
@@ -204,7 +204,7 @@ final class GuardPatrolProcess {
             var resumed=duty.mission().orElseThrow().post().mission();
             return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),resumed)),GuardContinuation.wake(duty.id(),tick));
         }
-        var choice=MeleePositions.plan(state,order,knowledge,CombatComposition.CAPABILITIES.orders(state,tick),tick,failed);
+        var choice=CombatPositioning.plan(state,order,knowledge,CombatComposition.CAPABILITIES.orders(state,tick),tick,failed);
         if(choice.station().isPresent())return List.of(new ProposedEvent(duty.id(),new GuardMissionSelected(duty.id(),duty.revision(),
                 duty.mission().orElseThrow().responding(choice.station().orElseThrow(),order.target()))),GuardContinuation.wake(duty.id(),tick));
         return List.of(new ProposedEvent(duty.id(),choice.event(order)),scheduled(action,duty,tick+state.bootstrap().ruleset().melee().sensingInterval()));

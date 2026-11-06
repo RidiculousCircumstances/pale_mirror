@@ -65,6 +65,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset SIMULATION_BASELINE = GrayboxSimulationProfiles.baseline(DEMAND_DRIVEN_WOOD_GRAYBOX);
     private static final FrontierRuleset SIMULATION_TERRAIN = GrayboxSimulationProfiles.terrain(DEMAND_DRIVEN_WOOD_GRAYBOX);
     private static final FrontierRuleset TEXTILES_TERRAIN = GrayboxTextileProduction.extend(SIMULATION_TERRAIN);
+    private static final FrontierRuleset RANGED_GUARDS = GrayboxRangedContent.extend(TEXTILES_TERRAIN);
     private static final FrontierRuleset SIMULATION_SCALE = GrayboxSimulationProfiles.scale(DEMAND_DRIVEN_WOOD_GRAYBOX);
     private static final FrontierRuleset SIMULATION_SCALE_FIFTY = GrayboxSimulationProfiles.scaleFifty(DEMAND_DRIVEN_WOOD_GRAYBOX);
     /** New-world startup references match current recipes; historical profiles stay immutable. */
@@ -100,6 +101,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(TEXTILES_TERRAIN.id(), TEXTILES_TERRAIN),
+            Map.entry(RANGED_GUARDS.id(), RANGED_GUARDS),
             Map.entry(SIMULATION_BASELINE.id(), SIMULATION_BASELINE),
             Map.entry(SIMULATION_TERRAIN.id(), SIMULATION_TERRAIN),
             Map.entry(SIMULATION_SCALE.id(), SIMULATION_SCALE),

@@ -23,8 +23,7 @@ public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardM
             var contact=state.security().contacts().get(allocated.contact());
             boolean intercept=mission.stage()==GuardMission.Stage.INTERCEPT;
             var order=intercept?CombatComposition.CAPABILITIES.current(state,owner.execution(),tick):Optional.<CombatOrder>empty();
-            boolean legalMelee=order.filter(value->MeleePositions.weapon(state.combat(),value)
-                    .filter(profile->MeleePositions.permitted(state,value,profile,mission.station(),tick)).isPresent()).isPresent();
+            boolean legalMelee=order.filter(value->CombatPositioning.legal(state,value,mission.station(),tick)).isPresent();
             int radius=state.bootstrap().ruleset().security().searchRadius();
             if(!io.farfrontier.palemirror.frontier.v3.model.security.GuardResponse.permitsStation(state,owner,mission.station())
                     || contact==null || !contact.target().equals(mission.response().orElseThrow())
@@ -71,7 +70,7 @@ public record GuardMissionSelected(SubjectId duty, long expectedRevision, GuardM
         var combat=state.combat();
         if(mission.stage()==GuardMission.Stage.INTERCEPT){
             var order=CombatComposition.CAPABILITIES.current(state,owner.execution(),tick).orElseThrow();
-            MeleePositions.requireClaim(state,order,mission.station(),tick);
+            CombatPositioning.requireClaim(state,order,mission.station(),tick);
             combat=combat.positioned(order,Optional.of(mission.station()),MeleePosition.Reason.RESERVED,tick,state.bootstrap().ruleset().melee());
         }else combat=combat.releasePosition(owner.id()).withdrawn(owner.execution());
         return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().withGuard(owner.withMission(mission))).combat(combat));

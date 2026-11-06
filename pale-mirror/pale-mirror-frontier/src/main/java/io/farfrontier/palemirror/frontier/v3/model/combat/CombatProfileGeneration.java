@@ -8,7 +8,7 @@ public final class CombatProfileGeneration {
         int sword=score(value,baseline,0),evade=score(value,baseline,1),defend=score(value,baseline,2);
         return new CombatProfile(new CombatAttributes(score(value,data.number("generation.attributeBaseline"),3),score(value,data.number("generation.attributeBaseline"),4),score(value,
             data.number("generation.attributeBaseline"),5),score(value,data.number("generation.attributeBaseline"),6),score(value,data.number("generation.attributeBaseline"),7)),
-            Map.of(CombatSkillId.SWORD,sword,CombatSkillId.EVASION,evade,CombatSkillId.WEAPON_DEFENCE,defend));
+            Map.of(CombatSkillId.CROSSBOW,score(mix(value),baseline,0),CombatSkillId.SWORD,sword,CombatSkillId.EVASION,evade,CombatSkillId.WEAPON_DEFENCE,defend));
     }
     private static int score(long seed,int baseline,int salt){int spread=salt<3?CombatTrainingCatalog.standard().generationSpread():CombatTrainingCatalog.standard().number("generation.attributeSpread");
         return (int)Math.clamp(baseline+Math.floorMod(mix(seed+salt*0x9e3779b97f4a7c15L),2*spread+1)-spread,0,100);}

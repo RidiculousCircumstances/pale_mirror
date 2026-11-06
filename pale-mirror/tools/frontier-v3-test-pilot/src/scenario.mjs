@@ -601,7 +601,7 @@ function validEntityName(value) {
   return value && Object.keys(value).length === 1 && reference && Object.keys(reference).length === 3
     && validDiagnosticIdentity(reference)
     && ((reference.view === 'actor' && reference.field === 'name' && requiredId(reference.id, 'resident:'))
-      || (reference.view === 'settlement' && ['firstGuardName', 'secondGuardName'].includes(reference.field) && requiredId(reference.id, 'settlement:'))
+      || (reference.view === 'settlement' && ['firstGuardName', 'secondGuardName', 'crossbowName'].includes(reference.field) && requiredId(reference.id, 'settlement:'))
       || (reference.view === 'scene' && reference.field === 'primaryActorName')
       || (reference.view === 'site' && reference.field === 'workerPresentation'));
 }
@@ -617,7 +617,7 @@ function validResolvablePosition(value) {
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
-        && (['farmAnchor', 'routeSurface', 'firstGuardPosition', 'layout.firstHousingAnchor'].includes(reference.field)
+        && (['farmAnchor', 'routeSurface', 'firstGuardPosition', 'crossbowPosition', 'layout.firstHousingAnchor'].includes(reference.field)
           || /^layout\.facilities\.(HALL|HOUSING|FARM|WORKSHOP|DEPOT|INFIRMARY|SMELTERY|FORGE|WOODSHOP|KITCHEN|TEXTILE_WORKSHOP)\.(anchor|entrance|secondaryEntrance|exterior|interior|floor|facadeView)$/.test(reference.field)))
       || (reference.view === 'process' && requiredId(reference.id, 'job:')
         && ['cursor.retainedBody', 'goal.station'].includes(reference.field))

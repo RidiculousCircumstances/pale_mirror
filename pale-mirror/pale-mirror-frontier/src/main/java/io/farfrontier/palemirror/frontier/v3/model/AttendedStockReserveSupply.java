@@ -13,8 +13,7 @@ final class AttendedStockReserveSupply implements ReserveSupplyPort {
             var recipe = state.bootstrap().ruleset().production().require(policy.recipeId());
             if (AutomaticStationProduction.stations(state, home, recipe).isEmpty()) continue;
             needs.put(recipe.product().itemKind(), new Need(Rate.ZERO, policy.outputReserve()));
-            var inputs = new TreeMap<String, Rate>();
-            ProductionRecipeInputs.select(recipe, kind -> 0L).forEach((kind, count) -> inputs.put(kind, Rate.of(count, recipe.product().quantity())));
+            var inputs = ProductionRecipeSupplyFlow.read(state.bootstrap().ruleset(), recipe);
             flows.add(new Flow(recipe.product().itemKind(), inputs));
             long duration = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE).workUnits();
             timing.put(recipe.product().itemKind(), new Timing(duration * policy.maximumBatches(), TimingBasis.LOCAL_ESTIMATE));

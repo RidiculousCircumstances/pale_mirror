@@ -20,7 +20,8 @@ public final class GuardWorkProcess {
     }
     public static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long tick) {
         return GuardEquipment.in(state, resident.settlementId()).stream().filter(duty -> alive(state, duty)).count() < GuardEquipment.target(state, resident.settlementId())
-                && WorkEquipmentSelection.hasAvailable(state, resident.settlementId(), GuardEquipment.REQUIREMENTS, WorkEquipmentClaimComposition.reserved(state));
+                && GuardEquipment.vacancies(state, resident.settlementId()).stream().anyMatch(method -> WorkEquipmentSelection.hasAvailable(state, resident.settlementId(), GuardEquipment.requirements(method),
+                        WorkEquipmentClaimComposition.reserved(state)));
     }
     public static List<ProposedEvent> review(FrontierWorldState initial, ScheduledAction action, long tick) {
         var events = new ArrayList<ProposedEvent>(); var state = initial;
@@ -30,12 +31,16 @@ public final class GuardWorkProcess {
             public HumanCapability capability() { return HumanCapability.SECURITY; }
             public Optional<ResidentWorkOffer<GuardDuty>> discover(FrontierWorldState snapshot, ResidentProfile resident, long now) {
                 if (!availableWork(snapshot, resident, now)) return Optional.empty();
-                return selection(snapshot, resident.settlementId(), resident.id(), Set.of()).map(selected -> {
+                for (var method : GuardEquipment.vacancies(snapshot, resident.settlementId())) {
+                    var choice = selection(snapshot, resident.settlementId(), resident.id(), Set.of(), method);
+                    if (choice.isEmpty()) continue;
+                    var selected = choice.orElseThrow();
                     var id = new SubjectId("guard-duty:" + resident.id().value().replace(':', '-'));
                     var execution = snapshot.actorExecutions().next(resident.id(), ActorActivityKind.GUARD, id);
-                    var duty = new GuardDuty(id, resident.settlementId(), execution, selected.item().id(), selected.source(), GuardDuty.Phase.EQUIPPING, 1);
-                    return new ResidentWorkOffer<>(kind(), resident.id(), duty, List.of(new WorkReservationClaim.ExactResource(duty.weapon(), 1)));
-                });
+                    var duty = new GuardDuty(id, resident.settlementId(), execution, selected.item().id(), selected.source(), GuardDuty.Phase.EQUIPPING, 1, method);
+                    return Optional.of(new ResidentWorkOffer<>(kind(), resident.id(), duty, List.of(new WorkReservationClaim.ExactResource(duty.weapon(), 1))));
+                }
+                return Optional.empty();
             }
         };
         for (var resident : ResidentWorkComposition.SELECTION.eligible(state, action.subject(), ResidentWorkKind.GUARD, HumanCapability.SECURITY, tick)) {
@@ -56,10 +61,10 @@ public final class GuardWorkProcess {
                 GuardContinuation.review(action.subject(), tick + initial.bootstrap().ruleset().cadence().strategicReviewInterval()))));
         return List.copyOf(events);
     }
-    private static Optional<WorkEquipmentSelection.Selection> selection(FrontierWorldState state, SubjectId home, SubjectId actor, Set<SubjectId> own) {
+    private static Optional<WorkEquipmentSelection.Selection> selection(FrontierWorldState state, SubjectId home, SubjectId actor, Set<SubjectId> own, io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod method) {
         var reserved = new HashSet<>(WorkEquipmentClaimComposition.reserved(state)); reserved.removeAll(own);
         return WorkEquipmentSelection.select(state, home, state.actorLocations().get(actor).supportingSurface(),
-                state.actorLocations().get(actor).navigationProfile(), GuardEquipment.REQUIREMENTS, reserved);
+                state.actorLocations().get(actor).navigationProfile(), GuardEquipment.requirements(method), reserved);
     }
     public static List<ProposedEvent> progress(FrontierWorldState state, ScheduledAction action, long tick) {
         var duty = state.strategicPlans().guards().get(action.subject());
@@ -70,6 +75,7 @@ public final class GuardWorkProcess {
             try { return GuardPatrolProcess.preparing(state,action,duty,tick); }
             catch(KnownPedestrianNavigation.RouteUnavailable waiting) { return retry(state,action,tick); }
         }
+        if(state.combat().ranged().unsettled(duty.id())) return retry(state,action,tick);
         if (GuardAuthority.equipmentPending(state, duty)) return retry(state, action, tick);
         if (!alive(state, duty)) return List.of(changed(duty, GuardDutyEvent.Change.ENDED), cancel(action));
         if (!state.actorExecutions().actors().get(duty.execution().actorId()).current().equals(Optional.of(duty.execution()))) return cancelled(action);
@@ -114,6 +120,24 @@ public final class GuardWorkProcess {
             }
             return List.copyOf(events);
         }
+        if(duty.phase()==GuardDuty.Phase.RESUPPLYING) {
+            var supply=GuardAmmunition.require(state,duty);
+            if(!GuardAmmunition.sourceAvailable(state,duty) || GuardStaffingRelease.requested(state,duty))
+                return List.of(new ProposedEvent(duty.id(),new GuardAmmunitionEvent.Cancelled(duty.id(),duty.revision())),cancel(action),GuardContinuation.wake(duty.id(),tick));
+            if(!duty.order().arrivedAt(state.actorLocations().get(duty.execution().actorId()).supportingSurface()))
+                {var events=new ArrayList<>(ActorMovementProcess.planStart(new ActorMovement(duty.order(),tick,new ActorMovementContext.GuardEquipment(duty.id(),duty.revision()),duty.execution())));events.add(cancel(action));
+                        return List.copyOf(events);}
+            if(ActorExecutionCoordinator.coldAvailable(state,duty.execution().actorId()) && !ReferenceContainerCustody.hasLiveCustody(state,duty.source().containerId())
+                    && ServiceAccessCoordinator.available(state,GuardAuthority.service(duty)))
+                return List.of(new ProposedEvent(duty.id(),new GuardAmmunitionEvent.Loaded(duty.id(),duty.revision(),Optional.empty(),List.of(),List.of())),cancel(action),GuardContinuation.wake(duty.id(),tick));
+            return retry(state,action,tick);
+        }
+        if(duty.phase()==GuardDuty.Phase.ON_DUTY && duty.method()==io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.CROSSBOW
+                && GuardEquipment.held(state,duty) && !GuardStaffingRelease.requested(state,duty)) {
+            try{var selected=GuardAmmunition.select(state,duty);
+                if(selected.isPresent())return List.of(new ProposedEvent(duty.id(),selected.orElseThrow()),cancel(action),GuardContinuation.wake(duty.id(),tick));}
+            catch(KnownPedestrianNavigation.RouteUnavailable waiting){return retry(state,action,tick);}
+        }
         if (duty.phase() != GuardDuty.Phase.RETURNING && GuardEquipment.held(state, duty) && !GuardStaffingRelease.requested(state,duty)) {
             if (duty.phase() == GuardDuty.Phase.ON_DUTY) {
                 try { return GuardPatrolProcess.progress(state,action,duty,tick); }
@@ -130,7 +154,7 @@ public final class GuardWorkProcess {
         }
         if (!carried && (duty.phase() != GuardDuty.Phase.EQUIPPING || !GuardAuthority.sourceAvailable(state, duty))) {
             Optional<WorkEquipmentSelection.Selection> selected;
-            try { selected = selection(state, duty.home(), duty.execution().actorId(), Set.of(duty.weapon())); }
+            try { selected = selection(state, duty.home(), duty.execution().actorId(), Set.of(duty.weapon()), duty.method()); }
             catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return retry(state, action, tick); }
             if (selected.isEmpty()) return retry(state, action, tick);
             var choice = selected.orElseThrow();

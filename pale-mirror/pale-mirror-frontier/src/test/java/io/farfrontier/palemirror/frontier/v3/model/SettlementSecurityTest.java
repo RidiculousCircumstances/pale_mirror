@@ -242,7 +242,8 @@ class SettlementSecurityTest {
         var command=new FrontierCommand(FrontierCommand.SCHEMA_VERSION,commandId,state.bootstrap().worldId(),Revision.ZERO,
             new SimInstant(21001),FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,CauseChain.root(commandId),
             new CombatEvent.ManeuverRequested(r.body(),order.target(),outside,new MeleeManeuvers.Facts(1,0)));
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("combat",state,command),"knockback outside the engagement refuses the optional intent before transition/replay");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,FrontierWorldProcessCatalog.planCommand("combat",state,command),
+                "knockback outside the engagement refuses the optional intent before transition/replay");
     }
     @Test void movementOfTheSameTargetWithinReachDoesNotCancelAnOtherwiseValidApproach(){
         var r=ready();var state=allocated(apply(offence(r),r.duty().home(),seen(r,contact(r)),21001),21001);
@@ -519,6 +520,9 @@ class SettlementSecurityTest {
         state=selectMission(state,r.duty().id(),lostAt);
         assertEquals(GuardMission.Stage.SEARCH,state.strategicPlans().guards().get(duty.id()).mission().orElseThrow().stage());
         assertEquals("Search last known area",ResidentPresentation.from(state,duty.execution().actorId()).task());
+        // The shared goal navigator may retain a different reachable search station.
+        // This unit explicitly observes arrival before asserting the station-local pause.
+        state=state.withActorBody(duty.execution().actorId(),state.strategicPlans().guards().get(duty.id()).mission().orElseThrow().station().standingBody());
         state=selectMission(state,r.duty().id(),lostAt+1);
         var searching=state.strategicPlans().guards().get(duty.id());
         assertEquals(lostAt+1+40,searching.mission().orElseThrow().search().orElseThrow().pauseUntil());
@@ -703,7 +707,9 @@ class SettlementSecurityTest {
         var station=new SurfaceAnchor(contact(r).position()).offset(1,0,0);
         var contender=new CombatOrder(other.execution(),other.revision(),other.weapon(),new CombatPartyId(new SubjectId("party:independent")),first.engagement(),first.targetPosition(),21001,1000,
                 state.actorLocations().get(other.execution().actorId()).supportingSurface(),state.actorLocations().get(other.execution().actorId()).navigationProfile(),Optional.of(station),
-                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0),combatProfile(),CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),MeleeAttack.BASIC_CUT);
+                new CombatStyle(new CombatStyleId("test:mechanics"),"Mechanics",2200000,1,1,1,0,1,0,0,0),combatProfile(),
+                        new io.farfrontier.palemirror.frontier.v3.model.combat.CombatUse.Melee(io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.MELEE,CombatSkillId.SWORD,java.util.EnumSet.allOf(MeleeAttack.class),
+                        MeleeAttack.BASIC_CUT));
         var occupied=apply(state,first.owner(),new CombatEvent.PositionPlanned(first.execution(),first.target(),first.targetPosition(),Optional.of(station),MeleePosition.Reason.RESERVED),21001);
         assertThrows(IllegalArgumentException.class,()->MeleePositions.requireClaim(occupied,contender,station,21002));
         MeleePositions.requireClaim(occupied,contender,station,21082);

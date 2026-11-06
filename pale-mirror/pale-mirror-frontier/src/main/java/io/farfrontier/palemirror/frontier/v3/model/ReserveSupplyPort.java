@@ -7,7 +7,7 @@ import java.util.*;
 
 /** Family-owned forecast facts, with no stock, route, job or financial mutation authority. */
 public interface ReserveSupplyPort {
-    enum Key { NUTRITION, BAKERY, FIELD, EXTRACTION, LOGISTICS, AUTOMATIC_STATIONS, EQUIPMENT, ATTENDED_STOCK }
+    enum Key { NUTRITION, BAKERY, FIELD, EXTRACTION, LOGISTICS, AUTOMATIC_STATIONS, EQUIPMENT, ATTENDED_STOCK, AMMUNITION }
     record Facts(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing,
                  Map<String, ProductionRequirement> requiredInputs, Map<String, Long> renewalInputs) {
         public Facts(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing, Map<String, ProductionRequirement> requiredInputs) { this(needs, flows, timing, requiredInputs, Map.of()); }

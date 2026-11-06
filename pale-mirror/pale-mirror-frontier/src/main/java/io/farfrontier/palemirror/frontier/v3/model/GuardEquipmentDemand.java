@@ -11,8 +11,15 @@ final class GuardEquipmentDemand implements EquipmentDemandPort {
     public List<EquipmentDemand> read(FrontierWorldState state, SubjectId home) {
         int target = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.GUARD).size();
         if (target == 0) return List.of();
-        return views.get(state.bootstrap(), home, List.of(state.bootstrap().ruleset().labour(), target), () -> List.of(
-                new EquipmentDemand("guard", List.of(GuardEquipment.CAPABILITY), target, Optional.empty(),
-                        EquipmentDemand.Acquisition.PRODUCE_LOCAL)));
+        int ranged = GuardEquipment.rangedTarget(state, home, target);
+        return views.get(state.bootstrap(), home, List.of(state.bootstrap().ruleset().labour(), target, ranged), () -> {
+            var demands = new ArrayList<EquipmentDemand>();
+            for (var method : io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.values()) {
+                int count = method == io.farfrontier.palemirror.frontier.v3.model.combat.CombatMethod.CROSSBOW ? ranged : target-ranged;
+                if (count > 0) demands.add(new EquipmentDemand("guard-" + method.name().toLowerCase(java.util.Locale.ROOT),
+                        List.of(GuardEquipment.capability(method)), count, Optional.empty(), EquipmentDemand.Acquisition.PRODUCE_LOCAL));
+            }
+            return List.copyOf(demands);
+        });
     }
 }
