@@ -1,6 +1,9 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
+import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.combat.RangedEvent;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.*;
@@ -31,6 +34,30 @@ class FrontierV3OperationLedgerTest {
         assertFalse(crashAfterConsumption.beginAttempt(unused.ticket()), "crash after proof consumption never permits replay");
         assertTrue(recovered.beginAttempt(unused.ticket())); recovered.finishAttempt(unused.ticket());
         assertFalse(recovered.beginAttempt(unused.ticket()), "one resumed operation has one live attempt");
+    }
+
+    @Test void guardAmmunitionAndShotConsequencesRetainDurableOwnerCommandsAcrossJournalRecovery() throws Exception {
+        var actor=new SubjectId("resident:ammo-receipt");var owner=new SubjectId("guard-duty:ammo-receipt");
+        var actuation=new ActorActuationId(new ActorBodyId(actor,1),new ActorExecutionId(actor,ActorActivityKind.GUARD,owner,1));
+        var step=new ActorItemTransferStep(new ActorHotObservation(actuation,1),List.of(new MaterialSourceSelection.Slice(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(new SubjectId("container:ammo-receipt"),0)),32,32,1)),1);
+        record Outcome(FrontierV3OperationReceipt.Protocol protocol,FrontierPayload payload) { }
+        var outcomes=List.of(
+                new Outcome(FrontierV3OperationReceipt.Protocol.GUARD_AMMUNITION,new GuardAmmunitionEvent.Loaded(owner,1,Optional.of(step),List.of(),List.of())),
+                new Outcome(FrontierV3OperationReceipt.Protocol.GUARD_AMMUNITION,new GuardAmmunitionEvent.Aborted(owner,1,step)),
+                new Outcome(FrontierV3OperationReceipt.Protocol.RANGED_SHOT,new RangedEvent.Completed(owner,1,true,List.of())),
+                new Outcome(FrontierV3OperationReceipt.Protocol.RANGED_SHOT,new RangedEvent.Completed(owner,1,false,List.of())));
+        var path=directory.resolve("ranged-consequences.dat");var ledger=fresh(path);var tickets=new ArrayList<UUID>();
+        for(int i=0;i<outcomes.size();i++) {
+            var outcome=outcomes.get(i);
+            var operation=ledger.prepare(new FrontierV3OperationReceipt.Declaration(outcome.protocol(),owner,"outcome-"+i,
+                    "sha256:"+"b".repeat(64),Set.of(BODY)));
+            var command=new FrontierV3OperationLedger.OwnerCommand(new CommandId("test:ranged-outcome-"+i),outcome.payload());
+            ledger.applied(operation.nativeReceipt(BODY));
+            ledger.bindOwnerCommand(operation.ticket(),command);tickets.add(operation.ticket());
+        }
+        ledger.finish();var recovered=reopen(path);
+        for(int i=0;i<outcomes.size();i++)assertEquals(outcomes.get(i).payload(),recovered.ownerCommand(tickets.get(i)).orElseThrow().consequence());
     }
 
     @Test void forgedOrIncompatibleShutdownProofCannotGrantPhysicalPermission() throws Exception {

@@ -14,6 +14,7 @@ public sealed interface RangedEvent extends FrontierPayload permits RangedEvent.
     }
     record Completed(SubjectId owner,long attemptOrdinal,boolean emitted,List<FungiblePhysicalObservation.Stack> remaining) implements RangedEvent {
         public static final String TYPE="frontier.ranged_shot_completed";public String type(){return TYPE;}
+        public boolean requiresDurableBeforeEffect(){return true;}
         public Completed{Objects.requireNonNull(owner);remaining=List.copyOf(remaining);if(attemptOrdinal<1 || !emitted&&!remaining.isEmpty())throw new IllegalArgumentException("invalid ranged outcome");}
     }
 }
