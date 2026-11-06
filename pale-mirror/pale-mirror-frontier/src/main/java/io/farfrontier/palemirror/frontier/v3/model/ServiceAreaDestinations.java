@@ -30,20 +30,6 @@ public final class ServiceAreaDestinations {
                 || point.egressSurfaces().contains(surface);
     }
 
-    public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,
-            SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
-        return select(points, actorId, start, knowledge, excluded, surface -> true);
-    }
-
-    public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,
-            SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
-            java.util.function.Predicate<SurfaceAnchor> available) {
-        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.withService(
-                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningService.PASSAGE_CLEARANCE,
-                () -> selectClearance(surface -> points.stream().anyMatch(point -> temporary(point, surface)), actorId, start, knowledge, excluded, available,
-                        route -> points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)), surface -> true));
-    }
-
     private static Optional<SurfaceAnchor> selectClearance(java.util.function.Predicate<SurfaceAnchor> temporary, SubjectId actorId,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
             java.util.function.Predicate<SurfaceAnchor> available,
@@ -58,8 +44,8 @@ public final class ServiceAreaDestinations {
                                 + Math.abs((long) candidate.z() - start.z()))
                         .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
         for (var candidate : nearby)
-            if (hasStandingClearance(candidate, excluded) && !temporary.test(candidate)
-                    && available.test(candidate) && routeAllowed.test(local.get(candidate))
+            if (hasStandingClearance(candidate, excluded) && available.test(candidate)
+                    && !temporary.test(candidate) && routeAllowed.test(local.get(candidate))
                     && reachable.test(candidate)) return Optional.of(candidate);
         var candidates = new java.util.PriorityQueue<Candidate>(java.util.Comparator.comparingLong(Candidate::distance)
                 .thenComparingInt(Candidate::ordinal));
@@ -79,7 +65,7 @@ public final class ServiceAreaDestinations {
             while (!candidates.isEmpty() && candidates.peek().distance() <= distance) {
                 var candidate = candidates.remove().surface();
                 if (local.containsKey(candidate) || !hasStandingClearance(candidate, excluded)
-                        || temporary.test(candidate) || !available.test(candidate)) continue;
+                        || !available.test(candidate) || temporary.test(candidate)) continue;
                 MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                         TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                 try {

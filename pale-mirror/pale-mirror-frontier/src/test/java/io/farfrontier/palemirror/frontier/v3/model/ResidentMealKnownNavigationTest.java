@@ -297,7 +297,8 @@ class ResidentMealKnownNavigationTest {
         assertTrue(!route.getLast().equals(stalePocket));
         assertTrue(!exits.contains(route.getLast()));
         var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(settlement.id())).identity());
-        var rest = ServiceAreaDestinations.select(List.of(point), actor, stalePocket, knowledge, java.util.Set.of()).orElseThrow();
+        var rest = ServiceAreaDestinations.select(ServiceClearanceRoutes.fromService(state,actor,stalePocket,
+                ServiceBoundaryComposition.declaration(state,meal.depotId()).identity()),actor,stalePocket,java.util.Set.of(),candidate -> true,candidate -> true).orElseThrow();
         assertTrue(!ServiceAreaDestinations.temporary(point, rest));
     }
 

@@ -42,7 +42,7 @@ final class FrontierV3ServicePointClearance {
         if (target == null || target.revision() != lease.revision()
                 || target.surfaces().stream().noneMatch(surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))) {
             if (point == null) { TARGETS.remove(body); return false; }
-            var clearance = ServiceClearanceRoutes.from(state, lease.actorId(), observed.supportingSurface());
+            var clearance = ServiceClearanceRoutes.fromService(state, lease.actorId(), observed.supportingSurface(), point.identity());
             var search = SEARCHES.get(body);
             if (search == null || !search.matches(actuation.id(), observed.supportingSurface(), clearance.knowledge().geometry())) {
                 search = new FrontierV3ClearanceProbe(actuation.id(), observed.supportingSurface(), clearance.knowledge().geometry());

@@ -144,8 +144,8 @@ class ExtractionTerracesTest {
                 new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(actor, actor, 0, 1,
                         List.of(station), TraversalCapability.PEDESTRIAN,
                         io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION)).getLast());
-        assertEquals(Optional.of(floor), ServiceAreaDestinations.select(List.of(), actor, start, knowledge, Set.of(),
-                candidate -> candidate.equals(rim) || candidate.equals(floor)));
+        assertEquals(Optional.of(floor), ServiceAreaDestinations.select(ServiceClearanceRoutes.from(state,actor,start),actor,start,Set.of(),
+                candidate -> candidate.equals(rim) || candidate.equals(floor),candidate -> true));
     }
     @Test void lowerLandingsRequireSweptStepClearanceWithoutStrippingTheWholeColumnAndRetainHistory() {
         var before = clearDeclared(initial()); var old = deposit(before); var id = old.site().id();

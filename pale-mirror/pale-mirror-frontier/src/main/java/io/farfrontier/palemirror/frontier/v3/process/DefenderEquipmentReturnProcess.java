@@ -142,8 +142,9 @@ public final class DefenderEquipmentReturnProcess {
                     .map(entry -> entry.getValue().supportingSurface()).forEach(excluded::add);
             state.actorMovements().values().stream().flatMap(move -> move.order().legalStations().stream()).forEach(excluded::add);
             state.humanPopulation().meals().values().stream().map(ResidentMeal::clearingSurface).forEach(excluded::add);
-            var destination = ServiceAreaDestinations.select(ServiceBoundaryComposition.geometries(state), visit.actorId(), actual,
-                    ResourceStorageNavigation.forEndpoint(state, visit.access().endpoint()), excluded);
+            var point=ServiceBoundaryComposition.declaration(state,visit.access().containerId()).identity();
+            var clearance=ServiceClearanceRoutes.fromService(state,visit.actorId(),actual,point);
+            var destination = ServiceAreaDestinations.select(clearance,visit.actorId(),actual,excluded,surface -> true,surface -> true);
             return destination.map(target -> List.of(changed(parent, Optional.of(phase(visit, DefenderEquipmentReturnVisit.Phase.CLEARANCE,
                     execution, Optional.of(goal(visit, List.of(target), tick))))))).orElseGet(List::of);
         }

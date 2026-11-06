@@ -48,7 +48,7 @@ final class ResidentServiceTurnover {
         if (occupied.isEmpty()) return Optional.empty();
         var actor = state.actorLocations().get(actorId);
         var point = occupied.orElseThrow();
-        var clearance = ServiceClearanceRoutes.from(state, actorId, actor.supportingSurface());
+        var clearance = ServiceClearanceRoutes.fromService(state, actorId, actor.supportingSurface(), point.identity());
         var excluded = new HashSet<SurfaceAnchor>();
         state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(actorId))
                 .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
