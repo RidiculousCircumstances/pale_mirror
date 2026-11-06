@@ -7,6 +7,26 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServicePointGeometryCacheTest {
+    @Test void storageBufferUsesTheDeclaredExteriorAndOnlyItsConnectedSurface() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:indoor-storage-buffer"),139));
+        var home = state.bootstrap().settlements().getFirst();
+        var id = CommunalDiningPlan.initialFoodStorage(state.bootstrap(),home.id());
+        var declaration = ServiceBoundaryComposition.declaration(state,id);
+        var point = ServiceBoundaryComposition.geometry(state,declaration.identity());
+        var endpoint = (ShipmentEndpoint.Storage) ResourceStorageAccess.at(state,id).endpoint();
+        var knowledge = ShipmentEndpointComposition.knowledge(state,List.of(endpoint));
+        var connected = io.farfrontier.palemirror.frontier.v3.model.geometry.ReachableSurfaceArea.select(
+                knowledge.geometry(),List.of(endpoint.exteriorApproach()),endpoint.exteriorApproach(),
+                ServiceWaitingTargets.radius(home.residents().size()),4096,2048,p -> true).selected();
+        assertFalse(point.waitingSurfaces().isEmpty(),"the ordinary kitchen retains an accessible outdoor buffer");
+        assertTrue(connected.containsAll(point.waitingSurfaces()),"isolated upper surfaces cannot become waiting destinations");
+        for(var candidate:point.waitingSurfaces()) {
+            assertTrue(Math.abs(candidate.x()-endpoint.exteriorApproach().x()) <= ServiceWaitingTargets.radius(home.residents().size()));
+            assertTrue(Math.abs(candidate.z()-endpoint.exteriorApproach().z()) <= ServiceWaitingTargets.radius(home.residents().size()));
+            assertTrue(point.boundary().cleared(candidate.standingBody()));
+        }
+    }
+
     @Test void remoteChangeReusesServiceGeometryButLocalObstructionRemovesAnExit() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:local-service"), 41));
         var settlement = state.bootstrap().settlements().getFirst();

@@ -38,7 +38,12 @@ final class ServiceWaitingTargets {
         waiting.removeIf(surface -> Math.max(Math.abs(surface.x() - center.x()), Math.abs(surface.z() - center.z())) > radius
                 || Math.abs(surface.y() - center.y()) > radius
                 || egress.contains(surface) || !knowledge.traversable(List.of(surface)));
-        return List.copyOf(waiting);
+        // A free roof or sealed pocket is not a waiting place. Reuse the shared bounded
+        // component walk from the provider-declared approach; missing facts grant no access.
+        if (waiting.isEmpty()) return List.of();
+        return io.farfrontier.palemirror.frontier.v3.model.geometry.ReachableSurfaceArea.select(
+                knowledge.geometry(), List.of(center), center, radius, waiting.size(), 2048, waiting::contains)
+                .selected();
     }
     private static void add(Set<SurfaceAnchor> waiting, ServiceAccessBoundary boundary,
             KnownPedestrianRouteKnowledge knowledge, int x, int z) {

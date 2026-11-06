@@ -25,7 +25,7 @@ public final class AmbientPlacementPolicy {
             Map.entry(AmbientGoalKind.MEAL, new Strategy() {
                 @Override public List<SurfaceAnchor> candidates(FrontierWorldState state, AmbientActorLease lease) {
                     return ResidentMealAdmissionPlacement.mayRelocate(state, lease.actorId())
-                            ? serviceZone(state, lease) : exact(state, lease);
+                            ? localServiceZone(state, lease) : exact(state, lease);
                 }
                 @Override public FrontierWorldState admitted(FrontierWorldState state, AmbientActorLease lease, BodyPosition body) {
                     return ResidentMealAdmissionPlacement.confirmed(state, lease.actorId(), body);
@@ -67,7 +67,7 @@ public final class AmbientPlacementPolicy {
     }
     private AmbientPlacementPolicy() { }
     private static final class ServiceStrategy implements Strategy {
-        @Override public List<SurfaceAnchor> candidates(FrontierWorldState state, AmbientActorLease lease) { return serviceZone(state, lease); }
+        @Override public List<SurfaceAnchor> candidates(FrontierWorldState state, AmbientActorLease lease) { return localServiceZone(state, lease); }
         @Override public Optional<PedestrianRouteReceipt> selectedRoute(FrontierWorldState state, AmbientActorLease lease, SurfaceAnchor surface) {
             return selectedServiceRoute(state, lease, surface);
         }
@@ -128,6 +128,21 @@ public final class AmbientPlacementPolicy {
         }
         return List.copyOf(result);
     }
+    /** Birth proposals only. Existing indexed bodies are never moved by placement policy. */
+    private static KnownPedestrianRouteKnowledge localPlacementKnowledge(FrontierWorldState state, AmbientActorLease lease) {
+        return PedestrianLocalDeparture.departure(state, lease.handoffBody().supportingSurface()).forActor(state, lease.actorId());
+    }
+    private static List<SurfaceAnchor> localServiceZone(FrontierWorldState state, AmbientActorLease lease) {
+        // Service turnover has its own declared buffer and arbitration. Extend only
+        // births outside it; a local alternative must not become a second service socket.
+        if (ServiceBoundaryComposition.turnoverPoint(state,lease.handoffBody().supportingSurface()).isPresent())
+            return serviceZone(state,lease);
+        var result = new ArrayList<>(exact(state, lease));
+        result.addAll(localPlacementKnowledge(state, lease).localPlacement(lease.handoffBody().supportingSurface()).stream()
+                .filter(surface -> !result.contains(surface)).toList());
+        for (var surface : serviceZone(state, lease)) if (!result.contains(surface)) result.add(surface);
+        return List.copyOf(result);
+    }
     private static List<SurfaceAnchor> serviceZone(FrontierWorldState state, AmbientActorLease lease) {
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return exact(state, lease);
@@ -157,13 +172,18 @@ public final class AmbientPlacementPolicy {
         return ServiceBoundaryComposition.knowledge(state, point.identity()).forActor(state, lease.actorId());
     }
     private static Optional<PedestrianRouteReceipt> selectedServiceRoute(FrontierWorldState state, AmbientActorLease lease, SurfaceAnchor surface) {
+        var local = localPlacementKnowledge(state, lease).localPlacementRoutes(lease.handoffBody().supportingSurface()).get(surface);
+        if (local != null) return Optional.of(new PedestrianRouteReceipt(local));
         var point = requireServicePoint(state, lease, surface);
         var order = new MovementOrder(lease.actorId(), lease.actorId(), 0, lease.revision(), List.of(surface),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         return Optional.of(new PedestrianRouteReceipt(serviceKnowledge(state, lease, point).plannedPath(lease.handoffBody().supportingSurface(), order)));
     }
     private static void requireServiceRoute(FrontierWorldState state, AmbientActorLease lease, SurfaceAnchor surface, PedestrianRouteReceipt route) {
-        serviceKnowledge(state, lease, requireServicePoint(state, lease, surface)).requireRoute(route.route());
+        var scope = LocalNavigationEnvelope.around(lease.handoffBody(), lease.handoffBody());
+        if (route.route().stream().allMatch(value -> scope.contains(value.support())))
+            localPlacementKnowledge(state, lease).requireLocalPlacementRoute(route);
+        else serviceKnowledge(state, lease, requireServicePoint(state, lease, surface)).requireRoute(route.route());
     }
     private static long distance(SurfaceAnchor first, SurfaceAnchor second) {
         return Math.abs((long) first.x() - second.x()) + Math.abs((long) first.y() - second.y()) + Math.abs((long) first.z() - second.z());

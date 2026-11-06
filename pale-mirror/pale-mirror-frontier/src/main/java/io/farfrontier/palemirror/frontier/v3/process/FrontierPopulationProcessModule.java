@@ -283,6 +283,11 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(cleared.residentId(), cleared)));
         }
+        if (command.payload() instanceof ResidentMealDiningRequired required) {
+            try { ResidentMealProcess.reduceDiningRequired(state, required.execution().actorId(), required); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(required.execution().actorId(), required)));
+        }
         if (command.payload() instanceof ResidentMealClearanceRequired required) {
             try { ResidentMealProcess.reduceClearanceRequired(state, required.execution().actorId(), required); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -345,6 +350,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMealHotHandReleased observed -> ResidentMealProcess.reduceHotHandReleased(state, event.subject(), observed);
             case ResidentMealHotAccessCleared cleared -> ResidentActivityProcess.retargetHotResident(
                     ResidentMealProcess.reduceHotAccessCleared(state, event.subject(), cleared), event.subject(), event.instant().ticks());
+            case ResidentMealDiningRequired required -> ResidentActivityProcess.retargetHotResident(
+                    ResidentMealProcess.reduceDiningRequired(state, event.subject(), required), event.subject(), event.instant().ticks());
             case ResidentMealClearanceRequired required -> ResidentActivityProcess.retargetHotResident(
                     ResidentMealProcess.reduceClearanceRequired(state, event.subject(), required), event.subject(), event.instant().ticks());
             case ResidentMealApproachRequired required -> ResidentActivityProcess.retargetHotResident(

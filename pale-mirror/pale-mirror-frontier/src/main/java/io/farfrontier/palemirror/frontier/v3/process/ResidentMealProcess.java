@@ -121,6 +121,10 @@ public final class ResidentMealProcess {
                 && meal.pendingPhysicalStep().isEmpty() && requiresClearance(state, meal, body.body()))
             return List.of(new ProposedEvent(meal.residentId(), new ResidentMealClearanceRequired(meal.executionId(), body.body())),
                     new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), progress(meal, Math.addExact(now, 1L)))));
+        if (ActorExecutionCoordinator.coldAvailable(state, meal.residentId())
+                && meal.pendingPhysicalStep().isEmpty() && requiresDining(state, meal, body.body()))
+            return List.of(new ProposedEvent(meal.residentId(), new ResidentMealDiningRequired(meal.executionId(), body.body())),
+                    new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), progress(meal, Math.addExact(now, 1L)))));
         Optional<ResidentMealColdStep> step = planColdStep(state, meal.residentId(), now);
         // A waiting side pocket is held by its addressed service wake. A genuinely
         // unavailable known route is retried at a bounded cadence, not every tick.
@@ -423,6 +427,24 @@ public final class ResidentMealProcess {
         return meal.phase() == ResidentMeal.Phase.CONSUME && atDiningDestination(state, meal, observedBody);
     }
 
+    public static boolean requiresDining(FrontierWorldState state, ResidentMeal meal, BodyPosition body) {
+        return meal.phase() == ResidentMeal.Phase.CONSUME
+                && !ResidentDiningPlaces.contains(state, meal.settlementId(), meal.destination(), body.supportingSurface())
+                && !requiresClearance(state, meal, body);
+    }
+
+    public static FrontierWorldState reduceDiningRequired(FrontierWorldState state, SubjectId subject,
+                                                          ResidentMealDiningRequired required) {
+        var meal = state.humanPopulation().meals().get(subject);
+        var actor = state.actorLocations().get(subject);
+        if (meal == null || actor == null || !meal.executionId().equals(required.execution())
+                || !subject.equals(required.execution().actorId()) || actor.condition().status() != ActorLifeStatus.ALIVE
+                || !actor.body().equals(required.body()) || !requiresDining(state, meal, required.body()))
+            throw new IllegalArgumentException("dining return lacks exact displaced body and portion owner");
+        state.actorExecutions().requireCurrent(meal.executionId());
+        return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.requireDining()));
+    }
+
     public static boolean requiresClearance(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
         return meal.phase() == ResidentMeal.Phase.CONSUME && !meal.portable()
                 && port(state, meal).accessBoundary().occupied(observedBody);
@@ -510,7 +532,7 @@ public final class ResidentMealProcess {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !ActorExecutionCoordinator.coldAvailable(state, residentId))
             return Optional.empty();
-        if (requiresClearance(state, meal, actor.body())) return Optional.empty();
+        if (requiresClearance(state, meal, actor.body()) || requiresDining(state, meal, actor.body())) return Optional.empty();
         if (meal.carriesWhileMoving()) {
             if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING
                     && atDiningDestination(state, meal, actor.body()))

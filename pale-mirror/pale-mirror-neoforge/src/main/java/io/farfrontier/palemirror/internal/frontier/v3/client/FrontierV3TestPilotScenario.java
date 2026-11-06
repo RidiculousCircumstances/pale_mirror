@@ -90,7 +90,7 @@ final class FrontierV3TestPilotScenario {
                             .anyMatch(key -> !key.equals("type") && !key.equals("causalMilestone"))) ||
                     (type.equals("place") && (!placePosition(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     (type.equals("use_item_on") && (!resolvablePosition(action, "position") || !itemKind(action)
-                            || !wholeWithin(action, "uses", 1, 32) || !timeout(action, 120_000L))) ||
+                            || !wholeWithin(action, "uses", 1, 32) || !timeout(action, 120_000L) || !validUseObservation(action))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
                     (type.equals("split_move_from_container") && !validSplitMove(action)) ||
                     (type.equals("move_within_container") && !validContainerReorder(action)) ||
@@ -438,6 +438,16 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("site") && field.equals("workerPresentation"));
     }
 
+    private static boolean validUseObservation(JsonObject action) {
+        if(!action.has("observeProperty")&&!action.has("observeTicks")&&!action.has("expectedValues"))return true;
+        return wholeWithin(action,"uses",1,1)&&wholeWithin(action,"observeTicks",1,100)
+                &&action.has("observeProperty")&&action.get("observeProperty").isJsonPrimitive()
+                &&action.get("observeProperty").getAsString().matches("[a-z0-9_]{1,32}")
+                &&action.has("expectedValues")&&action.get("expectedValues").isJsonArray()
+                &&action.getAsJsonArray("expectedValues").size()>=2&&action.getAsJsonArray("expectedValues").size()<=8
+                &&action.getAsJsonArray("expectedValues").asList().stream().allMatch(value -> value.isJsonPrimitive()
+                    &&value.getAsString().matches("[a-z0-9_]{1,32}"));
+    }
     private static boolean boundedOptionalNumber(JsonObject action, String field, double minimum, double maximum) {
         if (!action.has(field)) return true;
         if (!action.get(field).isJsonPrimitive() || !action.get(field).getAsJsonPrimitive().isNumber()) return false;

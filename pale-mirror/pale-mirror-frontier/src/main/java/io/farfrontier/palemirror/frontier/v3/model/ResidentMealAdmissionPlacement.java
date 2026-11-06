@@ -8,7 +8,7 @@ final class ResidentMealAdmissionPlacement {
     static boolean mayRelocate(FrontierWorldState state, SubjectId actorId) {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);
         if (meal == null) throw new IllegalArgumentException("meal admission lost its exact activity");
-        return meal.pendingPhysicalStep().isEmpty() && meal.phase() != ResidentMeal.Phase.CONSUME;
+        return meal.pendingPhysicalStep().isEmpty();
     }
     static FrontierWorldState confirmed(FrontierWorldState state, SubjectId actorId, BodyPosition body) {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);

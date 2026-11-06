@@ -40,19 +40,9 @@ final class FrontierV3ResidentMealNavigation {
             pursueClearance(level, state, body, meal, actuation);
             return;
         }
-        if (meal.phase() != ResidentMeal.Phase.MOVE
-                && !meal.carriesWhileMoving()) {
-            ROUTES.remove(body);
-            FrontierV3ServiceApproachNavigation.forget(body);
-            BLOCKED.remove(body);
-            FrontierV3GoalNavigation.stop(body, actuation);
-            return;
-        }
-        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
-            pursueClearance(level, state, body, meal, actuation);
-            return;
-        }
-        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) {
+        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING
+                || meal.phase() == ResidentMeal.Phase.CONSUME && ResidentMealProcess.requiresDining(state, meal,
+                        FrontierV3SurfaceObservation.observedBody(body))) {
             ROUTES.remove(body);
             FrontierV3ServiceApproachNavigation.forget(body);
             var start = FrontierV3SurfaceObservation.observedBody(body).supportingSurface();
@@ -69,6 +59,18 @@ final class FrontierV3ResidentMealNavigation {
                     FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED) blocked(body, meal, "dining:" + result.reason());
             else BLOCKED.remove(body);
+            return;
+        }
+        if (meal.phase() != ResidentMeal.Phase.MOVE
+                && !meal.carriesWhileMoving()) {
+            ROUTES.remove(body);
+            FrontierV3ServiceApproachNavigation.forget(body);
+            BLOCKED.remove(body);
+            FrontierV3GoalNavigation.stop(body, actuation);
+            return;
+        }
+        if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
+            pursueClearance(level, state, body, meal, actuation);
             return;
         }
         Route route = ROUTES.get(body);

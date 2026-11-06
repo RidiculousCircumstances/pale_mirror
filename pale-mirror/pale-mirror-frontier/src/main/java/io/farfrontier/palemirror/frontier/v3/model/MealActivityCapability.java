@@ -15,11 +15,11 @@ final class MealActivityCapability implements ActorActivityCapability {
             io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
         validateReference(state, execution);
         var meal = state.humanPopulation().meals().get(execution.actorId());
-        if (meal.pendingPhysicalStep().isPresent()
+        if (meal.pendingPhysicalStep().isPresent() && meal.phase() != ResidentMeal.Phase.CONSUME
                 || !order.actorId().equals(meal.residentId()) || !order.ownerId().equals(meal.claimId())
                 || order.goalOrdinal() != FrontierWireTags.tag(meal.phase()) || order.goalRevision() != meal.startedAtTick() + 1L
                 || order.capability() != TraversalCapability.PEDESTRIAN) return false;
-        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) {
+        if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING || meal.phase() == ResidentMeal.Phase.CONSUME) {
             if (!(meal.destination() instanceof MealDestination.DiningArea)
                     || order.arrivalPolicy() != io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION)
                 return false;

@@ -13,6 +13,38 @@ import java.nio.file.*;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3BuildingAuthoringGameTests {
+    @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void nativeStorageContactIsReachableThroughTheAuthoredEntrance(GameTestHelper helper) {
+        var catalog=BuildingCatalog.standard();
+        var definition=catalog.require(catalog.select(BuildingCatalog.MEDIEVAL_SPRUCE,
+                io.farfrontier.palemirror.frontier.v3.model.StructureKind.KITCHEN),
+                io.farfrontier.palemirror.frontier.v3.model.StructureKind.KITCHEN);
+        var level=helper.getLevel();var origin=helper.absolutePos(new net.minecraft.core.BlockPos(5,31,5));
+        for(int x=-3;x<28;x++)for(int z=-3;z<28;z++)level.setBlock(origin.offset(x,1,z),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),2);
+        for(var entry:definition.blocks().entrySet().stream().sorted(java.util.Comparator.comparingInt(e -> e.getKey().y())).toList()) {
+            var p=entry.getKey();var block=entry.getValue();var at=origin.offset(p.x(),p.y(),p.z());
+            var material=new io.farfrontier.palemirror.frontier.v3.model.StructureMaterial.Authored(block.state(),block.repairItem(),block.data());
+            level.setBlock(at,FrontierV3GrayboxPalette.block(material),2);
+            FrontierV3AuthoredBlockData.apply(level,at,material);
+        }
+        var pantry=definition.anchors().get("pantry");
+        level.setBlock(origin.offset(pantry.x(),pantry.y()+1,pantry.z()),net.minecraft.world.level.block.Blocks.BARREL.defaultBlockState(),2);
+        var contact=definition.anchors().get("serving");var target=origin.offset(contact.x(),contact.y()+1,contact.z());
+        var actor=net.minecraft.world.entity.EntityType.VILLAGER.create(level);actor.setNoAi(true);level.addFreshEntity(actor);
+        helper.runAfterDelay(3,() -> {
+            var front=definition.primaryEntranceDefinition().supports().getFirst();
+            actor.moveTo(origin.getX()+front.x()+.5,origin.getY()+front.y()+1,origin.getZ()+front.z()+.5,0,0);
+            actor.setOnGround(true);
+            var query=FrontierV3PedestrianTraffic.query(level,actor,target,new FrontierV3NavigationScope.ObservedWorld(
+                    new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(origin.getX()-8,origin.getZ()-8,48,48)),
+                    java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER));
+            helper.assertTrue(query.path()!=null && query.path().canReach()
+                    && FrontierV3PathClearance.path(level,actor,query.path()),
+                    "the original kitchen pantry is reachable from its declared entrance with native door capability");
+            actor.discard();helper.succeed();
+        });
+    }
+
     @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
     public static void linkedDoorsRetainBothVerticalHalvesAndRejectUnrelatedNeighbours(GameTestHelper helper) {
         var level=helper.getLevel();var base=helper.absolutePos(new net.minecraft.core.BlockPos(1,1,1));

@@ -69,6 +69,9 @@ final class FrontierV3ResidentMealPhysicalEffect {
             if (meal.pendingPhysicalStep().isEmpty() && ResidentMealProcess.requiresClearance(state, meal, observedBody.orElseThrow()))
                 return accepted(level, runtime, residentId, "resident-meal-clearance-required",
                         new ResidentMealClearanceRequired(meal.executionId(), observedBody.orElseThrow()));
+            if (meal.pendingPhysicalStep().isEmpty() && ResidentMealProcess.requiresDining(state, meal, observedBody.orElseThrow()))
+                return accepted(level, runtime, residentId, "resident-meal-dining-required",
+                        new ResidentMealDiningRequired(meal.executionId(), observedBody.orElseThrow()));
             if (!ResidentMealProcess.mayConsumeAt(state, meal, observedBody.orElseThrow())) return false;
             return consume(level, runtime, state, meal, worker, lease);
         }
@@ -173,7 +176,10 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
         var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, pending, held, participant);
         var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, List.of(participant),
-                () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held), FrontierV3NativeEffect.observed(() -> {
+                () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held)
+                        && FrontierV3SupportedBodyCapture.observe(level, worker)
+                            .filter(position -> ResidentMealProcess.mayConsumeAt(runtime.decodedState().orElseThrow(), meal, position)).isPresent(),
+                FrontierV3NativeEffect.observed(() -> {
                     var remainder = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()).copy(); remainder.shrink(meal.portion().quantity());
                     FrontierV3ActorResourceSlots.set(worker, meal.inventorySlot(), remainder);
                     level.playSound(null, worker.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.8F, 1.0F);

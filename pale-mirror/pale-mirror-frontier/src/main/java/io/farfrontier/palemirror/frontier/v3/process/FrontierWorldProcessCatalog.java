@@ -74,7 +74,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_meal_resource_effect_observed",
             "frontier.resident_meal_portion_disposition_observed",
             "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required",
+            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required",
             "frontier.resident_meal_approach_required",
             "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
@@ -699,7 +699,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
             "frontier.resident_meal_resource_effect_observed",
             "frontier.resident_meal_portion_disposition_observed",
             "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required",
+            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> economyCommands() { return types(
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
@@ -835,7 +835,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.resident_meal_resource_effect_observed",
                     "frontier.resident_meal_portion_disposition_observed",
                     "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-                    "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required",
+                    "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required",
                     "frontier.resident_meal_approach_required",
                     "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
                     "frontier.medical_treatment_started", "frontier.medical_treatment_transition",

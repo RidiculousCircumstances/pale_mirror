@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
@@ -9,6 +11,27 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AmbientBodyConfirmationProcessTest {
+    @Test void anObstructedOutdoorBirthUsesProvenLocalPlacementWithoutAwardingMealArrival() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:blocked-outdoor-meal-birth"),139));
+        var actor = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
+        var origin = initial.actorLocations().get(actor).supportingSurface();
+        var lease = AmbientActorProcess.nextLease(initial,actor,new SimInstant(1));
+        var prepared = AmbientLeaseStateProcess.prepare(initial,lease);
+        var blocked = new NavigationGeometryObserved(prepared.navigationGeometry().revision(), java.util.Map.of(
+                origin.support().offset(0,1,0), NavigationObservation.known(
+                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID)))
+                .apply(prepared,NavigationGeometryObserved.OWNER);
+        assertTrue(ServiceBoundaryComposition.turnoverPoint(blocked,origin).isEmpty(),"the failure is outside any service zone");
+        var candidate = AmbientPlacementPolicy.candidates(blocked,lease).stream().filter(p -> !p.equals(origin)).findFirst().orElseThrow();
+        var proof = AmbientPlacementPolicy.selectedRoute(blocked,lease,candidate);
+        assertTrue(proof.isPresent());
+        AmbientPlacementPolicy.requireSelected(new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(blocked)),
+                lease,candidate,proof);
+        assertThrows(IllegalArgumentException.class,() -> AmbientPlacementPolicy.requireSelected(blocked,lease,candidate,java.util.Optional.empty()));
+        assertEquals(initial.inventory(),blocked.inventory());
+        assertEquals(origin,blocked.actorLocations().get(actor).supportingSurface(),"planning never teleports or checkpoints an indexed body");
+    }
+
     @Test void admissionAndRestartResolvePurposeFromTheRetainedActivityNotHistoricalLease() {
         Fixture f = fixture();
         var lease = f.state().ambientLeases().get(f.medic());
@@ -56,13 +79,17 @@ class AmbientBodyConfirmationProcessTest {
         assertEquals(inspected.inventory(), next.inventory());
         assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(next, decoded));
     }
-    private record Fixture(FrontierWorldState state, SubjectId security, SubjectId medic, SettlementDepotServicePort port) { }
+    private record MealPort(SubjectId settlementId, SubjectId containerId, SurfaceAnchor serviceSurface,
+                            SurfaceAnchor exteriorApproach, ServiceAccessBoundary accessBoundary) { }
+    private record Fixture(FrontierWorldState state, SubjectId security, SubjectId medic, MealPort port) { }
     private Fixture fixture() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-admission"), 20260918065L));
         Settlement settlement = state.bootstrap().settlements().get(6);
         SubjectId security = new SubjectId("resident:7-4"), medic = new SubjectId("resident:7-11");
-        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+        var storageId = CommunalDiningPlan.initialFoodStorage(state.bootstrap(),settlement.id());
+        var storage = ResourceStorageAccess.at(state,storageId);
+        var port = new MealPort(settlement.id(),storageId,storage.interactionStation(state),
+                ShipmentEndpointComposition.exteriorApproach(state,storage.endpoint()),storage.accessBoundary());
         state = state.withHumanPopulation(state.humanPopulation().accrueHunger(security, 27_000L).accrueHunger(medic, 27_000L));
         for (SubjectId resident : List.of(security, medic))
             state = ResidentMealProcess.reduceStarted(state, resident,
@@ -98,8 +125,8 @@ class AmbientBodyConfirmationProcessTest {
         Fixture f = fixture();
         FrontierWorldState state = confirmed(f.state(), confirmation(f.state(), f.security(),
                 AmbientBodyConfirmed.Boundary.SERVICE_OCCUPANCY, f.port().serviceSurface().standingBody()));
-        assertTrue(ResidentMealServiceAccess.available(state, FrontierWorldState.depotId(f.port().settlementId()), f.security()));
-        assertFalse(ResidentMealServiceAccess.available(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
+        assertTrue(ResidentMealServiceAccess.available(state, f.port().containerId(), f.security()));
+        assertFalse(ResidentMealServiceAccess.available(state, f.port().containerId(), f.medic()));
         ResidentMealHotArrived arrival = new ResidentMealHotArrived(f.security(), state.ambientLeases().get(f.security()).revision(),
                 f.port().serviceSurface().standingBody(), ModeledActorBodyFacts.hotObservation(state,
                         state.humanPopulation().meals().get(f.security()).executionId(), state.ambientLeases().get(f.security()).revision()));
@@ -224,7 +251,7 @@ class AmbientBodyConfirmationProcessTest {
         state = confirmed(state, confirmation(state, f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION,
                 f.port().serviceSurface().standingBody()));
         // Earlier security meal owns arbitration; the medic must leave rather than stand in its socket.
-        assertFalse(ResidentMealServiceAccess.available(state, FrontierWorldState.depotId(f.port().settlementId()), f.medic()));
+        assertFalse(ResidentMealServiceAccess.available(state, f.port().containerId(), f.medic()));
         ResidentMeal meal = state.humanPopulation().meals().get(f.medic());
         List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
         assertTrue(route.size() > 1);
@@ -256,7 +283,7 @@ class AmbientBodyConfirmationProcessTest {
         FrontierEvent event = new FrontierEvent(1, new EventId("event:body-confirmation"), new TransactionId("transaction:body-confirmation"), f.state().bootstrap().worldId(),
                 engine.checkpoint().revision(), new SimInstant(27_001L), f.port().settlementId(), CauseChain.root(id), evidence);
         assertTrue(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.wakeKeys(f.state(), next, event)
-                .contains(FrontierWorldState.depotId(f.port().settlementId())));
+                .contains(f.port().containerId()));
         assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(next, evidence),
                 "late admission cannot reopen an already HOT lease");
     }

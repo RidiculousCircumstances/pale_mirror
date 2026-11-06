@@ -69,7 +69,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -107,7 +113,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -157,7 +169,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -185,7 +203,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -251,7 +275,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -304,7 +334,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -369,7 +405,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -412,7 +454,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -493,7 +541,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -531,7 +585,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -581,7 +641,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -609,7 +675,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -675,7 +747,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -713,7 +791,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -763,7 +847,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "false",
+        "true"
+      ]
     },
     {
       "type": "wait_until_block",
@@ -791,7 +881,13 @@
       },
       "item": "minecraft:air",
       "uses": 1,
-      "timeoutMs": 5000
+      "timeoutMs": 5000,
+      "observeProperty": "open",
+      "observeTicks": 20,
+      "expectedValues": [
+        "true",
+        "false"
+      ]
     },
     {
       "type": "wait_until_block",

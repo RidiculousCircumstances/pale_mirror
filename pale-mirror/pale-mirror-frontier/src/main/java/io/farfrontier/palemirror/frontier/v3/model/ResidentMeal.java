@@ -178,6 +178,15 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
                 Optional.empty(), Optional.empty(), Optional.empty(), executionId);
     }
 
+    /** Physics can displace an eater; the already acquired portion is never retaken. */
+    public ResidentMeal requireDining() {
+        if (phase != Phase.CONSUME || pendingPhysicalStep.isPresent() || coldTravel.isPresent())
+            throw new IllegalArgumentException("only unbegun consumption may return to dining");
+        return new ResidentMeal(residentId, settlementId, source, clearingSurface, destination, actorAccountId,
+                portion, claimId, retainedWorkOwner, Phase.MOVE_TO_DINING, startedAtTick,
+                Optional.empty(), Optional.empty(), Optional.empty(), executionId);
+    }
+
     public ResidentMeal clearWait() {
         return waitReason.isEmpty() ? this : new ResidentMeal(residentId, settlementId, source, clearingSurface, destination,
                 actorAccountId, portion, claimId, retainedWorkOwner, phase,

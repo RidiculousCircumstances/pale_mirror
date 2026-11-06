@@ -2,6 +2,7 @@
   "required": true,
   "package": "io.farfrontier.palemirror.internal.frontier.v3.mixin",
   "compatibilityLevel": "JAVA_21",
+  "client": ["FrontierV3PredictionStateAccessor", "FrontierV3ClientPredictionAccessor"],
   "mixins": [
     "FrontierV3NbtOutputMixin",
     "FrontierV3BlockCollisionAccessor",
@@ -41,6 +42,7 @@
     "FrontierV3ChunkUnloadQueueMixin",
     "FrontierV3EntitySavePassMixin",
     "FrontierV3PlayerActionMixin",
+    "FrontierV3PlayerUsePacketMixin",
     "FrontierV3BlockItemAccessor",
     "FrontierV3PlayerTerrainTickMixin",
     "FrontierV3PlayerPositionResetMixin",

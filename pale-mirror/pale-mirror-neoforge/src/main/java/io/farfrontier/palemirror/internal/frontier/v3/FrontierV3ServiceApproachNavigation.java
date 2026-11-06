@@ -42,10 +42,10 @@ final class FrontierV3ServiceApproachNavigation {
             WAITING.remove(body);
             var origin = FrontierV3SurfaceObservation.observedBody(body).supportingSurface();
             var candidates = ServiceClearanceTargets.waitingTargets(point, origin, excluded);
-            // Different visitors prefer different pockets, but an existing target remains stable.
+            // Preserve geometry ordering. Actor hashing must not promote a roof or a distant pocket over the nearest buffer.
             var search = SEARCHES.get(body);
             int cursor = search != null && search.authority().equals(actuation.id()) && search.point().equals(pointId)
-                    && search.ordinal() == ordinal && search.generation() == generation ? search.next() : actorId.value().hashCode();
+                    && search.ordinal() == ordinal && search.generation() == generation ? search.next() : 0;
             int first = candidates.isEmpty() ? 0 : Math.floorMod(cursor, candidates.size());
             for (int offset = 0; offset < Math.min(candidates.size(), MAX_CANDIDATE_PROBES); offset++) {
                 var candidate = candidates.get((first + offset) % candidates.size());

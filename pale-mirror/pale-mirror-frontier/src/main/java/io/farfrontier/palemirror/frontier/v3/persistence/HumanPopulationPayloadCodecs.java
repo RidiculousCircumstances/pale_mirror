@@ -300,6 +300,24 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec mealDiningRequired() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_dining_required"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                var required = (ResidentMealDiningRequired) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ActorExecutionStateCodec.writeId(output, required.execution());
+                    FrontierWorldPayloadCodecs.writePosition(output, required.body().supportingSurface().support());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealDiningRequired(
+                        ActorExecutionStateCodec.readId(input),
+                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))));
+            }
+        };
+    }
+
     static PayloadCodec mealApproachRequired() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_meal_approach_required"; }

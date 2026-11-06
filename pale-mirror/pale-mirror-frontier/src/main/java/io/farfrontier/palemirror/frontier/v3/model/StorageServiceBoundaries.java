@@ -41,6 +41,6 @@ final class StorageServiceBoundaries implements ServiceBoundaryProvider {
         int population = SettlementServiceAccessPoints.population(state, endpoint.settlementId());
         return new ServicePointGeometryCache.Request(
                 endpoint.facilityId().orElse(endpoint.containerId()), endpoint.settlementId(), endpoint.station(),
-                declaration.boundary(), endpoint.station(), List.of(), population, true);
+                declaration.boundary(), endpoint.exteriorApproach(), List.of(endpoint.exteriorApproach()), population, true);
     }
 }

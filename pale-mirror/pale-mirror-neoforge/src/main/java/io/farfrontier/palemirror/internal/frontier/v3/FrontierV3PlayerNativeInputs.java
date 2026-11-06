@@ -4,7 +4,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.*;
@@ -40,9 +39,9 @@ public final class FrontierV3PlayerNativeInputs {
         return execute(player, level, InteractionHand.MAIN_HAND,
                 List.of(new FrontierV3ManagedBlockWrites.PlannedWrite(position,replacement)), action, false);
     }
-    private static InteractionResult place(BlockPlaceContext context, BlockState placement, Supplier<InteractionResult> action) {
+    private static void place(BlockPlaceContext context, BlockState placement, Runnable action, Runnable rejected) {
         if (!(context.getPlayer() instanceof ServerPlayer player) || !(context.getLevel() instanceof ServerLevel level)
-                || placement == null) return action.get();
+                || placement == null) { action.run(); return; }
         var writes = new ArrayList<FrontierV3ManagedBlockWrites.PlannedWrite>(); var position = context.getClickedPos();
         writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(position,placement));
         if (placement.getBlock() instanceof DoorBlock || placement.getBlock() instanceof DoublePlantBlock)
@@ -50,36 +49,36 @@ public final class FrontierV3PlayerNativeInputs {
         if (placement.getBlock() instanceof BedBlock)
             writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(position.relative(placement.getValue(BlockStateProperties.HORIZONTAL_FACING)),
                     placement.setValue(BlockStateProperties.BED_PART,BedPart.HEAD)));
-        return execute(player,level,context.getHand(),writes,action,InteractionResult.FAIL);
+        execute(player,level,context.getHand(),writes,() -> {action.run();return true;},false,rejected);
     }
-    public static InteractionResult use(ServerPlayer player, ServerLevel level, InteractionHand hand, BlockHitResult hit,
-            Supplier<InteractionResult> action) {
+    static void usePacket(ServerPlayer player, ServerLevel level, InteractionHand hand, BlockHitResult hit,
+            Runnable action, Runnable rejected) {
         cancel(player);
         var position=hit.getBlockPos(); var block=level.getBlockState(position);
         if (!(block.getBlock() instanceof DoorBlock || block.getBlock() instanceof FenceGateBlock || block.getBlock() instanceof TrapDoorBlock)) {
-            // Resume the WHOLE game-mode call: NeoForge's snapshot/event/rollback and
-            // vanilla item consumption must remain around the eventual placement.
+            // Resume the WHOLE packet handler, including Minecraft's prediction ack,
+            // NeoForge events/rollback, vanilla item use and authoritative updates.
             if (player.getItemInHand(hand).getItem() instanceof net.minecraft.world.item.BlockItem item
                     && (player.isSecondaryUseActive() || block.getMenuProvider(level,position)==null)) {
                 var context=item.updatePlacementContext(new BlockPlaceContext(new net.minecraft.world.item.context.UseOnContext(player,hand,hit)));
-                if (context!=null && context.canPlace()) return place(context,
-                        ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3BlockItemAccessor)item).frontierV3$placementState(context),action);
+                if (context!=null && context.canPlace()) { place(context,
+                        ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3BlockItemAccessor)item).frontierV3$placementState(context),action,rejected); return; }
             }
-            return action.get();
+            action.run(); return;
         }
         if (block.getBlock() instanceof DoorBlock && !player.isSecondaryUseActive()) {
             boolean open=!block.getValue(DoorBlock.OPEN);
             var states=FrontierV3PassageBlocks.linkedDoorStates(level,position,open);
             if (!states.isEmpty()) {
                 var writes=states.entrySet().stream().map(e -> new FrontierV3ManagedBlockWrites.PlannedWrite(e.getKey(),e.getValue())).toList();
-                return execute(player,level,hand,writes,() -> {
-                    var result=action.get();
+                execute(player,level,hand,writes,() -> {
+                    action.run();
                     // Native use/events still decide whether the click succeeded. A matching
                     // paired leaf follows that confirmed operation under the same geometry fence.
-                    if (result.consumesAction() && level.getBlockState(position).equals(states.get(position)))
+                    if (level.getBlockState(position).equals(states.get(position)))
                         FrontierV3PassageBlocks.completeLinkedDoors(level,player,states);
-                    return result;
-                },InteractionResult.FAIL);
+                    return true;
+                },false,rejected); return;
             }
         }
         var writes=new ArrayList<FrontierV3ManagedBlockWrites.PlannedWrite>();
@@ -90,17 +89,21 @@ public final class FrontierV3PlayerNativeInputs {
             var state=level.getBlockState(other);
             if (state.is(block.getBlock())) writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(other,state.setValue(BlockStateProperties.OPEN,!block.getValue(BlockStateProperties.OPEN))));
         }
-        return execute(player,level,hand,writes,action,InteractionResult.FAIL);
+        execute(player,level,hand,writes,() -> {action.run();return true;},false,rejected);
     }
     private static <T> T execute(ServerPlayer player,ServerLevel level,InteractionHand hand,
             List<FrontierV3ManagedBlockWrites.PlannedWrite> writes,Supplier<T> action,T waiting) {
+        return execute(player,level,hand,writes,action,waiting,() -> { });
+    }
+    private static <T> T execute(ServerPlayer player,ServerLevel level,InteractionHand hand,
+            List<FrontierV3ManagedBlockWrites.PlannedWrite> writes,Supplier<T> action,T waiting,Runnable rejected) {
         if (!FrontierV3PhysicalWorld.isPhysical(level)) return action.get();
         var runtime=FrontierV3ServerLifecycle.runtimeFor(level.getServer());
         if (runtime==null || runtime.status().kind()!=FrontierV3RuntimeStatus.Kind.ACTIVE) return action.get();
         cancel(player);
         if (!FrontierV3ManagedBlockWrites.defersPlayerInput(level,runtime,writes)) return action.get();
-        if (PENDING.size()+CANCELLED.size()>=MAX_PENDING) return waiting;
-        var input=new Pending<>(player,level,hand,writes,action,waiting, runtime);
+        if (PENDING.size()+CANCELLED.size()>=MAX_PENDING) { rejected.run();return waiting; }
+        var input=new Pending<>(player,level,hand,writes,action,waiting,rejected,runtime);
         PENDING.put(player,input);
         return waiting; // Ordinary persistence turn owns preparation; never force the WAL from the packet thread.
     }
@@ -108,11 +111,11 @@ public final class FrontierV3PlayerNativeInputs {
         final ServerPlayer player; final ServerLevel level; final InteractionHand hand;
         final List<FrontierV3ManagedBlockWrites.PlannedWrite> writes;
         final Map<BlockPos,BlockState> predecessors=new HashMap<>(); final ItemStack item,itemReference;
-        final Supplier<T> action; final T waiting; final FrontierV3ServerRuntime<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState,?> runtime;
+        final Supplier<T> action; final T waiting; final Runnable rejected; final FrontierV3ServerRuntime<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState,?> runtime;
         final long expires; final net.minecraft.world.level.GameType gameMode; boolean finished;
         Pending(ServerPlayer player,ServerLevel level,InteractionHand hand,List<FrontierV3ManagedBlockWrites.PlannedWrite> writes,
-                Supplier<T> action,T waiting,FrontierV3ServerRuntime<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState,?> runtime) {
-            this.player=player;this.level=level;this.hand=hand;this.writes=List.copyOf(writes);this.action=action;this.waiting=waiting;this.runtime=runtime;
+                Supplier<T> action,T waiting,Runnable rejected,FrontierV3ServerRuntime<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState,?> runtime) {
+            this.player=player;this.level=level;this.hand=hand;this.writes=List.copyOf(writes);this.action=action;this.waiting=waiting;this.rejected=rejected;this.runtime=runtime;
             itemReference=player.getItemInHand(hand);item=itemReference.copy();expires=level.getGameTime()+200; gameMode=player.gameMode.getGameModeForPlayer();
             for (var write:writes) predecessors.put(write.position(),level.getBlockState(write.position()));
         }
@@ -120,6 +123,10 @@ public final class FrontierV3PlayerNativeInputs {
             if (finished || PENDING.get(player)!=this) return waiting;
             if (!valid()) { finish();return waiting; }
             if (!FrontierV3ManagedBlockWrites.preparePlannedWrites(level,runtime,writes,this::attempt)) return waiting;
+            // Preparation may synchronously deliver a durable continuation. It must
+            // not let this outer stack execute an already-consumed input again.
+            if (finished || PENDING.get(player)!=this) return waiting;
+            if (!valid()) { finish();return waiting; }
             // Remove BEFORE entering Minecraft: nested native interactions are distinct inputs,
             // never permission to invoke this action twice.
             finished=true;PENDING.remove(player,this);
@@ -138,6 +145,15 @@ public final class FrontierV3PlayerNativeInputs {
                         && level.getBlockState(e.getKey()).equals(e.getValue()) && level.mayInteract(player,e.getKey())
                         && player.canInteractWithBlock(e.getKey(),1.0));
         }
-        void finish() { finished=true;PENDING.remove(player,this);FrontierV3ManagedBlockWrites.finishPlannedWrites(level,runtime,writes); }
+        void finish() {
+            if(finished)return;
+            finished=true;PENDING.remove(player,this);
+            try { FrontierV3ManagedBlockWrites.finishPlannedWrites(level,runtime,writes); }
+            finally {
+                rejected.run();
+                if (!player.isRemoved() && player.serverLevel()==level && player.connection.isAcceptingMessages())
+                    for (var write:writes) player.connection.send(new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level,write.position()));
+            }
+        }
     }
 }

@@ -239,6 +239,13 @@ export function validateScenario(scenario) {
               || typeof value !== 'string' || !/^[a-z0-9_]{1,64}$/.test(value)))) {
         throw new Error('wait_until_block properties must be bounded native state names/values');
       }
+      if (action.type === 'use_item_on' && (action.observeProperty !== undefined || action.observeTicks !== undefined || action.expectedValues !== undefined)
+          && (action.uses !== 1 || typeof action.observeProperty !== 'string' || !/^[a-z0-9_]{1,32}$/.test(action.observeProperty)
+            || !Number.isInteger(action.observeTicks) || action.observeTicks < 1 || action.observeTicks > 100
+            || !Array.isArray(action.expectedValues) || action.expectedValues.length < 2 || action.expectedValues.length > 8
+            || action.expectedValues.some(v => typeof v !== 'string' || !/^[a-z0-9_]{1,32}$/.test(v)))) {
+        throw new Error('observed ordinary use needs one click, bounded property values and acknowledged observation window');
+      }
       if (action.type === 'use_item_on' && (!validResolvablePosition(action.position) || !validItemKind(action.item)
           || !Number.isInteger(action.uses) || action.uses < 1 || action.uses > 32
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120000)) {

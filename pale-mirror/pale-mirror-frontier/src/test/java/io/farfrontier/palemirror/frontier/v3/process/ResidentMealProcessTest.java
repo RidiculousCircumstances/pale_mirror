@@ -785,6 +785,27 @@ class ResidentMealProcessTest {
         }
         assertTrue(ResidentMealProcess.mayConsumeAt(state, state.humanPopulation().meals().get(resident),
                 state.actorLocations().get(resident).body()), "COLD also eats at the supported service exit");
+        // Ordinary physics may move an eater after HOT arrival and before COLD resumes.
+        var eatingMeal = state.humanPopulation().meals().get(resident);
+        var originalBody = state.actorLocations().get(resident).body();
+        var displacedBody = state.actorLocations().get(settlement.residents().get(1).id()).body();
+        var displacedState = state.withActorBody(resident, displacedBody);
+        assertTrue(ResidentMealProcess.requiresDining(displacedState, eatingMeal, displacedBody));
+        assertTrue(ResidentMealProcess.planColdStep(displacedState, resident, due.dueAt().ticks()).isEmpty(),
+                "a stale eating phase is not a consumption receipt");
+        var relocationEvents = ResidentMealProcess.planProgress(displacedState, due);
+        var relocation = assertInstanceOf(ResidentMealDiningRequired.class, relocationEvents.getFirst().payload());
+        assertEquals(relocation, FrontierWorldRuntimeDefinition.payloadCodecs().decode(relocation.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(relocation)));
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceDiningRequired(displacedState,
+                resident, new ResidentMealDiningRequired(eatingMeal.executionId(), originalBody)));
+        var returning = ResidentMealProcess.reduceDiningRequired(displacedState, resident, relocation);
+        returning = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(returning));
+        assertEquals(ResidentMeal.Phase.MOVE_TO_DINING, returning.humanPopulation().meals().get(resident).phase());
+        assertEquals(eatingMeal.claimId(), returning.humanPopulation().meals().get(resident).claimId());
+        assertEquals(displacedState.inventory(), returning.inventory(), "returning never consumes or retakes food");
+        var replayed = returning;
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceDiningRequired(replayed, resident, relocation));
         var consumeEvents = ResidentMealProcess.planProgress(state, due);
         ResidentMealColdStep consume = (ResidentMealColdStep) consumeEvents.getFirst().payload();
         assertEquals(ResidentMeal.Phase.CONSUME, consume.expectedPhase());
