@@ -196,14 +196,15 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     /** A real player interaction addresses this exact loaded provider. Complete
      * initial declaration -> observation -> acquisition through the existing owner,
      * rather than requiring UI retries during a global discovery revolution.
-     * An already prepared exact observation may finish here; no projection,
-     * release or ambiguous recovery is forced by opening the UI. */
+     * A released or already prepared scope follows the same exact observation
+     * protocol; live or unresolved authority is never bypassed by opening the UI. */
     static void admitInitialInteraction(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             SubjectId containerId) {
         for (int phase = 0; phase < 3; phase++) {
             var before = runtime.canonicalState().orElseThrow(); var state = before.state();
             var existing = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
-            if (existing != null && existing.status() != PhysicalCustodyLeaseStatus.PREPARING) return;
+            if (existing != null && (existing.status() == PhysicalCustodyLeaseStatus.ACQUIRED
+                    || existing.status() == PhysicalCustodyLeaseStatus.UNRESOLVED)) return;
             var surface = state.inventory().surfaces().get(containerId);
             if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE
                     || FrontierV3ContainerEffectFence.pending(level, state, containerId)) return;

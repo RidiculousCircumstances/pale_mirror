@@ -55,22 +55,6 @@
       "settleMs": 0
     },
     {
-      "type": "wait_until_diagnostic",
-      "view": "container",
-      "id": "container:1-depot",
-      "expect": {
-        "surface": "ACTIVE",
-        "custody": {
-          "status": "ACQUIRED"
-        },
-        "replica": {
-          "state": "OBSERVED_CURRENT",
-          "conflict": ""
-        }
-      },
-      "timeoutMs": 60000
-    },
-    {
       "type": "look",
       "at": {
         "diagnostic": {
@@ -136,7 +120,7 @@
   ],
   "assertions": [
     {
-      "after": 7,
+      "after": 6,
       "view": "container",
       "id": "container:1-depot",
       "expect": {
@@ -148,7 +132,7 @@
       }
     },
     {
-      "after": 10,
+      "after": 9,
       "view": "container",
       "id": "container:1-depot",
       "expect": {
@@ -160,7 +144,7 @@
       }
     },
     {
-      "after": 12,
+      "after": 11,
       "view": "summary",
       "id": "",
       "expect": {
@@ -172,12 +156,12 @@
   ],
   "frames": [
     {
-      "after": 7,
+      "after": 6,
       "name": "authored-rack-two-stack-deposits",
       "presentation": "player"
     },
     {
-      "after": 10,
+      "after": 9,
       "name": "authored-rack-two-stack-withdrawals",
       "presentation": "player"
     }

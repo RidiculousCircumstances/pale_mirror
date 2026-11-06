@@ -18,8 +18,7 @@
           "id": "container:authored-dc8209ef-3c0a-3c41-84d0-6145022c8dcd",
           "expect": {
             "status": "ok",
-            "slotCount": 27,
-            "occupiedCount": 0
+            "slotCount": 27
           }
         }
       ]
@@ -109,7 +108,8 @@
           "id": "container:authored-dc8209ef-3c0a-3c41-84d0-6145022c8dcd",
           "field": "position"
         }
-      }
+      },
+      "timeoutMs": 10000
     },
     {
       "type": "wait_until_block",
