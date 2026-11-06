@@ -168,7 +168,8 @@ class FrontierV3FixtureCatalogTest {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
             assertTrue(profile.provider().length() > 0);
             assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front",
-                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22", "tool-graybox", "forestry-r28", "wood-production-r29", "wood-demand-r30", "simulation-baseline-r31", "simulation-terrain-r31", "textiles-r32").contains(profile.rulesetId()));
+                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22", "tool-graybox", "forestry-r28", "wood-production-r29", "wood-demand-r30",
+                    "simulation-baseline-r31", "simulation-terrain-r31", "textiles-r32").contains(profile.rulesetId()));
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
             String world = "frontier:catalog-" + profile.id();
