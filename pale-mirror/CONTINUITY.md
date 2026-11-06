@@ -2,117 +2,109 @@
 
 ## Assignment and authority
 
-Main alone; no subagents, new goal or push. Latest user authorized fixing the
-traced latency and one-item shipment causes. Source is committed and deployed; bounded post-deploy causal observation is
-complete. Report the outcome and limits; do not start another feature unrequested.
-Standing delivery requires scoped commit and verified deployment. Live worlds
-are disposable, but this task preserves the current world. Canonical AGENTS.md
-and docs/engineering-agent-protocol.md remain authority. GOV has extensive
-unrelated WIP; never stage whole shared files.
+Main alone; no agents, new goal or push. User accepted authored-storage reuse,
+removing added settlement containers and inactive route-demo chest/board.
+Implementation and verified deployment complete;final report remains. Follow
+canonical AGENTS.md/execution protocol. Preserve unrelated GOV WIP/root baseline.
+Plan/receipt:docs/frontier-v3-authored-storage-reuse-20261106.md.
+Previous work and investigation archived in
+docs/archive/continuity-20261106-before-authored-storage-delivery.md. Live worlds
+are disposable;previous worlds were retained for a specific unresolved diagnosis.
 
-## Working set and identities
+## Working set and live identity
 
 IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
-branch feat/baker-carry-orders-20260926, clean e30b168f5869102570883b7a9d45903b9e9735b4.
-RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror, clean detached same ref.
-PACK /home/rd/proj/minecraft, HEAD98a6701, tracked clean; unrelated untracked
-.f0v-baseline/ retained. Hosted core updated through pack publisher;170indexed
-files verified. GOV /home/rd/proj/pm-governance retains unrelated changes.
-Task documentation/ledger and the isolated architecture addition are committed
-separately from the unrelated WIP, which remains unstaged.
+branch feat/baker-carry-orders-20260926,clean ca2c7689d. Main implementation33c101333;
+subsequent native integration/UI/custody/clearance corrections throughca2c7689d.
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror,clean detachedca2c7689d;
+build/authored-storage-lifecycle-release.log guardrails/JAR/packagePASS.
+PACK /home/rd/proj/minecraft HEAD98a6701 tracked clean,unrelated.f0v-baseline/
+untracked retained. Hosted core/Visuals published with170index entries verified.
+GOV task docs committed separately;extensive unrelated WIP remains unstaged.
+Stage only our receipt/ledger/archive and isolated authored_storage_boundary key,
+never the whole architecture.yml. No repository migration or push.
 
-LIVE /home/rd/far-frontier-server,far-frontier-v3-live.service; wrapper3986882,
-native JVM3986908,invocation aef9ea83d70242a8a9d520fe7f4100d0,notBefore1793975323.
-Port25565/RCON25575. Same world buildings-packet-dining-seed139-20261106,seed139,
-frontier-v3-textiles-terrain-r32,schema342/ledger7/Network7. Native3316566 stopped
-through RCON and saved all dimensions before install; no reset. New startup and
-installed hash passed scripts/frontier-v3-deploy-verify.sh.
-Core SHA512:
-a7f19a99bdcd1fecc96735b483420fe6543f94906addbe39da784c904d25e7e332f613e67df6d12f9e4f1e40d60aee625be240489e419c773d7bf55e0bcade22
-Visuals unchanged SHA512:
-2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601
-Java21build /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; Java22live
-/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java. Read-only RCON
-helper IMPL build/forestry-native/query-runtime.mjs; never print property secrets.
-No task clients/displays are running. User rd was online earlier;0players before
-this restart. Do not stop a human client. Normal20TPS,no fast-forward.
+LIVE /home/rd/far-frontier-server,far-frontier-v3-live.service,Java22 runner.
+World authored-storage-closure-seed139-20261106,seed139,r32,schema343/ledger7/Network7.
+Earlier authored-storage-seed139-20261106 (intermediate) and buildings-packet-dining-
+seed139-20261106 retained untouched. Fresh bootstrap,not an old schema overlay.
+Final invocationaa0dfe9fce33404e84c5f8fcdc74ce11,native754433,notBefore1793985458.
+CoreSHA5129a4b62450f858838d32581dfe3c7bda6e950a4d42e66a6cd6b8330a94c6748184be9734cdf0bf745e02398e744324937d9e2462141c0212d70c80c9293e2bc91.
+Visuals unchanged2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601.
+Clean-ref preflight,normal native save,checksum install and fresh startup verifyPASS.
+Postrestart21186/tick13850:0required/inventory/scene conflicts,0preparing replica
+scopes,native20TPS/no fastforward,0players. Native0.3ms tick is not whole-simulation
+CPU performance or a future80ms guarantee. Last save quiesced0unused/0pending ops.
+Java21build /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2.
+RCON helper IMPL build/forestry-native/query-runtime.mjs;never print property secrets.
+Task private Xvfb:1041 PID99838 was stopped after verifying its exact identity.
+No client remains running. PMStoragePilot has test-diagnostic operator permission;
+no human client/display was stopped. Private captures are not human/M3 acceptance.
 
-## Current fix and evidence
+## Delivered boundary
 
-Plan docs/frontier-v3-local-access-and-dispatch-20261106.md and canonical
-architecture local_access_dispatch_boundary. e30b168f5:
-- Common KnownLocalAccess rejects out-of-envelope goals before geometry reads;
- optional positive shortcut has128edge checks, then ordinary cooperative routing.
- A shortcut miss is never global NO_PATH. No new geometry or movement authority.
-- Internal asset manifests reject insufficient unclaimed volume and combined
- receiving capacity before pickup/drop connectivity. Exact admission remains.
-- ReplenishmentLot.economic selects an efficient useful load independently of
- cash. GoodsDispatchAdvice uses it; matching still conserves real goods/money.
- Explicit uncovered deadlines still allow tiny recovery. No global64minimum.
-- StorageConsolidationSupply issues ordinary InternalHaulRequest via existing
- ResourceHaulingPolicy for partial same-owner warehouse stacks. Filters/priority,
- claims/capacity and indexed incoming shipments remain owners; no kitchen/buffer
- repurposing, synthetic stock, direct multi-container pickup or reverse pending haul.
- ShipmentState.receiving exposes its existing read-only receiver index publicly.
- No schema/packet/ruleset shape changes.
+AuthoredStoragePlan admits actual registered inventories in marked STORAGE zones,
+connected by shared compiled collision geometry.324pristine authored stores/12towns,
+449total incl machines/remote/mobile/hive. Existing warehouse racks,kitchen barrels,
+smeltery chest used;no added authored depot/pantry/metals block or route-demo chest/
+board. Remote legitimate site buffers retained. Other empty/filled territorial
+stores remain naturally adopted. Schema343 rejects stale declarations.
+Optional MineColonies real item-handler/ordered-composition adapters join existing
+click,drop,block removal,custody and persistence owners,with weak reference identity
+binding. Native materials/models retained. Appearance callbacks require the exact
+still-installed provider;removed/stale inventories cannot recreate a rack block.
 
-IMPL build/delay-lot-analysis-20261106:
-fix-closure.log PASS78tests including actual meals, supply, commercial mixed trips
-and same-owner transfer/recovery;closure-counts.json retains suite counts.
-Final updated pre-navigation-capacity/index code:fix-final.log PASS guardrails,
-19selected tests,jar/verifyPackagedJar. nonflat-fallback.log PASS12tests including existing layered
-bridge/tunnel,unknown connections and fair yielded full routing.
-RELEASE build/access-dispatch-release-e30b168f5.log PASS guardrails/package.
-Copied-image probe:4239transition/3576surface reads ->0 for a173block goal outside
-radius16. Westhaven snapshot190072 buys109wheat with2.786337cash at1.97price:
-match1 remains financially possible, plannedLot1/ECONOMIC_LOT ->256/ACCUMULATING.
-Dawnbridge4cobble demand versus source1 retains SUPPLY_DEADLINE. These are same-image
-work/decision proofs, not measured whole-server speedup or historical trip replay.
+Fixed unfinished births no longer starve custody discovery. Discovery batches use
+existing hostbudget/headroom. Exact UI promotes RELEASED custody and initial resource
+binding via existing owners;it progresses prior witnessed click completion before
+next admission. Physical image comparison uses retained address/kind/count/epoch and
+complete lot backing,not a fresh lot/claim repartition;click,observer and composed
+command validation share it. Old food-theft test now uses actual kitchen storage.
 
-Original focused selection exposed5unchanged ResidentMealKnownNavigationTest
-old-depot-food failures; all5reproduced with exact HEAD KnownLocalAccess shadow
-class (meal-baseline-comparison2.log/meal-baseline.xml). No tests deleted/disabled;
-no whole-suite-green claim. New fixture mistakes (width/depth versus maxima and
-chest below ground) were corrected. Prior unrelated2ServiceApproachProgress and
-portable home-eating premise remain separately recorded in archive.
+Shared service clearance explicitly names its departing incumbent;unused neighbour
+storage envelopes permit public aisle transit without resource access. Other busy
+points,hard/unknown geometry and public/private boundaries remain enforced. Actual
+native background stack showed187.96CPU-s/193.88elapsed in old clearance. Later
+copied image comparison3.324s/no destination ->1.257s/6block exit is not that exact
+job or a whole-server ratio. No further global performance/economic claim.
 
-Post-deploy summary242951:340residents,12towns,0required/inventory/scene conflicts.
-Performance242956:pendingOrdinaryTicks0,READY0/CHECKING0,ready/deadline lag0;
-recent64hostmean3.67ms/max15.04ms in COLD, not HOT/native-total performance.
-45s pinned capture session50140 completed and profiler stopped:
-build/delay-lot-analysis-20261106/deployed-causal/report and deployed-trace-summary.json.
-903ticks delivered/899host arrivals,debt4->0,20.10TPS catch-up rate. Meal plan139calls,
-max24.856ms/0.318exclusive owner wall seconds; no KnownLocalAccess CPU samples.
-Hauling exact wait0.537s/45s in this changed world. No controlled whole-world ratio:
-source control prevents the demonstrated redundant work, live cuts differ in stock.
-Trace quality explicitly incomplete(1.52%unexplained/capture-edge references),no loss.
-Only >=80ms recorded ready span:guard100.175ms wall but0.328ms CPU at JFR-start edge;
-no overlapping monitor/park/GC event, no expensive guard algorithm established.
-Startup earlier had439.7ms native tick/367ms schedule allocation and308ms hive scout;
-those remain outside this scoped fix (no hive expansion/repair). No claim that all
-future peaks are below80ms. Final game tick query normal20TPS; no task clients.
-Economic collector healthy at242946:11hungry/340residents,30missions,all12towns;
-existing small accepted missions were not cancelled or rewritten to invent improvement.
+## Verification and material limits
 
-## Diagnosis and remaining limits
+Evidence IMPL build/authored-storage-reuse-20261106/:
+release-closure.log29selected Java+6native/guardrails/packagePASS;clearance-complete.log
+selected pure+7nativePASS;native-matcher-closure.log14selected purePASS (composed
+click6,physical resource processes7,current-layout positive/negative1);
+provider-lifecycle-closure.log8nativePASS,including actual installed rack removal
+and stale inventory callback. Clean RELEASE guardrails/JAR/packagePASS.
+Full suite not claimed:ResourceStorageAdoptionTest alternative-materialization
+NoSuchElementException reproduces unchangede30b168f5;reference-projection slice
+7fail/8pass identically at baseline6f98f9279 and then batching WIP. No tests disabled
+or deleted. Wrong native slice plural was a method failure;correct singular
+container-socket actually executed7,then8tests. Initial missing resources/operator/
+break timeout failures were corrected test setup,not product fixes.
 
-Original60s causal report in build/server-economy-review-20261106/causal-report:
-Northwatch hauling8.133s exact wait, six1.22..1.35CPU-s reviews; sampled stacks lead
-to ActorStorageApproach/KnownLocalAccess/canTraverse. Meal planning2.511s/max105ms
-in the same local BFS. Internal manifests checked volume only after route work.
-Fresh pre-fix30s191676..192276:20.02TPS,no sustained debt; hauling only0.174s in
-changed stock state, meal max74.5ms. Both reports explicitly incomplete(1.8%/1.4%
-unexplained); no JFR loss. Fresh first flush references3pre-capture appends.
-Original1.327s native entry peak lies outside captures and is not attributed/fixed
-by those stacks. Current fixes do not prove every future peak below80ms.
+Checked-in live-authored-storage-menu.json,PMStoragePilot,secondary actual rack
+container:authored-dc8209ef-3c0a-3c41-84d0-6145022c8dcd at(-1506,65,-1385),stationz-1:
+packet-menu-closure-world/manifest.json run3d44af09-18a4-41b6-811b-ac03c5cff1b6 PASS
+without pre-click wait. Actual canonical128granite after2x64deposits,0after2withdrawals,
+ACTIVE/ACQUIRED throughout. Actual Rack UI frame inspected. Subsequent
+live-authored-storage-break.json initially found native appearance resurrection;
+ca2c7689d fixed provider lifetime and packet-break-lifecycle/manifest.json
+run4800aa35-4105-416c-b21f-120083dc67d6 PASS:AIR,RETIRED/RELEASED,0conflicts.
+Actual removal frame inspected. Ordinary graceful save/restart retains that terminal
+state (read-only diagnostic);no formal human/M3 or universal recovery promotion.
 
-Before fix:25paid receipts/64items over one game-day,70missions,most moving;
-prolonged Northwatch preparation eventually progressed. Cash total1200 conserved,
-Clearwater ~62% and Southgate low liquidity; unequal money alone is no defect.
-Iron sell/buy price divergence and declining food in several towns remain distinct
-unclassified economic risks; do not claim balance repaired by dispatch changes.
+Intermediate world retains original container1-depotCONFLICT and captured rejected
+player transaction4ae477ac-2974-4fc1-81d1-082fb877c693. Initial conflict origin remains
+unclassified;do not claim reset repaired it. Copied click-stall.bin119479 and
+ClickRead.java plus old logs preserve evidence. That conflict withheld its whole
+chunk,so adjacent-rack testing there was not independent. Final delivery uses the
+fresh world above after source fixes;no old stock overwritten or witness erased.
+The new first-transition caller trace supports further diagnosis if it recurs.
 
-Previous door/porch/dining fix a609 and exact native receipts remain valid for
-unchanged dependencies. Details and all current investigation history preserved
-in docs/archive/continuity-20261106-before-access-dispatch-delivery.md and older
-archive referenced there. No full human M3/global-bugs-closed claim.
+## Closeout
+
+Owned GOV commit closes this delivery;task client/display are stopped.
+Source and RELEASE are clean;PACK tracked clean,baseline retained;preserve all
+unrelated GOV files. Final answer in Russian:scope,commit/deployed fresh world,
+real menu/removal checks and remote buffers retained. No push or new goal.
