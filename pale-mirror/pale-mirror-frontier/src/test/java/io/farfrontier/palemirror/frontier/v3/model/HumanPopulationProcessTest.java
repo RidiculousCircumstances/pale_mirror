@@ -260,7 +260,12 @@ class HumanPopulationProcessTest {
         assertEquals(housing.definition().beds().size(),SettlementFacilityCapability.forStructure(state,housing).residentCapacity());
 
         var withoutHomes=state;
-        for(var building:settlement.structures())if(building.kind()==StructureKind.HOUSING)withoutHomes=withoutHomes.withStructureCondition(building.id(),StructureCondition.DESTROYED);
+        for (var building : settlement.structures()) if (building.kind() == StructureKind.HOUSING)
+            for (var bed : building.definition().beds().values()) {
+                var position = building.placement().world(bed.head());
+                withoutHomes = StructureIntegrity.observe(withoutHomes, StructureObservationFixtures.missingCell(
+                        withoutHomes, building, position, "fixture:bed-head-removed"));
+            }
         final FrontierWorldState destroyed=withoutHomes;
         assertEquals(0, SettlementFacilityCapability.housingCapacity(destroyed, settlement.id()));
         ResidentProfile parent = destroyed.humanPopulation().resident(settlement.residents().getFirst().id());

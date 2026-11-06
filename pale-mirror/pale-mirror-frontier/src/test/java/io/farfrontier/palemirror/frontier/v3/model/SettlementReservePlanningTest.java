@@ -67,10 +67,11 @@ class SettlementReservePlanningTest {
     }
     @Test void destroyedMachineWithdrawsItsInputForecastButNotTheResidentsAppetite() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst();
-        var conditions = new HashMap<>(state.structureConditions());
-        home.structures().stream().filter(s -> s.kind() == StructureKind.WORKSHOP)
-                .forEach(s -> conditions.put(s.id(), StructureCondition.DESTROYED));
-        var damaged = state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(conditions));
+        var damaged = state;
+        for (var building : home.structures()) if (building.kind() == StructureKind.WORKSHOP)
+            for (var workplace : building.definition().workplaces().values())
+                damaged = StructureIntegrity.observe(damaged, StructureObservationFixtures.missingCell(damaged, building,
+                        building.placement().world(workplace.worker()), "fixture:worker-support-removed"));
         var before = SettlementReservePlanning.read(state, home.id(), 0L); var after = SettlementReservePlanning.read(damaged, home.id(), 0L);
         assertEquals(before.get("minecraft:bread").consumption(), after.get("minecraft:bread").consumption());
         assertEquals(0, after.get("minecraft:coal").quantity()); assertEquals(0, after.get("minecraft:wheat").quantity());

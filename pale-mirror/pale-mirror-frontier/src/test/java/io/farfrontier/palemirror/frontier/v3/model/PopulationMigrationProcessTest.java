@@ -219,7 +219,9 @@ class PopulationMigrationProcessTest {
                         () -> ResidentMigrationJourneyKnowledge.approach(held, heldJourney)).status());
         assertEquals(ResidentMigrationBlockReason.ROUTE_OBSTRUCTED,
                 payload(PopulationMigrationProcess.planProgress(held, due), ResidentMigrationBlocked.class).reason());
-        var repaired = held.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of()));
+        var repaired = GeometryObservationFixtures.observedAir(
+                held.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of())),
+                journey.nextColdPosition().offset(0, 1, 0));
         var refreshed = ResidentMigrationJourneyKnowledge.approach(repaired, heldJourney).orElseThrow();
         assertEquals(observed.supportingSurface(), refreshed.current());
         assertEquals(new SurfaceAnchor(journey.nextColdPosition()), refreshed.target());

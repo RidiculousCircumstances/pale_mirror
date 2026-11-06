@@ -103,7 +103,9 @@ class ProductionBodyContinuationTest {
                 assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
                         () -> ProductionJourneyKnowledge.approach(departed, retained)).status(),
                 "unknown support retains a knowledge wait; it cannot manufacture a HOT hint or claim NO_PATH");
-        var repaired = departed.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of()));
+        var repaired = GeometryObservationFixtures.observedAir(
+                departed.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of())),
+                fixture.port().workStation().support().offset(0, 1, 0));
         var hint = ProductionJourneyKnowledge.approach(repaired, retained).orElseThrow();
         assertEquals(fixture.port().inputStation(), hint.current());
         assertEquals(fixture.port().workStation(), hint.target());

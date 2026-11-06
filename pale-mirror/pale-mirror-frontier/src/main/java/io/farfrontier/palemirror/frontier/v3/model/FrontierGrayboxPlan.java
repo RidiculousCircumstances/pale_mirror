@@ -408,7 +408,8 @@ public final class FrontierGrayboxPlan {
      */
     private static Set<InfectionCell> infectedStructureCells(FrontierWorldState state, SettlementStructure structure,
                                                               StructureCondition condition) {
-        if (condition == StructureCondition.DESTROYED) return Set.of();
+        if (condition == StructureCondition.DESTROYED && structure.definition().representation()
+                != io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED) return Set.of();
         var bounds = structure.placement().volume(structure.definition().fabric());
         int minX = bounds.min().x(), maxX = bounds.max().x()-1, minZ = bounds.min().z(), maxZ = bounds.max().z()-1;
         Set<InfectionCell> candidates = new LinkedHashSet<>();

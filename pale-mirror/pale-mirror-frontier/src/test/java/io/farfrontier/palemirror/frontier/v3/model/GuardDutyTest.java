@@ -143,12 +143,17 @@ class GuardDutyTest {
         assertFalse(died.strategicPlans().guards().containsKey(duty.id()));
         assertFalse(died.actorExecutions().retainsSuspended(actor, ActorActivityKind.GUARD, duty.id()));
         assertEquals(died, codec.decode(codec.encode(died)));
-        for (long tick = 27001; tick < 28000 && state.humanPopulation().meals().containsKey(actor); tick++) {
-            var step = ResidentMealProcess.planColdStep(state, actor, tick);
+        long mealTick = 27001;
+        for (int transition = 0; transition < 32 && state.humanPopulation().meals().containsKey(actor); transition++) {
+            var remaining = state.humanPopulation().meals().get(actor);
+            mealTick = Math.max(mealTick, remaining.coldTravel().map(TimedKnownRoute::arrivalTick).orElse(mealTick));
+            var step = ResidentMealProcess.planColdStep(state, actor, mealTick);
             if (step.isPresent()) state = ResidentMealProcess.reduceColdStep(state, actor, step.orElseThrow());
+            mealTick++;
         }
         assertFalse(state.humanPopulation().meals().containsKey(actor));
-        state = apply(state, ResidentActivityProcess.plan(state, ResidentActivityProcess.review(actor, 28000)), 28000);
+        long resumeTick = Math.max(28000, mealTick);
+        state = apply(state, ResidentActivityProcess.plan(state, ResidentActivityProcess.review(actor, resumeTick)), resumeTick);
         assertEquals(sword, state.inventory().items().get(duty.weapon()));
         var resumed = state.strategicPlans().guards().get(duty.id());
         assertEquals(duty.weapon(), resumed.weapon()); assertTrue(resumed.execution().generation() > duty.execution().generation());

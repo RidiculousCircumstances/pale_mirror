@@ -21,6 +21,12 @@ final class RouteMaintenanceFairnessScenario {
         state = state.recordPhysicalDelta(new PhysicalDelta(secondLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:loaded-repair"));
 
+        // Retained fixture precondition: these two physical road cells are
+        // observed absent, not merely suspected semantic losses with unknown shape.
+        var air = GeometryObservationFixtures.air();
+        state = state.withChanges(FrontierWorldStateUpdate.begin().navigationGeometry(state.navigationGeometry()
+                .observe(state.navigationGeometry().revision(), Map.of(firstLoss, air, secondLoss, air))));
+
         RouteMaintenance first = maintenanceStarted(state, 1, 100L, firstLoss);
         state = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(state, first));
         RouteMaintenance second = maintenanceStarted(state, 2, 200L, secondLoss);
