@@ -29,7 +29,12 @@ Markup format4 explicitly declares `site.groundY` independently from the entry
 floor and names deliberate `site.excavations`; empty source cells below outdoor
 grade do not authorize excavation. A common bounded site survey/plan supplies
 cut, fill, native foundation and graded access without flattening the settlement.
-Unknown or unsafe terrain is not a successful fit. It also declares each workplace's `equipmentType` and local
+Unknown or unsafe terrain is not a successful fit. Import content may declare a bounded
+`entranceSupports` path and its `entranceThreshold` independently of outdoor ground.
+Use the actual native platform levels when the building has a raised entrance;
+raising the complete outdoor datum to conceal a mismatched port buries the yard.
+The importer rejects non-adjacent supports and a threshold that differs from the
+declared door. It also declares each workplace's `equipmentType` and local
 `facing`. The front points from the machine support towards its adjacent operator
 support. Missing/backwards declarations are errors; no direction is guessed.
 

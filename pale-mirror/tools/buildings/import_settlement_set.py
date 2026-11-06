@@ -48,7 +48,14 @@ def build(spec,source,out):
  # runtime inference/paste, inventories or foreign block-entity data are imported.
  door=tuple(spec['door']);dx,dz=DIRECTIONS[spec['front']]
  rise=floor-spec['groundY']
- path=[(door[0]+dx*i,floor-min(max(i,0),rise),door[1]+dz*i) for i in (3,2,1,0,-1)]
+ path=[tuple(p) for p in spec.get('entranceSupports',
+  [(door[0]+dx*i,floor-min(max(i,0),rise),door[1]+dz*i) for i in (3,2,1,0,-1)])]
+ threshold=spec.get('entranceThreshold',3)
+ if not 2<=len(path)<=32 or not 0<threshold<len(path)-1 or path[threshold]!=(door[0],floor,door[1]):
+  raise ValueError('declared entrance must retain its exact threshold and bounded support path')
+ for a,b in zip(path,path[1:]):
+  if len(a)!=3 or len(b)!=3 or any(type(v)!=int for v in (*a,*b)) or abs(a[0]-b[0])+abs(a[2]-b[2])!=1 or abs(a[1]-b[1])>1:
+   raise ValueError('declared entrance has a non-walkable support transition')
  extra=[]
  if 'secondaryDoor' in spec:
   ex,ez=spec['secondaryDoor'];extra=[(ex+dx*i,floor-min(max(i,0),rise),ez+dz*i) for i in (3,2,1,0,-1)]
@@ -104,7 +111,7 @@ def build(spec,source,out):
  def point(p):return p[0]-minx,p[1]-cut,p[2]-minz
  data={point(p):v for p,v in data.items() if p in cells and cells[p][0]==v[0]};cells={point(p):v for p,v in cells.items()};path=[point(p) for p in path]
  maxp=tuple(max(p[i] for p in cells)+1 for i in range(3));origin=point((door[0],floor,door[1]))
- prop={'format':'4','site.groundY':str(spec['groundY']),'site.excavations':','.join('void_'+str(i) for i in range(len(spec['excavations']))),'id':'pale_mirror:medieval_spruce/'+spec['name'],'version':'1','functions':spec['kind'],'representation':'AUTHORED','origin':','.join(map(str,origin)),'front':spec['front'],'fabric.min':'0,0,0','fabric.max':','.join(map(str,maxp)),'parcel.min':'-2,-1,-2','parcel.max':','.join(map(str,(maxp[0]+2,maxp[1]+2,maxp[2]+2))), 'rooms':'main','room.main.min':'-1,1,-1','room.main.max':','.join(map(str,maxp)),'zones':'','passages':'front','primaryEntrance':'front','primaryWorkplace':'','passage.front.from.kind':'EXTERIOR','passage.front.from.room':'','passage.front.to.kind':'ROOM','passage.front.to.room':'main','passage.front.public':'true','passage.front.threshold':'3','passage.front.supports':';'.join(','.join(map(str,p)) for p in path),'workplaces':'','anchors':','.join(anchors),'beds':''}
+ prop={'format':'4','site.groundY':str(spec['groundY']),'site.excavations':','.join('void_'+str(i) for i in range(len(spec['excavations']))),'id':'pale_mirror:medieval_spruce/'+spec['name'],'version':'1','functions':spec['kind'],'representation':'AUTHORED','origin':','.join(map(str,origin)),'front':spec['front'],'fabric.min':'0,0,0','fabric.max':','.join(map(str,maxp)),'parcel.min':'-2,-1,-2','parcel.max':','.join(map(str,(maxp[0]+2,maxp[1]+2,maxp[2]+2))), 'rooms':'main','room.main.min':'-1,1,-1','room.main.max':','.join(map(str,maxp)),'zones':'','passages':'front','primaryEntrance':'front','primaryWorkplace':'','passage.front.from.kind':'EXTERIOR','passage.front.from.room':'','passage.front.to.kind':'ROOM','passage.front.to.room':'main','passage.front.public':'true','passage.front.threshold':str(threshold),'passage.front.supports':';'.join(','.join(map(str,p)) for p in path),'workplaces':'','anchors':','.join(anchors),'beds':''}
  for i,area in enumerate(spec['excavations']):
   for bound in ('min','max'):prop['site.excavation.void_'+str(i)+'.'+bound]=','.join(map(str,point(area[bound])))
  for key,p in anchors.items():prop['anchor.'+key]=','.join(map(str,point(p)))

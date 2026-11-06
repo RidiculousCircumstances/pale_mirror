@@ -99,8 +99,35 @@
         "priority": 80
       }
     ],
-    "groundY": 2,
-    "excavations": []
+    "groundY": 1,
+    "excavations": [],
+    "entranceSupports": [
+      [
+        15,
+        2,
+        7
+      ],
+      [
+        14,
+        2,
+        7
+      ],
+      [
+        13,
+        2,
+        7
+      ],
+      [
+        12,
+        2,
+        7
+      ],
+      [
+        11,
+        2,
+        7
+      ]
+    ]
   },
   {
     "name": "smeltery",
