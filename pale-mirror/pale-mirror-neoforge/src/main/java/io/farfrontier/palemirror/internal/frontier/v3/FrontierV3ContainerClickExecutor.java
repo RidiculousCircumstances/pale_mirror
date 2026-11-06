@@ -50,10 +50,18 @@ final class FrontierV3ContainerClickExecutor {
         var ledger = FrontierV3DepotClickLedger.get(level);
         for (var target : targets) {
             var previous = ledger.transaction(target.record().id());
-            if (previous != null && FrontierV3PlayerClickOperation.confirmed(level, previous)) {
-                ledger.retire(previous); ledger.persist(level);
+            if (previous != null) {
+                FrontierV3CompositeClickExecutor.reconcile(level, runtime, runtime.decodedState().orElseThrow(), previous);
+                runtime.settleNativeBoundary();
+                var retained = ledger.transaction(target.record().id());
+                if (retained != null && FrontierV3PlayerClickOperation.confirmed(level, retained)) {
+                    ledger.retire(retained); ledger.persist(level);
+                }
             }
         }
+        // Closing a predecessor may publish its exact postimage and resource bindings.
+        state = runtime.decodedState().orElseThrow();
+        targets = FrontierV3ContainerMenuTarget.resolveAll(player, menu, state);
         UUID interaction = UUID.randomUUID();
         var members = new java.util.ArrayList<FrontierV3DepotClickWitness>();
         for (var target : targets) {
