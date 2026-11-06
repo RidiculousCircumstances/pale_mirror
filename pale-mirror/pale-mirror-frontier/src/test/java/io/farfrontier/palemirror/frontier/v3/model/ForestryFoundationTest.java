@@ -117,15 +117,18 @@ class ForestryFoundationTest {
     }
     @Test void reserveStopsAtItsTargetAndRestartsOnlyBelowTheResumeThresholdAfterActualLoss() {
         var state = FrontierWorldState.initial(BOOTSTRAP); var home = new SubjectId("settlement:7");
-        var rules = BOOTSTRAP.ruleset().forestry(); String kind = "minecraft:oak_log"; var initial = state;
+        var rules = BOOTSTRAP.ruleset().forestry(); String kind = "minecraft:oak_log";
         var container = state.inventory().containers().values().stream().filter(record -> record.ownerId().equals(home)
-                && record.storage().filter(policy -> policy.filter().accepts(kind)).isPresent()
-                && FungibleResourceCustodySupport.accountAtContainer(initial, record.id()).isPresent()).findFirst().orElseThrow();
+                && record.storage().filter(policy -> policy.filter().accepts(kind)).isPresent()).findFirst().orElseThrow();
         var lot = new SubjectId("lot:forest-reserve-fixture"); var staging = new SubjectId("custody:forest-reserve-fixture");
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, container.id()).orElseThrow().id();
+        var existing = FungibleResourceCustodySupport.accountAtContainer(state, container.id());
+        var account = existing.map(CustodyAccount::id).orElseGet(() -> ReferenceContainerCustody.scopeId(container.id()));
         var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, home, kind, rules.reserveItems(), "fixture:wood", List.of()),
                 new CustodyAccount(staging, new ResourceCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000264")),
-                        Map.of(lot, rules.reserveItems()), Map.of())).transfer(staging, account, Map.of(lot, rules.reserveItems()), Map.of());
+                        Map.of(lot, rules.reserveItems()), Map.of()));
+        resources = existing.isPresent() ? resources.transfer(staging, account, Map.of(lot, rules.reserveItems()), Map.of())
+                : resources.transferToNewAccount(staging, new CustodyAccount(account, new ResourceCustody.Container(container.id()),
+                        Map.of(lot, rules.reserveItems()), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         assertFalse(ForestryStockDemand.requested(state, home, kind, Optional.empty()));
         resources = resources.destroy(account, Map.of(lot, rules.reserveItems()-rules.resumeBelowItems()), Map.of());

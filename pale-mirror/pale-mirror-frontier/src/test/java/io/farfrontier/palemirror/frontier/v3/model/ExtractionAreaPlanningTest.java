@@ -24,8 +24,9 @@ class ExtractionAreaPlanningTest {
     }
     private static FrontierWorldState exhausted(FrontierWorldState state) {
         var prior = deposit(state);
-        var next = new ExtractionDeposit(prior.site(), prior.cells(), prior.geometry(), new WorkAreaDevelopment(2, prior.cells().keySet()));
-        for (long cell : next.cells().keySet()) next = next.extracted(cell, 1, "fixture:prior-work-" + cell);
+        var next = new ExtractionDeposit(prior.site(), prior.cells(), prior.geometry(), new WorkAreaDevelopment(prior.development().revision() + 1, prior.cells().keySet()));
+        for (long cell : next.cells().keySet()) if (next.cells().get(cell).disposition() == ExtractionDeposit.Disposition.PRESENT)
+            next = next.extracted(cell, next.cells().get(cell).revision(), "fixture:prior-work-" + cell);
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(next)));
     }
     @Test void admissionDiscoversOutsideOriginalPoolWithoutChangingOldHistoryOrCreditingWork() throws Exception {
@@ -135,7 +136,11 @@ class ExtractionAreaPlanningTest {
         var payloads = FrontierWorldRuntimeDefinition.payloadCodecs(); assertEquals(mutation, payloads.decode(mutation.type(), payloads.encode(mutation)));
     }
     @Test void expansionRefreshesAWholeHeldSourceRegionWithoutClaimingObservationOrReleasingItsCustody() {
-        var before = exhausted(); var site = deposit(before).site().id();
+        var depleted = exhausted(); var site = deposit(depleted).site().id();
+        // Establish a developed front before checking renewal of an existing
+        // source region; the first extension may legitimately enter a new chunk.
+        var first = ExtractionAreaPlanning.proposal(depleted, site, 0L).orElseThrow();
+        var before = exhausted(ExtractionAreaPlanning.apply(depleted, site, first, 800));
         var plan = ExtractionAreaPlanning.proposal(before, site, 0L).orElseThrow();
         var regions = plan.columns().stream().map(column -> new ExtractionRegion(site,
                 Math.floorDiv(column.floor().x(), 16), Math.floorDiv(column.floor().z(), 16))).distinct().toList();

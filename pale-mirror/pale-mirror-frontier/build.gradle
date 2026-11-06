@@ -106,8 +106,10 @@ sourceSets.named('test') {
 }
 
 tasks.withType(Test).configureEach {
-    // Full-suite geometry fixtures and the ArchUnit source graph share this worker.
+    // Rich authored-world fixtures retain bounded process-wide geometry caches.
+    // Isolate batches of worlds; do not accumulate every fixture in one JVM.
     maxHeapSize = '4g'
+    forkEvery = 32
     useJUnitPlatform()
     if (name != 'frontierV3AnnualAudit' && name != 'frontierV3ScaleAudit') {
         useJUnitPlatform {

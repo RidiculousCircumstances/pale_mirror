@@ -189,11 +189,12 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
-    void destroyedStructureHasNoDesiredCellsButOtherOwnersRemain() {
+    void aggregateConditionDoesNotEraseSurvivingFabricOrOtherOwners() {
         FrontierWorldState state = initial().withStructureCondition(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-workshop"), StructureCondition.DESTROYED);
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
 
-        assertFalse(plan.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("structure:1-workshop")));
+        assertTrue(plan.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("structure:1-workshop")),
+                "only exact confirmed losses remove cells; an aggregate label does not demolish the fabric");
         assertTrue(plan.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("structure:1-hall")));
     }
 
@@ -233,8 +234,8 @@ class FrontierGrayboxPlanTest {
         state.bootstrap().settlements().forEach(settlement -> {
             SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
             SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
-            port.ownedAccessSurfaces().forEach(surface -> assertAuthoredContact(state, plan, infirmary, surface));
-            assertAuthoredContact(state, plan, infirmary, port.throatSurface());
+            port.ownedAccessSurfaces().forEach(surface -> assertAuthoredContact(state, plan, infirmary, surface, false));
+            assertAuthoredContact(state, plan, infirmary, port.throatSurface(), false);
             assertEquals(2, port.ingressSurfaces().size() - 1, "treatment ingress must retain two adjacent portal transitions");
             for (int index = 1; index < port.arrivalSurfaces().size(); index++) {
                 SurfaceAnchor previous = port.arrivalSurfaces().get(index - 1), current = port.arrivalSurfaces().get(index);
@@ -276,11 +277,12 @@ class FrontierGrayboxPlanTest {
             SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
             assertEquals(port.containerPosition(), state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).position(),
                     "the exact depot chest must use its semantic service socket");
-            port.ownedAccessSurfaces().forEach(surface -> assertAuthoredContact(state, plan, depot, surface));
-            assertAuthoredContact(state, plan, depot, port.thresholdSurface());
+            port.ownedAccessSurfaces().forEach(surface -> assertAuthoredContact(state, plan, depot, surface, false));
+            assertAuthoredContact(state, plan, depot, port.thresholdSurface(), false);
             port.stations().forEach(station -> {
-                assertEquals(null, plan.cells().get(station.support().offset(0, 1, 0)), "service station feet cell must stay clear");
-                assertEquals(null, plan.cells().get(station.support().offset(0, 2, 0)), "service station head cell must stay clear");
+                assertAuthoredContact(state, plan, depot, station);
+                // A non-colliding torch may occupy a body cell. Clearance comes
+                // from the common native-shape provider, not map-key absence.
             });
         });
     }
@@ -351,6 +353,11 @@ class FrontierGrayboxPlanTest {
 
     private static void assertAuthoredContact(FrontierWorldState state, FrontierGrayboxPlan plan,
             SettlementStructure structure, SurfaceAnchor surface) {
+        assertAuthoredContact(state, plan, structure, surface, true);
+    }
+
+    private static void assertAuthoredContact(FrontierWorldState state, FrontierGrayboxPlan plan,
+            SettlementStructure structure, SurfaceAnchor surface, boolean station) {
         var expected = io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(structure).blocks().get(surface.support());
         assertNotNull(expected, "a declared facility contact needs its exact authored support");
         assertEquals(expected, plan.cells().get(surface.support()));
@@ -358,7 +365,8 @@ class FrontierGrayboxPlanTest {
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, structure.settlementId(), java.util.List.of(
                 new KnownPedestrianRouteKnowledge.Passage(structure, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)))
                 .forProfile(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER);
-        assertTrue(knowledge.clearStation(surface), "native fractional geometry must leave body clearance: " + structure.id() + " " + surface);
+        assertTrue(station ? knowledge.clearStation(surface) : !knowledge.geometry().blocked(surface),
+                "native geometry must admit the declared station or transit contact: " + structure.id() + " " + surface);
     }
 
     private static FrontierWorldState initial() {
