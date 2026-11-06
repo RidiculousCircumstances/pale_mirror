@@ -14,7 +14,11 @@ public final class GuardAmmunition {
         var resources=state.inventory().fungibleResources();var origin=state.actorLocations().get(duty.execution().actorId()).supportingSurface();
         for(var source:ResourceStorageSelection.withdrawalSources(state,resources,duty.home(),ARROW,origin,ROLES)) {
             int count=Math.min(source.quantity(),state.bootstrap().ruleset().ranged().loadSize());
-            var lots=FungibleResourceCustodySupport.selectAtAccount(resources,source.accountId(),duty.home(),ARROW,count);if(lots.isEmpty())continue;
+            var lots=FungibleResourceCustodySupport.selectAtAccount(resources,source.accountId(),duty.home(),ARROW,count);
+            // Discovery includes PREPARING stores for wake indexing. A real count is
+            // not yet usable while projection/binding is incomplete; admission must
+            // use the same custody fence as the reducer and the eventual transfer.
+            if(lots.isEmpty() || !FungibleResourceCustodySupport.canReserve(state,lots.orElseThrow()))continue;
             var target=new SubjectId("custody:guard-ammo/"+UUID.nameUUIDFromBytes((duty.id().value()+"|"+duty.revision()).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             if(!ActorCarriedResources.canAddAccount(resources,duty.execution().actorId(),target))return Optional.empty();
             var endpoint=ResourceStorageAccess.at(state,source.endpoint().containerId()).stations().stream()

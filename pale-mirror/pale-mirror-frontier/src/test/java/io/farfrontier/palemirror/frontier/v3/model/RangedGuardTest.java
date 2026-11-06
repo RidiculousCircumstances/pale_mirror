@@ -47,6 +47,42 @@ class RangedGuardTest {
         var after=s;assertThrows(IllegalArgumentException.class,()->GuardAmmunition.apply(after,r.duty().id(),loaded,102));
         assertEquals(s,codec.decode(codec.encode(s)));
     }
+    @Test void ammunitionWaitsForProjectionAndExactBindingThenCanBeAdmittedAfterRecovery(){
+        var r=guard();var container=r.state().inventory().containers().get(r.duty().source().containerId());
+        var s=AutomaticStationProductionTest.supply(r.state(),container,GuardAmmunition.ARROW,40,"loading-ammo");
+        var selected=GuardAmmunition.select(s,r.duty()).orElseThrow();
+        var expected=PhysicalReplicaRecord.expected(container.id(),ReferenceContainerCustody.semanticKind(s,container.id()),1,
+                ReferenceContainerCustody.canonicalFingerprint(s,container.id()),ReferenceContainerCustody.provenance(container.id()));
+        var scope=ReferenceContainerCustody.scopeId(container.id());
+        var custody=s.replicaCustody().declare(expected).prepareProjection(new PhysicalCustodyLease(scope,container.id(),
+                ReferenceContainerCustody.PROVIDER_ID,1,1,1,PhysicalCustodyLeaseStatus.PREPARING,null));
+        s=s.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        assertFalse(ResourceStorageSelection.withdrawalSources(s,s.inventory().fungibleResources(),r.duty().home(),GuardAmmunition.ARROW,
+                r.duty().source().station(),Set.of(ResourceStorageRole.WAREHOUSE,ResourceStorageRole.LOCAL_BUFFER)).isEmpty(),
+                "read-only discovery includes loading stores but cannot grant physical stock authority");
+        assertTrue(GuardAmmunition.select(s,r.duty()).isEmpty());
+        var preparing=s;assertThrows(IllegalArgumentException.class,()->GuardAmmunition.apply(preparing,r.duty().id(),selected,100));
+        s=ReferenceContainerCustodyFixtures.observedAndHeld(r.state().withInventory(s.inventory()),container.id());
+        assertTrue(GuardAmmunition.select(s,r.duty()).isEmpty(),"acquired custody still awaits exact material bindings");
+        var account=FungibleResourceCustodySupport.accountAtContainer(s,container.id()).orElseThrow();
+        var ledger=s.inventory().fungibleResources();
+        var occupied=new HashSet<Integer>();
+        for(var item:s.inventory().items().values())if(item.custody() instanceof InventoryCustody.ContainerSlot address
+                && address.containerId().equals(container.id()))occupied.add(address.slot());
+        var stacks=new ArrayList<FungiblePhysicalObservation.Stack>();int slot=0;
+        for(var entry:account.lotQuantities().entrySet()) {
+            var kind=ledger.lots().get(entry.getKey()).itemKind();int remaining=entry.getValue();
+            while(remaining>0){while(occupied.contains(slot))slot++;int count=Math.min(64,remaining);stacks.add(new FungiblePhysicalObservation.Stack(
+                    new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container.id(),slot++)),kind,count));remaining-=count;}
+        }
+        ledger=ledger.rebind(account.id(),1,FungiblePhysicalObservation.bind(ledger,account.id(),1,stacks));
+        s=s.withInventory(s.inventory().withFungibleResources(ledger));
+        var codec=new FrontierWorldStateCodec();s=codec.decode(codec.encode(s));
+        var admitted=GuardAmmunition.select(s,r.duty()).orElseThrow();s=GuardAmmunition.apply(s,r.duty().id(),admitted,101);
+        assertEquals(GuardDuty.Phase.RESUPPLYING,s.strategicPlans().guards().get(r.duty().id()).phase());
+        assertEquals(32,GuardAmmunition.require(s,s.strategicPlans().guards().get(r.duty().id())).order().portion().quantity());
+        assertEquals(40,s.inventory().fungibleResources().totalQuantity(r.duty().home(),GuardAmmunition.ARROW));
+    }
     @Test void playerTakingStockInvalidatesTheVisitWithoutInventingArrows(){
         var r=selected(8);var s=r.state();var supply=GuardAmmunition.require(s,r.duty());var p=(ActorContainerItemOrder.Portion.Fungible)supply.order().portion();
         var ledger=s.inventory().fungibleResources().destroy(p.sourceAccountId(),p.lotQuantities(),Map.of());s=s.withInventory(s.inventory().withFungibleResources(ledger));
