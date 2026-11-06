@@ -1,193 +1,135 @@
 # Active continuity — 2026-11-06
 
-## Assignment / authority
+## Assignment and outcome
 
-Main alone; no subagents, new goal or push. User requested cotton agriculture and
-thread/cloth production after the kitchen/storage/import work. Cotton technical
-implementation is now COMMITTED and DEPLOYED to a fresh disposable world. No active
-coding step remains; human playtest/M3 and continuous HOT cotton cultivation M2 are
-not claimed. Standing coherent-change commit+verified deployment remains; no push.
-Canonical AGENTS/protocol govern. Preserve unrelated governance WIP.
+Main alone; no subagents, new goal or push. User authorized the connected repair:
+confirmed block damage vs attempted hits; reusable integrity/function separation;
+Northwatch feeding/access; town-hall doors; terrain-aware placement; faithful native
+imports and actual client review. Implementation and disposable deployment are now
+complete. Autonomous resident repair/construction remains deferred; repair-ready
+contracts are implemented. No human M3 or whole-repository green claim.
 
-Task plan/evidence: docs/frontier-v3-cotton-textiles-20261106.md.
-Previous delivered cut: docs/frontier-v3-storage-and-dining-plan-20261105.md.
+Canonical task plans and evidence:
+- docs/frontier-v3-structural-integrity-and-repair-20261106.md
+- docs/frontier-v3-placement-and-northwatch-food-20261106.md
+- docs/archive/continuity-20261106-structural-wip-start.md (initial state)
 
-## Repositories / live identity
+## Repositories / delivery identity
 
-IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
-branch feat/baker-carry-orders-20260926, clean HEAD e4ec16b87 (docs/carrier); product1af1feca7.
-RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror, clean detached1af1feca7.
-PACK /home/rd/proj/minecraft HEAD98a6701, clean tracked state; unrelated untracked
-.f0v-baseline/ preserved. Pack index170 verified. GOV parent has extensive unrelated
-WIP; commit only this ledger, cotton plan and exact four owned architecture lines,
-never whole dirty AGENTS/architecture/historical docs. No repository migration.
+IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror; Git root parent;
+branch feat/baker-carry-orders-20260926. HEAD6a343e01146f2db19ecd8a70c10618000537ad4a,
+clean. Main implementation d2369cdf2, later semantic/test closure and final site fix
+included in HEAD. RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror clean,
+detached at that same exact commit. Only verified detached artifacts were published.
+PACK /home/rd/proj/minecraft HEAD98a6701: tracked unchanged,170index files valid;
+unrelated untracked .f0v-baseline/ preserved. GOV /home/rd/proj/pm-governance has
+extensive unrelated WIP: stage/commit only owned task plans, ledger, initial archive
+and the two owned architecture boundary lines. Do not absorb other changes.
 
-LIVE /home/rd/far-frontier-server, far-frontier-v3-live.service MainPID75296,
-TCP25565. Fresh world textiles-schema341-seed139-20261106, seed139, r32,
-schema341/Network7. Old kitchen-schema340 world stopped normally/all dimensions
-saved; no user account edited. Exact-ref preflight and fresh-start verifier PASS.
+LIVE /home/rd/far-frontier-server; far-frontier-v3-live.service. Final world
+buildings-schema342-site2-seed139-20261106, seed139, frontier-v3-textiles-terrain-r32,
+schema342/graybox ledger7/Network7. Wrapper2559129, native Java2559153, TCP25565;
+start notBefore1793956640, invocation61b2050bc0254c44b8adb526b7546a38.
 Core SHA512:
-a62462a35f9d47501bb840cf3fc360103e2723cda987bf51f1d657ffe1a3449741e5bda00c71d544fb2bc9db6b21485b3dbe66e6416fc0dab3cf3eedf522442c
-Unchanged Visuals SHA512:
+b3e8e8df57b20df8042fc9cbaf62718642ed36774968df6b83a0a2293723f9b3b1d66f7d83758100ecf827fb43d57150d9510c6130577f5b0c13648e01f00ec7
+Visuals unchanged, SHA512:
 2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601
-Build Java21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2;
-live22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
-Release receipts in RELEASE build/cotton-release. RCON helper IMPL
-build/forestry-native/query-runtime.mjs, never print secrets. Native client/private
-Xvfb closed. Live initial summary tick534/revision854:12homes,24fields,319residents;
-required/scene/inventory conflicts0. Cotton area64/sowing64/GROWING and both machine
-identities present. Station COLD UNMATERIALIZED before a visit is normal.
 
-## Implemented cotton/textile cut
+Both prior worlds were stopped through authenticated native RCON; all dimensions
+saved and native JVM/port exited before install. Final preflight and deploy verification
+passed. No previous world was silently recovered under new content. Latest after-client
+summary at tick4912/revision5684: ok/green retained-conflict scope,12settlements,
+319residents,0inventory/scene/required/replica conflicts. This is a bounded check,
+not proof of continuous economic solvency or every actor's progress.
 
-CropDefinition and FieldBalance crop policies provide native block/output/seed,
-extraction/tool identity, footprint and minimum stock. Both crops reuse field
-biology, cultivation, exact work/tools/cargo, observation/mutations/loot, storage,
-hauling, navigation/UAE and economics. COTTON_FIELD stabletag2; cotton_crop,
-cotton_seeds,cotton,cloth. Snapshot341 rejects old schema. Cotton8x8 per home;
-finite minima64rawcotton/thread/cloth. No synthetic consumers. Managed seed-cost
-policy unchanged. Wheat alone retains dynamic market-area allocation; cotton keeps
-its admitted area. Native crop/item/machine models are explicitly graybox.
+Build Java21: /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2.
+Live Java22: /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
+RCON helper: IMPL build/forestry-native/query-runtime.mjs; do not print secrets.
+All task native test/pilot clients are closed; full-pack client was limited to20FPS.
+The live service remains running. Do not leave a graphical client idle between checks.
 
-ProductionStationSpec retains nominal WorkplaceId. Genesis, installation, native
-adoption, schedules and recovery enumerate explicit independent mounts, reject
-missing/forged identity and isolate replacement from its sibling. Existing
-StationWork executes1cotton->2minecraft:string at80work and4string->1cloth at160work,
-attended/no fuel. Three shared production workers permitted; Weaver is current
-assignment display, not immutable profession. Factory uses original pinned Medieval
-Spruce dyer2 with native materials and surveyed spinning/weaving mounts. Existing
-facility-level reservations still serialize its jobs; no simultaneous dual-operator
-claim. No textile-only simulator/mover/inventory/economic owner.
+## Root causes and implemented ownership
 
-Connected defects fixed from the real native carrier: common small-height endpoint
-alignment swept into its own old floor on fullblock->dirtpath descent; common
-operational custody incorrectly admitted draining CHECKPOINTED instead of only
-ACQUIRED; staffing depended on current plan validity and unified economics treated
-its own tactical roster output as CAPACITY input. Advisory stock staffing now uses
-declared/lastaccepted targets and real stored inputs without routing or work grants;
-real population/life/schedule inputs still invalidate. Actual StationWork destination
-selection now skips proven NO_PATH stores, preserves pending/unknown geometry as
-waits and retains the ordinary exact-profile access receipt. Capacity-only selection
-had repeatedly picked an inaccessible adopted factory chest, starving weaving.
+Old Northwatch had23residents/15hungry despite77unclaimed usable pantry bread.
+START_DESTROY incorrectly recorded losses for two unchanged kitchen cells; these
+semantic losses also masked collision as UNKNOWN. Removing only those two false
+facts in an offline discriminator recovered the exact10-anchor pantry exit.
+Roof-heavy actor-hash candidate ordering amplified waits; some guard holds were
+independent. The old full diagnostic is in the placement plan, not a universal
+claim that every hungry actor had one cause.
 
-## Evidence / remaining limits
+StructureIntegrity alone projects exact lost/restored cells and repair evidence
+(ABSENT/REPLACED/UNKNOWN). StructureCellObserved carries the precise owner/part,
+actual collision and original-material result atomically. Native-equivalent visual
+serialization and operating properties are not material damage. FacilityFunctionAvailability
+consumes owner-declared requirements; ProductionFacilityAvailability owns exact
+job/station/workplace relationships. Navigation owns physical access; UNKNOWN stays
+a wait. Exact bed head/foot facts determine capacity; farmhouse damage does not own
+crop biology. Surviving authored fabric remains real despite aggregate DESTROYED,
+including the shared infection-contact geometry index.
 
-IMPL build/cotton-textiles: native authoring2/2 all14assets; extraction4/4 bothcrops,
-all3biomes/player-worker parity/wrongcrop/restart; navigation52/52 including supported
-1/16descent plus doors/widebodies/quarry constraints; Node56 scenario checks.
-Affected trade/field/custody/textile39cases passed; latest destination/textile/
-multiinput15passed. Guardrails, compile, assemble, packagedJar and clean RELEASE
-build passed. Native Core445:444positive and1 stale hand fixture failed because its
-site:hand-test never existed. Fixed only that fixture to use its actual owner's
-wheat field; affected full field-turns slice23/23 then passed. No production code
-changed between native terminal, Core and this fixture correction. Do not describe
-the original aggregate task as green or repeat it mechanically.
+STRUCTURE uses existing ManagedBlockWrites, paged graybox journal and confirmed
+operation ledger. START admits a hit; abort/no-op creates no loss. A bounded ordinary
+player-input continuation revalidates player/hand/world/reach/predecessors and invokes
+the whole native game-mode call once. Unattempted work expires/cancels; it is never
+replayed after restart. Hall cards no longer intercept interactive door/container clicks.
 
-Native terminal v15 run34c899d2-d54e-4eb5-9b6f-79aa70f8f41d exited0/statusok,
-10actions; starts4maturecottoncells/no harvestedtextiles,9000COLDticks then ordinary
-HOT chain.2cloth delivered to adopted warehouse at13247/revision23040, NORMAL,
-retained after graceful SAMEworld restart at13268. Both terminal assertions passed;
-exact-owned client/server cleanup/portclosed. v1..v14 are investigation, not accepted
-receipts. Normally saved v14 snapshot identified inaccessible destination via real
-planner call (v14-snapshot-assessment.txt/start-refusal.txt), no speculative retry.
+KnownLocalAccess supplies a bounded positive nearest proof (2048visits,radius16,
+cache64); miss falls back to ordinary cooperative navigation, never global NO_PATH.
+Meal approaches use shared proofs/batched goals and service-grade ordering. Geometry
+retains exact observed collision after semantic damage; loss-only facts invalidate
+stale observations until actual shape arrives. No alternate mover or body shrink.
 
-Evidence is M1 endpoint plus actual HOT spinning/weaving and recovery, not full M2
-cotton cultivation or humanM3. Reviewed private frames: crop already harvested and
-factory close porch view; they do not establish mature-crop visuals or whole interior.
-Prior kitchen/barrel/fullpack facades and nativeCore444 evidence in build/barrel-kitchen
-remains narrowly reusable. Actual hostile infirmary-door guard pursuit is still not
-checked. Older broad long24k/mixed-trip/expedition simulations were interrupted,
-not green; no full-suite success claim or need to rerun unrelated long campaigns.
-The task plan retains receipt details and intentionally deferred scope.
+BuildingSiteSurvey/Planner/Plan own bounded survey, grade and explicit cut/fill;
+markup4 separates outdoor ground, entrance supports and intended excavation. Source
+AIR below grade is not excavation authority. Hall uses pinned original townhall5;
+other explicit selections and native materials/NBT remain faithful.
 
-## Latest diagnosis — kitchen damage after aborted hit
+First full-pack review rejected the initially deployed depot datum2: it buried the
+original courtyard furniture. Final importer accepts explicit bounded 3D entrance
+supports/threshold independently of yard grade. Depot now retains original loading
+platform/path at sourceY2 and original outdoor gradeY1. No extra apron, architectural
+substitution, carved aisle or relaxed donkey profile was required. Kernel personal
+and donkey mixed trips still load/deliver/return/recover through the ordinary owners.
 
-User requested inspection/explanation, no code repair performed. Live still1af1feca7.
-At07:22:05 revision916406 kitchen1 floor(-1458,63,-1315) and07:22:06 revision916577
-wall(-1459,64,-1313) became PLAYER/KNOWN_SEMANTIC_LOSS. Read-only live execute-if-block
-confirmed original spruce_planks floor and domum_ornamentum:double_crossed wall both
-still present; native wall textureData also intact. Exact source contradiction:
-FrontierV3PlayerActionMixin HEAD(START_DESTROY_BLOCK) calls observePlayerBreakPacket;
-GrayboxExecutor.observeBlockBreak immediately commits PhysicalDeltaObserved while
-preparePhysicalDelta requires the original block STILL present. Domain reduction
-marks structure DAMAGED on first cell. Post-Vanilla/ABORT/STOP outcome callback only
-reconciles ResourceFieldPlayerBreakExecutor, not structural loss. Thus an aborted
-survival hit permanently records a false loss. Same generic graybox path includes
-other authored structures/routes; not a kitchen-only bug. Admission intent and
-confirmed physical aftermath must be separate, with abort/no-change closing intent
-without damage and real break admitted durably then confirmed exactly once.
-Current kitchen has1589 authored cells; destroy thresholdceil(n/3)=530; any first
-cell marksDAMAGED. Dining permits DAMAGED (excludesDESTROYED), station installation
-eligibility elsewhere requiresINTACT. Damage persists; ordinary hit abort does not
-repair/reconcile the structural record. Existing structural repair is a separate
-material-backed path, not an automatic status reset. Logs/read facts in ignored
-IMPL build/kitchen-damage and live latest.log; source/PACK unchanged, no new deploy.
+## Verification and limits
 
+Receipts under IMPL build/northwatch-dining-placement:
+- native-v9/manifest.json PASS: real hall open/close, aborted hit/no damage, actual
+  destruction, SAMEworld graceful restart, one ordinary restoration. Floor frame opened.
+- dining-native8/manifest.json PASS: physically HOT resident, actual192->191pantry
+  bread, NOURISHED/NONE,0claim. Frame is doorway, not visible eating-animation proof.
+- Native core448/448 and NeoForge unit921/921 passed before final content-only changes;
+  reuse only for their unchanged protocols. All native test JVMs closed.
+- depot-site-native-authoring.log: final original native/NBT/collision checks5/5 PASS.
+- depot-grade-animal-closure.log: personal and donkey kernel histories PASS1m6sec.
+- semantic-cohort-closure.log: distinct residents actually fed under SAME WorkBudget4,
+  driven by retained due boundaries rather than the obsolete3000tick stopwatch.
+- Final RELEASE build/structural-release342/site2-release-gates.log: affected catalog,
+  layout and graybox42/42, guardrails, jar and verifyPackagedJar PASS48sec. Prior
+  scoped-closure-gates2.log and final-delivery-gates.log cover unchanged integrity,
+  meals, production, readability, guard/bed/reserve/restoration and codec boundaries.
+- live-fullpack342-site2/manifest.json PASS23actions/11frames, loaded-mod inventoryPASS,
+  run e37c0ce2-32e5-44df-a888-820e70e593e6. Opened final depot original frame and full
+  11-facade contact sheet: courtyard/furniture at street grade, raised loading intact,
+  original hall stonework/materials visible. This is street-level automated review.
+- live-site2-delivery.json binds exact source/artifact/world/process and review limits.
 
-## Current request — accepted integrity design and hall fidelity diagnosis
+Whole historical Frontier suite is NOT green. Attempt33b43 reported2287tests and
+84assertion failures plus2harness errors;71exact failures reproduced on clean OLD1af.
+Its13new differences were closed by scoped checks (actual cells vs aggregate labels,
+positive geometry after restoration, real journey time, explicit loading fixtures).
+No test was silently disabled/deleted. The broad runner also exhausted a4GiB worker
+and a legacy construction CPU loop was explicitly stopped after9minutes. Keep this
+separate from the scoped delivery; do not claim all historical tests or all unsupported
+families were repaired. Retained controls: IMPL build/northwatch-dining-placement/
+baseline-control/comparison.json and logs. Read-only baseline checkout remains
+/home/rd/proj/pm-structural342-baseline at1af1feca7, no JVM running.
 
-User agreed and requested documentation of admission/result separation, exact cell
-integrity plus independent functional availability, physical alternate access even
-when a marked passage is damaged, and future resident repair using resources/shared
-execution. Saved in docs/frontier-v3-structural-integrity-and-repair-20261106.md;
-architecture target explicitly AGREED_NOT_IMPLEMENTED. No product repair requested
-in this turn; do not silently claim the START_DESTROY defect fixed.
+## Remaining handoff
 
-Import audit sourceclean1af1feca7/live samebuild: hall spec explicitly selects
-fundamentals/townhall2.blueprint, SHA2560de7053c7498f39e25611266f1a70db4b34be49eb82c73abe043c063cc469ed6,
-pinned MineColonies a9b03edfbbd5359b148c85284ea038066d689866. Regeneration into ignored
-build/hall-import-audit matched all4 tracked imported outputs byte-for-byte. Exact
-original comparison:978architecturalblocks retained unchanged;1sprucefence removed
-at source(1,5,7) for entrance; no material replacements. Sourcelevel2 has979realblocks
-and topY15. Pinned sourcelevel5 downloaded readonly:2481realblocks/topY28, stone-brick
-walls/tower. Gallery publisher FAQ explicitly shows maximumlevel; its regular
-TownHall bounds15x29x22 match thislevel5 family. Main disparity is chosen level2,
-not current palette conversion. Historical dae577e04 did substitute Domum decorative
-blocks/roof/racks with vanilla; removed d09b40034, but level2 asset choice remained.
-Other services also select level2, so gallery mismatch is broader than the hall.
-Native audit completed via checked-in live-hall-import-fidelity.json, run
-1f765951-8938-4eee-95cb-cb7eae8f169c,5actions/statusok, fullpack20FPS privateclient.
-Both current street/overview frames were opened: low wooden level2 hall, original
-Domum white timber panels present, substantial stone lowerwork below street datum.
-Gallery front JPG was also opened and shows the developed stone/timber tower.
-Actual placement export hall_import_audit:anchor(-1468,63,-1360),WEST,
-sha baaf1ee15b7f5e4642b111ca578f8c6d50aa94d9f8f8e04950b467b8ceb02f74.
-Local entrance supportY4 becomes worldY63; source outdoor dirt_pathY3 becomesY62,
-below normal streetY63. Ground datum and entry datum must be reviewed independently;
-source block equality alone is not visual placement acceptance. Scoped settled hall
-ingress audit98checks/0pending/0unverified/0mismatch passed; not a whole-building scan.
-
-Initial server-as-client-source failed correctly because EMF/ETFclientmods absent;
-actual railway-client updated through ordinary root installer. Old all-buildings
-fixture failed because settlement:1 now returns response_limit, NOT an established
-layoutrevision mismatch. Separate scoped visual carrier uses exported exact hall
-placement and summary diagnostics, no world mutation or weakened product outcome.
-Response-limit is a newly observed diagnostic defect, not investigated/fixed here.
-Nativeclient/Xvfb closed, no humanaccount edit or serverreset. IMPL docs/test-only
-commit e4ec16b87 adds the exact hall carrier and corrects stale importer README
-claims (old substitutes/no dependencies/no typedvisualNBT). Source otherwiseclean;
-RELEASE/live remain1af1feca7, productblocks/code unchanged. PACK98a6701 unchanged,
-baselineuntrackedpreserved. Guardrails+56Nodeparsercases passed. Finish scoped GOV
-commit for ledger/design/new AGREED_NOT_IMPLEMENTED architecturetarget; preserve
-unrelated WIP. No push/newgoal/subagents or redeploy for docs-only changes.
-
-## Latest request — Northwatch starvation and placement proposal
-
-Diagnosed live, no product/world changes. Full findings and proposed responsibility
-boundaries: docs/frontier-v3-placement-and-northwatch-food-20261106.md.23residents:
-8nourished/3hungry/12starving at ticks342993..343097; kitchen77usablebread,0claimed,
-ACTIVE/ACQUIRED/current replica. Resident1-3 still starving/no meal at347225, bread74.
-Live planning explicitly waits on the SAME2false kitchen damage cells; both original
-blocks still present. Offline copied snapshot1473488: same pantry-to-floor route
-waits TARGET_COMPONENT_NEEDS_GEOMETRY; removing only2false deltas in the offline
-immutable copy gives10anchors. Not a live repair/native acceptance. Also common
-waiting-target selection includes roofs (49/87targetsY67..74) and serial first-wait
-can block accessible alternatives. Other guards have owner safety holds; do not
-claim identical cause for every hungry resident. SETTLED kitchen ingress passed
-2814checks/2openports, narrower than interior or integrity acceptance.
-Placement source defect: entrance datum anchored to street, all source AIR below
-entry floor copied as excavation. Farm235/depot41/textile80 AIR cells at streetY63;
-no explicit yard-ground/cellar distinction or general terrain adaptation plan.
-Proposed content-owned site semantics + pure shared terrain-fit plan, existing
-layout/geometry/physical execution retain their responsibilities; not implemented.
-IMPL/RELEASE/PACK unchanged, no client launched/deploy/push/newgoal/subagents.
+Implementation, deployment and native review are complete. This record and the
+owned plans form the task's governance closure; only the concise user delivery
+report remains. No further implementation or test campaign is needed absent new evidence. Preserve
+all unrelated GOV/pack WIP. Autonomous resident repair, arbitrary-world terrain adapter,
+indoor animal transshipment and human M3 are not delivered in this cut.

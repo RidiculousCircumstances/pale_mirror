@@ -1,7 +1,8 @@
 # Building placement and Northwatch food — diagnosis and proposal, 2026-11-06
 
-Status: live diagnosis completed; placement design proposed, not implemented.
-No Java, live blocks, player inventories, artifact or world were changed.
+Status: scoped implementation and disposable deployment completed on 2026-11-06,
+source `6a343e01146f2db19ecd8a70c10618000537ad4a`. The initial evidence below concerns
+the old source; final delivery and remaining limitations are recorded at the end.
 
 ## Bound evidence
 
@@ -68,7 +69,7 @@ Non-flat settlement sites are predominantly rejected; there is no general cut/fi
 retaining-wall or foundation adaptation planner. Existing terrain fixtures outside
 settlement pads are not proof of uneven-site building placement support.
 
-## Proposed responsibility boundary
+## Agreed responsibility boundary
 
 Retain BuildingPlacement as the sole local/world transform. Do not make the runtime
 navigator, importer or individual work owners choose a building's height.
@@ -102,7 +103,7 @@ navigator, importer or individual work owners choose a building's height.
 Keep source grade/level selection separate from this mechanism. Fixing placement
 alone does not change level2 buildings into the gallery's maximum-level variants.
 
-## Implementation order if adopted
+## Implementation and acceptance boundary
 
 First close the already agreed player-break admission/result and reconciliation
 boundary, including unchanged blocks and restored/replaced cells. Then correct
@@ -114,4 +115,65 @@ Implement site semantics and the common placement plan next. Validate representa
 flat, sloped and intentionally lowered/cellar sites with two competing neighbouring
 plots, blocked connections and player edits. Review actual street-level frames for
 hall/farm/depot/textile rather than accepting only block-count equality or an
-entrance-only audit. No implementation/deployment claim is made in this document.
+entrance-only audit. The actual candidate and delivery evidence are bound in CONTINUITY.md.
+
+Implemented: markup4 declares outdoor ground independently of entrance support and
+explicit excavation volumes. The importer retains original native materials and
+visual data; below-grade source AIR is no excavation instruction. Hall uses the
+pinned level5 source; other service selections remain explicit level2 variants.
+`BuildingSiteSurvey` is an immutable ground + full-cell collision port; the current
+genesis adapter supplies the actual persisted graybox terrain. `BuildingSitePlanner`
+selects a bounded median grade; `BuildingSitePlan` produces exact cut/fill work and
+rejects unknown/unsafe/overhead/excessive earthwork. Uniform dry sites have a positive
+fast certificate. Shared physical projection and authored navigation consume the
+same plan; graded entrance supports connect to ordinary flush paving.
+
+There is no arbitrary-world terrain sampler or automatic repair/construction job
+in this cut. The provider-neutral survey permits those adapters later without
+moving placement ownership into navigation or per-building work executors.
+Common waiting targets retain bounded two-dimensional capacity and vertical extent;
+service clearance first accepts a bounded positive nearest-route proof, then uses
+the ordinary cooperative planner. A local miss never certifies global NO_PATH.
+Native meal consumption and street-level placement frames remain required delivery
+evidence, independently of pure geometry and native block/collision certificates.
+
+
+## Native placement review and final closure
+
+The first deployed candidate passed the programmatic gates but its full-pack depot
+frame still showed buried yard furniture. Its outdoor datum had been raised to
+sourceY2 to match the loading platform, whereas the original courtyard is sourceY1.
+This was rejected by visual review rather than labelled a successful placement.
+
+The importer now accepts a bounded explicit `entranceSupports` path and exact
+`entranceThreshold`. The depot keeps its original raised platform and original
+three-dimensional entrance path atY2, independently of outdoor groundY1. Existing
+source blocks, body profiles and service semantics are unchanged. No extra apron,
+material substitution or general carving was needed. The inferred ramp had put
+entrance nodes below the actual source platform; raising the whole building datum
+had concealed that contradiction by burying the courtyard.
+
+Verification: original native authoring/collision checks5/5; real kernel mixed-trip
+histories with both personal carriers and the donkey passed in1m6s; final affected
+catalog/layout/graybox checks42/42, guardrails and packaged JAR verification passed.
+Malformed threshold and diagonal importer inputs were rejected before output.
+Relevant receipts are under `build/northwatch-dining-placement` in the implementation
+checkout: `depot-grade-animal-closure.log`, `depot-site-native-authoring.log`,
+`live-fullpack342-site2/manifest.json` and `live-site2-delivery.json`. The clean release
+log is `build/structural-release342/site2-release-gates.log` in RELEASE.
+
+The final full-pack client run `e37c0ce2-32e5-44df-a888-820e70e593e6` completed23actions,
+11frames, loaded-mod inventoryPASS. The opened depot frame and all11facade contact
+sheet show the courtyard/furniture at street grade and the loading terrace raised;
+the hall retains the original level5 stonework and decorative materials. This is a
+street-level automated review, not a human M3 or every-angle visual acceptance.
+The exact live world is `buildings-schema342-site2-seed139-20261106`, seed139/r32,
+schema342/Network7. Native stop/save, fresh-world preflight and post-start verification
+passed. The capped20FPS client exited normally; the service remains running.
+
+The broad historical Frontier test attempt was not green:71assertion failures were
+reproduced on the old `1af1feca7` control; its13new differences were closed by scoped
+checks. The broad runner also hit a test-heap limit and an explicitly terminated
+legacy construction loop. `baseline-control/comparison.json` and retained logs
+record these limits. No historical failure was silently disabled or called passed.
+The delivery claims only the affected mechanisms and native flows above.
