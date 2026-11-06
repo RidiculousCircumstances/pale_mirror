@@ -2,128 +2,117 @@
 
 ## Assignment and authority
 
-Main alone; no subagents, new goal or push. User authorized completing the connected
-repair of door flicker/paired leaves, missing original porches, hunger with available
-bread and stationary MOVING reports. Code was committed and deployed. Native
-verification is complete for the bounded cases below; no human M3 or whole-repository
-green claim. Wait for further user steering; do not start a new feature unrequested.
+Main alone; no subagents, new goal or push. Latest user authorized fixing the
+traced latency and one-item shipment causes. Source is committed and deployed; bounded post-deploy causal observation is
+complete. Report the outcome and limits; do not start another feature unrequested.
+Standing delivery requires scoped commit and verified deployment. Live worlds
+are disposable, but this task preserves the current world. Canonical AGENTS.md
+and docs/engineering-agent-protocol.md remain authority. GOV has extensive
+unrelated WIP; never stage whole shared files.
 
-Current canonical plans:
-- docs/frontier-v3-structural-integrity-and-repair-20261106.md
-- docs/frontier-v3-placement-and-northwatch-food-20261106.md
-Historical diagnosis/receipts preserved in docs/archive/continuity-20261106-doors-meals-before-final-report.md.
-Canonical AGENTS/protocol remain authority; retain source/pack/GOV histories and WIP.
-
-## Repositories and delivery
+## Working set and identities
 
 IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
-branch feat/baker-carry-orders-20260926, clean HEAD
-a609bb030b09c84ab029358c87487ec12b7a7e32. Connected fixes include4b07a61c8,
-prior d2d0699f9 and9aff7b582. RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror,
-clean detached at the exact same a609 commit; only that verified JAR is installed.
-PACK /home/rd/proj/minecraft HEAD98a6701: tracked clean,170indexed files valid,
-unrelated untracked .f0v-baseline/ retained. GOV /home/rd/proj/pm-governance has extensive
-unrelated WIP. Commit only the two owned task plans, compact ledger and exact owned
-archive as appropriate; no wholesale staging or unrelated architecture edits.
+branch feat/baker-carry-orders-20260926, clean e30b168f5869102570883b7a9d45903b9e9735b4.
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror, clean detached same ref.
+PACK /home/rd/proj/minecraft, HEAD98a6701, tracked clean; unrelated untracked
+.f0v-baseline/ retained. Hosted core updated through pack publisher;170indexed
+files verified. GOV /home/rd/proj/pm-governance retains unrelated changes.
+Task documentation/ledger and the isolated architecture addition are committed
+separately from the unrelated WIP, which remains unstaged.
 
-LIVE /home/rd/far-frontier-server; far-frontier-v3-live.service; wrapper3316541,
-port25565; invocation16b704e1f5704fc290b9c8fd180470e1; notBefore1793965270.
-World buildings-packet-dining-seed139-20261106,seed139,frontier-v3-textiles-terrain-r32,
-schema342/graybox ledger7/Network7. A fresh world was selected when4b07 added a typed
-meal event and changed descriptor inventory. A609 resumed that SAME world. All
-prior native servers saved every dimension and exited before installs. Diagnostic
-older d2/6a worlds retained for identified evidence, not overwritten or migrated.
+LIVE /home/rd/far-frontier-server,far-frontier-v3-live.service; wrapper3986882,
+native JVM3986908,invocation aef9ea83d70242a8a9d520fe7f4100d0,notBefore1793975323.
+Port25565/RCON25575. Same world buildings-packet-dining-seed139-20261106,seed139,
+frontier-v3-textiles-terrain-r32,schema342/ledger7/Network7. Native3316566 stopped
+through RCON and saved all dimensions before install; no reset. New startup and
+installed hash passed scripts/frontier-v3-deploy-verify.sh.
 Core SHA512:
-f4bace11724477940e48a8c5f5efa045cc26f18d57ea884fa36eac66adf311df1f86b352cb85e593c8f6f2fa4bc41222c31169241c8c295668ddb498ae823f50
-Visuals unchanged, SHA512:
+a7f19a99bdcd1fecc96735b483420fe6543f94906addbe39da784c904d25e7e332f613e67df6d12f9e4f1e40d60aee625be240489e419c773d7bf55e0bcade22
+Visuals unchanged SHA512:
 2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601
+Java21build /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; Java22live
+/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java. Read-only RCON
+helper IMPL build/forestry-native/query-runtime.mjs; never print property secrets.
+No task clients/displays are running. User rd was online earlier;0players before
+this restart. Do not stop a human client. Normal20TPS,no fast-forward.
 
-Native tick rate RESTORED20, no sprint, no queued fast-forward. All task pilot/native
-test clients and isolated server JVMs CLOSED; none left idle. Live server remains up.
-Final snapshot52748: NORMAL,21nourished,2hungry/2active new meals,92bread/90available;
-0starving. This is a progressing next demand cycle, not a claim of perpetual zero
-hunger. Summary52744: ok,0required/inventory/scene conflicts. Final deploy verifyPASS
-in IMPL build/doors-porches-followup/public-waiting-deploy-verify.log. Native query
-reports normal20TPS; its post-client0.2ms average is COLD, not a HOT performance claim.
+## Current fix and evidence
 
-## Root causes and ownership
+Plan docs/frontier-v3-local-access-and-dispatch-20261106.md and canonical
+architecture local_access_dispatch_boundary. e30b168f5:
+- Common KnownLocalAccess rejects out-of-envelope goals before geometry reads;
+ optional positive shortcut has128edge checks, then ordinary cooperative routing.
+ A shortcut miss is never global NO_PATH. No new geometry or movement authority.
+- Internal asset manifests reject insufficient unclaimed volume and combined
+ receiving capacity before pickup/drop connectivity. Exact admission remains.
+- ReplenishmentLot.economic selects an efficient useful load independently of
+ cash. GoodsDispatchAdvice uses it; matching still conserves real goods/money.
+ Explicit uncovered deadlines still allow tiny recovery. No global64minimum.
+- StorageConsolidationSupply issues ordinary InternalHaulRequest via existing
+ ResourceHaulingPolicy for partial same-owner warehouse stacks. Filters/priority,
+ claims/capacity and indexed incoming shipments remain owners; no kitchen/buffer
+ repurposing, synthetic stock, direct multi-container pickup or reverse pending haul.
+ ShipmentState.receiving exposes its existing read-only receiver index publicly.
+ No schema/packet/ruleset shape changes.
 
-Door flicker: actual Minecraft ServerGamePacketListenerImpl.handleUseItemOn
-acknowledges prediction and sends block corrections outside the game-mode call.
-Deferring only ServerPlayerGameMode.useItemOn exposed old closed state between
-predicted open and admitted open. The isolated PlayerUsePacket adapter now defers
-the WHOLE native packet before ack/correction; cancellation reconciles exact planned
-writes and cumulative ack once. Native events, validation and WAL durability remain
-owners. Client pilot observes actual property transitions through acknowledgement.
-Paired native plans retain matching leaves/vertical halves, reject unrelated doors.
-Prior d2 fixed dependent geometry WRITE_PENDING fence oscillation (same dependencies
-for direct and dependent cells);9aff stopped importer headroom carving that deleted
-original porch stairs and added connected stair-edge geometry fallback.
+IMPL build/delay-lot-analysis-20261106:
+fix-closure.log PASS78tests including actual meals, supply, commercial mixed trips
+and same-owner transfer/recovery;closure-counts.json retains suite counts.
+Final updated pre-navigation-capacity/index code:fix-final.log PASS guardrails,
+19selected tests,jar/verifyPackagedJar. nonflat-fallback.log PASS12tests including existing layered
+bridge/tunnel,unknown connections and fair yielded full routing.
+RELEASE build/access-dispatch-release-e30b168f5.log PASS guardrails/package.
+Copied-image probe:4239transition/3576surface reads ->0 for a173block goal outside
+radius16. Westhaven snapshot190072 buys109wheat with2.786337cash at1.97price:
+match1 remains financially possible, plannedLot1/ECONOMIC_LOT ->256/ACCUMULATING.
+Dawnbridge4cobble demand versus source1 retains SUPPLY_DEADLINE. These are same-image
+work/decision proofs, not measured whole-server speedup or historical trip replay.
 
-Hunger: storage buffers were centred on interior pantry and hashed across roofs;
-shared waiting ignored existing FacilityPedestrianContacts.noParking and used service
-permissions for applicants. Providers now supply declared exterior, public waiting
-knowledge and no-parking policy to ONE common cache/selector. Existing bounded
-ReachableSurfaceArea proves connected candidates; cache checks both knowledge
-versions. Egress retains service geometry. No pantry-specific routing or whole-building
-box exclusion (authentic courtyards are inside source fabric boxes).
+Original focused selection exposed5unchanged ResidentMealKnownNavigationTest
+old-depot-food failures; all5reproduced with exact HEAD KnownLocalAccess shadow
+class (meal-baseline-comparison2.log/meal-baseline.xml). No tests deleted/disabled;
+no whole-suite-green claim. New fixture mistakes (width/depth versus maxima and
+chest below ground) were corrected. Prior unrelated2ServiceApproachProgress and
+portable home-eating premise remain separately recorded in archive.
 
-Eater1-10 drifted outside dining after HOT arrival; subsequent COLD CONSUME caused d2
-quarantine at33420/revision74094 and normal server stop. Meal owner now emits typed
-DiningRequired, retains portion/claim, resumes dining navigation. Pending HOT consume
-keeps its fence, may regain only its declared dining area, and rechecks actual supported
-pose before spending food. No suppressed invariant, fabricated consumption or retake.
-Resident1-1 PREPARED birth was physically obstructed by a chest outside service zones,
-proven using exact old snapshot/d2 decoder. Eligible service-purpose births now reuse
-existing bounded local placement proofs outside service zones; indexed bodies never
-teleport. Owner permissions/pending effects remain enforced.
+Post-deploy summary242951:340residents,12towns,0required/inventory/scene conflicts.
+Performance242956:pendingOrdinaryTicks0,READY0/CHECKING0,ready/deadline lag0;
+recent64hostmean3.67ms/max15.04ms in COLD, not HOT/native-total performance.
+45s pinned capture session50140 completed and profiler stopped:
+build/delay-lot-analysis-20261106/deployed-causal/report and deployed-trace-summary.json.
+903ticks delivered/899host arrivals,debt4->0,20.10TPS catch-up rate. Meal plan139calls,
+max24.856ms/0.318exclusive owner wall seconds; no KnownLocalAccess CPU samples.
+Hauling exact wait0.537s/45s in this changed world. No controlled whole-world ratio:
+source control prevents the demonstrated redundant work, live cuts differ in stock.
+Trace quality explicitly incomplete(1.52%unexplained/capture-edge references),no loss.
+Only >=80ms recorded ready span:guard100.175ms wall but0.328ms CPU at JFR-start edge;
+no overlapping monitor/park/GC event, no expensive guard algorithm established.
+Startup earlier had439.7ms native tick/367ms schedule allocation and308ms hive scout;
+those remain outside this scoped fix (no hive expansion/repair). No claim that all
+future peaks are below80ms. Final game tick query normal20TPS; no task clients.
+Economic collector healthy at242946:11hungry/340residents,30missions,all12towns;
+existing small accepted missions were not cancelled or rewritten to invent improvement.
 
-MOVING analysis: raw ActorLocation.body is last persisted position; compare retained
-COLD ActorMovementProjection as-of. Old MOVING records were not overdue. Many stationary
-PRESENCE actors were already at goal; pendingAdoption is entity-save synchronization,
-not by itself a gameplay handoff deadlock. Actual meal stalls were repaired above;
-no claim that every possible movement case has been exhausted.
+## Diagnosis and remaining limits
 
-## Verification and limits
+Original60s causal report in build/server-economy-review-20261106/causal-report:
+Northwatch hauling8.133s exact wait, six1.22..1.35CPU-s reviews; sampled stacks lead
+to ActorStorageApproach/KnownLocalAccess/canTraverse. Meal planning2.511s/max105ms
+in the same local BFS. Internal manifests checked volume only after route work.
+Fresh pre-fix30s191676..192276:20.02TPS,no sustained debt; hauling only0.174s in
+changed stock state, meal max74.5ms. Both reports explicitly incomplete(1.8%/1.4%
+unexplained); no JFR loss. Fresh first flush references3pre-capture appends.
+Original1.327s native entry peak lies outside captures and is not attributed/fixed
+by those stacks. Current fixes do not prove every future peak below80ms.
 
-All receipts under IMPL build/doors-porches-followup unless stated:
-- placement-dining-closure3.log:36Frontier+50NeoForge scoped checks PASS;
-  Node packet-scenario-schema.log PASS. Final public-waiting-closure3.log:
- 34affected Frontier checks+guardrails PASS. RELEASE structural-release342/
- public-waiting-release.log:guardrails+affected checks+jar/verifyPackagedJar PASS.
-- Native building-authoring7/7PASS, original registry/NBT/materials and actual pantry
- path from declared kitchen entrance. Rear-side exploratory probe was not a global
- connectivity proof; fixture now has terrain below original gravel.
--4b07 full-pack packet-fullpack2/manifest.json PASS77actions/12frames,
- run69483220-27fc-41e4-aa0b-1da2b2d56afe;16clicks recorded only false->true / true->false
- with ack, both paired leaves verified, loaded-mod inventoryPASS. Opened actual textile
- porch and kitchen frames. Door protocol/assets unchanged by a609.
--4b07 isolated checked-in disposable-communal-dining PASS, run97e62a24-7c7d-440f-
- bf2d-923214332d5d:actual HOT resident6-1,pantry192->191,NOURISHED/NONE/claim0,
- replica current. Opened endpoint resident frame; not an eating-animation/M3 claim.
-- a609 full-pack public-waiting-kitchen-cohort/manifest.json PASS7actions,
- rund68e9a01-c408-4653-a357-4fcbbd6f49fc,loaded-mod inventoryPASS,continuous normal20TPS
- HOT kitchen46513..51319. Retained read-only cohort samples prove actual progress:
-46891:1hungry,47607:2new hungry,48916/49037:23nourished/0meals/0claims;
- later needs recur (not failure). Nora1-20 had one rejected decorative waiting target,
- then consumed at50680 BEFORE client exit51319, with no repeat/refreeze. A transient
- rejected candidate is not a global route failure. Final kitchen bread100,4new active
- meals at51319; source and food effects continued after exit, no quarantine.
-- public-waiting-cohort-watch.json/log contain9bounded snapshots with native positions,
- authority and nutrition. Some far actors remain COLD outside the loaded area; do not
- claim all23 bodies stayed HOT. Observed loaded eaters consumed under physical custody.
-- First build-only HOT fast_forward was correctly REJECTED for physical work, not a
- product crash. Ordinary COLD24000 interval stopped safely on presentation demand;
- no forced HOT advancement. A609 door replay fixture failed because an NPC had left
- the kitchen door open, violating its initial-closed precondition; door end-state was
- not patched or forced. Successful unchanged door receipt reused appropriately.
+Before fix:25paid receipts/64items over one game-day,70missions,most moving;
+prolonged Northwatch preparation eventually progressed. Cash total1200 conserved,
+Clearwater ~62% and Southgate low liquidity; unequal money alone is no defect.
+Iron sell/buy price divergence and declining food in several towns remain distinct
+unclassified economic risks; do not claim balance repaired by dispatch changes.
 
-Expanded unit selection exposed2obsolete ServiceApproachProgressTest depot-food
-fixtures and ResidentPortableMealTest's old home-eats-in-place premise. They were not
-silently deleted/disabled; no all-historical-tests-green claim. Affected body-confirmation
-fixture was migrated to actual retained pantry and passes. Whole old suite failures
-and unsupported families remain separately documented; do not reopen indiscriminately.
-
-Build Java21 /home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; live Java22
-/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java. RCON helper IMPL
-build/forestry-native/query-runtime.mjs; never print server.properties secrets.
+Previous door/porch/dining fix a609 and exact native receipts remain valid for
+unchanged dependencies. Details and all current investigation history preserved
+in docs/archive/continuity-20261106-before-access-dispatch-delivery.md and older
+archive referenced there. No full human M3/global-bugs-closed claim.
