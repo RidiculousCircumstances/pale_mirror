@@ -564,6 +564,67 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         runtime.shutdown(); helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void equipmentTransfersCloseTheirActualStorageImageAndRejectForeignContents(GameTestHelper helper) {
+        for (boolean returning : List.of(false, true)) {
+            var world = new WorldId("frontier:equipment-storage-boundary-" + returning);
+            var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+            var store = FrontierWorldState.depotId(state.bootstrap().settlements().getFirst().id());
+            var local = helper.absolutePos(new BlockPos(2, 2, 2));
+            state = activated(state, store);
+            var owner = stateOwner(state, store);
+            var actor = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId()
+                    .equals(owner)).map(ResidentProfile::id).sorted().findFirst().orElseThrow();
+            var slot = new InventoryCustody.ContainerSlot(store, state.inventory().firstFreeSlot(store).orElseThrow());
+            var item = new ExactItemStack(new SubjectId("item:equipment-boundary"), stateOwner(state, store), "minecraft:iron_sword", 1,
+                    returning ? new InventoryCustody.Actor(actor) : slot);
+            var stocked = state.inventory().store(item.withCustody(slot));
+            if (returning) stocked = stocked.moveObservedItem(item.id(), slot, item.custody());
+            state = held(state.withInventory(stocked), store);
+            // Native unit boundary: the fixture supplies its own local provider, not live storage discovery.
+            var actual = local;
+            var level = helper.getLevel();
+            level.setBlock(actual, FrontierV3FixedContainerProviders.state(state.inventory().containers().get(store)), 3);
+            var entity = level.getBlockEntity(actual);
+            if (entity == null) throw new IllegalStateException("fixture storage provider missing");
+            entity.getPersistentData().putString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY, store.value());
+            entity.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY, ReferenceContainerCustody.provenance(store));
+            var physical = FrontierV3FixedContainerProviders.observed(entity, state.inventory().containers().get(store)).orElseThrow();
+            var chest = physical.inventory();
+            chest.clearContent(); FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, store);
+            var resident = EntityType.VILLAGER.create(helper.getLevel());
+            if (resident == null) throw new IllegalStateException("fixture villager missing");
+            // These are native physical handoffs; the following state is the already-confirmed exact receipt boundary.
+            if (returning) {
+                resident.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(item));
+                helper.assertTrue(FrontierV3ActorItemTransfer.place(chest, resident, item, slot, EquipmentSlot.MAINHAND), "native equipment return");
+            } else helper.assertTrue(FrontierV3ActorItemTransfer.take(chest, resident, item, slot, EquipmentSlot.MAINHAND), "native equipment issue");
+            state = state.withInventory(state.inventory().moveObservedItem(item.id(), item.custody(),
+                    returning ? slot : new InventoryCustody.Actor(actor)));
+            var runtime = runtime(world, state);
+            FrontierV3EquipmentServicePort.settleContainerMutation(runtime, physical);
+            var closed = runtime.decodedState().orElseThrow();
+            var replica = closed.replicaCustody().replicas().get(store);
+            helper.assertTrue(replica.state() == PhysicalReplicaState.EXPECTED && !ReferenceContainerCustody.hasLiveCustody(closed, store)
+                    && replica.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(closed, store)),
+                    "both equipment directions must close the actual successor before another turn/unload");
+            helper.assertValueEqual(closed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(closed)), "closed boundary recovers exactly");
+            runtime.shutdown();
+            // An unrelated real stack is not evidence of the expected equipment result.
+            chest.setItem(26, new ItemStack(Items.DIAMOND, 1));
+            var mismatched = runtime(world, state);
+            FrontierV3EquipmentServicePort.settleContainerMutation(mismatched, physical);
+            helper.assertTrue(mismatched.decodedState().orElseThrow().replicaCustody().custodyByScope()
+                    .get(ReferenceContainerCustody.scopeId(store)).status() == PhysicalCustodyLeaseStatus.UNRESOLVED
+                    && chest.getItem(26).is(Items.DIAMOND), "foreign physical contents stay isolated and cannot be adopted or overwritten");
+            mismatched.shutdown();
+        }
+        helper.succeed();
+    }
+    private static SubjectId stateOwner(FrontierWorldState state, SubjectId store) {
+        return state.inventory().containers().get(store).ownerId();
+    }
+
     @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void foreignAndMissingProvenanceRemainActualEvidence(GameTestHelper helper) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-observation"), 91L));

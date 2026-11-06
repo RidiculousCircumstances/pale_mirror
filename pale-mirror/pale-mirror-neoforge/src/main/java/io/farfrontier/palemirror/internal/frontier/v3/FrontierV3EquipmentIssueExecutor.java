@@ -171,6 +171,9 @@ final class FrontierV3EquipmentIssueExecutor {
         if (result instanceof CommandResult.Rejected) {
             throw new IllegalStateException("equipment issue confirmation was rejected");
         }
+        var physical = FrontierV3PhysicalContainer.loaded(level, runtime.decodedState().orElseThrow(), target.sourceSlot().containerId())
+                .orElseThrow(() -> new IllegalStateException("confirmed equipment transfer lost its exact physical storage"));
+        FrontierV3EquipmentServicePort.settleContainerMutation(runtime, physical);
         FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.humanEquipmentCorrelation(target.ownerId(), target.item().id()),
                 "human_equipment_issued", target.ownerId(), result);
     }

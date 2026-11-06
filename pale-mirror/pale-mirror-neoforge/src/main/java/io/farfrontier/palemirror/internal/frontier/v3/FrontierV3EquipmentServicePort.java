@@ -13,6 +13,11 @@ import net.minecraft.world.entity.npc.Villager;
 final class FrontierV3EquipmentServicePort {
     private static final double STATION_BODY_RADIUS_SQUARED = 0.5625D;
     private FrontierV3EquipmentServicePort() { }
+    /** Retain the observed whole-storage successor or its isolated conflict before equipment work releases its witness. */
+    static void settleContainerMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3PhysicalContainer physical) {
+        if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, physical.containerId(), physical))
+            throw new IllegalStateException("confirmed equipment transfer could not retain its storage disposition");
+    }
     static boolean ready(FrontierWorldState state, PhysicalIntent intent, Villager resident) {
         return EquipmentServiceBoundary.serviceAvailable(state, intent) && EquipmentServiceBoundary.serviceStation(state, intent)
                 .map(station -> bodyAtAssignedStation(resident, station.support())).orElse(false);
