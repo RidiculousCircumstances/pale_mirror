@@ -270,7 +270,7 @@
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
-          "field": "layout.facilities.TEXTILE_FACTORY.facadeView"
+          "field": "layout.facilities.TEXTILE_WORKSHOP.facadeView"
         }
       },
       "settleMs": 0
@@ -281,7 +281,7 @@
         "diagnostic": {
           "view": "settlement",
           "id": "settlement:1",
-          "field": "layout.facilities.TEXTILE_FACTORY.entrance"
+          "field": "layout.facilities.TEXTILE_WORKSHOP.entrance"
         }
       }
     }
