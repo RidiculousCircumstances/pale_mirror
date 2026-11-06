@@ -15,8 +15,8 @@ Previous delivered cut: docs/frontier-v3-storage-and-dining-plan-20261105.md.
 ## Repositories / live identity
 
 IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror (Git root parent),
-branch feat/baker-carry-orders-20260926, clean HEAD1af1feca73d6d6c73b450ffa605cfd68ce6f66c9.
-RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror, clean detached same ref.
+branch feat/baker-carry-orders-20260926, clean HEAD e4ec16b87 (docs/carrier); product1af1feca7.
+RELEASE /home/rd/proj/pm-r242-economic-release/pale-mirror, clean detached1af1feca7.
 PACK /home/rd/proj/minecraft HEAD98a6701, clean tracked state; unrelated untracked
 .f0v-baseline/ preserved. Pack index170 verified. GOV parent has extensive unrelated
 WIP; commit only this ledger, cotton plan and exact four owned architecture lines,
@@ -170,3 +170,24 @@ RELEASE/live remain1af1feca7, productblocks/code unchanged. PACK98a6701 unchange
 baselineuntrackedpreserved. Guardrails+56Nodeparsercases passed. Finish scoped GOV
 commit for ledger/design/new AGREED_NOT_IMPLEMENTED architecturetarget; preserve
 unrelated WIP. No push/newgoal/subagents or redeploy for docs-only changes.
+
+## Latest request — Northwatch starvation and placement proposal
+
+Diagnosed live, no product/world changes. Full findings and proposed responsibility
+boundaries: docs/frontier-v3-placement-and-northwatch-food-20261106.md.23residents:
+8nourished/3hungry/12starving at ticks342993..343097; kitchen77usablebread,0claimed,
+ACTIVE/ACQUIRED/current replica. Resident1-3 still starving/no meal at347225, bread74.
+Live planning explicitly waits on the SAME2false kitchen damage cells; both original
+blocks still present. Offline copied snapshot1473488: same pantry-to-floor route
+waits TARGET_COMPONENT_NEEDS_GEOMETRY; removing only2false deltas in the offline
+immutable copy gives10anchors. Not a live repair/native acceptance. Also common
+waiting-target selection includes roofs (49/87targetsY67..74) and serial first-wait
+can block accessible alternatives. Other guards have owner safety holds; do not
+claim identical cause for every hungry resident. SETTLED kitchen ingress passed
+2814checks/2openports, narrower than interior or integrity acceptance.
+Placement source defect: entrance datum anchored to street, all source AIR below
+entry floor copied as excavation. Farm235/depot41/textile80 AIR cells at streetY63;
+no explicit yard-ground/cellar distinction or general terrain adaptation plan.
+Proposed content-owned site semantics + pure shared terrain-fit plan, existing
+layout/geometry/physical execution retain their responsibilities; not implemented.
+IMPL/RELEASE/PACK unchanged, no client launched/deploy/push/newgoal/subagents.
