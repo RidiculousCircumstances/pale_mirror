@@ -9,6 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3TestPilotScenarioTest {
+    @Test void crossbowCarriersAgreeWithTheNativeReadOnlyDiagnosticSelectorSchema() throws java.io.IOException {
+        for(var name:java.util.List.of("live-crossbow-equipment-supply","live-crossbow-support-fire")){
+            var declaration=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot","scenarios",name+".json"));
+            org.junit.jupiter.api.Assertions.assertDoesNotThrow(()->FrontierV3TestPilotScenario.parse(declaration));
+            assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(declaration.replace("crossbowName","undeclaredGuardName")));
+        }
+    }
     @Test void acceptsReadOnlyPlayerHealthObservationButRejectsUnboundedOrInvertedPredicates() {
         String value="{\"schema\":1,\"actions\":[{\"type\":\"wait_until_player_health\",\"minimum\":1,\"maximum\":19,\"timeoutMs\":30000}]}";
         assertEquals(1,FrontierV3TestPilotScenario.parse(value).actionCount());
