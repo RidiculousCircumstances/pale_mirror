@@ -36,6 +36,29 @@ public final class FungiblePhysicalObservation {
         return bindAccount(ledger, account, authorityEpoch, observed);
     }
 
+    /** Checks a current physical image without repartitioning lots or moving pinned claims.
+     * Native slots prove address/kind/count; retained bindings own their economic portions. */
+    public static boolean matchesCurrentLayout(FungibleResourceLedger ledger, SubjectId accountId,
+                                                long authorityEpoch, List<Stack> observed) {
+        Objects.requireNonNull(ledger, "fungible resource ledger");
+        Objects.requireNonNull(accountId, "resource account");
+        Objects.requireNonNull(observed, "observed stacks");
+        if (authorityEpoch < 1) throw new IllegalArgumentException("positive authority epoch required");
+        var account = ledger.accounts().get(accountId);
+        if (account == null) return false;
+        var expected = new HashMap<PhysicalStackAddress, Stack>();
+        var represented = new HashMap<SubjectId, Integer>();
+        for (var binding : ledger.bindings().values()) {
+            if (!binding.accountId().equals(accountId)) continue;
+            if (binding.authorityEpoch() != authorityEpoch || expected.put(binding.address(),
+                    new Stack(binding.address(), binding.itemKind(), binding.quantity())) != null) return false;
+            binding.lotQuantities().forEach((lot, quantity) -> represented.merge(lot, quantity, Math::addExact));
+        }
+        if (!represented.equals(account.lotQuantities()) || expected.size() != observed.size()) return false;
+        for (var stack : observed) if (!stack.equals(expected.remove(stack.address()))) return false;
+        return expected.isEmpty();
+    }
+
     /** Transaction-local postimage; the final ledger transition validates conservation and custody. */
     static List<PhysicalStackBinding> bindAccount(FungibleResourceLedger ledger, CustodyAccount account,
                                                 long authorityEpoch, List<Stack> observed) {

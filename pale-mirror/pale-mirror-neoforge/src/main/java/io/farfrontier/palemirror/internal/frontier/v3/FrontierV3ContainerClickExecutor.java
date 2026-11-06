@@ -121,7 +121,7 @@ final class FrontierV3ContainerClickExecutor {
                     .filter(binding -> binding.accountId().equals(accountId)).sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
             try {
                 if (account == null ? !sectionBefore.isEmpty() || !canonical.isEmpty()
-                        : !canonical.equals(FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), accountId, lease.authorityEpoch(), sectionBefore)))
+                        : !FungiblePhysicalObservation.matchesCurrentLayout(state.inventory().fungibleResources(), accountId, lease.authorityEpoch(), sectionBefore))
                     return refused(player, target, slot, kind, "FUNGIBLE_LAYOUT_MISMATCH:" + section.value());
             } catch (IllegalArgumentException invalid) { return refused(player, target, slot, kind, "INVALID_BINDING:" + invalid.getMessage()); }
             if (account != null && mayRemoveReserved(menu, cargoSlot, button, kind, canonical, account, state))

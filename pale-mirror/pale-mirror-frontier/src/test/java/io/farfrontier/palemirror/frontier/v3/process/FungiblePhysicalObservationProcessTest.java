@@ -72,12 +72,12 @@ class FungiblePhysicalObservationProcessTest {
         FrontierWorldState initial = base.initialState();
         SubjectId owner = initial.bootstrap().settlements().getFirst().id();
         SubjectId resident = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
-        SubjectId depot = FrontierWorldState.depotId(owner);
+        SubjectId depot = io.farfrontier.palemirror.frontier.v3.model.CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), owner);
         SubjectId account = ReferenceContainerCustody.scopeId(depot);
         SubjectId lotId = new SubjectId("lot:meal-claimed-exit-bread");
-        FungibleResourceLedger cold = initial.inventory().fungibleResources().transformCold(account,
-                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
-                new ResourceLot(lotId, owner, "minecraft:bread", 64, "test", List.of()));
+        FungibleResourceLedger cold = initial.inventory().fungibleResources().issue(
+                new ResourceLot(lotId, owner, "minecraft:bread", 64, "test", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Container(depot), Map.of(lotId, 64), Map.of()));
         var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                 new InventoryCustody.ContainerSlot(depot, initial.inventory().availableSlots(depot).getFirst())), "minecraft:bread", 64);
         FungibleResourceLedger hot = cold.rebind(account, 1L,

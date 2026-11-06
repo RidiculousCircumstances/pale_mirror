@@ -81,6 +81,8 @@ final class FrontierV3FungibleResourceObservationExecutor {
             FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, ((ResourceCustody.Container) account.custody()).containerId());
             return false;
         }
+        if (FungiblePhysicalObservation.matchesCurrentLayout(state.inventory().fungibleResources(), account.id(), epoch, stacks))
+            return true;
         List<PhysicalStackBinding> expected;
         try {
             expected = FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), account.id(), epoch, stacks);
