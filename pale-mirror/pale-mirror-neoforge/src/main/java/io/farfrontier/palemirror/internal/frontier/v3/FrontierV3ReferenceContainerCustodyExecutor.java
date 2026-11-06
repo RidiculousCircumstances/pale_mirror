@@ -93,7 +93,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                         && !FrontierV3ContainerEffectFence.pending(level, state, surface.containerId())).toList();
         var preferred = eligibleReferenceSurfaces(state, demanded);
         if (!preferred.isEmpty()) {
-            reconcile(level, runtime, state, preferred.getFirst());
+            reconcileBatch(level, runtime, preferred);
             return;
         }
         // An unloaded serialized chest is evidence, never a live custodian.  Drain one exact
@@ -173,18 +173,37 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                             || FrontierV3ReferenceContainerPresentation.needsReconciliation(level, state, surface))
                         && !FrontierV3ContainerEffectFence.pending(level, state, surface.containerId())).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
-        if (!eligible.isEmpty()) reconcile(level, runtime, state, eligible.getFirst());
+        if (!eligible.isEmpty()) reconcileBatch(level, runtime, eligible);
+    }
+
+    /** Independent scopes share a bounded observation batch; every transition re-reads its owner. */
+    private static void reconcileBatch(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            List<ContainerSurface> candidates) {
+        var budget = new FrontierV3PhysicalTransitionBudget((long)
+                (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D), System::nanoTime);
+        for (var candidate : candidates) {
+            var capacity = runtime.commandAdmissionCapacity();
+            if (capacity.isEmpty() || !capacity.orElseThrow().hasCausalHeadroom() || !budget.tryStart()) return;
+            var current = runtime.decodedState().orElse(null);
+            if (current == null) return;
+            var surface = current.inventory().surfaces().get(candidate.containerId());
+            if (surface == null || !readyForReferenceDiscovery(surface)
+                    || FrontierV3ContainerEffectFence.pending(level, current, surface.containerId())) continue;
+            reconcile(level, runtime, current, surface);
+        }
     }
 
     /** A real player interaction addresses this exact loaded provider. Complete
      * initial declaration -> observation -> acquisition through the existing owner,
      * rather than requiring UI retries during a global discovery revolution.
-     * No projection, release or ambiguous recovery is accelerated here. */
+     * An already prepared exact observation may finish here; no projection,
+     * release or ambiguous recovery is forced by opening the UI. */
     static void admitInitialInteraction(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             SubjectId containerId) {
         for (int phase = 0; phase < 3; phase++) {
             var before = runtime.canonicalState().orElseThrow(); var state = before.state();
-            if (state.replicaCustody().custodyByScope().containsKey(ReferenceContainerCustody.scopeId(containerId))) return;
+            var existing = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+            if (existing != null && existing.status() != PhysicalCustodyLeaseStatus.PREPARING) return;
             var surface = state.inventory().surfaces().get(containerId);
             if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE
                     || FrontierV3ContainerEffectFence.pending(level, state, containerId)) return;
