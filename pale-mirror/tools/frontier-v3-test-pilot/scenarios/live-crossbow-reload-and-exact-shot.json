@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMBakeryAudit"
+  },
+  "id": "live_crossbow_reload_and_exact_shot",
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/attribute @s minecraft:generic.max_health base set 1000"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:instant_health 1 10 true"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 10000,
+      "checks": [
+        {
+          "view": "actor",
+          "id": "resident:1-4",
+          "expect": {
+            "guardMethod": "CROSSBOW",
+            "arrowsCarried": 31,
+            "shotPrepared": false
+          }
+        }
+      ]
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement_security",
+          "id": "settlement:1",
+          "field": "crossbowPosition"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement_security",
+          "id": "settlement:1",
+          "field": "crossbowName"
+        }
+      },
+      "maxDistance": 128,
+      "timeoutMs": 30000,
+      "standOff": 1.5
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 combat_trace start @s 3 120"
+    },
+    {
+      "type": "command",
+      "command": "/gamemode survival"
+    }
+  ],
+  "actions": [
+    {
+      "type": "attack_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement_security",
+          "id": "settlement:1",
+          "field": "crossbowName"
+        }
+      },
+      "maxDistance": 4,
+      "timeoutMs": 10000,
+      "maxAttacks": 1,
+      "requireRemoval": false,
+      "requireDamage": true
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "actor",
+      "id": "resident:1-4",
+      "expect": {
+        "shotPrepared": true
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "settlement_security",
+          "id": "settlement:1",
+          "field": "crossbowName"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "actor",
+      "id": "resident:1-4",
+      "expect": {
+        "arrowsCarried": 30,
+        "shotPrepared": false
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:1-4"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 5,
+      "view": "actor",
+      "id": "resident:1-4",
+      "expect": {
+        "guardMethod": "CROSSBOW",
+        "arrowsCarried": 30,
+        "shotPrepared": false
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "crossbow-visible-reload"
+    },
+    {
+      "after": 5,
+      "name": "crossbow-exact-shot"
+    }
+  ]
+}
