@@ -60,6 +60,28 @@ final class FrontierV3FungibleResourceObservationExecutor {
         }
     }
 
+    /** A real click must not wait for the global account sweep after exact custody acquisition.
+     * Only a not-yet-bound account is admitted here; retained layouts still fail closed on drift. */
+    static void bindInitialInteraction(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                       SubjectId containerId) {
+        var initial = runtime.decodedState().orElseThrow();
+        var record = initial.inventory().containers().get(containerId);
+        if (record == null) return;
+        for (var section : record.compartmentLayout().sections().keySet()) {
+            var state = runtime.decodedState().orElseThrow();
+            if (!ReferenceContainerCustody.hasOperationalCustody(state, containerId)) return;
+            var account = io.farfrontier.palemirror.frontier.v3.model.FungibleResourceCustodySupport
+                    .accountAtContainer(state, containerId, section).orElse(null);
+            if (account == null || state.inventory().fungibleResources().bindings().values().stream()
+                    .anyMatch(binding -> binding.accountId().equals(account.id()))) continue;
+            var physical = FrontierV3PhysicalContainer.loaded(level, state, containerId).orElse(null);
+            if (physical == null) return;
+            var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+            observe(level, runtime, state, account, physical.inventory(), lease.authorityEpoch());
+            runtime.settleNativeBoundary();
+        }
+    }
+
     static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                            CustodyAccount account, ChestBlockEntity chest, long epoch) {
         return observe(level, runtime, state, account, (Container) chest, epoch);
