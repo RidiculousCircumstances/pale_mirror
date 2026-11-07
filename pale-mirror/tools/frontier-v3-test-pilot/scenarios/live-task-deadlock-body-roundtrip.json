@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "id": "live_task_deadlock_body_roundtrip",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMBakeryAudit" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 10000, "checks": [
+      { "view": "actor", "id": "resident:1-4", "expect": {
+        "status": "ok", "life": "ALIVE", "guardMethod": "CROSSBOW", "arrowsCarried": 30, "shotPrepared": false } },
+      { "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "actor", "id": "resident:1-4", "field": "position" } },
+      "offset": { "x": -4, "y": 0, "z": 0 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-4",
+      "expect": { "status": "ok", "life": "ALIVE", "arrowsCarried": 30, "ambientLease": "HOT",
+        "physicalAdmission": { "status": "INDEXED" } }, "timeoutMs": 60000,
+      "causalMilestone": "same_saved_body_returns_without_duplicate_or_ammunition_change" },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager",
+      "nameContains": { "diagnostic": { "view": "actor", "id": "resident:1-4", "field": "name" } },
+      "maxDistance": 64, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager",
+      "nameContains": { "diagnostic": { "view": "actor", "id": "resident:1-4", "field": "name" } },
+      "maxDistance": 64, "maxAngleDeg": 60, "timeoutMs": 10000 },
+    { "type": "inspect", "view": "resident_life", "id": "resident:1-4" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-4",
+      "expect": { "status": "ok", "life": "ALIVE", "arrowsCarried": 30, "ambientLease": "CLOSED",
+        "physicalAdmission": { "status": "UNLOADED", "bodyCustody": { "phase": "NONE", "departureSaved": true } } },
+      "timeoutMs": 120000, "causalMilestone": "ordinary_departure_releases_exact_saved_body_and_ammunition" },
+    { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:1-4",
+      "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "activity": "WORK" },
+      "timeoutMs": 180000, "causalMilestone": "recovered_guard_finishes_food_and_resumes_duty" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "actor", "id": "resident:1-4", "expect": { "arrowsCarried": 30, "physicalAdmission": { "bodyCustody": { "phase": "NONE" } } } },
+    { "after": 9, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [ { "after": 4, "name": "recovered-crossbow-guard", "presentation": "player" } ]
+}
