@@ -555,7 +555,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"dropBlocks\":" + location.navigationProfile().dropBlocks() + ",\"capabilities\":["
                 + location.navigationProfile().capabilities().stream().sorted(java.util.Comparator.comparingInt(io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags::tag))
                     .map(value -> "\"" + value.name() + "\"").collect(java.util.stream.Collectors.joining(",")) + "]}"
-                + FrontierV3RangedDiagnostic.actor(state,subject) + (resident==null?"":FrontierV3EvasionDiagnostic.fields(state,subject))
+                + (resident==null?"":FrontierV3ClinicalDiagnostic.fields(state,subject))+FrontierV3RangedDiagnostic.actor(state,subject) + (resident==null?"":FrontierV3EvasionDiagnostic.fields(state,subject))
                 + (resident==null?"":",\"combatStyle\":\""+quote(resident.combatStyle().value())+"\",\"combatProfile\":"+FrontierV3CombatProfileView.json(resident.combatProfile()))
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)

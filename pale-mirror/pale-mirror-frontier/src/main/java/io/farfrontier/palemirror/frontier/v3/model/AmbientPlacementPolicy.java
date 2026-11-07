@@ -54,6 +54,7 @@ public final class AmbientPlacementPolicy {
                 }
             }),
             Map.entry(AmbientGoalKind.WORK, new ServiceStrategy()),
+            Map.entry(AmbientGoalKind.CLINICAL_CARE, new ServiceStrategy()),
             Map.entry(AmbientGoalKind.GUARD, new ServiceStrategy()),
             Map.entry(AmbientGoalKind.PATROL, new ServiceStrategy()),
             Map.entry(AmbientGoalKind.SCOUT_PATROL, AmbientPlacementPolicy::exact),
@@ -65,6 +66,8 @@ public final class AmbientPlacementPolicy {
         if (STRATEGIES.size() != AmbientGoalKind.values().length)
             throw new IllegalStateException("ambient placement capability registry is incomplete");
     }
+    /** Validate the closed catalog at world composition, before a player can demand any body. */
+    public static void requireComposition(){if(!STRATEGIES.keySet().equals(java.util.EnumSet.allOf(AmbientGoalKind.class)))throw new IllegalStateException("ambient placement capability registry is incomplete");}
     private AmbientPlacementPolicy() { }
     private static final class ServiceStrategy implements Strategy {
         @Override public List<SurfaceAnchor> candidates(FrontierWorldState state, AmbientActorLease lease) { return localServiceZone(state, lease); }

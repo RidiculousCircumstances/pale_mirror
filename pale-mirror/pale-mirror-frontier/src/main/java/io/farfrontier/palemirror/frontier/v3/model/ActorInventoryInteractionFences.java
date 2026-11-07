@@ -10,7 +10,8 @@ import java.util.function.BiFunction;
 /** Inventory interaction owners declare their fences; shared activity/body code knows no job phases. */
 public final class ActorInventoryInteractionFences {
     private static final List<BiFunction<FrontierWorldState, SubjectId, Optional<SubjectId>>> OWNERS = List.of(
-            ExpeditionSupplyAuthority::pendingOwnerForActor, ReferenceContainerCustody::pendingOwnerForActor,
+            io.farfrontier.palemirror.frontier.v3.model.rest.RestPlaces::pendingOwner,io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority::pendingOwner, ExpeditionSupplyAuthority::pendingOwnerForActor,
+                ReferenceContainerCustody::pendingOwnerForActor,
             ExtractionWorkAuthority::pendingOwner, ForestryWorkAuthority::pendingOwner, StationWorkDeathResources::pendingOwner,
             HarvestDeathResources::pendingOwner, FieldEquipment::pendingOwnerForActor, ResidentMealPhysicalAuthority::pendingOwnerForActor, io.farfrontier.palemirror.frontier.v3.model.combat.CombatInventoryFence::pendingOwner);
     private ActorInventoryInteractionFences() { }
@@ -19,7 +20,7 @@ public final class ActorInventoryInteractionFences {
     }
     public static Optional<SubjectId> pendingOwner(FrontierWorldState state, SubjectId actor) {
         var owners = OWNERS.stream().flatMap(owner -> owner.apply(state, actor).stream()).distinct().toList();
-        if (owners.size() > 1) throw new IllegalArgumentException("actor has competing physical inventory interaction owners");
+        if (owners.size() > 1) throw new IllegalArgumentException("actor has competing physical inventory interaction owners: actor="+actor+" owners="+owners);
         return owners.stream().findFirst();
     }
 }

@@ -7,11 +7,11 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
-public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
+public sealed interface ActorMovementContext permits ActorMovementContext.ClinicalLeg, ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
         ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg,
             ActorMovementContext.GuardEquipment, ActorMovementContext.GuardMissionLeg, ActorMovementContext.EvasionLeg, ActorMovementContext.CombatManeuverLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION, COMBAT_MANEUVER }
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION, COMBAT_MANEUVER, CLINICAL }
     Provider provider();
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
@@ -80,6 +80,20 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
             if (duty == null || duty.phase() != GuardDuty.Phase.ON_DUTY || duty.mission().isEmpty() || duty.revision()!=revision
                     || !duty.execution().equals(movement.executionId()) || !duty.missionOrder().equals(movement.order()))
                 throw new IllegalArgumentException("guard patrol lost its exact mission/execution/goal");
+        }
+    }
+    record ClinicalLeg(SubjectId taskId, long revision) implements ActorMovementContext {
+        public ClinicalLeg { Objects.requireNonNull(taskId); if (revision < 1) throw new IllegalArgumentException("invalid guard equipment goal"); }
+        public Provider provider() { return Provider.CLINICAL; }
+        public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.CLINICAL.at(taskId));
+        }
+        public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            var duty = refs.people().clinical().tasks().get(taskId);
+            if (duty == null || duty.revision() != revision
+                    || !duty.execution().equals(movement.executionId()) || !duty.order().equals(movement.order()))
+                throw new IllegalArgumentException("guard movement has a stale or foreign appointment/goal");
         }
     }
     record GuardEquipment(SubjectId dutyId, long revision) implements ActorMovementContext {

@@ -135,7 +135,10 @@ public final class BuildingDefinitionFormat {
         var beds=new LinkedHashMap<String, BuildingDefinition.Bed>();
         for(var name:r.names("beds")) {
             var key="bed."+name;
-            beds.put(name,new BuildingDefinition.Bed(name,point(r.take(key+".head")),point(r.take(key+".foot"))));
+            var profile=new io.farfrontier.palemirror.frontier.v3.model.rest.RestPlaceProfile(
+                    io.farfrontier.palemirror.frontier.v3.model.rest.RestPlaceProfile.Purpose.valueOf(r.take(key+".purpose")),
+                    Integer.parseInt(r.take(key+".recoveryPermille")));
+            beds.put(name,new BuildingDefinition.Bed(name,point(r.take(key+".head")),point(r.take(key+".foot")),profile));
         }
         r.finished();
         return new BuildingDefinition(

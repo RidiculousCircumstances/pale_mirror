@@ -155,7 +155,7 @@ public final class ResidentMealProcess {
     public static Optional<ResidentMealStarted> selectSourceAtYield(FrontierWorldState state,
                                                                  SubjectId residentId, long now) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
-        if (resident == null || state.humanPopulation().meals().containsKey(residentId)
+        if (resident == null || !ActorExecutionComposition.LIFECYCLE.mayBegin(state,residentId) || state.humanPopulation().meals().containsKey(residentId)
                 || state.actorMovements().containsKey(residentId)
                 || state.actorLocations().get(residentId).condition().status() != ActorLifeStatus.ALIVE
                 || state.humanPopulation().migration(residentId) != null

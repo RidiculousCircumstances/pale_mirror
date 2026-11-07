@@ -13,7 +13,7 @@ public final class ActorMovementProviders {
                  new ShipmentMovementProvider(), new GroupMovementProvider(), new ExpeditionSupplyMovementProvider(),
                  new ExtractionMovementProvider(),
                 new DefenderEquipmentReturnMovementProvider(),
-                    new ForestryMovementProvider(), new StationWorkMovementProvider(), new GuardMovementProvider(), new GuardMissionMovementProvider()));
+                    new ForestryMovementProvider(), new StationWorkMovementProvider(), new ClinicalMovementProvider(),new GuardMovementProvider(), new GuardMissionMovementProvider()));
     public static Map<ActorMovementContext.Provider, ActorMovementProvider> registry(List<ActorMovementProvider> ports) {
         var result = new EnumMap<ActorMovementContext.Provider, ActorMovementProvider>(ActorMovementContext.Provider.class);
         for (var port : List.copyOf(ports))

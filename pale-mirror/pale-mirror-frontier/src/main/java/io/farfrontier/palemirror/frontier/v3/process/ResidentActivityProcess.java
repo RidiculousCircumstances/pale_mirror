@@ -328,6 +328,7 @@ public final class ResidentActivityProcess {
         var execution = state.actorExecutions().actors().get(action.subject());
         if (execution != null && execution.suspended().isPresent()
                 && (choice.kind()==ResidentActivityChoice.Kind.EAT && execution.suspended().orElseThrow().activityKind()==io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL
+                    || choice.kind()==ResidentActivityChoice.Kind.CARE && execution.suspended().orElseThrow().activityKind()==io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.CLINICAL_CARE
                     || choice.kind()==ResidentActivityChoice.Kind.WORK && ActivityExecutionCapabilities.mayResumeWork(state, HumanAssignmentProjection.compile(state).assignment(action.subject())))
                 && (execution.current().isEmpty() || ActorExecutionComposition.CAPABILITIES
                     .require(execution.current().orElseThrow().activityKind()).interruption()

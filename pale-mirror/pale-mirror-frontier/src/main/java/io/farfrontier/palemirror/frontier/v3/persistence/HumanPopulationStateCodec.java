@@ -121,6 +121,7 @@ final class HumanPopulationStateCodec {
             if (obligation.pendingPhysicalStep().isPresent()) writeMealPhysicalStep(output, obligation.pendingPhysicalStep().orElseThrow());
             output.writeLong(obligation.retiredAtTick());
         }
+        ClinicalStateCodec.write(output,population.clinical(),population.restPlaces());
     }
 
     static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions, boolean hasNutrition,
@@ -283,8 +284,9 @@ final class HumanPopulationStateCodec {
             if (obligations.put(obligation.residentId(), obligation) != null)
                 throw new IllegalArgumentException("duplicate retired meal resource obligation");
         }
+        var clinical=ClinicalStateCodec.read(input);
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
-                provisions, nutrition, medicalOperations, schedules, meals, obligations);
+                provisions, nutrition, medicalOperations, schedules, meals, obligations,clinical.clinical(),clinical.rest());
     }
 
     static void writeMeal(DataOutputStream output, ResidentMeal meal) throws IOException {

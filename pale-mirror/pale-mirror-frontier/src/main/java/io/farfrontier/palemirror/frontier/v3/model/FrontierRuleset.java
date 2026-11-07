@@ -26,7 +26,21 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                               io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools, FrontierWorldLayout worldLayout,
                               io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryRules forestry,
                               io.farfrontier.palemirror.frontier.v3.model.security.SecurityRules security,
-                              io.farfrontier.palemirror.frontier.v3.model.combat.RangedRules ranged) {
+                              io.farfrontier.palemirror.frontier.v3.model.combat.RangedRules ranged,
+                              io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalRules clinical) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand, ResidentLife residentLife,
+            long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog, GoodsTradeRules goodsTrade,
+            java.util.List<InitialSettlementStock> initialSettlementStocks, SettlementLabourRules labour,
+            io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
+            io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction, Execution execution,
+            ProductionCatalog production, FieldBalance fields, io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools,
+            FrontierWorldLayout worldLayout, io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryRules forestry,
+            io.farfrontier.palemirror.frontier.v3.model.security.SecurityRules security,io.farfrontier.palemirror.frontier.v3.model.combat.RangedRules ranged) {
+        this(id,schemaVersion,cadence,spatial,rates,facilityCapacity,combat,hiveCommand,residentLife,resourceHarvestColdTravelTicksPerEdge,
+                workCatalog,goodsTrade,initialSettlementStocks,labour,expedition,extraction,execution,production,fields,tools,worldLayout,forestry,security,ranged,
+                io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalRules.initial());
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
             FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand, ResidentLife residentLife,
             long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog, GoodsTradeRules goodsTrade,
@@ -207,7 +221,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     public FrontierRuleset {
-        Objects.requireNonNull(ranged);
+        Objects.requireNonNull(clinical);Objects.requireNonNull(ranged);
         Objects.requireNonNull(security);
         Objects.requireNonNull(forestry);
         Objects.requireNonNull(worldLayout);
@@ -301,7 +315,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (worldLayout.equals(FrontierWorldLayout.compact()) ? "" : "|layout=" + worldLayout.canonicalText())
                 + (forestry.enabled() ? "|forestry=" + forestry.canonicalText() : "")
                 + "|security=" + security.canonicalText()+"|ranged="+ranged.canonicalText()+"|melee="+melee().canonicalText()+"|locomotion="+locomotion().canonicalText()+"|evasion="+evasion().canonicalText()
-                        +"|pedestrianTraversal="+pedestrianTraversal().canonicalText();
+                        +"|pedestrianTraversal="+pedestrianTraversal().canonicalText()+"|clinical="+clinical().canonicalText();
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

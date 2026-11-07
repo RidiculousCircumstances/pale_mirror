@@ -12,9 +12,15 @@ public final class ResourceSourceDiscovery {
                 .map(state.inventory().containers()::get)
                 .flatMap(container -> container.storage().stream()).filter(policy -> policy.role() == ResourceStorageRole.LOCAL_BUFFER)
                 .sorted(Comparator.comparing(policy -> policy.endpoint().containerId())).forEach(policy -> result.add(policy.endpoint()));
+        result.addAll(groundSources(state,home,Optional.empty()));return List.copyOf(result);
+    }
+    public static List<ResourceSourceEndpoint> groundSources(FrontierWorldState state,SubjectId home,String kind){return groundSources(state,home,Optional.of(kind));}
+    private static List<ResourceSourceEndpoint> groundSources(FrontierWorldState state,SubjectId home,Optional<String> item){
+        var result=new ArrayList<ResourceSourceEndpoint>();
         var resources = state.inventory().fungibleResources();
         var grounds = FungibleResourceReadIndex.groundAccounts(resources).stream().filter(account -> !account.lotQuantities().isEmpty()
                 && account.lotQuantities().keySet().stream().anyMatch(id -> resources.lots().get(id).economicOwnerId().equals(home))).toList();
+        grounds=grounds.stream().filter(account->item.map(kind->resources.unclaimedQuantity(account.id(),home,kind)>0).orElse(true)).toList();
         if (grounds.isEmpty()) return List.copyOf(result);
         var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home, List.of());
         for (var account : grounds) {

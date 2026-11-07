@@ -10,7 +10,7 @@ import java.util.*;
 public final class SettlementReservePlanning {
     private static final Map<ReserveSupplyPort.Key, ReserveSupplyPort> PORTS = register(List.of(
             new NutritionReserveSupply(), new BakeryReserveSupply(), new FieldReserveSupply(), new ExtractionReserveSupply(),
-            new LogisticsReserveSupply(), new AutomaticStationReserveSupply(), new EquipmentReserveSupply(), new AttendedStockReserveSupply(),new AmmunitionReserveSupply()));
+            new LogisticsReserveSupply(), new AutomaticStationReserveSupply(), new EquipmentReserveSupply(), new AttendedStockReserveSupply(),new AmmunitionReserveSupply(),new ClinicalReserveSupply()));
     private static final ImmutableInputView<Map<SubjectId, Map<String, Target>>> CACHE = new ImmutableInputView<>();
     private static final ImmutableInputView<Map<SubjectId, Basis>> BASIS = new ImmutableInputView<>();
     private record InstantKey(SubjectId home, long atTick) { }

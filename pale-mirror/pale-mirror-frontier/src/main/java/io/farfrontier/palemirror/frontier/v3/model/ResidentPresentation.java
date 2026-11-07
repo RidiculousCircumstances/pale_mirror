@@ -12,6 +12,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
         var assignment = HumanAssignmentProjection.compile(state).assignment(actor);
         String task = switch (assignment.kind()) {
             case IDLE -> "None";
+            case CLINICAL_CARE -> "Treat patient";
             case FIELD_HARVEST -> "Harvest and deliver crops";
             case EXTRACTION -> "Extract and store resources";
             case FORESTRY -> "Fell trees and store wood";
@@ -29,6 +30,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
         };
         String role = switch (assignment.kind()) {
             case IDLE -> "Unassigned";
+            case CLINICAL_CARE -> "Medic";
             case FIELD_HARVEST -> "Farmer";
             case EXTRACTION -> "Miner";
             case FORESTRY -> "Woodcutter";
@@ -51,6 +53,11 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case MEDICAL_EVACUATION -> "Medical worker";
             case TRANSIT -> "Traveller";
         };
+        var clinical=state.humanPopulation().clinical().taskFor(actor);
+        if(clinical.filter(t->io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority.current(state,t)).isPresent()){
+            var care=clinical.orElseThrow();role=care.role()==io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.Role.PATIENT?"Patient":"Medic";
+            task=switch(care.phase()){case SELECT->"Assess care";case SUPPLY->"Collect bandages";case APPROACH->"Go to care station";case TEND->care.patient().equals(actor)?"Self-tend":"Dress injuries";case REST->"Recover in bed";};
+        }
         if (assignment.kind() == HumanAssignmentKind.MEDICAL_EVACUATION) {
             var operation = state.humanPopulation().medicalOperations().get(assignment.ownerId().orElseThrow());
             if (operation.patientId().equals(actor)) {

@@ -7,6 +7,7 @@ import java.util.*;
 public record RangedSupply(ActorExecutionId execution, CombatMethod method, SubjectId economicOwner,
         ActorContainerItemOrder order, Optional<ActorItemTransferStep> pending) {
     public RangedSupply {
+        new ActorSupplyVisit(execution,economicOwner,order,pending);
         Objects.requireNonNull(execution);Objects.requireNonNull(economicOwner);Objects.requireNonNull(order);Objects.requireNonNull(pending);
         if(method!=CombatMethod.CROSSBOW || !execution.activityOwnerId().equals(order.ownerId()) || !execution.actorId().equals(order.actorId())
                 || order.direction()!=ActorContainerItemOrder.Direction.TAKE || !(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible p)

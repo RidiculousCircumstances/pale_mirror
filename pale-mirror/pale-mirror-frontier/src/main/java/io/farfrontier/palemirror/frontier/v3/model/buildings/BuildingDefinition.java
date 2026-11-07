@@ -146,9 +146,11 @@ public record BuildingDefinition(
     }
 
     /** A complete physical bed, independent of occupancy, sleep AI or access reservations. */
-    public record Bed(String id, BlockPosition head, BlockPosition foot) {
+    public record Bed(String id, BlockPosition head, BlockPosition foot,
+            io.farfrontier.palemirror.frontier.v3.model.rest.RestPlaceProfile profile) {
+        public Bed(String id,BlockPosition head,BlockPosition foot) { this(id,head,foot,io.farfrontier.palemirror.frontier.v3.model.rest.RestPlaceProfile.ordinary()); }
         public Bed {
-            name(id); Objects.requireNonNull(head); Objects.requireNonNull(foot);
+            name(id); Objects.requireNonNull(head); Objects.requireNonNull(foot); Objects.requireNonNull(profile);
             if (head.y() != foot.y() || Math.abs(head.x()-foot.x())+Math.abs(head.z()-foot.z()) != 1)
                 throw new IllegalArgumentException("bed must declare both adjacent halves");
         }

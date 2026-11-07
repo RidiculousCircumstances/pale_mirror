@@ -18,6 +18,7 @@ public final class FrontierSceneLeaseStateSupport {
     private FrontierSceneLeaseStateSupport() { }
 
     static FrontierWorldState prepare(FrontierWorldState state, SceneLease lease) {
+        for(var member:lease.members())state=ActorBodyPreparation.prepare(state,member.actorId(),lease.handoffInstant().ticks());
         Map<SceneLeaseId, SceneLease> leases = withPreparedLease(state, lease);
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), prepareRecovery(state.fencedRecovery(), lease));
     }

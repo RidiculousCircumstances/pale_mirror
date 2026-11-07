@@ -10,6 +10,7 @@ public final class PaleMirrorItems {
     private static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(PaleMirrorMod.MOD_ID);
     public static final DeferredItem<net.minecraft.world.item.Item> COTTON = ITEMS.registerSimpleItem("cotton");
     public static final DeferredItem<net.minecraft.world.item.Item> IRON_ARROWHEAD = ITEMS.registerSimpleItem("iron_arrowhead");
+    public static final DeferredItem<net.minecraft.world.item.Item> BANDAGE = ITEMS.registerSimpleItem("bandage");
     public static final DeferredItem<net.minecraft.world.item.Item> CLOTH = ITEMS.registerSimpleItem("cloth");
     public static final DeferredItem<RegionalLedgerItem> REGIONAL_LEDGER = ITEMS.register("regional_ledger",
             () -> new RegionalLedgerItem(new net.minecraft.world.item.Item.Properties().stacksTo(1)));

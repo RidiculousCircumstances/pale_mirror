@@ -154,10 +154,11 @@ public final class FrontierWorldProcessCatalog {
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
 DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES, GuardProcessModule.TYPES, SecurityProcessModule.TYPES,
-                CombatProcessModule.TYPES, RangedProcessModule.TYPES, GuardAmmunitionProcessModule.TYPES, EvasionProcessModule.TYPES);
+                CombatProcessModule.TYPES, RangedProcessModule.TYPES, GuardAmmunitionProcessModule.TYPES,ClinicalProcessModule.TYPES,RestPlaceProcessModule.TYPES, EvasionProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("forestry", new ForestryProcessModule()),
             Map.entry("guard", new GuardProcessModule()),
+            Map.entry("clinical-care",new ClinicalProcessModule()),Map.entry("rest-place",new RestPlaceProcessModule()),
             Map.entry("security", new SecurityProcessModule()),
             Map.entry("combat", new CombatProcessModule()),
             Map.entry("ranged-combat", new RangedProcessModule()),
@@ -213,6 +214,9 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
             Map.entry(EvasionProcess.REVIEW,coalescedReview(withPlanningRecovery(atExecutionTime((state,action,instant)->EvasionProcess.review(state,action,instant.ticks()))))),
             Map.entry(io.farfrontier.palemirror.frontier.v3.model.security.SecurityReview.KIND, coalescedReview(atExecutionTime(
                     (state,action,instant) -> SecurityProcessModule.review(state,action,instant.ticks())))),
+            Map.entry(io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalContinuation.REVIEW,coalescedReview(withPlanningRecovery(atExecutionTime((state,action,instant)->ClinicalCareProcess.review(state,action,instant.ticks()))))),
+            Map.entry(io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalContinuation.PROGRESS,ScheduledReviewAdmission.coalescedContinuation(withPlanningRecovery(atExecutionTime((state,action,
+                instant)->ClinicalCareProcess.progress(state,action,instant.ticks()))))),
             Map.entry(GuardContinuation.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(
                     (state, action, instant) -> GuardWorkProcess.review(state, action, instant.ticks()))))),
             Map.entry(GuardContinuation.PROGRESS, ScheduledReviewAdmission.coalescedContinuation(withPlanningRecovery(atExecutionTime(
@@ -451,7 +455,8 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
                 PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR,
                     CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR, GuardProcessModule.DESCRIPTOR,
-                    SecurityProcessModule.DESCRIPTOR, CombatProcessModule.DESCRIPTOR,RangedProcessModule.DESCRIPTOR,GuardAmmunitionProcessModule.DESCRIPTOR, EvasionProcessModule.DESCRIPTOR);
+                    SecurityProcessModule.DESCRIPTOR, CombatProcessModule.DESCRIPTOR,RangedProcessModule.DESCRIPTOR,GuardAmmunitionProcessModule.DESCRIPTOR,ClinicalProcessModule.DESCRIPTOR,RestPlaceProcessModule.DESCRIPTOR,
+                        EvasionProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }

@@ -77,6 +77,12 @@ record FrontierV3ActorActuation(ActorActuationId id, Supplier<Optional<FrontierW
 
     private static void requireEnvelope(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId, Mob body) {
         var profile = state.actorLocations().get(actorId).navigationProfile();
+        if(FrontierV3RestingPose.sleepingDimensions(body)){
+            var standing=body.getDimensions(net.minecraft.world.entity.Pose.STANDING);
+            var sleeping=body.getDimensions(net.minecraft.world.entity.Pose.SLEEPING);
+            if(profile.matchesDimensions(standing.width(),standing.height())&&Math.abs(body.getBbWidth()-sleeping.width())<0.001
+                    &&Math.abs(body.getBbHeight()-sleeping.height())<0.001)return;
+        }
         if (!profile.matchesDimensions(body.getBbWidth(), body.getBbHeight()))
             throw new IllegalStateException("navigation envelope mismatch for " + actorId + ": declared=" + profile
                     + "; observed=" + body.getBbWidth() + "x" + body.getBbHeight());

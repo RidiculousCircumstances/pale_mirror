@@ -55,6 +55,10 @@ final class FrontierV3BodyObservation {
                                        net.minecraft.core.BlockPos support) {
         if (geometry instanceof net.minecraft.world.level.chunk.LevelChunk chunk
                 && !chunk.getPos().equals(new net.minecraft.world.level.ChunkPos(support))) return unsupported(body);
+        if(FrontierV3RestingPose.at(body,geometry,support)){
+            var surface=SurfaceAnchor.at(support.getX(),support.getY(),support.getZ());
+            return new Observation(surface.standingBody(),Optional.of(surface));
+        }
         var collision = geometry.getBlockState(support).getCollisionShape(geometry, support);
         var bounds = body.getBoundingBox();
         var contactTop = collision.toAabbs().stream()

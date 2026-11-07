@@ -59,6 +59,14 @@ public final class ActorExecutionLifecycle {
         }
         return new Transition(state, state, state.actorExecutions().begin(successor, successor.generation() - 1L));
     }
+    /** Read-only successor admission checks the exact current owner and shared effect fence. */
+    public boolean mayBegin(FrontierWorldState state,SubjectId actorId){
+        var actor=state.actorLocations().get(actorId);if(actor==null||actor.condition().status()!=ActorLifeStatus.ALIVE)return false;
+        var retained=state.actorExecutions().actors().get(actorId);if(retained==null||retained.current().isEmpty())return true;
+        var current=retained.current().orElseThrow();var owner=capabilities.require(current.activityKind());owner.validateReference(state,current);
+        return owner.interruption()==ActorActivityCapability.Interruption.RELEASE?checkpoint(state,current,owner).ready()
+                :owner.supportsContinuation()&&retained.continuations().size()<ActorExecution.MAX_CONTINUATIONS&&checkpoint(state,current,owner).ready();
+    }
     public Transition prepareBegin(FrontierWorldState state, ActorExecutionId successor, long atTick) {
         capabilities.require(successor.activityKind());
         var actor = state.actorLocations().get(successor.actorId());

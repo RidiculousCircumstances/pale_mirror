@@ -30,6 +30,8 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
         Objects.requireNonNull(forest); Objects.requireNonNull(productionJobs);
         Objects.requireNonNull(actors); Objects.requireNonNull(executions);
     }
+    public static final Source<ActorMovementReferences,SubjectId,io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask>
+            CLINICAL=new Source<>(r->r.people().clinical().tasks());
     public static final Source<ActorMovementReferences, SubjectId, GuardDuty>
             GUARDS = new Source<>(r -> r.strategicPlans().guards());
     public static final Source<ActorMovementReferences, SubjectId, ProductionJob>
@@ -63,7 +65,7 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
     public static final Source<ActorMovementReferences,SubjectId,io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver>
             MANEUVERS=new Source<>(r->r.combat().maneuvers());
     public static final List<Source<ActorMovementReferences, ?, ?>> SOURCES = List.of(
-            MANEUVERS, EVASIONS, PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
+            CLINICAL, MANEUVERS, EVASIONS, PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
     public List<Read<ActorMovementReferences>> reads(ActorMovement movement) {
         var actor = movement.order().actorId();
         var result = new java.util.ArrayList<Read<ActorMovementReferences>>();

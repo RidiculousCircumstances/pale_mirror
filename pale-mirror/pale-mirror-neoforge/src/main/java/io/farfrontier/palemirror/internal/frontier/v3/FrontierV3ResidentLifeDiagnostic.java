@@ -152,7 +152,8 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"movementKnownRoute\":\"" + quote(movementKnownRoute(state, movement)) + "\""
                 + ",\"initialFoodStorageBread\":" + bread + ",\"initialFoodStorageBreadClaimed\":" + claimed
                 + ",\"settlementBreadStock\":" + SettlementFoodPolicy.breadStock(state, resident.settlementId())
-                + ",\"settlementBreadUsable\":" + SettlementFoodPolicy.usableBread(state, resident.settlementId()) + "}";
+                + ",\"settlementBreadUsable\":" + SettlementFoodPolicy.usableBread(state, resident.settlementId())
+                + FrontierV3ClinicalDiagnostic.fields(state,subject)+FrontierV3ClinicalDiagnostic.obligation(state,subject)+"}";
     }
 
     /** Operator-only retained evidence; a diagnostic must not initialize a route search. */

@@ -146,12 +146,9 @@ final class FrontierV3ActorResourceTransfer {
         var slice = request.source().getFirst();
         var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(order.portion().itemKind())).orElse(Items.AIR);
         if (item == Items.AIR || slice.moved() != order.portion().quantity()) throw new IllegalArgumentException("invalid native ground resource portion");
-        String witness = order.ownerId().value() + "|" + order.actorId().value() + "|" + order.goalOrdinal() + "|" + order.goalRevision()
-                + "|" + order.entityId() + "|" + order.sourceEpoch() + "|" + slice.before() + "|" + slice.moved()
-                + "|" + ActorBodyAuthority.current(state, order.actorId()).physicalEpoch();
         var journal = FrontierV3ResourceHandoffLedger.get(level);
-        var pickup = new FrontierV3ResourceHandoffLedger.Pickup(order.ownerId(), order.portion().sourceAccountId(), order.entityId(),
-                state.actorExecutions().actors().get(order.actorId()).current().orElseThrow().activityKind(), order.goalRevision(), witness);
+        var pickup=FrontierV3GroundPickupProof.declaration(order,new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(ActorBodyAuthority.current(state,order.actorId()),
+                state.actorExecutions().actors().get(order.actorId()).current().orElseThrow()),slice);
         FrontierV3GroundPickupRecovery.requireOwner(pickup.kind());
         return Optional.of(new Session() {
             @Override public List<FrontierV3MinecraftOperation.Participant> participants() {

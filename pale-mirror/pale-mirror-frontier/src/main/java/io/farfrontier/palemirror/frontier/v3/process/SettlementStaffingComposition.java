@@ -9,6 +9,16 @@ import java.util.Optional;
 public final class SettlementStaffingComposition {
     public static final SettlementStaffingPolicy POLICY = new SettlementStaffingPolicy(List.of(
             new SettlementStaffingPort() {
+                public ResidentWorkKind kind() { return ResidentWorkKind.MEDICAL; }
+                public HumanCapability capability() { return HumanCapability.MEDICINE; }
+                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
+                    var clinical=state.humanPopulation().clinical();
+                    var retained=clinical.tasks().values().stream().filter(t->t.home().equals(home)&&t.role()==io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.Role.MEDIC)
+                        .map(io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask::actor).collect(java.util.stream.Collectors.toSet());
+                    boolean patients=clinical.wounds().keySet().stream().anyMatch(actor->state.humanPopulation().resident(actor).settlementId().equals(home));
+                    return new Demand(kind(),capability(),patients?rules.targetWorkers():0,patients?rules.minimumLocalStaff():0,rules.priority(),retained);
+                }
+            },new SettlementStaffingPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.GUARD; }
                 public HumanCapability capability() { return HumanCapability.SECURITY; }
                 public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {

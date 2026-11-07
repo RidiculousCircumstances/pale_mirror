@@ -82,7 +82,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                     state.strategicPlans().settlementAssaults(), state.routeConstructions(), state.routeMaintenances(),
                     state.serviceWorks(), state.humanPopulation().medicalOperations(), state.humanPopulation().migrations(),
                     couriers(state), groupMembers(state), ActorIdentityDeclarations.declaredKinds(state.bootstrap(), state.actorLocations()),
-                    extraction(state), forestry(state), state.strategicPlans().guards()));
+                    extraction(state), forestry(state), state.strategicPlans().guards(),state.humanPopulation().clinical().tasks()));
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof Dependencies value) || sources.size() != value.sources.size()) return false;
@@ -125,6 +125,9 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         claimProjected(values, forestry(state));
         state.strategicPlans().guards().values().stream().sorted(Comparator.comparing(GuardDuty::id))
                 .forEach(duty -> claim(values, duty.execution().actorId(), HumanAssignmentKind.GUARD, duty.id()));
+        state.humanPopulation().clinical().tasks().values().stream().filter(t->t.role()==io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.Role.MEDIC)
+                .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask::id))
+                .forEach(t->claim(values,t.actor(),HumanAssignmentKind.CLINICAL_CARE,t.id()));
         // A conflict suspends execution, not the retained job's exclusive worker claim.
         fieldAssignments(state).entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .flatMap(site -> site.getValue().stream())

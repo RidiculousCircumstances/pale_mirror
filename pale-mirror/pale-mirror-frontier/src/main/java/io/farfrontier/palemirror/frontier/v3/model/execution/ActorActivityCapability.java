@@ -10,6 +10,11 @@ public interface ActorActivityCapability {
     default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, ActorExecutionId execution) { return java.util.Optional.empty(); }
 
+    default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.rest.RestUse.Action> restAction(FrontierWorldState state,ActorExecutionId execution,io.farfrontier.palemirror.frontier.v3.model.rest.RestUse use,long
+        tick){return java.util.Optional.empty();}
+    default void validateRestReference(FrontierWorldState state,ActorExecutionId execution,io.farfrontier.palemirror.frontier.v3.model.rest.RestUse use) { throw new IllegalArgumentException("activity does not own rest places"); }
+    default boolean permitsRestRelease(FrontierWorldState state,ActorExecutionId execution,io.farfrontier.palemirror.frontier.v3.model.rest.RestUse use) { return false; }
+    default boolean permitsRest(FrontierWorldState state,ActorExecutionId execution,io.farfrontier.palemirror.frontier.v3.model.rest.RestUse use) { return false; }
     default boolean permitsHomeFood(FrontierWorldState state, ActorExecutionId execution) { return true; }
     /** Explicit owner policy, not inferred from profession, scene or current job shape. */
     enum Interruption { RETAIN_CONTINUATION, RELEASE, TERMINAL_ONLY }

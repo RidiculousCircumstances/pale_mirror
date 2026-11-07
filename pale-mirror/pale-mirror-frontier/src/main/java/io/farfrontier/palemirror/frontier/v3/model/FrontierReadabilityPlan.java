@@ -549,6 +549,12 @@ public final class FrontierReadabilityPlan {
         if (structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id())) {
             return "QUARANTINE · " + state.humanPopulation().activeCases(settlement.id()) + " ACTIVE CASES";
         }
+        if(structure.kind()==StructureKind.INFIRMARY&&io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority.enabled(state)){
+            var uses=state.humanPopulation().restPlaces().uses().values().stream().filter(use->use.place().id().buildingId().equals(structure.id())).toList();
+            long medics=state.humanPopulation().clinical().tasks().values().stream().filter(t->t.home().equals(settlement.id())&&t.role()==io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.Role.MEDIC).count();
+            int stock=state.inventory().fungibleResources().totalQuantity(settlement.id(),state.bootstrap().ruleset().clinical().bandage());
+            return conditionText(condition)+"\nPATIENTS "+uses.size()+" / "+structure.definition().beds().size()+" · MEDICS "+medics+"\nBANDAGES "+stock;
+        }
         if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id(), atTick);
         if (structure.kind() == StructureKind.WORKSHOP) return workshopText(state, settlement, condition);
         if (ProductionFacilityLayout.supports(structure.kind())) return !FacilityFunctionAvailability.mayUse(state, structure.id())

@@ -178,8 +178,7 @@ final class FrontierV3RangedCombatExecutor {
         var expected=net.minecraft.core.registries.BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(shot.ammunition()));
         return actual.getCount()==shot.binding().quantity() && actual.getItem() instanceof ArrowItem && ItemStack.isSameItemSameComponents(actual,new ItemStack(expected));
     }
-    static ActorItemSlot slot(PhysicalStackAddress address){return switch(address){case PhysicalStackAddress.ActorPocket p->new ActorItemSlot.Pocket(p.slot());case PhysicalStackAddress.ActorHand h->new ActorItemSlot.Hand(h.hand());
-            default->throw new IllegalArgumentException("ammunition has no actor inventory address");};}
+    static ActorItemSlot slot(PhysicalStackAddress address){return FrontierV3ActorResourceSlots.slot(address);}
     static boolean inRange(Mob actor,LivingEntity target,RangedRules rules){double d=actor.distanceTo(target);return d>=rules.minimumRange()&&d<=rules.maximumRange();}
     static Vec3 aim(Mob actor,LivingEntity target,RangedRules rules){return aim(actor,target,rules,target.getDeltaMovement());}
     static Vec3 aim(Mob actor,LivingEntity target,RangedRules rules,Vec3 velocity){

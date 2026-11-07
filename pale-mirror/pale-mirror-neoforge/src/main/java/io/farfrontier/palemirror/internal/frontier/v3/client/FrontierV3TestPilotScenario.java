@@ -375,7 +375,7 @@ final class FrontierV3TestPilotScenario {
 
     /** A visual assertion may inspect only a locally rendered ordinary entity and its visible name. */
     private static boolean validVisibleEntity(JsonObject action) {
-        return action.has("entityType") && action.get("entityType").isJsonPrimitive()
+        return (!action.has("pose") || java.util.Set.of("STANDING","SLEEPING").contains(action.get("pose").getAsString())) && action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
                 && validEntityName(action.get("nameContains")) && validWorkerSelector(action)
                 && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
@@ -480,6 +480,7 @@ final class FrontierV3TestPilotScenario {
                 && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop") || diagnosticField.equals("boardPosition")
                 || diagnosticField.equals("terminalHarvest.terminalBody")))
                 || (view.equals("forest") && requiredId(reference, "id", "settlement:") && Set.of("firstTree", "workSource").contains(diagnosticField))
+                || (view.equals("resident_life") && requiredId(reference,"id","resident:")&&diagnosticField.equals("clinical.bedsidePosition"))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
                 || (view.equals("actor") && (requiredId(reference, "id", "actor:") || requiredId(reference, "id", "resident:"))
                     && diagnosticField.equals("position"))

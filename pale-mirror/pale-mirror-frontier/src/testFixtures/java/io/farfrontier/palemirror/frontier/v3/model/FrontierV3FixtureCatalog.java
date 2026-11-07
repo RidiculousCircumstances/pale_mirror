@@ -42,7 +42,8 @@ import java.util.function.BiFunction;
 public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
-    private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(Map.entry("wood-production-r29", FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
+    private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(Map.entry("clinical-r35", FrontierRulesets.installed("frontier-v3-clinical-care-r35")),Map.entry("wood-production-r29",
+        FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
             Map.entry("textiles-r32", FrontierRulesets.installed("frontier-v3-textiles-terrain-r32")),
             Map.entry("simulation-baseline-r31", FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")),
             Map.entry("wood-demand-r30", FrontierRulesets.installed("frontier-v3-wood-demand-graybox-r30")),
@@ -59,6 +60,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("clinicalCare", ClinicalCareFixture::configuration),
             Map.entry("authoredBuildingsWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("simulation-terrain-r31"))),
             Map.entry("peacefulGuards", PeacefulGuardFixture::configuration),
             Map.entry("equipmentRepair", (world, seed) -> equipmentWorkConfiguration(world, seed, true)),

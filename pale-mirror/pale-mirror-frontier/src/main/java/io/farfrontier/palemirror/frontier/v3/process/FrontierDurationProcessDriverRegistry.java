@@ -59,6 +59,10 @@ public final class FrontierDurationProcessDriverRegistry {
                 FrontierProcessSceneSdk.ExecutionArchetype.ATOMIC_INTENT, null, null, ContractState.DEFERRED),
         RESOURCE_SITE_PREPARATION("frontier.resource-site-preparation", "ResourceSiteLifecycle", "F0.6 revalidation", "resource-sites",
                 FrontierProcessSceneSdk.ExecutionArchetype.ATOMIC_INTENT, null, null, ContractState.DEFERRED),
+        CLINICAL_CARE("frontier.clinical-care", "ClinicalTask", "UAE/native custody", "clinical-care",
+                FrontierProcessSceneSdk.ExecutionArchetype.AMBIENT_CUSTODY, io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalContinuation.PROGRESS, null, ContractState.DEFERRED),
+        REST_PLACE("frontier.rest-place", "RestUse", "UAE/native custody", "rest-place",
+                FrontierProcessSceneSdk.ExecutionArchetype.AMBIENT_CUSTODY, null, null, ContractState.DEFERRED),
         AMBIENT_ACTOR_CUSTODY("frontier.ambient-actor-custody", "ActorLocation", "F0.2/F0.5", "ambient-actors",
                 FrontierProcessSceneSdk.ExecutionArchetype.AMBIENT_CUSTODY, null, null, ContractState.DEFERRED);
 
@@ -603,7 +607,7 @@ public final class FrontierDurationProcessDriverRegistry {
                     16, 64, 16, 512, 131_072, 2_400, 128);
             case HIVE_GROWTH -> new FrontierProcessSceneSdk.Limits(32, 32, 256, 64, 4_096, 128, 4_096,
                     1_048_576, 2_400, 1_024);
-            case AMBIENT_ACTOR_CUSTODY -> new FrontierProcessSceneSdk.Limits(128, 8, 8, 16, 256, 32, 1_024,
+            case CLINICAL_CARE, REST_PLACE, AMBIENT_ACTOR_CUSTODY -> new FrontierProcessSceneSdk.Limits(128, 8, 8, 16, 256, 32, 1_024,
                     262_144, 2_400, 128);
         };
     }

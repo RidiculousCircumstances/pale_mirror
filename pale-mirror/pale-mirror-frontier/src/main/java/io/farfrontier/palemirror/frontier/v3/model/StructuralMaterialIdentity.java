@@ -6,7 +6,7 @@ import java.util.Set;
 /** Structural identity excludes operating state and neighbour-derived connections.
  * Typed block-entity material data must additionally be witnessed by the native observer. */
 public final class StructuralMaterialIdentity {
-    private static final Set<String> OPERATING = Set.of("open", "powered", "lit", "waterlogged",
+    private static final Set<String> OPERATING = Set.of("open", "powered", "lit", "waterlogged", "occupied",
             "shape", "north", "south", "east", "west", "up", "down");
     private StructuralMaterialIdentity() { }
     public static boolean matches(NavigationBlockState original, NavigationBlockState actual) {

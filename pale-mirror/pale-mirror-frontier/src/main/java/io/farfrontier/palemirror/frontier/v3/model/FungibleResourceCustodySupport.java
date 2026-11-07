@@ -40,6 +40,16 @@ public final class FungibleResourceCustodySupport {
         var account = resources.accounts().get(input.accountId());
         if (account == null || !(account.custody() instanceof ResourceCustody.Container container)
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())) return false;
+        if(!canUseUnclaimed(state,input))return false;
+        var bindings = FungibleBindingReadIndex.forAccount(resources, input.accountId());
+        if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) return bindings.isEmpty();
+        if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())) return false;
+        return hasCurrentPhysicalPortion(state, input.accountId(), input.lotQuantities());
+    }
+
+    /** Source-neutral quantity/title/claim check. Endpoint custody and binding permission are separate. */
+    public static boolean canUseUnclaimed(FrontierWorldState state,LotSelection input){
+        var resources=state.inventory().fungibleResources();var account=resources.accounts().get(input.accountId());if(account==null)return false;
         ResourceLot first = resources.lots().get(input.firstLotId());
         if (first == null || resources.unclaimedQuantity(input.accountId(), first.economicOwnerId(), first.itemKind()) < input.quantity()) return false;
         for (var entry : input.lotQuantities().entrySet()) {
@@ -49,10 +59,7 @@ public final class FungibleResourceCustodySupport {
                     .mapToInt(claim -> claim.lotQuantities().getOrDefault(entry.getKey(), 0)).sum();
             if (entry.getValue() > account.lotQuantities().getOrDefault(entry.getKey(), 0) - pinned) return false;
         }
-        var bindings = FungibleBindingReadIndex.forAccount(resources, input.accountId());
-        if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) return bindings.isEmpty();
-        if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())) return false;
-        return hasCurrentPhysicalPortion(state, input.accountId(), input.lotQuantities());
+        return true;
     }
 
     /** Acquiring container custody precedes material binding. Claimed and unclaimed

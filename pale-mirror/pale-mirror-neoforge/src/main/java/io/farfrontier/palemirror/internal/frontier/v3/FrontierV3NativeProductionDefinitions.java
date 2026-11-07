@@ -41,7 +41,9 @@ final class FrontierV3NativeProductionDefinitions {
                 if (requirement.acceptedItems().size() != 1) throw new IllegalArgumentException("native alternatives require an explicit recipe compiler: " + declared.id().value());
                 inputs.merge(requirement.acceptedItems().iterator().next(), requirement.quantity(), Math::addExact);
             }
-            nativeProjection.requireTransformation(declared.capability(), inputs, declared.product().itemKind(), declared.product().quantity());
+            try{nativeProjection.requireTransformation(declared.capability(), inputs, declared.product().itemKind(), declared.product().quantity());}
+            catch(IllegalArgumentException mismatch){throw new IllegalArgumentException("native crafting mismatch for "+declared.id().value()
+                    +" source="+holder.id()+" declared="+inputs+" native="+requirements,mismatch);}
         }
         for (var fuel : catalog.fuels()) {
             var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(fuel.itemKind())).orElseThrow();

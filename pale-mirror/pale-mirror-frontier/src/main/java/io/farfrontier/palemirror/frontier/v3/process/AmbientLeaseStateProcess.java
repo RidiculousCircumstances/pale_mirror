@@ -41,7 +41,8 @@ public final class AmbientLeaseStateProcess {
         if (previous != null && previous.status() != AmbientLeaseStatus.CLOSED) throw new IllegalArgumentException("actor already has an active ambient lease");
         long expectedRevision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         if (lease.revision() != expectedRevision) throw new IllegalArgumentException("ambient lease revision is not the actor's next revision");
-        state = ActorBodyAuthority.demand(state, lease.actorId());
+        state = ActorBodyAuthority.demand(state, lease.actorId(),lease.handoffInstant().ticks());
+        actor=state.actorLocations().get(lease.actorId());
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(lease.actorId(), lease);
         var movement = state.actorMovements().get(lease.actorId());
         if (movement != null && movement.coldTravel().isPresent()) {

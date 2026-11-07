@@ -8,7 +8,7 @@ import java.util.*;
 /** Owners prove their own committed effect; the physical journal never interprets job phases. */
 final class FrontierV3GroundPickupRecovery {
     private interface Port { boolean completed(FrontierWorldState state, FrontierV3ResourceHandoffLedger.Pickup witness); }
-    private static final Map<ActorActivityKind, Port> PORTS = Map.of(ActorActivityKind.COURIER, new ShipmentPort());
+    private static final Map<ActorActivityKind, Port> PORTS = Map.of(ActorActivityKind.COURIER, new ShipmentPort(),ActorActivityKind.CLINICAL_CARE,new ClinicalPort());
     private static final class ShipmentPort implements Port {
         public boolean completed(FrontierWorldState state, FrontierV3ResourceHandoffLedger.Pickup witness) {
             var shipment = state.shipments().shipments().get(witness.owner());
@@ -17,6 +17,13 @@ final class FrontierV3GroundPickupRecovery {
                     && shipment.revision() >= Math.addExact(witness.revision(), 1)
                     && (shipment.status() == Shipment.Status.CARRYING || shipment.status() == Shipment.Status.DELIVERED
                         || shipment.status() == Shipment.Status.CARGO_DISPOSED);
+        }
+    }
+    private static final class ClinicalPort implements Port {
+        public boolean completed(FrontierWorldState s,FrontierV3ResourceHandoffLedger.Pickup witness){
+            return s.humanPopulation().clinical().supplied().values().stream().filter(v->v.order() instanceof ActorGroundItemOrder).anyMatch(v->
+                v.pending().filter(step->step.source().size()==1).map(step->FrontierV3GroundPickupProof.declaration((ActorGroundItemOrder)v.order(),step.observation().actuation(),step.source().getFirst())).equals(Optional.of(witness)));
+
         }
     }
     static boolean reconcileOne(ServerLevel level, FrontierWorldState state) {

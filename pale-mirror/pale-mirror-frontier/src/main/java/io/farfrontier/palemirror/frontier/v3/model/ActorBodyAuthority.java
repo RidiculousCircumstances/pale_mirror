@@ -42,6 +42,9 @@ public final class ActorBodyAuthority {
     }
 
     /** Representation demand never transfers an existing incarnation to its requester. */
+    public static FrontierWorldState demand(FrontierWorldState state,io.farfrontier.palemirror.frontier.v3.api.SubjectId actor,long tick){
+        return demand(ActorBodyPreparation.prepare(state,actor,tick),actor);
+    }
     public static FrontierWorldState demand(FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
         requireLiving(state, actor);

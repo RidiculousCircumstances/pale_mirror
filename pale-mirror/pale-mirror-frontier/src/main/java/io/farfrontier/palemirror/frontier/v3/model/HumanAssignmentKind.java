@@ -16,5 +16,6 @@ public enum HumanAssignmentKind {
     EXTRACTION,
     EQUIPMENT_SERVICE,
     FORESTRY,
-    GUARD
+    GUARD,
+    CLINICAL_CARE
 }

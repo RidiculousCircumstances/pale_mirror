@@ -526,7 +526,8 @@ public final class FrontierV3TestPilotClient {
             if (entity.isRemoved() || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
                     || !(entity instanceof Display.TextDisplay || entity.isCustomNameVisible())
                     || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
-                    || !minecraft.player.hasLineOfSight(entity)) return false;
+                    || !minecraft.player.hasLineOfSight(entity)
+                    || action.has("pose")&&!entity.getPose().name().equals(action.get("pose").getAsString())) return false;
             Vec3 delta = entity.position().subtract(eye); double distance = delta.length();
             return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
         }).stream().findFirst().isPresent();

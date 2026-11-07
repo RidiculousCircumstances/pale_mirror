@@ -263,7 +263,8 @@ final class FrontierV3AmbientActorExecutor {
             }
             long projectionTick = runtime.canonicalState().orElseThrow().instant().ticks(); BodyPosition projectedBody = state.actorMovements().containsKey(actorId) ? ActorMovementProcess.bodyAt(state, actorId, projectionTick)
                     : ResidentMealProcess.bodyAt(state, actorId, projectionTick);
-            boolean demanded = demand(level, projectedBody.supportingSurface().support());
+            boolean demanded = demand(level, projectedBody.supportingSurface().support())
+                    || loadedMovementDemandsExecution(level,state,actorId);
             if (!demanded) {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
@@ -312,6 +313,14 @@ final class FrontierV3AmbientActorExecutor {
                 if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
             }
         }
+    }
+    /** Presentation distance cannot suspend an extant native actuator while custody still fences COLD. */
+    private static boolean loadedMovementDemandsExecution(ServerLevel level,FrontierWorldState state,SubjectId actor){
+        var movement=state.actorMovements().get(actor);if(movement==null)return false;
+        var entity=level.getEntity(entityId(state,actor));
+        return entity instanceof Mob body&&body.isAlive()&&!body.isRemoved()
+                &&ActorBodyAuthority.retainsPhysicalCustody(state,actor)
+                &&FrontierV3ActorBodyController.readyForExecution(level,state,List.of(ActorBodyAuthority.current(state,actor)));
     }
     static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {
         return materialize(level, state, actorId, canonicalBody, FrontierV3StandingPosition::aboveExactFloor);

@@ -43,6 +43,7 @@ public final class ResidentActivityCoordinator {
                 || ServiceAccessCoordinator.turnoverPoint(state, residentId).isPresent()
                     && ActivityExecutionCapabilities.waitingForServiceResource(state,
                         HumanAssignmentProjection.compile(state).assignment(residentId))
+                || io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority.needsCare(state,residentId)
                 || state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt))
@@ -122,6 +123,11 @@ public final class ResidentActivityCoordinator {
         long assessedAt = Math.max(canonicalTick, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
         if(state.combat().evasions().containsKey(residentId))return new ResidentActivityChoice(residentId,ResidentActivityChoice.Kind.SAFETY,assignment.ownerId(),Optional.empty());
+        var care=state.humanPopulation().clinical().taskFor(residentId)
+                .filter(t->t.role()==io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.Role.PATIENT);
+        if(care.isPresent()&&!state.humanPopulation().meals().containsKey(residentId)
+                &&(!io.farfrontier.palemirror.frontier.v3.process.ClinicalCareProcess.hungry(state,residentId,assessedAt)||!ActorExecutionComposition.LIFECYCLE.mayBegin(state,residentId)))
+            return new ResidentActivityChoice(residentId,ResidentActivityChoice.Kind.CARE,assignment.ownerId(),Optional.empty());
         ResidentWorkYield checkpoint = ResidentWorkYield.assess(state, assignment);
         ResidentActivityChoice choice = choose(state.humanPopulation().schedule(resident.settlementId()), assessedAt,
                 state.humanPopulation().nutrition(residentId), assignment,

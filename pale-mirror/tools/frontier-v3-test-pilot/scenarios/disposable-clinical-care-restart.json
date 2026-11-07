@@ -1,0 +1,274 @@
+{
+  "schema": 1,
+  "id": "disposable_clinical_care_restart",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25587,
+    "profile": "clinical-care",
+    "viewDistance": 12
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "name"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "actor",
+          "id": "resident:1-1",
+          "expect": {
+            "status": "ok",
+            "life": "ALIVE",
+            "healthRaw": 20000000
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/damage @e[type=minecraft:villager,sort=nearest,limit=1,distance=..5] 8 minecraft:fall"
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-1",
+      "expect": {
+        "status": "ok",
+        "clinical": {
+          "dressed": true,
+          "restPhase": "RESTING"
+        }
+      },
+      "timeoutMs": 300000,
+      "causalMilestone": "ordinary_physical_injury_causes_real_dressing_and_bed_rest"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "resident_life",
+          "id": "resident:1-1",
+          "field": "clinical.bedsidePosition"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "name"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "name"
+        }
+      },
+      "pose": "SLEEPING",
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "name"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "name"
+        }
+      },
+      "pose": "SLEEPING",
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-1",
+      "expect": {
+        "status": "ok",
+        "clinical": {
+          "careComplete": true,
+          "phase": "NONE",
+          "restPhase": "NONE"
+        }
+      },
+      "timeoutMs": 300000,
+      "causalMilestone": "healed_patient_releases_bed_and_care_execution"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "name"
+        }
+      },
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-1",
+          "field": "name"
+        }
+      },
+      "pose": "STANDING",
+      "maxDistance": 64,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "resident_life",
+      "id": "resident:1-1"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 4,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/gamemode creative"
+      },
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "resident_life",
+            "id": "resident:1-1",
+            "field": "clinical.bedsidePosition"
+          }
+        },
+        "settleMs": 0
+      }
+    ]
+  },
+  "assertions": [
+    {
+      "after": 11,
+      "view": "resident_life",
+      "id": "resident:1-1",
+      "expect": {
+        "status": "ok",
+        "life": "ALIVE",
+        "clinical": {
+          "careComplete": true,
+          "phase": "NONE",
+          "restPhase": "NONE"
+        },
+        "progressObligation": {
+          "disposition": "TERMINAL",
+          "next": "CLOSED"
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "same-patient-physically-rests-in-bed"
+    },
+    {
+      "after": 6,
+      "name": "same-patient-restores-bed-after-restart"
+    },
+    {
+      "after": 10,
+      "name": "patient-standing-after-discharge"
+    }
+  ]
+}

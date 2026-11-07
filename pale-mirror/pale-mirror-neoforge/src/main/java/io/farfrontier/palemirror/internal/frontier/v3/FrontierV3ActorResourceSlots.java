@@ -16,6 +16,10 @@ final class FrontierV3ActorResourceSlots {
                 .filter(slot -> !(slot instanceof ActorItemSlot.Pocket) || actor instanceof Villager).toList();
     }
 
+    static ActorItemSlot slot(PhysicalStackAddress address){return switch(address){
+        case PhysicalStackAddress.ActorPocket p->new ActorItemSlot.Pocket(p.slot());
+        case PhysicalStackAddress.ActorHand h->new ActorItemSlot.Hand(h.hand());
+        default->throw new IllegalArgumentException("personal consumable requires an actor inventory address");};}
     static ItemStack get(Mob actor, ActorItemSlot slot) {
         return switch (slot) {
             case ActorItemSlot.Hand hand -> actor.getItemBySlot(equipment(hand));

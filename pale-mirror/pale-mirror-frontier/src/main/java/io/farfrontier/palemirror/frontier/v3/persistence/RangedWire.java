@@ -27,14 +27,13 @@ final class RangedWire {
     static void shot(DataOutputStream out,RangedShot s)throws IOException{
         actuation(out,s.attacker());out.writeByte(s.method().wireTag());out.writeLong(s.ownerRevision());id(out,s.weapon());condition(out,s.before());
         target(out,s.target());out.writeLong(s.targetIncarnation());id(out,s.ammunitionAccount());id(out,s.ammunitionLot());out.writeUTF(s.ammunition());
-        var b=s.binding();id(out,b.id());id(out,b.accountId());FungibleResourceStateCodec.writePhysicalAddress(out,b.address());out.writeLong(b.authorityEpoch());out.writeUTF(b.itemKind());
-        ShipmentStateCodec.lots(out,b.lotQuantities());ShipmentStateCodec.lots(out,b.claimQuantities());out.writeUTF(b.playerSaveFence());out.writeLong(s.attemptOrdinal());out.writeLong(s.preparedAt());CombatProfileCodec.write(out,
+        PhysicalStackBindingCodec.write(out,s.binding());out.writeLong(s.attemptOrdinal());out.writeLong(s.preparedAt());CombatProfileCodec.write(out,
                 s.actorProfile());out.writeByte(s.technique().tag());FrontierWorldStateCodec.writePosition(out,s.origin().support());
     }
     static RangedShot shot(DataInputStream in)throws IOException{
         var a=actuation(in);var method=CombatMethod.require(in.readUnsignedByte());long rev=in.readLong();var w=id(in);var condition=condition(in);var target=target(in);
         long incarnation=in.readLong();var account=id(in);var lot=id(in);String kind=in.readUTF();
-        var b=new PhysicalStackBinding(id(in),id(in),FungibleResourceStateCodec.readPhysicalAddress(in),in.readLong(),in.readUTF(),ShipmentStateCodec.lots(in),ShipmentStateCodec.cargoPortions(in),in.readUTF());
+        var b=PhysicalStackBindingCodec.read(in);
         return new RangedShot(a,method,rev,w,condition,target,incarnation,account,lot,kind,b,in.readLong(),in.readLong(),CombatProfileCodec.read(in),RangedTechnique.require(in.readUnsignedByte()),
                 new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));
     }

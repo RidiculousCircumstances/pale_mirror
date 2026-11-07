@@ -20,7 +20,11 @@ public final class SettlementBeds {
             SubjectId settlementId,
             BlockPosition head,
             BlockPosition foot,
-            boolean physicallyPresent) {}
+            boolean physicallyPresent, io.farfrontier.palemirror.frontier.v3.model.rest.RestPlaceProfile profile) {
+        public io.farfrontier.palemirror.frontier.v3.model.rest.RestPlace restPlace() {
+            return new io.farfrontier.palemirror.frontier.v3.model.rest.RestPlace(id,settlementId,head,foot,profile,physicallyPresent);
+        }
+    }
 
     public static List<Place> places(FrontierWorldState state, Settlement home) {
         var result = new ArrayList<Place>();
@@ -39,7 +43,7 @@ public final class SettlementBeds {
                                 home.id(),
                                 head,
                                 foot,
-                                available));
+                                available,bed.profile()));
             }
         }
         return List.copyOf(result);

@@ -65,7 +65,7 @@ final class ScheduledSubjectExistence {
         var next = new Image(state, sources(state), fixed, nested); IMAGE.set(next); return next;
     }
     private static List<Map<SubjectId, ?>> sources(FrontierWorldState state) {
-        return List.of(state.actorLocations(), state.structureConditions(),
+        return List.of(state.humanPopulation().clinical().tasks(),state.actorLocations(), state.structureConditions(),
                 state.inventory().items(), state.inventory().cargo(), state.inventory().fungibleResources().lots(),
                 state.inventory().fungibleResources().claims(), state.productionJobs(), state.serviceWorks(),
                 state.routeConstructions(), state.routeMaintenances(), state.resourceSites().sites(),

@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "pale_mirror:cloth"
+    }
+  ],
+  "result": {
+    "id": "pale_mirror:bandage",
+    "count": 4
+  }
+}

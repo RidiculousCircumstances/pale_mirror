@@ -124,10 +124,13 @@ class FrontierWorldProcessCatalogTest {
         assertEquals("physical-observation", registry.requireCommandOwner(transferBatch));
         assertThrows(IllegalArgumentException.class, () -> registry.requireReducedEventOwner(transferBatch));
         assertTrue(FrontierWorldProcessCatalog.allWorldPayloadTypes().contains(transferBatch));
+        String storageConfirmation="frontier.physical_intent_storage_confirmed";
+        assertEquals("physical-observation",registry.requireCommandOwner(storageConfirmation));
+        assertThrows(IllegalArgumentException.class,()->registry.requireReducedEventOwner(storageConfirmation));
         for (String type : FrontierWorldProcessCatalog.allWorldPayloadTypes()) {
             // A batch command emits its ordinary owned transfer events atomically; it is
             // deliberately not itself an event which could apply those transfers twice.
-            if (type.equals(transferBatch)) continue;
+            if (type.equals(transferBatch)||type.equals(storageConfirmation)) continue;
             assertFalse(registry.requireReducedEventOwner(type).isBlank());
         }
     }
@@ -289,6 +292,10 @@ class FrontierWorldProcessCatalogTest {
     @Test
     void everyProcessDescriptorRoundTripsOneOwnedRepresentativePayload() {
         Map<String, FrontierPayload> representatives = Map.ofEntries(
+                Map.entry("guard-ammunition",new GuardAmmunitionEvent.Cancelled(new SubjectId("guard:representative"),1)),
+                Map.entry("ranged-combat",new io.farfrontier.palemirror.frontier.v3.model.combat.RangedEvent.Completed(new SubjectId("guard:representative"),1,false,List.of())),
+                Map.entry("clinical-care",new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalEvent.Ended(new SubjectId("clinical:representative"),1)),
+                Map.entry("rest-place",new io.farfrontier.palemirror.frontier.v3.model.rest.RestEvent.Released(new SubjectId("resident:representative"),1)),
                 Map.entry("security",new io.farfrontier.palemirror.frontier.v3.model.security.SecurityEvent.Incident(new SubjectId("settlement:representative"),
                         new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId("resident:representative"),1),
                         new CombatTarget(CombatTarget.Kind.PLAYER,new java.util.UUID(1,2),"pale_mirror:frontier_graybox"),new BlockPosition(0,63,0),Optional.empty(),1)),
@@ -389,33 +396,13 @@ class FrontierWorldProcessCatalogTest {
         return new DefenderEquipmentReturnVisitChanged(owner, Optional.of(visit), Optional.empty());
     }
 
-    private static SettlementServiceWorkStarted serviceWorkRepresentative() {
-        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-representative"), 301L);
-        Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().value().equals("settlement:9")).findFirst().orElseThrow();
-        SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
-        InfectionCell cell = treatmentCell(bootstrap, infirmary);
-        SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:service-representative-reagent");
-        FrontierWorldState initial = FrontierWorldState.initial(bootstrap).withInfection(cell, new FixedRatio(new FixedScalar(750_000L)));
-        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:service-representative"), settlement.id(),
-                StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(cell), 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask task = new StrategicTask(new SubjectId("task:service-representative"), objective.id(), settlement.id(),
-                StrategicTaskKind.DECONTAMINATE_INFECTION_CELL, Optional.of(cell), List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY,
-                StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT), List.of(), StrategicTaskStatus.PENDING);
-        FrontierWorldState state = initial.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)).withInventory(initial.inventory()
-                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, initial.inventory().availableSlots(depot).getFirst()))));
-        return SettlementServiceWorkProcess.planDecontamination(state, SettlementServiceWorkProcess.scan(1, 1_000L)).stream()
-                .map(ProposedEvent::payload).filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
+    private static SettlementServiceWorkTraversalBlocked serviceWorkRepresentative() {
+        var actor=new SubjectId("resident:service-representative");var work=new SubjectId("service:representative");
+        var execution=new ActorExecutionId(actor,ActorActivityKind.SETTLEMENT_SERVICE,work,1);
+        var observation=new SettlementServiceWorkObservation(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(new ActorBodyId(actor,1),execution),1),
+                SettlementServiceWorkPhase.APPROACH_INPUT,0,0,0,1);
+        return new SettlementServiceWorkTraversalBlocked(work,new SceneLeaseId("scene:representative"),new BodyPosition(0,64,0),1,observation);
     }
 
-    private static InfectionCell treatmentCell(FrontierBootstrap bootstrap, SettlementStructure infirmary) {
-        for (int radius = 4; radius <= 32; radius += 4) for (int dx = -radius; dx <= radius; dx += 4) for (int dz = -radius; dz <= radius; dz += 4) {
-            if (Math.abs(dx) != radius && Math.abs(dz) != radius) continue;
-            InfectionCell candidate = InfectionCell.at(infirmary.anchor().offset(dx, 0, dz));
-            try {
-                if (!InfectionTreatmentWorksite.candidates(bootstrap, candidate).isEmpty()) return candidate;
-            } catch (IllegalArgumentException ignored) { }
-        }
-        throw new IllegalStateException("service representative has no treatment cell");
-    }
 }

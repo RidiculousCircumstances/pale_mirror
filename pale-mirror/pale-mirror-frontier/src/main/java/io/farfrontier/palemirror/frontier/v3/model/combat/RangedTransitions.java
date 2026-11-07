@@ -11,11 +11,8 @@ public final class RangedTransitions {
             capabilities.require(shot.attacker().execution()).requirePendingRanged(state,shot);
             if(!subject.equals(shot.owner()) || done.attemptOrdinal()!=shot.attemptOrdinal())throw new IllegalArgumentException("foreign ranged outcome");
             if(done.emitted()) {
-                var ledger=state.inventory().fungibleResources();
-                if(!shot.binding().equals(ledger.bindings().get(shot.binding().id())))throw new IllegalArgumentException("ranged ammunition preimage changed before receipt");
-                var expected=shot.binding().quantity()==1?List.<FungiblePhysicalObservation.Stack>of():List.of(new FungiblePhysicalObservation.Stack(shot.binding().address(),shot.ammunition(),shot.binding().quantity()-1));
-                if(!done.remaining().equals(expected))throw new IllegalArgumentException("ranged emission must consume exactly one arrow");
-                ledger=ledger.consumeUnclaimedObserved(shot.ammunitionAccount(),shot.binding().authorityEpoch(),Map.of(shot.ammunitionLot(),1),done.remaining());
+                var ledger=ActorConsumableUse.observed(state,shot.attacker().execution().actorId(),
+                        state.inventory().items().get(shot.weapon()).economicOwnerId(),shot.ammunition(),shot.binding(),shot.ammunitionLot(),done.remaining());
                 var item=Objects.requireNonNull(state.inventory().items().get(shot.weapon()),"fired weapon");
                 if(!item.condition().equals(shot.before()))throw new IllegalArgumentException("fired weapon condition changed before receipt");
                 update.inventory(state.inventory().changeCondition(item,shot.before().wear(1)).withFungibleResources(ledger));
