@@ -13,33 +13,29 @@ public final class ServiceBoundaryComposition {
                     .equals(EnumSet.allOf(ServicePointId.Kind.class)))
             throw new IllegalArgumentException("missing or duplicate service boundary owner");
     }
-    private static FrontierBootstrap cachedBootstrap;
-    private static List<Object> versions = List.of();
-    private static Map<SubjectId, ServiceBoundaryProvider.Declaration> cached;
-    private static Object activeSurfaces;
-    private static Object activeDeclarations;
-    private static Map<SubjectId, ServiceBoundaryProvider.Declaration> active;
+    // Provider version tokens may be thread-confined. Publish/cache on the same
+    // immutable planning lane rather than comparing tokens from different workers.
+    private static final ImmutableInputView<Map<SubjectId, ServiceBoundaryProvider.Declaration>> DECLARATIONS = new ImmutableInputView<>();
+    private static final ImmutableInputView<Map<SubjectId, ServiceBoundaryProvider.Declaration>> ACTIVE = new ImmutableInputView<>();
     /** Explicit all-points view; ordinary local turnover uses the declaration-only column index. */
     private static final ImmutableResultView<String, List<ServiceAccessPoint>> TURNOVER = new ImmutableResultView<>(4);
-    private record ColumnIndex(Object declarations, Object providerVersions, Object residents,
+    private record ColumnIndex(Object declarations, List<Object> providerVersions, Object residents,
             Map<ServicePointId, ServiceBoundaryProvider.SearchFootprint> footprints,
             Map<TerrainColumn, List<ServiceBoundaryProvider.Declaration>> candidates) { }
-    private static ColumnIndex columnIndex;
+    private static final ThreadLocal<ColumnIndex> COLUMN_INDEX = new ThreadLocal<>();
     private ServiceBoundaryComposition() { }
-    static synchronized Map<SubjectId, ServiceBoundaryProvider.Declaration> declarations(FrontierWorldState state) {
-        var nextVersions = PROVIDERS.stream().map(provider -> provider.version(state)).toList();
-        boolean same = cached != null && cachedBootstrap == state.bootstrap() && nextVersions.size() == versions.size();
-        for (int index = 0; same && index < versions.size(); index++) same = versions.get(index) == nextVersions.get(index);
-        if (same) return cached;
-        var result = new LinkedHashMap<SubjectId, ServiceBoundaryProvider.Declaration>();
-        for (var provider : PROVIDERS) for (var declaration : provider.declarations(state)) {
-            if (declaration.kind() != provider.kind() || result.putIfAbsent(declaration.pointId(), declaration) != null)
-                throw new IllegalArgumentException("foreign or duplicate service boundary declaration");
-        }
-        // A stock/policy update may replace container records without changing any declared footprint.
-        if (cachedBootstrap != state.bootstrap() || !result.equals(cached)) cached = Map.copyOf(result);
-        cachedBootstrap = state.bootstrap(); versions = nextVersions;
-        return cached;
+    static Map<SubjectId, ServiceBoundaryProvider.Declaration> declarations(FrontierWorldState state) {
+        var inputs = new ArrayList<Object>();
+        inputs.add(state.bootstrap());
+        PROVIDERS.forEach(provider -> inputs.add(provider.version(state)));
+        return DECLARATIONS.getPublished(inputs, () -> {
+            var result = new LinkedHashMap<SubjectId, ServiceBoundaryProvider.Declaration>();
+            for (var provider : PROVIDERS) for (var declaration : provider.declarations(state)) {
+                if (declaration.kind() != provider.kind() || result.putIfAbsent(declaration.pointId(), declaration) != null)
+                    throw new IllegalArgumentException("foreign or duplicate service boundary declaration");
+            }
+            return Map.copyOf(result);
+        });
     }
     static ServiceAccessBoundary boundary(FrontierWorldState state, SubjectId point) {
         var declaration = declarations(state).get(point);
@@ -72,17 +68,16 @@ public final class ServiceBoundaryComposition {
         return turnoverPoints(state);
     }
     /** Retained identities remain resolvable for draining work; retired facilities impose no new spatial restrictions. */
-    static synchronized Map<SubjectId, ServiceBoundaryProvider.Declaration> operationalDeclarations(FrontierWorldState state) {
+    static Map<SubjectId, ServiceBoundaryProvider.Declaration> operationalDeclarations(FrontierWorldState state) {
         var declared = declarations(state);
-        if (activeDeclarations == declared && activeSurfaces == state.inventory().surfaces()) return active;
-        var result = new LinkedHashMap<SubjectId, ServiceBoundaryProvider.Declaration>();
-        declared.forEach((id, value) -> {
-            var surface = state.inventory().surfaces().get(id);
-            if (surface != null && surface.status() != ContainerSurfaceStatus.RETIRED) result.put(id, value);
+        return ACTIVE.getPublished(List.of(declared, state.inventory().surfaces()), () -> {
+            var result = new LinkedHashMap<SubjectId, ServiceBoundaryProvider.Declaration>();
+            declared.forEach((id, value) -> {
+                var surface = state.inventory().surfaces().get(id);
+                if (surface != null && surface.status() != ContainerSurfaceStatus.RETIRED) result.put(id, value);
+            });
+            return Map.copyOf(result);
         });
-        if (!result.equals(active)) active = Map.copyOf(result);
-        activeDeclarations = declared; activeSurfaces = state.inventory().surfaces();
-        return active;
     }
     public static boolean occupancyChanged(FrontierWorldState state, BodyPosition previous, BodyPosition observed) {
         return !previous.equals(observed) && operationalDeclarations(state).values().stream()
@@ -110,13 +105,19 @@ public final class ServiceBoundaryComposition {
         return Optional.empty();
     }
     static List<ServiceBoundaryProvider.Declaration> nearbyDeclarations(FrontierWorldState state, TerrainColumn column) {
-        return columnIndex(state).candidates().getOrDefault(column, List.of());
+        return nearbyDeclarationIndex(state).getOrDefault(column, List.of());
     }
-    private static synchronized ColumnIndex columnIndex(FrontierWorldState state) {
+    /** Exact immutable broad phase captured once by a multi-contact clearance calculation. */
+    static Map<TerrainColumn, List<ServiceBoundaryProvider.Declaration>> nearbyDeclarationIndex(FrontierWorldState state) {
+        return columnIndex(state).candidates();
+    }
+    private static ColumnIndex columnIndex(FrontierWorldState state) {
+        var columnIndex = COLUMN_INDEX.get();
+        var versions = PROVIDERS.stream().map(provider -> provider.version(state)).toList();
         var declared = operationalDeclarations(state);
         var residents = state.humanPopulation().residents();
         if (columnIndex != null && columnIndex.declarations() == declared
-                && columnIndex.providerVersions() == versions && columnIndex.residents() == residents) return columnIndex;
+                && ImmutablePlanningScope.same(columnIndex.providerVersions(), versions) && columnIndex.residents() == residents) return columnIndex;
         var footprints = new HashMap<ServicePointId, ServiceBoundaryProvider.SearchFootprint>();
         declared.values().forEach(value -> footprints.put(value.identity(),
                 provider(value.kind()).searchFootprint(state, value)));
@@ -124,6 +125,7 @@ public final class ServiceBoundaryComposition {
         // Compare compact producer declarations before expanding thousands of columns.
         if (columnIndex != null && columnIndex.declarations() == declared && columnIndex.footprints().equals(footprints)) {
             columnIndex = new ColumnIndex(declared, versions, residents, columnIndex.footprints(), columnIndex.candidates());
+            COLUMN_INDEX.set(columnIndex);
             return columnIndex;
         }
         var byColumn = new HashMap<TerrainColumn, List<ServiceBoundaryProvider.Declaration>>();
@@ -140,6 +142,7 @@ public final class ServiceBoundaryComposition {
         // separation instead of rehashing this large index into MapN's linear probes.
         columnIndex = new ColumnIndex(declared, versions, residents, Map.copyOf(footprints),
                 Collections.unmodifiableMap(byColumn));
+        COLUMN_INDEX.set(columnIndex);
         return columnIndex;
     }
     private static List<ServiceAccessPoint> turnoverPoints(FrontierWorldState state) {

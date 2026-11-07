@@ -5,6 +5,7 @@ import java.util.List;
 
 /** Departure permission only. Never admits a service turn, resource access or a new private destination. */
 public final class ServiceClearanceRoutes {
+    private final java.util.Map<TerrainColumn, List<ServiceBoundaryProvider.Declaration>> nearby;
     private final SurfaceAnchor origin;
     private final KnownPedestrianRouteKnowledge departure;
     private final KnownPedestrianRouteKnowledge publicGeometry;
@@ -19,6 +20,7 @@ public final class ServiceClearanceRoutes {
         incumbent.ifPresent(point -> ServiceBoundaryComposition.require(state, point));
         departure = PedestrianLocalDeparture.departure(state, origin).forActor(state, actor);
         publicGeometry = KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, actor);
+        nearby = ServiceBoundaryComposition.nearbyDeclarationIndex(state);
     }
 
     public static ServiceClearanceRoutes from(FrontierWorldState state, SubjectId actor, SurfaceAnchor actual) {
@@ -31,7 +33,7 @@ public final class ServiceClearanceRoutes {
     public int evaluatedPointCount() { return evaluated.size(); }
     /** Exact indexed candidates only. Distant service geometry cannot affect this contact. */
     public boolean temporary(SurfaceAnchor surface) {
-        return ServiceBoundaryComposition.nearbyDeclarations(state, new TerrainColumn(surface.x(), surface.z())).stream()
+        return nearby.getOrDefault(new TerrainColumn(surface.x(), surface.z()), List.of()).stream()
                 .anyMatch(declaration -> declaration.idleClearanceAt(surface)
                         || ServiceAreaDestinations.temporary(evaluated.computeIfAbsent(declaration.pointId(),
                             ignored -> ServiceBoundaryComposition.geometry(state, declaration.identity())), surface));
@@ -52,8 +54,8 @@ public final class ServiceClearanceRoutes {
         var continuation = route.subList(firstPublic, route.size());
         if (!publicGeometry.traversable(continuation)) return false;
         var touched = new java.util.TreeMap<SubjectId, ServiceBoundaryProvider.Declaration>();
-        for (var surface : route) for (var declaration : ServiceBoundaryComposition.nearbyDeclarations(state,
-                new TerrainColumn(surface.x(), surface.z()))) touched.put(declaration.pointId(), declaration);
+        for (var surface : route) for (var declaration : nearby.getOrDefault(
+                new TerrainColumn(surface.x(), surface.z()), List.of())) touched.put(declaration.pointId(), declaration);
         for (var point : touched.values()) {
             var boundary = point.boundary();
             // An unused service envelope is ordinary transit, never inventory authority.
