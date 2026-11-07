@@ -103,7 +103,7 @@ final class GoodsTripPlanning {
                 if (!funding.canStart(quote.minimumPrices())) { unfunded++; continue; }
                 var source = GoodsParticipantStorage.endpoint(initial, endpoints.source());
                 var receiver = GoodsParticipantStorage.endpoint(initial, endpoints.receiver());
-                long minimumDuration = ExpeditionJourneyBounds.minimumDuration(initial, source, receiver);
+                long minimumDuration = ExpeditionJourneyBounds.minimumFirstLegDuration(initial, source, receiver);
                 for (var mode : GoodsTradeFulfillment.Mode.values()) {
                     if (selected.filter(value -> value.mode() != mode).isPresent()) continue;
                     var organizer = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller : buyer;

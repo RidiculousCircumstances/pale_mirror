@@ -94,6 +94,14 @@ public record TransportMission(SubjectId id, SubjectId groupId, List<SubjectId> 
         return new TransportMission(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous,
                 stage, revision, financialBudgetId, java.util.Optional.of(load), transportAssetId, replenishment, replenishmentPurchase);
     }
+    public TransportMission replanSupplies(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad load,
+            java.util.Optional<SubjectId> budgetId) {
+        if (!preparingSupplies() || supplies.isEmpty() || load.revision() != supplies.orElseThrow().revision() + 1
+                || replenishment.isPresent() || supplies.orElseThrow().allocations().stream().anyMatch(a -> a.pending().isPresent()))
+            throw new IllegalArgumentException("supply plan replacement lacks its reversible retained generation");
+        return new TransportMission(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous,
+                stage, revision, budgetId, java.util.Optional.of(load), transportAssetId, replenishment, replenishmentPurchase);
+    }
     public TransportMission withFinancialBudget(java.util.Optional<SubjectId> budgetId) {
         if (!preparingSupplies() || revision != 1 || financialBudgetId.isPresent())
             throw new IllegalArgumentException("funding must be declared once before mission admission");

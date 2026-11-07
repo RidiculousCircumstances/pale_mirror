@@ -17,5 +17,12 @@ public final class ExpeditionJourneyBounds {
         // assembly station or provisional distance is the actual shortest trip.
         return edges == 0 ? 0 : state.bootstrap().ruleset().expedition().plannedDuration(edges, edges);
     }
+    /** Food before the first possible supplier visit. Positive advice never secures the return leg. */
+    public static long minimumFirstLegDuration(FrontierWorldState state, ShipmentEndpoint sender, ShipmentEndpoint receiver) {
+        var from = new ArrayList<>(ShipmentEndpointComposition.stations(state, sender)); from.add(sender.station());
+        var to = new ArrayList<>(ShipmentEndpointComposition.stations(state, receiver)); to.add(receiver.station());
+        long edges = GroupRendezvous.minimumHorizontalSeparation(from, to);
+        return edges == 0 ? 0 : state.bootstrap().ruleset().expedition().plannedDuration(edges, 0);
+    }
     private ExpeditionJourneyBounds() { }
 }

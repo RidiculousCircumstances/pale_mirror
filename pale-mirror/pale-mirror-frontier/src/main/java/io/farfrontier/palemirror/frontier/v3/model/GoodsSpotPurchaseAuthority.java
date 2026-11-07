@@ -15,17 +15,26 @@ public final class GoodsSpotPurchaseAuthority {
     }
     public static Optional<Quote> quote(FrontierWorldState state, SubjectId container, SubjectId sellerId,
                                         SubjectId buyerId, String kind, long atTick) {
+        var buyer = state.companies().goodsTrade().participants().participants().get(buyerId);
+        if (buyer == null) return Optional.empty();
+        var maximum = state.bootstrap().ruleset().goodsTrade().policies().get(buyer.policy()).stream()
+                .filter(c -> c.itemKind().equals(kind)).map(c -> GoodsParticipantPricing.bid(buyer,c)).max(Comparator.naturalOrder());
+        return maximum.flatMap(limit -> quote(state,container,sellerId,buyerId,kind,limit,atTick));
+    }
+    /** The purchasing owner supplies its explicit price authorization, independently of a new domestic order. */
+    public static Optional<Quote> quote(FrontierWorldState state, SubjectId container, SubjectId sellerId,
+            SubjectId buyerId, String kind, io.farfrontier.palemirror.frontier.v3.api.FixedScalar maximumUnitPrice, long atTick) {
+        Objects.requireNonNull(maximumUnitPrice);
         var seller = state.companies().goodsTrade().participants().participants().get(sellerId);
         var buyer = state.companies().goodsTrade().participants().participants().get(buyerId);
-        if (seller == null || buyer == null || sellerId.equals(buyerId)
-                || !GoodsParticipantStorage.eligible(state, seller, container, kind)) return Optional.empty();
+        if (seller == null || buyer == null || sellerId.equals(buyerId) || maximumUnitPrice.raw() <= 0
+                || !GoodsParticipantStorage.eligible(state,seller,container,kind)) return Optional.empty();
         var rules = state.bootstrap().ruleset().goodsTrade();
-        var sale = GoodsParticipantPolicies.require(seller).decide(GoodsParticipantAssessment.view(state, seller, atTick), rules).stream()
-                .filter(i -> i.side() == GoodsTradeOrder.Side.SELL && i.itemKind().equals(kind)).findFirst().orElse(null);
-        if (sale == null || rules.policies().get(buyer.policy()).stream().noneMatch(c -> c.itemKind().equals(kind)
-                && GoodsParticipantPricing.bid(buyer, c).compareTo(sale.limit()) >= 0)) return Optional.empty();
-        int quantity = (int) Math.min(sale.quantity(), GoodsParticipantStorage.unclaimed(state, seller, container, kind));
-        return quantity > 0 ? Optional.of(new Quote(quantity, sale.limit())) : Optional.empty();
+        var sale = GoodsParticipantPolicies.require(seller).decide(GoodsParticipantAssessment.view(state,seller,atTick),rules).stream()
+                .filter(i -> i.side()==GoodsTradeOrder.Side.SELL && i.itemKind().equals(kind)).findFirst().orElse(null);
+        if (sale == null || sale.limit().compareTo(maximumUnitPrice)>0) return Optional.empty();
+        int quantity = (int)Math.min(sale.quantity(),GoodsParticipantStorage.unclaimed(state,seller,container,kind));
+        return quantity>0 ? Optional.of(new Quote(quantity,sale.limit())) : Optional.empty();
     }
     public static int availableQuantity(FrontierWorldState state, SubjectId container, SubjectId sellerId,
                                        SubjectId buyerId, SubjectId budgetId, String kind, long atTick) {
@@ -44,7 +53,8 @@ public final class GoodsSpotPurchaseAuthority {
         var seller = state.companies().goodsTrade().participants().participants().get(transfer.sourceEconomicOwnerId());
         if (seller == null || !GoodsParticipantStorage.eligible(state, seller, transfer.containerId(), transfer.itemKind()) || seller.party().id().equals(buyerId)
                 || budget == null || !budget.payerId().equals(buyerId)) return Optional.empty();
-        var sale = quote(state, transfer.containerId(), transfer.sourceEconomicOwnerId(), buyerId, transfer.itemKind(), atTick)
+        var sale = quote(state, transfer.containerId(), transfer.sourceEconomicOwnerId(), buyerId, transfer.itemKind(),
+                new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(budget.remaining().raw()/transfer.quantity()), atTick)
                 .filter(q -> q.quantity() >= transfer.quantity());
         if (sale.isEmpty()) return Optional.empty();
         var amount = sale.orElseThrow().unitPrice().multiply(transfer.quantity());

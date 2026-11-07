@@ -88,7 +88,17 @@ final class FrontierV3GroupDiagnosticJson {
                 + ",\"navigationStatus\":" + string(readiness.status()) + ",\"navigationReason\":" + string(readiness.reason())
                 + ",\"positionSource\":" + string(positionSource)
                 + ",\"provisioningWait\":" + (mission == null ? "null" : supplyWait(state, mission))
+                + ",\"supplyFunding\":" + (mission == null ? "null" : supplyFunding(state, mission))
                 + ",\"members\":[" + members + "],\"schedule\":[" + schedules + "]}";
+    }
+    private static String supplyFunding(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.TransportMission mission) {
+        var purchase = mission.supplies().flatMap(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad::purchase);
+        var budget = mission.financialBudgetId().map(state.inventory().economics().budgets()::get);
+        return "{\"plannedPurchaseQuantity\":" + purchase.map(p -> p.quantity()).orElse(0)
+                + ",\"plannedPurchaseCostRaw\":" + purchase.map(p -> p.amount().raw()).orElse(0L)
+                + ",\"remainingBudgetRaw\":" + budget.map(b -> b.remaining().raw()).orElse(0L)
+                + ",\"paymentHeldRaw\":" + mission.replenishmentPurchase().map(p -> p.payment().amount().raw()).orElse(0L)
+                + ",\"supplierStorage\":" + purchase.map(p -> string(p.supplier().containerId().value())).orElse("null") + "}";
     }
     private static java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult> routeEvidence(
             FrontierWorldState state, UnitGroup group, SurfaceAnchor start, SurfaceAnchor target) {

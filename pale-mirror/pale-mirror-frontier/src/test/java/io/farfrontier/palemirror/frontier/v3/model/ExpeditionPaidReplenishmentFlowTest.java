@@ -16,12 +16,15 @@ import static org.junit.jupiter.api.Assertions.*;
  * the initial placement is not native evidence or a claim that the outward trip was exercised here. */
 class ExpeditionPaidReplenishmentFlowTest {
     @Test void retainedPaidPurchaseSurvivesRecoveryAndClearsTheSupplierBeforePortableEating() {
-        purchaseFlow(false);
+        purchaseFlow(false,false);
     }
     @Test void pausedPaidPurchaseReleasesServiceAndResumesExactPromiseAfterRecovery() {
-        purchaseFlow(true);
+        purchaseFlow(true,false);
     }
-    private void purchaseFlow(boolean interrupt) {
+    @Test void reservedSupplyEnvelopePreservesUnusedFundsAcrossPurchaseCancellationAndActualReceipt() {
+        purchaseFlow(false,true);
+    }
+    private void purchaseFlow(boolean interrupt,boolean preFunded) {
         var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:paid-visited-supplies"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));
         var engine = FrontierEngines.createCanonicalStateAccess(base);
@@ -76,16 +79,38 @@ class ExpeditionPaidReplenishmentFlowTest {
         }
         assertTrue(unloaded); precondition = engine.canonicalState().state(); tick = engine.checkpoint().instant().ticks();
         var retainedMission = precondition.shipments().missions().get(mission.id());
-        assertTrue(retainedMission.financialBudgetId().isEmpty(), "provisioned departure must not hold unrelated cash");
+        if(preFunded) {
+            // Isolated supplier-arrival precondition with an already reserved supply envelope.
+            // Real pre-departure funding is exercised by ExpeditionSupplyBudgetFlowTest.
+            var envelope=new FinancialBudget(new SubjectId("budget:retained-supply-envelope"),retainedMission.organization().sponsor().id(),
+                    FinancialBudget.OwnerKind.TRANSPORT_MISSION,retainedMission.id(),FixedScalar.whole(20));
+            var funded=new TransportMission(retainedMission.id(),retainedMission.groupId(),retainedMission.shipmentIds(),retainedMission.sender(),retainedMission.receiver(),retainedMission.organization(),
+                    retainedMission.homeRendezvous(),retainedMission.destinationRendezvous(),retainedMission.stage(),retainedMission.revision(),Optional.of(envelope.id()),retainedMission.supplies(),
+                    retainedMission.transportAssetId(),retainedMission.replenishment(),retainedMission.replenishmentPurchase());
+            var missions=new LinkedHashMap<>(precondition.shipments().missions());missions.put(funded.id(),funded);
+            precondition=precondition.withChanges(FrontierWorldStateUpdate.begin().shipments(new ShipmentState(precondition.shipments().shipments(),missions,precondition.shipments().accumulation()))
+                    .inventory(precondition.inventory().withEconomics(precondition.inventory().economics().reserveBudget(envelope))));
+            retainedMission=funded;
+        } else assertTrue(retainedMission.financialBudgetId().isEmpty(), "provisioned departure must not hold unrelated cash");
         var transfer = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.select(precondition, retainedMission, tick).orElseThrow();
         assertEquals(mission.receiver().containerId(), transfer.containerId());
         assertFalse(transfer.sourceEconomicOwnerId().equals(mission.sender().settlementId()));
         var held = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.start(precondition, mission.id(), transfer, tick);
         FrontierReferenceClosure.validateTransition(precondition, held, List.of());
         var heldMission = held.shipments().missions().get(mission.id()); var purchase = heldMission.replenishmentPurchase().orElseThrow();
-        assertEquals(FixedScalar.ZERO, held.inventory().economics().budgets().get(heldMission.financialBudgetId().orElseThrow()).remaining());
-        assertEquals(precondition.inventory().economics().availableToReserve(purchase.payment().payerId()).minus(purchase.payment().amount()),
-                held.inventory().economics().availableToReserve(purchase.payment().payerId()), "only the accepted actual food purchase holds money");
+        var remainingBudget=held.inventory().economics().budgets().get(heldMission.financialBudgetId().orElseThrow()).remaining();
+        if(preFunded) {
+            assertEquals(FixedScalar.whole(20).minus(purchase.payment().amount()),remainingBudget);
+            assertEquals(precondition.inventory().economics().availableToReserve(purchase.payment().payerId()),
+                    held.inventory().economics().availableToReserve(purchase.payment().payerId()),
+                    "spending authorization moves into the exact payment hold without reserving cash twice");
+            var cancelled=io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionFundingAuthority.cancelPurchase(held.inventory(),purchase);
+            assertEquals(FixedScalar.whole(20),cancelled.economics().budgets().get(heldMission.financialBudgetId().orElseThrow()).remaining(),"a provably cancelled purchase returns money to this mission's envelope");
+            assertEquals(held.inventory().economics().accounts(),cancelled.economics().accounts(),"cancellation does not invent a refund transfer");
+        } else {
+            assertEquals(FixedScalar.ZERO,remainingBudget);
+            assertEquals(precondition.inventory().economics().availableToReserve(purchase.payment().payerId()).minus(purchase.payment().amount()),held.inventory().economics().availableToReserve(purchase.payment().payerId()));
+        }
         assertEquals(held, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(held)));
         if (interrupt) {
             held = pauseAndResume(held, mission.id(), transfer, tick);
@@ -111,6 +136,7 @@ class ExpeditionPaidReplenishmentFlowTest {
             var current = engine.canonicalState().state();
             if (!current.inventory().economics().reservations().containsKey(purchase.payment().id())) {
                 received = true;
+                if(preFunded)assertEquals(remainingBudget,current.inventory().economics().budgets().get(heldMission.financialBudgetId().orElseThrow()).remaining(),"actual receipt preserves all unused supply funds");
                 assertFalse(current.inventory().fungibleResources().claims().containsKey(transfer.claimId()));
             }
             var movement = current.actorMovements().get(recipient);

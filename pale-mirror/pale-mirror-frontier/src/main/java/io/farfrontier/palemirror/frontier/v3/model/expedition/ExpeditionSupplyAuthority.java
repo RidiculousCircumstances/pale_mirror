@@ -72,8 +72,17 @@ public final class ExpeditionSupplyAuthority {
         ExpeditionSupplyPlanning.requireSelectedLoad(state, mission, state.unitGroups().groups().get(mission.groupId()), value.replacement(), resources);
         for (var allocation : value.replacement().allocations()) resources = ExpeditionSupplyPlanning.reserve(resources, allocation,
                 mission.id(), mission.organization().sponsor().id(), value.replacement().foodKind());
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(resources))
-                .shipments(state.shipments().replaceSupplies(mission, value.replacement())));
+        var replacementBudget = ExpeditionFundingAuthority.plannedBudgetId(mission, value.replacement());
+        var economics = state.inventory().economics();
+        var previous = mission.financialBudgetId().map(economics.budgets()::get);
+        if (replacementBudget.isPresent()) {
+            var amount = value.replacement().purchase().orElseThrow().amount();
+            economics = previous.isPresent() ? economics.resizeBudget(previous.orElseThrow(), amount)
+                    : economics.reserveBudget(new FinancialBudget(replacementBudget.orElseThrow(),
+                        mission.organization().sponsor().id(), FinancialBudget.OwnerKind.TRANSPORT_MISSION, mission.id(), amount));
+        } else if (previous.isPresent()) economics = economics.releaseBudget(previous.orElseThrow().id());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(resources).withEconomics(economics))
+                .shipments(state.shipments().replaceSupplyPlan(mission, value.replacement(), replacementBudget)));
     }
     private static FungibleResourceLedger released(FrontierWorldState state, ExpeditionSupplyLoad load) {
         var claims = load.allocations().stream().filter(a -> !a.loaded() && !a.withdrawn())
@@ -90,6 +99,14 @@ public final class ExpeditionSupplyAuthority {
         ExpeditionReplenishmentAuthority.validate(state, mission);
         if (mission.supplies().isEmpty()) return;
         var load = mission.supplies().orElseThrow(); var resources = state.inventory().fungibleResources();
+        if (load.purchase().isPresent()) {
+            var budget = mission.financialBudgetId().map(state.inventory().economics().budgets()::get)
+                    .orElseThrow(() -> new IllegalArgumentException("planned supply purchase lacks its reserved mission budget"));
+            if (!budget.payerId().equals(mission.organization().sponsor().id()) || !budget.ownerId().equals(mission.id())
+                    || budget.ownerKind() != FinancialBudget.OwnerKind.TRANSPORT_MISSION
+                    || mission.preparingSupplies() && budget.remaining().compareTo(load.purchase().orElseThrow().amount()) < 0)
+                throw new IllegalArgumentException("planned supply purchase has a foreign or insufficient mission budget");
+        }
         var residents = group.members().stream().map(UnitGroup.Member::actorId)
                 .filter(actor -> state.humanPopulation().resident(actor) != null)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -130,7 +147,7 @@ public final class ExpeditionSupplyAuthority {
         if (!load.complete() || now < load.calculatedAtTick()) return false;
         var group = state.unitGroups().groups().get(mission.groupId());
         var fresh = ExpeditionSupplyPlanning.walkingForecast(state, mission, group, now, load.foodKind());
-        return sufficient(state, mission, fresh);
+        return sufficient(state, mission, fresh, now);
     }
     public static boolean loadedForDeparture(FrontierWorldState state, TransportMission mission, long now, ExpeditionJourneyProof proof) {
         proof.require(state, mission);
@@ -138,15 +155,27 @@ public final class ExpeditionSupplyAuthority {
         var load = mission.supplies().orElseThrow();
         if (!load.complete() || now < load.calculatedAtTick()) return false;
         return sufficient(state, mission, ExpeditionSupplyPlanning.retainedForecast(state, mission,
-                state.unitGroups().groups().get(mission.groupId()), now, load.foodKind(), proof));
+                state.unitGroups().groups().get(mission.groupId()), now, load.foodKind(), proof), now);
     }
-    private static boolean sufficient(FrontierWorldState state, TransportMission mission, Optional<ExpeditionProvisioning.Plan> fresh) {
+    private static boolean sufficient(FrontierWorldState state, TransportMission mission, Optional<ExpeditionProvisioning.Plan> fresh, long now) {
         var load = mission.supplies().orElseThrow();
+        if (load.purchase().isPresent() && mission.preparingSupplies()) {
+            var purchase = load.purchase().orElseThrow();
+            var budget = mission.financialBudgetId().map(state.inventory().economics().budgets()::get);
+            if (budget.isEmpty() || ExpeditionSupplyMarket.quote(state,mission,purchase.supplier(),purchase.foodKind(),now)
+                    .filter(q -> q.quantity() >= purchase.quantity() && q.unitPrice().multiply(purchase.quantity()).compareTo(budget.orElseThrow().remaining()) <= 0).isEmpty()) return false;
+            var group = state.unitGroups().groups().get(mission.groupId());
+            var first = ExpeditionSupplyPlanning.firstLegForecast(state, mission, group, now);
+            return first.filter(plan -> plan.feasible() && plan.members().values().stream().allMatch(m -> m.existingFoodItems() >= m.carriedFoodItems())).isPresent()
+                    && fresh.filter(plan -> plan.feasible() && plan.members().values().stream().allMatch(m ->
+                        (long)m.existingFoodItems() + purchase.personalQuantities().getOrDefault(m.actorId(), 0) >= m.carriedFoodItems())).isPresent();
+        }
         return fresh.filter(plan -> plan.feasible() && plan.members().values().stream()
                 .allMatch(member -> member.existingFoodItems() >= member.carriedFoodItems())
                 && (plan.transport() == ExpeditionProvisioning.Transport.WALKING || mission.transportAssetId().isPresent()
                     && sharedFood(state, mission, load.foodKind()) >= plan.sharedFoodItems())).isPresent();
     }
+
     public static int sharedFood(FrontierWorldState state, TransportMission mission, String foodKind) {
         if (mission.transportAssetId().isEmpty()) return 0;
         var asset = state.transportFleet().require(mission.transportAssetId().orElseThrow());

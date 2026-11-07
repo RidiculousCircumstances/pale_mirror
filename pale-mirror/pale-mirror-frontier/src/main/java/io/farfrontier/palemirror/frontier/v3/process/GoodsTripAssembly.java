@@ -70,7 +70,9 @@ final class GoodsTripAssembly {
         var candidates = people.stream().map(ResidentProfile::id).toList();
         for (var option : GoodsTransportOptions.forLoad(state, organizer, forecastDuration, parcels.size(), people.size(), now)) {
             var selected = ExpeditionCrewAdmission.select(state, organizer.settlementId(), candidates,
-                    option.workers(), option.animal(), forecastDuration, now,
+                    option.workers(), option.animal(), ExpeditionJourneyBounds.minimumFirstLegDuration(state,
+                            GoodsParticipantStorage.endpoint(state, parcels.getFirst().contract().sourceContainerId()),
+                            GoodsParticipantStorage.endpoint(state, parcels.getFirst().contract().receiverContainerId())), now,
                     ids -> SettlementLabourAllocation.canCommitToMission(state, organizer.settlementId(), ResidentWorkKind.LOGISTICS, ids));
             if (selected.isEmpty()) continue;
             var prepared = declaration(state, seller, buyer, parcels, mode,

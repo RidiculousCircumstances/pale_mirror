@@ -170,6 +170,13 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.withSupplies(supplies));
         return new ShipmentState(shipments, next, accumulation);
     }
+    public ShipmentState replaceSupplyPlan(TransportMission mission,
+            io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad supplies,
+            java.util.Optional<SubjectId> budgetId) {
+        if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale provisioning predecessor");
+        var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.replanSupplies(supplies,budgetId));
+        return new ShipmentState(shipments, next, accumulation);
+    }
     public ShipmentState abortLoadingMission(TransportMission mission) {
         if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale loading-abort predecessor");
         var next = ImmutableLookupMap.withEntry(missions, mission.id(), mission.abortLoading());

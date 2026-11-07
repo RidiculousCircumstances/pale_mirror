@@ -70,6 +70,8 @@ public final class TransportMissionProcess {
         TransportGroupMissionPort.validateRendezvous(state, mission.organization().itinerary() == TransportOrganization.Itinerary.SOURCE_DELIVERY ? mission.receiver() : mission.sender(), mission.destinationRendezvous(), group.members().size());
         var economics = state.inventory().economics();
         var budgetAmount = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionFundingAuthority.allocation(state, mission);
+        if (mission.financialBudgetId().isPresent() != (budgetAmount.raw() > 0))
+            throw new IllegalArgumentException("expedition budget declaration differs from its priced supply plan");
         if (mission.financialBudgetId().isPresent()) {
             economics = economics.reserveBudget(new FinancialBudget(mission.financialBudgetId().orElseThrow(),
                     mission.organization().sponsor().id(), FinancialBudget.OwnerKind.TRANSPORT_MISSION, mission.id(), budgetAmount));

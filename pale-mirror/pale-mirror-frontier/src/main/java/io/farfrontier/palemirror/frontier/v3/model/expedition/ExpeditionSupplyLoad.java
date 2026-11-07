@@ -10,7 +10,7 @@ import java.util.Optional;
 /** Retained loading obligations, not another stock ledger. Only a custody receipt marks a load done. */
 public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, long calculatedAtTick,
                                     Map<SubjectId, Integer> foodTargets, Map<SubjectId, SurfaceAnchor> assemblyStations, List<Allocation> allocations,
-                                    long revision, ExpeditionJourneyProof journey) {
+                                    long revision, ExpeditionJourneyProof journey, Optional<ExpeditionSupplyPurchase> purchase) {
     public enum Outcome {
         RESERVED(0), LOADED(1), SOURCE_WITHDRAWN(2);
         private final int wireTag;
@@ -53,7 +53,7 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
         }
     }
     public ExpeditionSupplyLoad {
-        Objects.requireNonNull(foodKind); Objects.requireNonNull(journey);
+        Objects.requireNonNull(foodKind); Objects.requireNonNull(journey); purchase = Objects.requireNonNull(purchase);
         foodTargets = Map.copyOf(foodTargets); assemblyStations = Map.copyOf(assemblyStations); allocations = List.copyOf(allocations);
         if (assemblyStations.isEmpty() || foodTargets.size() > 32 || assemblyStations.size() > 32 || forecastDurationTicks < 0 || calculatedAtTick < 0 || revision < 1
                 || foodTargets.values().stream().anyMatch(q -> q == null || q < 0 || q > 640)
@@ -62,6 +62,9 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
                 || !assemblyStations.keySet().containsAll(foodTargets.keySet())
                 || assemblyStations.values().stream().distinct().count() != assemblyStations.size())
             throw new IllegalArgumentException("invalid retained expedition loading plan");
+        if (purchase.isPresent() && (!purchase.orElseThrow().foodKind().equals(foodKind)
+                || !foodTargets.keySet().containsAll(purchase.orElseThrow().personalQuantities().keySet())))
+            throw new IllegalArgumentException("planned purchase has foreign food or roster");
         for (var allocation : allocations) if (!assemblyStations.containsKey(allocation.actorId())
                 || !(allocation.slot() instanceof ActorItemSlot.AttachedStorage) && !foodTargets.containsKey(allocation.actorId()))
             throw new IllegalArgumentException("supply allocation names a foreign participant");
@@ -87,7 +90,7 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
                 || !before.slot().equals(after.slot()) || !before.lots().equals(after.lots()))
             throw new IllegalArgumentException("supply transition changes its exact allocation");
         return new ExpeditionSupplyLoad(foodKind, forecastDurationTicks, calculatedAtTick, foodTargets, assemblyStations,
-                allocations.stream().map(a -> a.equals(before) ? after : a).toList(), revision, journey);
+                allocations.stream().map(a -> a.equals(before) ? after : a).toList(), revision, journey, purchase);
     }
     public ActorContainerItemOrder order(SubjectId owner, Allocation allocation) {
         int ordinal = allocations.indexOf(allocation);

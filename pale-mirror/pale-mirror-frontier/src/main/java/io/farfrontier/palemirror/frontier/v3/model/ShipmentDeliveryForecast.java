@@ -27,7 +27,7 @@ public final class ShipmentDeliveryForecast {
         // has no reliable ETA, whether the mission will refill here or continue.
         if (port.requestsJourneyStop(state, group) || mission.replenishment().isPresent()
                 || io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority
-                    .requiresPersonalStock(state, mission))
+                    .requiresPersonalStock(state, mission, 0))
             return DeliveryEstimate.unknown(GROUP_HELD);
         if (group.phase() != UnitGroup.Phase.TRAVELLING || group.goalOrdinal() != mission.deliveryOrdinal())
             return DeliveryEstimate.unknown(MOVEMENT_PENDING);

@@ -11,6 +11,14 @@ final class ExpeditionSupplyLoadCodec {
         out.writeUTF(load.foodKind()); out.writeLong(load.forecastDurationTicks()); out.writeLong(load.calculatedAtTick()); out.writeLong(load.revision());
         PedestrianPathProofCodec.write(out, load.journey().outward());
         PedestrianPathProofCodec.write(out, load.journey().returning());
+        out.writeBoolean(load.purchase().isPresent());
+        if (load.purchase().isPresent()) {
+            var purchase = load.purchase().orElseThrow(); ShipmentStateCodec.endpoint(out, purchase.supplier());
+            out.writeUTF(purchase.foodKind()); out.writeLong(purchase.unitPrice().raw()); out.writeByte(purchase.personalQuantities().size());
+            for (var entry : new TreeMap<>(purchase.personalQuantities()).entrySet()) {
+                UnitGroupStateCodec.id(out, entry.getKey()); out.writeInt(entry.getValue());
+            }
+        }
         out.writeByte(load.foodTargets().size());
         for (var entry : new TreeMap<>(load.foodTargets()).entrySet()) {
             UnitGroupStateCodec.id(out, entry.getKey()); out.writeInt(entry.getValue());
@@ -33,6 +41,16 @@ final class ExpeditionSupplyLoadCodec {
         String kind = in.readUTF(); long duration = in.readLong(), tick = in.readLong(), revision = in.readLong();
         var journey = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof(
                 PedestrianPathProofCodec.read(in), PedestrianPathProofCodec.read(in));
+        Optional<io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPurchase> purchase = Optional.empty();
+        if (in.readBoolean()) {
+            var supplier = ShipmentStateCodec.endpoint(in); var food = in.readUTF();
+            var price = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(in.readLong());
+            int size = in.readUnsignedByte(); if (size < 1 || size > 32) throw new IllegalArgumentException("invalid purchase roster");
+            var portions = new LinkedHashMap<SubjectId, Integer>();
+            for (int i = 0; i < size; i++) if (portions.put(UnitGroupStateCodec.id(in), in.readInt()) != null)
+                throw new IllegalArgumentException("duplicate purchase recipient");
+            purchase = Optional.of(new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPurchase(supplier, food, portions, price));
+        }
         int count = in.readUnsignedByte(); if (count > 32) throw new IllegalArgumentException("invalid supply roster size");
         var targets = new LinkedHashMap<SubjectId, Integer>();
         var assembly = new LinkedHashMap<SubjectId, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor>();
@@ -48,6 +66,6 @@ final class ExpeditionSupplyLoadCodec {
                 UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), ShipmentStateCodec.endpoint(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),
                 ActorItemSlotCodec.read(in), ShipmentStateCodec.lots(in), ExpeditionSupplyLoad.Outcome.fromWireTag(in.readUnsignedByte()),
                 in.readBoolean() ? Optional.of(ActorItemTransferStepCodec.read(in)) : Optional.empty()));
-        return new ExpeditionSupplyLoad(kind, duration, tick, targets, assembly, allocations, revision, journey);
+        return new ExpeditionSupplyLoad(kind, duration, tick, targets, assembly, allocations, revision, journey, purchase);
     }
 }

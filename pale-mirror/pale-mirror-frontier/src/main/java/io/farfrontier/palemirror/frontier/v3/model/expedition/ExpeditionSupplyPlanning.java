@@ -35,8 +35,17 @@ public final class ExpeditionSupplyPlanning {
             if (inputs.isEmpty()) return Optional.empty();
             var input = inputs.orElseThrow(); var free = input.freeSlots();
             int foodAvailable = availableFood(state, mission, resources, food.itemKind());
-            var plan = forecast(state, mission, group, input, food, foodAvailable);
-            if (!plan.feasible()) continue;
+            var full = forecast(state, mission, group, input, food, foodAvailable);
+            var plan = full; Optional<ExpeditionSupplyPurchase> purchase = Optional.empty();
+            if (!full.feasible()) {
+                if (full.refusal() != ExpeditionProvisioning.Refusal.FOOD_STOCK) continue;
+                full = forecast(state, mission, group, input, food, Integer.MAX_VALUE);
+                if (!full.feasible()) continue;
+                plan = forecast(state, mission, group, new WalkingInputs(input.roster(), input.freeSlots(), input.outward(), 0), food, foodAvailable);
+                if (!plan.feasible()) continue;
+                purchase = purchase(state, mission, full, plan, now);
+                if (purchase.isEmpty()) continue;
+            }
             var allocations = new ArrayList<ExpeditionSupplyLoad.Allocation>(); var targets = new LinkedHashMap<SubjectId, Integer>();
             var pickupOrigins = new HashMap<SubjectId, SurfaceAnchor>();
             boolean fits = true;
@@ -87,7 +96,7 @@ public final class ExpeditionSupplyPlanning {
                 try {
                     var living = group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE).toList();
                     var assembly = GroupFormation.stations(living, List.of(mission.homeRendezvous()), 0, knowledge, state.bootstrap().ruleset().expedition().formationSpacing());
-                    return Optional.of(new ExpeditionSupplyLoad(food.itemKind(), plan.durationTicks(), now, targets, assembly, allocations, revision, journey));
+                    return Optional.of(new ExpeditionSupplyLoad(food.itemKind(), full.durationTicks(), now, targets, assembly, allocations, revision, journey, purchase));
                 } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                     if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
                     return Optional.empty();
@@ -106,7 +115,14 @@ public final class ExpeditionSupplyPlanning {
         for (var food : state.bootstrap().ruleset().residentLife().foods().foods().values()) {
             var input = walkingInputs(state, mission, group, now, food, resources, edges, edges);
             int stock = availableFood(state, mission, resources, food.itemKind());
-            if (input.isPresent() && forecast(state, mission, group, input.orElseThrow(), food, stock).feasible()) return true;
+            if (input.isPresent()) {
+                var facts = input.orElseThrow(); var full = forecast(state, mission, group, facts, food, stock);
+                if (full.feasible()) return true;
+                if (full.refusal() == ExpeditionProvisioning.Refusal.FOOD_STOCK) {
+                    var firstLeg = forecast(state, mission, group, new WalkingInputs(facts.roster(), facts.freeSlots(), facts.outward(), 0), food, stock);
+                    if (firstLeg.feasible() && purchase(state, mission, forecast(state, mission, group, facts, food, Integer.MAX_VALUE), firstLeg, now).isPresent()) return true;
+                }
+            }
         }
         return false;
     }
@@ -119,7 +135,14 @@ public final class ExpeditionSupplyPlanning {
         for (var food : state.bootstrap().ruleset().residentLife().foods().foods().values()) {
             var input = walkingInputs(state, mission, group, now, food, resources, journey.outward().edges(), journey.returning().edges());
             int stock = availableFood(state, mission, resources, food.itemKind());
-            if (input.isPresent() && forecast(state, mission, group, input.orElseThrow(), food, stock).feasible()) return true;
+            if (input.isPresent()) {
+                var facts = input.orElseThrow(); var full = forecast(state, mission, group, facts, food, stock);
+                if (full.feasible()) return true;
+                if (full.refusal() == ExpeditionProvisioning.Refusal.FOOD_STOCK) {
+                    var firstLeg = forecast(state, mission, group, new WalkingInputs(facts.roster(), facts.freeSlots(), facts.outward(), 0), food, stock);
+                    if (firstLeg.feasible() && purchase(state, mission, forecast(state, mission, group, facts, food, Integer.MAX_VALUE), firstLeg, now).isPresent()) return true;
+                }
+            }
         }
         return false;
     }
@@ -172,11 +195,14 @@ public final class ExpeditionSupplyPlanning {
                 load.journey().outward().edges(), load.journey().returning().edges()).orElseThrow();
         // Replay checks only the declared stock. Reserving the exact lots below
         // proves availability; it cannot discover a different source or route.
-        var plan = forecast(state, mission, group, input, food,
+        var full = forecast(state, mission, group, input, food, Integer.MAX_VALUE);
+        var homeInput = load.purchase().isPresent() ? new WalkingInputs(input.roster(), input.freeSlots(), input.outward(), 0) : input;
+        var plan = forecast(state, mission, group, homeInput, food,
                 load.allocations().stream().mapToInt(ExpeditionSupplyLoad.Allocation::quantity).sum());
+        if (load.purchase().isPresent()) requirePurchase(state, mission, full, plan, load.purchase().orElseThrow(), load.calculatedAtTick());
         var targets = new LinkedHashMap<SubjectId, Integer>();
         plan.members().forEach((id, member) -> targets.put(id, member.requiredFoodItems()));
-        if (!plan.feasible() || plan.durationTicks() != load.forecastDurationTicks() || !targets.equals(load.foodTargets())
+        if (!plan.feasible() || full.durationTicks() != load.forecastDurationTicks() || !targets.equals(load.foodTargets())
                 || load.allocations().stream().anyMatch(a -> a.outcome() != ExpeditionSupplyLoad.Outcome.RESERVED || a.pending().isPresent()
                     || !(a.slot() instanceof ActorItemSlot.AttachedStorage)
                         && (!input.freeSlots().getOrDefault(a.actorId(), List.of()).contains(a.slot())
@@ -201,6 +227,45 @@ public final class ExpeditionSupplyPlanning {
         if (!GroupFormation.stations(living, List.of(mission.homeRendezvous()), 0, knowledge,
                 state.bootstrap().ruleset().expedition().formationSpacing()).equals(load.assemblyStations()))
             throw new IllegalArgumentException("selected supply assembly has foreign local geometry");
+    }
+    private static Map<SubjectId, Integer> purchaseQuantities(ExpeditionProvisioning.Plan full, ExpeditionProvisioning.Plan home) {
+        var quantities = new LinkedHashMap<SubjectId, Integer>();
+        // Personal deficits only. Shared animal cargo is fully loaded by the existing owner.
+        for (var member : full.members().values()) {
+            int quantity = Math.max(0, member.requiredFoodItems() - home.members().get(member.actorId()).requiredFoodItems());
+            if (quantity > 0) quantities.put(member.actorId(), quantity);
+        }
+        return Map.copyOf(quantities);
+    }
+    private static Optional<ExpeditionSupplyPurchase> purchase(FrontierWorldState state, TransportMission mission,
+            ExpeditionProvisioning.Plan full, ExpeditionProvisioning.Plan home, long now) {
+        if (!full.feasible() || full.sharedFoodItems() > 0 || !home.feasible()) return Optional.empty();
+        var quantities = purchaseQuantities(full, home); if (quantities.isEmpty()) return Optional.empty();
+        int count = quantities.values().stream().reduce(0, Math::addExact);
+        return ExpeditionSupplyMarket.storages(state, mission, full.foodKind()).stream()
+                .flatMap(source -> ExpeditionSupplyMarket.quote(state, mission, source, full.foodKind(), now)
+                    .filter(q -> q.quantity() >= count)
+                    .filter(q -> q.unitPrice().multiply(count).compareTo(ExpeditionFundingAuthority.availableForPlan(state, mission)) <= 0)
+                    .map(q -> new ExpeditionSupplyPurchase(source, full.foodKind(), quantities, q.unitPrice())).stream())
+                .min(Comparator.comparing(ExpeditionSupplyPurchase::amount).thenComparing(p -> p.supplier().containerId()));
+    }
+    private static void requirePurchase(FrontierWorldState state, TransportMission mission,
+            ExpeditionProvisioning.Plan full, ExpeditionProvisioning.Plan home, ExpeditionSupplyPurchase purchase, long now) {
+        var remote = mission.organization().itinerary() == TransportOrganization.Itinerary.SOURCE_DELIVERY ? mission.receiver() : mission.sender();
+        ShipmentEndpointComposition.validate(state, purchase.supplier());
+        if (!full.feasible() || !home.feasible() || full.sharedFoodItems() > 0 || !purchase.supplier().settlementId().equals(remote.settlementId())
+                || !purchase.foodKind().equals(full.foodKind()) || !purchase.personalQuantities().equals(purchaseQuantities(full, home))
+                || purchase.amount().compareTo(ExpeditionFundingAuthority.availableForPlan(state, mission)) > 0
+                || ExpeditionSupplyMarket.quote(state, mission, purchase.supplier(), full.foodKind(), now)
+                    .filter(q -> q.quantity() >= purchase.quantity() && q.unitPrice().equals(purchase.unitPrice())).isEmpty())
+            throw new IllegalArgumentException("planned supply purchase lost its exact supplier, forecast, price or funds");
+    }
+    /** Remaining first-leg demand uses retained geometry, not a second search. */
+    static Optional<ExpeditionProvisioning.Plan> firstLegForecast(FrontierWorldState state, TransportMission mission, UnitGroup group, long now) {
+        var load = mission.supplies().orElseThrow();
+        var food = state.bootstrap().ruleset().residentLife().foods().require(load.foodKind());
+        return walkingInputs(state, mission, group, now, food, state.inventory().fungibleResources(), load.journey().outward().edges(), 0)
+                .map(input -> forecast(state, mission, group, input, food, Integer.MAX_VALUE));
     }
     private record WalkingInputs(List<ExpeditionProvisioning.Member> roster, Map<SubjectId, List<ActorItemSlot>> freeSlots,
                                  long outward, long returning) { }

@@ -25,7 +25,10 @@ public final class GoodsTransportValuation {
             items = Math.addExact(items, ExpeditionProvisioning.requiredFoodItems(load.forecastDurationTicks(),
                     life.mealTargetUnits(), resident.characteristics().effectiveMetabolismPermille(now), food, life));
         }
-        return new DeliveryCost(GoodsResourceValuation.replacement(state, organizer, load.foodKind(), now).multiply(items),
+        var planned = load.purchase();
+        var carriedCost = GoodsResourceValuation.replacement(state, organizer, load.foodKind(), now)
+                .multiply(Math.max(0, items - planned.map(p -> p.quantity()).orElse(0)));
+        return new DeliveryCost(carriedCost.plus(planned.map(p -> p.amount()).orElse(FixedScalar.ZERO)),
                 Math.multiplyExact(load.forecastDurationTicks(), load.foodTargets().size()));
     }
 }
