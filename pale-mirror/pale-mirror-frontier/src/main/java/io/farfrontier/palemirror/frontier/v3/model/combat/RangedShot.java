@@ -6,9 +6,11 @@ import java.util.*;
 /** Exact native emission intent. A projectile, never a ranged MeleeStrike, owns its later collision. */
 public record RangedShot(ActorActuationId attacker, CombatMethod method, long ownerRevision, SubjectId weapon,
         ItemCondition before, CombatTarget target, long targetIncarnation, SubjectId ammunitionAccount,
-        SubjectId ammunitionLot, String ammunition, PhysicalStackBinding binding, long attemptOrdinal, long preparedAt, CombatProfile actorProfile) {
+        SubjectId ammunitionLot, String ammunition, PhysicalStackBinding binding, long attemptOrdinal, long preparedAt, CombatProfile actorProfile, RangedTechnique technique, SurfaceAnchor origin) {
     public RangedShot {
-        Objects.requireNonNull(actorProfile);actorProfile.skill(CombatSkillId.CROSSBOW);Objects.requireNonNull(attacker);Objects.requireNonNull(weapon);Objects.requireNonNull(before);Objects.requireNonNull(target);
+        Objects.requireNonNull(technique);Objects.requireNonNull(origin);Objects.requireNonNull(actorProfile);
+        if(!technique.unlocked(actorProfile))throw new IllegalArgumentException("unlearned ranged technique");actorProfile.skill(CombatSkillId.CROSSBOW);Objects.requireNonNull(attacker);Objects.requireNonNull(weapon);
+                Objects.requireNonNull(before);Objects.requireNonNull(target);
         Objects.requireNonNull(ammunitionAccount);Objects.requireNonNull(ammunitionLot);Objects.requireNonNull(ammunition);Objects.requireNonNull(binding);
         if(method!=CombatMethod.CROSSBOW || ownerRevision<1 || targetIncarnation<0 || attemptOrdinal<1 || preparedAt<0 || before.remaining()<1
                 || !binding.accountId().equals(ammunitionAccount) || !binding.itemKind().equals(ammunition)

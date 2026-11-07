@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class RangedManufactureTest {
     @ParameterizedTest @ValueSource(strings={"make_crossbow","iron_arrowheads","cloth_arrows"})
     void stationManufacturesExactDeclaredOutputsAndCannotReplay(String name){
-        var s=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ranged-manufacture"),139,FrontierRulesets.installed("frontier-v3-ranged-guards-r33")));
+        var s=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ranged-manufacture"),139,FrontierRulesets.installed("frontier-v3-ranged-guards-r34")));
         var recipe=s.bootstrap().ruleset().production().require(new ProductionRecipe.Id("pale_mirror:"+name));
         var record=s.inventory().containers().values().stream().filter(c->c.productionStation().filter(p->p.capability()==recipe.capability()).isPresent()).sorted(Comparator.comparing(ContainerRecord::id)).findFirst().orElseThrow();
         var station=record.productionStation().orElseThrow();var ledger=s.inventory().fungibleResources();int slot=0;

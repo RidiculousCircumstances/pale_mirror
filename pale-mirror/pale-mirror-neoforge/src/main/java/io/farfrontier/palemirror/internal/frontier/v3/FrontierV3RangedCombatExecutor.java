@@ -38,18 +38,26 @@ final class FrontierV3RangedCombatExecutor {
             state=runtime.decodedState().orElseThrow();order=CombatComposition.CAPABILITIES.current(state,order.execution(),tick).orElse(null);if(order==null)continue;
             var use=(CombatUse.Crossbow)order.use();var rules=state.bootstrap().ruleset().ranged();
             boolean visible=fighter.hasLineOfSight(target),clear=visible&&clearShot(level,fighter,target,rules);
-            var sight=new RangedStance(permission.id(),order.target(),order.targetPosition(),visible,clear,tick);
+            var motion=FrontierV3CombatTargetMotion.observe(fighter,target,permission.id(),visible,rules.sensingTicks());
+            var prior=state.combat().ranged().stances().get(order.owner());
+            boolean same=prior!=null&&prior.observer().equals(permission.id())&&prior.target().equals(order.target())&&tick>=prior.atTick()&&tick-prior.atTick()<=2L*rules.sensingTicks();
+            boolean attacking=visible&&target.swinging;
+            long opening=same?prior.openingAt():-1;
+            if(same&&visible&&(!prior.visible()||prior.attacking()&&!attacking))opening=tick;
+            var sight=new RangedStance(permission.id(),order.target(),order.targetPosition(),visible,clear,visible&&motion.separating() < -0.08,
+                    visible&&Math.hypot(motion.x(),motion.z())>0.06,attacking,opening,tick);
             FrontierV3CommandSubmission.propose(runtime,"ranged-sight",order.owner().value(),new RangedEvent.Observed(sight));
-            FrontierV3CombatFacing.face(fighter,target.getEyePosition());
+            if(visible)FrontierV3CombatFacing.face(fighter,target.getEyePosition());
             if(!visible||!clear || state.actorMovements().containsKey(order.execution().actorId()) || state.combat().ranged().unsettled(order.owner())
-                    || tick<state.combat().ranged().nextAttack().getOrDefault(order.owner(),0L) || !inRange(fighter,target,rules))continue;
+                    || RangedTactics.relocate(state.combat().ranged(),order,tick) || tick<state.combat().ranged().nextAttack().getOrDefault(order.owner(),0L) || !inRange(fighter,target,rules))continue;
             var item=state.inventory().items().get(order.weapon());
             if(item==null || !(fighter.getMainHandItem().getItem() instanceof CrossbowItem) || !FrontierV3ExactItemPresentation.exactMatch(fighter.getMainHandItem(),item))continue;
             var ammo=Ammunition.spendable(state,order.execution().actorId(),item.economicOwnerId(),use.ammunition());if(ammo.isEmpty())continue;
             var b=ammo.orElseThrow();var slot=slot(b.address());var actual=FrontierV3ActorResourceSlots.get(fighter,slot);
             if(actual.getCount()!=b.quantity()||!net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(actual.getItem()).toString().equals(use.ammunition()))continue;
             var shot=new RangedShot(permission.id(),order.method(),order.revision(),order.weapon(),item.condition(),order.target(),targetPort(target).identity().incarnation(),
-                    b.accountId(),b.lotQuantities().keySet().stream().min(Comparator.naturalOrder()).orElseThrow(),use.ammunition(),b,tick+1,tick,order.profile());
+                    b.accountId(),b.lotQuantities().keySet().stream().min(Comparator.naturalOrder()).orElseThrow(),use.ammunition(),b,tick+1,tick,order.profile(),RangedTactics.choose(state.combat().ranged(),order,sight,
+                            tick,rules),order.actorPosition());
             FrontierV3CommandSubmission.propose(runtime,"ranged-prepare",order.owner().value(),new RangedEvent.Prepared(shot));
         }
     }
@@ -98,12 +106,15 @@ final class FrontierV3RangedCombatExecutor {
         fighter.getPersistentData().remove(CLOCK);
     }
     static FrontierV3NativeEffect.Outcome emit(ServerLevel level,Mob fighter,LivingEntity target,RangedShot shot,RangedRules rules,ActorItemSlot ammoSlot){
+                    if(!clearShot(level,fighter,target,rules)||!inRange(fighter,target,rules))return FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT;
+                    var clock=fighter.getPersistentData().getCompound(CLOCK);
+                    if(clock.getBoolean("windowed")&&level.getGameTime()>clock.getLong("releaseUntil"))return FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT;
                     var ammo=FrontierV3ActorResourceSlots.get(fighter,ammoSlot);var weapon=fighter.getMainHandItem();
                     if(!(ammo.getItem() instanceof ArrowItem arrowItem)||!(weapon.getItem() instanceof CrossbowItem))return FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT;
                     var projectile=arrowItem.createArrow(level,ammo.copyWithCount(1),fighter,weapon);projectile.setUUID(shot.projectileId());
                     var motion=FrontierV3CombatTargetMotion.observe(fighter,target,shot.attacker(),true,rules.sensingTicks());
                     var aim=aim(fighter,target,rules,new Vec3(motion.x(),0,motion.z()));
-                    FrontierV3CombatFacing.face(fighter,fighter.getEyePosition().add(aim));projectile.shoot(aim.x,aim.y,aim.z,rules.projectileSpeedMicros()/1000000f,RangedMechanics.inaccuracy(shot.actorProfile(),rules));
+                    FrontierV3CombatFacing.face(fighter,fighter.getEyePosition().add(aim));projectile.shoot(aim.x,aim.y,aim.z,rules.projectileSpeedMicros()/1000000f,RangedMechanics.inaccuracy(shot.actorProfile(),rules,shot.technique()));
                     projectile.setSoundEvent(SoundEvents.CROSSBOW_HIT);projectile.pickup=AbstractArrow.Pickup.DISALLOWED;
                     // The launch is a transient vanilla effect. Its actor-side emission witness prevents replay after reload/restart, even after the projectile has expired.
                     if(!level.addFreshEntity(projectile))return FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT;
@@ -123,7 +134,7 @@ final class FrontierV3RangedCombatExecutor {
         try{ActorBodyAuthority.requireActuation(s,shot.attacker());}catch(IllegalArgumentException stale){return false;}
         return targetPort(target).identity().incarnation()==shot.targetIncarnation() && CombatComposition.CAPABILITIES.current(s,shot.attacker().execution(),tick)
                 .filter(o->o.method()==shot.method()&&o.revision()==shot.ownerRevision()&&o.weapon().equals(shot.weapon())&&o.target().equals(shot.target())).isPresent()
-                && inRange(actor,target,s.bootstrap().ruleset().ranged())&&clearShot((ServerLevel)actor.level(),actor,target,s.bootstrap().ruleset().ranged())
+                && inRange(actor,target,s.bootstrap().ruleset().ranged())
                 && s.inventory().items().containsKey(shot.weapon())
                 && FrontierV3ExactItemPresentation.exactMatch(actor.getMainHandItem(),s.inventory().items().get(shot.weapon()));
     }
@@ -133,14 +144,33 @@ final class FrontierV3RangedCombatExecutor {
             marker=new CompoundTag();marker.putString("owner",shot.owner().value());marker.putLong("ordinal",shot.attemptOrdinal());marker.putLong("start",level.getGameTime());actor.getPersistentData().put(CLOCK,marker);
             actor.startUsingItem(InteractionHand.MAIN_HAND);level.playSound(null,actor.getX(),actor.getY(),actor.getZ(),SoundEvents.CROSSBOW_LOADING_START,SoundSource.HOSTILE,1f,1f);
         }
-        FrontierV3CombatTargetMotion.observe(actor,target,shot.attacker(),true,rules.sensingTicks());
-        FrontierV3CombatFacing.face(actor,target.getEyePosition());long elapsed=level.getGameTime()-marker.getLong("start");
+        boolean visible=actor.hasLineOfSight(target),clear=visible&&clearShot(level,actor,target,rules),attacking=visible&&target.swinging;
+        FrontierV3CombatTargetMotion.observe(actor,target,shot.attacker(),visible,rules.sensingTicks());
+        if(visible)FrontierV3CombatFacing.face(actor,target.getEyePosition());
+        long now=level.getGameTime(),elapsed=now-marker.getLong("start");
+        if(attacking&&!marker.getBoolean("attacking"))marker.putLong("attackStart",now);
+        boolean recovered=visible&&marker.getBoolean("attacking")&&!attacking;
+        boolean revealed=clear&&marker.contains("clear")&&!marker.getBoolean("clear");
+        if(recovered||revealed){marker.putLong("opening",now);marker.putBoolean("recovery",recovered);}
+        marker.putBoolean("attacking",attacking);marker.putBoolean("clear",clear);
         if(elapsed<RangedMechanics.reloadTicks(shot.actorProfile(),rules))return FrontierV3NativeEffect.Admission.waiting("crossbow-reload");
         // Aiming is presentation, not ammunition custody. A preview arrow in the
         // real weapon can escape through a save/drop and strand strict unload recovery.
         // Keep the ordinary using-item pose; only emit spends the actual pocket arrow.
         if(!actor.isUsingItem())actor.startUsingItem(InteractionHand.MAIN_HAND);
-        return elapsed<RangedMechanics.reloadTicks(shot.actorProfile(),rules)+RangedMechanics.aimTicks(shot.actorProfile(),rules)?FrontierV3NativeEffect.Admission.waiting("crossbow-aim"):FrontierV3NativeEffect.Admission.READY;
+        long ready=RangedMechanics.reloadTicks(shot.actorProfile(),rules)+RangedMechanics.aimTicks(shot.actorProfile(),rules,shot.technique());
+        if(elapsed<ready)return FrontierV3NativeEffect.Admission.waiting("crossbow-aim");
+        long waited=elapsed-ready;int reaction=RangedMechanics.reactionTicks(shot.actorProfile());
+        boolean window=marker.contains("opening")&&now-marker.getLong("opening")>=reaction&&now-marker.getLong("opening")<=reaction+6;
+        if(shot.technique()==RangedTechnique.HELD&&visible&&attacking&&marker.contains("attackStart")&&now-marker.getLong("attackStart")>=reaction)window=true;
+        if(shot.technique()==RangedTechnique.COUNTERSHOT)window=window&&marker.getBoolean("recovery");
+        if(shot.technique().holdTicks()>0&&waited<shot.technique().holdTicks()){
+            if(!clear||!window)return FrontierV3NativeEffect.Admission.waiting("crossbow-opening");
+            marker.putBoolean("windowed",true);marker.putLong("releaseUntil",now+6);
+        }else if(!clear&&waited<shot.technique().holdTicks()+20)return FrontierV3NativeEffect.Admission.waiting("crossbow-clear-lane");
+        else marker.putBoolean("windowed",false);
+        // READY behind expired cover is a positively refused, non-emitted operation, never a late hit.
+        return FrontierV3NativeEffect.Admission.READY;
     }
     private static boolean ammunitionBefore(Mob actor,RangedShot shot){
         var actual=FrontierV3ActorResourceSlots.get(actor,slot(shot.binding().address()));

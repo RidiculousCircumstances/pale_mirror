@@ -267,6 +267,15 @@ public final class FrontierV3CombatTrace {
                         row.addProperty("lastHarmedAt",exchange.harmedAt());row.addProperty("pressureHandledThrough",exchange.handledThrough());
                         row.addProperty("duelSide",exchange.side());
                     }
+                    var rangedShot=combat.ranged().pending().get(owner);
+                    if(rangedShot!=null&&rangedShot.attacker().execution().equals(current)){
+                        row.addProperty("rangedTechnique",rangedShot.technique().name());row.addProperty("rangedAttempt",rangedShot.attemptOrdinal());
+                        row.addProperty("rangedPreparedAt",rangedShot.preparedAt());
+                    }
+                    var rangedLast=combat.ranged().followups().get(owner);
+                    if(rangedLast!=null&&rangedLast.execution().equals(current)){
+                        row.addProperty("lastRangedTechnique",rangedLast.technique().name());row.addProperty("lastRangedEmissionAt",rangedLast.atTick());
+                    }
                     var pending=combat.pending().get(owner);
                     if(pending!=null && pending.attacker().execution().equals(current)) {
                         row.addProperty("pendingAttack",pending.attack().name());row.addProperty("attempt",pending.attemptOrdinal());

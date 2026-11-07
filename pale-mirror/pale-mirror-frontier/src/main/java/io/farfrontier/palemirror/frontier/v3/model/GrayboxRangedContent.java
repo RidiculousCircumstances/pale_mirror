@@ -49,7 +49,7 @@ final class GrayboxRangedContent {
         var work=base.workCatalog().withDefinition(new WorkCatalog.Definition(crossbow,WorkOperation.PRODUCE,HumanCapability.INDUSTRY,240))
                 .withDefinition(new WorkCatalog.Definition(head,WorkOperation.PRODUCE,HumanCapability.INDUSTRY,120))
                 .withDefinition(new WorkCatalog.Definition(arrow,WorkOperation.PRODUCE,HumanCapability.INDUSTRY,40));
-        return new FrontierRuleset("frontier-v3-ranged-guards-r33",base.schemaVersion(),base.cadence(),base.spatial(),base.rates(),base.facilityCapacity(),
+        return new FrontierRuleset("frontier-v3-ranged-guards-r34",base.schemaVersion(),base.cadence(),base.spatial(),base.rates(),base.facilityCapacity(),
                 base.combat(),base.hiveCommand(),base.residentLife(),base.resourceHarvestColdTravelTicksPerEdge(),work,trade,base.initialSettlementStocks(),
                 base.labour(),base.expedition(),base.extraction(),base.execution(),production,base.fields(),new ToolCatalog(tools),base.worldLayout(),
                 base.forestry(),base.security().withRangedGuards(40),RangedRules.initial());

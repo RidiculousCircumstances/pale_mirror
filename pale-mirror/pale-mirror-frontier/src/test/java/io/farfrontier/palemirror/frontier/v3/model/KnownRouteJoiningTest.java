@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class KnownRouteJoiningTest {
     @Test void longAcceptedItineraryRefinesWindowsAndKeepsItsFinalSemanticGoal() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:long-join"), 41L,
-                FrontierRulesets.installed("frontier-v3-ranged-guards-r33")));
+                FrontierRulesets.installed("frontier-v3-ranged-guards-r34")));
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
         var start = SurfaceAnchor.at(-1900, 63, -1900);
         var proof = new PedestrianPathProof(start, List.of(new PedestrianPathProof.Run(1, 0, 0, 3800),

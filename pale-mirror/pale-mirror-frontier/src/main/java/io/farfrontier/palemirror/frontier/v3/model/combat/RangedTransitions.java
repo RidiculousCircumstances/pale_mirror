@@ -20,7 +20,7 @@ public final class RangedTransitions {
                 if(!item.condition().equals(shot.before()))throw new IllegalArgumentException("fired weapon condition changed before receipt");
                 update.inventory(state.inventory().changeCondition(item,shot.before().wear(1)).withFungibleResources(ledger));
             }
-            return state.withChanges(update.combat(combat.withRanged(ranged.completed(shot,tick,state.bootstrap().ruleset().ranged()))));
+            return state.withChanges(update.combat(combat.withRanged(ranged.completed(shot,tick,state.bootstrap().ruleset().ranged(),done.emitted()))));
         }
         var actor=event instanceof RangedEvent.Observed observed?observed.stance().observer():((RangedEvent.Prepared)event).shot().attacker();
         var order=CombatTransitions.requireOrder(state,capabilities,actor,tick);
@@ -32,12 +32,14 @@ public final class RangedTransitions {
             ranged=ranged.observed(sight);
         }else{
             var shot=((RangedEvent.Prepared)event).shot();var sight=ranged.stances().get(subject);
+            if(sight==null)throw new IllegalArgumentException("missing ranged sight");
             var weapon=state.inventory().items().get(order.weapon());var binding=state.inventory().fungibleResources().bindings().get(shot.binding().id());
-            if(!shot.actorProfile().equals(order.profile()) || shot.ownerRevision()!=order.revision() || !shot.weapon().equals(order.weapon()) || !shot.target().equals(order.target())
+            if(!shot.origin().equals(order.actorPosition()) || !shot.technique().equals(RangedTactics.choose(ranged,order,sight,tick,rules))
+                    || !shot.actorProfile().equals(order.profile()) || shot.ownerRevision()!=order.revision() || !shot.weapon().equals(order.weapon()) || !shot.target().equals(order.target())
                     || !shot.ammunition().equals(use.ammunition()) || !shot.before().equals(weapon.condition()) || !shot.binding().equals(binding)
                     || shot.binding().authorityEpoch()!=actor.body().physicalEpoch() || !state.inventory().fungibleResources().accounts().get(shot.ammunitionAccount()).custody().equals(new ResourceCustody.Actor(actor.execution().actorId()))
                     || shot.preparedAt()!=tick || shot.attemptOrdinal()!=tick+1 || tick<ranged.nextAttack().getOrDefault(subject,0L)
-                    || ranged.unsettled(subject) || ranged.supplies().containsKey(subject) || combat.pending().containsKey(subject) || combat.maneuverOpen(subject)
+                    || RangedTactics.relocate(ranged,order,tick) || ranged.unsettled(subject) || ranged.supplies().containsKey(subject) || combat.pending().containsKey(subject) || combat.maneuverOpen(subject)
                     || state.actorMovements().containsKey(order.execution().actorId()) || sight==null || !sight.current(order,tick,rules) || !sight.visible() || !sight.clearShot()
                     || !CombatPositioning.legal(state,order,order.actorPosition(),tick))throw new IllegalArgumentException("ranged shot lacks exact ammo, current sight, stationary range or readiness");
             var lot=state.inventory().fungibleResources().lots().get(shot.ammunitionLot());

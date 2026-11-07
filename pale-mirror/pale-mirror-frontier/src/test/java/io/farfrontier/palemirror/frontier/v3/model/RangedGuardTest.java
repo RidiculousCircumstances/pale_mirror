@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class RangedGuardTest {
     private record Ready(FrontierWorldState state,GuardDuty duty){}
     private static Ready guard(){
-        var s=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ranged-test"),139,FrontierRulesets.installed("frontier-v3-ranged-guards-r33")));
+        var s=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ranged-test"),139,FrontierRulesets.installed("frontier-v3-ranged-guards-r34")));
         var home=s.bootstrap().settlements().getFirst().id();var staffing=SettlementStaffingComposition.change(s,home,1);
         if(staffing.isPresent())s=SettlementStaffingComposition.reduce(s,home,staffing.orElseThrow());
         var actor=SettlementWorkPolicy.permissions(s,home).workers(ResidentWorkKind.GUARD).stream().sorted().findFirst().orElseThrow();
@@ -136,9 +136,10 @@ class RangedGuardTest {
         ledger=ledger.rebind(account,body.physicalEpoch(),FungiblePhysicalObservation.bind(ledger,account,body.physicalEpoch(),List.of(stack)));
         s=s.withInventory(s.inventory().withFungibleResources(ledger));
         var order=CombatComposition.CAPABILITIES.current(s,duty.execution(),10001).orElseThrow();
-        s=RangedTransitions.apply(s,duty.id(),new RangedEvent.Observed(new RangedStance(actuation,target,order.targetPosition(),true,true,10001)),10001,CombatComposition.CAPABILITIES);
+        s=RangedTransitions.apply(s,duty.id(),new RangedEvent.Observed(new RangedStance(actuation,target,order.targetPosition(),true,true,false,false,false,-1,10001)),10001,CombatComposition.CAPABILITIES);
         var binding=Ammunition.spendable(s,actor,duty.home(),GuardAmmunition.ARROW).orElseThrow();
-        var shot=new RangedShot(actuation,CombatMethod.CROSSBOW,duty.revision(),duty.weapon(),s.inventory().items().get(duty.weapon()).condition(),target,7,account,lot,GuardAmmunition.ARROW,binding,10002,10001,order.profile());
+        var shot=new RangedShot(actuation,CombatMethod.CROSSBOW,duty.revision(),duty.weapon(),s.inventory().items().get(duty.weapon()).condition(),target,7,account,lot,GuardAmmunition.ARROW,binding,10002,10001,
+                order.profile(),RangedTactics.choose(s.combat().ranged(),order,s.combat().ranged().stances().get(duty.id()),10001,s.bootstrap().ruleset().ranged()),origin);
         return new Aimed(s,duty,shot);
     }
     @Test void rangedEmissionDebitsOneArrowAndWeaponWearOnceAcrossRecovery(){
@@ -151,6 +152,7 @@ class RangedGuardTest {
         s=RangedTransitions.apply(s,r.duty().id(),receipt,10040,CombatComposition.CAPABILITIES);
         assertEquals(1,Ammunition.available(s,r.duty().execution().actorId(),r.duty().home(),GuardAmmunition.ARROW));
         assertEquals(1,s.inventory().items().get(r.duty().weapon()).condition().damage());assertFalse(GuardAuthority.pendingEffect(s,r.duty()));
+        assertEquals(r.shot().technique(),s.combat().ranged().followups().get(r.duty().id()).technique());
         var after=s;assertThrows(IllegalArgumentException.class,()->RangedTransitions.apply(after,r.duty().id(),receipt,10041,CombatComposition.CAPABILITIES));
         assertEquals(s,codec.decode(codec.encode(s)));
     }
@@ -160,6 +162,7 @@ class RangedGuardTest {
         assertThrows(IllegalArgumentException.class,()->RangedTransitions.apply(before,r.duty().id(),new RangedEvent.Completed(r.duty().id(),r.shot().attemptOrdinal(),true,List.of()),10040,CombatComposition.CAPABILITIES));
         s=RangedTransitions.apply(s,r.duty().id(),new RangedEvent.Completed(r.duty().id(),r.shot().attemptOrdinal(),false,List.of()),10040,CombatComposition.CAPABILITIES);
         assertEquals(2,Ammunition.available(s,r.duty().execution().actorId(),r.duty().home(),GuardAmmunition.ARROW));assertEquals(0,s.inventory().items().get(r.duty().weapon()).condition().damage());
+                assertTrue(s.combat().ranged().followups().isEmpty());
     }
 
 }

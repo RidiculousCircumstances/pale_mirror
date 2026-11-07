@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ResidentMealKnownNavigationTest {
     @Test void interruptedWorkerCanLeaveASecondaryPrivateEntranceForFoodAndStorage() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:secondary-exit"),
-                139L, FrontierRulesets.installed("frontier-v3-ranged-guards-r33")));
+                139L, FrontierRulesets.installed("frontier-v3-ranged-guards-r34")));
         var home = initial.bootstrap().settlements().get(1);
         var actor = home.residents().getFirst().id();
         var workshop = home.structures().stream().filter(f -> f.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();

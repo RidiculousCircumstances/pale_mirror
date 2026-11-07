@@ -17,5 +17,5 @@ public record RangedRules(int loadSize, int reservePerGuard, int minimumRange,
     public static RangedRules initial() { return new RangedRules(32, 64, 5, 11, 22, 25, 8, 12, 5, 450000, 3150000, 1000000, 500); }
     public String canonicalText() { return loadSize+":"+reservePerGuard+":"+minimumRange+":"+preferredRange+":"+maximumRange
             +":"+reloadTicks+":"+aimTicks+":"+recoveryTicks+":"+sensingTicks+":"+friendlyClearanceMicros
-            +":"+projectileSpeedMicros+":"+inaccuracyMicros+":"+trainingVariationPermille; }
+            +":"+projectileSpeedMicros+":"+inaccuracyMicros+":"+trainingVariationPermille+":"+RangedTechnique.canonicalText(); }
 }

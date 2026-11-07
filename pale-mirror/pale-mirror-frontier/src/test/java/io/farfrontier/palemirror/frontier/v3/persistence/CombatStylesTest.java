@@ -70,7 +70,7 @@ class CombatStylesTest {
     @Test void personalReferenceSurvivesRoleTrainingRelocationSnapshotAndUnknownDefinitionsFail(){
         var state=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:combat-styles"),139));
         var person=state.humanPopulation().resident(new SubjectId("resident:1-16"));
-        assertEquals(style("cautious").id(),person.combatStyle());
+        assertEquals(style("supporting").id(),person.combatStyle());
         assertEquals(style("pressing").id(),state.humanPopulation().resident(new SubjectId("resident:1-22")).combatStyle());
         assertEquals(person.combatStyle(),person.withRole(ResidentRole.CRAFTER).withCapabilities(person.capabilities())
                 .withCharacteristics(person.characteristics()).relocated(new SubjectId("settlement:other"),new SubjectId("household:other")).combatStyle());

@@ -5,5 +5,8 @@ public final class RangedMechanics {
     public static int reloadTicks(CombatProfile profile,RangedRules rules){return Math.max(1,rules.reloadTicks()*factor(profile.attributes().agility(),rules)/1000);}
     public static int aimTicks(CombatProfile profile,RangedRules rules){return Math.max(1,rules.aimTicks()*factor(profile.skill(CombatSkillId.CROSSBOW),rules)/1000);}
     public static float inaccuracy(CombatProfile profile,RangedRules rules){return rules.inaccuracyMicros()/1000000f*factor((profile.skill(CombatSkillId.CROSSBOW)+profile.attributes().perception())/2,rules)/1000f;}
+    public static int aimTicks(CombatProfile profile,RangedRules rules,RangedTechnique technique){return Math.max(1,aimTicks(profile,rules)*technique.aimPermille()/1000);}
+    public static float inaccuracy(CombatProfile profile,RangedRules rules,RangedTechnique technique){return inaccuracy(profile,rules)*technique.spreadPermille()/1000f;}
+    public static int reactionTicks(CombatProfile profile){return 2+(100-profile.attributes().perception())/25;}
     private RangedMechanics(){}
 }

@@ -29,28 +29,37 @@ final class RangedWire {
         target(out,s.target());out.writeLong(s.targetIncarnation());id(out,s.ammunitionAccount());id(out,s.ammunitionLot());out.writeUTF(s.ammunition());
         var b=s.binding();id(out,b.id());id(out,b.accountId());FungibleResourceStateCodec.writePhysicalAddress(out,b.address());out.writeLong(b.authorityEpoch());out.writeUTF(b.itemKind());
         ShipmentStateCodec.lots(out,b.lotQuantities());ShipmentStateCodec.lots(out,b.claimQuantities());out.writeUTF(b.playerSaveFence());out.writeLong(s.attemptOrdinal());out.writeLong(s.preparedAt());CombatProfileCodec.write(out,
-                s.actorProfile());
+                s.actorProfile());out.writeByte(s.technique().tag());FrontierWorldStateCodec.writePosition(out,s.origin().support());
     }
     static RangedShot shot(DataInputStream in)throws IOException{
         var a=actuation(in);var method=CombatMethod.require(in.readUnsignedByte());long rev=in.readLong();var w=id(in);var condition=condition(in);var target=target(in);
         long incarnation=in.readLong();var account=id(in);var lot=id(in);String kind=in.readUTF();
         var b=new PhysicalStackBinding(id(in),id(in),FungibleResourceStateCodec.readPhysicalAddress(in),in.readLong(),in.readUTF(),ShipmentStateCodec.lots(in),ShipmentStateCodec.cargoPortions(in),in.readUTF());
-        return new RangedShot(a,method,rev,w,condition,target,incarnation,account,lot,kind,b,in.readLong(),in.readLong(),CombatProfileCodec.read(in));
+        return new RangedShot(a,method,rev,w,condition,target,incarnation,account,lot,kind,b,in.readLong(),in.readLong(),CombatProfileCodec.read(in),RangedTechnique.require(in.readUnsignedByte()),
+                new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));
     }
     static void stance(DataOutputStream out,RangedStance s)throws IOException{actuation(out,s.observer());target(out,s.target());FrontierWorldStateCodec.writePosition(out,s.targetPosition().support());out.writeBoolean(s.visible());
-            out.writeBoolean(s.clearShot());out.writeLong(s.atTick());}
-    static RangedStance stance(DataInputStream in)throws IOException{return new RangedStance(actuation(in),target(in),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readBoolean(),in.readBoolean(),in.readLong());}
+            out.writeBoolean(s.clearShot());out.writeBoolean(s.approaching());out.writeBoolean(s.moving());out.writeBoolean(s.attacking());out.writeLong(s.openingAt());out.writeLong(s.atTick());}
+    static RangedStance stance(DataInputStream in)throws IOException{return new RangedStance(actuation(in),target(in),new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),in.readBoolean(),in.readBoolean(),
+            in.readBoolean(),in.readBoolean(),in.readBoolean(),in.readLong(),in.readLong());}
+    static void followup(DataOutputStream out,RangedFollowup v)throws IOException{
+        ActorExecutionStateCodec.writeId(out,v.execution());id(out,v.weapon());target(out,v.target());FrontierWorldStateCodec.writePosition(out,v.origin().support());out.writeByte(v.technique().tag());out.writeLong(v.atTick());
+    }
+    static RangedFollowup followup(DataInputStream in)throws IOException{return new RangedFollowup(ActorExecutionStateCodec.readId(in),id(in),target(in),
+            new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),RangedTechnique.require(in.readUnsignedByte()),in.readLong());}
     static void write(DataOutputStream out,RangedState s)throws IOException{
         out.writeInt(s.supplies().size());for(var v:s.supplies().values().stream().sorted(Comparator.comparing(RangedSupply::owner)).toList())supply(out,v);
         out.writeInt(s.pending().size());for(var v:s.pending().values().stream().sorted(Comparator.comparing(RangedShot::owner)).toList())shot(out,v);
         out.writeInt(s.nextAttack().size());for(var v:s.nextAttack().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){id(out,v.getKey());out.writeLong(v.getValue());}
         out.writeInt(s.stances().size());for(var v:s.stances().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){id(out,v.getKey());stance(out,v.getValue());}
+        out.writeInt(s.followups().size());for(var v:s.followups().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()){id(out,v.getKey());followup(out,v.getValue());}
     }
     static RangedState read(DataInputStream in)throws IOException{
         var supplies=new LinkedHashMap<SubjectId,RangedSupply>();var shots=new LinkedHashMap<SubjectId,RangedShot>();var next=new LinkedHashMap<SubjectId,Long>();var sights=new LinkedHashMap<SubjectId,RangedStance>();
         int n=count(in);for(int i=0;i<n;i++){var v=supply(in);unique(supplies,v.owner(),v);}n=count(in);for(int i=0;i<n;i++){var v=shot(in);unique(shots,v.owner(),v);}
         n=count(in);for(int i=0;i<n;i++)unique(next,id(in),in.readLong());n=count(in);for(int i=0;i<n;i++)unique(sights,id(in),stance(in));
-        return new RangedState(supplies,shots,next,sights);
+        var followups=new LinkedHashMap<SubjectId,RangedFollowup>();n=count(in);for(int i=0;i<n;i++)unique(followups,id(in),followup(in));
+        return new RangedState(supplies,shots,next,sights,followups);
     }
     private static int count(DataInputStream in)throws IOException{return UnitGroupStateCodec.count(in,SimulationCapacity.MAX_RESIDENTS);}
     private static <T>void unique(Map<SubjectId,T> map,SubjectId id,T v){if(map.putIfAbsent(id,v)!=null)throw new IllegalArgumentException("duplicate ranged owner");}
