@@ -1,8 +1,28 @@
 # Active continuity — 2026-11-07
 
 ## Assignment and authority
-Main alone; no subagents or automatic push. Medical implementation delivered. Standing commit/deploy,
-fresh disposable world authorized. Preserve unrelated WIP and prior receipts.
+Main alone; no subagents or automatic push. User's native-test repair delivered:
+all17retained failures plus1hidden fixture error fixed. No active implementation
+remains. Standing commit/deploy; preserve unrelated WIP.
+
+## Native test repair — 2026-11-07
+Source2c0a3b0f5 (6testfiles,100add/41remove). Receipt:
+[docs/frontier-v3-native-test-repair-20261107.md](docs/frontier-v3-native-test-repair-20261107.md).
+Storage fixtures preserve bulk stock and recovery fences, declare their real
+chest provider and choose vacant physical slots. Patrol observes its local
+floor before COLD assembly; service-death uses an explicit outdoor source and
+matching body/station. No product changes, deleted tests or increased timeouts.
+Final full native475/475 +guardrails/build/package PASS; clean detached RELEASE
+same ref build/package PASS. No whole-JVM-suite green claim; earlier unrelated
+JVM baseline debt remains. Evidence IMPL build/native-test-repair-20261107.
+
+Same worldclinical-care-seed139-20261107/seed139/r35/schema347 after graceful
+RCON save/JVM exit. Published170hash-verified pack; core967b1193…986b65
+(full hash in receipt), Visuals unchanged. Preflight/postverify PASS, hosted
+HTTP matches. Servicefar-frontier-v3-live.service ACTIVE, wrapper4078710,
+invocation87b1bcf3a3a94e99ad1efb9df296393c, notBefore1794069344. Post56758/
+revision137901:12settlements,335residents,green,0required/scene/inventory
+conflicts,incidentIndex0. No reset/push. IMPL/RELEASE/PACK tracked clean.
 
 ## Medical delivery — 2026-11-07
 Source041afc63936663a0f3778005ef112cffa03fe225, schema347/r35. Receipt
@@ -44,10 +64,9 @@ for manual playtest; do not reset again just for documentation.
 
 ## Repositories and ownership
 IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Git root parent,
-branch feat/baker-carry-orders-20260926, source
-041afc63936663a0f3778005ef112cffa03fe225. Medical source committed041afc639; local untracked
-`.serena/` retained. RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror`
-clean detached041afc639. PACK `/home/rd/proj/minecraft` HEAD98a6701 tracked
+branch feat/baker-carry-orders-20260926, source2c0a3b0f5 (test repair),
+medical parent041afc639. Local untracked `.serena/` retained.
+RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror` clean detached2c0a3b0f5. PACK `/home/rd/proj/minecraft` HEAD98a6701 tracked
 clean; unrelated `.f0v-baseline/` retained. Ignored hosted artifacts published;
 no tracked pack edit. Preserve independent histories.
 GOV `/home/rd/proj/pm-governance/pale-mirror` has extensive unrelated WIP.
