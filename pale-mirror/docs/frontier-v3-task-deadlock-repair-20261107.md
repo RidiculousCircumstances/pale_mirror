@@ -149,3 +149,23 @@ retain long FUEL_DELIVERY waits. Their near-zero cash/lifetime no sales are a
 separate unresolved economic shortage, not a demonstrated executor deadlock or
 healthy equilibrium. This delivery claims the five confirmed lifecycle fixes,
 not exhaustive absence of every possible deadlock or globally balanced economy.
+
+
+## Follow-up read-only audit, 12:25–12:28
+Same binary/world/invocation. `build/task-deadlocks-followup-20261107/` contains
+two bounded process cuts57.45seconds/~1149simulationticks apart and immutable
+snapshot662575 with source hash. All9sampled caravan bodies moved~76blocks;
+one seller was RETURNING. Ten surviving sampled ordinary jobs advanced;3unchanged
+bakery jobs retain explicit FUEL_DELIVERY. Newly missing sampled jobs alone are
+not counted as proven completion. No new ERROR/quarantine or tick debt.
+
+Remaining recovery gap: Mossbrook10-25/10-27/10-20 are STARVING and own0bread.
+Original plans169581/252578/311197 forecast184625/143488/144725ticks and actually
+loaded8/6/6bread. The old blocked trips have exceeded those forecasts; food is
+exhausted. The carriers are now moving with next leg arrivals676639/673201/676439,
+not mechanically stuck. Existing resupply sources are actual supplier visits or
+attached stores; neither is available to these individual carriers in transit.
+Twenty bread at home is not accessible food at their current positions. This
+is a remaining delayed-mission recovery/resupply problem, not demonstrated
+underprovisioning of a fresh trip. No source change or new deployment in this
+audit, and no terminal long-trip delivery/food-recovery claim.

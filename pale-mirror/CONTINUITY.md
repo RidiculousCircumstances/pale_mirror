@@ -113,3 +113,24 @@ by this cut. No invented money/credit or balancing changes authorized by a test.
 Scheduler startup/occasional >80ms peaks and baseline fixture debt remain outside
 this confirmed deadlock repair. Report these limits explicitly; do not call the
 whole economy healthy or every possible deadlock eliminated.
+
+
+## Read-only follow-up, 12:25–12:28 local
+Same source/world/invocation, no code/deploy/reset. Evidence IMPL
+build/task-deadlocks-followup-20261107/: two process cuts57.45s/~1149ticks;
+all9then-active caravan bodies advanced~76blocks, one seller already RETURNING.
+Ten surviving sampled non-extraction work tasks advanced;3unchanged bakery jobs
+explicitly await FUEL_DELIVERY (Ashcross/Southgate/Mossbrook), no physical effect
+or route conflict. No new ERROR/quarantine, debt0, route worker queue0,~20TPS COLD.
+Important remaining logistics recovery issue: Mossbrook actors10-25/10-27/10-20
+have0portablebread and STARVING, but continue accepted journeys, not frozen.
+Their provisioning plans were calculated169581/252578/311197 with duration
+184625/143488/144725; copied current snapshot662575 confirms food8/6/6LOADED
+historically and now0remaining. Prior stalls outlasted those forecasts. At663608+
+next leg arrivals676639/673201/676439; no meal, activity waitsMOVEMENT_HANDOFF.
+Replenishment source policy only considers attached stock or an actual supplier
+visit; these moving individual carriers have neither. Home20bread is not local
+physical food. This supports depleted supplies after old delays, not proof of
+incorrect fresh departure provisioning. Need address recovery/resupply after
+excessive delays before calling logistics fully healthy. No live starvation
+recovery or whole long return completion claimed. Small lots remain separate.
