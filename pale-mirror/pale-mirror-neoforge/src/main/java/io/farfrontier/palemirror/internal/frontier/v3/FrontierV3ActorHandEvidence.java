@@ -21,6 +21,11 @@ final class FrontierV3ActorHandEvidence {
         var id = FrontierV3ExactItemPresentation.itemId(actual);
         id.ifPresent(value -> CustomData.update(DataComponents.CUSTOM_DATA, expected,
                 tag -> tag.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY, value.value())));
+        // Vanilla reads an absent charge as EMPTY. Preserve that exact patch for
+        // comparison; this admits no loaded projectile or other removed component.
+        var charge = actual.getComponentsPatch().get(DataComponents.CHARGED_PROJECTILES);
+        if (actual.is(net.minecraft.world.item.Items.CROSSBOW) && charge != null && charge.isEmpty())
+            expected.remove(DataComponents.CHARGED_PROJECTILES);
         return ItemStack.isSameItemSameComponents(actual, expected);
     }
     static Optional<FrontierV3ActorBodyDeparture.HandStack> observed(ItemStack actual) {
@@ -39,7 +44,7 @@ final class FrontierV3ActorHandEvidence {
             if (!raw.contains("components", Tag.TAG_COMPOUND)) throw new IllegalArgumentException("invalid hand components");
             var components = raw.getCompound("components");
             if (components.isEmpty() || !components.getAllKeys().stream().allMatch(key -> key.equals("minecraft:custom_data")
-                    || FrontierV3HandComponents.keys().contains(key)))
+                    || FrontierV3HandComponents.keys().contains(key) || emptyCrossbowCharge(raw, components, key)))
                 throw new IllegalArgumentException("unsupported serialized actor hand components");
             for (var key : FrontierV3HandComponents.keys()) if (components.contains(key)) {
                 if (!components.contains(key, Tag.TAG_INT)) throw new IllegalArgumentException("invalid saved hand integer component");
@@ -55,5 +60,9 @@ final class FrontierV3ActorHandEvidence {
             }
         }
         return Optional.of(new FrontierV3ActorBodyDeparture.HandStack(raw.getString("id"), raw.getInt("count"), id, values));
+    }
+    private static boolean emptyCrossbowCharge(CompoundTag raw, CompoundTag components, String key) {
+        return raw.getString("id").equals("minecraft:crossbow") && key.equals("!minecraft:charged_projectiles")
+                && components.contains(key, Tag.TAG_COMPOUND) && components.getCompound(key).isEmpty();
     }
 }

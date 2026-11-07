@@ -17,6 +17,33 @@ import java.util.*;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3RangedCombatGameTests {
+    @GameTest(batch="pm-frontier-v3-scene-local-navigation",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=30)
+    public static void unloadedCrossbowRemovalKeepsExactHandEvidenceButLoadedProjectilesDoNot(GameTestHelper h){
+        var weapon=new ItemStack(Items.CROSSBOW);weapon.setDamageValue(2);
+        net.minecraft.world.item.component.CustomData.update(net.minecraft.core.component.DataComponents.CUSTOM_DATA,weapon,
+                tag->tag.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY,"item:crossbow-hand-recovery"));
+        var unloaded=FrontierV3ActorHandEvidence.observed(weapon);
+        weapon.remove(net.minecraft.core.component.DataComponents.CHARGED_PROJECTILES);
+        h.assertTrue(FrontierV3ActorHandEvidence.capturable(weapon),"a known removed EMPTY charge cannot strand body custody");
+        h.assertTrue(FrontierV3ActorHandEvidence.observed(weapon).equals(unloaded),"empty charge representations preserve exact item identity and wear");
+        var saved=(net.minecraft.nbt.CompoundTag)weapon.save(h.getLevel().registryAccess());
+        h.assertTrue(FrontierV3ActorHandEvidence.saved(saved).equals(unloaded),"actual vanilla save and live hand evidence agree without loading the body");
+        weapon.set(net.minecraft.core.component.DataComponents.CHARGED_PROJECTILES,
+                net.minecraft.world.item.component.ChargedProjectiles.of(new ItemStack(Items.ARROW)));
+        h.assertTrue(!FrontierV3ActorHandEvidence.capturable(weapon),"a loaded projectile remains an unfinished weapon effect");
+        var actors=actors(h);actors.shooter().setItemSlot(EquipmentSlot.MAINHAND,weapon);
+        var exact=new SubjectId("item:crossbow-hand-recovery");
+        FrontierV3RangedCombatExecutor.clearUnlaunchedCharge(actors.shooter(),exact);
+        h.assertTrue(!CrossbowItem.isCharged(weapon) && FrontierV3ActorHandEvidence.capturable(weapon),
+                "actual cancellation leaves a capturable native EMPTY charge and does not spend wear");
+        h.assertTrue(weapon.getDamageValue()==2,"cancelling an unlaunched shot cannot wear the weapon");
+        weapon.set(net.minecraft.core.component.DataComponents.CHARGED_PROJECTILES,
+                net.minecraft.world.item.component.ChargedProjectiles.of(new ItemStack(Items.ARROW)));
+        FrontierV3RangedCombatExecutor.clearUnlaunchedCharge(actors.shooter(),new SubjectId("item:foreign-crossbow"));
+        h.assertTrue(CrossbowItem.isCharged(weapon),"a stale cancellation cannot modify a replacement weapon");
+        actors.shooter().discard();actors.target().discard();
+        h.succeed();
+    }
     private record Actors(Villager shooter,Villager target){}
     private static Actors actors(GameTestHelper h){
         var level=h.getLevel();

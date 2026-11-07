@@ -86,9 +86,16 @@ final class FrontierV3RangedCombatExecutor {
             FrontierV3OperationConfirmation.submit(level,runtime,operation.ticket(),new RangedEvent.Completed(shot.owner(),shot.attemptOrdinal(),true,after),
                     ()->FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(),shot.attacker().execution().actorId(),fighter));
         }else if(operation.status()==FrontierV3MinecraftOperation.Status.NOT_APPLIED||operation.status()==FrontierV3MinecraftOperation.Status.SOURCE_CHANGED){
-            fighter.stopUsingItem();fighter.getMainHandItem().remove(DataComponents.CHARGED_PROJECTILES);fighter.getPersistentData().remove(CLOCK);
+            clearUnlaunchedCharge(fighter,shot.weapon());
             FrontierV3OperationConfirmation.submitRequired(level,runtime,operation.ticket(),new RangedEvent.Completed(shot.owner(),shot.attemptOrdinal(),false,List.of()));
         }
+    }
+    static void clearUnlaunchedCharge(Mob fighter,SubjectId weapon){
+        fighter.stopUsingItem();
+        var held=fighter.getMainHandItem();
+        if(held.getItem() instanceof CrossbowItem && FrontierV3ExactItemPresentation.itemId(held).equals(Optional.of(weapon)))
+            held.set(DataComponents.CHARGED_PROJECTILES,ChargedProjectiles.EMPTY);
+        fighter.getPersistentData().remove(CLOCK);
     }
     static FrontierV3NativeEffect.Outcome emit(ServerLevel level,Mob fighter,LivingEntity target,RangedShot shot,RangedRules rules,ActorItemSlot ammoSlot){
                     var ammo=FrontierV3ActorResourceSlots.get(fighter,ammoSlot);var weapon=fighter.getMainHandItem();

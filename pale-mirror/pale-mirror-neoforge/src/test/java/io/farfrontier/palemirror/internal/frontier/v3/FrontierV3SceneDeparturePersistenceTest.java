@@ -20,6 +20,33 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3SceneDeparturePersistenceTest {
+    @Test void cancelledCrossbowChargeDoesNotInvalidateTheSavedBodyAndLoadedOrForeignPatchesStayRejected() {
+        var entity = storedChunkWithWheat(4).getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        var hands = entity.getList("HandItems", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        var crossbow = new CompoundTag(); crossbow.putString("id", "minecraft:crossbow"); crossbow.putInt("count", 1);
+        var components = new CompoundTag(); components.putInt("minecraft:damage", 2);
+        var identity = new CompoundTag(); identity.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY, "item:saved-crossbow");
+        components.put("minecraft:custom_data", identity); crossbow.put("components", components);
+        hands.set(0, crossbow); hands.set(1, new CompoundTag());
+        var unloaded = FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow();
+        components.put("!minecraft:charged_projectiles", new CompoundTag());
+        assertEquals(unloaded, FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow(),
+                "vanilla treats both default EMPTY and removed charge as unloaded; damage and exact identity remain checked");
+        components.putString("!minecraft:charged_projectiles", "invalid");
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty());
+        components.put("!minecraft:charged_projectiles", new CompoundTag());
+        components.getCompound("!minecraft:charged_projectiles").putInt("unexpected", 1);
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty());
+        components.remove("!minecraft:charged_projectiles");
+        components.put("minecraft:charged_projectiles", new ListTag());
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty(),
+                "a serialized charge is not classified as a removal marker");
+        components.remove("minecraft:charged_projectiles");
+        components.put("!minecraft:charged_projectiles", new CompoundTag());
+        crossbow.putString("id", "minecraft:iron_sword");
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty(),
+                "this known empty crossbow encoding does not permit arbitrary item component removals");
+    }
     private static final SubjectId ACTOR = new SubjectId("resident:save-proof");
     private static final UUID ID = UUID.fromString("a520b5ba-7c35-36b7-845c-689ed5f4c697");
     private static final SceneLeaseId LEASE = new SceneLeaseId("lease:save-proof");
