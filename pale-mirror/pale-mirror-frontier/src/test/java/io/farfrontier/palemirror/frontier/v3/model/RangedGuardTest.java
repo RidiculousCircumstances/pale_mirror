@@ -156,6 +156,36 @@ class RangedGuardTest {
         var after=s;assertThrows(IllegalArgumentException.class,()->RangedTransitions.apply(after,r.duty().id(),receipt,10041,CombatComposition.CAPABILITIES));
         assertEquals(s,codec.decode(codec.encode(s)));
     }
+    @Test void crossbowKickUsesCommonContactReceiptCooldownAndRecoveryWithoutSpendingArrows(){
+        var r=aimed();var s=r.state();var duty=r.duty();var tick=10001L;
+        var order=CombatComposition.CAPABILITIES.current(s,duty.execution(),tick).orElseThrow();
+        assertTrue(CombatContactDefence.permits(order,MeleeAttack.KICK),"selected generated guard is trained for contact defence");
+        var observer=r.shot().attacker();
+        s=s.withActorBody(duty.execution().actorId(),order.targetPosition().offset(-1,0,0).standingBody());
+        var profile=new WeaponProfile("minecraft:crossbow",1,5,3,1,CombatSkillId.CROSSBOW);
+        s=CombatTransitions.apply(s,duty.id(),new CombatEvent.WeaponObserved(observer,duty.weapon(),profile),tick,CombatComposition.CAPABILITIES);
+        s=CombatTransitions.apply(s,duty.id(),new CombatEvent.StanceObserved(new MeleeStance(observer,order.target(),true,true,tick,Optional.empty(),CombatThreatObservation.none())),tick,CombatComposition.CAPABILITIES);
+        order=CombatComposition.CAPABILITIES.current(s,duty.execution(),tick).orElseThrow();assertTrue(CombatContactDefence.ready(s,order,observer,tick));
+        var strike=new MeleeStrike(duty.id(),duty.revision(),observer,order.target(),duty.weapon(),r.shot().before(),profile,MeleeAttack.KICK,7,tick+1,tick,order.profile(),List.of());
+        s=CombatTransitions.apply(s,duty.id(),new CombatEvent.Prepared(strike),tick,CombatComposition.CAPABILITIES);
+        assertTrue(GuardAuthority.pendingEffect(s,duty));assertTrue(s.combat().engagements().isEmpty(),"self-defence does not enlist a bow in a sword formation");
+        var codec=new FrontierWorldStateCodec();s=codec.decode(codec.encode(s));assertEquals(strike,s.combat().pending().get(duty.id()));
+        var outcome=new CombatEvent.Completed(duty.id(),strike.attemptOrdinal(),MeleeOutcome.HIT,strike.before());
+        s=CombatTransitions.apply(s,duty.id(),outcome,10040,CombatComposition.CAPABILITIES);
+        assertEquals(2,Ammunition.available(s,duty.execution().actorId(),duty.home(),GuardAmmunition.ARROW));assertEquals(0,s.inventory().items().get(duty.weapon()).condition().damage());
+        assertTrue(s.combat().recovering(duty.id(),10040));assertFalse(CombatContactDefence.ready(s,order,observer,10040));
+        var completed=s;assertThrows(RuntimeException.class,()->CombatTransitions.apply(completed,duty.id(),outcome,10041,CombatComposition.CAPABILITIES));
+        assertEquals(s,codec.decode(codec.encode(s)));
+    }
+    @Test void aRetainedArrowPreparationCannotAlsoAdmitTheContactKick(){
+        var r=aimed();var s=RangedTransitions.apply(r.state(),r.duty().id(),new RangedEvent.Prepared(r.shot()),10001,CombatComposition.CAPABILITIES);
+        var order=CombatComposition.CAPABILITIES.current(s,r.duty().execution(),10001).orElseThrow();
+        assertFalse(CombatContactDefence.ready(s,order,r.shot().attacker(),10001));
+        var profile=new WeaponProfile("minecraft:crossbow",1,5,3,1,CombatSkillId.CROSSBOW);
+        var kick=new MeleeStrike(order.owner(),order.revision(),r.shot().attacker(),order.target(),order.weapon(),r.shot().before(),profile,MeleeAttack.KICK,7,10002,10001,order.profile(),List.of());
+        var pending=s;assertThrows(IllegalArgumentException.class,()->CombatTransitions.apply(pending,order.owner(),new CombatEvent.Prepared(kick),10001,CombatComposition.CAPABILITIES));
+        assertEquals(r.shot(),s.combat().ranged().pending().get(order.owner()));assertTrue(s.combat().pending().isEmpty());
+    }
     @Test void cancelledShotCannotConsumeOrDamageAndForeignReceiptsFailBeforeMutation(){
         var r=aimed();var s=RangedTransitions.apply(r.state(),r.duty().id(),new RangedEvent.Prepared(r.shot()),10001,CombatComposition.CAPABILITIES);var before=s;
         assertThrows(IllegalArgumentException.class,()->RangedTransitions.apply(before,r.duty().id(),new RangedEvent.Completed(r.duty().id(),r.shot().attemptOrdinal()+1,true,List.of()),10040,CombatComposition.CAPABILITIES));

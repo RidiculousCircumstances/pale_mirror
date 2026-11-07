@@ -103,10 +103,20 @@ public final class FrontierV3MeleeBoundaryGameTests {
     public static void kickUsesShortPhysicalContactAndCannotReplay(GameTestHelper helper){durableAdmission(helper,MeleeAttack.KICK);}
     @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
     public static void circularContactUsesItsOwnDurableCueAndCannotReplay(GameTestHelper helper){durableAdmission(helper,MeleeAttack.CIRCLE);}
-    private static void durableAdmission(GameTestHelper helper,MeleeAttack attack){
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void crossbowKickUsesCommonCueAndDurableKnockbackWithoutAmmoOrWear(GameTestHelper helper){durableAdmission(helper,MeleeAttack.KICK,true,false);}
+    @GameTest(batch="pm-frontier-v3-scene-strikes",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=400)
+    public static void crossbowKickMissesWhenTheEnemyLeavesContact(GameTestHelper helper){durableAdmission(helper,MeleeAttack.KICK,true,true);}
+    private static void durableAdmission(GameTestHelper helper,MeleeAttack attack){durableAdmission(helper,attack,false,false);}
+    private static void durableAdmission(GameTestHelper helper,MeleeAttack attack,boolean crossbow,boolean retreat){
         var level=helper.getLevel();var fighter=helper.spawn(EntityType.VILLAGER,new BlockPos(4,8,4));fighter.setNoAi(true);fighter.setNoGravity(true);
         var target=helper.spawn(EntityType.VILLAGER,new BlockPos(5,8,4));target.setNoAi(true);target.setNoGravity(true);
-        var rules=MeleeRules.initial();var strike=strike(level.getGameTime(),attack,"durable-"+attack.name().toLowerCase(Locale.ROOT));
+        var rules=MeleeRules.initial();var raw=strike(level.getGameTime(),attack,"durable-"+attack.name().toLowerCase(Locale.ROOT)+(crossbow?"-crossbow":"")+(retreat?"-miss":""));
+        var held=new ItemStack(crossbow?Items.CROSSBOW:Items.IRON_SWORD);fighter.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,held);
+        var actorProfile=new CombatProfile(new CombatAttributes(50,50,50,50,50),Map.of(CombatSkillId.SWORD,100,CombatSkillId.CROSSBOW,100,CombatSkillId.EVASION,100,CombatSkillId.WEAPON_DEFENCE,100));
+        var strike=new MeleeStrike(raw.owner(),raw.ownerRevision(),raw.attacker(),raw.target(),raw.weapon(),new ItemCondition(held.getMaxDamage(),0),
+                FrontierV3WeaponProfiles.read(held,crossbow?CombatSkillId.CROSSBOW:CombatSkillId.SWORD),attack,raw.targetIncarnation(),raw.attemptOrdinal(),raw.preparedAt(),actorProfile,List.of());
+        if(crossbow)fighter.getInventory().setItem(2,new ItemStack(Items.ARROW,7));
         if(attack==MeleeAttack.KICK)target.setPos(fighter.getX()+0.8,fighter.getY(),fighter.getZ());
         helper.assertTrue(io.farfrontier.palemirror.internal.network.CombatGesture.strike(attack).name().equals(attack.name()),"the attack has its own warning");
 
@@ -121,14 +131,20 @@ public final class FrontierV3MeleeBoundaryGameTests {
             visibleSince.compareAndSet(-1,level.getGameTime());
             // Keep canonical time initially at Prepared: both preparations must run concurrently.
             long canonical=strike.preparedAt()+level.getGameTime()-visibleSince.get();
+            if(retreat&&level.getGameTime()>visibleSince.get())target.setPos(fighter.getX()+4,fighter.getY(),fighter.getZ());
             var admission=FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,canonical);
-            if(level.getGameTime()-visibleSince.get()==strike.timing(rules).preparationTicks())
+            if(!retreat&&level.getGameTime()-visibleSince.get()==strike.timing(rules).preparationTicks())
                 helper.assertTrue(admission.ready(),"aligned clocks need one windup, not canonical then native");
             return admission;
         },()->{
             helper.assertTrue(level.getGameTime()-visibleSince.get()>=strike.timing(rules).preparationTicks(),"native cue must last its complete preparation after admission");
-            helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules),"effect needs a live finite impact window");
-            helper.assertTrue(FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules),"actual production contact effect accepted");hits.incrementAndGet();
+            if(!retreat)helper.assertTrue(FrontierV3CombatPresentation.strikeWindow(level,fighter,strike,rules),"effect needs a live finite impact window");
+            boolean applied=FrontierV3CombatExecutor.applyImpact(level,fighter,target,strike,rules);
+            helper.assertTrue(applied!=retreat,"common physical contact hits nearby enemy and misses after retreat");hits.incrementAndGet();
+            if(crossbow){
+                helper.assertTrue(fighter.getInventory().getItem(2).getCount()==7&&fighter.getMainHandItem().getDamageValue()==0,"a foot strike never spends ammunition or weapon wear");
+                if(applied)helper.assertTrue(target.getDeltaMovement().horizontalDistance()>0.1,"native kick produces actual horizontal knockback");
+            }
             return FrontierV3NativeEffect.Outcome.APPLIED;
         });
         helper.onEachTick(()->{
@@ -136,7 +152,7 @@ public final class FrontierV3MeleeBoundaryGameTests {
                     ()->FrontierV3CombatPresentation.preparationAvailable(level,fighter,strike),effect,()->hits.get()==1);
             if(level.getGameTime()<admittedAfter)helper.assertTrue(visibleSince.get()==-1 && target.getHealth()==health,"waiting for admission must neither animate nor hurt");
             if(!result.complete())return;
-            helper.assertTrue(Math.abs(target.getHealth()-(health-CombatMechanics.damage(strike.actorProfile(),strike.profile(),strike.attack())))<0.001 && hits.get()==1,
+            helper.assertTrue(Math.abs(target.getHealth()-(health-(retreat?0:CombatMechanics.damage(strike.actorProfile(),strike.profile(),strike.attack()))))<0.001 && hits.get()==1,
                 "one calibrated native hit, not merely a swing");
             var observed=FrontierV3MinecraftOperation.applyDeferred(level,declaration,ports,()->false,effect,()->hits.get()==1);
             helper.assertTrue(observed.complete() && hits.get()==1,"completed native receipts never repeat the damage");

@@ -29,7 +29,8 @@ public final class FrontierV3CombatExecutor {
             var nominated=orders.get(cursor);cursor=(cursor+1)%orders.size();CURSOR.put(level,cursor);
             state=runtime.decodedState().orElseThrow();long tick=runtime.executionView().orElseThrow().instant().ticks();
             var order=capabilities.current(state,nominated.execution(),tick).orElse(null);
-            if(order==null || order.method()!=CombatMethod.MELEE)continue;
+            if(order==null)continue;
+            if(order.method()==CombatMethod.CROSSBOW){if(contactDefence(level,runtime,state,order,tick))visited++;continue;}
             var declared=state.combat().armaments().get(order.owner());
             if(declared==null || !declared.matches(order)){
                 var item=state.inventory().items().get(order.weapon());if(item==null)continue;
@@ -155,6 +156,42 @@ public final class FrontierV3CombatExecutor {
             trace(order,"PREPARE",result);
         }
     }
+    private static boolean contactDefence(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,
+            FrontierWorldState state,CombatOrder order,long tick){
+        if(!CombatContactDefence.permits(order,MeleeAttack.KICK)||state.combat().pending().containsKey(order.owner())
+                ||state.combat().ranged().unsettled(order.owner())||state.combat().recovering(order.owner(),tick))return false;
+        if(!ActorBodyAuthority.retainsPhysicalCustody(state,order.execution().actorId()))return false;
+        var body=ActorBodyAuthority.current(state,order.execution().actorId());
+        if(!FrontierV3ActorBodyController.readyForExecution(level,state,List.of(body)))return false;
+        var actor=level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(),order.execution().actorId()));
+        var opponent=level.getEntity(order.target().entity());
+        if(!(actor instanceof Mob fighter)||!fighter.isAlive())return false;
+        if(!(opponent instanceof LivingEntity target)||!target.isAlive()
+                ||target instanceof ServerPlayer player&&(player.isCreative()||player.isSpectator())||!fighter.hasLineOfSight(target))return true;
+        var item=state.inventory().items().get(order.weapon());
+        if(item==null||!FrontierV3ExactItemPresentation.exactMatch(fighter.getMainHandItem(),item))return true;
+        var profile=FrontierV3WeaponProfiles.read(fighter.getMainHandItem(),order.weaponSkill());
+        double distance=Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition()));
+        if(distance>CombatMechanics.reach(profile,MeleeAttack.KICK)||!FrontierV3MeleeReach.clearContact(fighter,target))return true;
+        var actuation=FrontierV3ActorActuation.capture(state,fighter,order.execution(),runtime::decodedState).id();
+        var known=state.combat().armaments().get(order.owner());
+        if(known==null||!known.matches(order)||!known.profile().equals(profile)){
+            FrontierV3CommandSubmission.submit(runtime,"contact-weapon",order.owner().value(),new CombatEvent.WeaponObserved(actuation,order.weapon(),profile));
+            state=runtime.decodedState().orElseThrow();
+        }
+        FrontierV3CombatFacing.face(fighter,target.getEyePosition());
+        FrontierV3CommandSubmission.submit(runtime,"contact-stance",order.owner().value(),new CombatEvent.StanceObserved(
+                new MeleeStance(actuation,order.target(),true,true,tick,Optional.empty(),CombatThreatObservation.none())));
+        state=runtime.decodedState().orElseThrow();
+        var current=CombatComposition.CAPABILITIES.current(state,order.execution(),tick).orElse(null);
+        if(current==null||!CombatContactDefence.ready(state,current,actuation,tick))return true;
+        var strike=new MeleeStrike(current.owner(),current.revision(),actuation,current.target(),current.weapon(),item.condition(),profile,MeleeAttack.KICK,
+                targetPort(target).identity().incarnation(),tick+1,tick,current.profile(),List.of());
+        var result=FrontierV3CommandSubmission.propose(runtime,"contact-prepare",current.owner().value(),new CombatEvent.Prepared(strike));
+        runtime.afterCommand(result,()->execute(level,runtime,strike));
+        FrontierV3CombatTrace.strike(level,fighter,target,strike,"PREPARE_SUBMITTED",result.getClass().getSimpleName());
+        return true;
+    }
     private static void execute(ServerLevel level,FrontierV3ServerRuntime<FrontierWorldState,FrontierWorldProjection> runtime,MeleeStrike strike) {
         var state=runtime.decodedState().orElseThrow();
         CombatComposition.CAPABILITIES.require(strike.attacker().execution()).requirePending(state,strike);
@@ -182,10 +219,12 @@ public final class FrontierV3CombatExecutor {
                 || targetPort(target).identity().incarnation()!=strike.targetIncarnation())) {
             FrontierV3CommandSubmission.submit(runtime,"combat-unattempted",strike.owner().value(),new CombatEvent.Completed(strike.owner(),strike.attemptOrdinal(),MeleeOutcome.CANCELLED,strike.before()));return;
         }
-        if(withdrawForEvasion(level,runtime,state,strike,fighter,target,retained))return;
+        boolean contactDefence=CombatComposition.CAPABILITIES.current(state,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks())
+                .filter(o->CombatContactDefence.permits(o,strike.attack())).isPresent();
+        if(!contactDefence&&withdrawForEvasion(level,runtime,state,strike,fighter,target,retained))return;
         if(retained.isEmpty()){
             var permission=CombatComposition.CAPABILITIES.current(state,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks());
-            boolean permissionMatches=permission.filter(order->order.techniques().contains(strike.attack()) && order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent();
+            boolean permissionMatches=permission.filter(order->order.permitsStrike(strike.attack()) && order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent();
             if(!permissionMatches
                     || !fighter.hasLineOfSight(target)
                     || !MeleeTactics.opportunity(strike.profile(),strike.attack(),Math.sqrt(target.getBoundingBox().distanceToSqr(fighter.getEyePosition())),state.bootstrap().ruleset().melee())){
@@ -229,7 +268,7 @@ public final class FrontierV3CombatExecutor {
                             && fighter.hasLineOfSight(target)
                             && FrontierV3CombatPresentation.preparationAvailable(level,fighter,strike)
                             && CombatComposition.CAPABILITIES.current(current,strike.attacker().execution(),runtime.executionView().orElseThrow().instant().ticks())
-                                .filter(order->order.techniques().contains(strike.attack()) && order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent()
+                                .filter(order->order.permitsStrike(strike.attack()) && order.target().equals(strike.target()) && order.weapon().equals(strike.weapon())).isPresent()
                             && current.inventory().items().containsKey(strike.weapon())
                             && FrontierV3ExactItemPresentation.exactMatch(fighter.getMainHandItem(),current.inventory().items().get(strike.weapon()));
                 },new FrontierV3NativeEffect(()->prepareStrike(level,runtime,fighter,target,strike),()->{

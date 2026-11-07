@@ -11,7 +11,8 @@ final class FrontierV3CombatProfileView {
             if(profile.knows(CombatSkillId.SWORD,t.minimum()))techniques.add(t.id().name());row.add("swordTechniques",techniques);
         var ranged=new JsonArray();if(profile.skills().containsKey(CombatSkillId.CROSSBOW))
             for(var t:RangedTechnique.values())if(t.unlocked(profile))ranged.add(t.name());
-        row.add("crossbowTechniques",ranged);return row;
+        row.add("crossbowTechniques",ranged);
+        var contact=new JsonArray();if(CombatContactDefence.learned(profile))contact.add(MeleeAttack.KICK.name());row.add("crossbowContactTechniques",contact);return row;
     }
     private FrontierV3CombatProfileView(){}
 }

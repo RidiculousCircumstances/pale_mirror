@@ -37,6 +37,11 @@ class RangedTacticsTest {
             var o=order(skill,style);assertTrue(RangedTactics.choose(RangedState.empty(),o,sight(o,true,true,true),100,RangedRules.initial()).unlocked(o.profile()));
         }
     }
+    @Test void contactPermissionIsALearnedKickAndDoesNotGrantSwordAttacks(){
+        assertFalse(order(19,"pressing").permitsStrike(MeleeAttack.KICK));
+        var trained=order(20,"pressing");assertTrue(trained.permitsStrike(MeleeAttack.KICK));
+        for(var move:MeleeAttack.values())if(move!=MeleeAttack.KICK)assertFalse(trained.permitsStrike(move));
+    }
     @Test void theSameEnemyExposesActualStyleAndSpeedAccuracyTradeoffs(){
         var pressing=order(100,"pressing");var cautious=order(100,"cautious");var mobile=order(100,"mobile");
         assertEquals(RangedTechnique.HURRIED,RangedTactics.choose(RangedState.empty(),pressing,sight(pressing,true,true,false),100,RangedRules.initial()));

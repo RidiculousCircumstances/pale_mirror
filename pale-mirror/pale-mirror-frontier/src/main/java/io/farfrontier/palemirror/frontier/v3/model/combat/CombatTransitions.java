@@ -55,7 +55,7 @@ public final class CombatTransitions {
         }else if(event instanceof CombatEvent.ManeuverRequested){throw new IllegalArgumentException("maneuver request is ingress, not a retained outcome");
         }else if(event instanceof CombatEvent.Prepared prepared){
             if(prepared.strike().actorProfile()==null || capabilities.current(state,prepared.strike().attacker().execution(),
-                    tick).filter(o->o.method()==CombatMethod.MELEE).isEmpty())throw new IllegalArgumentException("melee effect requires explicit melee permission");
+                    tick).filter(o->o.permitsStrike(prepared.strike().attack())).isEmpty())throw new IllegalArgumentException("contact effect requires explicit technique permission");
             var strike=prepared.strike();var order=requireOrder(state,capabilities,strike.attacker(),tick);var item=state.inventory().items().get(strike.weapon());
             var followup=combat.followups().get(strike.owner());
             if(state.bootstrap().ruleset().melee().training().require(strike.attack()).use()==CombatTrainingCatalog.Use.CONTINUATION && (followup==null
@@ -65,19 +65,21 @@ public final class CombatTransitions {
                 throw new IllegalArgumentException("followup lacks exact unspent missed-lunge continuation");
             var permitted=capabilities.require(order.execution()).areaTargets(state,order,tick);
             if(strike.additional().stream().anyMatch(v->!permitted.contains(v.target())))throw new IllegalArgumentException("area strike contains an unpermitted target");
-            if(!order.techniques().contains(strike.attack()) || !strike.actorProfile().equals(order.profile()) || !strike.profile().skill().equals(order.weaponSkill()) || !subject.equals(strike.owner())
+            if(!order.permitsStrike(strike.attack()) || !strike.actorProfile().equals(order.profile()) || !strike.profile().skill().equals(order.weaponSkill()) || !subject.equals(strike.owner())
             || !order.owner().equals(strike.owner()) || order.revision()!=strike.ownerRevision()
                     || !order.target().equals(strike.target()) || !order.weapon().equals(strike.weapon()) || strike.preparedAt()!=tick
                     || item==null || !item.condition().equals(strike.before()) || !item.itemKind().equals(strike.profile().itemKind())
                     || combat.maneuverBlocksStrike(strike.owner(),tick,state.bootstrap().ruleset().melee().maneuvers())
                         && !CombatEngagementPlanner.closedDefenceContact(combat,order,strike.attacker(),tick,state.bootstrap().ruleset().melee())
-                    || tick<combat.nextAttack().getOrDefault(strike.owner(),0L)
+                    || combat.ranged().unsettled(strike.owner()) || tick<combat.nextAttack().getOrDefault(strike.owner(),0L)
                     || state.actorMovements().containsKey(order.execution().actorId())
                         && !capabilities.require(order.execution()).permitsApproach(state,state.actorMovements().get(order.execution().actorId())))
                 throw new IllegalArgumentException("melee lacks current owner/target/weapon/readiness");
-            if(!CombatEngagementPlanner.permitsStrike(combat,order,strike.attacker(),strike.attack(),tick,state.bootstrap().ruleset().melee()))
+            boolean contactDefence=CombatContactDefence.permits(order,strike.attack());
+            if(contactDefence?!CombatContactDefence.ready(state,order,strike.attacker(),tick)
+                    :!CombatEngagementPlanner.permitsStrike(combat,order,strike.attacker(),strike.attack(),tick,state.bootstrap().ruleset().melee()))
                 throw new IllegalArgumentException("strike has no current close-contact or coordinated admission");
-            combat=CombatEngagementPlanner.committed(combat,order,strike.attacker())
+            combat=(contactDefence?combat:CombatEngagementPlanner.committed(combat,order,strike.attacker()))
                     .prepared(strike).spent(subject,tick,CombatMechanics.cost(order.profile(),state.bootstrap().ruleset().melee().readiness().cost(strike.attack())),state.bootstrap().ruleset().melee());
         }else if(event instanceof CombatEvent.Completed outcome){
             var strike=Objects.requireNonNull(combat.pending().get(outcome.owner()),"pending melee attempt");

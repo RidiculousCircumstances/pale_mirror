@@ -20,6 +20,7 @@ public record CombatOrder(ActorExecutionId execution,long revision,SubjectId wea
     public CombatMethod method(){return use.method();}
     public CombatSkillId weaponSkill(){return use.skill();}
     public Set<MeleeAttack> techniques(){return use instanceof CombatUse.Melee melee?melee.techniques():Set.of();}
+    public boolean permitsStrike(MeleeAttack attack){return techniques().contains(attack)||CombatContactDefence.permits(this,attack);}
     public MeleeAttack fallback(){if(use instanceof CombatUse.Melee melee)return melee.fallback();throw new IllegalArgumentException("ranged permission has no melee fallback");}
     public SubjectId owner(){return execution.activityOwnerId();}
     public CombatTarget target(){return engagement.target();}

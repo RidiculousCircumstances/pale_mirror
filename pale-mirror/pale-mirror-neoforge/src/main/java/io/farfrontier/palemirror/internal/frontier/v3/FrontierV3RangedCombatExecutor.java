@@ -48,6 +48,7 @@ final class FrontierV3RangedCombatExecutor {
                     visible&&Math.hypot(motion.x(),motion.z())>0.06,attacking,opening,tick);
             FrontierV3CommandSubmission.propose(runtime,"ranged-sight",order.owner().value(),new RangedEvent.Observed(sight));
             if(visible)FrontierV3CombatFacing.face(fighter,target.getEyePosition());
+            if(state.combat().pending().containsKey(order.owner())||state.combat().recovering(order.owner(),tick))continue;
             if(!visible||!clear || state.actorMovements().containsKey(order.execution().actorId()) || state.combat().ranged().unsettled(order.owner())
                     || RangedTactics.relocate(state.combat().ranged(),order,tick) || tick<state.combat().ranged().nextAttack().getOrDefault(order.owner(),0L) || !inRange(fighter,target,rules))continue;
             var item=state.inventory().items().get(order.weapon());

@@ -39,7 +39,7 @@ public final class RangedTransitions {
                     || !shot.ammunition().equals(use.ammunition()) || !shot.before().equals(weapon.condition()) || !shot.binding().equals(binding)
                     || shot.binding().authorityEpoch()!=actor.body().physicalEpoch() || !state.inventory().fungibleResources().accounts().get(shot.ammunitionAccount()).custody().equals(new ResourceCustody.Actor(actor.execution().actorId()))
                     || shot.preparedAt()!=tick || shot.attemptOrdinal()!=tick+1 || tick<ranged.nextAttack().getOrDefault(subject,0L)
-                    || RangedTactics.relocate(ranged,order,tick) || ranged.unsettled(subject) || ranged.supplies().containsKey(subject) || combat.pending().containsKey(subject) || combat.maneuverOpen(subject)
+                    || RangedTactics.relocate(ranged,order,tick) || ranged.unsettled(subject) || ranged.supplies().containsKey(subject) || combat.pending().containsKey(subject) || combat.recovering(subject,tick) || combat.maneuverOpen(subject)
                     || state.actorMovements().containsKey(order.execution().actorId()) || sight==null || !sight.current(order,tick,rules) || !sight.visible() || !sight.clearShot()
                     || !CombatPositioning.legal(state,order,order.actorPosition(),tick))throw new IllegalArgumentException("ranged shot lacks exact ammo, current sight, stationary range or readiness");
             var lot=state.inventory().fungibleResources().lots().get(shot.ammunitionLot());

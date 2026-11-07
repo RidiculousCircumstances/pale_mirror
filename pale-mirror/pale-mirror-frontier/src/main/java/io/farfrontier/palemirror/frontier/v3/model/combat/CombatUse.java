@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model.combat;
 import java.util.*;
-/** Complete weapon permission. Ranged orders grant no melee techniques or synthetic long-range hits. */
+/** Complete weapon permission. Crossbows grant only the explicit learned contact kick, never sword tactics or synthetic ranged hits. */
 public sealed interface CombatUse permits CombatUse.Melee, CombatUse.Crossbow {
     CombatMethod method();
     CombatSkillId skill();
