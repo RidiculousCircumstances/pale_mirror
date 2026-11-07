@@ -1,136 +1,118 @@
 # Active continuity — 2026-11-07
 
 ## Assignment and authority
-Main alone; no subagents, push, forced completion, invented resources or world
-reset to hide failures. Latest user assignment: thoroughly inspect/fix task
-deadlocks across active v3. Five confirmed lifecycle defects fixed, committed
-and deployed in the existing world. Standing commit/deploy instruction applies.
-No new goal requested. Canonical AGENTS, execution protocol/semantics apply.
-Do not infer exhaustive deadlock freedom, economy balance or M3 from this cut.
+Main alone; no subagents, automatic push, invented resources or forced arrival.
+Latest user accepted cashless caravan supply budgets and reminded us to finish
+that feature after fixing server crash/crossbow facing. Standing commit/deploy
+applies. Disposable new world authorized for necessary schema change; old world
+preserved. Canonical AGENTS/execution protocol/semantics apply. No new goal
+requested. No whole-economy, exhaustive deadlock freedom or HUMAN/M3 claim.
 
-## Current repositories
+## Repositories
 IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Git root parent,
-branch feat/baker-carry-orders-20260926, HEAD7ab403f9d34d8110bc06e2c0169f546d29fb8073.
+branch feat/baker-carry-orders-20260926, HEAD6028787c026b4e7a8b2cd088ae9321d386df0e1f.
 Tracked clean; local untracked `.serena/` excluded. RELEASE
 `/home/rd/proj/pm-r242-economic-release/pale-mirror` clean detached same ref.
 PACK `/home/rd/proj/minecraft` HEAD98a6701 tracked clean; unrelated
-`.f0v-baseline/` retained. Ignored hosted artifacts updated, no pack source change.
-GOV `/home/rd/proj/pm-governance/pale-mirror` has extensive unrelated WIP.
-This task owns this ledger, docs/frontier-v3-task-deadlock-repair-20261107.md,
-and ONLY `task_continuation_navigation` property in mixed architecture.yml.
-Preserve all other governance WIP. Source and pack histories remain independent.
+`.f0v-baseline/` retained. Ignored hosted artifacts published; no pack source edit.
+GOV `/home/rd/proj/pm-governance/pale-mirror` contains extensive unrelated WIP.
+This cut owns this ledger, docs/frontier-v3-caravan-supply-funding-20261107.md and
+ONLY `expedition_supply_funding` property in mixed architecture.yml. Stage
+architecture narrowly; preserve all other governance WIP/histories.
 
-## Repairs and durable receipts
-Current detailed receipt: docs/frontier-v3-task-deadlock-repair-20261107.md.
+## Current changes
+Source6028787c0: explicit ExpeditionSupplyPurchase retains real supplier storage,
+food, per-person quantities and price; money reserved jointly at mission
+admission, atomic reversible plan/budget replacement. Full round-trip home food
+remains first choice with zero budget. If home covers first leg only, a priced
+return-food purchase can be planned at the trading settlement already visited.
+Uses actual eligible food warehouses independently of cargo chest. No arbitrary
+flat allowance or guaranteed future seller stock. Shared animal food still
+requires existing complete home load; third-settlement detours are not added.
 
-- 54109f42c: shared departure enumerates every explicit facility port, including
- secondary private entrance. Storage planning/receipt share actual departure
- permission; foreign/private space and physical scars remain forbidden.
-- 54109f42c: mission port explicitly supplies accepted itinerary advice. Existing
- KnownRouteJoining joins actual body through bounded4096-surface windows,
- validates geometry and retains final goal/authority/observed arrival. No generic
- family-stage inference. Fresh search had exhausted~980866work for a still-valid
- 6151-edge mission path, repeatedly holding3departures.
-- 54109f42c: ordinary NO_PATH during activity interruption retains exact review,
- like unknown/planning, without partial handoff or global quarantine. Authority
- violations still fail.
-- 98642a7a9: cancelled crossbow removed EMPTY charge, stranding saved epoch6.
- Shared native hand evidence recognizes only known empty crossbow removal;
- loaded/malformed/foreign patches stay rejected. Cancellation setsEMPTY on its
- exact current weapon. Native census proved saved departure, no state edits.
-- 7ab403f9d: reload/aim no longer puts a preview arrow into the real weapon before
- actual ammunition debit. Preparation owns pose/clock; journalled emission owns
- actual projectile, one arrow and wear. Save/reload during aim remains classifiable.
-- bb58623b0: checked-in targeted native body HOT/COLD carrier.
+Purpose-specific approved supply price survives unrelated domestic bid changes.
+Actual supplier stock/consent, current return-food demand and treasury funds are
+rechecked. Current nutrition accrues at travel-decision tick. Purchase moves
+budget money into an exact payment hold; real receipt alone pays/transfers title.
+Cancellation returns money to same mission envelope; completion/retirement
+release leftovers. Higher cost needs actual additional funds; foreign budget
+rejected. New wire schema345 rejects344 rather than invent missing plan data.
+Group diagnostics expose supplyFunding with planned quantity/cost, remaining
+budget, held payment and supplier storage.
 
-Prior crossbow feature/production and ammo-custody delivery:
- docs/frontier-v3-crossbow-delivery-20261107.md (472bcccb4 and ancestors).
-Prior navigation/storage/cellar delivery:
- docs/frontier-v3-navigation-passage-cellar-repair-20261107.md.
-Ruleset r33/schema344 unchanged. Forge:4sticks+1plank+2ingots+2cotton string→crossbow;
-1ingot→8heads;4heads+4sticks+1cloth→4arrows.32-arrow loads, native465durability,
-ordinary production/supply/market, no COLD combat or free ammo.
+Preceding emergency commitd730ef07e: resource-site delivery pre-effect path
+intentionally lacked witness but classifier dereferenced it, causing quarantine
+at13:29:42. Named pre-effect classification now has explicit job resource kind;
+non-null recovery witness uses same image rules. Player occupancy still refused.
+NoAI bodies do not tick LookControl; shared native eye/body facing applies
+immediately during crossbow sense/aim and actual ballistic emission. Moving
+native target regression asserts head/body angles. Emergency build restored the
+SAME schema344 world before continuing caravans; no client visual retest yet.
 
-## Evidence and limits
-Evidence under IMPL build/task-deadlocks-20261107/.25focused owner JVM PASS;
-26native-boundary JVM PASS; final57native local-navigation PASS, including actual
-managed body save/load during aim followed by one-arrow/wear emission/native hit.
-19guardrails selftests PASS. Clean detached final guardrails/JAR/package and
-13saved-departure JVM PASS (/tmp/pm-deadlocks-final-release.log).
-An initial broad65 JVM run had15failures:2own fixture/assumption errors repaired,
-13others reproduced on clean472bcccb4; one old typed-service fixture repaired,
-12old meal/depot/adoption fixture failures remain. No whole-suite-green claim.
-Earlier whole native460 had18old failures, not all classified; no complete M3.
+## Verification
+Detailed current receipt docs/frontier-v3-caravan-supply-funding-20261107.md.
+IMPL build/caravan-supply-funding-20261107 contains bounded reports/live evidence.
+35integration JVM checks PASS: budget admission, complete delivery/return/close,
+checkpoint recovery, seller withdrawal recall, no-money/foreign-budget/old-wire
+negatives; paid actual receipt/cancellation; ordinary supply/collection/death/
+financial/architecture.19additional detached checks PASS (10architecture overlap):
+spot purchases, independent storage, clock recovery, supply identity, supply ETA.
+44distinct JVM checks in total.19guardrails selftests PASS, static architecture/
+debt/style gates PASS. Clean detached6028787c0 JAR/package and58native
+local-navigation GameTests PASS (/tmp/pm-supply-budget-release.log).
 
-Checked-in tools/frontier-v3-test-pilot/scenarios/live-task-deadlock-body-roundtrip.json,
-run1fdb86fc-96f2-40c1-ab2d-58d2f55ac66d,9actions PASS on98642a7a9.
-Actual recovered Leon Lake returned HOT/INDEXED with30arrows, left through ordinary
-unload to bodyCustodyNONE/departureSaved, ate and resumed work. PMV3 trace/frame
-linked in body-roundtrip-manifest.json. Frame partly occluded; no clear weapon
-animation acceptance. semanticProgress=[]/build=null means targeted diagnostic
-native evidence bound separately to pinned live artifact, not full obligation
-closure. No owned client/Xvfb remains. Final deployment actor644093 retains
-NOURISHED/GUARD/30arrows/no shot; UNLOADED/bodyNONE/carrierEpoch7/saveddeparture.
-
-Before immutable snapshot587273: Stonefield baker2-15 meal blocked since297847,
-11bread delivery suspended; Ironmeadow8-15 same secondary-exit defect. Both now
-NOURISHED with successor production jobs (live644097/644102). Stonefield hungry
-28→0 at630658; final644066 has2 (ordinary fluctuation). Final saved643175 census:
-14meals,1accepted/13planning/0immediate NO_PATH; pending completion not proved.
-All8missions TRAVELLING/no execution or movement-permission blockers; three
-previously stuck departures advanced. Full6151-edge live return/delivery not yet
-completed; canonical tests cover delivery/payment/return/retirement/recovery.
-Fastforward: initial24000 rejected by savedbody; later24000 advanced626722→628125
-then correctly rejected on player demand; separate500 completed630219→630719.
-No claim of a completed24k run; no fastforward remains.
+The real funded full-route test finished32732 vs conservative37175 forecast and
+needed no foreign purchase; it proves unused release, not actual paid arrival.
+Separate registered paid-replenishment tests exercise actual receipt/payment/
+cancellation/recovery from an explicitly declared supplier-arrival initial
+fixture, not native whole outward-trip evidence. An earlier actual departure
+recall3024 was caused by seller ask4 versus new ordinary buyer bid3.677364;
+retained approved supply quote4 now honored with real funding and seller consent.
+No full-suite green claim:12old meal/depot/adoption JVM fixture failures were
+reproduced on472bcccb4, old whole native460 had18not fully classified failures.
+Current selected native58PASS is not an entire native-suite result or M3.
 
 ## Live deployment
-LIVE `/home/rd/far-frontier-server`, selected world
-crossbow-guards-fixed-seed139-20261107,seed139,r33/schema344, retained throughout.
-Normal all-dimensions-saved12:10:29.186; JVM/25565 exit before install.
-Final preflight/postverify PASS (/tmp/pm-deadlocks-final-{preflight,verify}.log).
-far-frontier-v3-live.service ACTIVE, wrapper1435078, invocation
-bb987528711b4462804ad06f00cb9f7c, notBefore1794035443.
-Core SHA5121a8674c2fc06b3f6ab3fef33de987722238c460cd8e632490cdef096eb5efdc575bc9199fb1c1012416f9afe795fb5128f37c1e50bcdc93040eba2c618cfdb91.
-Visuals unchanged SHA5122fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601.
-Pack170 verified. Java21 build `/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2`;
-liveJava22 `/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`.
-RCON helper IMPL build/forestry-native/query-runtime.mjs reads credentials;
-never print server.properties wholesale. Observatory binds100.100.78.29:8093,
-not127.0.0.1. Final ordinary COLD35.2705s:19.98835native/simTPS, debt0, ready0,
-ready lag0. Last64ticks mean4.682ms/max44.973ms;1active search/no queued worker
-slices/oldest wait2turns. Invocation max476.212ms includes startup; no guarantee
-all peaks<80ms or HOT scalability. No new ERROR/quarantine; inventory/scene0.
-Required2conflicts are retained historical equipment/kernel incidents, not erased.
+LIVE `/home/rd/far-frontier-server`, service far-frontier-v3-live.service.
+Previous crossbow-guards-fixed-seed139-20261107 retained intact: all dimensions
+saved14:19:03.067, JVM/25565 exited before replacement. New selected world
+funded-caravans-seed139-20261107, seed139/rulesetfrontier-v3-ranged-guards-r33,
+wire345; required pack datapack installed before first startup. Clean source
+preflight/postverify PASS (/tmp/pm-supply-budget-{preflight,verify}.log).
+Wrapper2233018 invocation993635ea18a34572b5f8d03e607a0311,
+notBefore1794043174. Core SHA512
+b7377fda99384004ffbfeb10849020e8faf172f8e3e08dc4dd74dd23da8dbbd5ef931c22d338dffc6a379f1f3b57a8aae042caf0c9d0f107e55ed35e3497dace.
+Visuals unchanged SHA512
+2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601.
+Pack170checksums verified/published. JDK21 build at
+/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2; runtimeJava22 at
+/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
+Fresh364cut green/0conflicts/319residents/12settlements/0initialhungry;
+not a long-term economy result. Guarded +6000 request1 COMPLETED from812to6812; ordinary read6904,
+fastForwardRemaining0, no clock hold or new ERROR/quarantine. No missions/trades
+in this early interval; actual paid native supplier stop remains unobserved.
+No client/pilot/Xvfb running. No graphical crossbow-facing acceptance claimed.
 
-## Remaining separate findings
-Final644066 hunger75/346 (previous134→71 at630658). Ashcross29/Southgate33 still
-lack affordable fuel, near-zero cash and lifetime sales income0; long
-FUEL_DELIVERY is an explained economic shortage, not proved execution failure
-or healthy equilibrium. Clearwater holds most money; concentration alone is not
-proof. Small1–3unit lots persist; their economic justification not established
-by this cut. No invented money/credit or balancing changes authorized by a test.
-Scheduler startup/occasional >80ms peaks and baseline fixture debt remain outside
-this confirmed deadlock repair. Report these limits explicitly; do not call the
-whole economy healthy or every possible deadlock eliminated.
+## Prior repairs and open separate findings
+Prior delivery docs/frontier-v3-task-deadlock-repair-20261107.md names
+54109f42c/98642a7a9/bb58623b0/7ab403f9d: secondary private exits, accepted long
+itinerary joining via bounded4096windows, ordinary local navigation refusal,
+empty-crossbow saved-body recovery, no preview projectile before journalled shot.
+Native targeted body roundtrip1fdb86fc passed earlier, not full M3.
 
+Old-world Mossbrook actors10-25/10-27/10-20 were moving but starved after historic
+stalls exceeded their original food forecast. The old world remains on disk;
+new schema345 world is not proof they recovered. Arbitrary off-itinerary
+supplier diversion remains outside this funded already-visited-supplier cut.
+Ashcross/Southgate/Mossbrook had fuel/cash shortages; concentration at Clearwater
+alone is not economic invalidity.1–3item lots and occasional>80ms/startup spikes
+remain separately unproven. Do not describe whole economy as balanced/healthy.
+RCON helper IMPL build/forestry-native/query-runtime.mjs reads credentials; never
+print complete server.properties. Observatory100.100.78.29:8093/api/view.
 
-## Read-only follow-up, 12:25–12:28 local
-Same source/world/invocation, no code/deploy/reset. Evidence IMPL
-build/task-deadlocks-followup-20261107/: two process cuts57.45s/~1149ticks;
-all9then-active caravan bodies advanced~76blocks, one seller already RETURNING.
-Ten surviving sampled non-extraction work tasks advanced;3unchanged bakery jobs
-explicitly await FUEL_DELIVERY (Ashcross/Southgate/Mossbrook), no physical effect
-or route conflict. No new ERROR/quarantine, debt0, route worker queue0,~20TPS COLD.
-Important remaining logistics recovery issue: Mossbrook actors10-25/10-27/10-20
-have0portablebread and STARVING, but continue accepted journeys, not frozen.
-Their provisioning plans were calculated169581/252578/311197 with duration
-184625/143488/144725; copied current snapshot662575 confirms food8/6/6LOADED
-historically and now0remaining. Prior stalls outlasted those forecasts. At663608+
-next leg arrivals676639/673201/676439; no meal, activity waitsMOVEMENT_HANDOFF.
-Replenishment source policy only considers attached stock or an actual supplier
-visit; these moving individual carriers have neither. Home20bread is not local
-physical food. This supports depleted supplies after old delays, not proof of
-incorrect fresh departure provisioning. Need address recovery/resupply after
-excessive delays before calling logistics fully healthy. No live starvation
-recovery or whole long return completion claimed. Small lots remain separate.
+## Delivery state
+Implementation and deployment complete for the scoped supply-budget feature,
+crash repair and native facing mechanics. Governance guardrails PASS; scoped
+ledger/receipt/architecture scalar retained in the documentation commit. Preserve all
+unrelated WIP. User graphical crossbow check and actual paid native supplier stop
+remain unobserved; do not claim HUMAN/M3 or whole-economy balance. Do not push.
