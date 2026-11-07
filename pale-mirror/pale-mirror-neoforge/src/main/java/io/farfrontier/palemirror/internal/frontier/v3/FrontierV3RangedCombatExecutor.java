@@ -126,7 +126,7 @@ final class FrontierV3RangedCombatExecutor {
                 && s.inventory().items().containsKey(shot.weapon())
                 && FrontierV3ExactItemPresentation.exactMatch(actor.getMainHandItem(),s.inventory().items().get(shot.weapon()));
     }
-    private static FrontierV3NativeEffect.Admission prepare(ServerLevel level,Mob actor,LivingEntity target,RangedShot shot,RangedRules rules){
+    static FrontierV3NativeEffect.Admission prepare(ServerLevel level,Mob actor,LivingEntity target,RangedShot shot,RangedRules rules){
         var marker=actor.getPersistentData().getCompound(CLOCK);
         if(!marker.getString("owner").equals(shot.owner().value())||marker.getLong("ordinal")!=shot.attemptOrdinal()){
             marker=new CompoundTag();marker.putString("owner",shot.owner().value());marker.putLong("ordinal",shot.attemptOrdinal());marker.putLong("start",level.getGameTime());actor.getPersistentData().put(CLOCK,marker);
@@ -135,7 +135,10 @@ final class FrontierV3RangedCombatExecutor {
         FrontierV3CombatTargetMotion.observe(actor,target,shot.attacker(),true,rules.sensingTicks());
         actor.getLookControl().setLookAt(target,60,60);long elapsed=level.getGameTime()-marker.getLong("start");
         if(elapsed<RangedMechanics.reloadTicks(shot.actorProfile(),rules))return FrontierV3NativeEffect.Admission.waiting("crossbow-reload");
-        actor.stopUsingItem();actor.getMainHandItem().set(DataComponents.CHARGED_PROJECTILES,ChargedProjectiles.of(FrontierV3ActorResourceSlots.get(actor,slot(shot.binding().address())).copyWithCount(1)));
+        // Aiming is presentation, not ammunition custody. A preview arrow in the
+        // real weapon can escape through a save/drop and strand strict unload recovery.
+        // Keep the ordinary using-item pose; only emit spends the actual pocket arrow.
+        if(!actor.isUsingItem())actor.startUsingItem(InteractionHand.MAIN_HAND);
         return elapsed<RangedMechanics.reloadTicks(shot.actorProfile(),rules)+rules.aimTicks()?FrontierV3NativeEffect.Admission.waiting("crossbow-aim"):FrontierV3NativeEffect.Admission.READY;
     }
     private static boolean ammunitionBefore(Mob actor,RangedShot shot){
