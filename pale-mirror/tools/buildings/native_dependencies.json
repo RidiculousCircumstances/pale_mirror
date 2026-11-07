@@ -34,5 +34,17 @@
     "filename": "towntalk-1.2.0.jar",
     "url": "https://edge.forgecdn.net/files/5653/504/towntalk-1.2.0.jar",
     "sha512": "2414089d190045fea8ee80779a33f569827195ebbba41df712fa2feb7226f9d23b3b9be79d74515dd4207d8ac8d6549ccb22c2f9ea6ac6780da79cf7c4eb741d"
+  },
+  {
+    "name": "handcrafted",
+    "filename": "handcrafted-neoforge-1.21.1-4.0.3.jar",
+    "url": "https://cdn.modrinth.com/data/pJmCFF0p/versions/JfqnpP2Z/handcrafted-neoforge-1.21.1-4.0.3.jar",
+    "sha512": "4ff5fb2aa9582b886d03f647fe9b8c12a828d29a1787e9c9b463be18192ea798e6a4ac83479623042791bce0bacbf6e3e2c2e9ef086640aeeb6970d3404e7ee4"
+  },
+  {
+    "name": "resourcefullib",
+    "filename": "resourcefullib-neoforge-1.21-3.0.12.jar",
+    "url": "https://cdn.modrinth.com/data/G1hIVOrD/versions/x99nCLTm/resourcefullib-neoforge-1.21-3.0.12.jar",
+    "sha512": "a9d20e345faa9bcb297bd95ac9524205834804d1bb13518397dd4f7f62b352b08c3339ee7f7870d3669078ceeb33d5c31ea527aecce4b31d62ec1ff7d8b562c8"
   }
 ]

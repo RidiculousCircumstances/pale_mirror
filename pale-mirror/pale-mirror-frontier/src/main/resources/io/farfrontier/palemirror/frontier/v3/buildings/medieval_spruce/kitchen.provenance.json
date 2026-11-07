@@ -8,8 +8,10 @@
     "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
     "supported open entrance",
     "declared machine/operator aisle and service points",
-    "no entities, inventories or foreign controllers; typed visual data retained"
+    "no entities, inventories or foreign controllers; typed visual data retained",
+    "reviewed Handcrafted 4.0.3 window-six furniture replaces vanilla mock seats/tables; walls, cooking aisle, storage and DINING semantics retained"
   ],
-  "blocks": 1589,
-  "beds": 0
+  "blocks": 1587,
+  "beds": 0,
+  "furnitureLayoutSha256": "4bf21ada799344fc3487b5b98fe1bd4b3eaaeeb55edb57f5d01cfe7c3dc96f03"
 }

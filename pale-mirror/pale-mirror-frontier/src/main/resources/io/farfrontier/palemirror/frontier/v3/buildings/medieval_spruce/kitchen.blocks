@@ -1,4 +1,4 @@
-# Pinned Medieval Spruce private adaptation; no block NBT or entities.
+# Pinned Medieval Spruce private adaptation; reviewed Handcrafted window furniture.
 0,0,1	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
 0,0,2	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
 0,0,7	2|minecraft:dirt|minecraft:dirt|	FOUNDATION
@@ -1042,13 +1042,12 @@
 13,2,1	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=north|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OmNvYmJsZXN0b25lIn19	WALL
 13,2,4	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
 13,2,5	3|minecraft:spruce_wall_sign|minecraft:spruce_sign|facing=east,waterlogged=false|2|3465|e2JhY2tfdGV4dDoge2ZpbHRlcmVkX21lc3NhZ2VzOiBbJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9J10sIGhhc19nbG93aW5nX3RleHQ6IDBiLCBjb2xvcjogImJsYWNrIiwgbWVzc2FnZXM6IFsneyJ0ZXh0IjoiIn0nLCAneyJ0ZXh0IjoiIn0nLCAneyJ0ZXh0IjoiIn0nLCAneyJ0ZXh0IjoiIn0nXX0sIGZyb250X3RleHQ6IHtmaWx0ZXJlZF9tZXNzYWdlczogWyd7InRleHQiOiIifScsICd7InRleHQiOiIifScsICd7InRleHQiOiIifScsICd7InRleHQiOiIifSddLCBoYXNfZ2xvd2luZ190ZXh0OiAwYiwgY29sb3I6ICJibGFjayIsIG1lc3NhZ2VzOiBbJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9J119fQ	WALL
-13,2,13	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	WALL
-13,2,14	2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=true,waterlogged=false,west=true	WALL
+13,2,13	2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=south,waterlogged=false	WALL
+13,2,14	2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=east_side,waterlogged=false	WALL
 13,2,15	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=up|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OmNvYmJsZXN0b25lIn19	WALL
 13,2,20	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
 13,3,1	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=bottom,shape=straight,waterlogged=false	WALL
 13,3,4	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
-13,3,14	2|minecraft:spruce_pressure_plate|minecraft:spruce_pressure_plate|powered=false	WALL
 13,3,15	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
 13,4,0	2|minecraft:cobblestone_slab|minecraft:cobblestone_slab|type=top,waterlogged=false	WALL
 13,4,1	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=straight,waterlogged=false	WALL
@@ -1117,7 +1116,7 @@
 14,2,7	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	WALL
 14,2,8	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	WALL
 14,2,9	3|minecraft:spruce_wall_sign|minecraft:spruce_sign|facing=south,waterlogged=false|2|3465|e2JhY2tfdGV4dDoge2ZpbHRlcmVkX21lc3NhZ2VzOiBbJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9J10sIGhhc19nbG93aW5nX3RleHQ6IDBiLCBjb2xvcjogImJsYWNrIiwgbWVzc2FnZXM6IFsneyJ0ZXh0IjoiIn0nLCAneyJ0ZXh0IjoiIn0nLCAneyJ0ZXh0IjoiIn0nLCAneyJ0ZXh0IjoiIn0nXX0sIGZyb250X3RleHQ6IHtmaWx0ZXJlZF9tZXNzYWdlczogWyd7InRleHQiOiIifScsICd7InRleHQiOiIifScsICd7InRleHQiOiIifScsICd7InRleHQiOiIifSddLCBoYXNfZ2xvd2luZ190ZXh0OiAwYiwgY29sb3I6ICJibGFjayIsIG1lc3NhZ2VzOiBbJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9JywgJ3sidGV4dCI6IiJ9J119fQ	WALL
-14,2,14	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	WALL
+14,2,14	2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=west_side,waterlogged=false	WALL
 14,2,15	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=up|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OmNvYmJsZXN0b25lIn19	WALL
 14,2,18	2|minecraft:barrel|minecraft:barrel|facing=up,open=false	WALL
 14,2,20	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
@@ -1197,6 +1196,7 @@
 15,2,7	2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=true,waterlogged=false,west=true	WALL
 15,2,8	2|minecraft:spruce_log|minecraft:spruce_log|axis=y	WALL
 15,2,12	2|minecraft:spruce_log|minecraft:spruce_log|axis=y	WALL
+15,2,14	2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=west,waterlogged=false	WALL
 15,2,15	2|minecraft:spruce_log|minecraft:spruce_log|axis=y	WALL
 15,2,16	2|minecraft:cobblestone|minecraft:cobblestone|	WALL
 15,2,17	2|minecraft:barrel|minecraft:barrel|facing=up,open=false	WALL
@@ -1306,7 +1306,7 @@
 16,1,19	2|minecraft:gravel|minecraft:gravel|	FOUNDATION
 16,1,20	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 16,2,1	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=north|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OmNvYmJsZXN0b25lIn19	WALL
-16,2,14	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=bottom,shape=straight,waterlogged=false	WALL
+16,2,14	2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=east,waterlogged=false	WALL
 16,2,15	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=up|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OmNvYmJsZXN0b25lIn19	WALL
 16,2,18	2|minecraft:barrel|minecraft:barrel|facing=north,open=false	WALL
 16,2,20	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
@@ -1377,16 +1377,14 @@
 17,1,19	2|minecraft:gravel|minecraft:gravel|	FOUNDATION
 17,1,20	2|minecraft:cobblestone|minecraft:cobblestone|	FOUNDATION
 17,2,1	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=north|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OmNvYmJsZXN0b25lIn19	WALL
-17,2,9	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	WALL
-17,2,10	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=false	WALL
-17,2,11	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=bottom,shape=straight,waterlogged=false	WALL
-17,2,13	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	WALL
-17,2,14	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=true,waterlogged=false,west=false	WALL
+17,2,9	2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=south,waterlogged=false	WALL
+17,2,10	2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=single,waterlogged=false	WALL
+17,2,11	2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=north,waterlogged=false	WALL
+17,2,13	2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=south,waterlogged=false	WALL
+17,2,14	2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=single,waterlogged=false	WALL
 17,2,15	3|domum_ornamentum:plain|domum_ornamentum:plain|facing=up|1|3465|e3RleHR1cmVEYXRhOiB7Im1pbmVjcmFmdDpibG9jay9vYWtfcGxhbmtzIjogIm1pbmVjcmFmdDpzcHJ1Y2VfcGxhbmtzIiwgIm1pbmVjcmFmdDpibG9jay9kYXJrX29ha19wbGFua3MiOiAibWluZWNyYWZ0OmNvYmJsZXN0b25lIn19	WALL
 17,2,20	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
 17,3,1	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
-17,3,10	2|minecraft:spruce_pressure_plate|minecraft:spruce_pressure_plate|powered=false	WALL
-17,3,14	2|minecraft:spruce_pressure_plate|minecraft:spruce_pressure_plate|powered=false	WALL
 17,3,15	2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	WALL
 17,4,0	2|minecraft:cobblestone_slab|minecraft:cobblestone_slab|type=top,waterlogged=false	WALL
 17,4,1	2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=straight,waterlogged=false	WALL

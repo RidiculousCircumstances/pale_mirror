@@ -1,6 +1,7 @@
 # Handcrafted kitchen trial
 
-A private, isolated experiment using the existing `medieval_spruce/kitchen.nbt`,
+A private, isolated experiment using the historical `medieval_spruce/kitchen.nbt`
+from source `494356929`,
 Handcrafted 4.0.3 and ResourcefulLib 3.0.12 for NeoForge 1.21.1. The two dependencies
 are checksum-pinned in `dependencies.json`; `prepare.py` downloads them only into
 ignored build output. No pack manifest or production building changes are made.
@@ -46,3 +47,26 @@ with status `ok`, run `2d131beb-c129-4773-a8aa-adb1e48763fd`, world
 Evidence: `build/handcrafted-kitchen/trial-20261108-002418/` (trial receipt,
 three scans, client images, six mount/release receipts and actual released poses).
 This is an isolated authoring trial, not full-pack or NPC dining acceptance.
+
+## Promoted template
+
+The production kitchen now includes the reviewed `window-six` arrangement.
+`prepare.py` extracts the pinned historical NBT into ignored build output so the
+before/after trial remains reproducible after promotion.
+
+`uv run --no-project --with nbtlib==2.0.4 python tools/buildings/handcrafted-kitchen/promote.py`
+applies the layout to native/neutral assets, preserves unrelated visual NBT,
+updates template version/provenance and checks that furniture replaces no block
+payload. Regenerate the collision certificate through native `building validate`;
+never hand-edit it. Changed production template hashes require a fresh world.
+The native building-authoring gate also checks neighbour-derived table shapes
+and real furniture collision in all four building rotations.
+
+The checked-in `live-handcrafted-kitchen-seed139.json` scenario observes the
+promoted seed139 kitchen in the running full pack: read-only fixture, actual
+window furniture, reviewed frames and one ordinary player chair interaction.
+It never pastes blocks or changes canonical state. Run it through the existing
+pilot with `FRONTIER_V3_PILOT_PROFILE=pack`, an installed pack directory,
+`VIBECRAFT_NATIVE_PROFILE=pack` and `tools/vibecraft/native-gradle.sh` when a
+VibeCraft scan is needed. The optional bridge is injected only into that
+owned pilot profile, not the player's launcher instance.

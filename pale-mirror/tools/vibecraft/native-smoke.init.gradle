@@ -2,9 +2,11 @@
 gradle.projectsEvaluated {
     def project = gradle.rootProject.findProject(':pale-mirror-neoforge')
     if (project == null) return
-    def runDirectory = new File(project.buildDir, 'runs/frontier-v3-pilot-client')
+    def profile = System.getenv('VIBECRAFT_NATIVE_PROFILE') ?: 'lite'
+    if (!(profile in ['lite', 'pack'])) throw new GradleException('Unknown VIBECRAFT_NATIVE_PROFILE')
+    def runDirectory = new File(project.buildDir, profile == 'pack' ? 'runs/frontier-v3-pilot-pack-client' : 'runs/frontier-v3-pilot-client')
     def bridgeJar = new File(System.getenv('VIBECRAFT_NATIVE_JAR') ?: '')
-    project.tasks.named('prepareFrontierV3PilotClientRun') {
+    project.tasks.named(profile == 'pack' ? 'prepareFrontierV3PilotPackClientRun' : 'prepareFrontierV3PilotClientRun') {
         doLast {
             def jar = bridgeJar
             if (!jar.isFile()) throw new GradleException('VIBECRAFT_NATIVE_JAR must name the built bridge JAR')

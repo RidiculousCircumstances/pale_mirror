@@ -44,6 +44,54 @@ public final class FrontierV3BuildingAuthoringGameTests {
         });
     }
 
+    @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void handcraftedKitchenTablesSettleAgainstNeighboursInEveryRotation(GameTestHelper helper) {
+        var catalog = BuildingCatalog.standard();
+        var definition = catalog.require(catalog.select(BuildingCatalog.MEDIEVAL_SPRUCE,
+                io.farfrontier.palemirror.frontier.v3.model.StructureKind.KITCHEN),
+                io.farfrontier.palemirror.frontier.v3.model.StructureKind.KITCHEN);
+        var furniture = definition.blocks().entrySet().stream()
+                .filter(e -> e.getValue().state().kind().startsWith("handcrafted:")).toList();
+        helper.assertTrue(furniture.size() == 10, "reviewed kitchen has six real chairs and four table blocks");
+        var origin = helper.absolutePos(new net.minecraft.core.BlockPos(10, 5, 10));
+        var level = helper.getLevel();
+        for (int turn = 0; turn < 4; turn++) {
+            var facing = io.farfrontier.palemirror.frontier.v3.model.FacilityFacing.values()[turn];
+            var placement = new BuildingPlacement(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(
+                    origin.getX(), origin.getY(), origin.getZ()),
+                    new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(15, 2, 12),
+                    io.farfrontier.palemirror.frontier.v3.model.FacilityFacing.SOUTH, facing);
+            helper.runAfterDelay(turn * 4, () -> {
+                for (int x = -5; x <= 5; x++) for (int z = -5; z <= 5; z++) {
+                    level.setBlock(origin.offset(x, -1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
+                    level.setBlock(origin.offset(x, 0, z), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+                }
+                for (var entry : furniture) {
+                    var p = placement.world(entry.getKey());
+                    level.setBlock(new net.minecraft.core.BlockPos(p.x(), p.y(), p.z()),
+                            FrontierV3BlockStates.resolve(placement.state(entry.getValue().state())), 3);
+                }
+                helper.runAfterDelay(2, () -> {
+                    for (var entry : furniture) {
+                        var p = placement.world(entry.getKey());
+                        var at = new net.minecraft.core.BlockPos(p.x(), p.y(), p.z());
+                        var actual = level.getBlockState(at);
+                        var described = FrontierV3BlockStates.describe(actual);
+                        helper.assertTrue(io.farfrontier.palemirror.frontier.v3.model.StructuralMaterialIdentity.matches(
+                                placement.state(entry.getValue().state()), described), "settled furniture retains native identity/facing");
+                        helper.assertTrue(!actual.getCollisionShape(level, at).isEmpty(), "real registered furniture retains its collision");
+                        if (entry.getKey().equals(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(13, 2, 14))) {
+                            var direction = placement.direction(io.farfrontier.palemirror.frontier.v3.model.FacilityFacing.EAST);
+                            helper.assertTrue(described.properties().get("shape").equals(direction.name().toLowerCase(java.util.Locale.ROOT) + "_side"),
+                                    "connected table shape must settle against its rotated neighbour");
+                        }
+                    }
+                });
+            });
+        }
+        helper.runAfterDelay(16, helper::succeed);
+    }
+
     @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/mobs/empty",timeoutTicks=30)
     public static void linkedDoorsRetainBothVerticalHalvesAndRejectUnrelatedNeighbours(GameTestHelper helper) {
         var level=helper.getLevel();var base=helper.absolutePos(new net.minecraft.core.BlockPos(1,1,1));

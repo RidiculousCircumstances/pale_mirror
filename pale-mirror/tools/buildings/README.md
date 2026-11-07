@@ -5,8 +5,8 @@ structural custody, storage, production and navigation remain the gameplay owner
 The checked-in Medieval Spruce set is a **private test derivative**, not a grant of
 redistribution rights. Exact upstream sources and declared functional adaptations are
 in the provenance files, `import_medieval_spruce.py` and `import_settlement_set.py`.
-Native decorative blocks require the pinned Domum Ornamentum, MineColonies rack
-and support-mod dependencies. Colony controllers and their gameplay state are not imported.
+Native decorative blocks require the pinned Domum Ornamentum, MineColonies rack,
+Handcrafted furniture and support-mod dependencies. Colony controllers and their gameplay state are not imported.
 
 The town hall selects upstream **level 5** (`townhall5`), matching the gallery tower.
 Other service templates explicitly select **level 2** variants (`hospital2`,

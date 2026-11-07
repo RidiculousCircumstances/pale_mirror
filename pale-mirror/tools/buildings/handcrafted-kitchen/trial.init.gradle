@@ -5,7 +5,7 @@ gradle.projectsEvaluated {
     def root = gradle.rootProject.projectDir
     def dependencies = new groovy.json.JsonSlurper().parse(new File(root, 'tools/buildings/handcrafted-kitchen/dependencies.json'))
     def input = new File(root, 'build/handcrafted-kitchen/dependencies')
-    def template = new File(root, 'pale-mirror-frontier/src/main/resources/io/farfrontier/palemirror/frontier/v3/buildings/medieval_spruce/kitchen.nbt')
+    def template = new File(root, 'build/handcrafted-kitchen/baseline/kitchen.nbt')
     def clientRun = new File(project.buildDir, 'runs/frontier-v3-pilot-client')
     def serverRun = new File(project.buildDir, 'runs/frontier-v3-pilot-server')
     def worldName = project.providers.gradleProperty('frontierV3PilotWorld').orElse('frontier-v3-pilot-world').get()

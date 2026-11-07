@@ -1,0 +1,181 @@
+{
+  "schema": 1,
+  "id": "live_handcrafted_kitchen_seed139",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 4
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1488,
+        "y": 64,
+        "z": -1429
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok",
+            "requiredConflicts": 0
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1501,
+        "y": 64,
+        "z": -1436
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -1501,
+        "y": 64,
+        "z": -1438
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -1502,
+        "y": 64,
+        "z": -1437
+      },
+      "block": "handcrafted:spruce_chair",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1500,
+        "y": 64,
+        "z": -1435
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -1497,
+        "y": 64,
+        "z": -1434
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -1497,
+        "y": 64,
+        "z": -1433
+      },
+      "block": "handcrafted:spruce_table",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1500,
+        "y": 64,
+        "z": -1437
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -1497,
+        "y": 64,
+        "z": -1438
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -1498,
+        "y": 64,
+        "z": -1437
+      },
+      "block": "handcrafted:spruce_chair",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1502,
+        "y": 64,
+        "z": -1436
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -1502,
+        "y": 64,
+        "z": -1437
+      }
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "x": -1502,
+        "y": 64,
+        "z": -1437
+      },
+      "item": "minecraft:air",
+      "uses": 1,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait",
+      "ms": 15000
+    }
+  ],
+  "assertions": [],
+  "frames": [
+    {
+      "after": 3,
+      "name": "window-eye"
+    },
+    {
+      "after": 6,
+      "name": "rear-left-eye"
+    },
+    {
+      "after": 9,
+      "name": "rear-right-eye"
+    },
+    {
+      "after": 12,
+      "name": "actual-handcrafted-chair-player",
+      "presentation": "player"
+    }
+  ]
+}
