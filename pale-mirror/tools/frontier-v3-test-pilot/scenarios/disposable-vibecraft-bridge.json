@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "id": "disposable_vibecraft_bridge",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode spectator" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 102, "z": 6 }, "settleMs": 0 },
+    { "type": "command", "command": "/fill -8 100 -8 8 100 8 minecraft:stone" },
+    { "type": "command", "command": "/fill -4 101 -4 4 105 4 minecraft:air" },
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/time set 6000" },
+    { "type": "command", "command": "/weather clear" }
+  ],
+  "actions": [
+    { "type": "wait_until_block", "position": { "x": 3, "y": 101, "z": 0 }, "block": "minecraft:gold_block", "timeoutMs": 120000 },
+    { "type": "assert_visible_block", "position": { "x": 0, "y": 101, "z": 0 }, "block": "pale_mirror:production_bench", "properties": { "facing": "west" }, "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": 0, "y": 101, "z": 0 } }
+  ],
+  "assertions": [],
+  "frames": [{ "after": 3, "name": "vibecraft-modded-block" }]
+}

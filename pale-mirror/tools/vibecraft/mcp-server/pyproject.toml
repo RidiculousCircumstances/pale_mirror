@@ -1,0 +1,61 @@
+[project]
+name = "vibecraft-mcp"
+version = "0.1.0"
+description = "MCP server for AI-powered WorldEdit in Minecraft - Exposes all WorldEdit commands"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "VibeCraft Team"}
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "mcrcon>=0.7.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "nbtlib>=2.0.0",
+    "websocket-client>=1.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "websocket-server>=0.6.4",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"vibecraft" = ["*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+ignore = ["E402", "E741"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+preview = true
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

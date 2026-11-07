@@ -1,0 +1,10 @@
+client-mod/.gradle/
+client-mod/build/
+client-mod/run/
+mcp-server/.venv/
+mcp-server/.pytest_cache/
+mcp-server/*.egg-info/
+mcp-server/src/*.egg-info/
+.env
+*.log
+mcp-server/logs/

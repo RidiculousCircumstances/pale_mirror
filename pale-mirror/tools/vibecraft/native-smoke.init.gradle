@@ -1,0 +1,20 @@
+// Explicit test-only injection into the existing disposable client after its reset.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject.findProject(':pale-mirror-neoforge')
+    if (project == null) return
+    def runDirectory = new File(project.buildDir, 'runs/frontier-v3-pilot-client')
+    def bridgeJar = new File(System.getenv('VIBECRAFT_NATIVE_JAR') ?: '')
+    project.tasks.named('prepareFrontierV3PilotClientRun') {
+        doLast {
+            def jar = bridgeJar
+            if (!jar.isFile()) throw new GradleException('VIBECRAFT_NATIVE_JAR must name the built bridge JAR')
+            def run = runDirectory
+            new File(run, 'mods').mkdirs()
+            java.nio.file.Files.copy(jar.toPath(), new File(run, 'mods/vibecraft-neoforge.jar').toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            new File(run, 'config/vibecraft-client.json').text = groovy.json.JsonOutput.toJson([
+                    enabled: true, allowAiControl: true, host: '127.0.0.1', port: 18766,
+                    path: '/vibecraft', token: 'vibecraft-disposable-smoke', logCommands: false])
+        }
+    }
+}
