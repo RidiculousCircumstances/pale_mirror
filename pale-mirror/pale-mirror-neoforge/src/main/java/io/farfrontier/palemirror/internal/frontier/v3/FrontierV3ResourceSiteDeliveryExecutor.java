@@ -119,7 +119,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             if (custody == null || custody.status() != PhysicalCustodyLeaseStatus.ACQUIRED
                     || replica == null || replica.state() != PhysicalReplicaState.OBSERVED_CURRENT) continue;
             var chest = container(level, state, depot);
-            if (chest == null || classify(state, chest.inventory(), depot, job.outputSlot().slot(), quantity, null) != ChestState.BEFORE
+            if (chest == null || classifyBefore(state, chest.inventory(), depot, job.outputSlot().slot(), quantity, ResourceSiteHarvestCargo.itemKind(state, job)) != ChestState.BEFORE
                     || !replica.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, depot))
                     || !FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, depot, chest).provenance()
                     .equals(replica.provenance())) continue;
@@ -338,7 +338,18 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
 
     static ChestState classify(FrontierWorldState state, Container chest, SubjectId depot,
                                        int target, int quantity, FrontierV3ResourceSiteDeliveryWitness witness) {
-        var itemKind = state.resourceSite(witness.siteId()).kind().resourceKind();
+        java.util.Objects.requireNonNull(witness, "delivery recovery requires its retained operation witness");
+        return classifyImage(state, chest, depot, target, quantity,
+                state.resourceSite(witness.siteId()).kind().resourceKind(), Optional.of(witness));
+    }
+    /** Pre-effect admission has no witness yet. The current job supplies its explicit resource kind. */
+    static ChestState classifyBefore(FrontierWorldState state, Container chest, SubjectId depot,
+            int target, int quantity, String itemKind) {
+        return classifyImage(state, chest, depot, target, quantity, itemKind, Optional.empty());
+    }
+    private static ChestState classifyImage(FrontierWorldState state, Container chest, SubjectId depot,
+            int target, int quantity, String itemKind, Optional<FrontierV3ResourceSiteDeliveryWitness> operation) {
+        java.util.Objects.requireNonNull(itemKind, "delivery resource kind");
         if (target < 0 || target >= chest.getContainerSize()
                 || state.inventory().itemAt(depot, target).isPresent()
                 || ReferenceContainerCustody.expectedFungibleSlot(state, depot, target).isPresent()) return ChestState.FOREIGN;
@@ -372,9 +383,10 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 observed.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, projected.itemKind(), projected.quantity()));
             }
         }
-        if (witness == null) return targetState == ChestState.BEFORE
+        if (operation.isEmpty()) return targetState == ChestState.BEFORE
                 && ReferenceContainerCustody.observedFingerprint(state, depot, observed).equals(
                         ReferenceContainerCustody.canonicalFingerprint(state, depot)) ? ChestState.BEFORE : ChestState.FOREIGN;
+        var witness = operation.orElseThrow();
         String fingerprint = ReferenceContainerCustody.observedFingerprint(state, depot, observed);
         return targetState == ChestState.BEFORE && fingerprint.equals(witness.beforeFingerprint())
                 || targetState == ChestState.AFTER && fingerprint.equals(witness.afterFingerprint())

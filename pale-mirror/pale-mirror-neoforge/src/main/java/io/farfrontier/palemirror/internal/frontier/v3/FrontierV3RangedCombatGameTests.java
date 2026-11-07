@@ -76,10 +76,14 @@ public final class FrontierV3RangedCombatGameTests {
                 tag->tag.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY,shot.weapon().value()));
         var expectedHand=FrontierV3ActorHandEvidence.observed(a.shooter().getMainHandItem());
         float health=a.target().getHealth();
+        a.shooter().setYRot(90); a.shooter().yBodyRot=90; a.shooter().setYHeadRot(90);
         h.assertTrue(!FrontierV3RangedCombatExecutor.prepare(h.getLevel(),a.shooter(),a.target(),shot,rules).ready(),"reload begins without spending ammunition");
+        assertFacing(h,a.shooter(),a.target().getEyePosition());
         int reload=RangedMechanics.reloadTicks(shot.actorProfile(),rules);
         h.runAfterDelay(reload+1,()->{
+            a.target().setPos(a.target().getX(),a.target().getY(),a.target().getZ()+1);
             var aiming=FrontierV3RangedCombatExecutor.prepare(h.getLevel(),a.shooter(),a.target(),shot,rules);
+            assertFacing(h,a.shooter(),a.target().getEyePosition());
             h.assertTrue(aiming.waitingFor().equals(Optional.of("crossbow-aim")),"actual elapsed reload enters aiming");
             h.assertTrue(!CrossbowItem.isCharged(a.shooter().getMainHandItem()),"aiming may not install a virtual arrow in the native weapon");
             h.assertTrue(a.shooter().getInventory().getItem(2).getCount()==2 && a.shooter().getMainHandItem().getDamageValue()==0,"preparation preserves ammunition and wear");
@@ -135,6 +139,14 @@ public final class FrontierV3RangedCombatGameTests {
             h.assertTrue(first.z()>0 && repeated.equals(first),"aim preparation and launch share the measured displacement instead of resetting it");
             a.shooter().discard();a.target().discard();h.succeed();
         });
+    }
+    private static void assertFacing(GameTestHelper h,net.minecraft.world.entity.Mob body,Vec3 target) {
+        var direction=target.subtract(body.getEyePosition());
+        float yaw=(float)Math.toDegrees(Math.atan2(-direction.x,direction.z));
+        h.assertTrue(Math.abs(net.minecraft.util.Mth.wrapDegrees(body.getYRot()-yaw))<0.01f
+                && Math.abs(net.minecraft.util.Mth.wrapDegrees(body.yBodyRot-yaw))<0.01f
+                && Math.abs(net.minecraft.util.Mth.wrapDegrees(body.getYHeadRot()-yaw))<0.01f,
+                "NoAI preparation turns the actual body and head toward its moving target");
     }
     private FrontierV3RangedCombatGameTests(){}
 }

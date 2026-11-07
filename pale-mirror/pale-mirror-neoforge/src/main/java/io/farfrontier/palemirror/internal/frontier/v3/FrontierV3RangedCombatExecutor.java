@@ -40,7 +40,7 @@ final class FrontierV3RangedCombatExecutor {
             boolean visible=fighter.hasLineOfSight(target),clear=visible&&clearShot(level,fighter,target,rules);
             var sight=new RangedStance(permission.id(),order.target(),order.targetPosition(),visible,clear,tick);
             FrontierV3CommandSubmission.propose(runtime,"ranged-sight",order.owner().value(),new RangedEvent.Observed(sight));
-            fighter.getLookControl().setLookAt(target,60,60);
+            FrontierV3CombatFacing.face(fighter,target.getEyePosition());
             if(!visible||!clear || state.actorMovements().containsKey(order.execution().actorId()) || state.combat().ranged().unsettled(order.owner())
                     || tick<state.combat().ranged().nextAttack().getOrDefault(order.owner(),0L) || !inRange(fighter,target,rules))continue;
             var item=state.inventory().items().get(order.weapon());
@@ -102,7 +102,8 @@ final class FrontierV3RangedCombatExecutor {
                     if(!(ammo.getItem() instanceof ArrowItem arrowItem)||!(weapon.getItem() instanceof CrossbowItem))return FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT;
                     var projectile=arrowItem.createArrow(level,ammo.copyWithCount(1),fighter,weapon);projectile.setUUID(shot.projectileId());
                     var motion=FrontierV3CombatTargetMotion.observe(fighter,target,shot.attacker(),true,rules.sensingTicks());
-                    var aim=aim(fighter,target,rules,new Vec3(motion.x(),0,motion.z()));projectile.shoot(aim.x,aim.y,aim.z,rules.projectileSpeedMicros()/1000000f,RangedMechanics.inaccuracy(shot.actorProfile(),rules));
+                    var aim=aim(fighter,target,rules,new Vec3(motion.x(),0,motion.z()));
+                    FrontierV3CombatFacing.face(fighter,fighter.getEyePosition().add(aim));projectile.shoot(aim.x,aim.y,aim.z,rules.projectileSpeedMicros()/1000000f,RangedMechanics.inaccuracy(shot.actorProfile(),rules));
                     projectile.setSoundEvent(SoundEvents.CROSSBOW_HIT);projectile.pickup=AbstractArrow.Pickup.DISALLOWED;
                     // The launch is a transient vanilla effect. Its actor-side emission witness prevents replay after reload/restart, even after the projectile has expired.
                     if(!level.addFreshEntity(projectile))return FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT;
@@ -133,7 +134,7 @@ final class FrontierV3RangedCombatExecutor {
             actor.startUsingItem(InteractionHand.MAIN_HAND);level.playSound(null,actor.getX(),actor.getY(),actor.getZ(),SoundEvents.CROSSBOW_LOADING_START,SoundSource.HOSTILE,1f,1f);
         }
         FrontierV3CombatTargetMotion.observe(actor,target,shot.attacker(),true,rules.sensingTicks());
-        actor.getLookControl().setLookAt(target,60,60);long elapsed=level.getGameTime()-marker.getLong("start");
+        FrontierV3CombatFacing.face(actor,target.getEyePosition());long elapsed=level.getGameTime()-marker.getLong("start");
         if(elapsed<RangedMechanics.reloadTicks(shot.actorProfile(),rules))return FrontierV3NativeEffect.Admission.waiting("crossbow-reload");
         // Aiming is presentation, not ammunition custody. A preview arrow in the
         // real weapon can escape through a save/drop and strand strict unload recovery.
