@@ -73,6 +73,18 @@ deployment. A reference-reading sequence is not an implementation gate.
   there is no mandatory all-tools smoke on session or worktree activation.
   Missing optional tooling does not block direct source analysis or repair.
   Report a limitation when it affects the task or an evidence claim.
+- For building layouts, furniture placement and visual interior inspection,
+  prefer VibeCraft MCP when its client bridge is available. Read actual block
+  identifiers/properties and Minecraft images; verify placement changes with
+  a fresh region scan and, for a visual claim, a fresh client image. Perform
+  layout experiments in bounded drafts or a disposable test world. Validate
+  resident behavior and furniture access through the existing Pale Mirror
+  native pilot and scenarios. Check bridge availability when this capability
+  is needed: implemented tooling or a built JAR does not prove a connected
+  bridge. Launch a game client only when interaction or rendering is required;
+  routine source reading and unit checks use their existing tools. Build,
+  connection and limitations are documented in `tools/vibecraft/README.md`
+  in the implementation checkout named by `CONTINUITY.md`.
 - `docs/agent-assist-toolchain.md` defines the advisory runtime-evidence,
   change-selection, LSP, architecture and profiling tools. They reduce context
   and diagnosis cost; none owns product truth, acceptance or repair authority.
