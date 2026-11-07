@@ -1,6 +1,6 @@
 # Northwatch reachable storage and kitchen access — 2026-11-08
 
-Status: deployed to the same saved world; scoped native/restart and live full-pack checks passed.
+Status: final follow-up1a23b1629 verified and deployed to the preserved world; live full-pack preflight passed.
 
 Implementation checkout: `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`,
 base `ea78eeb608ddb66e962af4a570dc37f63cbbaa1f`. No schema, world, stock or
@@ -80,7 +80,7 @@ commute at its45s deadline. Attempt7 proved both weapons by1270 but its meal
 wait ended before the deliberately delayed hunger clock; final fixture restores
 1818 and makes those visitors unassigned. These prefixes do not prove four meals.
 
-## Deployment
+## Initial deployment (superseded by the follow-up below)
 
 Final native attempt8 PASS: run25787812-a4c2-45b6-bdd6-40558ba94af3,
 world v3-disposable_northwatch_storage_queue-3726fad8, seed139/r35. Both swords
@@ -131,8 +131,73 @@ client loaded all required mods, donated-item observations and two interior
 frames succeeded; its initial zero-history oracle correctly failed against the
 retained old incident. Final baseline-bound graphical check PASS: full-pack run3e9c5501-b3b2-4984-9da2-d56f17cccc99, `build/northwatch-live-20261108/fullpack-final.json`. Both fresh frames reviewed: actual storage exterior and kitchen passage render. The same old incident remains at one occurrence; both original sword IDs are actor-held and undamaged. Client/private display exited normally; live server remains active. At53152/revision132722 pendingOrdinaryTicks0. This proves scoped integration/compatibility, not NPC seating or blanket M3 acceptance.
 
-Final repository state: IMPL tracked clean atb60d185a9 (production099386926,
+Initial delivery repository state: IMPL tracked clean atb60d185a9 (production099386926,
 follow-up is scenario-only); clean detached RELEASE at099386926. PACK remains
 909c26c tracked clean,172file validation passed; hosted files are installer-owned
 ignored outputs. Unrelated IMPL.serena, PACK.f0v-baseline and GOV WIP preserved.
 Only this task receipt is committed in governance; no automatic push.
+
+## Superseding final-health finding and mining producer correction
+
+At54230/03:03:29host the initial release stopped on extraction review for
+settlement6: `storage admission route has foreign endpoints`. All dimensions
+saved03:03:29.838 and JVM1613856 exited. Earlier passing kitchen and full-pack
+checks remain scoped evidence, not a healthy final server claim. The terminal
+check caught this before the task was reported complete to the user.
+
+Two producer lines in `ExtractionWorkAdmission` reconstructed the canonical
+preferred endpoint after `WorkEquipmentSelection` had supplied a different
+valid contact. Now opportunity-to-source routing and the durable offer both
+retain `Selection.source()`. No validator/receipt or storage-ownership check was
+relaxed. Field, forestry and guard producers were reread and already retain
+the selected endpoint.
+
+The new regression places existing unreserved pickaxes in one ordinary pantry,
+obstructs its preferred contact, lets the real producer select another contact,
+then proves source-route/offer agreement, unchanged inventory and codec recovery.
+Initial test assumptions about a quarry's one-contact port and the optional
+local-access shortcut returning a zero-length receipt were invalid and corrected;
+the test now asserts the actual selected endpoint, not a fabricated nearest-point
+policy. Focused regression11checks PASS23s;21other affected checks passed in the
+preceding selected run. Existing suspended-miner single-step consumption test
+failure was reproduced on clean099 release (`/tmp/pm-northwatch-extraction-old-fixture-baseline.log`);
+it is not introduced by this correction.
+
+Guardrails +4native block-extraction checks +build/package PASS51s at
+`/tmp/pm-northwatch-extraction-native.log`. Reuse unaffected476/kitchen/restart
+evidence above; only the mining producer's selected endpoint propagation changed.
+Actual copied post-stop store recovers at136283/54230 and advances54430 ACTIVE.
+The previously failing settlement6 review really admits new work24 and25,
+including ordinary depot contact(-592,64,23), without mutating live files:
+`build/northwatch-live-recovery/second-replay-exact.txt`.
+
+The same retained kernel-incident key now has occurrences2, lastRevision136283,
+lastInstant54230; live preflight asserts exactly this retained prefix. No history
+is cleared and a later recurrence will fail that assertion.
+
+## Final follow-up deployment
+
+Source1a23b162951cde3a60315c8c69692b7819fb8710 includes the two mining producer
+corrections and the blocked-preferred-contact regression. Focused22JVM checks
+PASS55s (`/tmp/pm-northwatch-extraction-final-focused.log`);4affected native
+checks/guardrails/build/package PASS51s. The broader476 and exact kitchen/restart
+evidence remains applicable to unchanged components. No whole-JVM-suite claim.
+
+Clean detached `/home/rd/proj/pm-northwatch-extraction-release-20261108/pale-mirror`
+build/guardrails/package PASS15s; all classes/gameplay resources equal the tested
+artifact, only clean sourceTree provenance differs. Core SHA512
+`97d883dacee6a3fbfd08e9755d4f6d1534c0b25b7eb39ffd6a2e0cde7c421964c084f5c70dc53e42877ffec7b850f69d4af78ebdc31a32442341f51711d78e2b`.
+Pinned root publisher/install, preflight and post-start verifier PASS. Current
+servicefar-frontier-v3-live.service wrapper1692638, invocation
+8c893e7b77c2444ea8ae6c2b200f67e2, notBefore1794089601; same original world,
+seed139/r35/schema347, Java22/25565. No reset or live canonical repair.
+
+Current full-pack pilot PASS run7dd45d2a-2055-4d27-8f58-b9facabf897f,
+`build/northwatch-live-20261108/followup/fullpack.json`. All required client mods
+loaded, both exact original swords are actor-held/full250durability, upper store
+is empty, no item/scene conflicts, old incident remains exactly at2occurrences
+and lastRevision136283. Both fresh storage/passage frames reviewed. Task client/
+private display exited; live service left running. At55771/revision141349
+pendingOrdinaryTicks0. Final evidence under `build/northwatch-live-20261108/followup`.
+Source/RELEASE/PACK tracked clean; unrelated local and governance WIP retained.
+No push. Player manual retest remains distinct from this scoped verification.
