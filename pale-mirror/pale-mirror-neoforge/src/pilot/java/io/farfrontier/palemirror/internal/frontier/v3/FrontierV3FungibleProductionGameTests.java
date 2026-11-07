@@ -124,6 +124,7 @@ public final class FrontierV3FungibleProductionGameTests {
 
     private static Fixture prepareEffect(FrontierWorldState state, int settlementIndex, String suffix) {
         SubjectId settlement = new SubjectId("settlement:" + settlementIndex), depot = FrontierWorldState.depotId(settlement);
+        state = FrontierV3ReferenceContainerCustodyGameTests.chestProvider(state, depot);
         var anchor = state.inventory().surfaces().get(depot).position();
         BlockPos position = new BlockPos(anchor.x(), anchor.y(), anchor.z());
         var objective = new StrategicObjective(new SubjectId("objective:lot-effect-" + suffix), settlement,
@@ -142,7 +143,7 @@ public final class FrontierV3FungibleProductionGameTests {
         int slot = state.inventory().availableSlots(depot).getFirst();
         var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, slot)), "minecraft:wheat", 64));
         state = ProductionResourceCustody.bind(state, account, 1L, FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), account, 1L, stacks));
-        state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+        state = FrontierV3ReferenceContainerCustodyGameTests.activated(state, depot);
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state, depot);
         job = state.productionJobs().get(job.id());
         var intent = new PhysicalIntent(new PhysicalIntentId("intent:lot-effect-" + suffix), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,

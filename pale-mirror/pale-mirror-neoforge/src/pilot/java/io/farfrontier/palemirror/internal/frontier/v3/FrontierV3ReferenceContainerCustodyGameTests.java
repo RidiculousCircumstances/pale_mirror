@@ -52,14 +52,15 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
             var original = state.inventory().surfaces().get(depot).position();
             state = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(state.bootstrap(),
                     local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
-            state = held(activated(state, depot), depot);
+            state = held(activated(chestProvider(state, depot), depot), depot);
             var scope = ReferenceContainerCustody.scopeId(depot);
             state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(state.replicaCustody()
                     .checkpoint(scope, 1L, 0L, 2L).release(scope, 1L, 0L, 2L)));
             var chest = chest(helper, local, depot);
             chest.clearContent();
             FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
-            int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
+            int slot = java.util.stream.IntStream.range(0, chest.getContainerSize())
+                    .filter(index -> chest.getItem(index).isEmpty()).findFirst().orElseThrow();
             state = state.withInventory(state.inventory().store(new ExactItemStack(new SubjectId("item:cold-arrival"),
                     state.bootstrap().settlements().getFirst().id(), "minecraft:cobblestone", 8,
                     new InventoryCustody.ContainerSlot(depot, slot))));
@@ -292,6 +293,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         BlockPosition original = initial.inventory().surfaces().get(depot).position();
         initial = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(initial.bootstrap(),
                 local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        initial = chestProvider(initial, depot);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, initial);
         helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "fixture startup: " + runtime.status());
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareInitialProjection(runtime, initial, depot), "durable preparation must succeed");
@@ -321,9 +323,10 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertTrue(retained.status() == PhysicalCustodyLeaseStatus.UNRESOLVED && retained.authorityEpoch() == lease.authorityEpoch()
                         && conflicted.replicaCustody().replicas().get(depot).observedFingerprint().isPresent(),
                 "runtime recovery keeps actual mismatch and the same exclusive epoch");
-        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.eligibleReferenceSurfaces(conflicted,
-                        List.of(conflicted.inventory().surfaces().get(depot))).size() == 1,
-                "pending-write conflict remains eligible for later exact observation");
+        helper.assertTrue(conflicted.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.PREPARED
+                        && FrontierV3ReferenceContainerCustodyExecutor.eligibleReferenceSurfaces(conflicted,
+                        List.of(conflicted.inventory().surfaces().get(depot))).isEmpty(),
+                "a pre-ACTIVE fixture remains owned by surface recovery; inventory discovery cannot adopt it early");
         helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(helper.getLevel(), recovered, conflicted, retained, chest)
                         && chest.getItem(changedSlot).getCount() == 63 && recovered.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
                 "a repeated observation neither overwrites loss nor quarantines the instance");
@@ -482,6 +485,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         BlockPosition original = initial.inventory().surfaces().get(depot).position();
         FrontierWorldState state = activated(FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(
                 initial.bootstrap(), local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z())), depot);
+        state = chestProvider(state, depot);
         SubjectId accountId = new SubjectId("custody:reference-repack");
         ResourceLot wheat = new ResourceLot(new SubjectId("lot:field-repack"), settlement, "minecraft:wheat", 64, "field", List.of());
         ResourceLot bread = new ResourceLot(new SubjectId("lot:production-repack"), settlement, "minecraft:bread", 64, "recipe:bread", List.of());
@@ -546,7 +550,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         BlockPosition original = state.inventory().surfaces().get(depot).position();
         state = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(state.bootstrap(),
                 local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
-        state = held(activated(state, depot), depot);
+        state = held(activated(chestProvider(state, depot), depot), depot);
         SubjectId scope = ReferenceContainerCustody.scopeId(depot);
         state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(state.replicaCustody()
                 .checkpoint(scope, 1L, 0L, 2L)));
@@ -575,7 +579,9 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
             var owner = stateOwner(state, store);
             var actor = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId()
                     .equals(owner)).map(ResidentProfile::id).sorted().findFirst().orElseThrow();
-            var slot = new InventoryCustody.ContainerSlot(store, state.inventory().firstFreeSlot(store).orElseThrow());
+            var bulkSlots = ReferenceContainerCustody.expectedFungibleSlots(state, store);
+            var slot = new InventoryCustody.ContainerSlot(store, state.inventory().availableSlots(store).stream()
+                    .filter(index -> !bulkSlots.containsKey(index)).findFirst().orElseThrow());
             var item = new ExactItemStack(new SubjectId("item:equipment-boundary"), stateOwner(state, store), "minecraft:iron_sword", 1,
                     returning ? new InventoryCustody.Actor(actor) : slot);
             var stocked = state.inventory().store(item.withCustody(slot));
@@ -659,6 +665,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-fairness"), 91L));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         SubjectId hiveStore = baseline.bootstrap().hive().organs().stream().flatMap(organ -> organ.containerId().stream()).findFirst().orElseThrow();
+        baseline = activated(activated(baseline, depot), hiveStore);
         List<ContainerSurface> loaded = List.of(baseline.inventory().surfaces().get(depot), baseline.inventory().surfaces().get(hiveStore));
         List<ContainerSurface> eligible = FrontierV3ReferenceContainerCustodyExecutor.eligibleReferenceSurfaces(baseline, loaded);
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.selectRoundRobin(eligible, 0L).containerId()
@@ -838,12 +845,30 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         recovered.shutdown(); runtime.shutdown(); helper.succeed();
     }
 
+    /** Initial unit fixture: the test installs a chest, so its declared provider must also be a chest.
+     * Latest authored warehouse content uses racks; custody tests do not exercise that building import. */
+    static FrontierWorldState chestProvider(FrontierWorldState state, SubjectId id) {
+        if (state.replicaCustody().replicas().containsKey(id)) throw new IllegalArgumentException("provider is an initial fixture precondition");
+        var inventory = state.inventory(); var record = inventory.containers().get(id);
+        if (record.purpose() != ContainerPurpose.RESOURCE_STORAGE) return state;
+        var records = new LinkedHashMap<>(inventory.containers());
+        records.put(id, new ContainerRecord(record.id(), record.ownerId(), record.slotCount(), record.purpose(), record.productionStation(), record.storage(),
+                Optional.of(StorageBlockKind.CHEST), record.fungibleLayout()));
+        return state.withInventory(new ExactInventory(records, inventory.items(), inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(),
+                inventory.conflicts(), inventory.surfaces(), inventory.economics(), inventory.fungibleResources()));
+    }
+
     static FrontierWorldState activated(FrontierWorldState state, SubjectId containerId) {
-        java.util.Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>(state.inventory().surfaces());
-        surfaces.put(containerId, new ContainerSurface(containerId, surfaces.get(containerId).position(), ContainerSurfaceStatus.ACTIVE));
-        ExactInventory inventory = new ExactInventory(state.inventory().containers(), state.inventory().items(), state.inventory().cargo(),
-                state.inventory().playerItems(), state.inventory().worldCarrierItems(), state.inventory().conflicts(), surfaces, state.inventory().economics());
-        return state.withInventory(inventory);
+        var inventory = state.inventory(); var surface = inventory.surfaces().get(containerId);
+        if (surface.status() == ContainerSurfaceStatus.ACTIVE) return state;
+        var container = inventory.containers().get(containerId); var recovery = state.fencedRecovery();
+        if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
+            recovery = FencedRecoveryContainerSupport.transition(recovery, container, surface, ContainerSurfaceStatus.PREPARED);
+            inventory = inventory.withSurfaceStatus(containerId, ContainerSurfaceStatus.PREPARED);
+            surface = inventory.surfaces().get(containerId);
+        }
+        recovery = FencedRecoveryContainerSupport.transition(recovery, container, surface, ContainerSurfaceStatus.ACTIVE);
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory.withSurfaceStatus(containerId, ContainerSurfaceStatus.ACTIVE)).fencedRecovery(recovery));
     }
 
     private static BlockPos position(FrontierWorldState state, SubjectId containerId) {

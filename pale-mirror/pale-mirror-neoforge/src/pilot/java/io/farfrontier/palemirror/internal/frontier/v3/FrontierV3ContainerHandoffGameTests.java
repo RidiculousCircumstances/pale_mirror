@@ -118,17 +118,9 @@ public final class FrontierV3ContainerHandoffGameTests {
                 translated.inventory().fungibleResources().issue(new ResourceLot(stockLot,
                         translated.inventory().containers().get(depot).ownerId(), "minecraft:wheat", 64, "fixture:handoff-stock", List.of()),
                         new CustodyAccount(ReferenceContainerCustody.scopeId(depot), new ResourceCustody.Container(depot), Map.of(stockLot, 64), Map.of()))));
+        translated = FrontierV3ReferenceContainerCustodyGameTests.chestProvider(translated, depot);
         var active = activated ? FrontierV3ReferenceContainerCustodyGameTests.activated(translated, depot) : translated;
         var state = active.withInventory(active.inventory().withFungibleResources(translated.inventory().fungibleResources()));
-        if (activated) {
-            var container = state.inventory().containers().get(depot);
-            var surface = translated.inventory().surfaces().get(depot);
-            var recovery = FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container, surface,
-                    ContainerSurfaceStatus.PREPARED);
-            recovery = FencedRecoveryContainerSupport.transition(recovery, container,
-                    surface.transitionTo(ContainerSurfaceStatus.PREPARED), ContainerSurfaceStatus.ACTIVE);
-            state = state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(recovery));
-        }
         var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var config = new FrontierEngineConfiguration<>(world, state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(),
                 base.reducer(), new FrontierWorldStateCodec(state.bootstrap()), base.projectionMapper(), base.limits(), List.of(),

@@ -240,6 +240,27 @@ public final class FrontierV3RoutePatrolGameTests {
         // never a local replacement route. Admission and the COLD assembly remain production
         // transitions; the pair starts at the declared Hall staging surfaces; only the first physical HOT edge is asserted by this GameTest.
         RoutePatrol patrol = RoutePatrol.planned(initial, task, settlement, unit);
+        // This unit fixture supplies a real clear native floor before advancing COLD
+        // assembly. Authored buildings may otherwise occupy the retained staging edge.
+        var floor = new java.util.LinkedHashSet<SurfaceAnchor>();
+        patrol.assembly().members().values().forEach(member -> floor.addAll(member.corridor()));
+        floor.addAll(patrol.inspectionRoute().linearCorridorSurfaces().stream().limit(4).toList());
+        var level = helper.getLevel();
+        floor.forEach(surface -> {
+            var support = new BlockPos(surface.x(), surface.y(), surface.z());
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        });
+        var cells = new LinkedHashMap<BlockPosition, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation>();
+        floor.forEach(surface -> {
+            for (int dy = 0; dy <= 2; dy++) {
+                var position = surface.support().offset(0, dy, 0);
+                cells.put(position, FrontierV3NavigationShapes.capture(level, position));
+            }
+        });
+        initial = initial.withChanges(FrontierWorldStateUpdate.begin().navigationGeometry(
+                initial.navigationGeometry().observe(initial.navigationGeometry().revision(), cells)));
         FrontierWorldState state = initial.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceStarted(state, settlement.id(),
                 new RoutePatrolStarted(patrol, RoutePatrolExecutionAuthority.admission(state, patrol)));

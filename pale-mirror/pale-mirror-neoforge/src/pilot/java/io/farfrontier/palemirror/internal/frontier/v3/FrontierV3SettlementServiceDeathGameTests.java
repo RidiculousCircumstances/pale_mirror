@@ -43,6 +43,9 @@ public final class FrontierV3SettlementServiceDeathGameTests {
         var level = helper.getLevel();
         var source = helper.absolutePos(new BlockPos(1, 8, 0));
         helper.setBlock(new BlockPos(1, 7, 0), Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(0, 7, 0), Blocks.STONE.defaultBlockState());
+        helper.setBlock(new BlockPos(0, 8, 0), Blocks.AIR.defaultBlockState());
+        helper.setBlock(new BlockPos(0, 9, 0), Blocks.AIR.defaultBlockState());
         var runtime = fixtureRuntime(source, applied, started);
         var state = runtime.decodedState().orElseThrow();
         var work = state.serviceWorks().values().iterator().next();
@@ -53,7 +56,8 @@ public final class FrontierV3SettlementServiceDeathGameTests {
         var body = EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("native service death fixture could not create its hand carrier");
         body.setUUID(SceneLease.deterministicEntityId(state.bootstrap().worldId(), work.workerId()));
-        body.setPos(source.getX() + 0.5D, source.getY() + 1.0D, source.getZ() + 0.5D);
+        var station = work.inputStation().standingBody();
+        body.setPos(station.x() + 0.5D, station.y(), station.z() + 0.5D);
         body.setNoAi(true);
         var id = ActorBodyAuthority.current(state, work.workerId());
         FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, work.workerId(),
@@ -99,28 +103,42 @@ public final class FrontierV3SettlementServiceDeathGameTests {
 
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> fixtureRuntime(BlockPos source, boolean applied, boolean startedEffect) {
         var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:service-death-native-" + applied + "-" + startedEffect), 211L);
-        var declaredSource = base.initialState().inventory().surfaces().get(new SubjectId("container:9-depot")).position();
-        var initial = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(base.initialState().bootstrap(),
-                source.getX() - declaredSource.x(), source.getY() - declaredSource.y(), source.getZ() - declaredSource.z()));
-        var settlement = initial.bootstrap().settlements().stream().filter(s -> s.id().value().equals("settlement:9")).findFirst().orElseThrow();
-        var infirmary = settlement.structures().stream().filter(s -> s.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
-        InfectionCell cell = null;
-        for (int dx = -32; dx <= 32 && cell == null; dx += 4) for (int dz = -32; dz <= 32; dz += 4) {
+        // Death accounting is isolated from authored warehouse interiors and resident
+        // home routes. Declare an ordinary outdoor source beside a known worksite and
+        // stage the worker there before admission; no service effect is fabricated.
+        var original = base.initialState();
+        var home = original.bootstrap().settlements().stream().filter(value -> value.id().value().equals("settlement:9"))
+                .findFirst().orElseThrow();
+        var infirmary = home.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
+        SurfaceAnchor originalStation = null;
+        for (int dx = -32; dx <= 32 && originalStation == null; dx += 4) for (int dz = -32; dz <= 32; dz += 4) {
             var candidate = InfectionCell.at(infirmary.anchor().offset(dx, 0, dz));
-            if (!InfectionTreatmentWorksite.candidates(initial.bootstrap(), candidate).isEmpty()) { cell = candidate; break; }
+            var positions = InfectionTreatmentWorksite.candidates(original.bootstrap(), candidate);
+            if (!positions.isEmpty()) { originalStation = positions.getFirst(); break; }
         }
-        if (cell == null) throw new IllegalStateException("fixture has no known service worksite");
+        if (originalStation == null) throw new IllegalStateException("fixture has no known service worksite");
+        var origin = originalStation.support();
+        var initial = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(original.bootstrap(),
+                source.getX() - 1 - origin.x(), source.getY() - 1 - origin.y(), source.getZ() - origin.z()));
+        var settlement = initial.bootstrap().settlements().stream().filter(value -> value.id().equals(home.id())).findFirst().orElseThrow();
+        var inputStation = SurfaceAnchor.at(source.getX() - 1, source.getY() - 1, source.getZ());
+        var cell = InfectionCell.at(inputStation.support());
+        var depot = new SubjectId("container:service-death-source");
+        var endpoint = new ShipmentEndpoint.Storage(settlement.id(), depot, inputStation, Optional.empty(), inputStation);
+        initial = new ResourceStorageDeclared(ContainerRecord.storage(depot, settlement.id(), 27, StorageBlockKind.CHEST,
+                new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)),
+                new BlockPosition(source.getX(), source.getY(), source.getZ())).apply(initial, settlement.id());
+        initial = FrontierV3ReferenceContainerCustodyGameTests.activated(initial, depot);
+        var worker = FrontierWorldStateSupport.availableFieldResident(initial, settlement.id(), HumanCapability.MEDICINE).orElseThrow();
+        initial = initial.withActorBody(worker.id(), inputStation.standingBody());
         var objective = new StrategicObjective(new SubjectId("objective:service-death-native"), settlement.id(),
                 StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(cell), 1, StrategicObjectiveStatus.ACTIVE);
         var task = new StrategicTask(new SubjectId("task:service-death-native"), objective.id(), settlement.id(),
                 StrategicTaskKind.DECONTAMINATE_INFECTION_CELL, Optional.of(cell), List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY,
                 StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT), List.of(), StrategicTaskStatus.ACTIVE);
-        var depot = FrontierWorldState.depotId(settlement.id());
-        var inventory = initial.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
-                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE).store(new ExactItemStack(new SubjectId("item:service-death-native"),
-                        settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, initial.inventory().firstFreeSlot(depot).orElseThrow())));
-        // Whole fixture translation keeps the source and its declared access port together.
-        // Moving only the chest surface would produce an impossible retained relationship.
+        var inventory = initial.inventory().store(new ExactItemStack(new SubjectId("item:service-death-native"),
+                settlement.id(), DecontaminationPolicy.REAGENT, 1,
+                new InventoryCustody.ContainerSlot(depot, initial.inventory().firstFreeSlot(depot).orElseThrow())));
         var pending = task.withStatus(StrategicTaskStatus.PENDING);
         var state = initial.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)
                 .strategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(pending))).withInfection(cell, new FixedRatio(new FixedScalar(750_000L)));
@@ -134,7 +152,7 @@ public final class FrontierV3SettlementServiceDeathGameTests {
             work = work.withInputTraversalCursor(work.inputTraversalCursor() + 1);
         var actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(work.workerId(), actors.get(work.workerId()).withBody(
-                SurfaceAnchor.at(source.getX(), source.getY(), source.getZ()).standingBody()));
+                work.inputStation().standingBody()));
         var intents = new LinkedHashMap<>(state.physicalIntents());
         var intent = intents.get(work.inputIssueIntentId());
         if (startedEffect) intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.RUNNING, Optional.empty()));

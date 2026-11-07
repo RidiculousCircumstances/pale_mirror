@@ -27,7 +27,7 @@ public final class FrontierV3StoredContainerGameTests {
         var original = initial.inventory().surfaces().get(depot).position();
         initial = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(initial.bootstrap(),
                 local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
-        initial = FrontierV3ReferenceContainerCustodyGameTests.activated(initial, depot);
+        initial = FrontierV3ReferenceContainerCustodyGameTests.activated(FrontierV3ReferenceContainerCustodyGameTests.chestProvider(initial, depot), depot);
         var prior = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(initial, depot), 0,
                 ReferenceContainerCustody.canonicalFingerprint(initial, depot), ReferenceContainerCustody.provenance(depot));
         var scope = ReferenceContainerCustody.scopeId(depot);
@@ -40,7 +40,8 @@ public final class FrontierV3StoredContainerGameTests {
         chest.clearContent(); FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, initial, depot);
         var saved = new CompoundTag(); var list = new ListTag();
         list.add(chest.saveWithFullMetadata(helper.getLevel().registryAccess())); saved.put("block_entities", list);
-        int free = initial.inventory().firstFreeSlot(depot).orElseThrow();
+        int free = java.util.stream.IntStream.range(0, chest.getContainerSize())
+                .filter(index -> chest.getItem(index).isEmpty()).findFirst().orElseThrow();
         initial = initial.withInventory(initial.inventory().store(new ExactItemStack(
                 new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:cold-projection-change"),
                 initial.bootstrap().settlements().getFirst().id(), "minecraft:cobblestone", 8,
@@ -79,6 +80,7 @@ public final class FrontierV3StoredContainerGameTests {
         var original = state.inventory().surfaces().get(depot).position();
         state = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(state.bootstrap(),
                 local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        state = FrontierV3ReferenceContainerCustodyGameTests.chestProvider(state, depot);
         var chest = FrontierV3ReferenceContainerCustodyGameTests.chest(helper, local, depot);
         chest.clearContent();
         FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
