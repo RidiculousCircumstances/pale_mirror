@@ -1,28 +1,60 @@
 # Active continuity — 2026-11-07
 
 ## Assignment and authority
-Main alone; no subagents or automatic push. User requests a knockback kick against enemies closing on the crossbow
-combatant. Implemented, committedb7ae41ae7 and same-world deployed. Uses
-existing KICK at skill20, common contact intent/native journal/cue/receipt;
-no private physical executor, schema change, new skill or COLD fight.
-Skill opens techniques; permanent attributes govern execution; existing personal
-style governs choice. No XP/learning or temporary hunger/injury combat penalties.
-Standing commit/deploy applies. No new goal requested. Canonical AGENTS,
-execution protocol and HOT/COLD semantics remain authoritative. No whole-suite,
-graphical player-combat, balance, HUMAN_CANDIDATE or M3 claim.
+Main alone; no subagents or automatic push. Medical implementation delivered. Standing commit/deploy,
+fresh disposable world authorized. Preserve unrelated WIP and prior receipts.
+
+## Medical delivery — 2026-11-07
+Source041afc63936663a0f3778005ef112cffa03fe225, schema347/r35. Receipt
+[docs/frontier-v3-clinical-care-20261107.md](docs/frontier-v3-clinical-care-20261107.md)
+owns exact commands/results/runtime identity, known baseline debt and claim limits.
+Implemented cloth→4bandages with common production/market/reserves, source-neutral
+actual personal supplies, finite skill-dependent medic/self dressing, independent
+patient stays, generic complete-bed reservations/native sleeping and gradual
+HOT/COLD recovery with explicit ordinary/medical bed bonuses. One HP authority;
+no instant healing, stacking or resurrection. Meals interrupt rest and retain
+reservation. No transient physiology multipliers or infection cure by bandages.
+
+109scoped JVM checks +guardrails/build/package PASS. Full475native:458pass/17fail;
+clean b7ae470native:453pass/identical17failing names. Five new clinical cases PASS.
+11old JVM fixture failures separately reproduced. Unfiltered IMPL full-check was
+invalidated by concurrent compilation and is NOT evidence; later scoped gate is
+green. Do not call whole suite green. Earlier whole-state `companies` codec
+equality discrepancy remains unclassified; affected clinical/body/inventory
+roundtrip and actual medical restart pass.
+
+Pilot8 checked-in ordinary damage→actual supply/dressing→bed→graceful native
+save/restart→gradual HP recovery→standing/task+bed release PASS; semantic TERMINAL
+SATISFIED, patient19.968683HP. Three frames inspected. Medicine70doctor finished
+independently while patient still rested. Native quarantine from competing doctor
+TEND and patient rest was corrected with common pre-admission fences on both
+actors. Shared loaded movement demand also corrected the native actuator freeze
+outside presentation radius, without force loading. All task-owned client/server/
+private Xvfb109 processes exited. This is graphical disposable_lite automation,
+not M3/full-pack human cosmetic acceptance.
+
+LIVE fresh `clinical-care-seed139-20261107`, seed139/r35; old world preserved after
+RCON save and actual JVM exit. Core SHA512473c4114…400fa79, exact full hash in
+receipt. Clean detached RELEASE build, root pack170hash validation/publish,
+preflight/post-start PASS. `far-frontier-v3-live.service`, wrapper3874795,
+invocation1eafa30fa35b403aac2df43ddbb6f00a, Java22/25565. Tick606:12settlements,
+319residents, green,0required/scene/inventory conflicts, incidentIndex0. New item
+requires client update. PACK tracked clean; no push. Next: preserve this identity
+for manual playtest; do not reset again just for documentation.
 
 ## Repositories and ownership
 IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Git root parent,
 branch feat/baker-carry-orders-20260926, source
-b7ae41ae7c72a0906b528de6bff1f3c23a861e4d. Tracked clean; local untracked
+041afc63936663a0f3778005ef112cffa03fe225. Medical source committed041afc639; local untracked
 `.serena/` retained. RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror`
-clean detached same commit. PACK `/home/rd/proj/minecraft` HEAD98a6701 tracked
+clean detached041afc639. PACK `/home/rd/proj/minecraft` HEAD98a6701 tracked
 clean; unrelated `.f0v-baseline/` retained. Ignored hosted artifacts published;
 no tracked pack edit. Preserve independent histories.
 GOV `/home/rd/proj/pm-governance/pale-mirror` has extensive unrelated WIP.
-This cut owns ONLY CONTINUITY.md, the new crossbow contact-defence receipt and
-the new `frontier-v3-crossbow-contact-defence` architecture invariant. Stage that
-invariant against HEAD separately, preserving all unrelated WIP.
+This medical cut owns CONTINUITY.md, the new architecture invariant
+`frontier-v3-clinical-trauma-care` and its clinical-care receipt only. Preserve extensive unrelated WIP and prior
+contact-defence/progression receipts/invariants; stage owned scalars against HEAD
+separately when committing architecture.
 
 ## Contact-defence cut
 Receipt: docs/frontier-v3-crossbow-contact-defence-20261107.md.
