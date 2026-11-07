@@ -27,7 +27,8 @@ final class FrontierV3RangedDiagnostic {
         var home=subject(id).orElse(null);
         if(home==null || state.bootstrap().settlements().stream().noneMatch(h->h.id().equals(home)))return unavailable("settlement_security",id,checkpoint,"not_found");
         var guards=GuardEquipment.in(state,home);
-        return base("settlement_security",id,checkpoint)+",\"status\":\"ok\",\"guardsAssigned\":"+guards.size()+settlement(state,home)
+        return base("settlement_security",id,checkpoint)+",\"status\":\"ok\",\"guardsAssigned\":"+guards.size()
+                +",\"guardsReady\":"+guards.stream().filter(g->state.actorLocations().get(g.execution().actorId()).condition().status()==ActorLifeStatus.ALIVE && GuardEquipment.held(state,g)).count()+settlement(state,home)
                 +",\"guards\":"+guards.stream().map(g->"{\"actor\":\""+quote(g.execution().actorId().value())+"\",\"name\":\""+quote(state.humanPopulation().resident(g.execution().actorId()).name())
                     +"\",\"method\":\""+g.method()+"\",\"phase\":\""+g.phase()+"\",\"arrows\":"+Ammunition.available(state,g.execution().actorId(),home,"minecraft:arrow")+"}")
                     .collect(java.util.stream.Collectors.joining(",","[","]"))+"}";

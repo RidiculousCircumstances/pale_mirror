@@ -9,6 +9,19 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 public final class ActorItemCustody {
     private ActorItemCustody() { }
 
+    /** Both declared storage endpoints must have yielded physical authority before a COLD handoff. */
+    public static boolean coldStorageAvailable(FrontierWorldState state, ActorContainerItemOrder order) {
+        var container = order.containerEndpoint().containerId();
+        if (!state.inventory().containers().containsKey(container)
+                || ReferenceContainerCustody.hasLiveCustody(state, container)
+                || ReferenceContainerCustody.blocksCanonicalUse(state, container)) return false;
+        if (!(order.actorSlot() instanceof ActorItemSlot.AttachedStorage attached)) return true;
+        var surface = state.inventory().surfaces().get(attached.containerId());
+        return surface != null && surface.location().equals(new ContainerLocation.Mobile(order.actorId()))
+                && !ReferenceContainerCustody.hasLiveCustody(state, attached.containerId())
+                && !ReferenceContainerCustody.blocksCanonicalUse(state, attached.containerId());
+    }
+
     public static ExactInventory transferCold(FrontierWorldState state, ActorContainerItemOrder order) {
         var changes = transferColdUpdate(state, order);
         return changes.inventoryOnly();

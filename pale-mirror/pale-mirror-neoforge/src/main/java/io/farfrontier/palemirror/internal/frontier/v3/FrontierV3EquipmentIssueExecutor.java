@@ -104,6 +104,8 @@ final class FrontierV3EquipmentIssueExecutor {
         }
         if (FrontierV3ContainerEffectFence.pending(level, state, EquipmentPhysicalAuthority.container(intent))) return;
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
+        if (!io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.hasOperationalCustody(
+                runtime.decodedState().orElseThrow(), target.sourceSlot().containerId())) return;
         if (!handOff(chest, resident, target)) { unknown(runtime, intent.id(), "effect-conflict"); return; }
         confirm(level, runtime, intent, target);
     }

@@ -3,6 +3,12 @@ package io.farfrontier.palemirror.frontier.v3.model;
 /** Read-only access admission. It acquires no actor, service slot, movement or resource reservation. */
 public final class ResourceStorageNavigation {
     private ResourceStorageNavigation() { }
+    /** The stored station is a preferred contact, not a requirement to climb onto another container. */
+    public static java.util.Optional<ShipmentEndpoint> selectApproach(FrontierWorldState state, SurfaceAnchor origin,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile, ShipmentEndpoint target) {
+        return ActorStorageApproach.selectForProfile(state, target, origin,
+                forDeparture(state, origin, target).forProfile(profile));
+    }
     public static java.util.List<SurfaceAnchor> plannedPath(FrontierWorldState state, SurfaceAnchor origin, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile, ShipmentEndpoint target) {
         return forDeparture(state, origin, target).forProfile(profile).plannedBetween(origin, target.station());
     }

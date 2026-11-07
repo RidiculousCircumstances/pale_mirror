@@ -85,7 +85,8 @@ public final class EquipmentServiceBoundary {
         if (station.isEmpty()) return Optional.empty();
         var access = ResourceStorageAccess.at(state, EquipmentPhysicalAuthority.container(intent));
         var surface = state.inventory().surfaces().get(access.containerId());
-        if (!access.stations().contains(station.orElseThrow())
+        var selected = ResourceStorageAccess.at(state, access.endpoint().withStation(station.orElseThrow()));
+        if (!selected.stations().contains(station.orElseThrow())
                 || !BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(station.orElseThrow(), surface.position()))
             throw new IllegalArgumentException("equipment station cannot reach its exact declared storage");
         return station;

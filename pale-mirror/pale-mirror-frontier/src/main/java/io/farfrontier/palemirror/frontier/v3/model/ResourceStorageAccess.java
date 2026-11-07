@@ -25,8 +25,12 @@ public record ResourceStorageAccess(ShipmentEndpoint endpoint, List<SurfaceAncho
     public static ResourceStorageAccess at(FrontierWorldState state, SubjectId containerId) {
         var record = Objects.requireNonNull(state.inventory().containers().get(containerId), "retained resource storage");
         var endpoint = record.storage().orElseThrow(() -> new IllegalArgumentException("container has no declared storage capability")).endpoint();
+        return at(state, endpoint.withStation(ShipmentEndpointComposition.interactionStation(state, endpoint)));
+    }
+    /** Preserve the exact contact selected by the producer together with its container relationship. */
+    public static ResourceStorageAccess at(FrontierWorldState state, ShipmentEndpoint endpoint) {
         ShipmentEndpointComposition.validate(state, endpoint);
         return new ResourceStorageAccess(endpoint, ShipmentEndpointComposition.stations(state, endpoint),
-                ServiceAccessCoordinator.boundary(state, containerId));
+                ServiceAccessCoordinator.boundary(state, endpoint.containerId()));
     }
 }

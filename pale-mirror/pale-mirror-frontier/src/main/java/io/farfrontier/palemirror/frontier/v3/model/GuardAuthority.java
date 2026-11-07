@@ -94,7 +94,7 @@ public final class GuardAuthority {
         return WorkEquipmentSelection.available(state, duty.home(), item, GuardEquipment.requirements(duty.method()), unavailable)
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(duty.source().containerId())
                 && state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint().withStation(duty.source().station()).equals(duty.source())
-                && ResourceStorageAccess.at(state, slot.containerId()).stations().contains(duty.source().station());
+                && ResourceStorageAccess.at(state, duty.source()).stations().contains(duty.source().station());
     }
     private GuardAuthority() { }
 }

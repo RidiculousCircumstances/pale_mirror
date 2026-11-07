@@ -27,6 +27,9 @@ public final class WorkEquipmentSelection {
             var source = endpoint(state, item);
             if (!triedStores.add(source.containerId())) continue;
             try {
+                var approach = ResourceStorageNavigation.selectApproach(state, origin, profile, source);
+                if (approach.isEmpty()) continue;
+                source = approach.orElseThrow();
                 var route = ResourceStorageNavigation.plannedPath(state, origin, profile, source);
                 return Optional.of(new Selection(item, source, route.size() > 1
                         ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));

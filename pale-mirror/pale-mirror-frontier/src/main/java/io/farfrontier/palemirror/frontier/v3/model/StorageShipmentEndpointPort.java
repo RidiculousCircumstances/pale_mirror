@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReac
 
 /** Registered ordinary storage geometry; the logistics coordinator does not interpret buildings. */
 final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
+    private static final ImmutableKeyedInputView<ShipmentEndpoint, SurfaceAnchor> CONTACTS = new ImmutableKeyedInputView<>(512);
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.DECLARED_STORAGE; }
     @Override public ShipmentReceiverReplacement replacementPolicy() { return StorageShipmentReceiverReplacement.INSTANCE; }
     @Override public java.util.Optional<SettlementStructure> supportingFacility(FrontierWorldState state, ShipmentEndpoint endpoint) {
@@ -48,7 +49,7 @@ final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
         validate(state, endpoint); return ((ShipmentEndpoint.Storage) endpoint).exteriorApproach();
     }
     @Override public List<SurfaceAnchor> stations(FrontierWorldState state,ShipmentEndpoint endpoint) {
-        validate(state,endpoint);return List.of(endpoint.station());
+        validate(state,endpoint); return List.of(endpoint.station());
     }
     @Override public List<SurfaceAnchor> approachStations(FrontierWorldState state,ShipmentEndpoint endpoint,KnownPedestrianRouteKnowledge actorKnowledge) {
         validate(state,endpoint);
@@ -61,6 +62,22 @@ final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
         return List.of(endpoint.station());
     }
     @Override public SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        validate(state, endpoint); return endpoint.station();
+        validate(state, endpoint);
+        var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(endpoint))
+                .forProfile(io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER);
+        if (knowledge.clearStation(endpoint.station())) return endpoint.station();
+        // Old authored records can prefer the top of a lower barrel. Resolve an
+        // actual connected contact for every consumer, including meals, without
+        // changing that container's identity, contents or retained physical effects.
+        return CONTACTS.getPublished(state.bootstrap(), endpoint, List.of(knowledge.geometry().version()), () -> {
+            var candidates = approachStations(state, endpoint, knowledge);
+            var exterior = ((ShipmentEndpoint.Storage) endpoint).exteriorApproach();
+            var targets = java.util.Set.copyOf(candidates);
+            return io.farfrontier.palemirror.frontier.v3.model.geometry.ReachableSurfaceArea.select(
+                knowledge.geometry(), List.of(exterior), exterior, 16, 1, 4096, targets::contains).selected().stream().findFirst()
+                // No positive geometry proof: keep an unresolved hint. Navigation
+                // still rejects it; this does not declare the old contact usable.
+                .orElse(endpoint.station());
+        });
     }
 }

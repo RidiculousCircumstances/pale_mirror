@@ -108,8 +108,7 @@ final class ExpeditionSupplyProcess {
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { /* Retain named load; common navigation owns reconsideration. */ }
         } else if (permitted && ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a))
                 && ActorExecutionCoordinator.coldAvailable(state, a.actorId())
-                && !ReferenceContainerCustody.hasLiveCustody(state, a.source().containerId())
-                && !ReferenceContainerCustody.blocksCanonicalUse(state, a.source().containerId())) {
+                && ActorItemCustody.coldStorageAvailable(state, order)) {
             var received = ExpeditionSupplyAuthority.coldLoaded(state, mission.id(), a.claimId());
             events.add(new ProposedEvent(mission.id(), new ExpeditionSupplyColdLoaded(mission.id(), a.claimId())));
             events.addAll(ExpeditionSupplyProcessModule.loadingContinuations(received, mission.id(), now));

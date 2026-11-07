@@ -1,0 +1,342 @@
+{
+  "schema": 1,
+  "id": "disposable_northwatch_storage_queue",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25597,
+    "profile": "northwatch-access",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/give @s minecraft:iron_sword 2"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1495,
+        "y": 64,
+        "z": -1433
+      },
+      "settleMs": 0
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:authored-e807bf15-0ba0-38c2-a613-66b15c34e5ec",
+      "expect": {
+        "status": "ok",
+        "occupiedCount": 0,
+        "custody": {
+          "status": "ACQUIRED"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "x": -1493,
+        "y": 65,
+        "z": -1435
+      },
+      "timeoutMs": 10000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_sword",
+      "count": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:authored-e807bf15-0ba0-38c2-a613-66b15c34e5ec",
+      "expect": {
+        "status": "ok",
+        "occupiedCount": 1
+      },
+      "timeoutMs": 10000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_sword",
+      "count": 1,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:authored-e807bf15-0ba0-38c2-a613-66b15c34e5ec",
+      "expect": {
+        "status": "ok",
+        "occupiedCount": 2
+      },
+      "timeoutMs": 10000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1493,
+        "y": 66,
+        "z": -1435
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "position": {
+        "x": -1500,
+        "y": 64,
+        "z": -1429
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement_security",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "guardsAssigned": 2
+      },
+      "timeoutMs": 60000,
+      "causalMilestone": "two_exact_guard_appointments_from_upper_barrel"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:authored-e807bf15-0ba0-38c2-a613-66b15c34e5ec",
+      "expect": {
+        "status": "ok",
+        "occupiedCount": 0
+      },
+      "timeoutMs": 45000,
+      "causalMilestone": "both_donated_swords_leave_the_actual_upper_barrel"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "settlement_security",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "guardsReady": 2
+      },
+      "timeoutMs": 45000,
+      "causalMilestone": "both_residents_physically_hold_their_donated_swords"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "actor",
+      "id": "resident:1-11",
+      "expect": {
+        "status": "ok",
+        "activityKind": "MEAL"
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100,
+      "causalMilestone": "four_nearby_visitors_enter_the_ordinary_meal_flow"
+    },
+    {
+      "type": "inspect",
+      "view": "resident_life",
+      "id": "resident:1-11"
+    },
+    {
+      "type": "inspect",
+      "view": "resident_life",
+      "id": "resident:1-14"
+    },
+    {
+      "type": "inspect",
+      "view": "resident_life",
+      "id": "resident:1-17"
+    },
+    {
+      "type": "inspect",
+      "view": "resident_life",
+      "id": "resident:1-20"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-11",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "storedSatietyUnits": 1000,
+        "mealPhase": "NONE",
+        "physicalBodyCustody": true
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "queued_resident_1_11_has_eaten_and_released_service"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-14",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "storedSatietyUnits": 1000,
+        "mealPhase": "NONE",
+        "physicalBodyCustody": true
+      },
+      "timeoutMs": 45000,
+      "causalMilestone": "queued_resident_1_14_has_eaten_and_released_service"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-17",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "storedSatietyUnits": 1000,
+        "mealPhase": "NONE",
+        "physicalBodyCustody": true
+      },
+      "timeoutMs": 45000,
+      "causalMilestone": "queued_resident_1_17_has_eaten_and_released_service"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-20",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "storedSatietyUnits": 1000,
+        "mealPhase": "NONE",
+        "physicalBodyCustody": true
+      },
+      "timeoutMs": 45000,
+      "causalMilestone": "queued_resident_1_20_has_eaten_and_released_service"
+    },
+    {
+      "type": "inspect",
+      "view": "settlement_population",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:authored-7e339c4b-9a6c-3788-8ba0-33d9f0ca8d3c"
+    }
+  ],
+  "assertions": [
+    {
+      "after": 12,
+      "view": "settlement_security",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok",
+        "guardsReady": 2
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 12,
+      "name": "northwatch-two-upper-barrel-weapons"
+    },
+    {
+      "after": 21,
+      "name": "northwatch-four-meals-complete"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 21,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/gamemode spectator"
+      },
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "x": -1493,
+          "y": 66,
+          "z": -1435
+        },
+        "settleMs": 0
+      },
+      {
+        "type": "assert_fixture",
+        "timeoutMs": 30000,
+        "checks": [
+          {
+            "view": "settlement_security",
+            "id": "settlement:1",
+            "expect": {
+              "status": "ok",
+              "guardsAssigned": 2
+            }
+          },
+          {
+            "view": "resident_life",
+            "id": "resident:1-11",
+            "expect": {
+              "status": "ok",
+              "nutrition": "NOURISHED",
+              "mealPhase": "NONE",
+              "storedSatietyUnits": 1000
+            }
+          },
+          {
+            "view": "resident_life",
+            "id": "resident:1-14",
+            "expect": {
+              "status": "ok",
+              "nutrition": "NOURISHED",
+              "mealPhase": "NONE",
+              "storedSatietyUnits": 1000
+            }
+          },
+          {
+            "view": "resident_life",
+            "id": "resident:1-17",
+            "expect": {
+              "status": "ok",
+              "nutrition": "NOURISHED",
+              "mealPhase": "NONE",
+              "storedSatietyUnits": 1000
+            }
+          },
+          {
+            "view": "resident_life",
+            "id": "resident:1-20",
+            "expect": {
+              "status": "ok",
+              "nutrition": "NOURISHED",
+              "mealPhase": "NONE",
+              "storedSatietyUnits": 1000
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

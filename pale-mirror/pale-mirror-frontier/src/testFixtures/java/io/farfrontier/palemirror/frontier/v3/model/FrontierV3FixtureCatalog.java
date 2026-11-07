@@ -60,6 +60,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("northwatchAccess", NorthwatchAccessFixture::configuration),
             Map.entry("clinicalCare", ClinicalCareFixture::configuration),
             Map.entry("authoredBuildingsWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("simulation-terrain-r31"))),
             Map.entry("peacefulGuards", PeacefulGuardFixture::configuration),

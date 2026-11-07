@@ -106,7 +106,8 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
             resident.settlementId(),deposit.site().layout().entrance().support())
                 || !resident.settlementId().equals(deposit.site().settlementId()) || !ExtractionToolSelection.eligible(state, resident, tool)
                 || !tool.custody().equals(job.toolReturnSlot())
-                || !state.inventory().containers().get(job.toolReturnSlot().containerId()).storage().orElseThrow().endpoint().equals(job.toolSource()))
+                || !state.inventory().containers().get(job.toolReturnSlot().containerId()).storage().orElseThrow().endpoint()
+                    .withStation(job.toolSource().station()).equals(job.toolSource()))
             throw new IllegalArgumentException("mining start has a changed tool/source or foreign site");
         var target = job.target().orElseThrow();
         if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), tick).contains(target.key().cell()))

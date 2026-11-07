@@ -73,6 +73,20 @@ final class FrontierV3ResidentMealNavigation {
             pursueClearance(level, state, body, meal, actuation);
             return;
         }
+        // A COLD hint can name a geometrically declared pocket that the loaded
+        // body cannot reach. Waiting always uses the common bounded alternatives;
+        // a failed physical target must not be selected again by the same hint.
+        if (!ResidentMealKnownNavigation.approachStations(state, meal,
+                FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), station -> available(level, body, station))
+                .contains(ResidentMealProcess.serviceSurface(state, meal))) {
+            ROUTES.remove(body);
+            var result = FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, meal.depotId(),
+                    meal.residentId(), FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, actuation);
+            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING)
+                blocked(body, meal, "native_approach:" + result.reason());
+            else BLOCKED.remove(body);
+            return;
+        }
         Route route = ROUTES.get(body);
         boolean admitted = ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId());
         if (route == null || !route.actuation().equals(actuation.id()) || route.leaseRevision() != lease.revision()
@@ -103,17 +117,6 @@ final class FrontierV3ResidentMealNavigation {
             }
         }
         ROUTES.put(body, route);
-        if (route.physicalOnly() && meal.phase() == ResidentMeal.Phase.MOVE
-                && !ResidentMealKnownNavigation.approachStations(state, meal,
-                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), station -> available(level, body, station))
-                    .contains(ResidentMealProcess.serviceSurface(state, meal))) {
-            var result = FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, meal.depotId(),
-                    meal.residentId(), FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, actuation);
-            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING)
-                blocked(body, meal, "native_approach:" + result.reason());
-            else BLOCKED.remove(body);
-            return;
-        }
         FrontierV3ServiceApproachNavigation.forget(body);
         if (FrontierV3SemanticMovement.arrived(level, body, route.waypoints().getLast())) {
             BLOCKED.remove(body);

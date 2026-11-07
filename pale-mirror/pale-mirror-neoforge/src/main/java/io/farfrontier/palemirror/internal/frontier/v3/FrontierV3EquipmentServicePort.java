@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.EquipmentServiceBoundary;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.EquipmentPhysicalAuthority;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageAccess;
 import io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReach;
 import net.minecraft.world.entity.npc.Villager;
 
@@ -23,18 +22,24 @@ final class FrontierV3EquipmentServicePort {
         return FrontierV3CommandSubmission.submitResult(runtime,"equipment-storage-confirm",intent.causeSubjectId().value(),receipt);
     }
     static boolean ready(FrontierWorldState state, PhysicalIntent intent, Villager resident) {
-        return EquipmentServiceBoundary.serviceAvailable(state, intent) && EquipmentServiceBoundary.serviceStation(state, intent)
+        return io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.hasOperationalCustody(
+                    state, EquipmentPhysicalAuthority.container(intent))
+                && EquipmentServiceBoundary.serviceAvailable(state, intent) && EquipmentServiceBoundary.serviceStation(state, intent)
                 .map(station -> bodyAtAssignedStation(resident, station.support())).orElse(false);
     }
     /** A retry of this retained attempt needs real reach, but no renewed work assignment. */
     static boolean readyForInspection(FrontierWorldState state, PhysicalIntent intent, Villager resident) {
         EquipmentServiceBoundary.validateInspection(state, intent);
+        // Inspecting an already applied postimage needs no new effect. Retrying an
+        // unchanged preimage does: RELEASED/CHECKPOINTED cannot authorize another write.
+        if (!io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.hasOperationalCustody(
+                state, EquipmentPhysicalAuthority.container(intent))) return false;
         var surface = state.inventory().surfaces().get(EquipmentPhysicalAuthority.container(intent));
         if (surface == null || !surface.fixed()) return false;
         try {
-            return ResourceStorageAccess.at(state, EquipmentPhysicalAuthority.container(intent)).stations().stream()
-                    .anyMatch(station -> BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(station, surface.position())
-                            && bodyAtAssignedStation(resident, station.support()));
+            return EquipmentServiceBoundary.serviceStation(state, intent)
+                    .filter(station -> BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(station, surface.position())
+                            && bodyAtAssignedStation(resident, station.support())).isPresent();
         } catch (IllegalArgumentException unavailableAccess) {
             // No current physical port means defer this retry; already observed results need no port.
             return false;

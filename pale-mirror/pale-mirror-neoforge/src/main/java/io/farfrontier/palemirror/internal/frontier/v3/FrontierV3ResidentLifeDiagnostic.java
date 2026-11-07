@@ -153,7 +153,16 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"initialFoodStorageBread\":" + bread + ",\"initialFoodStorageBreadClaimed\":" + claimed
                 + ",\"settlementBreadStock\":" + SettlementFoodPolicy.breadStock(state, resident.settlementId())
                 + ",\"settlementBreadUsable\":" + SettlementFoodPolicy.usableBread(state, resident.settlementId())
-                + FrontierV3ClinicalDiagnostic.fields(state,subject)+FrontierV3ClinicalDiagnostic.obligation(state,subject)+"}";
+                + FrontierV3ClinicalDiagnostic.fields(state,subject)+FrontierV3ClinicalDiagnostic.obligation(state,subject)
+                + mealObligation(state,subject)+"}";
+    }
+
+    private static String mealObligation(FrontierWorldState state,SubjectId actor) {
+        var o=io.farfrontier.palemirror.frontier.v3.process.ResidentMealProgressObligation.describe(state,actor);
+        return ",\"progressObligations\":[{\"schema\":1,\"rule\":\"frontier.resident-meal.progress.v1\",\"subject\":\""+quote(actor.value())
+                +"\",\"worker\":\""+quote(actor.value())+"\",\"generation\":"+o.generation()+",\"revision\":"+o.generation()
+                +",\"fingerprint\":\""+quote(o.fingerprint())+"\",\"budgetTicks\":"+o.budgetTicks()
+                +",\"disposition\":\""+o.disposition()+"\",\"next\":\""+o.next()+"\"}]";
     }
 
     /** Operator-only retained evidence; a diagnostic must not initialize a route search. */

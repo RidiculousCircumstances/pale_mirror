@@ -102,7 +102,8 @@ final class ForestryWorkAdmission implements ResidentWorkProvider<ForestryWorkSt
         var requirement = new ToolRequirement(rules.tool().ability(), rules.tool().minimumGrade(), Math.multiplyExact(rules.tool().wear(), source.remaining()));
         if (!WorkEquipmentSelection.available(state, job.home(), tool, EquipmentRequirements.allOf(Set.of(requirement)), WorkEquipmentClaimComposition.reserved(state))
                 || !(tool.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(job.toolSource().containerId())
-                || !state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint().equals(job.toolSource())
+                || !state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint()
+                    .withStation(job.toolSource().station()).equals(job.toolSource())
                 || !rules.requireHarvest(source.declaration().species(), source.declaration().logs().block(0).kind()).outputItem().equals(job.outputKind()))
             throw new IllegalArgumentException("forestry admission has a changed tool/source/output");
         var knowledge = ResourceStorageNavigation.forEndpoint(state, job.toolSource()).forActor(state, resident.id());

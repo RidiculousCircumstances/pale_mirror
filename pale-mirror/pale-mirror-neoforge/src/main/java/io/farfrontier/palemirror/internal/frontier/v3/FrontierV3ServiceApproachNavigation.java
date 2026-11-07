@@ -17,9 +17,8 @@ final class FrontierV3ServiceApproachNavigation {
                            long generation, SurfaceAnchor target) { }
     private static final Map<Mob, Waiting> WAITING = new WeakHashMap<>();
     private record Search(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId authority,
-                          SubjectId point, long ordinal, long generation, int next) { }
+                          SubjectId point, long ordinal, long generation, FrontierV3GoalAlternatives alternatives) { }
     private static final Map<Mob, Search> SEARCHES = new WeakHashMap<>();
-    private static final int MAX_CANDIDATE_PROBES = 8;
     private FrontierV3ServiceApproachNavigation() { }
 
     static void forget(Mob body) { WAITING.remove(body); SEARCHES.remove(body); }
@@ -31,55 +30,73 @@ final class FrontierV3ServiceApproachNavigation {
         requireWaitingAuthority(state, actorId, actuation.id());
         var declared = ServiceBoundaryComposition.declaration(state, pointId);
         var point = ServiceBoundaryComposition.geometry(state, declared.identity());
+        if (point.boundary().occupied(FrontierV3SurfaceObservation.observedBody(body))) {
+            forget(body);
+            var exit = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, declared.settlementId(),
+                    pointId, actuation.id().execution().activityOwnerId(), actorId, ordinal, generation, actuation);
+            return exit.status() == FrontierV3GoalNavigation.Status.ARRIVED
+                    ? new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "service-access:cleared-for-waiting", Optional.empty(), Optional.empty()) : exit;
+        }
         var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actorId));
         WAITING.entrySet().removeIf(entry -> !entry.getValue().authority().current(entry.getKey()));
         WAITING.forEach((other, waiting) -> { if (other != body) excluded.add(waiting.target()); });
         var prior = WAITING.get(body);
-        if (prior == null || !prior.authority().id().equals(actuation.id()) || !prior.point().equals(pointId)
+        if (prior != null && (!prior.authority().id().equals(actuation.id()) || !prior.point().equals(pointId)
                 || prior.ordinal() != ordinal || prior.generation() != generation
                 || !point.waitingSurfaces().contains(prior.target()) || excluded.contains(prior.target())
-                || !FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, prior.target())) {
-            WAITING.remove(body);
-            var origin = FrontierV3SurfaceObservation.observedBody(body).supportingSurface();
-            var candidates = ServiceClearanceTargets.waitingTargets(point, origin, excluded);
-            // Preserve geometry ordering. Actor hashing must not promote a roof or a distant pocket over the nearest buffer.
-            var search = SEARCHES.get(body);
-            int cursor = search != null && search.authority().equals(actuation.id()) && search.point().equals(pointId)
-                    && search.ordinal() == ordinal && search.generation() == generation ? search.next() : 0;
-            int first = candidates.isEmpty() ? 0 : Math.floorMod(cursor, candidates.size());
-            for (int offset = 0; offset < Math.min(candidates.size(), MAX_CANDIDATE_PROBES); offset++) {
-                var candidate = candidates.get((first + offset) % candidates.size());
-                if (!FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(candidate.x(), candidate.y(), candidate.z()))
-                        || !FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, candidate)) continue;
-                prior = new Waiting(actuation, pointId, ordinal, generation, candidate);
-                WAITING.put(body, prior);
-                SEARCHES.put(body, new Search(actuation.id(), pointId, ordinal, generation,
-                        (first + offset + 1) % candidates.size()));
-                break;
-            }
-            if (!WAITING.containsKey(body)) SEARCHES.put(body, new Search(actuation.id(), pointId, ordinal, generation,
-                    first + Math.min(candidates.size(), MAX_CANDIDATE_PROBES)));
+                || !FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, prior.target()))) {
+            WAITING.remove(body); prior = null;
         }
-        if (prior == null || !WAITING.containsKey(body)) {
+        var candidates = ServiceClearanceTargets.waitingTargets(point,
+                FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), excluded).stream()
+                .filter(candidate -> FrontierV3LoadedWorld.ready(level,
+                        new net.minecraft.core.BlockPos(candidate.x(), candidate.y(), candidate.z()))
+                        && FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, candidate)).toList();
+        if (candidates.isEmpty()) {
+            forget(body);
             FrontierV3GoalNavigation.stop(body, actuation);
             return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.BLOCKED,
                     "service-access:no-reachable-free-waiting-target",
                     Optional.of(FrontierV3GoalNavigation.BlockReason.SEARCH_BUDGET_EXHAUSTED), Optional.empty());
         }
-        var result = FrontierV3GoalNavigation.pursue(level, body,
-                waitingGoal(point, prior.target(), state.bootstrap().bounds(),
-                    new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
-                        actuation.id().execution().activityOwnerId(), actorId, ordinal, generation, List.of(prior.target()),
-                        TraversalCapability.PEDESTRIAN,
-                        io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION),
-                    FrontierV3ActorMovementNavigation.routeHint(state, body, actuation)), actuation);
-        // Do not preflight with canReach: a pedestrian obstruction must reach the
-        // navigator's courtesy protocol, not become a permanent no-path decision.
-        // A real geometry failure advances the bounded candidate search next turn.
-        if (FrontierV3GoalAlternatives.reconsider(result)) WAITING.remove(body);
+        var search = SEARCHES.get(body);
+        if (search == null || !search.authority().equals(actuation.id()) || !search.point().equals(pointId)
+                || search.ordinal() != ordinal || search.generation() != generation) {
+            search = new Search(actuation.id(), pointId, ordinal, generation, new FrontierV3GoalAlternatives(candidates));
+        } else if (!search.alternatives().matches(candidates)) {
+            // Candidate order changes as the visitor walks. Keep already rejected identities,
+            // rather than moving a numeric cursor through a freshly distance-sorted list.
+            var rejected = new HashSet<>(search.alternatives().rejected()); rejected.retainAll(candidates);
+            search = new Search(actuation.id(), pointId, ordinal, generation,
+                    new FrontierV3GoalAlternatives(candidates, rejected));
+        }
+        var alternatives = search.alternatives().nextPassIfExhausted();
+        var batch = prior == null ? alternatives.batch() : List.of(prior.target());
+        var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
+                actuation.id().execution().activityOwnerId(), actorId, ordinal, generation, batch,
+                TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+        var goal = waitingGoal(point, batch, state.bootstrap().bounds(), order);
+        var demand = new FrontierV3MinecraftGoalNavigation.Demand(batch, goal.scope(), goal.order());
+        var selected = FrontierV3MinecraftGoalNavigation.selectedTarget(body, demand);
+        var result = FrontierV3GoalNavigation.pursue(level, body, goal, actuation);
+        if (FrontierV3GoalAlternatives.reconsider(result)) {
+            var failed = result.blockReason().filter(reason -> reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED)
+                    .isPresent() && selected.isPresent() ? List.of(selected.orElseThrow()) : batch;
+            alternatives = alternatives.reject(failed);
+            WAITING.remove(body);
+        } else {
+            // Reserve only the endpoint the shared provider actually selected, not every
+            // alternative. This is a physical waiting claim, never service/task arrival.
+            var target = result.arrivedStation().or(() -> FrontierV3MinecraftGoalNavigation.selectedTarget(body, demand));
+            target.filter(batch::contains).ifPresent(station -> WAITING.put(body,
+                    new Waiting(actuation, pointId, ordinal, generation, station)));
+        }
+        SEARCHES.put(body, new Search(actuation.id(), pointId, ordinal, generation, alternatives));
         return result.status() == FrontierV3GoalNavigation.Status.ARRIVED
                 ? new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.IN_PROGRESS,
-                    "service-access:waiting-outside target=" + prior.target(), Optional.empty(), Optional.empty())
+                    "service-access:waiting-outside target=" + result.arrivedStation().orElseThrow(), Optional.empty(), Optional.empty())
                 : result; // Never return semantic ARRIVED to a work owner.
     }
 
@@ -134,4 +151,14 @@ final class FrontierV3ServiceApproachNavigation {
                 new FrontierV3NavigationScope.OutsideService(new FrontierV3NavigationScope.ObservedWorld(bounds), point.boundary()),
                 Optional.of(order), waitingHint(point, target, approach));
     }
+    static FrontierV3GoalNavigation.Goal waitingGoal(ServiceAccessPoint point, List<SurfaceAnchor> targets,
+            WorldBounds bounds, io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        if (targets.isEmpty() || targets.stream().anyMatch(target -> !point.waitingSurfaces().contains(target)
+                || point.egressSurfaces().contains(target) || !point.boundary().cleared(target.standingBody())))
+            throw new IllegalArgumentException("waiting targets must belong to the declared non-egress buffer");
+        return new FrontierV3GoalNavigation.Goal(targets, TraversalCapability.PEDESTRIAN,
+                new FrontierV3NavigationScope.OutsideService(new FrontierV3NavigationScope.ObservedWorld(bounds), point.boundary()),
+                Optional.of(order), List.of());
+    }
+
 }

@@ -19,3 +19,17 @@ test('recovery/holds never become terminal proof and exact worker survives a new
   monitor.observe(value(230, { generation: 2, revision: 3, fingerprint: 'closed', next: 'CLOSED', disposition: 'TERMINAL' }));
   assert.equal(monitor.receipts()[0].verdict, 'SATISFIED');
 });
+test('independent owner obligations on one resident cannot hide each others stall or recovery', () => {
+  const monitor = new SemanticProgressMonitor();
+  const sample = (instant, meal = {}) => ({ ...value(instant, { disposition: 'TERMINAL', next: 'CLOSED' }),
+    progressObligations: [{ ...value(instant).progressObligation, rule: 'frontier.resident-meal.progress.v1', ...meal }] });
+  monitor.observe(sample(10)); monitor.observe(sample(110));
+  assert.throws(() => monitor.observe(sample(111)), /deadline violated/);
+  assert.equal(monitor.receipts().length, 2);
+  const recovery = new SemanticProgressMonitor(); recovery.observe(sample(10));
+  recovery.observe(sample(20, { disposition: 'RECOVERY_UNKNOWN' }));
+  assert.equal(recovery.receipts().find(o => o.rule.includes('meal')).verdict, 'INCONCLUSIVE');
+  assert.throws(() => recovery.observe({ ...sample(21), progressObligations: Array(17).fill({}) }), /bounded/);
+  const duplicate = sample(21); duplicate.progressObligations[0].rule = duplicate.progressObligation.rule;
+  assert.throws(() => recovery.observe(duplicate), /duplicate/);
+});

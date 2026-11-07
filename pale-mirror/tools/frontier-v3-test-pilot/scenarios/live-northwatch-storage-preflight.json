@@ -1,0 +1,30 @@
+{
+  "schema":1,
+  "id":"live_northwatch_storage_preflight",
+  "server":{"host":"127.0.0.1","port":25565,"viewDistance":6},
+  "pilot":{"username":"PMAudit"},
+  "setup":[
+    {"type":"command","command":"/gamemode spectator"},
+    {"type":"visit","dimension":"pale_mirror:frontier_graybox","position":{"x":-1497,"y":65,"z":-1431},"settleMs":0}
+  ],
+  "actions":[
+    {"type":"look","position":{"x":-1493,"y":64,"z":-1433}},
+    {"type":"wait_until_diagnostic","view":"settlement_security","id":"settlement:1","expect":{"status":"ok","guardsReady":2},"timeoutMs":30000},
+    {"type":"inspect","view":"container","id":"container:authored-e807bf15-0ba0-38c2-a613-66b15c34e5ec"},
+    {"type":"inspect","view":"item","id":"item:player-contribution-06f2a9ce-e9d4-3d23-b1eb-c60ac0d939bf"},
+    {"type":"inspect","view":"item","id":"item:player-contribution-100f6860-96ea-38ed-99b7-38036142815a"},
+    {"type":"visit","dimension":"pale_mirror:frontier_graybox","position":{"x":-1502,"y":65,"z":-1427},"settleMs":0},
+    {"type":"look","position":{"x":-1497,"y":64,"z":-1429}},
+    {"type":"wait","ms":10000},
+    {"type":"inspect","view":"summary","id":""},
+    {"type":"inspect","view":"performance","id":""}
+  ],
+  "assertions":[
+    {"after":3,"view":"container","id":"container:authored-e807bf15-0ba0-38c2-a613-66b15c34e5ec","expect":{"status":"ok","occupiedCount":0}},
+    {"after":9,"view":"summary","id":"","expect":{"status":"ok","requiredConflicts":0,"sceneConflicts":0,"inventoryConflicts":0}}
+  ],
+  "frames":[
+    {"after":5,"name":"live-northwatch-original-upper-storage"},
+    {"after":8,"name":"live-northwatch-kitchen-passage"}
+  ]
+}

@@ -67,7 +67,11 @@ public final class AuthoredStoragePlan {
         var area = ReachableSurfaceArea.select(geometry, List.of(start), start, 128, 65536, 65536, geometry::clearStation);
         if (area.exhausted()) throw new IllegalArgumentException("authored storage connectivity exceeds content bound: " + definition.id());
         var result = new ArrayList<InventoryPort>();
+        var containerSupports = definition.blocks().entrySet().stream()
+                .filter(entry -> PROVIDERS.containsKey(entry.getValue().state().kind()))
+                .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toSet());
         for (var entry : candidates) area.selected().stream()
+                .filter(s -> !containerSupports.contains(s.support()))
                 .filter(s -> BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(s, entry.getKey()))
                 .min(Comparator.comparingLong((SurfaceAnchor s) -> distance(s, entry.getKey()))
                         .thenComparingInt(SurfaceAnchor::y).thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z))

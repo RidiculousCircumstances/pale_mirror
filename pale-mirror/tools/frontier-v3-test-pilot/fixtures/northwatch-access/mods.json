@@ -1,0 +1,30 @@
+[
+  {
+    "filename": "minecolonies-1.1.1411-1.21.1-snapshot.jar",
+    "sha512": "b32a5e954f68dc15d2616602bc55b4c6bc5b604ed6c921ffc446362ac1160abb1ce256b30c8b0477c0fe830e0afdad54d628b1a1d59aef5ea21d92a1acc4cfb0"
+  },
+  {
+    "filename": "structurize-1.0.837-1.21.1-snapshot.jar",
+    "sha512": "5a03a88a5a7d432a86966c2d02e6ab7916a22f39e90aa408c43ce7fe8454c84d28fb94f88cacf128ca9b847a8c5e4c5105116f16741584e2a7ce9e9a71302067"
+  },
+  {
+    "filename": "blockui-1.0.212-1.21.1-snapshot.jar",
+    "sha512": "defaae595ade0f82e4be5f426978b71cbe9e7a84301f8f8e4e096581b8aefe3b053d8f5e6e0ee55844c3d4e07f3db781e70aab4663fd222a61e20c30f66cd3a3"
+  },
+  {
+    "filename": "resourcefullib-neoforge-1.21-3.0.12.jar",
+    "sha512": "a9d20e345faa9bcb297bd95ac9524205834804d1bb13518397dd4f7f62b352b08c3339ee7f7870d3669078ceeb33d5c31ea527aecce4b31d62ec1ff7d8b562c8"
+  },
+  {
+    "filename": "multipiston-1.2.58-1.21.1.jar",
+    "sha512": "60007e72516857228c45cbfee14ec18c9c4e89b626ecdd659fff3a146d5dc527d52563645e3348b79820f7eeb0b6d3aeab4394e7b6d6a065666ed04333c05a48"
+  },
+  {
+    "filename": "handcrafted-neoforge-1.21.1-4.0.3.jar",
+    "sha512": "4ff5fb2aa9582b886d03f647fe9b8c12a828d29a1787e9c9b463be18192ea798e6a4ac83479623042791bce0bacbf6e3e2c2e9ef086640aeeb6970d3404e7ee4"
+  },
+  {
+    "filename": "domum-ornamentum-1.0.237-snapshot-main.jar",
+    "sha512": "f0d56073a6053ff1318701ec1b9bfcb5aae40be658ec6e7cb4211613dfb170288e4cf408c8ff676d5369bf3789492d1a629ba8736422ee8d2fb9fa0d019e9d60"
+  }
+]

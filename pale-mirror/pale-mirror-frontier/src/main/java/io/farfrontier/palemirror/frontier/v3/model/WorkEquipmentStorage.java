@@ -16,7 +16,7 @@ public final class WorkEquipmentStorage {
     }
     public static boolean available(FrontierWorldState state, ExactItemStack item, ShipmentEndpoint endpoint) {
         var record = state.inventory().containers().get(endpoint.containerId());
-        return record != null && record.storage().filter(policy -> policy.endpoint().equals(endpoint)).isPresent()
+        return record != null && record.storage().filter(policy -> policy.endpoint().withStation(endpoint.station()).equals(endpoint)).isPresent()
                 && ResourceStorageSelection.permits(state.inventory(), endpoint.containerId(), item.economicOwnerId(),
                     item.itemKind(), Set.of(ResourceStorageRole.WAREHOUSE))
                 && ContainerStorageAdmission.first(state, endpoint.containerId(), Optional.empty(), slot -> false).isPresent();
@@ -26,7 +26,12 @@ public final class WorkEquipmentStorage {
         for (var endpoint : ResourceStorageSelection.candidates(state, item.economicOwnerId(), item.itemKind(), origin,
                 Set.of(ResourceStorageRole.WAREHOUSE))) {
             if (!available(state, item, endpoint)) continue;
-            try { ResourceStorageNavigation.plannedPath(state, origin, profile, endpoint); return Optional.of(endpoint); }
+            try {
+                var selected = ResourceStorageNavigation.selectApproach(state, origin, profile, endpoint);
+                if (selected.isEmpty()) continue;
+                ResourceStorageNavigation.plannedPath(state, origin, profile, selected.orElseThrow());
+                return selected;
+            }
             catch (KnownPedestrianNavigation.RouteUnavailable pending) {
                 if (pending.status() != PedestrianRouteResult.Status.NO_PATH) waiting = pending;
             }

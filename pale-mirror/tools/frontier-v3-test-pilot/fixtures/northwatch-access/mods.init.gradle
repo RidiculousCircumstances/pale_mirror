@@ -1,0 +1,26 @@
+// Real authored-block providers in the existing disposable pilot. No world/runtime edits.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject.findProject(':pale-mirror-neoforge')
+    if (project == null) return
+    def catalog = new groovy.json.JsonSlurper().parse(new File(gradle.rootProject.projectDir,
+            'tools/frontier-v3-test-pilot/fixtures/northwatch-access/mods.json'))
+    def buildDirectory = project.buildDir
+    def source = new File(System.getenv('FRONTIER_V3_AUTHORED_MODS_DIRECTORY') ?: '')
+    if (!source.isAbsolute() || !source.isDirectory()) throw new GradleException('Set FRONTIER_V3_AUTHORED_MODS_DIRECTORY to the installed mods directory')
+    ['prepareFrontierV3PilotClientRun': 'runs/frontier-v3-pilot-client',
+     'prepareFrontierV3PilotServerWorld': 'runs/frontier-v3-pilot-server'].each { taskName, directory ->
+        project.tasks.named(taskName) {
+            doLast {
+                def destination = new File(buildDirectory, directory + '/mods')
+                destination.mkdirs()
+                catalog.each { entry ->
+                    def jar = new File(source, entry.filename)
+                    if (!jar.isFile() || java.security.MessageDigest.getInstance('SHA-512').digest(jar.bytes).encodeHex().toString() != entry.sha512)
+                        throw new GradleException('Changed authored fixture dependency: ' + entry.filename)
+                    java.nio.file.Files.copy(jar.toPath(), new File(destination, entry.filename).toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        }
+    }
+}

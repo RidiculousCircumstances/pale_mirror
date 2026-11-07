@@ -203,6 +203,11 @@ class GuardDutyTest {
         var intent = GuardEquipmentStateSupport.issue(state, duty, 6000);
         state = apply(state, List.of(new ProposedEvent(duty.home(), new PhysicalIntentPrepared(intent))), 6000);
         assertTrue(GuardAuthority.pending(state, duty));
+        var displaced=state.withActorBody(actor,new SurfaceAnchor(duty.source().station().support().offset(1,0,1)).standingBody());
+        var capability=ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD);
+        assertEquals(duty.source().station(),capability.stationaryAmbientTarget(displaced,duty.execution()).orElseThrow().station());
+        assertEquals(Optional.of(duty.order()),capability.navigationOrder(displaced,duty.execution()),
+                "a pending effect retains its exact source approach after body displacement");
         assertFalse(ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD).checkpoint(state, duty.execution()).ready());
         var finalState = state;
         assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD).validateAmbientRelease(finalState, duty.execution()));

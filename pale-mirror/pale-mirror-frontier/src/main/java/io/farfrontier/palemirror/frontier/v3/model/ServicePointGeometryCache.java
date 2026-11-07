@@ -11,6 +11,9 @@ final class ServicePointGeometryCache {
                    ServiceAccessBoundary boundary, SurfaceAnchor center,
                    List<SurfaceAnchor> preferred, int population, boolean waiting) {
         Request { preferred = List.copyOf(preferred); }
+        Request atStation(SurfaceAnchor selected) {
+            return new Request(facility, settlement, selected, boundary, center, preferred, population, waiting);
+        }
         ServiceBoundaryProvider.SearchFootprint searchFootprint() {
             return new ServiceBoundaryProvider.SearchFootprint(boundary, center, preferred, population, waiting);
         }

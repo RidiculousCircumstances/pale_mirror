@@ -51,7 +51,11 @@ final class GuardActivityCapability implements ActorActivityCapability {
                 ? Optional.of(new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, duty.id())) : Optional.empty());
     }
     public Optional<ActorActivityAmbientTarget> stationaryAmbientTarget(FrontierWorldState state, ActorExecutionId execution) {
-        validateReference(state, execution);
+        var duty = GuardAuthority.require(state, execution);
+        // Arrival retires the journey, not this exact equipment interaction. A
+        // crowded visitor can be displaced while its durable issue is pending.
+        if (duty.phase()!=GuardDuty.Phase.ON_DUTY && GuardAuthority.goalAvailable(state,duty))
+            return Optional.of(new ActorActivityAmbientTarget(AmbientGoalKind.WORK,duty.source().station()));
         return Optional.of(new ActorActivityAmbientTarget(AmbientGoalKind.GUARD,
                 state.actorLocations().get(execution.actorId()).supportingSurface()));
     }
@@ -59,6 +63,7 @@ final class GuardActivityCapability implements ActorActivityCapability {
         validateReference(state, execution); var move = state.actorMovements().get(execution.actorId());
         if (move != null) return move.executionId().equals(execution) ? Optional.of(move.order()) : Optional.empty();
         var duty = GuardAuthority.require(state, execution);
+        if (duty.phase()!=GuardDuty.Phase.ON_DUTY && GuardAuthority.goalAvailable(state,duty)) return Optional.of(duty.order());
         var strike = state.combat().pending().get(duty.id());
         // A brief native attack correction may retain the exact mission after its approach arrived.
         // It neither opens a new semantic journey nor grants a different role's order.
@@ -67,9 +72,11 @@ final class GuardActivityCapability implements ActorActivityCapability {
                         .equals(Optional.of(strike.target())) ? Optional.of(duty.missionOrder()) : Optional.empty();
     }
     public boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease) {
-        validateReference(state, execution);
+        var duty = GuardAuthority.require(state, execution);
         return lease.goal() == AmbientGoalKind.GUARD
                     && lease.goalBody().supportingSurface().equals(state.actorLocations().get(execution.actorId()).supportingSurface())
+                || lease.goal() == AmbientGoalKind.WORK && duty.phase()!=GuardDuty.Phase.ON_DUTY
+                    && GuardAuthority.goalAvailable(state,duty) && lease.goalBody().supportingSurface().equals(duty.source().station())
                 || lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT
                 && navigationOrder(state, execution).filter(order -> order.legalStations().contains(lease.goalBody().supportingSurface())).isPresent();
     }

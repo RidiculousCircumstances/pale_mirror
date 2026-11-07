@@ -71,7 +71,10 @@ public final class ServiceAccessCoordinator {
         var actor = state.actorLocations().get(actorId);
         if (actor != null) ServiceBoundaryComposition.nearbyDeclarations(state,
                     new TerrainColumn(actor.body().x(), actor.body().z())).stream()
-                .filter(point -> point.boundary().occupied(actor.body())).forEach(point -> points.add(point.pointId()));
+                // Approaches and waiting pockets also change distance arbitration.
+                // A parked continuation must wake when its next visitor reaches the buffer,
+                // rather than only after somebody has already crossed the exclusive boundary.
+                .forEach(point -> points.add(point.pointId()));
         return java.util.Set.copyOf(points);
     }
 
@@ -137,9 +140,23 @@ public final class ServiceAccessCoordinator {
         // owns permission to interrupt the old activity or begin a physical effect.
         if (incumbent.isPresent()) return new AccessDecision(incumbent.orElseThrow().identity().actorId().equals(requested.actorId()),
                 AccessReason.CURRENT_OCCUPANT, Optional.of(incumbent.orElseThrow().identity().actorId()));
-        if (requestingSelfCare || entering.isPresent()) return new AccessDecision(requestingSelfCare
-                && entering.map(demand -> demand.identity().equals(requested)).orElse(true),
-                AccessReason.SELF_CARE_TURN, entering.map(demand -> demand.identity().actorId()));
+        // COLD journeys retain their independent timed approaches; only the atomic
+        // interaction is exclusive. A physically retained visitor additionally needs
+        // one entrance winner so real bodies do not crowd the same doorway.
+        if (ActorExecutionCoordinator.coldAvailable(state, requested.actorId())) {
+            if (requestingSelfCare || entering.isPresent()) return new AccessDecision(requestingSelfCare
+                    && entering.map(demand -> demand.identity().equals(requested)).orElse(true),
+                    AccessReason.SELF_CARE_TURN, entering.map(demand -> demand.identity().actorId()));
+            return workers.stream().findFirst().map(demand -> new AccessDecision(demand.identity().equals(requested),
+                    AccessReason.WORK_TURN, Optional.of(demand.identity().actorId())))
+                    .orElseGet(() -> new AccessDecision(false, AccessReason.NO_READY_WORKER, Optional.empty()));
+        }
+        var nextSelfCare = entering.or(() -> selfCare.stream().min(approachOrder(state, access)));
+        if (nextSelfCare.isPresent()) return new AccessDecision(nextSelfCare.orElseThrow().identity().equals(requested),
+                AccessReason.SELF_CARE_TURN, nextSelfCare.map(demand -> demand.identity().actorId()));
+        // Discovery can assess a prospective meal before its demand is committed.
+        // It may enter a vacant point, but cannot compete with an existing claimant.
+        if (requestingSelfCare) return new AccessDecision(true, AccessReason.SELF_CARE_TURN, Optional.empty());
         return workers.stream().findFirst().map(demand -> new AccessDecision(demand.identity().equals(requested),
                 AccessReason.WORK_TURN, Optional.of(demand.identity().actorId())))
                 .orElseGet(() -> new AccessDecision(false, AccessReason.NO_READY_WORKER, Optional.empty()));

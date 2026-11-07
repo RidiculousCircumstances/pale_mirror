@@ -27,8 +27,12 @@ public final class ActorStorageApproach {
     }
     public static Optional<ShipmentEndpoint> select(FrontierWorldState state, ShipmentEndpoint endpoint,
             SubjectId actorId, SurfaceAnchor origin, KnownPedestrianRouteKnowledge declaredJourney) {
+        return selectForProfile(state, endpoint, origin, declaredJourney.forActor(state, actorId));
+    }
+    /** A declared envelope is sufficient for read-only equipment discovery; no actor authority is acquired. */
+    public static Optional<ShipmentEndpoint> selectForProfile(FrontierWorldState state, ShipmentEndpoint endpoint,
+            SurfaceAnchor origin, KnownPedestrianRouteKnowledge knowledge) {
         ShipmentEndpointComposition.validate(state, endpoint);
-        var knowledge = declaredJourney.forActor(state, actorId);
         var exterior = ShipmentEndpointComposition.exteriorApproach(state, endpoint);
         var candidates = java.util.stream.Stream.concat(java.util.stream.Stream.of(endpoint.station()),
                 ShipmentEndpointComposition.approachStations(state,endpoint,knowledge).stream()).distinct()
